@@ -30,7 +30,7 @@ use crate::db::dialect;
 use crate::db::engine;
 use crate::db::schema;
 use crate::db::vault_imports::{self, CompleteImportArgs};
-use crate::import_media::MediaMode;
+use media::MediaMode;
 
 pub mod contact_name;
 pub mod failure;
@@ -150,7 +150,7 @@ impl<'a> ImportOptions<'a> {
             import_id: args.import_id,
             source_from_jsonl: false,
             paths: None,
-            media: MediaMode::Copy,
+            media: MediaMode::Clone,
             wipe_sources: None,
         }
     }

@@ -109,6 +109,20 @@ pub fn ext_for_mime(mime: &str) -> Option<&'static str> {
         .map(|(ext, _, _)| *ext)
 }
 
+/// Media kind for a MIME type by its top-level type: `image/*`, `video/*`,
+/// `audio/*`; `None` for anything else. Parameters after `;` are ignored.
+/// For a file stored without an extension, this is what the caller has.
+pub fn kind_for_mime(mime: &str) -> Option<Kind> {
+    let base = mime.split(';').next().unwrap_or("").trim();
+    let top = base.split('/').next().unwrap_or("");
+    match top.to_ascii_lowercase().as_str() {
+        "image" => Some(Kind::Image),
+        "video" => Some(Kind::Video),
+        "audio" => Some(Kind::Audio),
+        _ => None,
+    }
+}
+
 /// Media kind for a file extension (dotted or bare, case-insensitive);
 /// `None` for extensions the media pass does not process (including `.pdf`
 /// and `.vcf`, which have MIME types but are not media).

@@ -19,11 +19,12 @@ mod size;
 mod tools;
 
 pub use estimate::{SizeVerdict, classify_probed, estimate_bytes, needs_probe};
-pub use mime::{Kind, ext_for_mime, kind_for_ext, mime_for_ext};
+pub use mime::{Kind, ext_for_mime, kind_for_ext, kind_for_mime, mime_for_ext};
 pub use probe::{MediaProbe, probe_media};
 pub use process::{
     MediaReport, TranscodeOutcome, classify, collect_media_files, derivative_name,
     derivative_name_for_missing, format_bytes, process_attachment_files, transcode_file,
+    transcode_file_as,
 };
 use size::parse_size;
 pub use tools::{FfmpegToolsProbe, ffmpeg_available, probe_ffmpeg_tools, set_tools_dir, tools_dir};
@@ -60,7 +61,7 @@ impl MediaMode {
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "disabled" | "none" | "skip" => Some(Self::Disabled),
-            "clone" => Some(Self::Clone),
+            "clone" | "copy" => Some(Self::Clone),
             "convert" => Some(Self::Convert),
             "compress" => Some(Self::Compress),
             _ => None,

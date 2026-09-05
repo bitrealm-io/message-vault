@@ -1,11 +1,12 @@
 //! Generate browser-friendly derived media under `assets_converted/`.
 //!
 //! Keeps originals intact, writes content-addressed JPEG/MP4/MP3 blobs, and
-//! updates `attachments.derived_*`. Requires `ffmpeg` / `ffprobe` on PATH for
-//! conversions (images, video, audio).
+//! updates `attachments.derived_*`. The conversions are the `media` crate's,
+//! which finds ffmpeg and ffprobe beside the binary, in `MESSAGE_VAULT_IO_BIN`,
+//! or on `PATH`.
 
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -14,11 +15,12 @@ use tempfile::TempDir;
 
 use crate::config::Config;
 use crate::db::{engine, schema};
-use crate::media_tools::{self, MediaKind, ext_of, path_str};
+use media::{CompressOptions, Kind, MediaMode, TranscodeOutcome};
 
-/// Post-import derivation always uses the compressing recipe variant (CRF 28,
-/// keep-as-is size thresholds apply); there is no non-compressing mode here.
-const COMPRESS: bool = true;
+/// Browser previews use the `media` crate's compress recipe, the same one the
+/// desktop export applies, so a preview and an exported copy of the same
+/// source are the same bytes.
+const PREVIEW_MODE: MediaMode = MediaMode::Compress;
 
 /// Options for one derived-media processing pass.
 #[derive(Debug, Clone, Default)]
@@ -249,16 +251,17 @@ impl<'a> SourcePass<'a> {
         if is_part_path(&row.assets_path) {
             return self.remove_incomplete(row);
         }
-        let kind = kind_of(
+        let Some(kind) = kind_of(
             &row.assets_path,
             row.mime_type.as_deref(),
             &row.name_hints(),
-        );
+        ) else {
+            return Ok(Outcome::Skipped);
+        };
         let wanted = match kind {
-            MediaKind::Image => !self.opts.skip_image,
-            MediaKind::Video => !self.opts.skip_video,
-            MediaKind::Audio => !self.opts.skip_audio,
-            MediaKind::Other => false,
+            Kind::Image => !self.opts.skip_image,
+            Kind::Video => !self.opts.skip_video,
+            Kind::Audio => !self.opts.skip_audio,
         };
         if !wanted
             || should_skip_existing(
@@ -299,42 +302,32 @@ impl<'a> SourcePass<'a> {
         Ok(Outcome::Skipped)
     }
 
-    /// Convert one original by kind. Images come back as bytes; video and
-    /// audio come back as a file ffmpeg wrote to the work folder.
-    fn derive(&self, kind: MediaKind, source_path: &Path, row: &AssetRow) -> Result<Derived> {
-        match kind {
-            MediaKind::Image => {
-                let Some(jpeg) = derive_image(source_path)? else {
-                    return Ok(Derived::Skipped);
-                };
-                if self.opts.dry_run {
-                    println!(
-                        "[dry-run] image {} -> jpeg {} bytes",
-                        self.label(row),
-                        jpeg.len()
-                    );
-                    return Ok(Derived::DryRun);
-                }
-                Ok(Derived::Stored(store_derived_bytes(
-                    &self.converted_dir,
-                    &jpeg,
-                    ".jpg",
-                )?))
-            }
-            MediaKind::Video => {
-                let out = derive_video(source_path, self.work_dir)?;
-                self.store_work_file(out, "video", "mp4", ".mp4", row)
-            }
-            MediaKind::Audio => {
-                let out = derive_audio(source_path, self.work_dir)?;
-                self.store_work_file(out, "audio", "mp3", ".mp3", row)
-            }
-            MediaKind::Other => Ok(Derived::Skipped),
-        }
+    /// Convert one original by kind into the work folder, then store it.
+    fn derive(&self, kind: Kind, source_path: &Path, row: &AssetRow) -> Result<Derived> {
+        let (what, format) = match kind {
+            Kind::Image => ("image", "jpg"),
+            Kind::Video => ("video", "mp4"),
+            Kind::Audio => ("audio", "mp3"),
+        };
+        let token = row.sha256.get(..12).unwrap_or(&row.sha256);
+        let out = self.work_dir.join(format!("out-{token}.{format}"));
+        let outcome = media::transcode_file_as(
+            source_path,
+            kind,
+            &out,
+            PREVIEW_MODE,
+            &CompressOptions::default(),
+        )
+        .with_context(|| format!("{what} preview for {}", self.label(row)))?;
+        let out = match outcome {
+            TranscodeOutcome::Produced => Some(out),
+            TranscodeOutcome::Skipped => None,
+        };
+        self.store_work_file(out, what, format, &format!(".{format}"), row)
     }
 
-    /// Store a derivative ffmpeg wrote to the work folder, then remove the
-    /// work file. `None` means ffmpeg declined the file.
+    /// Store a derivative the media pass wrote to the work folder, then remove
+    /// the work file. `None` means the pass left the original alone.
     fn store_work_file(
         &self,
         out: Option<PathBuf>,
@@ -613,103 +606,39 @@ fn upload_session_is_stale(session: &Path, now: std::time::SystemTime) -> Result
 ///
 /// Stored files are named `<folder>/<sha256>` with no extension, so a row whose
 /// `mime_type` is missing (older imports, or a source that declared nothing)
-/// would otherwise classify as `Other` and never be converted for the browser.
+/// would otherwise have no kind and never be converted for the browser.
 /// `name_hints` are the attachment's `original_name` and original export `path`,
-/// used only when the stored path and the declared MIME say nothing.
-fn kind_of(assets_path: &str, mime: Option<&str>, name_hints: &[Option<&str>]) -> MediaKind {
+/// used only when the stored path and the declared MIME say nothing. A declared
+/// MIME is authoritative even when it names something that is not media.
+///
+/// GIFs are animations and never get a still-frame preview: a `.gif` name or
+/// an `image/gif` MIME ends the search with `None`.
+fn kind_of(assets_path: &str, mime: Option<&str>, name_hints: &[Option<&str>]) -> Option<Kind> {
     if is_part_path(assets_path) {
-        return MediaKind::Other;
+        return None;
     }
     let declared = mime.and_then(message_ir::trimmed);
-    let kind = media_tools::kind_of(Path::new(assets_path), declared);
-    // A stored path that already identifies the file wins, and so does a
-    // declared MIME — including `image/gif` and `.gif`, which stay unconverted.
-    if kind != MediaKind::Other || declared.is_some() || ext_of(Path::new(assets_path)) == ".gif" {
-        return kind;
+    if declared == Some("image/gif") || has_gif_ext(assets_path) {
+        return None;
     }
-    for hint in name_hints.iter().flatten() {
-        let hinted = media_tools::kind_of(Path::new(hint), None);
-        if hinted != MediaKind::Other {
-            return hinted;
-        }
+    if let Some(kind) = media::classify(Path::new(assets_path)) {
+        return Some(kind);
     }
-    MediaKind::Other
+    if let Some(declared) = declared {
+        return media::kind_for_mime(declared);
+    }
+    name_hints
+        .iter()
+        .flatten()
+        .filter(|hint| !has_gif_ext(hint))
+        .find_map(|hint| media::classify(Path::new(hint)))
 }
 
-/// JPEG bytes for an image, or `None` when it is already small enough to serve as-is.
-fn derive_image(source_path: &Path) -> Result<Option<Vec<u8>>> {
-    let ext = ext_of(source_path);
-    let size = fs::metadata(source_path)?.len();
-    if media_tools::skip_image_conversion(&ext, size, COMPRESS) {
-        return Ok(None);
-    }
-    if !media_tools::tool_on_path("ffmpeg") {
-        bail!("ffmpeg required for image derived media");
-    }
-    let tmp = tempfile::Builder::new()
-        .suffix(".jpg")
-        .tempfile()
-        .context("temp jpeg")?;
-    let tmp_path = tmp.path().to_path_buf();
-    media_tools::run_ffmpeg(
-        &media_tools::image_to_jpeg_args(path_str(source_path)?, path_str(&tmp_path)?),
-        Some(&tmp_path),
-    )?;
-    let mut buf = Vec::new();
-    File::open(&tmp_path)?.read_to_end(&mut buf)?;
-    Ok(Some(buf))
-}
-
-/// Path of an MP4 preview written under `work_dir`, or `None` when the source is already web-friendly.
-fn derive_video(source_path: &Path, work_dir: &Path) -> Result<Option<PathBuf>> {
-    let ext = ext_of(source_path);
-    let size = fs::metadata(source_path)?.len();
-    if media_tools::skip_video_conversion(source_path, &ext, size, COMPRESS) {
-        return Ok(None);
-    }
-    if !media_tools::tool_on_path("ffmpeg") {
-        bail!("ffmpeg required for video derived media");
-    }
-    let out = work_dir.join(format!(
-        "out-{}.mp4",
-        hash_file_prefix(source_path).unwrap_or_else(|| "vid".into())
-    ));
-    media_tools::run_ffmpeg(
-        &media_tools::video_to_mp4_args(path_str(source_path)?, path_str(&out)?, COMPRESS),
-        Some(&out),
-    )?;
-    Ok(Some(out))
-}
-
-/// Path of an MP3 preview written under `work_dir`, or `None` when the source is already web-friendly.
-fn derive_audio(source_path: &Path, work_dir: &Path) -> Result<Option<PathBuf>> {
-    let ext = ext_of(source_path);
-    let size = fs::metadata(source_path)?.len();
-    if media_tools::skip_audio_conversion(&ext, size, COMPRESS) {
-        return Ok(None);
-    }
-    if !media_tools::tool_on_path("ffmpeg") {
-        bail!("ffmpeg required for audio derived media");
-    }
-    let out = work_dir.join(format!(
-        "out-{}.mp3",
-        source_path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("audio")
-    ));
-    media_tools::run_ffmpeg(
-        &media_tools::audio_to_mp3_args(path_str(source_path)?, path_str(&out)?),
-        Some(&out),
-    )?;
-    Ok(Some(out))
-}
-
-/// The first twelve hex digits of the file's sha256, for log lines.
-fn hash_file_prefix(path: &Path) -> Option<String> {
-    crate::assets::hash_file(path)
-        .ok()
-        .map(|h| h[..12].to_string())
+/// True for a `.gif` name, in any case.
+fn has_gif_ext(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("gif"))
 }
 
 /// Content-addressed relative path: `<aa>/<sha><ext>`.
@@ -779,25 +708,25 @@ mod tests {
 
     #[test]
     fn kind_classifies_and_skips_gif() {
-        assert_eq!(kind_of("x.jpg", None, &[]), MediaKind::Image);
-        assert_eq!(kind_of("x.mp4", None, &[]), MediaKind::Video);
-        assert_eq!(kind_of("x.m4a", None, &[]), MediaKind::Audio);
-        assert_eq!(kind_of("x.gif", None, &[]), MediaKind::Other);
-        assert_eq!(kind_of("x.bin", Some("image/png"), &[]), MediaKind::Image);
+        assert_eq!(kind_of("x.jpg", None, &[]), Some(Kind::Image));
+        assert_eq!(kind_of("x.mp4", None, &[]), Some(Kind::Video));
+        assert_eq!(kind_of("x.m4a", None, &[]), Some(Kind::Audio));
+        assert_eq!(kind_of("x.gif", None, &[]), None);
+        assert_eq!(kind_of("x.bin", Some("image/png"), &[]), Some(Kind::Image));
     }
 
     #[test]
     fn extensionless_blobs_classify_from_the_attachment_name() {
         let canonical = format!("ab/{SHA}");
         for (name, expected) in [
-            ("voice-note.amr", MediaKind::Audio),
-            ("memo.wav", MediaKind::Audio),
-            ("podcast.ogg", MediaKind::Audio),
-            ("clip.3gp", MediaKind::Video),
-            ("clip.webm", MediaKind::Video),
-            ("movie.mkv", MediaKind::Video),
-            ("scan.tiff", MediaKind::Image),
-            ("notes.txt", MediaKind::Other),
+            ("voice-note.amr", Some(Kind::Audio)),
+            ("memo.wav", Some(Kind::Audio)),
+            ("podcast.ogg", Some(Kind::Audio)),
+            ("clip.3gp", Some(Kind::Video)),
+            ("clip.webm", Some(Kind::Video)),
+            ("movie.mkv", Some(Kind::Video)),
+            ("scan.tiff", Some(Kind::Image)),
+            ("notes.txt", None),
         ] {
             assert_eq!(
                 kind_of(&canonical, None, &[Some(name), None]),
@@ -823,21 +752,15 @@ mod tests {
         // A declared MIME is authoritative, including the deliberate GIF skip.
         assert_eq!(
             kind_of(&canonical, Some("image/gif"), &[Some("clip.mp4")]),
-            MediaKind::Other
+            None
         );
         assert_eq!(
             kind_of(&canonical, Some("application/pdf"), &[Some("clip.mp4")]),
-            MediaKind::Other
+            None
         );
-        assert_eq!(
-            kind_of("ab/photo.gif", None, &[Some("clip.mp4")]),
-            MediaKind::Other
-        );
+        assert_eq!(kind_of("ab/photo.gif", None, &[Some("clip.mp4")]), None);
         // Incomplete transfers stay out of ffmpeg regardless of the hint.
-        assert_eq!(
-            kind_of("ab/upload.part", None, &[Some("clip.mp4")]),
-            MediaKind::Other
-        );
+        assert_eq!(kind_of("ab/upload.part", None, &[Some("clip.mp4")]), None);
     }
 
     #[test]
@@ -922,10 +845,7 @@ mod tests {
         assert!(is_part_path("aa/aabbcc.part"));
         assert!(is_part_path("upload.PART"));
         assert!(!is_part_path("aa/aabbcc.mp4"));
-        assert_eq!(
-            kind_of("aa/x.part", Some("video/mp4"), &[]),
-            MediaKind::Other
-        );
+        assert_eq!(kind_of("aa/x.part", Some("video/mp4"), &[]), None);
     }
 
     #[tokio::test]
@@ -965,18 +885,8 @@ mod tests {
                 row.mime_type.as_deref(),
                 &row.name_hints()
             ),
-            MediaKind::Audio,
+            Some(Kind::Audio),
             "an extensionless blob with no declared MIME must classify from its attachment name"
         );
-    }
-
-    #[test]
-    fn jpeg_under_threshold_skipped_without_ffmpeg() {
-        let dir = tempfile::tempdir().unwrap();
-        let img = dir.path().join("small.jpg");
-        fs::write(&img, vec![0u8; 100]).unwrap();
-        // derive_image returns None for small JPEGs before calling ffmpeg.
-        let out = derive_image(&img).unwrap();
-        assert!(out.is_none());
     }
 }

@@ -268,7 +268,12 @@ async fn run_import(args: ImportArgs) -> Result<()> {
         validate_source_id(source)?;
     }
     let mode = crate::import::ImportMode::parse(&args.mode)?;
-    let media = crate::import_media::MediaMode::parse(&args.media)?;
+    let media = media::MediaMode::parse(&args.media).ok_or_else(|| {
+        anyhow::anyhow!(
+            "invalid --media '{}' (expected copy, none, convert, or compress)",
+            args.media
+        )
+    })?;
     let db_path = args.db.clone().unwrap_or_else(|| cfg.paths.db.clone());
     let target = DbTarget::new(args.db_url.as_deref(), &db_path);
     let account = account_profile::resolve_account_ref_at(target, &args.account).await?;

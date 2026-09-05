@@ -18,11 +18,17 @@ RUN npm run build
 # -----------------------------------------------------------------------------
 # Stage 2: Rust binary
 # -----------------------------------------------------------------------------
-# rusqlite 0.40 / libsqlite3-sys 0.38 need Rust 1.95+ (cfg_select!).
-FROM rust:1.95-bookworm AS rust-builder
+# rust-toolchain.toml is the one place the compiler version is chosen. The
+# image copies it and lets rustup install that exact toolchain before the
+# build, so the published vault compiles on the Rust that CI tested (#427).
+# The base tag only picks the Debian release and pre-installs the same
+# minor: once Docker Hub carries the patch release the install is a no-op,
+# and scripts/check-docker-context.sh fails when the two minors disagree.
+FROM rust:1.98-bookworm AS rust-builder
 
 WORKDIR /src
-COPY Cargo.toml Cargo.lock ./
+COPY rust-toolchain.toml Cargo.toml Cargo.lock ./
+RUN rustup toolchain install
 COPY crates ./crates
 # Required at compile time by crates/vault/server/src/db/schema.rs include_str!(…).
 COPY schema ./schema

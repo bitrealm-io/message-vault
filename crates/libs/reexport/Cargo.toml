@@ -6,15 +6,14 @@ description = "Convert a Message Vault output directory to another format"
 license = "LicenseRef-FCL-1.0-ALv2"
 
 [dependencies]
-anyhow = "1.0.103"
-clap = { version = "4.6.1", features = ["derive"] }
+anyhow = { workspace = true }
 csv = "1.4.0"
 message-vault-io-core = { path = "../../core/message-vault-io-core" }
 message-ir = { path = "../ir" }
 message-ir-format = { path = "../ir-format" }
 media = { path = "../media" }
-serde_json = "1.0.150"
+serde_json = { workspace = true }
 
 [dev-dependencies]
 message-ir = { path = "../ir", features = ["testutil"] }
-tempfile = "3.27.0"
+tempfile = { workspace = true }

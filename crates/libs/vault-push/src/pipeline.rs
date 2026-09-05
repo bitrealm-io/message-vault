@@ -418,7 +418,7 @@ impl<'a> ImportPipeline<'a> {
                 mode,
                 request_ms,
                 messages_per_second: message_count as f64 / seconds,
-                mebibytes_per_second: body_bytes as f64 / (1024.0 * 1024.0) / seconds,
+                mebibytes_per_second: body_bytes as f64 / message_ir::MIB as f64 / seconds,
                 body_bytes,
                 message_count,
                 response,

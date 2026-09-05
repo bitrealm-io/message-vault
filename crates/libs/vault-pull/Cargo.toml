@@ -6,9 +6,9 @@ description = "Pull messages from a Message Vault export API into a message-ir f
 license = "LicenseRef-FCL-1.0-ALv2"
 
 [dependencies]
-anyhow = "1.0.103"
-chrono = { version = "0.4.44", default-features = false, features = ["clock", "std"] }
-hex = "0.4"
+anyhow = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
 jsonl_journal = { package = "journal", path = "../../libs/journal" }
 vault-api-types = { path = "../../libs/vault-api-types" }
 vault-http = { path = "../../libs/vault-http" }
@@ -16,10 +16,9 @@ message-vault-io-core = { path = "../../core/message-vault-io-core" }
 media = { path = "../media" }
 message-ir = { path = "../../libs/ir" }
 message-ir-format = { path = "../../libs/ir-format" }
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
+reqwest = { workspace = true, features = ["blocking"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3.27.0"
-httpmock = "0.8"
+tempfile = { workspace = true }

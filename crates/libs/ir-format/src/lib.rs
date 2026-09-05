@@ -42,7 +42,9 @@ pub use staging_summary::{
 };
 pub use transcode::{TranscodeOptions, TranscodeProgress, TranscodeReport, transcode_staged};
 pub use util::UNSAFE_ATTACHMENT_PATH_PREFIX;
-pub use write::{CSV_HEADERS, document_to_mail_messages, write_conversation_jsonl_to};
+pub use write::{
+    CSV_HEADERS, document_to_mail_messages, write_conversation_jsonl, write_conversation_jsonl_to,
+};
 pub use write_queue::{
     AttachmentSource, ConversationUnit, UnitAttachment, WriteQueueOptions, WriteQueueReport,
     default_writer_count, drain_units, drain_write_queue, drain_write_queue_with_loader,

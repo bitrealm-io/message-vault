@@ -52,7 +52,7 @@ pub(crate) fn load_chat_store(path: &Path) -> Result<ChatStoreFile> {
 }
 
 /// True when the message's `media` field is the boolean `true`.
-fn media_flag_true(msg: &MessageJson) -> bool {
+fn has_media_flag(msg: &MessageJson) -> bool {
     matches!(&msg.media, Value::Bool(true))
 }
 
@@ -66,7 +66,7 @@ fn is_missing_media_placeholder(s: &str) -> bool {
 /// When `media` is true, wtsexporter stores the file path in `data`, so only
 /// `caption` (if any) is treated as message text.
 pub(crate) fn message_text(msg: &MessageJson) -> String {
-    if media_flag_true(msg) {
+    if has_media_flag(msg) {
         return msg.caption.clone().unwrap_or_default();
     }
     let body = match &msg.data {

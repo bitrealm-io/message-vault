@@ -94,7 +94,7 @@ pub(crate) fn require_ffmpeg() -> Result<()> {
 }
 
 /// True when running `bin` with `args` exits successfully.
-fn command_ok(bin: &Path, args: &[&str]) -> bool {
+fn command_runs(bin: &Path, args: &[&str]) -> bool {
     Command::new(bin)
         .args(args)
         .stdin(Stdio::null())
@@ -143,7 +143,7 @@ fn resolve_tool(name: &str) -> Option<PathBuf> {
 /// The tool under `dir` if it exists and runs.
 fn find_tool_in_dir(dir: &Path, name: &str) -> Option<PathBuf> {
     let candidate = dir.join(executable_name(name));
-    if candidate.is_file() && command_ok(&candidate, &["-version"]) {
+    if candidate.is_file() && command_runs(&candidate, &["-version"]) {
         Some(candidate)
     } else {
         None
@@ -212,7 +212,7 @@ fn find_tool_with_override(name: &str, override_dir: Option<&Path>) -> Option<Pa
             if candidate.as_os_str().is_empty() {
                 continue;
             }
-            if candidate.is_file() && command_ok(&candidate, &["-version"]) {
+            if candidate.is_file() && command_runs(&candidate, &["-version"]) {
                 return Some(candidate);
             }
         }
@@ -220,7 +220,7 @@ fn find_tool_with_override(name: &str, override_dir: Option<&Path>) -> Option<Pa
 
     if let Some(extra) = std::env::var_os("MESSAGE_VAULT_IO_BIN") {
         let candidate = PathBuf::from(extra).join(&executable);
-        if candidate.is_file() && command_ok(&candidate, &["-version"]) {
+        if candidate.is_file() && command_runs(&candidate, &["-version"]) {
             return Some(candidate);
         }
     }
@@ -228,7 +228,7 @@ fn find_tool_with_override(name: &str, override_dir: Option<&Path>) -> Option<Pa
     if let Some(paths) = std::env::var_os("PATH") {
         for directory in std::env::split_paths(&paths) {
             let candidate = directory.join(&executable);
-            if candidate.is_file() && command_ok(&candidate, &["-version"]) {
+            if candidate.is_file() && command_runs(&candidate, &["-version"]) {
                 return Some(candidate);
             }
         }
@@ -236,7 +236,7 @@ fn find_tool_with_override(name: &str, override_dir: Option<&Path>) -> Option<Pa
 
     // Last resort: bare name (PATH lookup by the OS / shell semantics).
     let bare = PathBuf::from(&executable);
-    if command_ok(&bare, &["-version"]) {
+    if command_runs(&bare, &["-version"]) {
         return Some(bare);
     }
 

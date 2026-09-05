@@ -36,6 +36,19 @@ exclude = ["src-tauri"]
 message-ir = { path = "crates/libs/ir" }
 contacts = { path = "crates/libs/contacts" }
 phone = { path = "crates/libs/phone" }
+# Third-party crates more than one member uses. One version here, so a bump
+# lands everywhere at once and two members never drift apart.
+anyhow = "1.0.103"
+chrono = "0.4.44"
+hex = "0.4.3"
+quick-xml = { version = "0.42.0", features = ["serialize"] }
+regex = "1.13.0"
+reqwest = { version = "0.12.25", default-features = false, features = ["rustls-tls", "json"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+sha2 = "0.11.0"
+tempfile = "3.27.0"
+toml = "1.1.2"
 
 [patch.crates-io]
 sqlx-sqlite = { path = "vendor/sqlx-sqlite" }

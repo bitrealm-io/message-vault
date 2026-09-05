@@ -8,20 +8,9 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::LazyLock;
 
-static SAFE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[^\w.\-]+").expect("safe"));
+use message_ir::valid_filename;
 
-/// The file name trimmed, unless blank or a literal `null`/`none`.
-fn valid_filename(name: Option<&str>) -> Option<String> {
-    let cleaned = name?.trim();
-    if cleaned.is_empty()
-        || cleaned.eq_ignore_ascii_case("null")
-        || cleaned.eq_ignore_ascii_case("none")
-    {
-        None
-    } else {
-        Some(cleaned.to_string())
-    }
-}
+static SAFE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[^\w.\-]+").expect("safe"));
 
 /// File extension from the MIME type, falling back to the file name's own extension.
 fn extension_for(ctype: &str, filename: Option<&str>) -> String {
@@ -29,7 +18,7 @@ fn extension_for(ctype: &str, filename: Option<&str>) -> String {
     if let Some(ext) = media::ext_for_mime(&ct) {
         return ext.into();
     }
-    if let Some(valid) = valid_filename(filename)
+    if let Some(valid) = filename.and_then(valid_filename)
         && let Some(ext) = Path::new(&valid).extension().and_then(|e| e.to_str())
     {
         return format!(".{}", ext.to_ascii_lowercase());
@@ -121,11 +110,11 @@ pub(crate) fn extract_attachments(
             .cloned()
             .or_else(|| part.headers.get_first_value("Content-Type").and(None));
         // Prefer Content-Disposition filename
-        let original = valid_filename(filename.as_deref()).or_else(|| {
+        let original = filename.as_deref().and_then(valid_filename).or_else(|| {
             part.get_content_disposition()
                 .params
                 .get("name")
-                .and_then(|n| valid_filename(Some(n)))
+                .and_then(|n| valid_filename(n))
         });
         let ext = extension_for(&ctype, original.as_deref());
         // Content-addressed prefix: re-exports with different bytes get a new path

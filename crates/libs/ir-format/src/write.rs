@@ -124,8 +124,12 @@ pub fn write_conversation_jsonl_to(path: &Path, doc: &ConversationDocument) -> R
     })
 }
 
-/// First JSON Lines line: schema, export, and conversation metadata (no messages).
-fn write_conversation_jsonl(output_dir: &Path, doc: &ConversationDocument) -> Result<PathBuf> {
+/// Write `doc` as `<stem>.jsonl` under `output_dir` and return that path.
+///
+/// # Errors
+///
+/// Returns an error when the file cannot be created or written.
+pub fn write_conversation_jsonl(output_dir: &Path, doc: &ConversationDocument) -> Result<PathBuf> {
     let path = output_dir.join(format!("{}.jsonl", doc.filename_stem()));
     write_conversation_jsonl_to(&path, doc)?;
     Ok(path)

@@ -11,5 +11,5 @@ description = "Line-delimited JSON protocol between the Message Vault desktop ap
 repository = "https://github.com/bitrealm-io/message-vault"
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }

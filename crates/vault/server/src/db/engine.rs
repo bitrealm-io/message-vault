@@ -7,7 +7,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result, bail};
 use sqlx::any::{AnyConnectOptions, AnyPoolOptions};
 use sqlx::sqlite::SqliteConnectOptions;
-use sqlx::{AnyPool, ConnectOptions};
+use sqlx::{AnyPool, ConnectOptions, Connection};
 
 /// Which database engine a connection URL selects.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -202,7 +202,6 @@ pub fn redact_db_url(url: &str) -> String {
 #[cfg(test)]
 pub(crate) async fn test_pool() -> (AnyPool, tempfile::TempDir) {
     if let Some(url) = crate::pg_test_url() {
-        sqlx::any::install_default_drivers();
         let dir = tempfile::tempdir().unwrap();
         return (pg_test_schema_pool(&url).await, dir);
     }
@@ -211,9 +210,10 @@ pub(crate) async fn test_pool() -> (AnyPool, tempfile::TempDir) {
 
 /// File-backed SQLite in a fresh temp dir, whatever `MV_TEST_POSTGRES_URL`
 /// says: for a test whose subject is SQLite (a pragma, the file on disk,
-/// `sqlite_master`).
-#[cfg(test)]
-pub(crate) async fn sqlite_test_pool() -> (AnyPool, tempfile::TempDir) {
+/// `sqlite_master`), and for the SQLite half of the search-parity
+/// integration test. Test-support surface, not product API.
+#[doc(hidden)]
+pub async fn sqlite_test_pool() -> (AnyPool, tempfile::TempDir) {
     sqlx::any::install_default_drivers();
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("vault.db");
@@ -224,21 +224,47 @@ pub(crate) async fn sqlite_test_pool() -> (AnyPool, tempfile::TempDir) {
     (pool, dir)
 }
 
-/// A pool whose connections all run in a schema created for this one test.
+/// A pool whose connections all run in a Postgres schema created for this
+/// one test; see [`pg_test_schema_url`]. Test-support surface, not product
+/// API.
+#[doc(hidden)]
+pub async fn pg_test_schema_pool(url: &str) -> AnyPool {
+    let scoped = pg_test_schema_url(url).await;
+    AnyPoolOptions::new()
+        .max_connections(4)
+        .connect(&scoped)
+        .await
+        .expect("connect to the test schema")
+}
+
+/// A connection URL for a Postgres schema created for this one test.
 ///
 /// The schema is named `mvtest_<pid>_<n>`, so tests in one process never
-/// share one and a later process can tell the leftovers of an earlier one
-/// apart from its own. The first call in a process drops every `mvtest_`
-/// schema another process left behind: a crashed or interrupted run must
-/// not fill the shared test database. The connection URL carries
-/// `options=-csearch_path=<schema>`, so every table `ensure_vault_schema`
-/// creates lands in that schema and every query reads from it.
-#[cfg(test)]
-async fn pg_test_schema_pool(url: &str) -> AnyPool {
+/// share one. The URL carries `options=-csearch_path=<schema>`, so every
+/// table `ensure_vault_schema` creates lands in that schema and every query
+/// reads from it: nothing a test writes outlives its schema, and two
+/// checkouts running the suite against one server never see each other's
+/// rows (#435). A code path that takes a URL rather than a pool (the
+/// `reset-demo --db-url` path) runs inside the schema by being handed this
+/// URL.
+///
+/// The first call in a process sweeps the `mvtest_` schemas that earlier
+/// processes left behind, so a crashed or interrupted run does not fill the
+/// shared test database. Whether a schema's process is still running is
+/// decided by an advisory lock, not by age or by a pid lookup: every test
+/// process holds `pg_advisory_lock(PG_TEST_LOCK_CLASS, pid)` for its whole
+/// life on a connection of its own ([`hold_pg_test_process_lock`]), and the
+/// sweep drops a schema only when it can take that lock for the pid in the
+/// schema's name, which means the owner is gone. A suite still running in
+/// another checkout keeps its schemas. Test-support surface, not product API.
+#[doc(hidden)]
+pub async fn pg_test_schema_url(url: &str) -> String {
+    use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
     static SWEPT: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
 
+    sqlx::any::install_default_drivers();
     let pid = std::process::id();
     let schema = format!("mvtest_{pid}_{}", NEXT.fetch_add(1, Ordering::Relaxed));
     let admin = AnyPoolOptions::new()
@@ -248,18 +274,68 @@ async fn pg_test_schema_pool(url: &str) -> AnyPool {
         .expect("connect to MV_TEST_POSTGRES_URL");
     SWEPT
         .get_or_init(|| async {
+            // Held before the first schema exists, so another checkout's
+            // sweep never finds this process's schemas unclaimed.
+            hold_pg_test_process_lock(url, pid);
             let mine = format!("mvtest_{pid}_%");
-            let stale: Vec<String> = sqlx::query_scalar(
-                "SELECT nspname FROM pg_namespace WHERE nspname LIKE 'mvtest_%' AND nspname NOT LIKE $1",
+            // Best effort, but never silent: a sweep that fails quietly
+            // leaves the shared database filling up with nobody the wiser.
+            let others: Vec<String> = sqlx::query_scalar(
+                "SELECT nspname::text FROM pg_namespace WHERE nspname LIKE 'mvtest_%' AND nspname NOT LIKE $1",
             )
             .bind(&mine)
             .fetch_all(&admin)
             .await
-            .unwrap_or_default();
-            for name in stale {
-                let _ = sqlx::query(&format!("DROP SCHEMA IF EXISTS \"{name}\" CASCADE"))
+            .unwrap_or_else(|err| {
+                eprintln!("warning: could not list leftover mvtest_ schemas: {err}");
+                Vec::new()
+            });
+            let mut by_owner: BTreeMap<i32, Vec<String>> = BTreeMap::new();
+            for name in others {
+                if let Some(owner) = pg_test_schema_pid(&name) {
+                    by_owner.entry(owner).or_default().push(name);
+                }
+            }
+            for (owner, schemas) in by_owner {
+                // One probe per owner. A held lock means that suite is still
+                // running, or another sweeper is already dropping its
+                // schemas; either way they are not this process's to touch.
+                let owner_gone: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock($1, $2)")
+                    .bind(PG_TEST_LOCK_CLASS)
+                    .bind(owner)
+                    .fetch_one(&admin)
+                    .await
+                    .unwrap_or_else(|err| {
+                        eprintln!("warning: could not probe test process {owner}: {err}");
+                        false
+                    });
+                if !owner_gone {
+                    continue;
+                }
+                // A vault schema is about forty-five objects, and one
+                // statement's locks all count against
+                // max_locks_per_transaction, so drop ten schemas at a time.
+                for chunk in schemas.chunks(10) {
+                    let list = chunk
+                        .iter()
+                        .map(|name| format!("\"{name}\""))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    if let Err(err) = sqlx::query(&format!("DROP SCHEMA IF EXISTS {list} CASCADE"))
+                        .execute(&admin)
+                        .await
+                    {
+                        eprintln!("warning: could not drop leftover schemas {list}: {err}");
+                    }
+                }
+                if let Err(err) = sqlx::query("SELECT pg_advisory_unlock($1, $2)")
+                    .bind(PG_TEST_LOCK_CLASS)
+                    .bind(owner)
                     .execute(&admin)
-                    .await;
+                    .await
+                {
+                    eprintln!("warning: could not release the probe lock for {owner}: {err}");
+                }
             }
         })
         .await;
@@ -270,12 +346,61 @@ async fn pg_test_schema_pool(url: &str) -> AnyPool {
     admin.close().await;
 
     let separator = if url.contains('?') { '&' } else { '?' };
-    let scoped = format!("{url}{separator}options=-csearch_path%3D{schema}");
-    AnyPoolOptions::new()
-        .max_connections(4)
-        .connect(&scoped)
-        .await
-        .expect("connect to the test schema")
+    format!("{url}{separator}options=-csearch_path%3D{schema}")
+}
+
+/// Class id of the advisory lock each test process holds under its pid
+/// (the `(int, int)` form of `pg_advisory_lock`): "mv", so a co-tenant on
+/// the same server picking its own class is unlikely to collide.
+const PG_TEST_LOCK_CLASS: i32 = 0x6d76;
+
+/// The pid in a `mvtest_<pid>_<n>` schema name, as the int4 key the process
+/// lock is taken under.
+fn pg_test_schema_pid(name: &str) -> Option<i32> {
+    name.strip_prefix("mvtest_")?
+        .split('_')
+        .next()?
+        .parse()
+        .ok()
+}
+
+/// Take `pg_advisory_lock(PG_TEST_LOCK_CLASS, pid)` and hold it until the
+/// process exits. Returns once the lock is held.
+///
+/// The connection lives on a thread of its own with its own runtime: a
+/// `#[tokio::test]` runtime ends with its test, and a connection parked in
+/// a static would die with the first one. When the process exits the
+/// socket closes and the server releases the lock, which is how the next
+/// process's sweep learns this one's schemas are free to drop.
+fn hold_pg_test_process_lock(url: &str, pid: u32) {
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+    let url = url.to_string();
+    let key = i32::try_from(pid).expect("a pid fits an int4 advisory lock key");
+    std::thread::Builder::new()
+        .name("pg-test-process-lock".into())
+        .spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("runtime for the Postgres test process lock");
+            runtime.block_on(async move {
+                let mut conn = sqlx::AnyConnection::connect(&url)
+                    .await
+                    .expect("connect for the Postgres test process lock");
+                sqlx::query("SELECT pg_advisory_lock($1, $2)")
+                    .bind(PG_TEST_LOCK_CLASS)
+                    .bind(key)
+                    .execute(&mut conn)
+                    .await
+                    .expect("take the Postgres test process lock");
+                let _ = ready_tx.send(());
+                std::future::pending::<()>().await;
+            });
+        })
+        .expect("spawn the Postgres test process lock thread");
+    ready_rx
+        .recv()
+        .expect("the Postgres test process lock thread reports ready");
 }
 
 #[cfg(test)]

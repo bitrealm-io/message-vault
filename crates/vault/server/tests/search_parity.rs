@@ -7,14 +7,15 @@
 //! The queries and expected sets are the parity contract committed by the
 //! sqlx Any migration (#148): both engines must return exactly these sets.
 //!
-//! Runs on SQLite always (via a duplicate of the crate's `#[cfg(test)]`
-//! `test_pool` helper — integration tests cannot see it) and on Postgres
-//! when `MV_TEST_POSTGRES_URL` is set (CI and the local compose service).
+//! Runs on SQLite always and, when `MV_TEST_POSTGRES_URL` is set (CI and
+//! the local compose service), on Postgres too, in a schema of its own. Both
+//! pools come from the crate's test-support re-exports.
 
-use message_vault_server::{ExportPageOpts, ensure_vault_schema, export_messages};
+use message_vault_server::{
+    ExportPageOpts, ensure_vault_schema, export_messages, pg_test_schema_pool, sqlite_test_pool,
+};
 use serde::Deserialize;
 use sqlx::AnyConnection;
-use sqlx::ConnectOptions;
 
 /// Account used for the corpus vault (the same id the crate's unit tests use).
 const ACCOUNT_ID: &str = "11111111-1111-1111-1111-111111111111";
@@ -68,26 +69,6 @@ enum Engine {
     Postgres,
 }
 
-/// Task 1's validated `test_pool` shape, duplicated because integration
-/// tests cannot see the crate's `#[cfg(test)]` helper: install the Any
-/// drivers, then open a file-backed SQLite pool in a fresh temp dir.
-async fn sqlite_test_pool() -> (sqlx::AnyPool, tempfile::TempDir) {
-    sqlx::any::install_default_drivers();
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("vault.db");
-    let url = sqlx::sqlite::SqliteConnectOptions::new()
-        .filename(&path)
-        .create_if_missing(true)
-        .to_url_lossy()
-        .to_string();
-    let pool = sqlx::any::AnyPoolOptions::new()
-        .max_connections(4)
-        .connect(&url)
-        .await
-        .unwrap();
-    (pool, dir)
-}
-
 /// Load the committed corpus fixture.
 fn corpus() -> Vec<FixtureMessage> {
     serde_json::from_str(include_str!(
@@ -98,25 +79,11 @@ fn corpus() -> Vec<FixtureMessage> {
 
 /// Create a fresh vault: schema, one account, one conversation (a handle row
 /// is required for `chat_handle_id`), then the corpus messages with their
-/// keys bound as ids. Leftover account rows are cleared first so re-runs on
-/// the shared Postgres test database start clean (the account FKs cascade).
+/// keys bound as ids.
 async fn setup_vault(conn: &mut AnyConnection) {
     ensure_vault_schema(conn)
         .await
         .expect("fresh vault schema applies");
-    sqlx::query("DELETE FROM accounts WHERE id = $1")
-        .bind(ACCOUNT_ID)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    // The corpus owns message ids 1..=15, and the shared identity sequence
-    // may have handed those ids to the other gated tests' rows, so clear the
-    // range before inserting explicit keys (the PG_TEST_LOCK serializes us
-    // against those tests, so nothing is mid-flight here).
-    sqlx::query("DELETE FROM messages WHERE id BETWEEN 1 AND 15")
-        .execute(&mut *conn)
-        .await
-        .unwrap();
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
         .bind(ACCOUNT_ID)
         .execute(&mut *conn)
@@ -275,16 +242,7 @@ async fn search_parity_across_engines() {
     let Some(url) = message_vault_server::pg_test_url() else {
         return;
     };
-    // Cargo runs the lib and integration test binaries as separate
-    // processes; the shared Postgres test database (same account id and
-    // username as the crate's gated unit tests) is only race-safe while the
-    // in-process mutex and the cross-process file lock are both held.
-    let _pg_guard = message_vault_server::acquire_pg_test_lock().await;
-    sqlx::any::install_default_drivers();
-    let pool = sqlx::any::AnyPoolOptions::new()
-        .connect(&url)
-        .await
-        .expect("connect to the Postgres test database");
+    let pool = pg_test_schema_pool(&url).await;
     let mut conn = pool.acquire().await.unwrap();
     let postgres = run_against(&mut conn).await;
     assert_committed_cases(&postgres, Engine::Postgres);

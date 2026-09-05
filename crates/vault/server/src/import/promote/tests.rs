@@ -41,31 +41,9 @@ async fn promote_fts_cycle_pg() {
     let Some(url) = crate::pg_test_url() else {
         return;
     };
-    let _pg_guard = crate::acquire_pg_test_lock().await;
-    sqlx::any::install_default_drivers();
-    let pool = sqlx::any::AnyPoolOptions::new()
-        .connect(&url)
-        .await
-        .unwrap();
+    let pool = crate::db::engine::pg_test_schema_pool(&url).await;
     let mut conn = pool.acquire().await.unwrap();
     schema::ensure_vault_schema(&mut conn).await.unwrap();
-    // The Postgres test database is shared across runs; clear anything a
-    // previous run left behind (the account FKs cascade). The username is
-    // distinct from the other gated tests' 'alice' because the
-    // case-insensitive username index is database-global.
-    sqlx::query("DELETE FROM accounts WHERE id = $1")
-        .bind(TEST_ACCOUNT)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    // The shared identity sequence may hand out message ids inside the
-    // search-parity corpus range (keys 1..=15): that test binds its keys
-    // as explicit ids, so clear the range (the PG_TEST_LOCK above
-    // serializes us against the other gated tests).
-    sqlx::query("DELETE FROM messages WHERE id BETWEEN 1 AND 15")
-        .execute(&mut *conn)
-        .await
-        .unwrap();
 
     // One account + handle + conversation, and a pre-existing message
     // below the promote watermark, indexed by the insert trigger.
@@ -382,7 +360,7 @@ async fn promote_analyzes_import_tables_before_begin_pg() {
     }
     // A schema of this test's own (db::engine::test_pool on Postgres), so
     // nothing an earlier run left in staging can make this one promote the
-    // wrong rows, and no lock is needed against the other gated tests (#394).
+    // wrong rows (#394).
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
     schema::ensure_vault_schema(&mut conn).await.unwrap();

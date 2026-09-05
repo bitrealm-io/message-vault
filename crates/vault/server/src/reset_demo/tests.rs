@@ -85,8 +85,10 @@ async fn reset_demo_db_url_creates_demo_account_on_postgres() {
     let Some(url) = crate::pg_test_url() else {
         return;
     };
-    let _pg_guard = crate::acquire_pg_test_lock().await;
-    sqlx::any::install_default_drivers();
+    // A schema of this test's own. `reset_prepared_bundle_at_url` takes a
+    // URL rather than a pool, so the schema rides in the URL's search_path
+    // and everything the reset writes lands there (#435).
+    let url = crate::db::engine::pg_test_schema_url(&url).await;
 
     let temp = tempfile::tempdir().expect("temp dir");
     let bundle = temp.path().join("bundle");
@@ -112,12 +114,7 @@ async fn reset_demo_db_url_creates_demo_account_on_postgres() {
     schema::ensure_vault_schema(&mut conn)
         .await
         .expect("schema");
-    sqlx::query("DELETE FROM accounts WHERE id = $1")
-        .bind(DEMO_ACCOUNT_ID)
-        .execute(&mut *conn)
-        .await
-        .expect("wipe leftover demo");
-    conn.close().await.expect("close wipe conn");
+    conn.close().await.expect("close schema conn");
     pool.close().await;
 
     let host_config_before = fs::read(&config_dest).expect("read host config");
@@ -160,11 +157,6 @@ async fn reset_demo_db_url_creates_demo_account_on_postgres() {
             .await
             .expect("conversations");
     assert!(conversations >= 1, "expected imported conversations");
-    sqlx::query("DELETE FROM accounts WHERE id = $1")
-        .bind(DEMO_ACCOUNT_ID)
-        .execute(&mut *conn)
-        .await
-        .expect("cleanup demo");
     conn.close().await.expect("close");
     pool.close().await;
 }

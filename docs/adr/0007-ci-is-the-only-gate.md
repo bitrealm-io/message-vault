@@ -223,11 +223,11 @@ inherit it. A specific site that genuinely wants nine arguments carries a local
 `#[allow]` with a reason.
 
 The `test-postgres` job is gone. Its Postgres service moved onto the `test`
-job, which sets `MV_TEST_POSTGRES_URL` for `cargo test --workspace`. The
-Postgres-gated tests already serialize themselves against their shared database
-through `PG_TEST_LOCK` and an `fs2` file lock across test binaries
-(`crates/vault/server/src/lib.rs:58-75`), so running them inside the workspace
-suite introduces no race. The server crate now compiles once per pull request
+job, which sets `MV_TEST_POSTGRES_URL` for `cargo test --workspace`. Every
+Postgres-gated test runs in a schema of its own on that server
+(`pg_test_schema_url` in `crates/vault/server/src/db/engine.rs`, #435), so
+running them inside the workspace suite introduces no race, and two checkouts
+can run against one server at the same time. The server crate now compiles once per pull request
 instead of twice.
 
 The ruleset does not require a branch to be up to date with `main` before it

@@ -605,30 +605,9 @@ async fn messages_fts_stays_in_sync_pg() {
     let Some(url) = crate::pg_test_url() else {
         return;
     };
-    let _pg_guard = crate::acquire_pg_test_lock().await;
-    sqlx::any::install_default_drivers();
-    let pool = sqlx::any::AnyPoolOptions::new()
-        .connect(&url)
-        .await
-        .unwrap();
+    let pool = crate::db::engine::pg_test_schema_pool(&url).await;
     let mut conn = pool.acquire().await.unwrap();
     ensure_vault_schema(&mut conn).await.unwrap();
-    // The Postgres test database is shared across runs, so clear anything
-    // a previous run left behind (the account FKs cascade to handles,
-    // conversations, messages, attachments, and tapbacks).
-    sqlx::query("DELETE FROM accounts WHERE id = $1")
-        .bind(A1)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    // The shared identity sequence may hand out message ids inside the
-    // search-parity corpus range (keys 1..=15): that test binds its keys
-    // as explicit ids, so clear the range (the PG_TEST_LOCK above
-    // serializes us against the other gated tests).
-    sqlx::query("DELETE FROM messages WHERE id BETWEEN 1 AND 15")
-        .execute(&mut *conn)
-        .await
-        .unwrap();
 
     // One account + conversation, mirroring the SQLite test's setup.
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
@@ -715,22 +694,9 @@ async fn stale_postgres_marker_rebuilds_vault_schema_empty() {
     let Some(url) = crate::pg_test_url() else {
         return;
     };
-    let _pg_guard = crate::acquire_pg_test_lock().await;
-    sqlx::any::install_default_drivers();
-    let pool = sqlx::any::AnyPoolOptions::new()
-        .connect(&url)
-        .await
-        .unwrap();
+    let pool = crate::db::engine::pg_test_schema_pool(&url).await;
     let mut conn = pool.acquire().await.unwrap();
     ensure_vault_schema(&mut conn).await.unwrap();
-    // The Postgres test database is shared across runs, so clear anything
-    // a previous run left behind (the account FK cascades to handles,
-    // conversations, messages, attachments, and tapbacks).
-    sqlx::query("DELETE FROM accounts WHERE id = $1")
-        .bind(A1)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
         .bind(A1)
         .execute(&mut *conn)
@@ -785,20 +751,11 @@ async fn postgres_rebuild_spares_tables_the_vault_does_not_own() {
     let Some(url) = crate::pg_test_url() else {
         return;
     };
-    let _pg_guard = crate::acquire_pg_test_lock().await;
-    sqlx::any::install_default_drivers();
-    let pool = sqlx::any::AnyPoolOptions::new()
-        .connect(&url)
-        .await
-        .unwrap();
+    let pool = crate::db::engine::pg_test_schema_pool(&url).await;
     let mut conn = pool.acquire().await.unwrap();
     ensure_vault_schema(&mut conn).await.unwrap();
 
     // A co-tenant application's table, sitting in the same schema.
-    sqlx::query("DROP TABLE IF EXISTS mv_test_neighbour")
-        .execute(&mut *conn)
-        .await
-        .unwrap();
     sqlx::query("CREATE TABLE mv_test_neighbour (id BIGINT PRIMARY KEY, note TEXT)")
         .execute(&mut *conn)
         .await
@@ -843,11 +800,6 @@ async fn postgres_rebuild_spares_tables_the_vault_does_not_own() {
         .await
         .unwrap();
     assert_eq!(ready, 1, "the rebuild stamps the current marker");
-
-    sqlx::query("DROP TABLE IF EXISTS mv_test_neighbour")
-        .execute(&mut *conn)
-        .await
-        .unwrap();
 }
 
 /// The drop list is read out of the embedded DDL, so it covers every

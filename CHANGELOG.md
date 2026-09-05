@@ -26,6 +26,7 @@ Released version headings also carry a date: `## [0.8.0] - 2026-08-24`.
 
 ### Fixed
 
+- 2026-09-05: The release Docker image compiles the vault with the Rust that `rust-toolchain.toml` pins, not with whatever the `rust:` base tag carried (1.95 while the pin said 1.98.1), so the published server is built on the compiler CI tested. `scripts/check-docker-context.sh` fails when the Dockerfile stops copying the pin or its base image moves to another minor. (#427)
 - 2026-09-03: Importing a file the vault cannot read now answers with a 400 that says what is wrong — which schema version the file has and which the vault reads, or which line is not valid — instead of "internal server error" with the reason on the server's log only.
 - 2026-09-03: `POST /v1/import` without a `source` now returns the vault's own JSON error ("query param source is required") instead of the framework's plain-text rejection.
 - 2026-08-30: Message Vault Settings no longer reports an address it has not probed. Editing the address after a failed Test used to fall back to the card's own connection — which belongs to the vault already saved — and turn the line green. An address typed but not tried now reads `Not tested`.

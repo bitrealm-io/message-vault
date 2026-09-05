@@ -3,9 +3,9 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use tauri::Emitter;
 use vault_push::{ProgressEvent, VaultPushConfig, run as run_push};
 
+use super::events;
 use super::events::ExtractProgressEvent;
 use super::jobs::{reset_and_clone_cancel, spawn_job};
 use crate::state::AppState;
@@ -162,13 +162,14 @@ fn push_config(args: PushArgs) -> VaultPushConfig {
 fn forward_push_event(app: &tauri::AppHandle, event: ProgressEvent) {
     match event {
         ProgressEvent::Log(line) => {
-            let _ = app.emit("extract:log", line);
+            events::emit(app, events::LOG, line);
         }
         ProgressEvent::Auth { .. } => {}
         ProgressEvent::FileStart { index, total, file } => {
-            let _ = app.emit("extract:log", format!("Starting: {file}"));
-            let _ = app.emit(
-                "extract:progress",
+            events::emit(app, events::LOG, format!("Starting: {file}"));
+            events::emit(
+                app,
+                events::PROGRESS,
                 ExtractProgressEvent {
                     step: "upload".into(),
                     done: index.saturating_sub(1),
@@ -180,7 +181,7 @@ fn forward_push_event(app: &tauri::AppHandle, event: ProgressEvent) {
             );
         }
         ProgressEvent::FileDone { file, status } => {
-            let _ = app.emit("extract:log", format!("Done: {file} ({status})"));
+            events::emit(app, events::LOG, format!("Done: {file} ({status})"));
         }
         ProgressEvent::Issue {
             kind,
@@ -188,8 +189,9 @@ fn forward_push_event(app: &tauri::AppHandle, event: ProgressEvent) {
             item,
             reason,
         } => {
-            let _ = app.emit(
-                "extract:issue",
+            events::emit(
+                app,
+                events::ISSUE,
                 serde_json::json!({
                     "kind": kind,
                     "step": step,
@@ -200,8 +202,8 @@ fn forward_push_event(app: &tauri::AppHandle, event: ProgressEvent) {
         }
         ProgressEvent::Finished(report) => {
             let (progress, summary) = finished_push_events(&report);
-            let _ = app.emit("extract:progress", progress);
-            let _ = app.emit("extract:finished", summary.to_string());
+            events::emit(app, events::PROGRESS, progress);
+            events::emit(app, events::FINISHED, summary.to_string());
         }
     }
 }

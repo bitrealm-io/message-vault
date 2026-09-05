@@ -3,12 +3,12 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use tauri::Emitter;
 use vault_pull::{
     DEFAULT_ASSET_DOWNLOAD_WORKERS, DEFAULT_PAGE_LIMIT, ProgressEvent, VaultPullConfig,
     run as run_pull,
 };
 
+use super::events;
 use super::jobs::{reset_and_clone_cancel, spawn_job};
 use crate::state::AppState;
 
@@ -64,15 +64,16 @@ pub async fn pull(
 
         let mut progress = |event: ProgressEvent| match event {
             ProgressEvent::Log(line) => {
-                let _ = app_handle.emit("extract:log", line);
+                events::emit(&app_handle, events::LOG, line);
             }
             ProgressEvent::Auth { .. } => {}
             ProgressEvent::Page {
                 messages,
                 total_so_far,
             } => {
-                let _ = app_handle.emit(
-                    "extract:log",
+                events::emit(
+                    &app_handle,
+                    events::LOG,
                     format!("Fetched {messages} message(s) ({total_so_far} total)"),
                 );
             }
@@ -85,7 +86,7 @@ pub async fn pull(
                     "Pull complete: {} messages, {} conversations",
                     report.messages, report.conversations,
                 );
-                let _ = app_handle.emit("extract:finished", summary);
+                events::emit(&app_handle, events::FINISHED, summary);
             }
             Err(err) => return Err(err),
         }

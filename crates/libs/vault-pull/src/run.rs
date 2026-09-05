@@ -53,8 +53,6 @@ pub struct VaultPullConfig {
 /// Final summary of a download (conversations, messages, attachment counts).
 #[derive(Debug, Clone, Serialize)]
 pub struct PullReport {
-    /// Always `true`: a run that fails returns an error instead of a report.
-    pub ok: bool,
     /// Account id the key resolved to.
     pub account: String,
     /// The query the run asked the vault for.
@@ -178,6 +176,7 @@ pub fn run(
     };
     let conversations = pull.write_conversations(fetched.by_conv)?;
     pull.finish_journal(
+        &mut on_progress,
         conversations,
         fetched.total_messages,
         &assets,
@@ -185,7 +184,6 @@ pub fn run(
     );
 
     let report = PullReport {
-        ok: true,
         account: pull.account,
         query: pull.query,
         conversations,
@@ -389,10 +387,15 @@ impl<'a> Pull<'a> {
                     url: cfg.base_url.clone(),
                     username: self.username.clone(),
                     sha256: sha.clone(),
-                    path: String::new(),
-                    size_bytes: 0,
                 };
-                let _ = crate::journal::append(&self.journal_path, &event);
+                if let Err(error) = crate::journal::append(&self.journal_path, &event) {
+                    emit(
+                        out,
+                        ProgressEvent::Log(format!(
+                            "warning: could not record {sha} in the journal: {error:#}"
+                        )),
+                    );
+                }
             }
         }
         emit(
@@ -432,10 +435,12 @@ impl<'a> Pull<'a> {
 
     /// Record that this download finished, then rewrite the journal in its
     /// shortest form. Every asset this run saw is on disk: it was downloaded
-    /// above, or an earlier run had already fetched it. Best effort: a journal
-    /// write failure does not fail a run whose files are already written.
+    /// above, or an earlier run had already fetched it. A journal write
+    /// failure does not fail a run whose files are already written; it is
+    /// reported on the progress log, since the next run will re-download.
     fn finish_journal(
         &self,
+        out: &mut Option<&mut ProgressFn<'_>>,
         conversations: u64,
         messages: u64,
         assets: &AssetCounts,
@@ -448,19 +453,31 @@ impl<'a> Pull<'a> {
             messages,
             assets: assets.downloaded + assets.skipped,
         };
-        let _ = crate::journal::append(&self.journal_path, &event);
+        if let Err(error) = crate::journal::append(&self.journal_path, &event) {
+            emit(
+                out,
+                ProgressEvent::Log(format!(
+                    "warning: could not record the finished download in the journal: {error:#}"
+                )),
+            );
+        }
         let mut recorded_assets = self.journal.assets.clone();
         recorded_assets.extend(seen_assets.into_keys());
         let final_state = crate::journal::PullJournalState {
             assets: recorded_assets,
             backup_complete: true,
         };
-        let _ = crate::journal::compact(
+        if let Err(error) = crate::journal::compact(
             &self.journal_path,
             &self.cfg.base_url,
             &self.username,
             &final_state,
-        );
+        ) {
+            emit(
+                out,
+                ProgressEvent::Log(format!("warning: could not compact the journal: {error:#}")),
+            );
+        }
     }
 }
 

@@ -26,10 +26,6 @@ pub enum PullJournalEvent {
         username: String,
         /// Hex SHA-256 fingerprint of the attachment bytes; the skip key.
         sha256: String,
-        /// Not filled in: the run writes an empty string and nothing reads it.
-        path: String,
-        /// Not filled in: the run writes `0` and nothing reads it.
-        size_bytes: u64,
     },
     /// A whole download finished, with its counts.
     BackupComplete {
@@ -120,8 +116,6 @@ pub fn compact(path: &Path, url: &str, username: &str, state: &PullJournalState)
                 url: url.to_string(),
                 username: username.to_string(),
                 sha256: sha.clone(),
-                path: String::new(), // resume looks up attachments/{sha}, not this path
-                size_bytes: 0,       // size is unused when skipping already-downloaded files
             });
         }
         if state.backup_complete {

@@ -17,8 +17,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use message_vault_io_core::CancelFlag;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
+use super::events;
 use super::events::ExtractErrorEvent;
 use crate::state::AppState;
 
@@ -46,8 +47,9 @@ where
 {
     thread::spawn(move || {
         if let Err(err) = run() {
-            let _ = app.emit(
-                "extract:error",
+            events::emit(
+                &app,
+                events::ERROR,
                 ExtractErrorEvent {
                     detail: format!("{err:#}"),
                     user_message: None,

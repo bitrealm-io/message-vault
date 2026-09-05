@@ -6,6 +6,27 @@
 
 use message_vault_io_core::ProgressEvent;
 use serde::Serialize;
+use tauri::{AppHandle, Emitter};
+
+/// One log line for the UI's log panel. Payload: `String`.
+pub const LOG: &str = "extract:log";
+/// Progress-bar numbers. Payload: [`ExtractProgressEvent`].
+pub const PROGRESS: &str = "extract:progress";
+/// One skipped or failed item for the Import Errors list. Payload: an issue row.
+pub const ISSUE: &str = "extract:issue";
+/// The job finished. Payload: the summary line or JSON the screen shows.
+pub const FINISHED: &str = "extract:finished";
+/// The job failed before it could finish. Payload: [`ExtractErrorEvent`].
+pub const ERROR: &str = "extract:error";
+
+/// Send one event to the UI. An emit fails only when no window is left to
+/// receive it; the job carries on, and the miss goes to the process log so it
+/// is not silent.
+pub fn emit(app: &AppHandle, event: &str, payload: impl Serialize + Clone) {
+    if let Err(error) = app.emit(event, payload) {
+        eprintln!("warning: {event} event not delivered: {error}");
+    }
+}
 
 /// Progress numbers the UI uses to update the progress bar.
 #[derive(Debug, Clone, Serialize)]

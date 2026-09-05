@@ -33,8 +33,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use message_ir_format::{EXPORT_SENTINEL, StagingSummary, TranscodeOptions, TranscodeReport};
-use tauri::Emitter;
 
+use super::events;
 use super::events::ExtractProgressEvent;
 use super::extract::{parse_attachment_media, parse_compress_options, parse_max_resolution};
 use super::jobs::{reset_and_clone_cancel, spawn_job};
@@ -154,8 +154,9 @@ pub async fn summarize_staging(
     let progress_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         message_ir_format::summarize_staging(&staging_dir, &options, &mut |progress| {
-            let _ = progress_app.emit(
-                "extract:progress",
+            events::emit(
+                &progress_app,
+                events::PROGRESS,
                 ExtractProgressEvent {
                     step: "prepare".into(),
                     done: progress.done,
@@ -258,8 +259,9 @@ pub async fn transcode_staging(
     let app_handle = app.clone();
     spawn_job(app, move || {
         if has_media_step {
-            let _ = app_handle.emit(
-                "extract:log",
+            events::emit(
+                &app_handle,
+                events::LOG,
                 "Converting and compressing attachments…".to_string(),
             );
         }
@@ -273,8 +275,9 @@ pub async fn transcode_staging(
             &options,
             Some(&cancel),
             &mut |progress| {
-                let _ = app_handle.emit(
-                    "extract:progress",
+                events::emit(
+                    &app_handle,
+                    events::PROGRESS,
                     ExtractProgressEvent {
                         step: "media".into(),
                         done: progress.done,
@@ -296,7 +299,7 @@ pub async fn transcode_staging(
 
         let summary = transcode_summary(&report);
         if report.failed > 0 || report.too_large > 0 {
-            let _ = app_handle.emit("extract:log", summary.clone());
+            events::emit(&app_handle, events::LOG, summary.clone());
         }
 
         let payload = serde_json::json!({
@@ -310,7 +313,7 @@ pub async fn transcode_staging(
             "bytes_before": report.bytes_before,
             "bytes_after": report.bytes_after,
         });
-        let _ = app_handle.emit("extract:finished", payload.to_string());
+        events::emit(&app_handle, events::FINISHED, payload.to_string());
         Ok(())
     });
 

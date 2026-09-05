@@ -163,18 +163,6 @@ impl CompleteImportArgs {
     }
 }
 
-/// Finish an import session, logging a warning if the row update fails.
-pub async fn complete_import_or_warn(
-    conn: &mut AnyConnection,
-    account_id: &str,
-    import_id: i64,
-    args: &CompleteImportArgs,
-) {
-    if let Err(e) = complete_import(conn, account_id, import_id, args).await {
-        eprintln!("warning: complete_import({import_id}) failed: {e}");
-    }
-}
-
 /// One problem to record against an import session.
 #[derive(Debug, Clone)]
 pub struct ImportIssueInput {

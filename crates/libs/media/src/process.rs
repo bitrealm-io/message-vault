@@ -769,6 +769,8 @@ fn compress_video(
         return keep_or_remux(path, commit);
     }
 
+    // A probe that fails yields empty codec and zero dimensions, which never
+    // count as efficient, so the file goes through compression like any other.
     let probe = probe_video(path).unwrap_or_default();
     if opts.skip_efficient
         && is_efficient(&probe.codec, probe.width, probe.height, probe.bitrate, opts)

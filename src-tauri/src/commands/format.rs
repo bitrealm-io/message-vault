@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 use message_vault_io_core::{
     ExporterConfig, FormatConfig, LogSink, MediaConfig, OutputFormat, SourceConfig,
 };
-use tauri::Emitter;
 
+use super::events;
 use super::jobs::{reset_and_clone_cancel, spawn_job};
 use super::last_log_line_or;
 use crate::state::AppState;
@@ -54,7 +54,7 @@ pub async fn format(
             media: MediaConfig::default(),
             cancel: Some(cancel),
             log: Some(LogSink::new(move |line: &str| {
-                let _ = log_app.emit("extract:log", line.to_string());
+                events::emit(&log_app, events::LOG, line.to_string());
             })),
             // The Format screen shows a log, not a progress bar.
             progress: None,
@@ -67,9 +67,9 @@ pub async fn format(
             Ok(run_result) => {
                 let summary = last_log_line_or(&run_result.messages, "Format conversion complete.");
                 for line in run_result.messages {
-                    let _ = app_handle.emit("extract:log", line);
+                    events::emit(&app_handle, events::LOG, line);
                 }
-                let _ = app_handle.emit("extract:finished", summary);
+                events::emit(&app_handle, events::FINISHED, summary);
             }
             Err(err) => return Err(err),
         }

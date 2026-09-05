@@ -22,7 +22,6 @@ use message_vault_io_core::{
     ApplePlatform, AttachmentMedia, Exporter, ExporterConfig, Form, LogSink, OutputFormat,
     ProgressSink, SourceConfig, WhatsappPlatform,
 };
-use tauri::Emitter;
 
 // Short names so the match in `run_exporter` stays easy to read.
 use go_sms_pro_exporter::run as run_go_sms_pro;
@@ -33,6 +32,7 @@ use sms_backup_plus_exporter::run as run_sms_plus;
 use sms_backup_restore_exporter::run as run_sms_restore;
 use whatsapp_exporter::run as run_whatsapp;
 
+use super::events;
 use super::events::{ExtractErrorEvent, ExtractProgressEvent};
 use super::jobs::{reset_and_clone_cancel, spawn_job};
 use super::last_log_line_or;
@@ -222,11 +222,15 @@ pub async fn extract(
     // the prose.
     let log_app = app_handle.clone();
     config.log = Some(LogSink::new(move |line: &str| {
-        let _ = log_app.emit("extract:log", line.to_string());
+        events::emit(&log_app, events::LOG, line.to_string());
     }));
     let progress_app = app_handle.clone();
     config.progress = Some(ProgressSink::new(move |event| {
-        let _ = progress_app.emit("extract:progress", ExtractProgressEvent::from(event));
+        events::emit(
+            &progress_app,
+            events::PROGRESS,
+            ExtractProgressEvent::from(event),
+        );
     }));
 
     spawn_job(app, move || {
@@ -236,7 +240,7 @@ pub async fn extract(
             Ok(run_result) => {
                 let summary = last_log_line_or(&run_result.messages, "Export complete.");
                 for line in run_result.messages {
-                    let _ = app_handle.emit("extract:log", line);
+                    events::emit(&app_handle, events::LOG, line);
                 }
                 match count_jsonl_output(Path::new(&output_dir)) {
                     Ok(counts) => {
@@ -245,11 +249,11 @@ pub async fn extract(
                             "files_parsed": counts.files,
                             "messages_parsed": counts.messages,
                         });
-                        let _ = app_handle.emit("extract:finished", payload.to_string());
+                        events::emit(&app_handle, events::FINISHED, payload.to_string());
                     }
                     Err(err) => {
-                        let _ = app_handle.emit(
-                            "extract:error",
+                        events::emit(&app_handle,
+                            events::ERROR,
                             ExtractErrorEvent {
                                 detail: format!(
                                     "count extracted JSON Lines records in {output_dir}: {err:#}"

@@ -1,4 +1,5 @@
 use super::*;
+use crate::kind_for_mime;
 use crate::tools::ffmpeg_available;
 
 /// Write a minimal valid 1x1 PNG, readable by ffmpeg, for conversion tests.
@@ -385,4 +386,55 @@ fn process_attachment_files_touches_only_the_listed_files() {
         unlisted_before,
         "unlisted file was rewritten"
     );
+}
+
+#[test]
+fn transcode_file_as_converts_an_extensionless_source_by_the_given_kind() {
+    let _tools = crate::tools::tools_test_lock();
+    if !ffmpeg_available() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    // The vault stores originals under their fingerprint alone.
+    let src = dir.path().join("3b1f");
+    write_test_png(&src);
+    assert_eq!(classify(&src), None, "no extension, so no kind to read");
+    let dest = dir.path().join("3b1f.jpg.in_progress");
+
+    let outcome = transcode_file_as(
+        &src,
+        Kind::Image,
+        &dest,
+        MediaMode::Convert,
+        &CompressOptions::default(),
+    )
+    .unwrap();
+
+    assert_eq!(outcome, TranscodeOutcome::Produced);
+    assert!(dest.exists());
+    assert!(src.exists(), "the original is never touched");
+    assert_eq!(
+        transcode_file_as(
+            &src,
+            Kind::Image,
+            &dest,
+            MediaMode::Clone,
+            &CompressOptions::default()
+        )
+        .unwrap(),
+        TranscodeOutcome::Skipped,
+        "clone mode never converts"
+    );
+}
+
+#[test]
+fn kind_for_mime_reads_the_top_level_type() {
+    assert_eq!(kind_for_mime("image/heic"), Some(Kind::Image));
+    assert_eq!(
+        kind_for_mime("video/quicktime; codecs=hvc1"),
+        Some(Kind::Video)
+    );
+    assert_eq!(kind_for_mime("AUDIO/amr"), Some(Kind::Audio));
+    assert_eq!(kind_for_mime("application/pdf"), None);
+    assert_eq!(kind_for_mime(""), None);
 }

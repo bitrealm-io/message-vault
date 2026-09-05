@@ -237,13 +237,10 @@ fn remove_msgmedia_temps(root: &Path) -> Result<()> {
 /// `IMG_0001.MOV`, for instance — and a coarser, stem-only match would delete
 /// one file's in-flight scratch while converting the other.
 ///
-/// `path` itself can never be swept: `classify` (and so this function)
-/// treats a `.msgmedia.tmp.` path as having no kind, so a caller that passes
-/// scratch as `path` gets a no-op, not a self-delete.
-fn remove_temps_beside(path: &Path) {
-    let Some(kind) = classify(path) else {
-        return;
-    };
+/// `path` itself can never be swept: `classify` treats a `.msgmedia.tmp.`
+/// path as having no kind, so a caller that passes scratch as `path` never
+/// gets here with a kind to sweep by.
+fn remove_temps_beside(path: &Path, kind: Kind) {
     let ext = match kind {
         Kind::Image => "jpg",
         Kind::Audio => "mp3",
@@ -301,11 +298,11 @@ pub fn classify(path: &Path) -> Option<Kind> {
 /// re-encode came out no smaller (decision 44).
 fn run_one(
     path: &Path,
+    kind: Kind,
     mode: MediaMode,
     compress: &CompressOptions,
     commit: Commit<'_>,
 ) -> Result<Option<PathBuf>> {
-    let kind = classify(path).context("unknown media kind")?;
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
@@ -357,7 +354,8 @@ fn process_one(
     compress: &CompressOptions,
 ) -> Result<Outcome> {
     let old_rel = rel_path(output_dir, path)?;
-    match run_one(path, mode, compress, Commit::InPlace)? {
+    let kind = classify(path).context("unknown media kind")?;
+    match run_one(path, kind, mode, compress, Commit::InPlace)? {
         Some(new_path) => changed(output_dir, &old_rel, &new_path),
         None => Ok(Outcome::Skipped),
     }
@@ -478,14 +476,56 @@ pub fn transcode_file(
     mode: MediaMode,
     compress: &CompressOptions,
 ) -> Result<TranscodeOutcome> {
+    let kind = classify(src);
     // Clear this file's own scratch before checking the mode: an interrupted
     // run can leave scratch beside a file regardless of what mode retries it.
-    remove_temps_beside(src);
+    if let Some(kind) = kind {
+        remove_temps_beside(src, kind);
+    }
     if matches!(mode, MediaMode::Clone | MediaMode::Disabled) {
         return Ok(TranscodeOutcome::Skipped);
     }
+    let kind = kind.context("unknown media kind")?;
+    transcode_as(src, kind, dest, mode, compress)
+}
+
+/// [`transcode_file`] for a source whose kind the caller already knows,
+/// because the file carries no extension to read it from: the vault stores
+/// originals under their SHA-256 alone, and knows the kind from the MIME type
+/// the import declared. Use [`kind_for_mime`](crate::kind_for_mime) for that.
+///
+/// A source with no extension is never "already in the target format", so in
+/// `Convert` mode every image becomes a JPEG, every video an MP4, and every
+/// audio file an MP3; the same-format floors only apply when the extension
+/// says so.
+///
+/// # Errors
+///
+/// Returns an error when ffmpeg/ffprobe are missing or fail, or IO fails.
+pub fn transcode_file_as(
+    src: &Path,
+    kind: Kind,
+    dest: &Path,
+    mode: MediaMode,
+    compress: &CompressOptions,
+) -> Result<TranscodeOutcome> {
+    remove_temps_beside(src, kind);
+    if matches!(mode, MediaMode::Clone | MediaMode::Disabled) {
+        return Ok(TranscodeOutcome::Skipped);
+    }
+    transcode_as(src, kind, dest, mode, compress)
+}
+
+/// The shared tail of the two `transcode_file` entry points.
+fn transcode_as(
+    src: &Path,
+    kind: Kind,
+    dest: &Path,
+    mode: MediaMode,
+    compress: &CompressOptions,
+) -> Result<TranscodeOutcome> {
     require_ffmpeg()?;
-    match run_one(src, mode, compress, Commit::To(dest))? {
+    match run_one(src, kind, mode, compress, Commit::To(dest))? {
         Some(_) => Ok(TranscodeOutcome::Produced),
         None => Ok(TranscodeOutcome::Skipped),
     }
@@ -577,11 +617,22 @@ fn commit_produced(commit: Commit<'_>, original: &Path, produced: &Path) -> Resu
                 fs::create_dir_all(parent)
                     .with_context(|| format!("create {}", parent.display()))?;
             }
-            fs::rename(produced, dest)
-                .with_context(|| format!("rename {} to {}", produced.display(), dest.display()))?;
+            move_file(produced, dest)?;
             Ok(dest.to_path_buf())
         }
     }
+}
+
+/// Move `from` to `to`: a rename when both sit on one filesystem, else a copy
+/// and a delete. The scratch file is written beside the source, and a caller's
+/// destination (a temp folder, say) need not share a device with it.
+fn move_file(from: &Path, to: &Path) -> Result<()> {
+    if fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    fs::copy(from, to).with_context(|| format!("copy {} to {}", from.display(), to.display()))?;
+    fs::remove_file(from).with_context(|| format!("remove {}", from.display()))?;
+    Ok(())
 }
 
 /// Is `produced` actually smaller than `original`?

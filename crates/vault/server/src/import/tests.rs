@@ -814,7 +814,7 @@ async fn trunk_zero_phone_imports_digits_with_review_note() {
 #[tokio::test]
 async fn source_from_jsonl_stamps_export_source_and_assets() {
     use crate::config::PathsConfig;
-    use crate::import_media::MediaMode;
+    use media::MediaMode;
 
     let tmp = TempDir::new().unwrap();
     let db = tmp.path().join("vault.db");
@@ -851,7 +851,7 @@ async fn source_from_jsonl_stamps_export_source_and_assets() {
             import_id: None,
             source_from_jsonl: true,
             paths: Some(&paths),
-            media: MediaMode::Copy,
+            media: MediaMode::Clone,
             wipe_sources: Some(vec!["go-sms-pro".into()]),
         },
     )
@@ -873,7 +873,7 @@ async fn source_from_jsonl_stamps_export_source_and_assets() {
 #[tokio::test]
 async fn media_none_skips_attachment_copy() {
     use crate::config::PathsConfig;
-    use crate::import_media::MediaMode;
+    use media::MediaMode;
 
     let tmp = TempDir::new().unwrap();
     let db = tmp.path().join("vault.db");
@@ -910,7 +910,7 @@ async fn media_none_skips_attachment_copy() {
             import_id: None,
             source_from_jsonl: true,
             paths: Some(&paths),
-            media: MediaMode::None,
+            media: MediaMode::Disabled,
             wipe_sources: Some(vec!["sms".into()]),
         },
     )

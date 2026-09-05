@@ -11,9 +11,9 @@ use crate::db::engine::DbTarget;
 use crate::db::schema;
 use crate::dedupe::{self, DedupeStats};
 use crate::import::{self, ImportMode, ImportOptions, ImportStats};
-use crate::import_media::MediaMode;
 use crate::jsonl;
 use crate::models::ExportRecord;
+use media::MediaMode;
 
 /// Options for a CLI directory import.
 #[derive(Debug, Clone)]

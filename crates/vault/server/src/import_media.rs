@@ -1,50 +1,13 @@
-//! Import-time media rewrite before content-addressed asset store.
+//! Import-time media rewrite before the content-addressed asset store.
+//!
+//! The modes and the conversions are the `media` crate's, the same ones the
+//! desktop export applies, so an attachment converted on import and one
+//! converted on export come out as the same bytes.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
-
-use crate::media_tools::{self, MediaKind, ext_of, kind_of, path_str};
-
-/// How attachment files are handled during import.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum MediaMode {
-    /// Hash/copy attachment files as-is (default).
-    #[default]
-    Copy,
-    /// Skip attachment files and metadata.
-    None,
-    /// Convert non-browser-friendly media to JPEG/MP4/MP3.
-    Convert,
-    /// Convert and recompress oversized media (process-assets thresholds).
-    Compress,
-}
-
-impl MediaMode {
-    /// Parse a `--media` value: `copy`, `none`, `convert`, or `compress`;
-    /// anything else is an error. Accepts the aliases `clone`, `skip`, and
-    /// `disabled`.
-    pub fn parse(s: &str) -> Result<Self> {
-        match s.to_ascii_lowercase().as_str() {
-            "copy" | "clone" => Ok(Self::Copy),
-            "none" | "skip" | "disabled" => Ok(Self::None),
-            "convert" => Ok(Self::Convert),
-            "compress" => Ok(Self::Compress),
-            other => bail!("invalid --media '{other}' (expected copy, none, convert, or compress)"),
-        }
-    }
-
-    /// Canonical flag value for this mode (`copy`, `none`, `convert`, or `compress`).
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Copy => "copy",
-            Self::None => "none",
-            Self::Convert => "convert",
-            Self::Compress => "compress",
-        }
-    }
-}
+use anyhow::{Context, Result};
+use media::{CompressOptions, Kind, MediaMode, TranscodeOutcome};
 
 /// The file to store for one attachment, after the mode's transformation.
 #[derive(Debug)]
@@ -55,9 +18,25 @@ pub struct ResolvedMedia {
     pub mime_type: Option<String>,
 }
 
+impl ResolvedMedia {
+    /// The source file, stored as it is.
+    fn as_is(source_path: &Path, mime: Option<&str>) -> Self {
+        Self {
+            path: source_path.to_path_buf(),
+            mime_type: mime.map(str::to_string),
+        }
+    }
+}
+
 /// Resolve the file bytes to store for one attachment.
 ///
-/// Returns `Ok(None)` when the attachment should be omitted (`MediaMode::None`).
+/// Returns `Ok(None)` when the attachment should be omitted
+/// ([`MediaMode::Disabled`]).
+///
+/// # Errors
+///
+/// Returns an error when a conversion fails, or when the mode needs ffmpeg
+/// and the `media` crate cannot find it.
 pub fn resolve_for_store(
     source_path: &Path,
     mime: Option<&str>,
@@ -65,124 +44,62 @@ pub fn resolve_for_store(
     work_dir: &Path,
 ) -> Result<Option<ResolvedMedia>> {
     match mode {
-        MediaMode::None => Ok(None),
-        MediaMode::Copy => Ok(Some(ResolvedMedia {
-            path: source_path.to_path_buf(),
-            mime_type: mime.map(str::to_string),
-        })),
-        MediaMode::Convert | MediaMode::Compress => {
-            transform(source_path, mime, mode == MediaMode::Compress, work_dir)
-        }
+        MediaMode::Disabled => Ok(None),
+        MediaMode::Clone => Ok(Some(ResolvedMedia::as_is(source_path, mime))),
+        MediaMode::Convert | MediaMode::Compress => transform(source_path, mime, mode, work_dir),
     }
 }
 
-/// Convert or compress one media file by kind, or `None` when it should be stored as-is.
+/// Convert or compress one media file by kind; anything else is stored as it is.
 fn transform(
     source_path: &Path,
     mime: Option<&str>,
-    compress: bool,
+    mode: MediaMode,
     work_dir: &Path,
 ) -> Result<Option<ResolvedMedia>> {
     if !source_path.is_file() {
-        return Ok(Some(ResolvedMedia {
-            path: source_path.to_path_buf(),
-            mime_type: mime.map(str::to_string),
-        }));
+        return Ok(Some(ResolvedMedia::as_is(source_path, mime)));
     }
-    let kind = kind_of(source_path, mime);
-    match kind {
-        MediaKind::Other => Ok(Some(ResolvedMedia {
+    let Some(kind) = kind_of(source_path, mime) else {
+        return Ok(Some(ResolvedMedia::as_is(source_path, mime)));
+    };
+    let (tag, target) = match kind {
+        Kind::Image => ("img", "jpg"),
+        Kind::Video => ("vid", "mp4"),
+        Kind::Audio => ("aud", "mp3"),
+    };
+    let out = work_dir.join(format!("{tag}-{}.{target}", stem_token(source_path)));
+    let outcome =
+        media::transcode_file_as(source_path, kind, &out, mode, &CompressOptions::default())
+            .with_context(|| format!("convert {}", source_path.display()))?;
+    Ok(Some(match outcome {
+        TranscodeOutcome::Produced => ResolvedMedia {
+            path: out,
+            mime_type: media::mime_for_ext(target).map(str::to_string),
+        },
+        TranscodeOutcome::Skipped => ResolvedMedia {
             path: source_path.to_path_buf(),
-            mime_type: mime.map(str::to_string),
-        })),
-        MediaKind::Image => transform_image(source_path, compress, work_dir),
-        MediaKind::Video => transform_video(source_path, compress, work_dir),
-        MediaKind::Audio => transform_audio(source_path, compress, work_dir),
-    }
-}
-
-/// JPEG under `work_dir` for an image worth converting, else `None`.
-fn transform_image(
-    source_path: &Path,
-    compress: bool,
-    work_dir: &Path,
-) -> Result<Option<ResolvedMedia>> {
-    let ext = ext_of(source_path);
-    let size = fs::metadata(source_path)?.len();
-    if media_tools::skip_image_conversion(&ext, size, compress) {
-        return Ok(Some(ResolvedMedia {
-            path: source_path.to_path_buf(),
-            mime_type: Some("image/jpeg".into()),
-        }));
-    }
-    if ext == ".gif" {
-        return Ok(Some(ResolvedMedia {
-            path: source_path.to_path_buf(),
-            mime_type: Some("image/gif".into()),
-        }));
-    }
-    ensure_ffmpeg()?;
-    let out = work_dir.join(format!("img-{}.jpg", stem_token(source_path)));
-    media_tools::run_ffmpeg(
-        &media_tools::image_to_jpeg_args(path_str(source_path)?, path_str(&out)?),
-        None,
-    )?;
-    Ok(Some(ResolvedMedia {
-        path: out,
-        mime_type: Some("image/jpeg".into()),
+            mime_type: mime.map(str::to_string).or_else(|| {
+                source_path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .and_then(media::mime_for_ext)
+                    .map(str::to_string)
+            }),
+        },
     }))
 }
 
-/// MP4 under `work_dir` for a video worth converting, else `None`.
-fn transform_video(
-    source_path: &Path,
-    compress: bool,
-    work_dir: &Path,
-) -> Result<Option<ResolvedMedia>> {
-    let ext = ext_of(source_path);
-    let size = fs::metadata(source_path)?.len();
-    if media_tools::skip_video_conversion(source_path, &ext, size, compress) {
-        return Ok(Some(ResolvedMedia {
-            path: source_path.to_path_buf(),
-            mime_type: Some("video/mp4".into()),
-        }));
+/// Media kind from the file's extension, else from the declared MIME type.
+/// GIFs are animations and are never converted, so they answer `None`.
+fn kind_of(source_path: &Path, mime: Option<&str>) -> Option<Kind> {
+    let gif_name = source_path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("gif"));
+    if gif_name || mime == Some("image/gif") {
+        return None;
     }
-    ensure_ffmpeg()?;
-    let out = work_dir.join(format!("vid-{}.mp4", stem_token(source_path)));
-    media_tools::run_ffmpeg(
-        &media_tools::video_to_mp4_args(path_str(source_path)?, path_str(&out)?, compress),
-        None,
-    )?;
-    Ok(Some(ResolvedMedia {
-        path: out,
-        mime_type: Some("video/mp4".into()),
-    }))
-}
-
-/// MP3 under `work_dir` for an audio file worth converting, else `None`.
-fn transform_audio(
-    source_path: &Path,
-    compress: bool,
-    work_dir: &Path,
-) -> Result<Option<ResolvedMedia>> {
-    let ext = ext_of(source_path);
-    let size = fs::metadata(source_path)?.len();
-    if media_tools::skip_audio_conversion(&ext, size, compress) {
-        return Ok(Some(ResolvedMedia {
-            path: source_path.to_path_buf(),
-            mime_type: Some("audio/mpeg".into()),
-        }));
-    }
-    ensure_ffmpeg()?;
-    let out = work_dir.join(format!("aud-{}.mp3", stem_token(source_path)));
-    media_tools::run_ffmpeg(
-        &media_tools::audio_to_mp3_args(path_str(source_path)?, path_str(&out)?),
-        None,
-    )?;
-    Ok(Some(ResolvedMedia {
-        path: out,
-        mime_type: Some("audio/mpeg".into()),
-    }))
+    media::classify(source_path).or_else(|| mime.and_then(media::kind_for_mime))
 }
 
 /// A short, filesystem-safe token from the file stem, for temp file names.
@@ -194,12 +111,4 @@ fn stem_token(path: &Path) -> String {
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .take(24)
         .collect()
-}
-
-/// Fail early when ffmpeg is not on PATH.
-fn ensure_ffmpeg() -> Result<()> {
-    if media_tools::tool_on_path("ffmpeg") {
-        return Ok(());
-    }
-    bail!("ffmpeg is required for --media convert|compress (not found on PATH)");
 }

@@ -16,11 +16,12 @@ use crate::db::handles::{
     HandleIdCache, infer_handle_type_from_shape as infer_handle_type, upsert_handle_row_cached,
 };
 use crate::db::sql::{max_rows_for_bind_limit, values_tuples};
-use crate::import_media::{self, MediaMode};
+use crate::import_media;
 use crate::jsonl;
 use crate::models::{
     AttachmentRecord, ConversationRecord, ExportRecord, MessageRecord, TapbackRecord, clean_body,
 };
+use media::MediaMode;
 
 use super::contact_name::{
     IncomingSender, ensure_contact_for_handle, resolve_incoming_sender_handle,
@@ -137,7 +138,7 @@ fn prepare_attachments(
     media: MediaMode,
     media_work: &Path,
 ) -> Result<Vec<PreparedAttachment>> {
-    if media == MediaMode::None {
+    if media == MediaMode::Disabled {
         return Ok(Vec::new());
     }
 

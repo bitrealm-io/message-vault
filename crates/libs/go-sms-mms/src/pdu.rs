@@ -321,7 +321,7 @@ fn ext_from_filename(name: &str) -> Option<String> {
 }
 
 /// False for stubs too small to be real media of that type.
-fn attachment_ok(ext: &str, len: usize) -> bool {
+fn is_usable_attachment(ext: &str, len: usize) -> bool {
     if len < 64 && matches!(ext, ".jpg" | ".png" | ".gif") {
         return false;
     }
@@ -356,7 +356,7 @@ fn attachments_from_named_parts(named: &[NamedPart], smil: &SmilRefs) -> Vec<Par
         if use_smil && smil_name.is_none() {
             continue;
         }
-        if !attachment_ok(&ext, part.data.len()) {
+        if !is_usable_attachment(&ext, part.data.len()) {
             continue;
         }
         out.push(ParsedAttachment {
@@ -399,7 +399,7 @@ fn attachments_from_structured(msg: &StructuredMms, smil: &SmilRefs) -> Vec<Pars
         if use_smil && smil_name.is_none() {
             continue;
         }
-        if !attachment_ok(&ext, part.data.len()) {
+        if !is_usable_attachment(&ext, part.data.len()) {
             continue;
         }
         out.push(ParsedAttachment {
@@ -437,12 +437,12 @@ fn parse_smil_refs(data: &[u8]) -> SmilRefs {
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e) | Event::Empty(e)) => {
-                let tag = String::from_utf8_lossy(e.name().as_ref()).to_ascii_lowercase();
+                let tag = e.name().as_ref().to_ascii_lowercase();
                 let mut src = None;
                 for attr in e.attributes().flatten() {
-                    let key = String::from_utf8_lossy(attr.key.as_ref()).to_ascii_lowercase();
+                    let key = attr.key.as_ref().to_ascii_lowercase();
                     if key == "src" {
-                        src = Some(String::from_utf8_lossy(&attr.value).into_owned());
+                        src = Some(attr.value.into_owned());
                     }
                 }
                 if let Some(s) = src {
@@ -558,7 +558,7 @@ fn detect_attachment_blobs(data: &[u8]) -> Vec<(String, usize, usize)> {
     for (idx, (start, ext)) in hits.iter().enumerate() {
         let next_start = hits.get(idx + 1).map(|(s, _)| *s).unwrap_or(data.len());
         let size = next_start - start;
-        if !attachment_ok(ext, size) {
+        if !is_usable_attachment(ext, size) {
             continue;
         }
         merged.push((ext.to_string(), *start, next_start));

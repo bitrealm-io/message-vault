@@ -28,6 +28,9 @@ use crate::server::{
     upload_content_type,
 };
 
+/// Read/write chunk for hashing and copying files: 1 MiB.
+pub(crate) const COPY_BUFFER_BYTES: usize = 1024 * 1024;
+
 /// Counts of files handled during one asset store pass.
 #[derive(Debug, Default)]
 pub struct AssetStats {
@@ -300,7 +303,7 @@ fn copy_to_verified_temp(
     let mut src =
         open_nofollow_read(source).with_context(|| format!("open source {}", source.display()))?;
     let mut hasher = Sha256::new();
-    let mut buf = vec![0u8; 1024 * 1024];
+    let mut buf = vec![0u8; COPY_BUFFER_BYTES];
     loop {
         let n = src
             .read(&mut buf)
@@ -433,7 +436,7 @@ pub(crate) fn hash_file(path: &Path) -> Result<String> {
     let file = open_nofollow_read(path)?;
     let mut reader = BufReader::new(file);
     let mut hasher = Sha256::new();
-    let mut buf = [0u8; 1024 * 1024];
+    let mut buf = [0u8; COPY_BUFFER_BYTES];
     loop {
         let n = reader.read(&mut buf)?;
         if n == 0 {

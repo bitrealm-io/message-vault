@@ -88,7 +88,7 @@ pub fn classify_probed(
 ) -> SizeVerdict {
     let ext = ext.to_ascii_lowercase();
     let ext = ext.as_str();
-    if !processable(ext) {
+    if !is_processable(ext) {
         return size_only(size_bytes, limit_bytes, SizeVerdict::CannotProcess);
     }
     if untouched_by(ext, mode) || skipped_as_efficient(ext, probe, mode, compress) {
@@ -126,7 +126,7 @@ fn size_only(size_bytes: u64, limit_bytes: u64, over: SizeVerdict) -> SizeVerdic
 /// Mirrors [`crate::process::classify`] exactly — same three extension lists,
 /// `false` for anything else — by calling it on a synthetic path, so a new
 /// extension added to the media pass cannot be missed by the forecast.
-fn processable(ext: &str) -> bool {
+fn is_processable(ext: &str) -> bool {
     classify(&Path::new("f").with_extension(ext)).is_some()
 }
 

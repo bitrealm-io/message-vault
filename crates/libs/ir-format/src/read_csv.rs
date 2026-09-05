@@ -121,8 +121,8 @@ fn message_from_record(cols: &HashMap<&str, usize>, row: &csv::StringRecord) -> 
         get("source_fields_json"),
     );
 
-    let is_reply = parse_bool(get("is_reply"));
-    let is_deleted = parse_bool(get("is_deleted"));
+    let is_reply = message_csv::parse_bool(get("is_reply"));
+    let is_deleted = message_csv::parse_bool(get("is_deleted"));
     let thread_originator_part = {
         let s = get("thread_originator_part");
         if s.is_empty() { None } else { s.parse().ok() }
@@ -197,11 +197,6 @@ fn cell<'a>(
     name: &str,
 ) -> Option<&'a str> {
     row.get(*cols.get(name)?)
-}
-
-/// True for `true`, `1`, or `yes`, ignoring case.
-fn parse_bool(s: &str) -> bool {
-    matches!(s.trim().to_ascii_lowercase().as_str(), "true" | "1" | "yes")
 }
 
 /// Parse a JSON cell, treating blank and `null` as absent.

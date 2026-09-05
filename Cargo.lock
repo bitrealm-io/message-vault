@@ -504,7 +504,6 @@ name = "contacts"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap",
  "csv",
  "message-ir",
  "phone",
@@ -1054,7 +1053,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "phone",
- "quick-xml 0.41.0",
+ "quick-xml 0.42.0",
  "regex",
  "tempfile",
 ]
@@ -1069,7 +1068,6 @@ dependencies = [
  "go-sms-mms",
  "hex",
  "media",
- "message-csv",
  "message-ir",
  "message-ir-format",
  "message-vault-io-core",
@@ -1804,7 +1802,6 @@ dependencies = [
  "csv",
  "message-ir",
  "serde",
- "serde_json",
  "tempfile",
 ]
 
@@ -1821,11 +1818,9 @@ dependencies = [
  "anyhow",
  "chrono",
  "csv",
- "hex",
  "message-ir",
  "serde",
  "serde_json",
- "sha2 0.11.0",
 ]
 
 [[package]]
@@ -1866,7 +1861,6 @@ name = "message-reexport"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap",
  "csv",
  "media",
  "message-ir",
@@ -2032,7 +2026,6 @@ name = "obfuscate"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap",
  "csv",
  "hex",
  "hmac 0.13.0",
@@ -2308,15 +2301,6 @@ name = "quick-xml"
 version = "0.39.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdcc8dd4e2f670d309a5f0e83fe36dfdc05af317008fea29144da1a2ac858e5e"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "quick-xml"
-version = "0.41.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
 dependencies = [
  "memchr",
 ]
@@ -2768,8 +2752,9 @@ dependencies = [
  "base64 0.23.1",
  "hex",
  "html-escape",
+ "message-ir",
  "phone",
- "quick-xml 0.41.0",
+ "quick-xml 0.42.0",
  "regex",
  "serde",
  "sha2 0.11.0",
@@ -2981,7 +2966,6 @@ dependencies = [
  "hex",
  "mailparse",
  "media",
- "message-csv",
  "message-ir",
  "message-ir-format",
  "message-vault-io-core",
@@ -2998,9 +2982,7 @@ name = "sms-backup-restore-exporter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "contacts",
  "media",
- "message-csv",
  "message-ir",
  "message-ir-format",
  "message-vault-io-core",
@@ -3809,7 +3791,6 @@ dependencies = [
  "anyhow",
  "chrono",
  "hex",
- "httpmock",
  "journal",
  "media",
  "message-ir",

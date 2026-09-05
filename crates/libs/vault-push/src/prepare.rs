@@ -339,8 +339,8 @@ fn scan_one_attachment(
             reason: format!(
                 "attachment is {} bytes ({} MiB), over the configured asset max of {} MiB",
                 file_len,
-                file_len / (1024 * 1024),
-                ctx.cfg.asset_max_bytes / (1024 * 1024)
+                file_len / message_ir::MIB,
+                ctx.cfg.asset_max_bytes / message_ir::MIB
             ),
         });
         return Ok(AttachmentProjection::Missing {
@@ -399,7 +399,7 @@ fn build_import_chunks(
                 "{name}: message {guid} encodes to {} bytes alone, which exceeds the \
                  {} MiB import chunk limit — cannot upload through Cloudflare safely",
                 line.len(),
-                MAX_IMPORT_BODY_BYTES / (1024 * 1024)
+                MAX_IMPORT_BODY_BYTES as u64 / message_ir::MIB
             );
         }
         builder.push(
@@ -713,8 +713,8 @@ fn check_upload_file(ctx: &PrepareContext<'_>, name: &str, rel: &str) -> Result<
              asset max of {} MiB. Raise vault [server] asset_max_bytes (and \
              vault-push --asset-max-bytes) or omit the file.",
             file_len,
-            file_len / (1024 * 1024),
-            ctx.cfg.asset_max_bytes / (1024 * 1024)
+            file_len / message_ir::MIB,
+            ctx.cfg.asset_max_bytes / message_ir::MIB
         );
     }
     Ok((path, file_len))

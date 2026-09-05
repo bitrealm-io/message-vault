@@ -586,8 +586,8 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
     }
     eprintln!(
         "  assets: max={} MiB  part_size={} MiB",
-        upload_limits.max_bytes / (1024 * 1024),
-        upload_limits.part_size / (1024 * 1024)
+        upload_limits.max_bytes / message_ir::MIB,
+        upload_limits.part_size as u64 / message_ir::MIB
     );
 
     let state = AppState {
@@ -604,43 +604,8 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
     let app = http_app(state);
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     eprintln!("message-vault-server serve listening on http://{bind}");
-    eprintln!("  GET  /health");
-    eprintln!("  GET  /v1/auth/check   (Bearer session token or API token)");
     eprintln!(
-        "  GET  /v1/export/messages?q=&limit=&offset=&account=  (download messages, a page at a time)"
-    );
-    eprintln!("  GET  /v1/conversations?q=&limit=&offset=  (browse conversations)");
-    eprintln!("  GET  /v1/conversations/{{id}}              (one conversation, list shape)");
-    eprintln!(
-        "  GET  /v1/conversations/{{id}}/messages?limit=&offset=&year=  (a conversation's messages, a page at a time)"
-    );
-    eprintln!("  POST /v1/conversations/{{id}}/trash        (trash a conversation)");
-    eprintln!("  POST /v1/conversations/{{id}}/restore      (take a conversation out of trash)");
-    eprintln!("  GET  /v1/contacts?q=&limit=&offset=     (browse contacts)");
-    eprintln!("  PATCH /v1/contacts/{{id}}                  (edit a contact)");
-    eprintln!("  POST /v1/contacts/{{id}}/trash             (trash a contact)");
-    eprintln!("  POST /v1/contacts/{{id}}/restore           (take a contact out of trash)");
-    eprintln!("  GET  /v1/export/messages/count?q=&account=  (export match counts)");
-    eprintln!("  GET  /v1/assets/{{sha256}}?source=&account=  (download content-addressed media)");
-    eprintln!("  GET  /v1/imports       (list past import sessions with stats)");
-    eprintln!("  GET  /v1/account/storage  (usage + top attachments)");
-    eprintln!("  POST /v1/imports  (start import session; returns id)");
-    eprintln!("  GET  /                  (static files — Vite SPA)");
-    eprintln!("  POST /v1/imports/{{id}}/complete");
-    eprintln!("  HEAD /v1/assets/{{sha256}}?source=&account=  (probe before PUT)");
-    eprintln!("  PUT  /v1/assets/{{sha256}}?source=&account=  (raw body; content-addressed media)");
-    eprintln!("  POST /v1/assets/{{sha256}}/uploads?source=&account=  (start multipart)");
-    eprintln!("  PUT  /v1/assets/{{sha256}}/uploads/{{id}}/parts/{{n}}  (part body)");
-    eprintln!("  POST /v1/assets/{{sha256}}/uploads/{{id}}/complete");
-    eprintln!("  DELETE /v1/assets/{{sha256}}/uploads/{{id}}  (abort)");
-    eprintln!(
-        "  POST /v1/import?source=<slug>&mode=append|replace&dedupe=false&import_id=&account="
-    );
-    eprintln!("       source= required: a short name such as whatsapp or imessage");
-    eprintln!("       account= optional (must match token); derived from Bearer when omitted");
-    eprintln!("       Content-Type: application/jsonl  (body only; assets by sha256)");
-    eprintln!(
-        "       A file the vault cannot read is a 400 that names the line; export routes are read-only"
+        "  routes: `message-vault-server dump-openapi` lists them all; set [server] openapi_ui = true for /docs"
     );
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())

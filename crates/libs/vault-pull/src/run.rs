@@ -8,7 +8,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use message_ir::ConversationDocument;
 use message_ir_format::write_export_sentinel;
 use message_vault_io_core::{CancelFlag, check_cancel, parallel_for_each};
 use serde::Serialize;
@@ -425,7 +424,7 @@ impl<'a> Pull<'a> {
                 doc.packaging_stem_suffix =
                     Some(format!("__{}", sanitize_source_suffix(&doc.export.source)));
             }
-            write_conversation_jsonl(&self.cfg.out_dir, &doc)?;
+            message_ir_format::write_conversation_jsonl(&self.cfg.out_dir, &doc)?;
             conversations += 1;
         }
         Ok(conversations)
@@ -613,11 +612,6 @@ fn download_assets_parallel(args: DownloadAssetsParallelArgs<'_>) -> Result<Asse
 /// # Errors
 ///
 /// Returns an error when the file cannot be created, serialized, or renamed.
-fn write_conversation_jsonl(out_dir: &Path, doc: &ConversationDocument) -> Result<()> {
-    let path = out_dir.join(format!("{}.jsonl", doc.filename_stem()));
-    message_ir_format::write_conversation_jsonl_to(&path, doc)
-}
-
 /// Keep letters, digits, `-`, and `_`; replace every other character with `_`.
 fn sanitize_source_suffix(source: &str) -> String {
     let mut out = String::with_capacity(source.len());

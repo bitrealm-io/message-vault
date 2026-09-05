@@ -202,7 +202,7 @@ pub fn start_upload(
         bail!(
             "object exceeds {} byte server limit ({} MiB)",
             limits.max_bytes,
-            limits.max_bytes / (1024 * 1024)
+            limits.max_bytes / message_ir::MIB
         );
     }
     // Best-effort: drop abandoned multipart staging so disk does not grow forever.
@@ -326,7 +326,7 @@ pub fn complete_upload(
     {
         let mut out =
             File::create(&assembled).with_context(|| format!("create {}", assembled.display()))?;
-        let mut buf = vec![0u8; 1024 * 1024];
+        let mut buf = vec![0u8; assets::COPY_BUFFER_BYTES];
         for n in 1..=count {
             let path = part_path(&session, n);
             let mut file = File::open(&path).with_context(|| format!("open {}", path.display()))?;

@@ -12,6 +12,8 @@ use std::io::BufRead;
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
 
+use message_ir::valid_filename;
+
 const INSERT_ADDRESS_TOKEN: &str = "insert-address-token";
 const MMS_ADDR_FROM: &str = "137";
 const MMS_BOX_SENT: &str = "2";
@@ -163,7 +165,7 @@ fn attrs(e: &quick_xml::events::BytesStart<'_>) -> HashMap<String, String> {
     e.attributes()
         .flatten()
         .map(|a| {
-            let key = String::from_utf8_lossy(a.key.as_ref()).to_ascii_lowercase();
+            let key = a.key.as_ref().to_ascii_lowercase();
             let value = a
                 .normalized_value(XmlVersion::Implicit1_0)
                 .map(|v| v.into_owned())
@@ -292,15 +294,6 @@ fn smil_refs(parts: &[MmsPart], decoded: &[DecodedPartData]) -> (Vec<String>, Ve
             .collect()
     };
     (captures(&TEXT_SRC), captures(&IMG_SRC))
-}
-
-/// The file name trimmed, unless blank or a literal `null`/`none`.
-fn valid_filename(value: &str) -> Option<String> {
-    let value = value.trim();
-    (!value.is_empty()
-        && !value.eq_ignore_ascii_case("null")
-        && !value.eq_ignore_ascii_case("none"))
-    .then(|| value.into())
 }
 
 /// File extension for a part's content type.
@@ -781,39 +774,39 @@ where
         (HashMap::new(), HashMap::new(), Vec::new(), Vec::new());
     loop {
         match xml.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) => match e.name().as_ref().to_ascii_lowercase().as_slice() {
-                b"sms" => sms = attrs(&e),
-                b"mms" => {
+            Ok(Event::Start(e)) => match e.name().as_ref().to_ascii_lowercase().as_str() {
+                "sms" => sms = attrs(&e),
+                "mms" => {
                     mms = attrs(&e);
                     parts.clear();
                     addrs.clear();
                 }
-                b"part" => parts.push(part(&attrs(&e))),
-                b"addr" => addrs.push(addr(&attrs(&e))),
+                "part" => parts.push(part(&attrs(&e))),
+                "addr" => addrs.push(addr(&attrs(&e))),
                 _ => {}
             },
-            Ok(Event::Empty(e)) => match e.name().as_ref().to_ascii_lowercase().as_slice() {
-                b"sms" => {
+            Ok(Event::Empty(e)) => match e.name().as_ref().to_ascii_lowercase().as_str() {
+                "sms" => {
                     if let Some(r) = parse_sms(&attrs(&e), stats) {
                         on_record(r)?;
                     }
                 }
-                b"part" => parts.push(part(&attrs(&e))),
-                b"addr" => addrs.push(addr(&attrs(&e))),
-                b"mms" => {
+                "part" => parts.push(part(&attrs(&e))),
+                "addr" => addrs.push(addr(&attrs(&e))),
+                "mms" => {
                     if let Some(r) = parse_mms(&attrs(&e), &[], &[], owners, stats) {
                         on_record(r)?;
                     }
                 }
                 _ => {}
             },
-            Ok(Event::End(e)) => match e.name().as_ref().to_ascii_lowercase().as_slice() {
-                b"sms" => {
+            Ok(Event::End(e)) => match e.name().as_ref().to_ascii_lowercase().as_str() {
+                "sms" => {
                     if let Some(r) = parse_sms(&sms, stats) {
                         on_record(r)?;
                     }
                 }
-                b"mms" => {
+                "mms" => {
                     let record = parse_mms(&mms, &parts, &addrs, owners, stats);
                     // Drop the base64 `data` strings before the callback stages
                     // decoded bytes, so peak RAM is one payload, not payload plus
@@ -861,9 +854,9 @@ pub fn infer_owner_phones(path: &Path) -> Result<Vec<String>> {
     loop {
         match xml.read_event_into(&mut buf) {
             Ok(Event::Start(e) | Event::Empty(e)) => {
-                match e.name().as_ref().to_ascii_lowercase().as_slice() {
-                    b"mms" => in_sent = get(&attrs(&e), "msg_box").trim() == MMS_BOX_SENT,
-                    b"addr" if in_sent => {
+                match e.name().as_ref().to_ascii_lowercase().as_str() {
+                    "mms" => in_sent = get(&attrs(&e), "msg_box").trim() == MMS_BOX_SENT,
+                    "addr" if in_sent => {
                         let a = attrs(&e);
                         if get(&a, "type").trim() == MMS_ADDR_FROM {
                             let raw = get(&a, "address");
@@ -879,7 +872,7 @@ pub fn infer_owner_phones(path: &Path) -> Result<Vec<String>> {
                     _ => {}
                 }
             }
-            Ok(Event::End(e)) if e.name().as_ref().eq_ignore_ascii_case(b"mms") => in_sent = false,
+            Ok(Event::End(e)) if e.name().as_ref().eq_ignore_ascii_case("mms") => in_sent = false,
             Ok(Event::Eof) => break,
             Err(error) => bail!("parse {}: {error}", path.display()),
             _ => {}

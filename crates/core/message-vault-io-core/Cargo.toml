@@ -6,16 +6,16 @@ license = "LicenseRef-FCL-1.0-ALv2"
 description = "Shared export pipeline, jobs, and form model for the Message Vault desktop app"
 
 [dependencies]
-anyhow = "1.0.103"
-chrono = "0.4.44"
+anyhow = { workspace = true }
+chrono = { workspace = true }
 message-csv = { path = "../../libs/csv" }
 message-ir = { path = "../../libs/ir" }
 media = { path = "../../libs/media" }
 obfuscate = { path = "../../libs/obfuscate" }
-sha2 = "0.11.0"
+sha2 = { workspace = true }
 
 [features]
 testutil = []
 
 [dev-dependencies]
-tempfile = "3.27.0"
+tempfile = { workspace = true }

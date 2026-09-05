@@ -785,6 +785,19 @@ pub fn nonempty(s: &str) -> Option<String> {
     trimmed(s).map(str::to_string)
 }
 
+/// `value` trimmed, unless it is blank or the literal `null` / `none` that
+/// some backups write where an attachment name is missing.
+pub fn valid_filename(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()
+        && !value.eq_ignore_ascii_case("null")
+        && !value.eq_ignore_ascii_case("none"))
+    .then(|| value.to_string())
+}
+
+/// One mebibyte, for byte counts shown or compared in MiB.
+pub const MIB: u64 = 1024 * 1024;
+
 /// Owner identity for outgoing rows: handle + display (`"Me"` if handle set but name missing).
 pub fn owner_sender(export: &ExportMeta) -> (Option<String>, Option<String>) {
     let handle = export.owner_handle.as_deref().and_then(nonempty);

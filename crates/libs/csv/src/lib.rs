@@ -133,6 +133,14 @@ pub fn col(headers: &[String], name: &str) -> anyhow::Result<usize> {
         .with_context(|| format!("missing column {name:?} (have {headers:?})"))
 }
 
+/// A CSV boolean cell: `1`, `true`, `yes`, or `y` in any case, after trimming.
+pub fn parse_bool(raw: &str) -> bool {
+    matches!(
+        raw.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "y"
+    )
+}
+
 /// Trimmed value of one CSV cell (empty string when missing).
 pub fn field(rec: &csv::StringRecord, idx: usize) -> String {
     rec.get(idx).unwrap_or("").trim().to_string()

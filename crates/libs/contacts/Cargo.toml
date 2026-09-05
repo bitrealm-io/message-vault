@@ -6,11 +6,10 @@ license = "LicenseRef-FCL-1.0-ALv2"
 description = "VCF / contacts CSV name↔phone resolution for message-vault-io"
 
 [dependencies]
-anyhow = "1.0.103"
-clap = { version = "4.6.1", features = ["derive"] }
+anyhow = { workspace = true }
 csv = "1.4.0"
 message-ir = { path = "../ir" }
 phone = { path = "../phone" }
 
 [dev-dependencies]
-tempfile = "3.27.0"
+tempfile = { workspace = true }

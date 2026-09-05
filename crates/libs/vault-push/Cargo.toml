@@ -6,19 +6,19 @@ description = "Push message-ir JSONL exports into a Message Vault import API"
 license = "LicenseRef-FCL-1.0-ALv2"
 
 [dependencies]
-anyhow = "1.0.103"
-hex = "0.4.3"
+anyhow = { workspace = true }
+hex = { workspace = true }
 jsonl_journal = { package = "journal", path = "../../libs/journal" }
 vault-http = { path = "../../libs/vault-http" }
 message-vault-io-core = { path = "../../core/message-vault-io-core" }
 media = { path = "../media" }
 message-ir = { path = "../../libs/ir" }
 message-ir-format = { path = "../../libs/ir-format" }
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
-sha2 = "0.11.0"
+reqwest = { workspace = true, features = ["blocking"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3.27.0"
+tempfile = { workspace = true }
 httpmock = "0.8"

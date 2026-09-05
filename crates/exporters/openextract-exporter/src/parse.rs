@@ -101,8 +101,8 @@ pub(crate) fn parse_csv_file(path: &Path) -> Result<Vec<RawRow>> {
         if date.is_empty() && sender.is_empty() && text.is_empty() {
             continue;
         }
-        let is_from_me = parse_bool(&field(&rec, is_from_me_i));
-        let has_attachments = parse_bool(&field(&rec, has_att_i));
+        let is_from_me = message_csv::parse_bool(&field(&rec, is_from_me_i));
+        let has_attachments = message_csv::parse_bool(&field(&rec, has_att_i));
         let conversation = conversation_i
             .map(|i| field(&rec, i))
             .filter(|s| !s.is_empty());
@@ -121,12 +121,4 @@ pub(crate) fn parse_csv_file(path: &Path) -> Result<Vec<RawRow>> {
         });
     }
     Ok(rows)
-}
-
-/// True for `1`, `true`, `yes`, or `y`.
-fn parse_bool(raw: &str) -> bool {
-    matches!(
-        raw.trim().to_ascii_lowercase().as_str(),
-        "1" | "true" | "yes" | "y"
-    )
 }

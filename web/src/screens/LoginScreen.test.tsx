@@ -215,6 +215,47 @@ describe("LoginScreen", () => {
     expect(screen.getByRole("button", { name: "Log in" })).toBeDisabled();
   });
 
+  it("offers Change vault address only for an address that is a change", async () => {
+    stubVault();
+    const user = setupUser();
+    renderScreen();
+
+    await screen.findByText("Connected");
+    await user.click(screen.getByRole("button", { name: "Change vault settings" }));
+
+    const field = screen.getByRole("textbox", { name: "Address" });
+    const apply = () => screen.getByRole("button", { name: "Change vault address" });
+
+    // The card connected to the address the field already holds, so there is
+    // nothing to apply.
+    expect(apply()).toBeDisabled();
+
+    await user.type(field, "http://127.0.0.1:8080");
+    expect(apply()).toBeEnabled();
+
+    // A field naming no address at all is nothing to apply either.
+    await user.clear(field);
+    expect(apply()).toBeDisabled();
+
+    // Cancel is unaffected and stays the way out.
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+
+    await user.type(field, "http://127.0.0.1:8080");
+    await user.click(apply());
+    await waitFor(() => {
+      expect(setServer).toHaveBeenCalledWith("http://127.0.0.1:8080");
+    });
+
+    // Back on the settings screen, the applied address is now the connected
+    // one, so it is no longer a change — and editing it makes it one again.
+    await user.click(screen.getByRole("button", { name: "Change vault settings" }));
+    expect(screen.getByRole("textbox", { name: "Address" })).toHaveValue("http://127.0.0.1:8080");
+    expect(apply()).toBeDisabled();
+
+    await user.type(screen.getByRole("textbox", { name: "Address" }), "9");
+    expect(apply()).toBeEnabled();
+  });
+
   it("opens Message Vault Settings from the link and comes back on Cancel", async () => {
     stubVault();
     const user = setupUser();

@@ -2,6 +2,7 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { useIsVaultOwner } from "../lib/useIsVaultOwner";
 import { useMustChangePassword } from "../lib/useMustChangePassword";
+import { useNeedsProfileSetup } from "../lib/useNeedsProfileSetup";
 
 /**
  * Layout route: renders child routes via <Outlet /> when the account may use
@@ -12,9 +13,10 @@ import { useMustChangePassword } from "../lib/useMustChangePassword";
  * more than not having named itself yet.
  */
 export function AuthGuard() {
-  const { isAuthenticated, needsOnboarding } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { mustChange, loading } = useMustChangePassword();
   const { isOwner } = useIsVaultOwner();
+  const { needsSetup } = useNeedsProfileSetup();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -37,7 +39,7 @@ export function AuthGuard() {
     return <Navigate to="/admin" replace />;
   }
 
-  if (needsOnboarding) {
+  if (needsSetup) {
     return <Navigate to="/onboarding" replace />;
   }
 

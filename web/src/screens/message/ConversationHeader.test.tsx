@@ -42,6 +42,7 @@ const PROFILE = {
   emails: [],
   is_owner: false,
   must_change_password: false,
+  must_set_up_profile: false,
   is_demo: false,
   can_import: true,
   can_export: true,

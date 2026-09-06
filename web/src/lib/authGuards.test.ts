@@ -33,6 +33,22 @@ describe("parsePersistedAuth", () => {
           serverUrl: "http://localhost:8080",
           token: "tok",
           accountId: "acc1",
+        }),
+      ),
+    ).toEqual({
+      serverUrl: "http://localhost:8080",
+      token: "tok",
+      accountId: "acc1",
+    });
+  });
+
+  it("drops a needs-setup flag left in storage by an older build", () => {
+    expect(
+      parsePersistedAuth(
+        JSON.stringify({
+          serverUrl: "http://localhost:8080",
+          token: "tok",
+          accountId: "acc1",
           needsOnboarding: true,
         }),
       ),
@@ -40,7 +56,6 @@ describe("parsePersistedAuth", () => {
       serverUrl: "http://localhost:8080",
       token: "tok",
       accountId: "acc1",
-      needsOnboarding: true,
     });
   });
 

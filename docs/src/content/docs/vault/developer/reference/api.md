@@ -18,13 +18,13 @@ Why: [ADR-0005](https://github.com/bitrealm-io/message-vault/blob/main/docs/adr/
 
 ## Trash is the only door to deletion
 
-`POST /v1/conversations/{id}/trash` and `POST /v1/contacts/{id}/trash` set a marker; `/restore` clears it. Nothing is deleted until one of three routes runs, and each needs a signed-in session whose account may delete (the demo account may not):
+`POST /v1/conversations/{id}/trash` and `POST /v1/contacts/{id}/trash` set a marker; `/restore` clears it. Nothing is deleted until one of three routes runs, and each needs a signed-in session whose account may delete:
 
 - `DELETE /v1/conversations/{id}` removes a trashed conversation, its messages, and any attachment file no remaining message references. A conversation that is not in the trash answers 409.
 - `DELETE /v1/contacts/{id}` does what a phone's Delete Contact does: the name, the person's edits and their Contact Group memberships go, the contact becomes Unknown and leaves the trash, and every conversation stays as it is, showing the handle. A contact that is not in the trash answers 409.
 - `DELETE /v1/trash` does both for everything in the trash.
 
-All three answer `204`. An Import Run's record on `/v1/imports` does not change when messages it brought in are later deleted.
+All three answer `204`. The demo account may delete like any other account. The one deletion it is refused is its own: `POST /v1/auth/delete-account` answers 400 for it, and `reset-demo` restores the vault instead. An Import Run's record on `/v1/imports` does not change when messages it brought in are later deleted.
 
 ## Tokens
 

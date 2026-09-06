@@ -26,7 +26,6 @@ export interface ParsedPersistedAuth {
   serverUrl: string;
   token: string;
   accountId: string;
-  needsOnboarding: boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -55,6 +54,5 @@ export function parsePersistedAuth(raw: string): ParsedPersistedAuth | null {
     serverUrl: parsed.serverUrl,
     token: parsed.token,
     accountId: parsed.accountId,
-    needsOnboarding: parsed.needsOnboarding === true,
   };
 }

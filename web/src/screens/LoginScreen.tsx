@@ -146,7 +146,15 @@ export default function LoginScreen() {
    * are typing works, on the strength of a probe that never touched it. That
    * is how a failed Test used to turn green again on the next keystroke.
    */
-  const settingsStatus: VaultConnection = tested ?? (draft.trim() === address ? state : "untested");
+  const trimmedDraft = draft.trim();
+  const settingsStatus: VaultConnection = tested ?? (trimmedDraft === address ? state : "untested");
+
+  // Change vault address applies an address. An empty field names no address,
+  // and the one already connected is not a change: applying it would drop the
+  // card back to "connecting", re-probe the same vault, and land where it
+  // started. Either way there is nothing to apply, so the button is disabled
+  // until the field holds a different address.
+  const canApplyDraft = trimmedDraft !== "" && trimmedDraft !== address;
 
   const closeSettings = () => {
     testRun.current += 1;
@@ -162,6 +170,7 @@ export default function LoginScreen() {
             <VaultSettingsScreen
               draft={draft}
               status={settingsStatus}
+              canSubmit={canApplyDraft}
               onDraftChange={(value) => {
                 setDraft(value);
                 setTested(null);

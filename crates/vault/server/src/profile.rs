@@ -34,6 +34,11 @@ pub struct AccountProfileResponse {
     /// The vault owner chose this password; it must be replaced before the
     /// account can be used.
     pub must_change_password: bool,
+    /// The account holder has not set up their profile yet, so profile setup
+    /// is owed before the account can be used. The vault decides this, not the
+    /// client: the same answer reaches every app, and it survives cleared site
+    /// data and a second browser.
+    pub must_set_up_profile: bool,
     /// May call the import endpoints.
     pub can_import: bool,
     /// May call the export endpoints.
@@ -69,6 +74,7 @@ async fn load_response(
         is_demo: account_profile::is_demo_account(account_id),
         is_owner: account_profile::is_vault_owner(account_id),
         must_change_password: auth.must_change_password,
+        must_set_up_profile: auth.must_set_up_profile,
         can_import: auth.permissions.import,
         can_export: auth.permissions.export,
         can_delete: auth.permissions.delete,
@@ -256,6 +262,11 @@ async fn update_profile_on_conn(
         &req.remove_handles,
     )
     .await?;
+    // Saving a profile is what profile setup is, so the account no longer owes
+    // one. Cleared in the same transaction as the change it describes, the way
+    // changing a password clears `must_change_password`, so the flag cannot
+    // outlive the fact it stands for.
+    account_profile::set_must_set_up_profile(&mut tx, account_id, false).await?;
     tx.commit().await?;
     Ok(load_response(conn, account_id).await?)
 }
@@ -489,6 +500,70 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(wa_service, "whatsapp");
+    }
+
+    /// Saving a profile is what profile setup is, so the vault stops asking
+    /// for one. The flag is the answer every client reads, so it has to move
+    /// when the fact behind it does.
+    #[tokio::test]
+    async fn saving_a_profile_clears_the_setup_owed_flag() {
+        let vault = test_vault().await;
+        let account_id = vault
+            .account_with_id("00000000-0000-4000-8000-000000000001", "alice")
+            .await;
+        let mut conn = vault.conn().await;
+        account_profile::set_must_set_up_profile(&mut conn, &account_id, true)
+            .await
+            .unwrap();
+        assert!(
+            load_response(&mut conn, &account_id)
+                .await
+                .unwrap()
+                .must_set_up_profile
+        );
+
+        let reloaded = update_profile_on_conn(
+            &mut conn,
+            &account_id,
+            &AccountProfileUpdateRequest {
+                preferred_name: Some("Alex".into()),
+                time_zone: None,
+                handles: Vec::new(),
+                remove_handles: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert!(!reloaded.must_set_up_profile);
+        let auth = account_profile::load_account_auth(&mut conn, &account_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            !auth.must_set_up_profile,
+            "the cleared flag is written, not just reported"
+        );
+    }
+
+    /// An account that owes nothing is not asked again, whatever its profile
+    /// happens to hold. The empty-looking profile used to be the whole rule.
+    #[tokio::test]
+    async fn an_empty_profile_is_not_by_itself_setup_owed() {
+        let vault = test_vault().await;
+        let account_id = vault
+            .account_with_id("00000000-0000-4000-8000-000000000002", "bare")
+            .await;
+        let mut conn = vault.conn().await;
+
+        let loaded = load_response(&mut conn, &account_id).await.unwrap();
+        assert_eq!(loaded.preferred_name, None);
+        assert!(loaded.phones.is_empty());
+        assert!(loaded.emails.is_empty());
+        assert!(
+            !loaded.must_set_up_profile,
+            "the flag says what is owed; an empty profile does not"
+        );
     }
 
     #[tokio::test]

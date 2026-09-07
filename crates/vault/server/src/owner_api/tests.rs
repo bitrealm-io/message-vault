@@ -358,6 +358,35 @@ async fn a_self_registered_account_owes_no_password_change() {
     assert!(!alice.must_change_password);
 }
 
+/// The owner names a username and a password and nothing else, so the account
+/// arrives with no display name and no handles and its holder sets that up.
+/// The vault records it rather than leaving each client to infer it.
+#[tokio::test]
+async fn an_account_the_owner_creates_owes_profile_setup() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+
+    let created: ManagedAccount = post_json(
+        &state,
+        "/v1/owner/accounts",
+        &owner.token,
+        serde_json::json!({ "username": "dana", "password": "hunter2hunter2" }),
+    )
+    .await;
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let auth = crate::db::account_profile::load_account_auth(&mut conn, &created.account_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(auth.must_set_up_profile);
+    assert!(
+        auth.must_change_password,
+        "both are owed: the password the owner chose, then the profile"
+    );
+}
+
 #[tokio::test]
 async fn changing_the_password_clears_the_forced_change() {
     let vault = test_vault().await;

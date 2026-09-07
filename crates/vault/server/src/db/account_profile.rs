@@ -253,13 +253,16 @@ pub async fn vault_is_claimed(conn: &mut AnyConnection) -> Result<bool> {
     Ok(count > 0)
 }
 
-/// An account's disabled flag, forced-password-change flag, and permissions.
+/// An account's disabled flag, the two things its holder still owes, and its
+/// permissions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AccountAuth {
     /// May not sign in; existing sessions are refused.
     pub disabled: bool,
     /// The vault owner chose this password; the holder must replace it.
     pub must_change_password: bool,
+    /// The holder has not set up their profile; they must before going on.
+    pub must_set_up_profile: bool,
     /// What this account may do.
     pub permissions: crate::db::permissions::Permissions,
 }
@@ -270,17 +273,19 @@ pub async fn load_account_auth(
     account_id: &str,
 ) -> Result<Option<AccountAuth>> {
     schema::ensure_accounts_schema(conn).await?;
-    let row: Option<(i64, i64, i64, i64, i64)> = sqlx::query_as(
-        "SELECT disabled, must_change_password, can_import, can_export, can_delete
+    let row: Option<(i64, i64, i64, i64, i64, i64)> = sqlx::query_as(
+        "SELECT disabled, must_change_password, must_set_up_profile,
+                can_import, can_export, can_delete
          FROM accounts WHERE id = $1",
     )
     .bind(account_id)
     .fetch_optional(&mut *conn)
     .await?;
     Ok(row.map(
-        |(disabled, must_change, import, export, delete)| AccountAuth {
+        |(disabled, must_change, must_set_up, import, export, delete)| AccountAuth {
             disabled: disabled != 0,
             must_change_password: must_change != 0,
+            must_set_up_profile: must_set_up != 0,
             permissions: crate::db::permissions::Permissions::from_ints(import, export, delete),
         },
     ))
@@ -296,6 +301,27 @@ pub async fn set_must_change_password(
     schema::ensure_accounts_schema(conn).await?;
     sqlx::query("UPDATE accounts SET must_change_password = $1 WHERE id = $2")
         .bind(i32::from(must_change))
+        .bind(account_id)
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+/// Mark an account as still owing profile setup, or clear the mark once its
+/// holder has saved one.
+///
+/// The vault says whether setup is owed, rather than each client deciding for
+/// itself from an empty-looking profile. A rule the client owns is a rule that
+/// drifts, and the answer has to survive cleared site data and a second
+/// browser.
+pub async fn set_must_set_up_profile(
+    conn: &mut AnyConnection,
+    account_id: &str,
+    must_set_up: bool,
+) -> Result<()> {
+    schema::ensure_accounts_schema(conn).await?;
+    sqlx::query("UPDATE accounts SET must_set_up_profile = $1 WHERE id = $2")
+        .bind(i32::from(must_set_up))
         .bind(account_id)
         .execute(&mut *conn)
         .await?;

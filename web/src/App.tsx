@@ -12,6 +12,7 @@ import { isTauri } from "./lib/tauri-check";
 import { useAccountProfile } from "./lib/useAccountProfile";
 import { useIsVaultOwner } from "./lib/useIsVaultOwner";
 import { useMustChangePassword } from "./lib/useMustChangePassword";
+import { useNeedsProfileSetup } from "./lib/useNeedsProfileSetup";
 import LoginScreen from "./screens/LoginScreen";
 import OnboardingScreen from "./screens/OnboardingScreen";
 import OwnerConsole from "./screens/OwnerConsole";
@@ -47,9 +48,10 @@ function ImportExportRoute({ children }: { children: ReactNode }) {
 }
 
 function AppRoutes() {
-  const { isAuthenticated, needsOnboarding } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { mustChange: mustChangePassword } = useMustChangePassword();
   const { isOwner } = useIsVaultOwner();
+  const { needsSetup: needsOnboarding } = useNeedsProfileSetup();
   useMouseHistoryNavigation();
 
   // Where a signed-in visitor to the login screen should go next. Same order

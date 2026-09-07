@@ -1,6 +1,5 @@
 use super::*;
 use crate::kind_for_mime;
-use crate::tools::ffmpeg_available;
 
 /// Write a minimal valid 1x1 PNG, readable by ffmpeg, for conversion tests.
 ///
@@ -61,10 +60,9 @@ fn write_jpeg_that_grows_on_finer_reencode(path: &Path, target_size: u64) {
 
 #[test]
 fn compress_keeps_the_original_jpeg_when_the_re_encode_is_not_smaller() {
-    let _tools = crate::tools::tools_test_lock();
-    if !ffmpeg_available() {
+    let Some(_tools) = crate::tools::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     let dir = tempfile::tempdir().unwrap();
     let attachments = dir.path().join("attachments");
     fs::create_dir_all(&attachments).unwrap();
@@ -104,10 +102,9 @@ fn compress_keeps_the_original_jpeg_when_the_re_encode_is_not_smaller() {
 
 #[test]
 fn transcode_file_writes_the_derivative_and_leaves_the_original_alone() {
-    let _tools = crate::tools::tools_test_lock();
-    if !ffmpeg_available() {
+    let Some(_tools) = crate::tools::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     let dir = tempfile::tempdir().unwrap();
     let src = dir.path().join("photo.png");
     write_test_png(&src);
@@ -152,10 +149,9 @@ fn derivative_name_is_none_for_a_file_the_mode_leaves_alone() {
 
 #[test]
 fn derivative_name_matches_what_the_media_step_actually_produces() {
-    let _tools = crate::tools::tools_test_lock();
-    if !ffmpeg_available() {
+    let Some(_tools) = crate::tools::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     // The forecast and the patch both trust derivative_name. If it disagrees
     // with the pass, a conversation file points at a name nothing wrote.
     let dir = tempfile::tempdir().unwrap();
@@ -349,10 +345,9 @@ fn clone_with_log_emits_nothing() {
 }
 #[test]
 fn process_attachment_files_touches_only_the_listed_files() {
-    let _tools = crate::tools::tools_test_lock();
-    if !ffmpeg_available() {
+    let Some(_tools) = crate::tools::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     let dir = tempfile::tempdir().unwrap();
     let attachments = dir.path().join("attachments");
     fs::create_dir_all(&attachments).unwrap();
@@ -390,10 +385,9 @@ fn process_attachment_files_touches_only_the_listed_files() {
 
 #[test]
 fn transcode_file_as_converts_an_extensionless_source_by_the_given_kind() {
-    let _tools = crate::tools::tools_test_lock();
-    if !ffmpeg_available() {
+    let Some(_tools) = crate::tools::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     let dir = tempfile::tempdir().unwrap();
     // The vault stores originals under their fingerprint alone.
     let src = dir.path().join("3b1f");

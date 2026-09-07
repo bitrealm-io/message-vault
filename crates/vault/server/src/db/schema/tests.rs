@@ -202,6 +202,7 @@ async fn assert_current_schema_contract(conn: &mut AnyConnection) {
             "time_zone",
             "disabled",
             "must_change_password",
+            "must_set_up_profile",
             "can_import",
             "can_export",
             "can_delete"

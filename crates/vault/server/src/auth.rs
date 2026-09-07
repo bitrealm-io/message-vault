@@ -410,6 +410,16 @@ pub async fn register_handler(
             .map_err(|e| ApiError::BadRequest(e.to_string()))?;
     }
 
+    // A registration that named nothing leaves an account with no display
+    // name and no handles, and that account owes profile setup. Decided once,
+    // here, and recorded — rather than re-derived from an empty-looking
+    // profile by each client that reads it.
+    if preferred_name.is_none() && phone.is_none() {
+        account_profile::set_must_set_up_profile(&mut tx, &account_id, true)
+            .await
+            .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    }
+
     let token = session_tokens::insert_account_session_token(&mut tx, &account_id)
         .await
         .map_err(|e| ApiError::BadRequest(e.to_string()))?;

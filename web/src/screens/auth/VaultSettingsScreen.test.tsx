@@ -10,6 +10,7 @@ function renderScreen(overrides: Partial<Parameters<typeof VaultSettingsScreen>[
   const props = {
     draft: "http://127.0.0.1:8080",
     status: "connected" as VaultConnection,
+    canSubmit: true,
     onDraftChange: vi.fn(),
     onTest: vi.fn(),
     onCancel: vi.fn(),
@@ -55,6 +56,19 @@ describe("VaultSettingsScreen", () => {
     expect(apply).toBeEnabled();
     await user.click(apply);
     expect(props.onSubmit).toHaveBeenCalledOnce();
+  });
+
+  it("does not offer a change the caller says is not a change", async () => {
+    const user = userEvent.setup();
+    const props = renderScreen({ canSubmit: false });
+
+    const apply = screen.getByRole("button", { name: "Change vault address" });
+    expect(apply).toBeDisabled();
+    await user.click(apply);
+    expect(props.onSubmit).not.toHaveBeenCalled();
+
+    // Re-probing the address in the field is still a real question to ask.
+    expect(screen.getByRole("button", { name: "Test" })).toBeEnabled();
   });
 
   it("offers a way out that changes nothing", async () => {

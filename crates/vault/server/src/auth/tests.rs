@@ -420,6 +420,81 @@ async fn registration_never_produces_the_vault_owner() {
     );
 }
 
+/// Whether an account still owes profile setup is the vault's answer, decided
+/// once when the account is made and recorded on the row. It used to be
+/// inferred in the browser from a profile that looked empty and cached in
+/// `localStorage`, so clearing site data changed what the product believed.
+#[tokio::test]
+async fn a_registration_that_names_nothing_owes_profile_setup() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+
+    let account = register_via_api(&state, "alice", "hunter2hunter2").await;
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let auth = account_profile::load_account_auth(&mut conn, &account.account_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        auth.must_set_up_profile,
+        "an account registered with no name and no handle still owes setup"
+    );
+}
+
+/// A registration that named the account leaves nothing to set up, which is
+/// the same answer the browser used to reach on its own.
+#[tokio::test]
+async fn a_registration_that_names_the_account_owes_no_profile_setup() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+
+    let status = post_status(
+        &state,
+        "/v1/auth/register",
+        "irrelevant-no-token-needed",
+        serde_json::json!({
+            "username": "sam",
+            "password": "hunter2hunter2",
+            "preferred_name": "Sam",
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let account_id: String = sqlx::query_scalar("SELECT id FROM accounts WHERE username = $1")
+        .bind("sam")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    let auth = account_profile::load_account_auth(&mut conn, &account_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !auth.must_set_up_profile,
+        "a registration that gave a display name has set the profile up"
+    );
+}
+
+/// The vault owner holds no messages, so profile setup would ask for a name
+/// shown against messages, a zone to read them in, and handles that mark one
+/// as theirs — three questions with no answer. The owner is never sent there.
+#[tokio::test]
+async fn the_vault_owner_owes_no_profile_setup() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let owner = crate::test_support::claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let auth = account_profile::load_account_auth(&mut conn, &owner.account_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!auth.must_set_up_profile);
+}
+
 /// Any account may register without a password. The rule that the first one
 /// had to set one existed only because it became the administrator, and no
 /// registration does that now.

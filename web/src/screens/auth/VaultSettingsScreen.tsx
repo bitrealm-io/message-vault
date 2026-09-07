@@ -13,6 +13,14 @@ export interface VaultSettingsScreenProps {
    * different one it is still holding behind this screen.
    */
   status: VaultConnection;
+  /**
+   * Whether the address in the field is one there is anything to apply.
+   * The caller decides: it is the one that knows which address the card is
+   * already connected to, and re-applying that one is a change that is not a
+   * change. Test is unaffected — re-probing the current address is a real
+   * answer to a real question.
+   */
+  canSubmit: boolean;
   onDraftChange: (value: string) => void;
   onTest: () => void;
   onCancel: () => void;
@@ -28,6 +36,7 @@ export interface VaultSettingsScreenProps {
 export default function VaultSettingsScreen({
   draft,
   status,
+  canSubmit,
   onDraftChange,
   onTest,
   onCancel,
@@ -60,7 +69,7 @@ export default function VaultSettingsScreen({
         <Button variant="secondary" onPress={onCancel}>
           Cancel
         </Button>
-        <Button variant="primary" onPress={onSubmit}>
+        <Button variant="primary" onPress={onSubmit} disabled={!canSubmit}>
           Change vault address
         </Button>
       </div>

@@ -159,11 +159,14 @@ mod tests {
     /// generated fixture with a known codec, resolution, and frame rate.
     #[test]
     fn probes_a_real_video_file() {
-        use crate::tools::{ffmpeg_available, run_ffmpeg};
+        use crate::tools::run_ffmpeg;
 
-        if !ffmpeg_available() {
+        // Holds the tools lock: this test runs the real ffmpeg, and the tests
+        // in `tools` point the process-wide override at mock and empty
+        // directories while they run.
+        let Some(_tools) = crate::tools::real_ffmpeg_test_guard() else {
             return;
-        }
+        };
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("clip.mp4");
         let args: Vec<String> = [

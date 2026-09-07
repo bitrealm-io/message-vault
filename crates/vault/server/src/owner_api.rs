@@ -225,6 +225,10 @@ pub async fn create_account_handler(
         .await
         .map_err(|e| ApiError::BadRequest(e.to_string()))?;
     account_profile::set_must_change_password(&mut tx, &account_id, true).await?;
+    // The owner names a username and a password and nothing else, so the
+    // account arrives with no display name and no handles. Its holder sets
+    // that up themselves, after replacing the password.
+    account_profile::set_must_set_up_profile(&mut tx, &account_id, true).await?;
     tx.commit().await?;
 
     let account = load_managed_account(&mut conn, &account_id)

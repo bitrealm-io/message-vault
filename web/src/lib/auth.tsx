@@ -20,28 +20,6 @@ interface AuthState {
   token: string | null;
   accountId: string | null;
   isAuthenticated: boolean;
-  needsOnboarding: boolean;
-}
-
-interface Profile {
-  is_owner?: boolean;
-  preferred_name?: string | null;
-  phones?: string[];
-  emails?: string[];
-}
-
-/** True when the profile has no name, phone, or email yet — the user still needs setup. */
-function profileNeedsOnboarding(profile: Profile): boolean {
-  // The vault owner has no profile to set up: no name shown against messages,
-  // no time zone to read them in, and no handles that mark a message as
-  // theirs, because they hold no messages. Profile setup would ask three
-  // questions with no answer.
-  if (profile.is_owner === true) return false;
-
-  const hasName = !!profile.preferred_name?.trim();
-  const hasPhone = (profile.phones?.length ?? 0) > 0;
-  const hasEmail = (profile.emails?.length ?? 0) > 0;
-  return !hasName && !hasPhone && !hasEmail;
 }
 
 interface AuthContextValue extends AuthState {
@@ -81,7 +59,6 @@ function loadPersisted(): Partial<AuthState> | null {
       serverUrl: parsed.serverUrl,
       token: parsed.token,
       accountId: parsed.accountId,
-      needsOnboarding: parsed.needsOnboarding,
     };
   } catch {
     return null;
@@ -97,7 +74,6 @@ function persistState(state: AuthState) {
         serverUrl: state.serverUrl,
         token: state.token,
         accountId: state.accountId,
-        needsOnboarding: state.needsOnboarding,
       }),
     );
   } catch {
@@ -138,7 +114,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token: persisted.token,
         accountId: persisted.accountId,
         isAuthenticated: true,
-        needsOnboarding: persisted.needsOnboarding ?? false,
       };
     }
     return {
@@ -146,7 +121,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token: null,
       accountId: null,
       isAuthenticated: false,
-      needsOnboarding: false,
     };
   });
 
@@ -167,20 +141,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await checkAuth();
         if (cancelled) return;
 
-        // Re-read the profile so a stale "needs setup" flag can correct itself.
+        // Warm the profile before the app renders. Whether this account still
+        // owes profile setup is read from it, so fetching it here keeps the
+        // guards from deciding against an empty cache.
         try {
-          const profile = await fetchAccountProfileFor(queryClient, state.accountId, true);
-          if (!cancelled && profile) {
-            const needsOnboarding = profileNeedsOnboarding(profile);
-            setState((s) => {
-              if (s.needsOnboarding === needsOnboarding) return s;
-              const next: AuthState = { ...s, needsOnboarding };
-              persistState(next);
-              return next;
-            });
-          }
+          await fetchAccountProfileFor(queryClient, state.accountId, true);
         } catch {
-          // Profile request failed. Keep the saved "needs setup" flag.
+          // The guards treat a profile that has not loaded as "not decided
+          // yet" and hold, so there is nothing to fall back to here.
         }
 
         if (!cancelled) setRestored(true);
@@ -195,7 +163,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             token: null,
             accountId: null,
             isAuthenticated: false,
-            needsOnboarding: false,
           }));
           setRestored(true);
         }
@@ -221,12 +188,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setBaseUrl(serverUrl);
       setToken(token);
 
-      // New accounts have no profile yet, so send them through setup.
-      let needsOnboarding = false;
-      const profile = await fetchAccountProfileFor(queryClient, accountId, true);
-      // A failed profile request leaves `profile` null; assume one exists rather
-      // than locking the user out of the app they just signed in to.
-      if (profile) needsOnboarding = profileNeedsOnboarding(profile);
+      // Fetch the profile before the app renders: it carries whether this
+      // account still owes profile setup or a password change, and the guards
+      // read it from there rather than from anything decided here.
+      await fetchAccountProfileFor(queryClient, accountId, true);
 
       if (authEpoch.current !== epoch) return; // A later login or logout replaced this one.
 
@@ -235,7 +200,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token,
         accountId,
         isAuthenticated: true,
-        needsOnboarding,
       };
       persistState(newState);
       setState(newState);
@@ -278,7 +242,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token: null,
       accountId: null,
       isAuthenticated: false,
-      needsOnboarding: false,
     }));
   }, [resetVaultCache]);
 

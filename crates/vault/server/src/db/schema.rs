@@ -44,7 +44,7 @@ const DROP_MESSAGES_FTS_TRIGGERS_PG_SQL: &str =
 /// `PRAGMA user_version`. Bump this whenever any `schema/sql/*.sql` file
 /// changes; a database at any other version is rebuilt empty (see
 /// [`migrate_vault_schema`]).
-pub const SCHEMA_VERSION: i64 = 11;
+pub const SCHEMA_VERSION: i64 = 12;
 
 /// Bring the database to [`SCHEMA_VERSION`].
 ///
@@ -303,7 +303,7 @@ pub const MESSAGES_FTS_TRIGGERS_META_KEY: &str = "messages_fts_triggers_v1";
 /// Marker that the one-time Postgres vault DDL install has completed.
 /// Bumped with the schema: a vault holding an older marker is rebuilt
 /// empty, matching SQLite's `user_version` behaviour.
-pub const VAULT_SCHEMA_META_KEY: &str = "vault_schema_v3";
+pub const VAULT_SCHEMA_META_KEY: &str = "vault_schema_v4";
 
 /// Advisory lock id serializing the one-time Postgres DDL install so two
 /// concurrent first-touches cannot interleave the trigger drop/create pair

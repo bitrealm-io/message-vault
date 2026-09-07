@@ -6,10 +6,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthGuard } from "./AuthGuard";
 
 const profileState = vi.hoisted(() => ({
-  profile: null as { must_change_password: boolean; is_owner?: boolean } | null,
+  profile: null as {
+    must_change_password: boolean;
+    must_set_up_profile?: boolean;
+    is_owner?: boolean;
+  } | null,
   loading: false,
 }));
-const authState = vi.hoisted(() => ({ isAuthenticated: true, needsOnboarding: false }));
+const authState = vi.hoisted(() => ({ isAuthenticated: true }));
 
 vi.mock("../lib/useAccountProfile", () => ({
   useAccountProfile: () => ({
@@ -28,7 +32,6 @@ afterEach(() => {
   profileState.profile = null;
   profileState.loading = false;
   authState.isAuthenticated = true;
-  authState.needsOnboarding = false;
 });
 
 function renderGuard() {
@@ -61,8 +64,7 @@ describe("AuthGuard", () => {
   });
 
   it("puts the password before profile setup when both are owed", () => {
-    profileState.profile = { must_change_password: true };
-    authState.needsOnboarding = true;
+    profileState.profile = { must_change_password: true, must_set_up_profile: true };
     renderGuard();
 
     expect(screen.getByText("set password")).toBeInTheDocument();
@@ -70,8 +72,7 @@ describe("AuthGuard", () => {
   });
 
   it("sends an account that only owes a profile to onboarding", () => {
-    profileState.profile = { must_change_password: false };
-    authState.needsOnboarding = true;
+    profileState.profile = { must_change_password: false, must_set_up_profile: true };
     renderGuard();
 
     expect(screen.getByText("onboarding")).toBeInTheDocument();

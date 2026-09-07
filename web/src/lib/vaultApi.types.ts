@@ -1171,6 +1171,13 @@ export interface components {
              *     account can be used.
              */
             must_change_password: boolean;
+            /**
+             * @description The account holder has not set up their profile yet, so profile setup
+             *     is owed before the account can be used. The vault decides this, not the
+             *     client: the same answer reaches every app, and it survives cleared site
+             *     data and a second browser.
+             */
+            must_set_up_profile: boolean;
             /** @description Phone handles linked to the account. */
             phones: string[];
             /** @description Display name, when set. */

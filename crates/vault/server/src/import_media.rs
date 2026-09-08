@@ -60,7 +60,7 @@ fn transform(
     if !source_path.is_file() {
         return Ok(Some(ResolvedMedia::as_is(source_path, mime)));
     }
-    let Some(kind) = kind_of(source_path, mime) else {
+    let Some(kind) = media::kind_of(source_path, mime, &[]) else {
         return Ok(Some(ResolvedMedia::as_is(source_path, mime)));
     };
     let (tag, target) = match kind {
@@ -90,18 +90,6 @@ fn transform(
     }))
 }
 
-/// Media kind from the file's extension, else from the declared MIME type.
-/// GIFs are animations and are never converted, so they answer `None`.
-fn kind_of(source_path: &Path, mime: Option<&str>) -> Option<Kind> {
-    let gif_name = source_path
-        .extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case("gif"));
-    if gif_name || mime == Some("image/gif") {
-        return None;
-    }
-    media::classify(source_path).or_else(|| mime.and_then(media::kind_for_mime))
-}
-
 /// A short, filesystem-safe token from the file stem, for temp file names.
 fn stem_token(path: &Path) -> String {
     path.file_stem()
@@ -111,4 +99,97 @@ fn stem_token(path: &Path) -> String {
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .take(24)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stem_token_keeps_alphanumerics_and_caps_the_length() {
+        assert_eq!(stem_token(Path::new("a/b/IMG_0001.HEIC")), "IMG_0001");
+        assert_eq!(
+            stem_token(Path::new("voice note (2).m4a")),
+            "voice_note__2_"
+        );
+        assert_eq!(
+            stem_token(Path::new("abcdefghijklmnopqrstuvwxyz0123456789.mp4")),
+            "abcdefghijklmnopqrstuvwx"
+        );
+        assert_eq!(stem_token(Path::new("")), "media");
+    }
+
+    #[test]
+    fn as_is_keeps_the_path_and_the_declared_mime() {
+        let media = ResolvedMedia::as_is(Path::new("x/photo.heic"), Some("image/heic"));
+        assert_eq!(media.path, PathBuf::from("x/photo.heic"));
+        assert_eq!(media.mime_type.as_deref(), Some("image/heic"));
+        let unknown = ResolvedMedia::as_is(Path::new("x/blob"), None);
+        assert_eq!(unknown.mime_type, None);
+    }
+
+    #[test]
+    fn disabled_stores_nothing() {
+        let work = tempfile::tempdir().unwrap();
+        let resolved = resolve_for_store(
+            Path::new("x/photo.heic"),
+            Some("image/heic"),
+            MediaMode::Disabled,
+            work.path(),
+        )
+        .unwrap();
+        assert!(resolved.is_none());
+    }
+
+    #[test]
+    fn clone_stores_the_source_as_it_is() {
+        let work = tempfile::tempdir().unwrap();
+        let resolved = resolve_for_store(
+            Path::new("x/photo.heic"),
+            Some("image/heic"),
+            MediaMode::Clone,
+            work.path(),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(resolved.path, PathBuf::from("x/photo.heic"));
+        assert_eq!(resolved.mime_type.as_deref(), Some("image/heic"));
+    }
+
+    #[test]
+    fn convert_stores_a_missing_source_as_it_is() {
+        let work = tempfile::tempdir().unwrap();
+        let missing = work.path().join("gone.mp4");
+        let resolved =
+            resolve_for_store(&missing, Some("video/mp4"), MediaMode::Convert, work.path())
+                .unwrap()
+                .unwrap();
+        assert_eq!(resolved.path, missing);
+        assert_eq!(resolved.mime_type.as_deref(), Some("video/mp4"));
+    }
+
+    #[test]
+    fn convert_stores_a_file_that_is_not_media_as_it_is() {
+        let work = tempfile::tempdir().unwrap();
+        let card = work.path().join("contact.vcf");
+        std::fs::write(&card, b"BEGIN:VCARD\nEND:VCARD\n").unwrap();
+        let resolved =
+            resolve_for_store(&card, Some("text/vcard"), MediaMode::Compress, work.path())
+                .unwrap()
+                .unwrap();
+        assert_eq!(resolved.path, card);
+        assert_eq!(resolved.mime_type.as_deref(), Some("text/vcard"));
+    }
+
+    #[test]
+    fn convert_stores_a_gif_as_it_is_because_animations_are_never_converted() {
+        let work = tempfile::tempdir().unwrap();
+        let gif = work.path().join("sticker.gif");
+        std::fs::write(&gif, b"GIF89a").unwrap();
+        let resolved = resolve_for_store(&gif, None, MediaMode::Convert, work.path())
+            .unwrap()
+            .unwrap();
+        assert_eq!(resolved.path, gif);
+        assert_eq!(resolved.mime_type, None);
+    }
 }

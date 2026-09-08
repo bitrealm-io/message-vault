@@ -432,3 +432,74 @@ fn kind_for_mime_reads_the_top_level_type() {
     assert_eq!(kind_for_mime("application/pdf"), None);
     assert_eq!(kind_for_mime(""), None);
 }
+
+#[test]
+fn kind_of_reads_the_extension_first_and_never_converts_a_gif() {
+    assert_eq!(kind_of(Path::new("x.jpg"), None, &[]), Some(Kind::Image));
+    assert_eq!(kind_of(Path::new("x.mp4"), None, &[]), Some(Kind::Video));
+    assert_eq!(kind_of(Path::new("x.m4a"), None, &[]), Some(Kind::Audio));
+    assert_eq!(kind_of(Path::new("x.gif"), None, &[]), None);
+    assert_eq!(kind_of(Path::new("x.GIF"), Some("image/png"), &[]), None);
+    assert_eq!(kind_of(Path::new("x.png"), Some("image/gif"), &[]), None);
+    assert_eq!(
+        kind_of(Path::new("x.bin"), Some("image/png"), &[]),
+        Some(Kind::Image)
+    );
+    assert_eq!(kind_of(Path::new("x.bin"), Some("  "), &[]), None);
+}
+
+const SHA: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+
+#[test]
+fn kind_of_falls_back_to_the_attachment_names_for_an_extensionless_blob() {
+    let canonical = PathBuf::from(format!("ab/{SHA}"));
+    for (name, expected) in [
+        ("voice-note.amr", Some(Kind::Audio)),
+        ("memo.wav", Some(Kind::Audio)),
+        ("podcast.ogg", Some(Kind::Audio)),
+        ("clip.3gp", Some(Kind::Video)),
+        ("clip.webm", Some(Kind::Video)),
+        ("movie.mkv", Some(Kind::Video)),
+        ("scan.tiff", Some(Kind::Image)),
+        ("notes.txt", None),
+    ] {
+        assert_eq!(
+            kind_of(&canonical, None, &[Some(name), None]),
+            expected,
+            "unexpected kind for {name}"
+        );
+        // The original export path is the second-choice hint.
+        assert_eq!(
+            kind_of(
+                &canonical,
+                Some("  "),
+                &[None, Some(&format!("media/{name}"))]
+            ),
+            expected,
+            "unexpected kind for path hint media/{name}"
+        );
+    }
+}
+
+#[test]
+fn kind_of_never_lets_a_name_hint_override_the_declared_media_type() {
+    let canonical = PathBuf::from(format!("ab/{SHA}"));
+    // A declared MIME is authoritative, including the deliberate GIF skip.
+    assert_eq!(
+        kind_of(&canonical, Some("image/gif"), &[Some("clip.mp4")]),
+        None
+    );
+    assert_eq!(
+        kind_of(&canonical, Some("application/pdf"), &[Some("clip.mp4")]),
+        None
+    );
+    assert_eq!(
+        kind_of(Path::new("ab/photo.gif"), None, &[Some("clip.mp4")]),
+        None
+    );
+    // A GIF hint is passed over for the next hint, not treated as an image.
+    assert_eq!(
+        kind_of(&canonical, None, &[Some("still.gif"), Some("clip.mp4")]),
+        Some(Kind::Video)
+    );
+}

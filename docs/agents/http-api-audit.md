@@ -253,8 +253,8 @@ Two sub-questions are settled and one is not:
 
 **Sorting is a request parameter, in one spelling, on every list.**
 `sort=-field,field`, comma-separated keys with a `-` prefix for descending, on
-all five list routes. Each route declares which columns it accepts, and an unlisted
-column is a `400 Bad Request` naming the column, matching how the search
+all five list routes. Each route declares which columns it accepts, and an
+unlisted column is a `400 Bad Request` naming the column, matching how the search
 language already refuses an unknown word. This closes findings E1 and E2.
 
 **Filtering stays in the search language, and `fields=` is refused.** ADR-0004

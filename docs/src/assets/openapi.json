@@ -7,7 +7,7 @@
       "name": "Fair Core License 1.0 (ALv2 future)",
       "url": "https://github.com/bitrealm-io/message-vault/blob/main/LICENSE.md"
     },
-    "version": "0.8.3"
+    "version": "0.9.0"
   },
   "paths": {
     "/health": {

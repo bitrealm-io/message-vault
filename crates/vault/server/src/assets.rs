@@ -617,8 +617,6 @@ fn open_nofollow_read(path: &Path) -> Result<File> {
 #[derive(Debug, Deserialize)]
 pub(crate) struct AssetPutQuery {
     source: String,
-    #[serde(default)]
-    account: Option<String>,
 }
 
 /// Stored asset fingerprint and path.
@@ -673,7 +671,7 @@ async fn resolve_asset_lookup(
         ));
     }
     validate_source_id(&query.source).map_err(|e| ApiError::validation(e.to_string()))?;
-    let account = resolve_import_account(auth, query.account.as_deref(), &state.db).await?;
+    let account = resolve_import_account(auth);
     let source_id = query.source.clone();
 
     let cfg = Arc::clone(&state.cfg);
@@ -702,8 +700,7 @@ async fn resolve_asset_lookup(
     security(("bearer" = [])),
     params(
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
-        ("source" = String, Query),
-        ("account" = Option<String>, Query)
+        ("source" = String, Query)
     ),
     responses(
         (status = 200, body = AssetPutResponse),
@@ -738,8 +735,7 @@ pub(crate) async fn asset_head_handler(
     security(("bearer" = [])),
     params(
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
-        ("source" = String, Query),
-        ("account" = Option<String>, Query)
+        ("source" = String, Query)
     ),
     responses(
         (status = 200, description = "Raw asset bytes", content_type = "application/octet-stream"),
@@ -818,8 +814,7 @@ pub(crate) async fn asset_get_handler(
     security(("bearer" = [])),
     params(
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
-        ("source" = String, Query),
-        ("account" = Option<String>, Query)
+        ("source" = String, Query)
     ),
     request_body(content_type = "application/octet-stream", description = "Raw asset bytes"),
     responses(
@@ -937,8 +932,7 @@ pub(crate) struct AssetUploadPartResponse {
     security(("bearer" = [])),
     params(
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
-        ("source" = String, Query),
-        ("account" = Option<String>, Query)
+        ("source" = String, Query)
     ),
     request_body = AssetUploadStartBody,
     responses(
@@ -1017,8 +1011,7 @@ pub(crate) async fn asset_upload_start_handler(
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
         ("upload_id" = String, Path),
         ("part" = u32, Path),
-        ("source" = String, Query),
-        ("account" = Option<String>, Query)
+        ("source" = String, Query)
     ),
     request_body(content_type = "application/octet-stream", description = "Raw part bytes"),
     responses(
@@ -1068,8 +1061,7 @@ pub(crate) async fn asset_upload_part_handler(
     params(
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
         ("upload_id" = String, Path),
-        ("source" = String, Query),
-        ("account" = Option<String>, Query)
+        ("source" = String, Query)
     ),
     responses(
         (status = 200, body = AssetPutResponse),
@@ -1135,8 +1127,7 @@ pub(crate) async fn asset_upload_complete_handler(
     params(
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
         ("upload_id" = String, Path),
-        ("source" = String, Query),
-        ("account" = Option<String>, Query)
+        ("source" = String, Query)
     ),
     responses(
         (status = 204, description = "Upload aborted"),

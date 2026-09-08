@@ -112,9 +112,11 @@ of, and a search that reads the same everywhere.
   with accounts, each moved to one address serving everyone, with the vault
   deciding what a given caller may see rather than the address saying it. A
   single message can now be read by its id, so a search result links to the
-  message rather than to a position in a list. This matters if you wrote
-  something against the interface yourself; nothing in the app or the desktop
-  app changes.
+  message rather than to a position in a list. Parameters that no longer did
+  anything are gone — nothing asks you to name your account when your key
+  already says it — and import history sorts the same way export history does.
+  This matters if you wrote something against the interface yourself; nothing
+  in the app or the desktop app changes.
 - 2026-09-05: The vault and the desktop app now convert media with the same
   code, so a video converted on import and a preview generated later can no
   longer differ. Previews are better quality than before.

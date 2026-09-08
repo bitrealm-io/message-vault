@@ -946,17 +946,6 @@ pub(crate) async fn health() -> (StatusCode, &'static str) {
     (StatusCode::OK, "ok\n")
 }
 
-/// Resolve a username or id to an account id, reporting an unknown account as a bad request.
-async fn resolve_account_ref_async(
-    pool: &sqlx::AnyPool,
-    account_ref: &str,
-) -> Result<i64, ApiError> {
-    let mut conn = pool.acquire().await?;
-    account_profile::resolve_account_ref(&mut conn, account_ref)
-        .await
-        .map_err(|e| ApiError::validation(e.to_string()))
-}
-
 /// Read the Bearer token from `Authorization`.
 ///
 /// # Errors
@@ -1057,23 +1046,15 @@ pub async fn resolve_auth_on_conn(
     })
 }
 
-/// Resolve the account id for an import or export: Bearer token binds the account.
-/// Optional query may be username or id and must match the token.
-pub(crate) async fn resolve_import_account(
-    auth: &AuthIdentity,
-    query_account: Option<&str>,
-    pool: &sqlx::AnyPool,
-) -> Result<i64, ApiError> {
-    let query = query_account.and_then(message_ir::trimmed);
-    if let Some(q) = query {
-        let resolved = resolve_account_ref_async(pool, q).await?;
-        if resolved != auth.account_id {
-            return Err(ApiError::InsufficientScope(
-                "account query does not match token's account".into(),
-            ));
-        }
-    }
-    Ok(auth.account_id)
+/// The account an import or asset route writes to: the one the credential
+/// names, always.
+///
+/// A route never takes an `account=` parameter. A session or an API token
+/// belongs to exactly one account, so a parameter could only repeat it or
+/// contradict it, and the rules document says the credential names the
+/// account (`docs/agents/http-api-rules.md`, "Credentials and reach").
+pub(crate) fn resolve_import_account(auth: &AuthIdentity) -> i64 {
+    auth.account_id
 }
 
 /// The media type from `Content-Type` without its parameters.

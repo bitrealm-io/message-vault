@@ -44,7 +44,9 @@ use staging::StagingInserts;
 
 use crate::dedupe;
 use crate::import::{self};
-use crate::paging::{DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, PageQuery, page_params};
+use crate::paging::{
+    DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, PageQuery, page_params, parse_sort,
+};
 use crate::server::{
     ApiError, AppState, Created, ImportAccess, content_type_base, is_jsonl_content_type,
     resolve_import_account, stream_body_to_file,
@@ -813,6 +815,9 @@ pub(crate) struct ListImportsQuery {
     pub(crate) limit: Option<usize>,
     #[serde(default)]
     pub(crate) offset: Option<usize>,
+    /// `started_at` or `-started_at`; newest first when absent.
+    #[serde(default)]
+    pub(crate) sort: Option<String>,
 }
 
 /// One stored import issue.
@@ -860,7 +865,8 @@ pub(crate) struct ImportDetailResponse {
     params(
         ("status" = Option<String>, Query, description = "One of running, completed, completed_with_issues, failed, cancelled"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, at most 500"),
-        ("offset" = Option<usize>, Query, description = "Rows to skip, at most 50000")
+        ("offset" = Option<usize>, Query, description = "Rows to skip, at most 50000"),
+        ("sort" = Option<String>, Query, description = "`started_at` or `-started_at`. Default `-started_at`, newest first.")
     ),
     responses(
         (status = 200, body = Page<crate::db::vault_imports::ImportSummary>),
@@ -874,12 +880,17 @@ pub(crate) async fn imports_list_handler(
     ImportAccess(auth): ImportAccess,
     Query(query): Query<ListImportsQuery>,
 ) -> Result<Json<Page<crate::db::vault_imports::ImportSummary>>, ApiError> {
-    let account = resolve_import_account(&auth, None, &state.db).await?;
+    let account = resolve_import_account(&auth);
     let page = page_params(
         query.limit,
         query.offset,
         DEFAULT_LIST_LIMIT,
         Some(MAX_LIST_OFFSET),
+    )?;
+    let order = parse_sort(
+        query.sort.as_deref(),
+        &crate::db::vault_imports::IMPORT_SORT_KEYS,
+        &crate::db::vault_imports::DEFAULT_IMPORT_SORT,
     )?;
     let status = query
         .status
@@ -900,6 +911,7 @@ pub(crate) async fn imports_list_handler(
         &mut conn,
         account,
         status,
+        &order,
         page.limit as i64,
         page.offset as i64,
     )
@@ -975,7 +987,7 @@ pub(crate) async fn imports_create_handler(
         ));
     }
     validate_source_id(&body.source).map_err(|e| ApiError::validation(e.to_string()))?;
-    let account = resolve_import_account(&auth, None, &state.db).await?;
+    let account = resolve_import_account(&auth);
     let stage = match body.stage.as_deref() {
         None => crate::db::vault_imports::ImportStage::Parse,
         Some(raw) => crate::db::vault_imports::ImportStage::parse(raw).ok_or_else(|| {
@@ -1038,7 +1050,7 @@ pub(crate) async fn imports_complete_handler(
     AxumPath(import_id): AxumPath<i64>,
     Json(body): Json<CompleteImportBody>,
 ) -> Result<Json<CompleteImportResponse>, ApiError> {
-    let account = resolve_import_account(&auth, None, &state.db).await?;
+    let account = resolve_import_account(&auth);
     validate_complete_import_issues(&body.issues)?;
     validate_import_status(body.status.as_deref())?;
     let summary_json =
@@ -1392,22 +1404,23 @@ pub(crate) struct SetImportStageBody {
     pub(crate) summary: Option<serde_json::Value>,
 }
 
-/// Confirmation that the stage moved.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct SetImportStageResponse {
-    pub(crate) stage: String,
-}
-
 /// Move a live import session to another stage.
+///
+/// The stage is a field of the run, so moving it is a `PATCH` of the run
+/// rather than a `POST` to a `stage` sub-resource: a path segment names a
+/// resource, and `stage` is not one (`docs/agents/http-api-rules.md`,
+/// "Naming a route"). The answer is the run itself, the same shape
+/// `GET /v1/imports/{id}` returns, so a caller reads one record wherever it
+/// asks.
 #[utoipa::path(
-    post,
-    path = "/v1/imports/{id}/stage",
+    patch,
+    path = "/v1/imports/{id}",
     tag = "Import",
     security(("bearer" = [])),
     params(("id" = i64, Path, description = "Import session id")),
     request_body = SetImportStageBody,
     responses(
-        (status = 200, body = SetImportStageResponse),
+        (status = 200, body = ImportDetailResponse),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
@@ -1415,13 +1428,13 @@ pub(crate) struct SetImportStageResponse {
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn imports_stage_handler(
+pub(crate) async fn imports_patch_handler(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath(import_id): AxumPath<i64>,
     Json(body): Json<SetImportStageBody>,
-) -> Result<Json<SetImportStageResponse>, ApiError> {
-    let account = resolve_import_account(&auth, None, &state.db).await?;
+) -> Result<Json<ImportDetailResponse>, ApiError> {
+    let account = resolve_import_account(&auth);
     let stage = crate::db::vault_imports::ImportStage::parse(&body.stage).ok_or_else(|| {
         ApiError::validation(format!(
             "invalid import stage '{}'; expected one of parse, write, awaiting_gate_1, transcode, awaiting_gate_2, pushing",
@@ -1438,9 +1451,11 @@ pub(crate) async fn imports_stage_handler(
         summary_json.as_deref(),
     )
     .await?;
-    Ok(Json(SetImportStageResponse {
-        stage: stage.as_str().to_string(),
-    }))
+    let detail = crate::db::vault_imports::get_import_detail(&mut conn, account, import_id)
+        .await
+        .map_err(ApiError::from)?;
+    let contacts = contact_counts(&mut conn, account, &detail.row.started_at).await?;
+    Ok(Json(import_detail_response(detail, contacts)))
 }
 
 /// Confirmation that a session was discarded.
@@ -1471,7 +1486,7 @@ pub(crate) async fn imports_discard_handler(
     ImportAccess(auth): ImportAccess,
     AxumPath(import_id): AxumPath<i64>,
 ) -> Result<Json<DiscardImportResponse>, ApiError> {
-    let account = resolve_import_account(&auth, None, &state.db).await?;
+    let account = resolve_import_account(&auth);
     let mut conn = state.db.acquire().await?;
     crate::db::vault_imports::discard_import(&mut conn, account, import_id).await?;
     Ok(Json(DiscardImportResponse {
@@ -1487,13 +1502,6 @@ pub(crate) async fn imports_discard_handler(
     params(("id" = i64, Path, description = "Import Run id")),
     tag = "Import",
     security(("bearer" = [])),
-    params(
-        ("source" = String, Query),
-        ("account" = Option<String>, Query),
-        ("mode" = Option<String>, Query, description = "Default append"),
-        ("dedupe" = Option<bool>, Query),
-        ("import_id" = Option<i64>, Query)
-    ),
     request_body(
         content(
             ("application/x-ndjson"),
@@ -1533,7 +1541,7 @@ pub(crate) async fn import_batch_handler(
         ));
     };
 
-    let account = resolve_import_account(&auth, None, &state.db).await?;
+    let account = resolve_import_account(&auth);
     // The run's row says what the batch imports under; a run that is not
     // running, or belongs to another account, refuses the batch here before
     // any of the body is read.

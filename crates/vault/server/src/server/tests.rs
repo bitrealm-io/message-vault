@@ -4,7 +4,7 @@ use crate::import::ImportMode;
 use crate::import::{
     CompleteImportBody, CompleteImportIssueBody, CreateImportBody, SetImportStageBody,
     imports_complete_handler, imports_create_handler, imports_discard_handler, imports_get_handler,
-    imports_list_handler, imports_stage_handler,
+    imports_list_handler, imports_patch_handler,
 };
 use axum::extract::State;
 use tempfile::TempDir;
@@ -192,6 +192,7 @@ async fn running_import(
         State(state.clone()),
         import_access(state, token).await,
         crate::extract::Query(crate::import::ListImportsQuery {
+            sort: None,
             status: Some("running".into()),
             limit: None,
             offset: None,
@@ -755,7 +756,7 @@ async fn a_second_session_is_refused_with_conflict() {
 async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
     let (_dir, state, token, import_id) = test_state().await;
 
-    let _ = imports_stage_handler(
+    let _ = imports_patch_handler(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
@@ -775,7 +776,7 @@ async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
         Some("pushing")
     );
 
-    let err = imports_stage_handler(
+    let err = imports_patch_handler(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),

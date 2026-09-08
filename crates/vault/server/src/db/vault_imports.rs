@@ -7,6 +7,7 @@ use sqlx::any::AnyRow;
 use sqlx::{AnyConnection, Connection, Row};
 
 use crate::db::dialect;
+use crate::paging::{Direction, SortKey};
 
 /// Where a live import session is in its lifecycle.
 ///
@@ -713,7 +714,7 @@ pub struct ImportSummary {
     /// Addresses the backup's device sent from (JSON array), or null.
     pub source_identities: serde_json::Value,
     /// What the user approved at the last gate they passed, or null. The
-    /// column `POST /v1/imports/{id}/stage` writes with its `summary`.
+    /// column `PATCH /v1/imports/{id}` writes with its `summary`.
     pub summary: serde_json::Value,
 }
 
@@ -763,12 +764,31 @@ pub const IMPORT_STATUSES: [&str; 5] = [
     "cancelled",
 ];
 
-/// One page of an account's Import Runs, newest first, narrowed to one
-/// `status` when given, with the total the page is cut from.
+/// The one key `GET /v1/imports` accepts in `sort=`: `started_at`, the same
+/// key and default `GET /v1/exports` takes, because the two lists sit beside
+/// each other in Settings → Storage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportSort {
+    /// When the run started, ties broken by id the same way.
+    StartedAt,
+}
+
+/// The accepted keys, as `sort=` spells them.
+pub const IMPORT_SORT_KEYS: [(&str, ImportSort); 1] = [("started_at", ImportSort::StartedAt)];
+
+/// Newest first: what the list shows when `sort` is absent.
+pub const DEFAULT_IMPORT_SORT: [SortKey<ImportSort>; 1] = [SortKey {
+    key: ImportSort::StartedAt,
+    direction: Direction::Desc,
+}];
+
+/// One page of an account's Import Runs, in the order `order` asks for,
+/// narrowed to one `status` when given, with the total the page is cut from.
 pub async fn list_imports_page(
     conn: &mut AnyConnection,
     account_id: i64,
     status: Option<&str>,
+    order: &[SortKey<ImportSort>],
     limit: i64,
     offset: i64,
 ) -> Result<(Vec<ImportSummary>, u64)> {
@@ -784,6 +804,11 @@ pub async fn list_imports_page(
     }
     let total = count.fetch_one(&mut *conn).await?.max(0) as u64;
 
+    let direction = order
+        .iter()
+        .find(|k| k.key == ImportSort::StartedAt)
+        .map_or(Direction::Desc, |k| k.direction)
+        .sql();
     let (limit_param, offset_param) = if status.is_some() {
         ("$3", "$4")
     } else {
@@ -793,7 +818,7 @@ pub async fn list_imports_page(
         "SELECT {VAULT_IMPORT_COLUMNS}
          FROM vault_imports
          WHERE account_id = $1{status_sql}
-         ORDER BY started_at DESC, id DESC
+         ORDER BY started_at {direction}, id {direction}
          LIMIT {limit_param} OFFSET {offset_param}"
     );
     let mut query = sqlx::query(&sql).bind(account_id);

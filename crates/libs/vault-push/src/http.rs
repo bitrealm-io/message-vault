@@ -97,30 +97,24 @@ fn payload_too_large_message(kind: &str, bytes: Option<usize>) -> String {
     )
 }
 
-/// Build `{base}/v1/assets/...` with extra path segments (percent-encoded) and
-/// the `source=` / `account=` query pair every asset route takes.
-fn asset_url(
-    base_url: &str,
-    segments: &[&str],
-    source: &str,
-    account: &str,
-) -> Result<reqwest::Url> {
+/// Build `{base}/v1/assets/...` with extra path segments (percent-encoded)
+/// and the `source=` query every asset route takes. The account is not a
+/// parameter: the API key names it.
+fn asset_url(base_url: &str, segments: &[&str], source: &str) -> Result<reqwest::Url> {
     let base = trim_base_url(base_url);
     let mut url = reqwest::Url::parse(base).with_context(|| format!("invalid vault URL {base}"))?;
     url.path_segments_mut()
         .map_err(|()| anyhow!("invalid vault URL {base}"))?
         .pop_if_empty()
         .extend(["v1", "assets"].into_iter().chain(segments.iter().copied()));
-    url.query_pairs_mut()
-        .append_pair("source", source)
-        .append_pair("account", account);
+    url.query_pairs_mut().append_pair("source", source);
     Ok(url)
 }
 
 impl Session {
     /// `/v1/assets/...` URL under this session's account.
     fn asset_url(&self, source: &str, segments: &[&str]) -> Result<reqwest::Url> {
-        asset_url(&self.url, segments, source, &self.username)
+        asset_url(&self.url, segments, source)
     }
 
     /// Whether the vault already holds the attachment with this digest.
@@ -520,12 +514,11 @@ mod tests {
             "http://127.0.0.1:8080/",
             &["abc123", "uploads", "up 1"],
             "sms backup",
-            "alice",
         )
         .unwrap();
         assert_eq!(
             url.as_str(),
-            "http://127.0.0.1:8080/v1/assets/abc123/uploads/up%201?source=sms+backup&account=alice"
+            "http://127.0.0.1:8080/v1/assets/abc123/uploads/up%201?source=sms+backup"
         );
     }
 }

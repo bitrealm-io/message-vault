@@ -247,21 +247,29 @@ async fn list_imports_includes_duration_ms() {
     .await
     .unwrap();
 
-    let (imports, total) = list_imports_page(&mut conn, ACCOUNT_ID, None, 40, 0)
-        .await
-        .unwrap();
+    let (imports, total) =
+        list_imports_page(&mut conn, ACCOUNT_ID, None, &DEFAULT_IMPORT_SORT, 40, 0)
+            .await
+            .unwrap();
     assert_eq!((imports.len(), total), (1, 1));
     assert_eq!(imports[0].duration_ms, Some(48_000));
-    let (running, total) = list_imports_page(&mut conn, ACCOUNT_ID, Some("running"), 40, 0)
-        .await
-        .unwrap();
+    let (running, total) = list_imports_page(
+        &mut conn,
+        ACCOUNT_ID,
+        Some("running"),
+        &DEFAULT_IMPORT_SORT,
+        40,
+        0,
+    )
+    .await
+    .unwrap();
     assert_eq!((running.len(), total), (0, 0));
 }
 
 /// The account's running Import Run through the list, as the desktop app
 /// finds it: `status=running`, and at most one.
 async fn running_import(conn: &mut AnyConnection, account: i64) -> Option<ImportSummary> {
-    let (items, _) = list_imports_page(conn, account, Some("running"), 1, 0)
+    let (items, _) = list_imports_page(conn, account, Some("running"), &DEFAULT_IMPORT_SORT, 1, 0)
         .await
         .unwrap();
     items.into_iter().next()

@@ -3,7 +3,10 @@
 //! These tests build the helper with cargo (a no-op once it is built), write
 //! a small `chat.db` with the tables `imessage-database` queries, and run the
 //! exporter against it. The exporter finds the program in `target/<profile>/`
-//! because this test binary runs from `target/<profile>/deps/`.
+//! because this test binary runs from `target/<profile>/deps/`. The build
+//! is sent to the same target directory this test binary came from, so a run
+//! under another one (cargo-llvm-cov uses `target/llvm-cov-target/`) still
+//! puts the program where the exporter looks.
 
 use std::{
     fs,
@@ -34,6 +37,9 @@ fn helper_binary() -> &'static Path {
                 "--message-format=json-render-diagnostics",
             ])
             .current_dir(env!("CARGO_MANIFEST_DIR"));
+        if let Some(target_dir) = target_dir() {
+            command.arg("--target-dir").arg(target_dir);
+        }
         if !cfg!(debug_assertions) {
             command.arg("--release");
         }
@@ -53,6 +59,13 @@ fn helper_binary() -> &'static Path {
             .find_map(|message| message["executable"].as_str().map(PathBuf::from))
             .expect("cargo reported the imessage-reader executable")
     })
+}
+
+/// The target directory this test binary was built into: it runs from
+/// `<target>/<profile>/deps/`, so three levels up.
+fn target_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    exe.ancestors().nth(3).map(Path::to_path_buf)
 }
 
 /// Seconds since 2001-01-01 as the nanosecond stamp `chat.db` stores.

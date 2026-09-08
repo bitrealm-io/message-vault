@@ -282,12 +282,25 @@ parameter can only be typed with every field optional, which is the `?? []` and
 casts ADR-0005 exists to have deleted. Pagination already bounds the payload
 size that `fields=` exists to reduce.
 
+**`406 Not Acceptable` is answered narrowly.** A request is refused only when
+an `Accept` header is present and no member of it matches `application/json`,
+`application/problem+json`, or `*/*`. A missing `Accept` is a request for JSON:
+RFC 9110 says a request without one accepts any media type, and none of the
+vault's own clients send one — `web/src/lib/api.ts:80` sets only
+`Authorization`, so the browser's `fetch` defaults to `*/*`, and `vault-push`
+and `vault-pull` send no `Accept` at all. A rule that required the header would
+refuse the web app, the desktop app, and the push library on their first
+request.
+
+`application/problem+json` is named in that list on purpose. It does not
+literally match `application/json`, so a matcher that compares strings refuses
+the error body to a client that politely asked for JSON, exactly when something
+has already gone wrong. RFC 7807 chose the `+json` suffix for this reason. The
+condition is the whole design; the code is a few lines.
+
+This closes finding D1.
+
 ## Open questions
 
-One remains.
-
-1. **Content negotiation.** Is `406 Not Acceptable` worth implementing for an
-   interface that speaks only `application/json`, given Export selects its
-   format by query parameter rather than by `Accept`? The answer also has to
-   cover `application/problem+json`, which the error decision adds as a second
-   response type.
+None. Every question the audit raised is answered, and the rules are ready to
+be written as an ADR.

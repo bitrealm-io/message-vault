@@ -39,7 +39,7 @@ enum SourceFlavor {
 }
 
 /// Counts of contacts, conversations, messages, and attachments written this run.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct GenStats {
     /// Contacts invented.
     pub contacts: usize,
@@ -1295,43 +1295,4 @@ fn sanitize_filename(s: &str) -> String {
             _ => '_',
         })
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
-
-    #[test]
-    fn fixed_reference_time_makes_timestamps_reproducible() {
-        let first = SeedConfig::load(&SeedConfig::default_path()).expect("load first config");
-        let second = SeedConfig::load(&SeedConfig::default_path()).expect("load second config");
-        assert_eq!(
-            first.reference_time,
-            Utc.with_ymd_and_hms(2026, 8, 1, 12, 0, 0)
-                .single()
-                .expect("valid expected reference time")
-        );
-        assert_eq!(first.reference_time, second.reference_time);
-
-        let mut first_rng = ChaCha8Rng::seed_from_u64(first.seed);
-        let mut second_rng = ChaCha8Rng::seed_from_u64(second.seed);
-        let first_timestamps = bursty_timestamps(
-            50,
-            2.0,
-            first.reference_time,
-            sample_direct_day_burst,
-            &mut first_rng,
-        );
-        let second_timestamps = bursty_timestamps(
-            50,
-            2.0,
-            second.reference_time,
-            sample_direct_day_burst,
-            &mut second_rng,
-        );
-
-        assert_eq!(first_timestamps, second_timestamps);
-    }
 }

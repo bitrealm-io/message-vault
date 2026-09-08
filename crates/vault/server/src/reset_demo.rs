@@ -208,7 +208,7 @@ pub async fn run_reset_demo(
     };
 
     println!("  bundle:       {}", bundle.display());
-    let seed_stats = maybe_regenerate_bundle(&bundle)?;
+    let seed_stats = maybe_regenerate_bundle(&bundle, &demo_seed::SeedConfig::default_path())?;
     let reset_stats =
         prepare_config_and_reset(&bundle, config_dest, DEMO_ACCOUNT_ID, db_url).await?;
 
@@ -858,20 +858,21 @@ fn remove_any_if_exists(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Rebuild the demo bundle from `demo_seed.toml` when that file is present
-/// (a development checkout). Release images copy a generated staging/config
-/// tree and omit `demo_seed.toml` — skip regeneration there.
+/// Rebuild the demo bundle from `seed_toml` when that file is present (a
+/// development checkout, where it is the crate's `demo_seed.toml`). Release
+/// images copy a generated staging/config tree and omit the seed file, so a
+/// complete bundle is used as it is and an incomplete one is an error.
 ///
 /// Staging here is the temporary import area under the demo bundle
 /// (`staging/imessage`, and so on).
-fn maybe_regenerate_bundle(bundle: &Path) -> Result<demo_seed::GenStats> {
-    let seed_toml = demo_seed::SeedConfig::default_path();
+fn maybe_regenerate_bundle(bundle: &Path, seed_toml: &Path) -> Result<demo_seed::GenStats> {
     if seed_toml.is_file() {
         println!(
             "Reset demo — regenerating bundle from {}",
             seed_toml.display()
         );
-        return demo_seed::generate_to(bundle, None).context("regenerate demo bundle (demo-seed)");
+        return demo_seed::generate_to(seed_toml, bundle)
+            .context("regenerate demo bundle (demo-seed)");
     }
 
     let complete = bundle.join("config/seed.toml").is_file()
@@ -884,13 +885,7 @@ fn maybe_regenerate_bundle(bundle: &Path) -> Result<demo_seed::GenStats> {
             "Reset demo — using image bundle (no {} in this image)",
             seed_toml.display()
         );
-        return Ok(demo_seed::GenStats {
-            contacts: 0,
-            conversation_files: 0,
-            messages: 0,
-            attachment_refs: 0,
-            groups: 0,
-        });
+        return Ok(demo_seed::GenStats::default());
     }
 
     bail!(

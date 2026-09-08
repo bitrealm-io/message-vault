@@ -12,10 +12,8 @@ use serde::{Deserialize, Deserializer, de};
 #[derive(Debug, Clone, Deserialize)]
 pub struct SeedConfig {
     /// Random seed. The same seed and settings produce the same backups.
-    #[serde(default = "default_seed")]
     pub seed: u64,
     /// Folder the generated backups are written under.
-    #[serde(default = "default_out")]
     pub out: String,
     /// The "now" that every generated timestamp counts back from.
     #[serde(deserialize_with = "deserialize_reference_time")]
@@ -33,17 +31,7 @@ pub struct SeedConfig {
     /// Deliberately awkward data: unassigned handles, orphans, empty threads.
     pub edge_cases: EdgeCasesConfig,
     /// How conversations are split across the backup folders.
-    #[serde(default)]
     pub sources: SourcesConfig,
-}
-
-/// serde default for `seed`.
-fn default_seed() -> u64 {
-    42
-}
-/// serde default for `out`.
-fn default_out() -> String {
-    "crates/vault/demo-seed".into()
 }
 
 /// Read a timestamp string such as `2026-08-01T12:00:00Z` and convert it to UTC.
@@ -103,11 +91,8 @@ pub struct GroupsConfig {
     pub participants_max: u32,
     /// At least this many groups must have a participant count between
     /// `large_participants_min` and `large_participants_max`.
-    #[serde(default = "default_large_min_count")]
     pub large_min_count: usize,
-    #[serde(default = "default_large_participants_min")]
     pub large_participants_min: u32,
-    #[serde(default = "default_large_participants_max")]
     pub large_participants_max: u32,
     pub typical_min: u32,
     pub typical_max: u32,
@@ -120,19 +105,6 @@ pub struct GroupsConfig {
     pub phone_only_fraction: f64,
 }
 
-/// serde default for `large_min_count`.
-fn default_large_min_count() -> usize {
-    10
-}
-/// serde default for `large_participants_min`.
-fn default_large_participants_min() -> u32 {
-    8
-}
-/// serde default for `large_participants_max`.
-fn default_large_participants_max() -> u32 {
-    20
-}
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct MessagesConfig {
     pub emoji_probability: f64,
@@ -142,13 +114,7 @@ pub struct MessagesConfig {
     pub reply_stride: usize,
     /// Share of messages in the iMessage folder that are marked as SMS or RCS
     /// so the conversation view can show those labels.
-    #[serde(default = "default_apple_fallback_transport_fraction")]
     pub apple_fallback_transport_fraction: f64,
-}
-
-/// serde default for `apple_fallback_transport_fraction`.
-fn default_apple_fallback_transport_fraction() -> f64 {
-    0.20
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -165,62 +131,17 @@ pub struct EdgeCasesConfig {
 pub struct SourcesConfig {
     /// Share of one-to-one contacts (excluding the ones that appear in both
     /// backups) that only appear in the Android backup.
-    #[serde(default = "default_android_only_fraction")]
     pub android_only_fraction: f64,
     /// How many contacts are written into both the iMessage and Android folders.
-    #[serde(default = "default_overlap_count")]
     pub overlap_count: usize,
     /// Share of messages in those overlapping iMessage threads that also appear
     /// in the Android backup with the same text and time.
-    #[serde(default = "default_overlap_shared_fraction")]
     pub overlap_shared_fraction: f64,
-    #[serde(default = "default_overlap_android_extra_min")]
     pub overlap_android_extra_min: usize,
-    #[serde(default = "default_overlap_android_extra_max")]
     pub overlap_android_extra_max: usize,
     /// Share of contacts that also get a WhatsApp conversation. That conversation
     /// uses the same phone number, marked as WhatsApp rather than iMessage or SMS.
-    #[serde(default = "default_whatsapp_contact_fraction")]
     pub whatsapp_contact_fraction: f64,
-}
-
-impl Default for SourcesConfig {
-    /// Values used when `demo_seed.toml` omits the `[sources]` section.
-    fn default() -> Self {
-        Self {
-            android_only_fraction: default_android_only_fraction(),
-            overlap_count: default_overlap_count(),
-            overlap_shared_fraction: default_overlap_shared_fraction(),
-            overlap_android_extra_min: default_overlap_android_extra_min(),
-            overlap_android_extra_max: default_overlap_android_extra_max(),
-            whatsapp_contact_fraction: default_whatsapp_contact_fraction(),
-        }
-    }
-}
-
-/// serde default for `android_only_fraction`.
-fn default_android_only_fraction() -> f64 {
-    0.12
-}
-/// serde default for `overlap_count`.
-fn default_overlap_count() -> usize {
-    10
-}
-/// serde default for `overlap_shared_fraction`.
-fn default_overlap_shared_fraction() -> f64 {
-    0.35
-}
-/// serde default for `overlap_android_extra_min`.
-fn default_overlap_android_extra_min() -> usize {
-    20
-}
-/// serde default for `overlap_android_extra_max`.
-fn default_overlap_android_extra_max() -> usize {
-    80
-}
-/// serde default for `whatsapp_contact_fraction`.
-fn default_whatsapp_contact_fraction() -> f64 {
-    0.20
 }
 
 impl SeedConfig {

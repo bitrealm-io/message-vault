@@ -500,23 +500,21 @@ fn remove_path_if_exists(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Load `demo_seed.toml` from this crate, then generate into `out`.
+/// Load the settings at `seed_file`, then generate into `out`.
 ///
-/// `seed` replaces the seed from the settings file when it is `Some`.
+/// The seed and every other setting come from the file. `reset-demo` calls
+/// this with the checked-in `demo_seed.toml`.
 ///
 /// # Errors
 ///
 /// Returns an error if the settings file cannot be read, `out` is not valid
 /// UTF-8, or generation fails.
-pub fn generate_to(out: &Path, seed: Option<u64>) -> Result<GenStats> {
-    let mut cfg = SeedConfig::load(&SeedConfig::default_path())?;
+pub fn generate_to(seed_file: &Path, out: &Path) -> Result<GenStats> {
+    let mut cfg = SeedConfig::load(seed_file)?;
     cfg.out = out
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("demo out path is not UTF-8: {}", out.display()))?
         .to_string();
-    if let Some(seed) = seed {
-        cfg.seed = seed;
-    }
     generate(&cfg)
 }
 
@@ -621,193 +619,4 @@ Prejudice ({corpus_sentences} sentences) under `crates/vault/demo-seed/data/corp
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn failed_generation_preserves_existing_bundle() {
-        let temp = tempfile::tempdir().expect("create test directory");
-        let active = temp.path().join("active");
-        let prepared = temp.path().join("prepared");
-        let existing_file = active
-            .join("staging")
-            .join(IMESSAGE_SOURCE)
-            .join("existing.jsonl");
-        let existing_parent = existing_file.parent().expect("existing file parent");
-        fs::create_dir_all(existing_parent).expect("create active staging");
-        let original = b"existing demo bytes\n";
-        fs::write(&existing_file, original).expect("write existing file");
-
-        let result = prepare_and_replace(&active, &prepared, |root| {
-            fs::create_dir_all(root.join("staging").join(IMESSAGE_SOURCE))?;
-            fs::write(
-                root.join("staging")
-                    .join(IMESSAGE_SOURCE)
-                    .join("partial.jsonl"),
-                b"partial replacement\n",
-            )?;
-            anyhow::bail!("preparation failed on purpose");
-        });
-
-        assert!(result.is_err());
-        assert_eq!(
-            fs::read(&existing_file).expect("read existing file"),
-            original
-        );
-    }
-
-    #[test]
-    fn move_path_copies_file_when_rename_crosses_devices() {
-        let temp = tempfile::tempdir().expect("create test directory");
-        let source = temp.path().join("README.md");
-        let destination = temp.path().join("backup").join("README.md");
-        fs::write(&source, b"new readme").expect("write source file");
-        fs::create_dir_all(destination.parent().expect("backup parent"))
-            .expect("create backup directory");
-
-        move_path_with(&source, &destination, |_source, _destination| {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::CrossesDevices,
-                "Invalid cross-device link",
-            ))
-        })
-        .expect("copy after cross-device rename");
-
-        assert!(!source.exists(), "source file must be removed after copy");
-        assert_eq!(
-            fs::read(&destination).expect("read destination file"),
-            b"new readme"
-        );
-    }
-
-    #[test]
-    fn move_path_copies_directory_when_rename_crosses_devices() {
-        let temp = tempfile::tempdir().expect("create test directory");
-        let source = temp.path().join("config");
-        let destination = temp.path().join("backup").join("config");
-        fs::create_dir_all(&source).expect("create source directory");
-        fs::write(source.join("marker"), b"hello").expect("write source file");
-        fs::create_dir_all(destination.parent().expect("backup parent"))
-            .expect("create backup directory");
-
-        move_path_with(&source, &destination, |_source, _destination| {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::CrossesDevices,
-                "Invalid cross-device link",
-            ))
-        })
-        .expect("copy after cross-device rename");
-
-        assert!(
-            !source.exists(),
-            "source directory must be removed after copy"
-        );
-        assert_eq!(
-            fs::read(destination.join("marker")).expect("read destination file"),
-            b"hello"
-        );
-    }
-
-    #[test]
-    fn replace_generated_paths_installs_when_every_rename_crosses_devices() {
-        let temp = tempfile::tempdir().expect("create test directory");
-        let active = temp.path().join("active");
-        let prepared = temp.path().join("prepared");
-        write_bundle_paths(&active, b"old");
-        write_bundle_paths(&prepared, b"new");
-
-        replace_generated_paths_with(&active, &prepared, |source, destination| {
-            move_path_with(source, destination, |_source, _destination| {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::CrossesDevices,
-                    "Invalid cross-device link",
-                ))
-            })
-        })
-        .expect("install after cross-device renames");
-
-        assert_bundle_paths(&active, b"new");
-    }
-
-    #[test]
-    fn replacement_failure_at_each_generated_path_restores_all_old_paths() {
-        for failing_install in 1..=3 {
-            let temp = tempfile::tempdir().expect("create test directory");
-            let active = temp.path().join("active");
-            let prepared = temp.path().join("prepared");
-            write_bundle_paths(&active, b"old");
-            write_bundle_paths(&prepared, b"new");
-            let mut installs = 0;
-
-            let result = replace_generated_paths_with(&active, &prepared, |source, destination| {
-                if source.starts_with(&prepared) && destination.starts_with(&active) {
-                    installs += 1;
-                    if installs == failing_install {
-                        anyhow::bail!("install failed on purpose {failing_install}");
-                    }
-                }
-                fs::rename(source, destination).map_err(Into::into)
-            });
-
-            assert!(result.is_err(), "install {failing_install} must fail");
-            assert_bundle_paths(&active, b"old");
-        }
-    }
-
-    #[test]
-    fn restore_attempts_all_paths_after_one_restore_fails() {
-        let temp = tempfile::tempdir().expect("create test directory");
-        let active = temp.path().join("active");
-        let prepared = temp.path().join("prepared");
-        write_bundle_paths(&active, b"old");
-        write_bundle_paths(&prepared, b"new");
-        let mut installs = 0;
-        let mut restored_staging = false;
-
-        let result = replace_generated_paths_with(&active, &prepared, |source, destination| {
-            if source.starts_with(&prepared) && destination.starts_with(&active) {
-                installs += 1;
-                if installs == 3 {
-                    anyhow::bail!("README install failed on purpose");
-                }
-            }
-            if source.ends_with(".previous-active/config") {
-                anyhow::bail!("config restore failed on purpose");
-            }
-            if source.ends_with(".previous-active/staging") {
-                restored_staging = true;
-            }
-            fs::rename(source, destination).map_err(Into::into)
-        });
-
-        let error = result.expect_err("replacement must fail").to_string();
-        assert!(
-            restored_staging,
-            "staging restoration must still be attempted"
-        );
-        assert!(error.contains("config restore failed on purpose"));
-        assert!(prepared.join(".previous-active/config").exists());
-    }
-
-    /// Write `staging/marker`, `config/marker`, and `README.md` with the same bytes.
-    fn write_bundle_paths(root: &Path, marker: &[u8]) {
-        fs::create_dir_all(root.join("staging")).expect("create staging directory");
-        fs::create_dir_all(root.join("config")).expect("create config directory");
-        fs::write(root.join("staging/marker"), marker).expect("write staging marker");
-        fs::write(root.join("config/marker"), marker).expect("write config marker");
-        fs::write(root.join("README.md"), marker).expect("write README marker");
-    }
-
-    /// Check that `staging/marker`, `config/marker`, and `README.md` still hold `marker`.
-    fn assert_bundle_paths(root: &Path, marker: &[u8]) {
-        assert_eq!(
-            fs::read(root.join("staging/marker")).expect("staging"),
-            marker
-        );
-        assert_eq!(
-            fs::read(root.join("config/marker")).expect("config"),
-            marker
-        );
-        assert_eq!(fs::read(root.join("README.md")).expect("README"), marker);
-    }
-}
+mod tests;

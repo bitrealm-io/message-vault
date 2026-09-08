@@ -51,7 +51,7 @@ pub struct VaultPullConfig {
 }
 
 /// Final summary of a download (conversations, messages, attachment counts).
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PullReport {
     /// Account id the key resolved to.
     pub account: String,
@@ -70,7 +70,7 @@ pub struct PullReport {
 }
 
 /// Live progress sent to the CLI or desktop app during a query or download.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProgressEvent {
     /// One line for the log panel.
     Log(String),
@@ -412,9 +412,15 @@ impl<'a> Pull<'a> {
 
     /// Write one JSON Lines file per conversation and return how many.
     ///
+    /// The stem comes from [`message_ir::ConversationDocument::filename_stem`],
+    /// which appends `packaging_stem_suffix` (the sanitized source, set here
+    /// so the same chat from two sources lands in two files). The write is
+    /// atomic: ir-format writes a `.tmp` sibling and renames it, so a crash
+    /// never leaves a truncated conversation file.
+    ///
     /// # Errors
     ///
-    /// Returns an error when a file cannot be written.
+    /// Returns an error when a file cannot be created, serialized, or renamed.
     fn write_conversations(
         &self,
         by_conv: BTreeMap<String, (Message, Vec<message_ir::IrMessage>)>,
@@ -621,16 +627,6 @@ fn download_assets_parallel(args: DownloadAssetsParallelArgs<'_>) -> Result<Asse
     Ok(stats)
 }
 
-/// Write one conversation as a JSON Lines file (header, then one message per line).
-///
-/// The stem comes from [`ConversationDocument::filename_stem`], which appends
-/// [`ConversationDocument::packaging_stem_suffix`] (the sanitized source, set
-/// by the caller). The write is atomic: ir-format writes a `.tmp` sibling and
-/// renames it, so a crash never leaves a truncated conversation file.
-///
-/// # Errors
-///
-/// Returns an error when the file cannot be created, serialized, or renamed.
 /// Keep letters, digits, `-`, and `_`; replace every other character with `_`.
 fn sanitize_source_suffix(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
@@ -701,5 +697,93 @@ mod out_dir_tests {
         prepare_out_dir(&out, false).unwrap();
 
         assert!(out.join(EXPORT_SENTINEL).is_file());
+    }
+}
+
+#[cfg(test)]
+mod suffix_tests {
+    use super::sanitize_source_suffix;
+
+    #[test]
+    fn a_source_name_keeps_letters_digits_dash_and_underscore_only() {
+        assert_eq!(
+            sanitize_source_suffix("sms-backup-restore"),
+            "sms-backup-restore"
+        );
+        assert_eq!(
+            sanitize_source_suffix("whatsapp (phone 2)"),
+            "whatsapp__phone_2_"
+        );
+        assert_eq!(sanitize_source_suffix("café/2024"), "caf__2024");
+    }
+}
+
+#[cfg(test)]
+mod asset_ref_tests {
+    use super::*;
+    use serde_json::json;
+
+    /// One exported message from `source` carrying `attachments`, with the
+    /// rest of the vault's shape at its plainest.
+    fn message_from(source: &str, attachments: serde_json::Value) -> Message {
+        serde_json::from_value(json!({
+            "id": 1,
+            "source": source,
+            "timestamp": "2015-03-12T18:05:22Z",
+            "sort_order": 0,
+            "is_from_me": false,
+            "is_announcement": false,
+            "is_reply": false,
+            "num_replies": 0,
+            "conversation": {
+                "id": 9,
+                "chat_identifier": "+15555550101",
+                "conversation_type": "individual",
+                "participants": []
+            },
+            "attachments": attachments,
+            "tapbacks": []
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn the_first_mention_of_a_fingerprint_decides_its_source_and_path() {
+        let mut assets = HashMap::new();
+
+        note_asset_refs(
+            &message_from(
+                "imessage",
+                json!([
+                    { "path": "attachments/menu.pdf", "sha256": "ab" },
+                    { "path": "/attachments/photo.png", "sha256": "cd" },
+                    { "sha256": " ef " },
+                    { "path": "attachments/no-fingerprint.txt" }
+                ]),
+            ),
+            &mut assets,
+        );
+        note_asset_refs(
+            &message_from("sms", json!([{ "path": "other/menu.pdf", "sha256": "ab" }])),
+            &mut assets,
+        );
+
+        assert_eq!(
+            assets,
+            HashMap::from([
+                (
+                    "ab".to_string(),
+                    ("imessage".to_string(), "attachments/menu.pdf".to_string())
+                ),
+                (
+                    "cd".to_string(),
+                    ("imessage".to_string(), "attachments/photo.png".to_string())
+                ),
+                (
+                    "ef".to_string(),
+                    ("imessage".to_string(), "attachments/ef".to_string())
+                ),
+            ])
+        );
     }
 }

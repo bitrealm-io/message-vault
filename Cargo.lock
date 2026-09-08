@@ -3871,6 +3871,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "hex",
+ "httpmock",
  "journal",
  "media",
  "message-ir",

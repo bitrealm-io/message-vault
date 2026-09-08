@@ -33,22 +33,23 @@ Twenty-one findings. Each names the evidence.
 
 ### A. Status codes (4 findings)
 
-**A1. No route returns 201, and no route sends a `Location` header.**
-Seven creating POSTs answer `200`: `/v1/contact-groups`, `/v1/message-tags`,
+**A1. No route returns `201 Created`, and no route sends a `Location` header.**
+Seven creating POSTs answer `200 OK`: `/v1/contact-groups`, `/v1/message-tags`,
 `/v1/saved-searches`, `/v1/account/api-tokens`, `/v1/owner/accounts`,
 `/v1/imports`, `/v1/assets/{sha256}/uploads`. `StatusCode::CREATED` and the
 `LOCATION` header appear nowhere in `crates/vault/server/src`. A client that
 creates a resource cannot learn its URL from the response.
 
-**A2. Validation failures return 400 with one string, never 422 with a field
-breakdown.** `ApiError::BadRequest` carries a single message
-(`crates/vault/server/src/server.rs:381`), so a form with four bad fields
-reports one of them at a time.
+**A2. Validation failures return `400 Bad Request` with one string, never
+`422 Unprocessable Entity` with a field breakdown.** `ApiError::BadRequest`
+carries a single message (`crates/vault/server/src/server.rs:381`), so a form
+with four bad fields reports one of them at a time.
 
-**A3. The 429 carries no `Retry-After`.** `ApiError::TooManyRequests`
-(`crates/vault/server/src/server.rs:386`) sends a status and a message; a
-client is told to back off but not for how long. No `X-RateLimit-Limit`,
-`X-RateLimit-Remaining` or `X-RateLimit-Reset` header exists either.
+**A3. The `429 Too Many Requests` carries no `Retry-After`.**
+`ApiError::TooManyRequests` (`crates/vault/server/src/server.rs:386`) sends a
+status and a message; a client is told to back off but not for how long. No
+`X-RateLimit-Limit`, `X-RateLimit-Remaining` or `X-RateLimit-Reset` header
+exists either.
 
 **A4. The rate limiter is undocumented.** `check_auth_rate_limit`
 (`crates/vault/server/src/auth.rs:40`) guards login, register and vault claim
@@ -120,16 +121,18 @@ the data came from rather than the resource it creates.
 
 ### D. Content negotiation (1 finding)
 
-**D1. The `Accept` header is never read and 406 is never returned.** 415 is
-handled on request bodies (`crates/vault/server/src/extract.rs:156`,
+**D1. The `Accept` header is never read and `406 Not Acceptable` is never
+returned.** `415 Unsupported Media Type` is handled on request bodies
+(`crates/vault/server/src/extract.rs:156`,
 `crates/vault/server/src/import/mod.rs:1531`), so half the rule is met. A
 client asking for a format the vault cannot produce gets JSON anyway.
 
 ### E. Filtering and sorting (2 findings)
 
 **E1. Only one of five list routes can be sorted.** `sort=` exists on
-`GET /v1/conversations` alone (`crates/vault/server/src/conversations_api.rs:571`,
-values `date` and `messages`). `/v1/contacts`, `/v1/messages`,
+`GET /v1/conversations` alone
+(`crates/vault/server/src/conversations_api.rs:571`, values `date` and
+`messages`). `/v1/contacts`, `/v1/messages`,
 `/v1/conversations/{id}/messages` and `/v1/export/messages` take `limit` and
 `offset` with no ordering control.
 
@@ -165,7 +168,8 @@ secret with `created_at` and `expires_at`.
 - **Versioning.** `/v1` is a whole number in the path. No dotted versions.
 - **Pagination.** Offset and limit, `{items, total, limit, offset}`, default
   40 for lists and 100 for export, maximum 500, offset capped at 50,000, and a
-  400 rather than a silent clamp (`crates/vault/server/src/paging.rs`).
+  `400 Bad Request` rather than a silent clamp
+  (`crates/vault/server/src/paging.rs`).
 - **Wire casing.** Zero camelCase fields and zero camelCase query parameters
   across all 58 paths. snake_case throughout, though nothing says so in
   writing.
@@ -176,10 +180,12 @@ secret with `created_at` and `expires_at`.
 - **Nesting depth.** The deepest path,
   `/v1/assets/{sha256}/uploads/{upload_id}/parts/{part}`, is three levels,
   inside the usual two-to-three ceiling.
-- **204 on no-content writes.** Trash, restore, logout and account delete all
-  answer 204 correctly.
-- **409 on conflicts.** Duplicate named-collection names answer 409.
-- **401 against 403.** The two are distinguished rather than conflated.
+- **`204 No Content` on no-content writes.** Trash, restore, logout and account
+  delete all answer `204 No Content` correctly.
+- **`409 Conflict` on conflicts.** Duplicate named-collection names answer
+  `409 Conflict`.
+- **`401 Unauthorized` against `403 Forbidden`.** The two are distinguished
+  rather than conflated.
 - **Authentication.** Opaque bearer secrets hashed at rest, Argon2id with a
   per-hash salt, a timing-equalization dummy verify
   (`crates/vault/server/src/auth.rs:179`), `expires_at` on both session and
@@ -191,14 +197,15 @@ These three have to be answered before the rules can be written, because each
 one changes what the rule says.
 
 1. **The error body.** Adopt `{"error": {"type", "code", "message",
-   "request_id"}}` with 422 field breakdowns, which amends ADR-0005's flat
-   `{error}` shape? Or keep the flat shape and accept that clients match on
-   message text?
+   "request_id"}}` with `422 Unprocessable Entity` field breakdowns, which
+   amends ADR-0005's flat `{error}` shape? Or keep the flat shape and accept
+   that clients match on message text?
 2. **Filtering and sorting.** The search language (ADR-0004) already filters
    inside `q`. Adopt a standard `sort=-field,field` convention across all five
    list routes while leaving filtering to the search language, and reject
    `fields=` selection as contrary to ADR-0005's "a thing is returned as
    itself"?
-3. **Content negotiation.** Is 406 worth implementing for an interface that
+3. **Content negotiation.** Is `406 Not Acceptable` worth implementing for an
+   interface that
    speaks only `application/json`, given Export selects its format by query
    parameter rather than by `Accept`?

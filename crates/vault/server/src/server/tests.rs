@@ -586,7 +586,7 @@ async fn active_session_is_empty_then_reports_the_live_one() {
         .await
         .unwrap();
     let session = active.0.session.expect("a live session is reported");
-    assert_eq!(session.id, created.0.id);
+    assert_eq!(session.id, created.body.id);
     assert_eq!(session.stage.as_deref(), Some("write"));
     assert_eq!(
         session.staging_dir.as_deref(),

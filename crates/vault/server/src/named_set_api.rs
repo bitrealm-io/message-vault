@@ -14,7 +14,7 @@ use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::named_membership::{self, MembershipSpec};
-use crate::server::{ApiError, AppState, ErrorBody, FullAccess};
+use crate::server::{ApiError, AppState, Created, ErrorBody, FullAccess};
 
 /// One Contact Group or Message Tag: its id and name.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -73,18 +73,22 @@ pub(crate) async fn list(
     Ok(Json(NamedSetList { items }))
 }
 
-/// Create a set and answer its id and trimmed name. A blank or over-long
-/// name, or a reserved name, answers 400; a name already taken (ignoring
-/// case) answers 409.
+/// Create a set and answer `201 Created` with its id and trimmed name, and a
+/// `Location` of `{root_path}/{id}`. A blank or over-long name, or a reserved
+/// name, answers 400; a name already taken (ignoring case) answers 409.
 pub(crate) async fn create(
     spec: &'static MembershipSpec,
+    root_path: &str,
     state: &AppState,
     account_id: &str,
     body: NamedSetBody,
-) -> Result<Json<NamedSet>, ApiError> {
+) -> Result<Created<NamedSet>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let (id, name) = named_membership::create_set(spec, &mut conn, account_id, &body.name).await?;
-    Ok(Json(NamedSet { id, name }))
+    Ok(Created {
+        location: format!("{root_path}/{id}"),
+        body: NamedSet { id, name },
+    })
 }
 
 /// Rename a set by id, answering its id and the new name. An unknown or
@@ -208,7 +212,11 @@ macro_rules! named_set_routes {
             security(("bearer" = [])),
             request_body = NamedSetBody,
             responses(
-                (status = 200, body = NamedSet),
+                (
+                    status = 201,
+                    body = NamedSet,
+                    headers(("Location" = String, description = "Path of the new set"))
+                ),
                 (status = 400, body = ErrorBody),
                 (status = 401, body = ErrorBody),
                 (status = 403, body = ErrorBody),
@@ -219,8 +227,8 @@ macro_rules! named_set_routes {
             axum::extract::State(state): axum::extract::State<AppState>,
             FullAccess(auth): FullAccess,
             Json(body): Json<NamedSetBody>,
-        ) -> Result<Json<NamedSet>, ApiError> {
-            create($spec(), &state, &auth.account_id, body).await
+        ) -> Result<Created<NamedSet>, ApiError> {
+            create($spec(), $root_path, &state, &auth.account_id, body).await
         }
 
         #[doc = $update_doc]

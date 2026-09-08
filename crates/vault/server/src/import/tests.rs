@@ -1,6 +1,8 @@
 use super::*;
 use crate::assets;
-use crate::test_support::{TestVault, get_json, post_json, register_via_api, test_vault};
+use crate::test_support::{
+    TestVault, get_json, post_created_json, post_json, register_via_api, test_vault,
+};
 use tempfile::TempDir;
 
 const TEST_ACCOUNT: &str = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -17,7 +19,7 @@ fn write_jsonl(dir: &Path, name: &str, body: &str) -> PathBuf {
 async fn session_with_summary(summary: serde_json::Value) -> (TestVault, String, i64) {
     let vault = test_vault().await;
     let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
-    let created: serde_json::Value = post_json(
+    let (_, created): (String, serde_json::Value) = post_created_json(
         &vault.state,
         "/v1/imports",
         &account.token,
@@ -58,7 +60,7 @@ async fn a_stage_change_with_a_summary_stores_it() {
     // question from what was actually approved.
     let vault = test_vault().await;
     let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
-    let created: serde_json::Value = post_json(
+    let (location, created): (String, serde_json::Value) = post_created_json(
         &vault.state,
         "/v1/imports",
         &account.token,
@@ -66,6 +68,7 @@ async fn a_stage_change_with_a_summary_stores_it() {
     )
     .await;
     let import_id = created["id"].as_i64().unwrap();
+    assert_eq!(location, format!("/v1/imports/{import_id}"));
 
     post_json::<serde_json::Value>(
         &vault.state,

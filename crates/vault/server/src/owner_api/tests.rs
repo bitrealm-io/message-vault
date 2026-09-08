@@ -3,8 +3,8 @@ use axum::http::StatusCode;
 use super::*;
 use crate::test_support::{
     claim_vault_as_owner, delete_json, delete_status, get_json, get_status, login_status,
-    patch_status, post_json, post_status, put_status, register_via_api, seed_one_message,
-    test_vault,
+    patch_status, post_created_json, post_json, post_status, put_status, register_via_api,
+    seed_one_message, test_vault,
 };
 
 /// One case per route: an ordinary session gets 403 on every handler, not
@@ -325,13 +325,17 @@ async fn a_created_account_must_replace_the_password_the_owner_chose() {
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let created: ManagedAccount = post_json(
+    let (location, created): (String, ManagedAccount) = post_created_json(
         &state,
         "/v1/owner/accounts",
         &owner.token,
         serde_json::json!({ "username": "carol", "password": "hunter2hunter2" }),
     )
     .await;
+    assert_eq!(
+        location,
+        format!("/v1/owner/accounts/{}", created.account_id)
+    );
 
     assert!(
         created.must_change_password,
@@ -367,7 +371,7 @@ async fn an_account_the_owner_creates_owes_profile_setup() {
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let created: ManagedAccount = post_json(
+    let (_, created): (String, ManagedAccount) = post_created_json(
         &state,
         "/v1/owner/accounts",
         &owner.token,
@@ -393,7 +397,7 @@ async fn changing_the_password_clears_the_forced_change() {
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let created: ManagedAccount = post_json(
+    let (_, created): (String, ManagedAccount) = post_created_json(
         &state,
         "/v1/owner/accounts",
         &owner.token,

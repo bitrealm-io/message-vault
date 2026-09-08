@@ -93,8 +93,16 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Path of the new token"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -833,7 +841,25 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "The asset is already stored; nothing was created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetUploadStartResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A new upload was started",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Path of the new upload"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1577,8 +1603,16 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Path of the new set"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -3506,8 +3540,16 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Path of the new import"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -4063,8 +4105,16 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Path of the new set"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -4581,8 +4631,16 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Path of the new account"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -5071,7 +5129,7 @@
         "tags": [
           "Saved searches"
         ],
-        "summary": "Create a saved search and return it.",
+        "summary": "Create a saved search: `201 Created`, `Location: /v1/saved-searches/{id}`,\nand the row.",
         "operationId": "saved_searches_create_handler",
         "requestBody": {
           "content": {
@@ -5084,8 +5142,16 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Path of the new saved search"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {

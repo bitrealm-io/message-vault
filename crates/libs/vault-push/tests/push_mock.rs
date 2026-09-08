@@ -128,7 +128,9 @@ fn authenticate_and_push_text_only_conversation() {
     });
     let _start_import = server.mock(|when, then| {
         when.method(POST).path("/v1/imports");
-        then.status(200).json_body(json!({ "id": 42 }));
+        then.status(201)
+            .header("Location", "/v1/imports/42")
+            .json_body(json!({ "id": 42 }));
     });
     let _complete_import = server.mock(|when, then| {
         when.method(POST).path("/v1/imports/42/complete");
@@ -194,9 +196,11 @@ fn reuses_supplied_import_session_without_starting_or_completing_one() {
     });
     let start = server.mock(|when, then| {
         when.method(POST).path("/v1/imports");
-        then.status(200).json_body(json!({
-            "id": 42
-        }));
+        then.status(201)
+            .header("Location", "/v1/imports/99")
+            .json_body(json!({
+                "id": 42
+            }));
     });
     let complete = server.mock(|when, then| {
         when.method(POST).path("/v1/imports/99/complete");

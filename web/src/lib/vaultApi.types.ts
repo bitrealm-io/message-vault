@@ -1033,7 +1033,10 @@ export interface paths {
         /** List the account's saved searches, A–Z. */
         get: operations["saved_searches_list_handler"];
         put?: never;
-        /** Create a saved search and return it. */
+        /**
+         * Create a saved search: `201 Created`, `Location: /v1/saved-searches/{id}`,
+         *     and the row.
+         */
         post: operations["saved_searches_create_handler"];
         delete?: never;
         options?: never;
@@ -2579,8 +2582,10 @@ export interface operations {
             };
         };
         responses: {
-            200: {
+            201: {
                 headers: {
+                    /** @description Path of the new token */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3076,8 +3081,20 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The asset is already stored; nothing was created */
             200: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetUploadStartResponse"];
+                };
+            };
+            /** @description A new upload was started */
+            201: {
+                headers: {
+                    /** @description Path of the new upload */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -3589,8 +3606,10 @@ export interface operations {
             };
         };
         responses: {
-            200: {
+            201: {
                 headers: {
+                    /** @description Path of the new set */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4873,8 +4892,10 @@ export interface operations {
             };
         };
         responses: {
-            200: {
+            201: {
                 headers: {
+                    /** @description Path of the new import */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -5261,8 +5282,10 @@ export interface operations {
             };
         };
         responses: {
-            200: {
+            201: {
                 headers: {
+                    /** @description Path of the new set */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -5615,8 +5638,10 @@ export interface operations {
             };
         };
         responses: {
-            200: {
+            201: {
                 headers: {
+                    /** @description Path of the new account */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -5977,8 +6002,10 @@ export interface operations {
             };
         };
         responses: {
-            200: {
+            201: {
                 headers: {
+                    /** @description Path of the new saved search */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {

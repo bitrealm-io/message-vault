@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::db::api_tokens;
 use crate::db::permissions::Permissions;
 use crate::db::schema;
-use crate::server::{ApiError, AppState, FullAccess};
+use crate::server::{ApiError, AppState, Created, FullAccess};
 
 /// One named API token as shown in Settings: label, permissions, and masked secret.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -167,7 +167,11 @@ pub async fn list_api_tokens_handler(
     security(("bearer" = [])),
     request_body = CreateApiTokenRequest,
     responses(
-        (status = 200, body = CreateApiTokenResponse),
+        (
+            status = 201,
+            body = CreateApiTokenResponse,
+            headers(("Location" = String, description = "Path of the new token"))
+        ),
         (status = 400, body = crate::server::ErrorBody),
         (status = 401, body = crate::server::ErrorBody),
         (status = 403, body = crate::server::ErrorBody)
@@ -177,7 +181,7 @@ pub async fn create_api_token_handler(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     Json(req): Json<CreateApiTokenRequest>,
-) -> Result<Json<CreateApiTokenResponse>, ApiError> {
+) -> Result<Created<CreateApiTokenResponse>, ApiError> {
     let account_id = auth.account_id;
     let label = req.label;
     let permissions = Permissions {
@@ -194,17 +198,20 @@ pub async fn create_api_token_handler(
             .await
             .map_err(map_label_error)?;
 
-    Ok(Json(CreateApiTokenResponse {
-        id: created.id,
-        label: created.label,
-        can_import: created.permissions.import,
-        can_export: created.permissions.export,
-        can_delete: created.permissions.delete,
-        created_at: created.created_at,
-        expires_at: created.expires_at,
-        token_hint: api_tokens::mask_api_token(&created.token),
-        token: created.token,
-    }))
+    Ok(Created {
+        location: format!("/v1/account/api-tokens/{}", created.id),
+        body: CreateApiTokenResponse {
+            id: created.id,
+            label: created.label,
+            can_import: created.permissions.import,
+            can_export: created.permissions.export,
+            can_delete: created.permissions.delete,
+            created_at: created.created_at,
+            expires_at: created.expires_at,
+            token_hint: api_tokens::mask_api_token(&created.token),
+            token: created.token,
+        },
+    })
 }
 
 /// Delete one named API token. Requests using it start failing on the next call.
@@ -325,13 +332,17 @@ mod tests {
         let account =
             crate::test_support::register_via_api(&state, "token-owner", "hunter2hunter2").await;
 
-        let body: serde_json::Value = crate::test_support::post_json(
+        let (location, body): (String, serde_json::Value) = crate::test_support::post_created_json(
             &state,
             "/v1/account/api-tokens",
             &account.token,
             serde_json::json!({ "label": "cli token" }),
         )
         .await;
+        assert_eq!(
+            location,
+            format!("/v1/account/api-tokens/{}", body["id"].as_str().unwrap())
+        );
 
         assert_eq!(
             body["can_delete"],

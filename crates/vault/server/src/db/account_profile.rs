@@ -535,22 +535,6 @@ pub async fn unlink_account_handle(
     Ok(removed > 0)
 }
 
-/// Open the vault at `target` and resolve `account_ref` (username or UUID)
-/// to an account UUID. Used by CLI commands that take `--account`.
-///
-/// # Errors
-///
-/// Returns an error when the database cannot be opened or the account does
-/// not exist.
-pub async fn resolve_account_ref_at(
-    target: crate::db::engine::DbTarget<'_>,
-    account_ref: &str,
-) -> Result<String> {
-    let pool = target.open().await?;
-    let mut conn = pool.acquire().await?;
-    resolve_account_ref(&mut conn, account_ref).await
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

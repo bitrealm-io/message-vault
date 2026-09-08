@@ -14,7 +14,8 @@ use sqlx::AnyConnection;
 use tempfile::TempDir;
 
 use crate::config::Config;
-use crate::db::{engine, schema};
+use crate::db::schema;
+use crate::open_vault::OpenVault;
 use media::{CompressOptions, Kind, MediaMode, TranscodeOutcome};
 
 /// Browser previews use the `media` crate's compress recipe, the same one the
@@ -35,12 +36,8 @@ pub struct ProcessAssetsOptions {
     pub skip_video: bool,
     /// Skip audio conversion.
     pub skip_audio: bool,
-    /// Override DB path from config.
-    pub db: Option<PathBuf>,
     /// Only process this source id.
     pub source: Option<String>,
-    /// Connection URL (`postgres://…` or `sqlite://…`); wins over `db` / `paths.db`.
-    pub db_url: Option<String>,
 }
 
 /// Counts reported by one derived-media processing pass.
@@ -86,19 +83,11 @@ impl AssetRow {
 ///
 /// # Errors
 ///
-/// Returns an error when the database is missing, a conversion tool fails, or
-/// a derived file cannot be written.
-pub async fn run(cfg: &Config, opts: &ProcessAssetsOptions) -> Result<ProcessAssetsStats> {
-    let db_path = opts.db.as_ref().unwrap_or(&cfg.paths.db);
-    let target = engine::DbTarget::new(opts.db_url.as_deref(), db_path);
-    if let engine::DbTarget::Path(path) = target
-        && !path.is_file()
-    {
-        bail!("database not found: {}", path.display());
-    }
-    let pool = target.open().await?;
-    let mut conn = pool.acquire().await?;
-    schema::ensure_vault_schema(&mut conn).await?;
+/// Returns an error when the vault has no accounts, a conversion tool fails,
+/// or a derived file cannot be written.
+pub async fn run(vault: &OpenVault, opts: &ProcessAssetsOptions) -> Result<ProcessAssetsStats> {
+    let cfg = &vault.cfg;
+    let mut conn = vault.conn().await?;
 
     let account_ids = list_account_ids(&mut conn, &cfg.paths.data_dir).await?;
     if account_ids.is_empty() {

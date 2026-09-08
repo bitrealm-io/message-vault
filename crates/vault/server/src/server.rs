@@ -29,11 +29,12 @@ use crate::asset_uploads;
 use crate::config::Config;
 use crate::db::account_profile;
 use crate::db::api_tokens;
-use crate::db::engine::{self, DbEngine};
+use crate::db::engine::DbEngine;
 use crate::db::permissions::Permissions;
 use crate::db::schema;
 use crate::db::session_tokens;
 use crate::keyed_locks::KeyedLocks;
+use crate::open_vault::OpenVault;
 use crate::problem::{Problem, ProblemType};
 
 /// What a Bearer credential is allowed to do.
@@ -302,8 +303,6 @@ pub struct AppState {
     /// Connection pool (SQLite file or `[database] url`). Handlers acquire
     /// short-lived connections from here.
     pub db: sqlx::AnyPool,
-    /// Engine the pool was opened for (SQLite by default, Postgres via URL).
-    pub db_engine: DbEngine,
     /// Per-account import mutex: same-account imports stay serialized so staging
     /// rows (the temporary import area) for that tenant are not wiped mid-run.
     /// Different accounts may overlap at the lock layer; SQLite write-ahead
@@ -320,6 +319,23 @@ pub struct AppState {
     pub(crate) upload_limits: asset_uploads::UploadLimits,
     /// Axum request body cap (single PUT or one part); equals `asset_max_bytes`.
     pub(crate) max_body_bytes: usize,
+}
+
+impl AppState {
+    /// The state every handler shares, over an opened vault. `serve` and the
+    /// test harness both come through here, so the locks, the rate limits
+    /// and the body cap are assembled in one place.
+    pub fn new(vault: OpenVault, upload_limits: asset_uploads::UploadLimits) -> Self {
+        Self {
+            cfg: Arc::new(vault.cfg),
+            db: vault.db,
+            account_import_locks: KeyedLocks::default(),
+            asset_complete_locks: KeyedLocks::default(),
+            auth_rate_limits: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            upload_limits,
+            max_body_bytes: upload_limits.max_bytes as usize,
+        }
+    }
 }
 
 /// The answer to a request that made one new resource: `201 Created`, a
@@ -857,14 +873,7 @@ pub(crate) fn http_app(state: AppState) -> Router {
 pub async fn run(cfg: Config) -> anyhow::Result<()> {
     let server = cfg.require_server()?.clone();
     let bind = server.bind.clone();
-    // Production entry points must install the Any drivers once before any pool
-    // connect (idempotent; `engine::test_pool` does the same for tests).
-    sqlx::any::install_default_drivers();
-    let db_url = cfg.database.url.clone();
-    let engine = match &db_url {
-        Some(url) => engine::detect_engine(url)?,
-        None => DbEngine::Sqlite,
-    };
+    let engine = cfg.db_engine()?;
     let lock_path = if engine == DbEngine::Sqlite {
         cfg.paths.db.clone()
     } else {
@@ -873,24 +882,18 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
     let _operation_lock = crate::operation_lock::acquire_for_serve(&lock_path)?;
     let upload_limits =
         asset_uploads::UploadLimits::resolve(server.asset_part_size, server.asset_max_bytes);
-    let max_body_bytes = upload_limits.max_bytes as usize;
 
-    // Open the pool, warm it, and ensure schema once before serving.
-    let pool = engine::DbTarget::new(db_url.as_deref(), &cfg.paths.db)
-        .open()
-        .await?;
-    {
-        let mut conn = pool.acquire().await?;
-        let _: i32 = sqlx::query_scalar("SELECT 1").fetch_one(&mut *conn).await?; // warmup (i32: INT4 on Postgres, INTEGER on SQLite)
-        schema::ensure_vault_schema(&mut conn).await?;
-    }
+    let vault = OpenVault::open(cfg).await?;
     if engine == DbEngine::Sqlite {
-        crate::operation_lock::mark_ready(&cfg.paths.db)?;
+        crate::operation_lock::mark_ready(&vault.cfg.paths.db)?;
         let mode: String = sqlx::query_scalar("PRAGMA journal_mode")
-            .fetch_one(&pool)
+            .fetch_one(&vault.db)
             .await
             .unwrap_or_else(|_| "unknown".into());
-        eprintln!("  db:   {} (journal_mode={mode})", cfg.paths.db.display());
+        eprintln!(
+            "  db:   {} (journal_mode={mode})",
+            vault.cfg.paths.db.display()
+        );
     }
     eprintln!(
         "  assets: max={} MiB  part_size={} MiB",
@@ -898,18 +901,7 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         upload_limits.part_size as u64 / message_ir::MIB
     );
 
-    let state = AppState {
-        cfg: Arc::new(cfg),
-        db: pool,
-        db_engine: engine,
-        account_import_locks: KeyedLocks::default(),
-        asset_complete_locks: KeyedLocks::default(),
-        auth_rate_limits: Arc::new(std::sync::Mutex::new(HashMap::new())),
-        upload_limits,
-        max_body_bytes,
-    };
-
-    let app = http_app(state);
+    let app = http_app(AppState::new(vault, upload_limits));
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     eprintln!("message-vault-server serve listening on http://{bind}");
     eprintln!(
@@ -1169,36 +1161,32 @@ pub(crate) async fn stream_body_to_file(
 /// Build the `AppState` every test in this crate drives: a real `Config`
 /// rooted at `data_dir` (with a sibling `vault.db` path that nothing in the
 /// test suite reads from disk — queries go through `pool`), the given pool,
-/// and default upload limits. `#[cfg(test)]`-gated so it never ships in a
-/// release build; `pub(crate)` so `test_support` and the other test modules
-/// in this crate can reach it.
+/// and default upload limits. Goes through [`AppState::new`], the same
+/// assembly `serve` uses. `#[cfg(test)]`-gated so it never ships in a release
+/// build; `pub(crate)` so `test_support` and the other test modules in this
+/// crate can reach it.
 #[cfg(test)]
-pub(crate) async fn test_app_state(pool: sqlx::AnyPool, data_dir: &Path) -> AppState {
-    AppState {
-        cfg: Arc::new(crate::config::Config {
-            paths: crate::config::PathsConfig {
-                db: data_dir.join("vault.db"),
-                data_dir: data_dir.to_path_buf(),
-                assets_dir: "assets".into(),
-                assets_converted_dir: "assets_converted".into(),
-            },
-            server: Some(crate::config::ServerConfig {
-                bind: "127.0.0.1:0".into(),
-                asset_max_bytes: 8 * 1024 * 1024,
-                asset_part_size: 1024 * 1024,
-                cors_origins: Vec::new(),
-                openapi_ui: false,
-            }),
-            database: crate::config::DatabaseConfig::default(),
+pub(crate) fn test_app_state(pool: sqlx::AnyPool, data_dir: &Path) -> AppState {
+    let cfg = crate::config::Config {
+        paths: crate::config::PathsConfig {
+            db: data_dir.join("vault.db"),
+            data_dir: data_dir.to_path_buf(),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: Some(crate::config::ServerConfig {
+            bind: "127.0.0.1:0".into(),
+            asset_max_bytes: 8 * 1024 * 1024,
+            asset_part_size: 1024 * 1024,
+            cors_origins: Vec::new(),
+            openapi_ui: false,
         }),
-        db: pool,
-        db_engine: DbEngine::Sqlite,
-        account_import_locks: KeyedLocks::default(),
-        asset_complete_locks: KeyedLocks::default(),
-        auth_rate_limits: Arc::new(std::sync::Mutex::new(HashMap::new())),
-        upload_limits: asset_uploads::UploadLimits::default(),
-        max_body_bytes: asset_uploads::DEFAULT_MAX_BYTES as usize,
-    }
+        database: crate::config::DatabaseConfig::default(),
+    };
+    AppState::new(
+        OpenVault { cfg, db: pool },
+        asset_uploads::UploadLimits::default(),
+    )
 }
 
 #[cfg(test)]

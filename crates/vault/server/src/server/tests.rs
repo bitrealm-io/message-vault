@@ -168,7 +168,7 @@ async fn test_state() -> (TempDir, AppState, String, i64) {
     .await
     .unwrap();
 
-    let state = test_app_state(pool, &data_dir).await;
+    let state = test_app_state(pool, &data_dir);
 
     (tmp, state, token, import_id)
 }

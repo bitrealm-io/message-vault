@@ -25,6 +25,7 @@ pub(crate) mod messages_api;
 pub(crate) mod models;
 pub(crate) mod named_membership;
 pub(crate) mod named_set_api;
+pub(crate) mod open_vault;
 pub(crate) mod openapi;
 pub(crate) mod operation_lock;
 pub(crate) mod owner_api;

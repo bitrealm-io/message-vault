@@ -775,19 +775,5 @@ async fn apply_duplicate_flags(
     Ok(())
 }
 
-/// Open DB helpers used by CLI. `db_url` (`postgres://…` or `sqlite://…`)
-/// selects the engine and wins over `db_path`, mirroring
-/// [`crate::import_cli`]'s pool choice.
-pub async fn run_dedupe(
-    target: crate::db::engine::DbTarget<'_>,
-    account_id: &str,
-    near_window_secs: i64,
-) -> Result<DedupeStats> {
-    let pool = target.open().await?;
-    let mut conn = pool.acquire().await?;
-    crate::db::schema::ensure_vault_schema(&mut conn).await?;
-    dedupe_cross_source(&mut conn, account_id, None, near_window_secs).await
-}
-
 #[cfg(test)]
 mod tests;

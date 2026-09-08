@@ -17,6 +17,7 @@ use crate::db::engine::{self, DbTarget};
 use crate::db::schema;
 use crate::dedupe;
 use crate::import::{self, ImportExportArgs, ImportMode};
+use crate::open_vault::OpenVault;
 use crate::process_assets::{self, ProcessAssetsOptions};
 
 /// Stable demo account id used when `reset-demo` runs without `--account`.
@@ -129,27 +130,30 @@ async fn dedupe_and_process_assets(
     account_id: &str,
     target: DbTarget<'_>,
 ) -> Result<(dedupe::DedupeStats, process_assets::ProcessAssetsStats)> {
-    let dedupe_stats = dedupe::run_dedupe(target, account_id, 2).await?;
-    println!("Reset demo — processing prepared assets");
     let (db, db_url) = match target {
         DbTarget::Url(url) => (None, Some(url.to_string())),
         DbTarget::Path(path) => (Some(path.to_path_buf()), None),
     };
+    let vault = OpenVault::open(cfg.clone().with_db_overrides(db, db_url)).await?;
+    let dedupe_stats = {
+        let mut conn = vault.conn().await?;
+        dedupe::dedupe_cross_source(&mut conn, account_id, None, 2).await?
+    };
+    println!("Reset demo — processing prepared assets");
     let process_stats = process_assets::run(
-        cfg,
+        &vault,
         &ProcessAssetsOptions {
             force: false,
             dry_run: false,
             skip_image: false,
             skip_video: false,
             skip_audio: false,
-            db,
             source: None,
-            db_url,
         },
     )
     .await
     .context("process-assets after prepared demo import")?;
+    vault.close().await;
     if process_stats.errors > 0 {
         eprintln!(
             "warning: {} demo attachment(s) failed conversion; originals stay in place and reset-demo continues",

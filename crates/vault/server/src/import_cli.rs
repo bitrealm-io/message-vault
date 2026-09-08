@@ -5,14 +5,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-use crate::config::{Config, validate_source_id};
+use crate::config::validate_source_id;
 use crate::db::account_profile;
-use crate::db::engine::DbTarget;
-use crate::db::schema;
 use crate::dedupe::{self, DedupeStats};
 use crate::import::{self, ImportMode, ImportOptions, ImportStats};
 use crate::jsonl;
 use crate::models::ExportRecord;
+use crate::open_vault::OpenVault;
 use media::MediaMode;
 
 /// Options for a CLI directory import.
@@ -22,10 +21,6 @@ pub struct CliImportOptions {
     pub account_id: String,
     /// Folder of `*.jsonl` conversation files (+ attachments).
     pub input_dir: PathBuf,
-    /// Database path override; falls back to config when `None`.
-    pub db_path: Option<PathBuf>,
-    /// Database URL override (`sqlite:...` / `postgres://...`); wins over `db_path`.
-    pub db_url: Option<String>,
     /// Originals asset store override; per-account default when `None`.
     pub assets_dir: Option<PathBuf>,
     /// When set, force this source for every conversation (ignore IR export.source).
@@ -106,7 +101,7 @@ impl SourcePlan {
 ///
 /// Returns an error when the input directory is missing, has no `.jsonl`
 /// files, or import / duplicate detection fails.
-pub async fn run(cfg: &Config, opts: &CliImportOptions) -> Result<CliImportStats> {
+pub async fn run(vault: &OpenVault, opts: &CliImportOptions) -> Result<CliImportStats> {
     let input = &opts.input_dir;
     if !input.is_dir() {
         bail!("input directory does not exist: {}", input.display());
@@ -116,16 +111,12 @@ pub async fn run(cfg: &Config, opts: &CliImportOptions) -> Result<CliImportStats
         bail!("input {} has no .jsonl files", input.display());
     }
     let plan = SourcePlan::resolve(opts, &paths, input)?;
-    let db_path = opts.db_path.clone().unwrap_or_else(|| cfg.paths.db.clone());
-    let target = DbTarget::new(opts.db_url.as_deref(), &db_path);
-    print_plan(opts, target, &plan);
+    print_plan(opts, vault, &plan);
 
-    let pool = target.open().await?;
-    let mut conn = pool.acquire().await?;
-    schema::ensure_vault_schema(&mut conn).await?;
+    let mut conn = vault.conn().await?;
     account_profile::ensure_account_row(&mut conn, &opts.account_id).await?;
 
-    let import_stats = import_under_session(cfg, opts, &mut conn, &paths, &plan).await?;
+    let import_stats = import_under_session(&vault.cfg, opts, &mut conn, &paths, &plan).await?;
     let dedupe = if opts.skip_dedupe {
         None
     } else {
@@ -149,11 +140,11 @@ pub async fn run(cfg: &Config, opts: &CliImportOptions) -> Result<CliImportStats
 
 /// Echo what the import is about to do so a wrong flag is visible before any
 /// row is written.
-fn print_plan(opts: &CliImportOptions, target: DbTarget<'_>, plan: &SourcePlan) {
+fn print_plan(opts: &CliImportOptions, vault: &OpenVault, plan: &SourcePlan) {
     println!("Import");
     println!("  account:      {}", opts.account_id);
     println!("  input:        {}", opts.input_dir.display());
-    println!("  db:           {target}");
+    println!("  db:           {}", vault.location());
     println!("  sources:      {}", plan.sources.join(", "));
     if plan.from_jsonl {
         println!("  source mode:  from JSONL export.source");
@@ -176,7 +167,7 @@ fn print_plan(opts: &CliImportOptions, target: DbTarget<'_>, plan: &SourcePlan) 
 ///
 /// Returns the import's error after the session has been marked failed.
 async fn import_under_session(
-    cfg: &Config,
+    cfg: &crate::config::Config,
     opts: &CliImportOptions,
     conn: &mut sqlx::pool::PoolConnection<sqlx::Any>,
     paths: &[PathBuf],

@@ -4,10 +4,12 @@ Every known problem with the vault's `/v1` interface in one place, as of
 2026-09-08 (`main` at 065f12b, product version 0.8.3, 58 paths in
 `docs/src/assets/openapi.json`).
 
-This file is a findings list, not a decision. The rules it grades against are
-not yet written down anywhere in the repository, which is the root cause of
-most of what follows. Writing them is the next step; the three open questions
-at the end have to be answered first.
+Every finding below is closed. The rules it grades against were written as
+ADR-0009 and ADR-0010 (#496), and the findings were closed by four pull
+requests: #498 (201 Created), #499 (problem documents), #500 (route names)
+and #501 (sorting); the product version moved to 0.9.0 with them. Each
+finding names the pull request that closed it. The file stays as the record
+of what was wrong and why it was fixed the way it was.
 
 ## What the interface is graded against
 
@@ -41,6 +43,7 @@ Seven creating POSTs answer `200 OK`: `/v1/contact-groups`, `/v1/message-tags`,
 `/v1/imports`, `/v1/assets/{sha256}/uploads`. `StatusCode::CREATED` and the
 `LOCATION` header appear nowhere in `crates/vault/server/src`. A client that
 creates a resource cannot learn its URL from the response.
+Closed by #498.
 
 **A2. Two kinds of validation failure answer with two different statuses.**
 A JSON body that fails to deserialize passes Axum's `422 Unprocessable Entity`
@@ -49,35 +52,41 @@ vault's own validation never uses it: all 61 `ApiError::BadRequest` sites
 answer `400 Bad Request` with a single message
 (`crates/vault/server/src/server.rs:381`), so a form with four bad fields
 reports one of them at a time.
+Closed by #499.
 
 **A3. The `429 Too Many Requests` carries no `Retry-After`.**
 `ApiError::TooManyRequests` (`crates/vault/server/src/server.rs:386`) sends a
 status and a message; a client is told to back off but not for how long. No
 `X-RateLimit-Limit`, `X-RateLimit-Remaining` or `X-RateLimit-Reset` header
 exists either.
+Closed by #499.
 
 **A4. The rate limiter is undocumented.** `check_auth_rate_limit`
 (`crates/vault/server/src/auth.rs:40`) guards login, register and vault claim
 over a 60-second window. Nothing in the published docs says the limit exists
 or what it is.
+Closed by #499.
 
 **A5. Authentication failures answer `400 Bad Request`, not
 `401 Unauthorized`.** A wrong password on login, and a wrong current password
 on account delete, are both `ApiError::BadRequest`
 (`crates/vault/server/src/auth.rs`). The status says the request was malformed
 when the request was fine and the credential was not.
+Closed by #499.
 
 **A6. A duplicate username answers `400 Bad Request`, not `409 Conflict`.**
 Registration refuses a taken username with `BadRequest`
 (`crates/vault/server/src/auth.rs`), while a duplicate Contact Group, Message
 Tag or Saved Search name already answers `409 Conflict`. The interface
 disagrees with itself about what a name collision is.
+Closed by #499.
 
 **A7. A missing import `Content-Type` answers `400 Bad Request`, not
 `415 Unsupported Media Type`.** `import/mod.rs` refuses a body with no
 `Content-Type` using `BadRequest`, while the same module answers
 `415 Unsupported Media Type` for a `Content-Type` it does not accept. Absent
 and wrong are the same class of failure.
+Closed by #499.
 
 ### B. Resource-oriented naming (9 findings)
 
@@ -86,14 +95,17 @@ writes into.** It appends a JSONL batch to an Import Run created by
 `POST /v1/imports`; `vault-push` calls both
 (`crates/libs/vault-push/src/http.rs:290`).
 Fix: `POST /v1/imports/{id}/batches`.
+Closed by #500.
 
 **B2. `POST /v1/import` takes `account=` as a query parameter.** The bearer
 credential already names the account. The parameter is redundant and invites
 a mismatch between the two.
+Closed by #500.
 
 **B3. `POST /v1/import` takes `source`, `mode` and `dedupe` per batch.** Two
 batches of one Import Run can disagree about how to import. These belong on
 the run's creation, where they can only be stated once.
+Closed by #500.
 
 **B4. `import_id` is optional, so a sessionless import exists.**
 `post_import` takes `import_id: Option<i64>`
@@ -102,6 +114,7 @@ the run's creation, where they can only be stated once.
 as "raw POST /v1/import — stores a null staging_dir". CONTEXT.md says an
 Import Run is "recorded permanently whether it succeeded, failed, or was
 cancelled"; a path that skips the record contradicts the domain model.
+Closed by #500.
 
 **B5. `GET /v1/imports/active` is a filter squatting in the member-id
 namespace.** It returns the account's one running Import Run. The path collides
@@ -109,40 +122,47 @@ with `/v1/imports/{id}` and hides a filter in a path segment, and "active" is a
 word the row never stores: `vault_imports.status` holds `running`, `completed`,
 `completed_with_issues`, `failed` or `cancelled` (`schema/sql/accounts.sql:189`).
 Fix: `GET /v1/imports?status=running`, accepting the five stored values.
+Closed by #500.
 
 **B6. Three paths spell an HTTP method as a verb.**
 `POST /v1/auth/delete-account`, `POST /v1/account/delete-messages`,
 `POST /v1/auth/change-password`. Fixes: `DELETE /v1/account`,
 `DELETE /v1/account/messages`, `PUT /v1/account/password`. The last matches
 `PUT /v1/owner/accounts/{id}/password`, which already gets it right.
+Closed by #500.
 
 **B7. `/v1/auth` and `/v1/account` split the same subject arbitrarily.**
 `change-password` and `delete-account` sit under `auth`, while
 `delete-messages`, `profile`, `storage` and `api-tokens` sit under `account`.
 All six act on the signed-in account. `/v1/auth` should hold only what
 establishes or ends a session: `login`, `logout`, `register`, `check`.
+Closed by #500.
 
 **B8. `/v1/owner/vault-settings` files a resource under a role prefix.** Its
 handlers, `vault_settings_handler` and `patch_vault_settings_handler`, live in
 `crates/vault/server/src/vault_api.rs` next to `/v1/vault`. The module groups
 by resource; the path groups by who may call it. A path segment should not
 encode authorization. Fix: `GET|PATCH /v1/vault/settings`.
+Closed by #500.
 
 **B9. Two paths are named for something other than what they return or do.**
 `POST /v1/contacts/match` reports which identifiers have no vault contact, so
 it returns unmatched handles, not matches. `GET /v1/search/fields` implies a
 `search` collection that does not exist. Fixes:
 `POST /v1/contacts/unmatched-handles` and `GET /v1/search-fields`.
+Closed by #500.
 
 ### C. Method semantics (2 findings)
 
 **C1. `POST /v1/account/profile` performs a partial update.** It changes the
 display name and linked handles. Fix: `PATCH /v1/account/profile`. Every other
 update on the interface already uses PATCH.
+Closed by #500.
 
 **C2. `POST /v1/contacts/address-book` is the only way to create a contact.**
 There is no `POST /v1/contacts`. The one creation door is named after the file
 the data came from rather than the resource it creates.
+Closed by #500.
 
 ### D. Content negotiation (1 finding)
 
@@ -151,6 +171,7 @@ returned.** `415 Unsupported Media Type` is handled on request bodies
 (`crates/vault/server/src/extract.rs:156`,
 `crates/vault/server/src/import/mod.rs:1531`), so half the rule is met. A
 client asking for a format the vault cannot produce gets JSON anyway.
+Closed by #499.
 
 ### E. Filtering and sorting (2 findings)
 
@@ -160,6 +181,7 @@ client asking for a format the vault cannot produce gets JSON anyway.
 `messages`). `/v1/contacts`, `/v1/messages`,
 `/v1/conversations/{id}/messages` and `/v1/export/messages` take `limit` and
 `offset` with no ordering control.
+Closed by #501.
 
 **E2. The one `sort=` that exists spells direction as a second parameter.**
 `sort=date|messages` takes its direction from a separate `order=asc|desc`
@@ -167,6 +189,7 @@ client asking for a format the vault cannot produce gets JSON anyway.
 (`web/src/lib/vaultApi.ts:255`). Both are lenient by design: an unknown value
 falls back to the default rather than being refused, so a typo sorts silently.
 There is no second sort key.
+Closed by #501.
 
 ### F. Error format (1 finding)
 
@@ -176,6 +199,7 @@ the web app must match on human-readable text to branch on a failure. An
 internal error is logged server-side with the full context chain
 (`server.rs:390`) but nothing in the response ties the client's failure to
 that log line.
+Closed by #499.
 
 ### G. Documentation drift (2 findings)
 
@@ -185,17 +209,20 @@ says to run `curl http://127.0.0.1:8080/v1/auth/mode` when Connect fails.
 There is no `/v1/auth/mode` anywhere in the server, and
 `web/src/screens/LoginScreen.test.tsx:110` asserts the client never calls it.
 The working equivalent is `GET /v1/auth/check`.
+Closed by #500.
 
 ### H. Response shape (1 finding)
 
 **H1. `GET /v1/imports` is not a page.** It answers `{items}` with no `total`,
 `limit` or `offset` (`crates/vault/server/src/import/mod.rs:799`). ADR-0005
 already forbids that shape; every other list answers a page.
+Closed by #500.
 
 **G2. CLAUDE.md describes the session token as a JWT.** It is not: there is no
 `jsonwebtoken` dependency in any manifest, and `account_session_tokens`
 (`schema/sql/accounts.sql:55`) stores a hash of an opaque `mv-user-` prefixed
 secret with `created_at` and `expires_at`.
+Closed by #500.
 
 ## Already conformant, so not to be re-litigated
 

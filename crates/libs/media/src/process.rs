@@ -292,6 +292,44 @@ pub fn classify(path: &Path) -> Option<Kind> {
     crate::mime::kind_for_ext(path.extension().and_then(|e| e.to_str()).unwrap_or(""))
 }
 
+/// Media [`Kind`] of an attachment from everything the caller knows about it:
+/// the file's own extension first, then the declared MIME type, then the
+/// names the export supplied for it.
+///
+/// A vault stores blobs as `<folder>/<sha256>` with no extension, so a row
+/// whose MIME type is missing would otherwise have no kind and never be
+/// converted. `name_hints` (the attachment's original name and its path
+/// inside the export) are read only when the path and the declared MIME say
+/// nothing. A declared MIME is authoritative even when it names something that
+/// is not media, so a `application/pdf` blob called `clip.mp4` is not a video.
+///
+/// GIFs are animations and are never converted: a `.gif` name or an
+/// `image/gif` MIME answers `None`.
+pub fn kind_of(path: &Path, mime: Option<&str>, name_hints: &[Option<&str>]) -> Option<Kind> {
+    let declared = mime.map(str::trim).filter(|m| !m.is_empty());
+    if declared == Some("image/gif") || has_gif_ext(path) {
+        return None;
+    }
+    if let Some(kind) = classify(path) {
+        return Some(kind);
+    }
+    if let Some(declared) = declared {
+        return crate::mime::kind_for_mime(declared);
+    }
+    name_hints
+        .iter()
+        .flatten()
+        .map(Path::new)
+        .filter(|hint| !has_gif_ext(hint))
+        .find_map(classify)
+}
+
+/// True for a `.gif` name, in any case.
+fn has_gif_ext(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("gif"))
+}
+
 /// Run the media step over one file, committing however `commit` says.
 ///
 /// Returns the produced path, or `None` when the media step leaves this file

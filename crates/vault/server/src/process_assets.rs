@@ -56,7 +56,7 @@ pub struct ProcessAssetsStats {
     pub errors: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct DerivedBlob {
     sha256: String,
     assets_path: String,
@@ -185,6 +185,7 @@ struct SourcePass<'a> {
 }
 
 /// What deriving one attachment produced.
+#[derive(Debug, PartialEq, Eq)]
 enum Derived {
     /// The original is not converted: unsupported, already small, or declined.
     Skipped,
@@ -242,40 +243,27 @@ impl<'a> SourcePass<'a> {
 
     /// Derive a browser preview for one stored blob and record it, or report why it was left as-is.
     ///
+    /// Reads the two facts only the disk can supply, lets [`plan`] decide,
+    /// then does what the plan says.
+    ///
     /// # Errors
     ///
     /// Returns an error when the original is missing, a conversion fails, or
     /// the row cannot be updated.
     async fn process(&self, conn: &mut AnyConnection, row: &AssetRow) -> Result<Outcome> {
-        // Incomplete transfers / aborted uploads — never hand these to ffmpeg.
-        if is_part_path(&row.assets_path) {
-            return self.remove_incomplete(row);
-        }
-        let Some(kind) = kind_of(
-            &row.assets_path,
-            row.mime_type.as_deref(),
-            &row.name_hints(),
-        ) else {
-            return Ok(Outcome::Skipped);
-        };
-        let wanted = match kind {
-            Kind::Image => !self.opts.skip_image,
-            Kind::Video => !self.opts.skip_video,
-            Kind::Audio => !self.opts.skip_audio,
-        };
-        if !wanted
-            || should_skip_existing(
-                self.opts.force,
+        let source_path = self.assets_dir.join(&row.assets_path);
+        let on_disk = OnDisk {
+            original_exists: source_path.is_file(),
+            derived_exists: derived_file_exists(
                 row.derived_assets_path.as_deref(),
                 &self.converted_dir,
-            )
-        {
-            return Ok(Outcome::Skipped);
-        }
-        let source_path = self.assets_dir.join(&row.assets_path);
-        if !source_path.is_file() {
-            bail!("missing original: {}", self.label(row));
-        }
+            ),
+        };
+        let kind = match plan(row, self.opts, on_disk)? {
+            Plan::RemoveIncomplete => return self.remove_incomplete(row, &source_path),
+            Plan::Skip(_) => return Ok(Outcome::Skipped),
+            Plan::Derive(kind) => kind,
+        };
         let blob = match self.derive(kind, &source_path, row)? {
             Derived::Skipped => return Ok(Outcome::Skipped),
             Derived::DryRun => return Ok(Outcome::Derived),
@@ -288,13 +276,12 @@ impl<'a> SourcePass<'a> {
 
     /// Delete a `.part` left by an interrupted upload, or say so in a dry
     /// run. Always counts as skipped.
-    fn remove_incomplete(&self, row: &AssetRow) -> Result<Outcome> {
-        let source_path = self.assets_dir.join(&row.assets_path);
+    fn remove_incomplete(&self, row: &AssetRow, source_path: &Path) -> Result<Outcome> {
         if source_path.is_file() {
             if self.opts.dry_run {
                 println!("[dry-run] would remove incomplete {}", self.label(row));
             } else {
-                fs::remove_file(&source_path)
+                fs::remove_file(source_path)
                     .with_context(|| format!("remove incomplete {}", source_path.display()))?;
                 println!("removed incomplete {}", self.label(row));
             }
@@ -602,43 +589,77 @@ fn upload_session_is_stale(session: &Path, now: std::time::SystemTime) -> Result
     Ok(age.as_secs() >= STALE_UPLOAD_SESSION_SECS)
 }
 
-/// Classify a stored file, falling back to the names the export supplied.
-///
-/// Stored files are named `<folder>/<sha256>` with no extension, so a row whose
-/// `mime_type` is missing (older imports, or a source that declared nothing)
-/// would otherwise have no kind and never be converted for the browser.
-/// `name_hints` are the attachment's `original_name` and original export `path`,
-/// used only when the stored path and the declared MIME say nothing. A declared
-/// MIME is authoritative even when it names something that is not media.
-///
-/// GIFs are animations and never get a still-frame preview: a `.gif` name or
-/// an `image/gif` MIME ends the search with `None`.
-fn kind_of(assets_path: &str, mime: Option<&str>, name_hints: &[Option<&str>]) -> Option<Kind> {
-    if is_part_path(assets_path) {
-        return None;
-    }
-    let declared = mime.and_then(message_ir::trimmed);
-    if declared == Some("image/gif") || has_gif_ext(assets_path) {
-        return None;
-    }
-    if let Some(kind) = media::classify(Path::new(assets_path)) {
-        return Some(kind);
-    }
-    if let Some(declared) = declared {
-        return media::kind_for_mime(declared);
-    }
-    name_hints
-        .iter()
-        .flatten()
-        .filter(|hint| !has_gif_ext(hint))
-        .find_map(|hint| media::classify(Path::new(hint)))
+/// What one stored blob needs, decided before any file is touched.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Plan {
+    /// A `.part` left by an interrupted transfer: delete it, never hand it to ffmpeg.
+    RemoveIncomplete,
+    /// Leave the original as it is.
+    Skip(SkipReason),
+    /// Convert the original for the browser as this kind of media.
+    Derive(Kind),
 }
 
-/// True for a `.gif` name, in any case.
-fn has_gif_ext(name: &str) -> bool {
-    Path::new(name)
-        .extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case("gif"))
+/// Why a blob is left as it is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SkipReason {
+    /// Not an image, video or audio file, or a GIF, which is never converted.
+    NotMedia,
+    /// The options turn this kind off (`--skip-image` and friends).
+    KindDisabled,
+    /// A browser preview already exists and `--force` was not given.
+    AlreadyDerived,
+}
+
+/// The two facts about one blob that only the filesystem can supply.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct OnDisk {
+    /// The stored original is present under the assets folder.
+    original_exists: bool,
+    /// The preview the row points at is present under the converted folder.
+    derived_exists: bool,
+}
+
+/// Decide what one blob needs from the row, the options and what is on disk.
+/// No IO happens here: `on_disk` carries the facts the caller read.
+///
+/// # Errors
+///
+/// Returns an error when a conversion is wanted and the original is missing.
+fn plan(row: &AssetRow, opts: &ProcessAssetsOptions, on_disk: OnDisk) -> Result<Plan> {
+    if is_part_path(&row.assets_path) {
+        return Ok(Plan::RemoveIncomplete);
+    }
+    let Some(kind) = media::kind_of(
+        Path::new(&row.assets_path),
+        row.mime_type.as_deref(),
+        &row.name_hints(),
+    ) else {
+        return Ok(Plan::Skip(SkipReason::NotMedia));
+    };
+    let wanted = match kind {
+        Kind::Image => !opts.skip_image,
+        Kind::Video => !opts.skip_video,
+        Kind::Audio => !opts.skip_audio,
+    };
+    if !wanted {
+        return Ok(Plan::Skip(SkipReason::KindDisabled));
+    }
+    if on_disk.derived_exists && !opts.force {
+        return Ok(Plan::Skip(SkipReason::AlreadyDerived));
+    }
+    if !on_disk.original_exists {
+        bail!("missing original");
+    }
+    Ok(Plan::Derive(kind))
+}
+
+/// True when the preview `derived_assets_path` names is present under `converted_dir`.
+fn derived_file_exists(derived_assets_path: Option<&str>, converted_dir: &Path) -> bool {
+    match derived_assets_path {
+        Some(rel) if !rel.is_empty() => converted_dir.join(rel).is_file(),
+        _ => false,
+    }
 }
 
 /// Content-addressed relative path: `<aa>/<sha><ext>`.
@@ -677,216 +698,5 @@ fn store_derived_file(derived_dir: &Path, file_path: &Path, ext: &str) -> Result
     store_derived_bytes(derived_dir, &buf, ext)
 }
 
-/// Whether an existing derived file should be skipped (idempotency).
-fn should_skip_existing(
-    force: bool,
-    derived_assets_path: Option<&str>,
-    converted_dir: &Path,
-) -> bool {
-    if force {
-        return false;
-    }
-    match derived_assets_path {
-        Some(rel) if !rel.is_empty() => converted_dir.join(rel).is_file(),
-        _ => false,
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::db::engine;
-
-    #[test]
-    fn derived_rel_path_layout() {
-        let sha = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-        assert_eq!(derived_rel_path(sha, ".jpg"), format!("ab/{sha}.jpg"));
-        assert_eq!(derived_rel_path(sha, ".jpeg"), format!("ab/{sha}.jpg"));
-    }
-
-    const SHA: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-
-    #[test]
-    fn kind_classifies_and_skips_gif() {
-        assert_eq!(kind_of("x.jpg", None, &[]), Some(Kind::Image));
-        assert_eq!(kind_of("x.mp4", None, &[]), Some(Kind::Video));
-        assert_eq!(kind_of("x.m4a", None, &[]), Some(Kind::Audio));
-        assert_eq!(kind_of("x.gif", None, &[]), None);
-        assert_eq!(kind_of("x.bin", Some("image/png"), &[]), Some(Kind::Image));
-    }
-
-    #[test]
-    fn extensionless_blobs_classify_from_the_attachment_name() {
-        let canonical = format!("ab/{SHA}");
-        for (name, expected) in [
-            ("voice-note.amr", Some(Kind::Audio)),
-            ("memo.wav", Some(Kind::Audio)),
-            ("podcast.ogg", Some(Kind::Audio)),
-            ("clip.3gp", Some(Kind::Video)),
-            ("clip.webm", Some(Kind::Video)),
-            ("movie.mkv", Some(Kind::Video)),
-            ("scan.tiff", Some(Kind::Image)),
-            ("notes.txt", None),
-        ] {
-            assert_eq!(
-                kind_of(&canonical, None, &[Some(name), None]),
-                expected,
-                "unexpected kind for {name}"
-            );
-            // The original export path is the second-choice hint.
-            assert_eq!(
-                kind_of(
-                    &canonical,
-                    Some("  "),
-                    &[None, Some(&format!("media/{name}"))]
-                ),
-                expected,
-                "unexpected kind for path hint media/{name}"
-            );
-        }
-    }
-
-    #[test]
-    fn attachment_name_hints_never_override_declared_media_types() {
-        let canonical = format!("ab/{SHA}");
-        // A declared MIME is authoritative, including the deliberate GIF skip.
-        assert_eq!(
-            kind_of(&canonical, Some("image/gif"), &[Some("clip.mp4")]),
-            None
-        );
-        assert_eq!(
-            kind_of(&canonical, Some("application/pdf"), &[Some("clip.mp4")]),
-            None
-        );
-        assert_eq!(kind_of("ab/photo.gif", None, &[Some("clip.mp4")]), None);
-        // Incomplete transfers stay out of ffmpeg regardless of the hint.
-        assert_eq!(kind_of("ab/upload.part", None, &[Some("clip.mp4")]), None);
-    }
-
-    #[test]
-    fn skip_existing_derived_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let rel = "ab/deadbeef.jpg";
-        let dest = dir.path().join(rel);
-        fs::create_dir_all(dest.parent().unwrap()).unwrap();
-        fs::write(&dest, b"x").unwrap();
-        assert!(should_skip_existing(false, Some(rel), dir.path()));
-        assert!(!should_skip_existing(true, Some(rel), dir.path()));
-        assert!(!should_skip_existing(
-            false,
-            Some("missing.jpg"),
-            dir.path()
-        ));
-        assert!(!should_skip_existing(false, None, dir.path()));
-    }
-
-    #[tokio::test]
-    async fn store_and_update_derived_db() {
-        let (pool, dir) = engine::test_pool().await;
-        schema::ensure_vault_schema(&mut pool.acquire().await.unwrap())
-            .await
-            .unwrap();
-        let mut conn = pool.acquire().await.unwrap();
-        sqlx::query("INSERT INTO accounts (id, username) VALUES ('acc', 'demo')")
-            .execute(&mut *conn)
-            .await
-            .unwrap();
-        sqlx::query(
-            "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-             VALUES ('acc', '+1', '+1', 'phone', 'phone')",
-        )
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-        sqlx::query(
-            "INSERT INTO conversations (id, account_id, chat_handle_id, conversation_type, source_file)
-             VALUES (1, 'acc', 1, 'individual', 't')",
-        )
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-        sqlx::query(
-            "INSERT INTO messages (id, conversation_id, account_id, source, timestamp, is_from_me, sort_order)
-             VALUES (1, 1, 'acc', 'imessage', '2020-01-01T00:00:00Z', 0, 0)",
-        )
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-        sqlx::query(
-            "INSERT INTO attachments (id, message_id, sha256, assets_path, mime_type)
-             VALUES (1, 1, 'aa11', 'aa/aa11.jpg', 'image/jpeg')",
-        )
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-
-        let converted = dir.path().join("converted");
-        fs::create_dir_all(&converted).unwrap();
-        let blob = store_derived_bytes(&converted, b"jpeg-bytes", ".jpg").unwrap();
-        assert!(converted.join(&blob.assets_path).is_file());
-
-        update_derived(&mut conn, "acc", "imessage", "aa11", &blob)
-            .await
-            .unwrap();
-
-        let (d_sha, d_path, d_mime): (String, String, String) = sqlx::query_as(
-            "SELECT derived_sha256, derived_assets_path, derived_mime_type FROM attachments WHERE id = 1",
-        )
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-        assert_eq!(d_sha, blob.sha256);
-        assert_eq!(d_path, blob.assets_path);
-        assert_eq!(d_mime, "image/jpeg");
-    }
-
-    #[test]
-    fn part_paths_are_not_media() {
-        assert!(is_part_path("aa/aabbcc.part"));
-        assert!(is_part_path("upload.PART"));
-        assert!(!is_part_path("aa/aabbcc.mp4"));
-        assert_eq!(kind_of("aa/x.part", Some("video/mp4"), &[]), None);
-    }
-
-    #[tokio::test]
-    async fn listed_attachments_carry_name_hints_for_extensionless_blobs() {
-        let (pool, _dir) = engine::test_pool().await;
-        schema::ensure_vault_schema(&mut pool.acquire().await.unwrap())
-            .await
-            .unwrap();
-        let mut conn = pool.acquire().await.unwrap();
-        for statement in [
-            "INSERT INTO accounts (id, username) VALUES ('acc', 'demo')".to_string(),
-            "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-                VALUES ('acc', '+1', '+1', 'phone', 'phone')"
-                .to_string(),
-            "INSERT INTO conversations (id, account_id, chat_handle_id, conversation_type, source_file)
-                VALUES (1, 'acc', 1, 'individual', 't')"
-                .to_string(),
-            "INSERT INTO messages (id, conversation_id, account_id, source, timestamp, is_from_me, sort_order)
-                VALUES (1, 1, 'acc', 'imessage', '2020-01-01T00:00:00Z', 0, 0)"
-                .to_string(),
-            format!(
-                "INSERT INTO attachments (id, message_id, sha256, assets_path, mime_type, original_name, path)
-                VALUES (1, 1, '{SHA}', 'ab/{SHA}', NULL, 'voice-note.amr', 'attachments/voice-note.amr')"
-            ),
-        ] {
-            sqlx::query(&statement).execute(&mut *conn).await.unwrap();
-        }
-
-        let rows = list_attachments(&mut conn, "acc", "imessage")
-            .await
-            .unwrap();
-        assert_eq!(rows.len(), 1);
-        let row = &rows[0];
-        assert_eq!(
-            kind_of(
-                &row.assets_path,
-                row.mime_type.as_deref(),
-                &row.name_hints()
-            ),
-            Some(Kind::Audio),
-            "an extensionless blob with no declared MIME must classify from its attachment name"
-        );
-    }
-}
+mod tests;

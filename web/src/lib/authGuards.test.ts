@@ -32,13 +32,13 @@ describe("parsePersistedAuth", () => {
         JSON.stringify({
           serverUrl: "http://localhost:8080",
           token: "tok",
-          accountId: "acc1",
+          accountId: 7,
         }),
       ),
     ).toEqual({
       serverUrl: "http://localhost:8080",
       token: "tok",
-      accountId: "acc1",
+      accountId: 7,
     });
   });
 
@@ -48,14 +48,14 @@ describe("parsePersistedAuth", () => {
         JSON.stringify({
           serverUrl: "http://localhost:8080",
           token: "tok",
-          accountId: "acc1",
+          accountId: 7,
           needsOnboarding: true,
         }),
       ),
     ).toEqual({
       serverUrl: "http://localhost:8080",
       token: "tok",
-      accountId: "acc1",
+      accountId: 7,
     });
   });
 

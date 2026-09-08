@@ -59,7 +59,7 @@ function seedSession() {
     JSON.stringify({
       serverUrl: "http://127.0.0.1:8080",
       token: "session-token",
-      accountId: "acct-1",
+      accountId: 7,
       needsOnboarding: false,
     }),
   );

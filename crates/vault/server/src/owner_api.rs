@@ -20,7 +20,7 @@ use crate::server::{ApiError, AppState, Created, Owner};
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ManagedAccount {
     /// Account id.
-    pub account_id: String,
+    pub account_id: i64,
     /// Login username.
     pub username: String,
     /// May not sign in.
@@ -82,10 +82,7 @@ pub struct SetPasswordRequest {
 }
 
 /// Number of messages an account owns. Never touches message content.
-async fn account_message_count(
-    conn: &mut AnyConnection,
-    account_id: &str,
-) -> Result<i64, ApiError> {
+async fn account_message_count(conn: &mut AnyConnection, account_id: i64) -> Result<i64, ApiError> {
     Ok(
         sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE account_id = $1")
             .bind(account_id)
@@ -98,7 +95,7 @@ async fn account_message_count(
 /// `None` when the account no longer exists.
 async fn load_managed_account(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<Option<ManagedAccount>, ApiError> {
     let row: Option<(String, i64, i64, i64, i64, i64)> = sqlx::query_as(
         "SELECT username, disabled, must_change_password, can_import, can_export, can_delete
@@ -114,7 +111,7 @@ async fn load_managed_account(
     let storage_bytes =
         crate::db::vault_imports::account_attachment_bytes(conn, account_id).await?;
     Ok(Some(ManagedAccount {
-        account_id: account_id.to_string(),
+        account_id,
         username,
         disabled: disabled != 0,
         must_change_password: must_change != 0,
@@ -134,7 +131,7 @@ async fn load_managed_account(
 /// vault, and the owner is not one of them.
 async fn require_managed_account(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<(), ApiError> {
     if account_profile::is_vault_owner(account_id)
         || account_profile::username_for_account(conn, account_id)
@@ -167,7 +164,7 @@ pub async fn list_accounts_handler(
     Owner(_auth): Owner,
 ) -> Result<Json<ListAccountsResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let ids: Vec<String> =
+    let ids: Vec<i64> =
         sqlx::query_scalar("SELECT id FROM accounts WHERE id != $1 ORDER BY username")
             .bind(account_profile::OWNER_ACCOUNT_ID)
             .fetch_all(&mut *conn)
@@ -175,7 +172,7 @@ pub async fn list_accounts_handler(
 
     let mut items = Vec::with_capacity(ids.len());
     for id in ids {
-        if let Some(account) = load_managed_account(&mut conn, &id).await? {
+        if let Some(account) = load_managed_account(&mut conn, id).await? {
             items.push(account);
         }
     }
@@ -224,18 +221,18 @@ pub async fn create_account_handler(
     let mut tx = conn.begin().await?;
     crate::auth::require_username_free(&mut tx, &username).await?;
 
-    let account_id = uuid::Uuid::new_v4().to_string();
-    account_profile::insert_account(&mut tx, &account_id, &username, Some(&password_hash), None)
-        .await
-        .map_err(ApiError::Internal)?;
-    account_profile::set_must_change_password(&mut tx, &account_id, true).await?;
+    let account_id =
+        account_profile::insert_account(&mut tx, &username, Some(&password_hash), None)
+            .await
+            .map_err(ApiError::Internal)?;
+    account_profile::set_must_change_password(&mut tx, account_id, true).await?;
     // The owner names a username and a password and nothing else, so the
     // account arrives with no display name and no handles. Its holder sets
     // that up themselves, after replacing the password.
-    account_profile::set_must_set_up_profile(&mut tx, &account_id, true).await?;
+    account_profile::set_must_set_up_profile(&mut tx, account_id, true).await?;
     tx.commit().await?;
 
-    let account = load_managed_account(&mut conn, &account_id)
+    let account = load_managed_account(&mut conn, account_id)
         .await?
         .ok_or_else(|| {
             ApiError::Internal(anyhow::anyhow!("account vanished immediately after insert"))
@@ -259,7 +256,7 @@ pub async fn create_account_handler(
     tag = "Owner",
     operation_id = "owner_patch_account",
     security(("bearer" = [])),
-    params(("id" = String, Path, description = "Account id to modify")),
+    params(("id" = i64, Path, description = "Account id to modify")),
     request_body = PatchAccountRequest,
     responses(
         (status = 200, body = ManagedAccount),
@@ -272,12 +269,12 @@ pub async fn create_account_handler(
 )]
 pub async fn patch_account_handler(
     State(state): State<AppState>,
-    Path(target): Path<String>,
+    Path(target): Path<i64>,
     Owner(_auth): Owner,
     Json(req): Json<PatchAccountRequest>,
 ) -> Result<Json<ManagedAccount>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_managed_account(&mut conn, &target).await?;
+    require_managed_account(&mut conn, target).await?;
 
     // Column names come from this compile-time array, never from the
     // request, so formatting them into the SQL is safe; values stay bound.
@@ -291,12 +288,12 @@ pub async fn patch_account_handler(
         let Some(value) = value else { continue };
         sqlx::query(&format!("UPDATE accounts SET {column} = $1 WHERE id = $2"))
             .bind(i32::from(value))
-            .bind(&target)
+            .bind(target)
             .execute(&mut *conn)
             .await?;
     }
 
-    let account = load_managed_account(&mut conn, &target)
+    let account = load_managed_account(&mut conn, target)
         .await?
         .ok_or_else(|| ApiError::NotFound(format!("account {target} not found")))?;
     Ok(Json(account))
@@ -312,7 +309,7 @@ pub async fn patch_account_handler(
     tag = "Owner",
     operation_id = "owner_set_account_password",
     security(("bearer" = [])),
-    params(("id" = String, Path, description = "Account id whose password is set")),
+    params(("id" = i64, Path, description = "Account id whose password is set")),
     request_body = SetPasswordRequest,
     responses(
         (status = 204, description = "Password set"),
@@ -325,7 +322,7 @@ pub async fn patch_account_handler(
 )]
 pub async fn set_account_password_handler(
     State(state): State<AppState>,
-    Path(target): Path<String>,
+    Path(target): Path<i64>,
     Owner(_auth): Owner,
     Json(req): Json<SetPasswordRequest>,
 ) -> Result<axum::http::StatusCode, ApiError> {
@@ -333,10 +330,10 @@ pub async fn set_account_password_handler(
     let hash = crate::auth::hash_password(&req.password)?;
 
     let mut conn = state.db.acquire().await?;
-    require_managed_account(&mut conn, &target).await?;
-    account_profile::update_password_hash(&mut conn, &target, &hash).await?;
-    account_profile::set_must_change_password(&mut conn, &target, true).await?;
-    crate::db::session_tokens::revoke_account_sessions(&mut conn, &target).await?;
+    require_managed_account(&mut conn, target).await?;
+    account_profile::update_password_hash(&mut conn, target, &hash).await?;
+    account_profile::set_must_change_password(&mut conn, target, true).await?;
+    crate::db::session_tokens::revoke_account_sessions(&mut conn, target).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
@@ -348,7 +345,7 @@ pub async fn set_account_password_handler(
     tag = "Owner",
     operation_id = "owner_delete_account_messages",
     security(("bearer" = [])),
-    params(("id" = String, Path, description = "Account whose messages are destroyed")),
+    params(("id" = i64, Path, description = "Account whose messages are destroyed")),
     responses(
         (status = 200, body = crate::profile::DeleteMessagesResponse),
         (status = 401, body = crate::problem::Problem),
@@ -358,16 +355,16 @@ pub async fn set_account_password_handler(
 )]
 pub async fn delete_account_messages_handler(
     State(state): State<AppState>,
-    Path(target): Path<String>,
+    Path(target): Path<i64>,
     Owner(_auth): Owner,
 ) -> Result<Json<crate::profile::DeleteMessagesResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_managed_account(&mut conn, &target).await?;
+    require_managed_account(&mut conn, target).await?;
 
-    let stats = account_profile::delete_all_messages_for_account(&mut conn, &target).await?;
+    let stats = account_profile::delete_all_messages_for_account(&mut conn, target).await?;
     crate::profile::remove_account_asset_trees(
         &state.cfg.paths.data_dir,
-        &target,
+        target,
         &state.cfg.paths.assets_dir,
         &state.cfg.paths.assets_converted_dir,
     )?;
@@ -387,7 +384,7 @@ pub async fn delete_account_messages_handler(
     tag = "Owner",
     operation_id = "owner_delete_account",
     security(("bearer" = [])),
-    params(("id" = String, Path, description = "Account id to delete")),
+    params(("id" = i64, Path, description = "Account id to delete")),
     responses(
         (status = 204, description = "Account deleted"),
         (status = 401, body = crate::problem::Problem),
@@ -397,14 +394,14 @@ pub async fn delete_account_messages_handler(
 )]
 pub async fn delete_account_handler(
     State(state): State<AppState>,
-    Path(target): Path<String>,
+    Path(target): Path<i64>,
     Owner(_auth): Owner,
 ) -> Result<axum::http::StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_managed_account(&mut conn, &target).await?;
+    require_managed_account(&mut conn, target).await?;
 
-    account_profile::delete_account(&mut conn, &target).await?;
-    let account_root = state.cfg.paths.data_dir.join(&target);
+    account_profile::delete_account(&mut conn, target).await?;
+    let account_root = state.cfg.paths.data_dir.join(target.to_string());
     if account_root.exists() {
         tokio::task::spawn_blocking(move || std::fs::remove_dir_all(&account_root))
             .await

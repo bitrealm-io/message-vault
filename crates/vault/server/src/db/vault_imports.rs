@@ -66,7 +66,7 @@ pub struct VaultImportRow {
     /// Import session id.
     pub id: i64,
     /// Vault account that owns the session.
-    pub account_id: String,
+    pub account_id: i64,
     /// Source id the session imports.
     pub source: String,
     /// Importing tool, e.g. `vault-push`.
@@ -233,7 +233,7 @@ impl From<sqlx::Error> for ImportLookupError {
 /// Everything recorded when a session begins.
 pub struct StartImportArgs<'a> {
     /// Owning vault account.
-    pub account_id: &'a str,
+    pub account_id: i64,
     /// IR source family (`imessage`, `whatsapp`, …), not a method id.
     pub source: &'a str,
     /// Import mode recorded by the importer.
@@ -262,7 +262,7 @@ impl<'a> StartImportArgs<'a> {
     /// fingerprint, or identities. The CLI importer and most tests start
     /// here; a caller with more to record uses struct update syntax on
     /// top of it.
-    pub fn new(account_id: &'a str, source: &'a str, mode: &'a str, tool: Option<&'a str>) -> Self {
+    pub fn new(account_id: i64, source: &'a str, mode: &'a str, tool: Option<&'a str>) -> Self {
         Self {
             account_id,
             source,
@@ -393,7 +393,7 @@ fn vault_import_from_row(row: &AnyRow) -> Result<VaultImportRow, sqlx::Error> {
 /// Load an import row owned by `account_id`, or error.
 pub async fn get_owned_import(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     import_id: i64,
 ) -> std::result::Result<VaultImportRow, ImportLookupError> {
     let row = sqlx::query(&format!(
@@ -419,7 +419,7 @@ pub async fn get_owned_import(
 /// [`ImportLookupError::InvalidSession`] when it is no longer running.
 pub async fn require_running_import(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     import_id: i64,
 ) -> std::result::Result<VaultImportRow, ImportLookupError> {
     let existing = get_owned_import(&mut *conn, account_id, import_id).await?;
@@ -448,7 +448,7 @@ pub async fn require_running_import(
 /// [`ImportLookupError::InvalidSession`] when it is no longer running.
 pub async fn set_import_stage(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     import_id: i64,
     stage: ImportStage,
     summary_json: Option<&str>,
@@ -491,7 +491,7 @@ pub async fn set_import_stage(
 /// [`ImportLookupError::InvalidSession`] when it is no longer running.
 pub async fn discard_import(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     import_id: i64,
 ) -> std::result::Result<(), ImportLookupError> {
     require_running_import(conn, account_id, import_id).await?;
@@ -511,7 +511,7 @@ pub async fn discard_import(
 /// Finish an import: prefer client counts, else derive from linked messages.
 pub async fn complete_import(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     import_id: i64,
     args: &CompleteImportArgs,
 ) -> Result<VaultImportRow> {
@@ -639,7 +639,7 @@ fn validate_issue_kind(kind: &str) -> Result<()> {
 /// Load one import row and its issue list.
 pub async fn get_import_detail(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     import_id: i64,
 ) -> std::result::Result<ImportDetail, ImportLookupError> {
     let row = get_owned_import(conn, account_id, import_id).await?;
@@ -767,7 +767,7 @@ pub const IMPORT_STATUSES: [&str; 5] = [
 /// `status` when given, with the total the page is cut from.
 pub async fn list_imports_page(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     status: Option<&str>,
     limit: i64,
     offset: i64,
@@ -826,7 +826,7 @@ const ACCOUNT_ATTACHMENTS_FROM: &str = r"
         ";
 
 /// Total attachment bytes for an account (original `size_bytes`).
-pub async fn account_attachment_bytes(conn: &mut AnyConnection, account_id: &str) -> Result<i64> {
+pub async fn account_attachment_bytes(conn: &mut AnyConnection, account_id: i64) -> Result<i64> {
     let n: i64 = sqlx::query_scalar(&format!(
         "SELECT COALESCE(SUM(a.size_bytes), 0) {ACCOUNT_ATTACHMENTS_FROM}"
     ))
@@ -837,7 +837,7 @@ pub async fn account_attachment_bytes(conn: &mut AnyConnection, account_id: &str
 }
 
 /// Attachment row count for an account.
-pub async fn account_attachment_count(conn: &mut AnyConnection, account_id: &str) -> Result<i64> {
+pub async fn account_attachment_count(conn: &mut AnyConnection, account_id: i64) -> Result<i64> {
     let n: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) {ACCOUNT_ATTACHMENTS_FROM}"))
         .bind(account_id)
         .fetch_one(&mut *conn)
@@ -878,7 +878,7 @@ type TopAttachmentRow = (
 /// Largest attachments for an account.
 pub async fn top_attachments_by_size(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     limit: i64,
 ) -> Result<Vec<TopAttachment>> {
     let rows: Vec<TopAttachmentRow> = sqlx::query_as(

@@ -67,15 +67,15 @@ pub(crate) fn conversation_involves(conv: &str, contact_expr: &str) -> String {
 
 /// Which list a fragment is for, and what it needs from the request.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct ListCtx<'a> {
+pub(crate) struct ListCtx {
     pub list: ListKind,
     pub engine: DbEngine,
-    pub account_id: &'a str,
+    pub account_id: i64,
     /// The account's time zone, for the date words' boundaries.
     pub zone: chrono_tz::Tz,
 }
 
-impl ListCtx<'_> {
+impl ListCtx {
     /// The base row's account column.
     pub fn account_col(&self) -> &'static str {
         match self.list {

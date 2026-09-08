@@ -35,7 +35,7 @@ pub(super) struct PromoteStats {
 pub(super) async fn promote_append(
     conn: &mut AnyConnection,
     mode: ImportMode,
-    account_id: &str,
+    account_id: i64,
     fill_content_keys: bool,
     wipe_sources: &[String],
 ) -> Result<PromoteStats> {
@@ -75,7 +75,7 @@ pub(super) async fn promote_append(
 /// earlier ones write.
 struct Promote<'a> {
     tx: Transaction<'a, Any>,
-    account_id: &'a str,
+    account_id: i64,
     mode: ImportMode,
     engine: DbEngine,
     stats: PromoteStats,

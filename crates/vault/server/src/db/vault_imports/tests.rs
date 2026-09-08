@@ -1,6 +1,6 @@
 use super::*;
 
-const ACCOUNT_ID: &str = "11111111-1111-1111-1111-111111111111";
+const ACCOUNT_ID: i64 = 7;
 
 async fn setup_accounts_only() -> (sqlx::AnyPool, tempfile::TempDir) {
     let (pool, dir) = crate::db::engine::test_pool().await;
@@ -19,7 +19,7 @@ async fn setup_accounts_only() -> (sqlx::AnyPool, tempfile::TempDir) {
 
 /// A default session-open for tests that only care that a running
 /// import exists, not about its stage or session fields.
-fn default_start_args(account_id: &str) -> StartImportArgs<'_> {
+fn default_start_args(account_id: i64) -> StartImportArgs<'static> {
     StartImportArgs::new(account_id, "ios", "append", Some("message-vault-io"))
 }
 
@@ -260,7 +260,7 @@ async fn list_imports_includes_duration_ms() {
 
 /// The account's running Import Run through the list, as the desktop app
 /// finds it: `status=running`, and at most one.
-async fn running_import(conn: &mut AnyConnection, account: &str) -> Option<ImportSummary> {
+async fn running_import(conn: &mut AnyConnection, account: i64) -> Option<ImportSummary> {
     let (items, _) = list_imports_page(conn, account, Some("running"), 1, 0)
         .await
         .unwrap();

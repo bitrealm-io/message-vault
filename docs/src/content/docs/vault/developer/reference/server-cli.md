@@ -75,7 +75,7 @@ Import a message-ir JSONL folder (source from export.source unless --source)
 * `--window-secs <WINDOW_SECS>` — Near-time window in seconds for dedupe Pass B (default 2)
 
   Default value: `2`
-* `--account <ACCOUNT>` — Account username or UUID (scopes import to this vault tenant)
+* `--account <ACCOUNT>` — Account username or id (scopes import to this vault tenant)
 
 
 
@@ -95,7 +95,7 @@ Soft-hide the same SMS when it appears under more than one import source
 * `--window-secs <WINDOW_SECS>` — Near-time window in seconds for Pass B (default 2)
 
   Default value: `2`
-* `--account <ACCOUNT>` — Account username or UUID (scopes dedupe to this vault tenant)
+* `--account <ACCOUNT>` — Account username or id (scopes dedupe to this vault tenant)
 
 
 
@@ -113,7 +113,7 @@ Import an address book (VCF or vCard CSV) into an existing database
 * `--contacts <CONTACTS>` — Address book: VCF, or vCard CSV (First Name, Last Name, Phone columns)
 * `--db <DB>` — Output SQLite database path (overrides config)
 * `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
-* `--account <ACCOUNT>` — Account username or UUID (scopes contacts to this vault tenant)
+* `--account <ACCOUNT>` — Account username or id (scopes contacts to this vault tenant)
 
 
 

@@ -232,7 +232,8 @@
             "description": "API token id",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int64"
             }
           }
         ],
@@ -290,7 +291,8 @@
             "description": "API token id",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int64"
             }
           }
         ],
@@ -4851,7 +4853,8 @@
             "description": "Account id to delete",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int64"
             }
           }
         ],
@@ -4910,7 +4913,8 @@
             "description": "Account id to modify",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int64"
             }
           }
         ],
@@ -5007,7 +5011,8 @@
             "description": "Account whose messages are destroyed",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int64"
             }
           }
         ],
@@ -5074,7 +5079,8 @@
             "description": "Account id whose password is set",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int64"
             }
           }
         ],
@@ -5927,7 +5933,8 @@
         ],
         "properties": {
           "account_id": {
-            "type": "string",
+            "type": "integer",
+            "format": "int64",
             "description": "The signed-in account id."
           },
           "can_delete": {
@@ -6119,7 +6126,8 @@
             "description": "Unix-seconds expiry; absent means no expiry."
           },
           "id": {
-            "type": "string",
+            "type": "integer",
+            "format": "int64",
             "description": "Token id (the secret itself is stored hashed)."
           },
           "label": {
@@ -7050,7 +7058,8 @@
             "description": "Unix-seconds expiry; absent means no expiry."
           },
           "id": {
-            "type": "string",
+            "type": "integer",
+            "format": "int64",
             "description": "Token id."
           },
           "label": {
@@ -7527,7 +7536,8 @@
             ],
             "properties": {
               "account": {
-                "type": "string"
+                "type": "integer",
+                "format": "int64"
               },
               "dedupe": {
                 "oneOf": [
@@ -7843,7 +7853,8 @@
         ],
         "properties": {
           "account_id": {
-            "type": "string",
+            "type": "integer",
+            "format": "int64",
             "description": "Account id."
           },
           "can_delete": {
@@ -8855,7 +8866,8 @@
         ],
         "properties": {
           "id": {
-            "type": "string",
+            "type": "integer",
+            "format": "int64",
             "description": "Token id that was renamed."
           },
           "label": {
@@ -8948,9 +8960,10 @@
         "properties": {
           "account_id": {
             "type": [
-              "string",
+              "integer",
               "null"
-            ]
+            ],
+            "format": "int64"
           },
           "sources": {
             "type": "array",
@@ -8976,7 +8989,8 @@
         ],
         "properties": {
           "account_id": {
-            "type": "string",
+            "type": "integer",
+            "format": "int64",
             "description": "Account id the session belongs to."
           },
           "token": {

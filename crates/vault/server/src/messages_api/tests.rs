@@ -14,7 +14,7 @@ async fn seeded() -> (TestVault, RegisteredAccount, i64, i64) {
     let direct = seed_conversation(
         &vault.state,
         &SeedConversation {
-            account_id: &alice.account_id,
+            account_id: alice.account_id,
             handle: "+15555550100",
             conversation_type: "individual",
             group_title: None,
@@ -39,7 +39,7 @@ async fn seeded() -> (TestVault, RegisteredAccount, i64, i64) {
     let group = seed_conversation(
         &vault.state,
         &SeedConversation {
-            account_id: &alice.account_id,
+            account_id: alice.account_id,
             handle: "chat100",
             conversation_type: "group",
             group_title: Some("Family"),
@@ -56,7 +56,7 @@ async fn seeded() -> (TestVault, RegisteredAccount, i64, i64) {
     seed_conversation(
         &vault.state,
         &SeedConversation {
-            account_id: &bob.account_id,
+            account_id: bob.account_id,
             handle: "+15555550999",
             conversation_type: "individual",
             group_title: None,

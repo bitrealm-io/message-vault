@@ -74,7 +74,7 @@ impl OpenVault {
     ///
     /// Returns an error for an empty value or a username the vault does not
     /// have.
-    pub async fn account_id(&self, account_ref: &str) -> Result<String> {
+    pub async fn account_id(&self, account_ref: &str) -> Result<i64> {
         let mut conn = self.conn().await?;
         account_profile::resolve_account_ref(&mut conn, account_ref).await
     }
@@ -131,25 +131,16 @@ mod tests {
             .await
             .unwrap();
         let mut conn = vault.conn().await.unwrap();
-        account_profile::insert_account(
-            &mut conn,
-            "00000000-0000-4000-8000-000000000001",
-            "alice",
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let alice = account_profile::insert_account(&mut conn, "alice", None, None)
+            .await
+            .unwrap();
         drop(conn);
 
-        assert_eq!(
-            vault.account_id("Alice").await.unwrap(),
-            "00000000-0000-4000-8000-000000000001"
-        );
+        assert_eq!(vault.account_id("Alice").await.unwrap(), alice);
         let err = vault.account_id("nobody").await.unwrap_err();
         assert_eq!(
             err.to_string(),
-            "account not found: nobody (use an existing username or account UUID)"
+            "account not found: nobody (use an existing username or account id)"
         );
     }
 

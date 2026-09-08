@@ -15,7 +15,7 @@ use crate::server::{ApiError, AppState, DeleteAccess, FullAccess, SignedIn};
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct AccountProfileResponse {
     /// The signed-in account id.
-    pub account_id: String,
+    pub account_id: i64,
     /// Account username (falls back to the account id).
     pub username: String,
     /// Display name, when set.
@@ -50,7 +50,7 @@ pub struct AccountProfileResponse {
 /// Load the profile JSON for `account_id`.
 async fn load_response(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<AccountProfileResponse> {
     let username = account_profile::username_for_account(conn, account_id)
         .await?
@@ -65,7 +65,7 @@ async fn load_response(
         .await?
         .ok_or_else(|| anyhow::anyhow!("account no longer exists"))?;
     Ok(AccountProfileResponse {
-        account_id: account_id.to_string(),
+        account_id,
         username,
         preferred_name,
         time_zone,
@@ -101,7 +101,7 @@ pub async fn account_profile_handler(
     let account_id = auth.account_id;
 
     let mut conn = state.db.acquire().await?;
-    let result = load_response(&mut conn, &account_id).await?;
+    let result = load_response(&mut conn, account_id).await?;
 
     Ok(Json(result))
 }
@@ -166,7 +166,7 @@ impl From<ProfileUpdateError> for ApiError {
 /// Apply name and handle changes on an open connection.
 async fn apply_profile_update(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     preferred_name: Option<&str>,
     time_zone: Option<&str>,
     handles: &[ProfileHandleInput],
@@ -249,7 +249,7 @@ async fn apply_profile_update(
 /// Apply a profile update in one transaction, then reload the response.
 async fn update_profile_on_conn(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     req: &AccountProfileUpdateRequest,
 ) -> std::result::Result<AccountProfileResponse, ProfileUpdateError> {
     let mut tx = conn.begin().await?;
@@ -313,7 +313,7 @@ pub async fn account_profile_update_handler(
     let account_id = auth.account_id;
 
     let mut conn = state.db.acquire().await?;
-    let result = update_profile_on_conn(&mut conn, &account_id, &req).await?;
+    let result = update_profile_on_conn(&mut conn, account_id, &req).await?;
 
     Ok(Json(result))
 }
@@ -337,11 +337,11 @@ pub struct DeleteMessagesResponse {
 /// Delete on-disk attachment trees for every source under this account.
 pub(crate) fn remove_account_asset_trees(
     data_dir: &std::path::Path,
-    account_id: &str,
+    account_id: i64,
     assets_name: &str,
     converted_name: &str,
 ) -> Result<()> {
-    let account_root = data_dir.join(account_id);
+    let account_root = data_dir.join(account_id.to_string());
     if !account_root.is_dir() {
         return Ok(());
     }
@@ -394,8 +394,8 @@ pub async fn delete_messages_handler(
     let converted_name = state.cfg.paths.assets_converted_dir.clone();
 
     let mut conn = state.db.acquire().await?;
-    let stats = account_profile::delete_all_messages_for_account(&mut conn, &account_id).await?;
-    remove_account_asset_trees(&data_dir, &account_id, &assets_name, &converted_name)?;
+    let stats = account_profile::delete_all_messages_for_account(&mut conn, account_id).await?;
+    remove_account_asset_trees(&data_dir, account_id, &assets_name, &converted_name)?;
 
     Ok(Json(DeleteMessagesResponse {
         conversations: stats.conversations,
@@ -431,11 +431,11 @@ pub(crate) async fn account_storage_handler(
     let account_id = auth.account_id;
     let mut conn = state.db.acquire().await?;
     let total_bytes =
-        crate::db::vault_imports::account_attachment_bytes(&mut conn, &account_id).await?;
+        crate::db::vault_imports::account_attachment_bytes(&mut conn, account_id).await?;
     let attachment_count =
-        crate::db::vault_imports::account_attachment_count(&mut conn, &account_id).await?;
+        crate::db::vault_imports::account_attachment_count(&mut conn, account_id).await?;
     let top_attachments =
-        crate::db::vault_imports::top_attachments_by_size(&mut conn, &account_id, 100).await?;
+        crate::db::vault_imports::top_attachments_by_size(&mut conn, account_id, 100).await?;
     let result = AccountStorageResponse {
         total_bytes,
         attachment_count,
@@ -507,7 +507,7 @@ pub async fn change_password_handler(
 
     let mut conn = state.db.acquire().await?;
     let token =
-        crate::auth::change_password_on_conn(&mut conn, &account_id, &current_password, &new_hash)
+        crate::auth::change_password_on_conn(&mut conn, account_id, &current_password, &new_hash)
             .await?;
 
     Ok(Json(ChangePasswordResponse { token }))
@@ -540,16 +540,16 @@ pub async fn delete_account_handler(
         return Err(ApiError::validation("confirmation flag must be true"));
     }
     let account_id = auth.account_id;
-    if account_profile::is_demo_account(&account_id) {
+    if account_profile::is_demo_account(account_id) {
         return Err(ApiError::DemoAccountProtected(
             "the demo account cannot be deleted; use reset-demo to restore it".into(),
         ));
     }
     let current_password = req.current_password.clone();
-    let account_root = state.cfg.paths.data_dir.join(&account_id);
+    let account_root = state.cfg.paths.data_dir.join(account_id.to_string());
 
     let mut conn = state.db.acquire().await?;
-    let password_hash = account_profile::load_password_hash(&mut conn, &account_id).await?;
+    let password_hash = account_profile::load_password_hash(&mut conn, account_id).await?;
     let has_local_password = matches!(password_hash.as_deref(), Some(hash) if !hash.is_empty());
     if has_local_password {
         let Some(pw) = current_password.as_deref() else {
@@ -563,7 +563,7 @@ pub async fn delete_account_handler(
             ));
         }
     }
-    account_profile::delete_account(&mut conn, &account_id).await?;
+    account_profile::delete_account(&mut conn, account_id).await?;
     if account_root.exists() {
         let root = account_root.clone();
         tokio::task::spawn_blocking(move || std::fs::remove_dir_all(&root))
@@ -587,13 +587,11 @@ mod tests {
     #[tokio::test]
     async fn apply_profile_update_sets_name_and_handles() {
         let vault = test_vault().await;
-        let account_id = vault
-            .account_with_id("00000000-0000-4000-8000-000000000001", "alice")
-            .await;
+        let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
         apply_profile_update(
             &mut conn,
-            &account_id,
+            account_id,
             Some("Alex"),
             None,
             &[
@@ -615,7 +613,7 @@ mod tests {
         .await
         .unwrap();
 
-        let loaded = load_response(&mut conn, &account_id).await.unwrap();
+        let loaded = load_response(&mut conn, account_id).await.unwrap();
         assert_eq!(loaded.preferred_name.as_deref(), Some("Alex"));
         assert!(loaded.phones.iter().any(|p| p == "+15555550100"));
         assert!(loaded.phones.iter().any(|p| p == "+15555550199"));
@@ -624,7 +622,7 @@ mod tests {
         let wa_service: String = sqlx::query_scalar(
             "SELECT service FROM handles WHERE account_id = $1 AND normalized = $2",
         )
-        .bind(&account_id)
+        .bind(account_id)
         .bind("+15555550199")
         .fetch_one(&mut *conn)
         .await
@@ -638,15 +636,13 @@ mod tests {
     #[tokio::test]
     async fn saving_a_profile_clears_the_setup_owed_flag() {
         let vault = test_vault().await;
-        let account_id = vault
-            .account_with_id("00000000-0000-4000-8000-000000000001", "alice")
-            .await;
+        let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
-        account_profile::set_must_set_up_profile(&mut conn, &account_id, true)
+        account_profile::set_must_set_up_profile(&mut conn, account_id, true)
             .await
             .unwrap();
         assert!(
-            load_response(&mut conn, &account_id)
+            load_response(&mut conn, account_id)
                 .await
                 .unwrap()
                 .must_set_up_profile
@@ -654,7 +650,7 @@ mod tests {
 
         let reloaded = update_profile_on_conn(
             &mut conn,
-            &account_id,
+            account_id,
             &AccountProfileUpdateRequest {
                 preferred_name: Some("Alex".into()),
                 time_zone: None,
@@ -666,7 +662,7 @@ mod tests {
         .unwrap();
 
         assert!(!reloaded.must_set_up_profile);
-        let auth = account_profile::load_account_auth(&mut conn, &account_id)
+        let auth = account_profile::load_account_auth(&mut conn, account_id)
             .await
             .unwrap()
             .unwrap();
@@ -681,12 +677,10 @@ mod tests {
     #[tokio::test]
     async fn an_empty_profile_is_not_by_itself_setup_owed() {
         let vault = test_vault().await;
-        let account_id = vault
-            .account_with_id("00000000-0000-4000-8000-000000000002", "bare")
-            .await;
+        let account_id = vault.account_with_id(102, "bare").await;
         let mut conn = vault.conn().await;
 
-        let loaded = load_response(&mut conn, &account_id).await.unwrap();
+        let loaded = load_response(&mut conn, account_id).await.unwrap();
         assert_eq!(loaded.preferred_name, None);
         assert!(loaded.phones.is_empty());
         assert!(loaded.emails.is_empty());
@@ -699,13 +693,11 @@ mod tests {
     #[tokio::test]
     async fn apply_profile_update_removes_handles() {
         let vault = test_vault().await;
-        let account_id = vault
-            .account_with_id("00000000-0000-4000-8000-000000000001", "alice")
-            .await;
+        let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
         apply_profile_update(
             &mut conn,
-            &account_id,
+            account_id,
             None,
             None,
             &[
@@ -725,7 +717,7 @@ mod tests {
 
         apply_profile_update(
             &mut conn,
-            &account_id,
+            account_id,
             None,
             None,
             &[],
@@ -743,7 +735,7 @@ mod tests {
         .await
         .unwrap();
 
-        let loaded = load_response(&mut conn, &account_id).await.unwrap();
+        let loaded = load_response(&mut conn, account_id).await.unwrap();
         assert!(loaded.phones.is_empty());
         assert!(loaded.emails.is_empty());
     }
@@ -751,14 +743,12 @@ mod tests {
     #[tokio::test]
     async fn profile_update_rolls_back_when_a_handle_service_is_unsupported() {
         let vault = test_vault().await;
-        let account_id = vault
-            .account_with_id("00000000-0000-4000-8000-000000000001", "alice")
-            .await;
+        let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
 
         let result = update_profile_on_conn(
             &mut conn,
-            &account_id,
+            account_id,
             &AccountProfileUpdateRequest {
                 preferred_name: Some("Changed Name".into()),
                 time_zone: None,
@@ -773,7 +763,7 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(
-            account_profile::load_preferred_name(&mut conn, &account_id)
+            account_profile::load_preferred_name(&mut conn, account_id)
                 .await
                 .unwrap(),
             None
@@ -788,7 +778,7 @@ mod tests {
 
         let mut conn = state.db.acquire().await.unwrap();
         sqlx::query("UPDATE accounts SET can_delete = 0 WHERE id = $1")
-            .bind(&created.account_id)
+            .bind(created.account_id)
             .execute(&mut *conn)
             .await
             .unwrap();
@@ -811,7 +801,7 @@ mod tests {
         let mut conn = state.db.acquire().await.unwrap();
         let token = api_tokens::create_api_token(
             &mut conn,
-            &created.account_id,
+            created.account_id,
             "tool",
             Permissions::all(),
             None,
@@ -851,12 +841,12 @@ mod tests {
         let account =
             crate::test_support::register_via_api(&vault.state, "alice", "hunter2hunter2").await;
         let mut conn = vault.conn().await;
-        let before = load_response(&mut conn, &account.account_id).await.unwrap();
+        let before = load_response(&mut conn, account.account_id).await.unwrap();
         assert_eq!(before.time_zone, "UTC", "a new account starts in UTC");
 
         update_profile_on_conn(
             &mut conn,
-            &account.account_id,
+            account.account_id,
             &AccountProfileUpdateRequest {
                 preferred_name: None,
                 time_zone: Some("America/New_York".into()),
@@ -866,12 +856,12 @@ mod tests {
         )
         .await
         .unwrap();
-        let after = load_response(&mut conn, &account.account_id).await.unwrap();
+        let after = load_response(&mut conn, account.account_id).await.unwrap();
         assert_eq!(after.time_zone, "America/New_York");
 
         let err = update_profile_on_conn(
             &mut conn,
-            &account.account_id,
+            account.account_id,
             &AccountProfileUpdateRequest {
                 preferred_name: None,
                 time_zone: Some("Mars/Olympus_Mons".into()),
@@ -886,7 +876,7 @@ mod tests {
             "{err}"
         );
         assert!(matches!(ApiError::from(err), ApiError::ValidationFailed(_)));
-        let unchanged = load_response(&mut conn, &account.account_id).await.unwrap();
+        let unchanged = load_response(&mut conn, account.account_id).await.unwrap();
         assert_eq!(unchanged.time_zone, "America/New_York");
     }
 
@@ -965,7 +955,7 @@ mod tests {
         let conversation_id = seed_conversation(
             &vault.state,
             &SeedConversation {
-                account_id: &account.account_id,
+                account_id: account.account_id,
                 handle: "+15555550100",
                 conversation_type: "individual",
                 group_title: None,

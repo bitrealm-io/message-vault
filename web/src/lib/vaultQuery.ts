@@ -30,7 +30,12 @@ import {
 import { useMemo } from "react";
 import { useAuth } from "./auth";
 import { PAGE_SIZE_FILL, PAGE_SIZE_FIRST } from "./listPaging";
-import { ANONYMOUS_ACCOUNT, type VaultQueryKey, vaultQueryKey } from "./vaultQueryKey";
+import {
+  type AccountScope,
+  ANONYMOUS_ACCOUNT,
+  type VaultQueryKey,
+  vaultQueryKey,
+} from "./vaultQueryKey";
 
 /**
  * Build the query client.
@@ -61,7 +66,7 @@ export function createVaultQueryClient(): QueryClient {
  * name of their own keeps their entries from ever being read by a signed-in
  * account.
  */
-function useAccountScope(): string {
+function useAccountScope(): AccountScope {
   const { accountId } = useAuth();
   return accountId ?? ANONYMOUS_ACCOUNT;
 }

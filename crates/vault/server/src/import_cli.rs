@@ -18,7 +18,7 @@ use media::MediaMode;
 #[derive(Debug, Clone)]
 pub struct CliImportOptions {
     /// Vault account the import writes into.
-    pub account_id: String,
+    pub account_id: i64,
     /// Folder of `*.jsonl` conversation files (+ attachments).
     pub input_dir: PathBuf,
     /// Originals asset store override; per-account default when `None`.
@@ -114,15 +114,14 @@ pub async fn run(vault: &OpenVault, opts: &CliImportOptions) -> Result<CliImport
     print_plan(opts, vault, &plan);
 
     let mut conn = vault.conn().await?;
-    account_profile::ensure_account_row(&mut conn, &opts.account_id).await?;
+    account_profile::ensure_account_row(&mut conn, opts.account_id).await?;
 
     let import_stats = import_under_session(&vault.cfg, opts, &mut conn, &paths, &plan).await?;
     let dedupe = if opts.skip_dedupe {
         None
     } else {
         let stats =
-            dedupe::dedupe_cross_source(&mut conn, &opts.account_id, None, opts.window_secs)
-                .await?;
+            dedupe::dedupe_cross_source(&mut conn, opts.account_id, None, opts.window_secs).await?;
         println!(
             "  dedupe:       fingerprints_set={} exact_hidden={} near_flagged={} (fingerprints are one per message, not duplicates)",
             stats.keys_filled, stats.exact_flagged, stats.near_flagged
@@ -173,7 +172,7 @@ async fn import_under_session(
     paths: &[PathBuf],
     plan: &SourcePlan,
 ) -> Result<ImportStats> {
-    let account_id = &opts.account_id;
+    let account_id = opts.account_id;
     let assets_dir = opts.assets_dir.clone().unwrap_or_else(|| {
         cfg.paths
             .assets_dir_for_account(account_id, plan.sources.first().expect("sources non-empty"))

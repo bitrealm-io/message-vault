@@ -44,7 +44,7 @@ beforeEach(() => {
 
 function baseProfile() {
   return {
-    account_id: "a1",
+    account_id: 7,
     username: "bob",
     preferred_name: null,
     phones: [],

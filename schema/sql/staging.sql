@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS staging_conversations (
     -- Surrogate primary key for this staging conversation.
     id INTEGER PRIMARY KEY,
     -- Owning vault account (`accounts.id`).
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Thread identity handle id (resolved into handles during staging).
     chat_handle_id INTEGER NOT NULL,
     -- Thread shape: 'individual' | 'group' (and any other values the importer writes).
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS staging_messages (
     -- Parent staging conversation (`staging_conversations.id`).
     conversation_id INTEGER NOT NULL REFERENCES staging_conversations(id) ON DELETE CASCADE,
     -- Owning vault account (`accounts.id`).
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Backup/source family that produced this row.
     source TEXT NOT NULL,
     -- Source-native message id when available.

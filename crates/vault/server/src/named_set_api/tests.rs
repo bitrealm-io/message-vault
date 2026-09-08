@@ -23,7 +23,7 @@ impl Kind {
     }
 
     /// Insert one row a set of this kind can hold, answering its id.
-    async fn member(self, state: &AppState, account_id: &str) -> i64 {
+    async fn member(self, state: &AppState, account_id: i64) -> i64 {
         let mut conn = state.db.acquire().await.unwrap();
         match self {
             Kind::Groups => sqlx::query_scalar(
@@ -239,8 +239,8 @@ async fn members_patch_adds_and_removes_in_one_call() {
         let vault = test_vault().await;
         let state = &vault.state;
         let user = alice(state).await;
-        let a = kind.member(state, &user.account_id).await;
-        let b = kind.member(state, &user.account_id).await;
+        let a = kind.member(state, user.account_id).await;
+        let b = kind.member(state, user.account_id).await;
         let id = create(state, kind, &user.token, "Family").await;
         let members = format!("{}/{id}/members", kind.base());
 
@@ -272,7 +272,7 @@ async fn members_patch_with_a_foreign_member_writes_nothing() {
         let vault = test_vault().await;
         let state = &vault.state;
         let user = alice(state).await;
-        let a = kind.member(state, &user.account_id).await;
+        let a = kind.member(state, user.account_id).await;
         let id = create(state, kind, &user.token, "Family").await;
         let members = format!("{}/{id}/members", kind.base());
         assert_eq!(

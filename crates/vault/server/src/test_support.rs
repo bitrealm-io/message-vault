@@ -25,7 +25,7 @@ pub struct TestVault {
 /// An account created through the API, with its session token.
 pub struct RegisteredAccount {
     /// The new account's id.
-    pub account_id: String,
+    pub account_id: i64,
     /// The username it was created with.
     pub username: String,
     /// A live session token for it.
@@ -129,22 +129,21 @@ impl TestVault {
     /// Insert an `accounts` row with a chosen id, for a test that asserts on
     /// the id itself. Returns the id it was given, so a caller can bind the
     /// result rather than repeat the literal.
-    pub async fn account_with_id(&self, id: &str, username: &str) -> String {
+    pub async fn account_with_id(&self, id: i64, username: &str) -> i64 {
         let mut conn = self.conn().await;
-        sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, $2)")
-            .bind(id)
-            .bind(username)
-            .execute(&mut *conn)
+        crate::db::account_profile::insert_account_at(&mut conn, id, username, None, None)
             .await
             .unwrap();
-        id.to_string()
+        id
     }
 
-    /// Insert an `accounts` row under a generated id, for a test that only
-    /// needs an account to exist.
-    pub async fn account(&self, username: &str) -> String {
-        let id = uuid::Uuid::new_v4().to_string();
-        self.account_with_id(&id, username).await
+    /// Insert an `accounts` row under the id the database hands out, for a
+    /// test that only needs an account to exist.
+    pub async fn account(&self, username: &str) -> i64 {
+        let mut conn = self.conn().await;
+        crate::db::account_profile::insert_account(&mut conn, username, None, None)
+            .await
+            .unwrap()
     }
 }
 
@@ -213,7 +212,7 @@ pub async fn register_via_api(
     .await;
     let body: serde_json::Value = expect_ok("register", status, &text);
     RegisteredAccount {
-        account_id: body["account_id"].as_str().unwrap().to_string(),
+        account_id: body["account_id"].as_i64().unwrap(),
         username: body["username"].as_str().unwrap().to_string(),
         token: body["token"].as_str().unwrap().to_string(),
     }
@@ -231,7 +230,7 @@ pub async fn claim_vault_as_owner(
 ) -> RegisteredAccount {
     let hash = crate::auth::hash_password(password).expect("hash the owner password");
     let mut conn = state.db.acquire().await.expect("acquire for claim");
-    crate::db::account_profile::insert_account(
+    crate::db::account_profile::insert_account_at(
         &mut conn,
         crate::db::account_profile::OWNER_ACCOUNT_ID,
         username,
@@ -244,7 +243,7 @@ pub async fn claim_vault_as_owner(
 
     let body = sign_in(state, username, password).await;
     RegisteredAccount {
-        account_id: crate::db::account_profile::OWNER_ACCOUNT_ID.to_string(),
+        account_id: crate::db::account_profile::OWNER_ACCOUNT_ID,
         username: username.to_string(),
         token: body["token"].as_str().unwrap().to_string(),
     }
@@ -627,7 +626,7 @@ pub struct SeedMessage<'a> {
 /// A conversation to seed, with its messages in order.
 pub struct SeedConversation<'a> {
     /// The account that owns it.
-    pub account_id: &'a str,
+    pub account_id: i64,
     /// The peer handle, created as a `handles` row. Must be unique per
     /// account: `handles` is keyed on the normalized value.
     pub handle: &'a str,
@@ -707,7 +706,7 @@ pub async fn seed_conversation(state: &AppState, c: &SeedConversation<'_>) -> i6
 /// file from the row.
 pub async fn attach_stored_file(
     state: &AppState,
-    account_id: &str,
+    account_id: i64,
     conversation_id: i64,
     sha: &str,
 ) -> std::path::PathBuf {
@@ -747,7 +746,7 @@ pub fn fake_sha256(tag: char) -> String {
 
 /// Give an account one conversation holding one message, so counts are
 /// non-zero.
-pub async fn seed_one_message(state: &AppState, account_id: &str) {
+pub async fn seed_one_message(state: &AppState, account_id: i64) {
     seed_conversation(
         state,
         &SeedConversation {
@@ -774,14 +773,12 @@ mod tests {
     #[tokio::test]
     async fn the_fixture_makes_an_account_with_the_id_a_test_asks_for() {
         let vault = test_vault().await;
-        let id = vault
-            .account_with_id("00000000-0000-4000-8000-00000000000f", "alice")
-            .await;
-        assert_eq!(id, "00000000-0000-4000-8000-00000000000f");
+        let id = vault.account_with_id(101, "alice").await;
+        assert_eq!(id, 101);
 
         let mut conn = vault.conn().await;
         let username: String = sqlx::query_scalar("SELECT username FROM accounts WHERE id = $1")
-            .bind(&id)
+            .bind(id)
             .fetch_one(&mut *conn)
             .await
             .unwrap();
@@ -798,7 +795,7 @@ mod tests {
         let id = seed_conversation(
             &vault.state,
             &SeedConversation {
-                account_id: &account,
+                account_id: account,
                 handle: "+15555550100",
                 conversation_type: "group",
                 group_title: Some("Book Club"),
@@ -851,7 +848,7 @@ mod tests {
             seed_conversation(
                 &vault.state,
                 &SeedConversation {
-                    account_id: &user.account_id,
+                    account_id: user.account_id,
                     handle: &format!("+1555000{i:04}"),
                     conversation_type: "individual",
                     group_title: None,

@@ -1,7 +1,7 @@
 /** What every vault sign-in route returns: a session token and the account it belongs to. */
 export interface SessionResponse {
   token: string;
-  account_id: string;
+  account_id: number;
 }
 
 /** Desktop login default. IPv4 loopback, because `localhost` often resolves to IPv6 and Docker Compose publishes 8080 on IPv4 only. */
@@ -25,7 +25,7 @@ export function initialLoginServerUrl(savedUrl: string | undefined, inTauri: boo
 export interface ParsedPersistedAuth {
   serverUrl: string;
   token: string;
-  accountId: string;
+  accountId: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -48,7 +48,7 @@ export function parsePersistedAuth(raw: string): ParsedPersistedAuth | null {
 
   if (typeof parsed.serverUrl !== "string") return null;
   if (typeof parsed.token !== "string" || !parsed.token) return null;
-  if (typeof parsed.accountId !== "string" || !parsed.accountId) return null;
+  if (typeof parsed.accountId !== "number" || !Number.isInteger(parsed.accountId)) return null;
 
   return {
     serverUrl: parsed.serverUrl,

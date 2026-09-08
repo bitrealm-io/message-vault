@@ -42,7 +42,7 @@ pub async fn create_owner(vault: &OpenVault, username: &str, password: &str) -> 
     }
 
     let hash = crate::auth::hash_password(password)?;
-    account_profile::insert_account(
+    account_profile::insert_account_at(
         &mut conn,
         account_profile::OWNER_ACCOUNT_ID,
         &username,

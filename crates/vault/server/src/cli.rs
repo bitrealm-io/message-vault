@@ -156,7 +156,7 @@ pub struct ImportArgs {
     #[arg(long, default_value_t = 2)]
     pub window_secs: i64,
 
-    /// Account username or UUID (scopes import to this vault tenant)
+    /// Account username or id (scopes import to this vault tenant)
     #[arg(long)]
     pub account: String,
 }
@@ -180,7 +180,7 @@ pub struct DedupeArgs {
     #[arg(long, default_value_t = 2)]
     pub window_secs: i64,
 
-    /// Account username or UUID (scopes dedupe to this vault tenant)
+    /// Account username or id (scopes dedupe to this vault tenant)
     #[arg(long)]
     pub account: String,
 }
@@ -204,7 +204,7 @@ pub struct ImportContactsArgs {
     #[arg(long)]
     pub db_url: Option<String>,
 
-    /// Account username or UUID (scopes contacts to this vault tenant)
+    /// Account username or id (scopes contacts to this vault tenant)
     #[arg(long)]
     pub account: String,
 }
@@ -459,7 +459,7 @@ async fn run_dedupe(args: DedupeArgs) -> Result<()> {
     let vault = OpenVault::open(cfg).await?;
     let account = vault.account_id(&args.account).await?;
     let mut conn = vault.conn().await?;
-    let priority = crate::dedupe::source_priority_from_db(&mut conn, &account).await?;
+    let priority = crate::dedupe::source_priority_from_db(&mut conn, account).await?;
 
     println!("Cross-source dedupe on {}", vault.location());
     println!("  config:       {}", args.config.display());
@@ -475,7 +475,7 @@ async fn run_dedupe(args: DedupeArgs) -> Result<()> {
     );
 
     let stats =
-        crate::dedupe::dedupe_cross_source(&mut conn, &account, None, args.window_secs).await?;
+        crate::dedupe::dedupe_cross_source(&mut conn, account, None, args.window_secs).await?;
     print!("{}", format_dedupe_stats(&stats));
     drop(conn);
     vault.close().await;
@@ -489,7 +489,7 @@ async fn run_import_contacts(args: ImportContactsArgs) -> Result<()> {
     let account = vault.account_id(&args.account).await?;
     let mut conn = vault.conn().await?;
     let stats =
-        contacts_db::load_contacts_if_needed(&mut conn, Some(&args.contacts), true, &account)
+        contacts_db::load_contacts_if_needed(&mut conn, Some(&args.contacts), true, account)
             .await?;
 
     println!("Imported contacts into {}", vault.location());

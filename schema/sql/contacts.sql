@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS contacts (
     -- Surrogate primary key for this contact row.
     id INTEGER PRIMARY KEY,
     -- Owning vault account (`accounts.id`).
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Display name shown in the UI. Empty until something supplies a name;
     -- a contact with identities and no preferred name is Unknown.
     preferred_name TEXT NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS handles (
     -- Surrogate primary key for this handle row.
     id INTEGER PRIMARY KEY,
     -- Owning vault account (`accounts.id`).
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Identity string exactly as the backup/source wrote it.
     raw TEXT NOT NULL,
     -- Dedup key: E.164 when unambiguous for phones; otherwise cleaned digits/text.
@@ -49,7 +49,7 @@ CREATE INDEX IF NOT EXISTS ix_handles_normalized ON handles (account_id, normali
 -- Links one handle to at most one contact within an account.
 CREATE TABLE IF NOT EXISTS contact_handles (
     -- Owning vault account (`accounts.id`).
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Linked identity (`handles.id`).
     handle_id INTEGER NOT NULL REFERENCES handles(id) ON DELETE CASCADE,
     -- Address-book person that owns this handle (`contacts.id`).
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS contact_groups (
     -- Surrogate primary key for this group.
     id INTEGER PRIMARY KEY,
     -- Owning vault account (`accounts.id`).
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Group text unique per account.
     name TEXT NOT NULL,
     -- How the row was born: 'manual' when a person made it, 'import' when the
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS contact_group_members (
 -- Soft-delete marker for a conversation; chat rows stay until purge.
 CREATE TABLE IF NOT EXISTS trashed_conversations (
     -- Owning vault account (`accounts.id`).
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Conversation marked trash (`conversations.id`, no FK so chat can remain).
     conversation_id INTEGER NOT NULL,
     -- When the conversation entered trash (SQLite datetime string).
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS trashed_conversations (
 -- Soft-delete marker for a contact; contact row stays until purge.
 CREATE TABLE IF NOT EXISTS trashed_contacts (
     -- Owning vault account (`accounts.id`).
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Contact marked trash (`contacts.id`, no FK so contact can remain).
     contact_id INTEGER NOT NULL,
     -- When the contact entered trash (SQLite datetime string).

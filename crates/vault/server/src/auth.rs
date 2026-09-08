@@ -114,7 +114,7 @@ pub struct SessionTokenResponse {
     /// Session token to send as `Authorization: Bearer …`.
     pub token: String,
     /// Account id the session belongs to.
-    pub account_id: String,
+    pub account_id: i64,
     /// Account username (falls back to the account id).
     pub username: String,
 }
@@ -124,12 +124,12 @@ impl SessionTokenResponse {
     /// account id when the row has no username.
     async fn for_existing_account(
         conn: &mut AnyConnection,
-        account_id: String,
+        account_id: i64,
     ) -> Result<SessionTokenResponse> {
-        let token = session_tokens::get_or_create_session_token(conn, &account_id).await?;
-        let username = account_profile::username_for_account(conn, &account_id)
+        let token = session_tokens::get_or_create_session_token(conn, account_id).await?;
+        let username = account_profile::username_for_account(conn, account_id)
             .await?
-            .unwrap_or_else(|| account_id.clone());
+            .unwrap_or_else(|| account_id.to_string());
         Ok(SessionTokenResponse {
             token,
             account_id,
@@ -234,7 +234,7 @@ pub(crate) fn is_valid_username(s: &str) -> bool {
 pub(crate) struct SessionResponse {
     sources: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    account_id: Option<String>,
+    account_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     username: Option<String>,
 }
@@ -258,8 +258,8 @@ pub(crate) async fn get_session_handler(
     auth: AuthIdentity,
 ) -> Result<Json<SessionResponse>, ApiError> {
     let account_id = auth.account_id;
-    let username = load_username(&state.db, &account_id).await?;
-    let sources = list_account_sources(&state.db, &account_id).await?;
+    let username = load_username(&state.db, account_id).await?;
+    let sources = list_account_sources(&state.db, account_id).await?;
     Ok(Json(SessionResponse {
         sources,
         account_id: Some(account_id),
@@ -268,18 +268,16 @@ pub(crate) async fn get_session_handler(
 }
 
 /// Source ids this account has imported, oldest first.
-async fn list_account_sources(pool: &AnyPool, account_id: &str) -> Result<Vec<String>, ApiError> {
-    let account_id = account_id.to_string();
+async fn list_account_sources(pool: &AnyPool, account_id: i64) -> Result<Vec<String>, ApiError> {
     // Read-only: do not run ensure_vault_schema (avoids write locks on auth).
     let mut conn = pool.acquire().await?;
-    Ok(dedupe::source_priority_from_db(&mut conn, &account_id).await?)
+    Ok(dedupe::source_priority_from_db(&mut conn, account_id).await?)
 }
 
 /// Username for an account id, when the account has one.
-async fn load_username(pool: &AnyPool, account_id: &str) -> Result<Option<String>, ApiError> {
-    let account_id = account_id.to_string();
+async fn load_username(pool: &AnyPool, account_id: i64) -> Result<Option<String>, ApiError> {
     let mut conn = pool.acquire().await?;
-    Ok(account_profile::username_for_account(&mut conn, &account_id).await?)
+    Ok(account_profile::username_for_account(&mut conn, account_id).await?)
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +294,7 @@ pub(crate) async fn require_username_free(
     conn: &mut AnyConnection,
     username: &str,
 ) -> Result<(), ApiError> {
-    if account_profile::lookup_account_ref(conn, username)
+    if account_profile::lookup_account_by_username(conn, username)
         .await
         .map_err(ApiError::Internal)?
         .is_some()
@@ -361,16 +359,13 @@ pub async fn register_handler(
     let preferred_name = req.preferred_name.as_deref().and_then(message_ir::nonempty);
     let phone = req.phone.as_deref().and_then(message_ir::nonempty);
 
-    let account_id = uuid::Uuid::new_v4().to_string();
-
     let mut conn = state.db.acquire().await?;
     let mut tx = conn.begin().await?;
 
     require_username_free(&mut tx, &username).await?;
 
-    account_profile::insert_account(
+    let account_id = account_profile::insert_account(
         &mut tx,
-        &account_id,
         &username,
         password_hash.as_deref(),
         preferred_name.as_deref(),
@@ -379,7 +374,7 @@ pub async fn register_handler(
     .map_err(ApiError::Internal)?;
 
     if let Some(ref phone) = phone {
-        account_profile::upsert_account_phone(&mut tx, &account_id, phone)
+        account_profile::upsert_account_phone(&mut tx, account_id, phone)
             .await
             .map_err(ApiError::Internal)?;
     }
@@ -389,12 +384,12 @@ pub async fn register_handler(
     // here, and recorded — rather than re-derived from an empty-looking
     // profile by each client that reads it.
     if preferred_name.is_none() && phone.is_none() {
-        account_profile::set_must_set_up_profile(&mut tx, &account_id, true)
+        account_profile::set_must_set_up_profile(&mut tx, account_id, true)
             .await
             .map_err(ApiError::Internal)?;
     }
 
-    let token = session_tokens::insert_account_session_token(&mut tx, &account_id)
+    let token = session_tokens::insert_account_session_token(&mut tx, account_id)
         .await
         .map_err(ApiError::Internal)?;
     tx.commit()
@@ -443,21 +438,23 @@ pub async fn create_session_handler(
     let password = req.password.clone();
 
     let mut conn = state.db.acquire().await?;
-    let Some(account_id) = account_profile::lookup_account_ref(&mut conn, &username).await? else {
+    let Some(account_id) =
+        account_profile::lookup_account_by_username(&mut conn, &username).await?
+    else {
         let _ = verify_password(dummy_password_hash(), &password);
         return Err(ApiError::InvalidCredentials(
             "invalid username or password".into(),
         ));
     };
 
-    let password_hash = account_profile::load_password_hash(&mut conn, &account_id).await?;
+    let password_hash = account_profile::load_password_hash(&mut conn, account_id).await?;
     if !verify_login_password(password_hash.as_deref(), &password) {
         return Err(ApiError::InvalidCredentials(
             "invalid username or password".into(),
         ));
     }
 
-    let auth = account_profile::load_account_auth(&mut conn, &account_id)
+    let auth = account_profile::load_account_auth(&mut conn, account_id)
         .await?
         .ok_or_else(|| ApiError::InvalidCredentials("invalid username or password".into()))?;
     if auth.disabled {
@@ -510,7 +507,7 @@ impl From<ChangePasswordError> for ApiError {
 /// wrong; [`ChangePasswordError::Db`] when a database read or write fails.
 pub(crate) async fn change_password_on_conn(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     current_password: &str,
     new_hash: &str,
 ) -> std::result::Result<String, ChangePasswordError> {

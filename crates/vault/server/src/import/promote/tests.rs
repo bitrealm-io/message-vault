@@ -1,6 +1,6 @@
 use super::*;
 
-const TEST_ACCOUNT: &str = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+const TEST_ACCOUNT: i64 = 7;
 
 /// Full-text hit count under the Postgres 'simple' config.
 async fn pg_fts_hits(conn: &mut AnyConnection, needle: &str) -> i64 {
@@ -456,10 +456,10 @@ async fn promote_message_map_ignores_other_accounts() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
     for statement in [
-        "CREATE TABLE messages (id INTEGER PRIMARY KEY, account_id TEXT NOT NULL)",
+        "CREATE TABLE messages (id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL)",
         "INSERT INTO messages (id, account_id) VALUES
-            (1, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
-            (2, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb')",
+            (1, 7),
+            (2, 8)",
     ] {
         sqlx::query(statement).execute(&mut *conn).await.unwrap();
     }

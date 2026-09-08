@@ -22,7 +22,7 @@ pub enum ProgressEvent {
     /// The key was accepted; the run knows which account it imports into.
     Auth {
         /// Account id the key resolved to.
-        account_id: String,
+        account_id: i64,
         /// Username the vault reports for that account, else the account id.
         username: String,
     },

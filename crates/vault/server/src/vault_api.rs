@@ -125,7 +125,7 @@ pub async fn claim_vault_handler(
         ));
     }
     crate::auth::require_username_free(&mut tx, &username).await?;
-    account_profile::insert_account(
+    account_profile::insert_account_at(
         &mut tx,
         account_profile::OWNER_ACCOUNT_ID,
         &username,
@@ -144,7 +144,7 @@ pub async fn claim_vault_handler(
 
     Ok(Json(crate::auth::SessionTokenResponse {
         token,
-        account_id: account_profile::OWNER_ACCOUNT_ID.to_string(),
+        account_id: account_profile::OWNER_ACCOUNT_ID,
         username,
     }))
 }

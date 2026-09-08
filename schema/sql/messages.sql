@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     -- Surrogate primary key for this conversation.
     id INTEGER PRIMARY KEY,
     -- Owning vault account (`accounts.id`).
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Thread identity handle (`handles.id`); peer for 1:1, group chat id for groups.
     chat_handle_id INTEGER NOT NULL REFERENCES handles(id) ON DELETE CASCADE,
     -- Thread shape: 'individual' | 'group' (and any other values the importer writes).
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS messages (
     -- Parent conversation (`conversations.id`).
     conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     -- Owning vault account (`accounts.id`) denormalized for account-scoped queries.
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Backup/source family that produced this row (for example imessage, whatsapp).
     source TEXT NOT NULL,
     -- Source-native message id when available; used for exact dedupe with source.
@@ -167,7 +167,7 @@ CREATE TABLE IF NOT EXISTS message_tags (
     -- Surrogate primary key for this tag.
     id INTEGER PRIMARY KEY,
     -- Owning vault account (`accounts.id`).
-    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Tag text unique per account.
     name TEXT NOT NULL,
     UNIQUE(account_id, name)

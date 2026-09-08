@@ -34,7 +34,7 @@ const updateContactGroupMembersMock = vi.mocked(updateContactGroupMembers);
 
 /** The signed-in account: one phone, so the owner can be told apart from the others. */
 const PROFILE = {
-  account_id: "acct",
+  account_id: 7,
   username: "me",
   preferred_name: "Me",
   time_zone: "UTC",

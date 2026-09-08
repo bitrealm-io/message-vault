@@ -14,7 +14,7 @@ import { useVaultCache, useVaultQuery } from "../../lib/vaultQuery";
 
 /** One account as the vault owner sees it — mirrors `ManagedAccount` in `owner_api.rs`. */
 export type ManagedAccount = {
-  account_id: string;
+  account_id: number;
   username: string;
   disabled: boolean;
   must_change_password: boolean;
@@ -56,17 +56,17 @@ export function useCreateAccount(): UseMutationResult<
 export function useUpdateAccount(): UseMutationResult<
   unknown,
   Error,
-  { id: string; changes: ManagedAccountChanges }
+  { id: number; changes: ManagedAccountChanges }
 > {
   return useOwnerWrite(({ id, changes }) => updateAccount(id, changes));
 }
 
-export function useDeleteAccount(): UseMutationResult<unknown, Error, string> {
-  return useOwnerWrite((id: string) => deleteAccountById(id));
+export function useDeleteAccount(): UseMutationResult<unknown, Error, number> {
+  return useOwnerWrite((id: number) => deleteAccountById(id));
 }
 
-export function useDeleteAccountMessages(): UseMutationResult<unknown, Error, string> {
-  return useOwnerWrite((id: string) => deleteAccountMessages(id));
+export function useDeleteAccountMessages(): UseMutationResult<unknown, Error, number> {
+  return useOwnerWrite((id: number) => deleteAccountMessages(id));
 }
 
 /**
@@ -76,7 +76,7 @@ export function useDeleteAccountMessages(): UseMutationResult<unknown, Error, st
 export function useSetAccountPassword(): UseMutationResult<
   unknown,
   Error,
-  { id: string; password: string }
+  { id: number; password: string }
 > {
   return useOwnerWrite(({ id, password }) => setVaultAccountPassword(id, { password }));
 }
@@ -187,7 +187,7 @@ export function useOwnerAccounts() {
   }, [passwordTarget, resetPasswordValue, changePassword.mutate]);
 
   const patch = useCallback(
-    (id: string, changes: ManagedAccountChanges) =>
+    (id: number, changes: ManagedAccountChanges) =>
       changeAccount.mutateAsync({ id, changes }).then(
         () => undefined,
         () => undefined,
@@ -198,7 +198,7 @@ export function useOwnerAccounts() {
   // These two answer whether the vault agreed, so the confirmation dialog can
   // stay open and show the refusal instead of closing as though it had worked.
   const deleteMessages = useCallback(
-    (id: string) =>
+    (id: number) =>
       removeMessages.mutateAsync(id).then(
         () => true,
         () => false,
@@ -207,7 +207,7 @@ export function useOwnerAccounts() {
   );
 
   const deleteOne = useCallback(
-    (id: string) =>
+    (id: number) =>
       removeAccount.mutateAsync(id).then(
         () => true,
         () => false,

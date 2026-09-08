@@ -49,7 +49,7 @@ impl From<MembershipError> for crate::server::ApiError {
 /// Extra work after a membership change, async over the connection borrow.
 type ChangeHook = for<'a> fn(
     &'a mut AnyConnection,
-    &'a str,
+    i64,
     i64,
 ) -> Pin<Box<dyn Future<Output = AnyResult<()>> + Send + 'a>>;
 
@@ -182,7 +182,7 @@ pub fn group_spec() -> &'static MembershipSpec {
 /// Bump the member contact's updated-at, boxed so the spec table can hold it as a plain function pointer.
 fn touch_member_owner<'a>(
     conn: &'a mut AnyConnection,
-    account_id: &'a str,
+    account_id: i64,
     member_id: i64,
 ) -> Pin<Box<dyn Future<Output = AnyResult<()>> + Send + 'a>> {
     Box::pin(crate::db::contacts::touch_contact(
@@ -194,7 +194,7 @@ fn touch_member_owner<'a>(
 async fn find_id(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     name: &str,
 ) -> Result<Option<i64>, MembershipError> {
     let sql = format!(
@@ -214,7 +214,7 @@ async fn find_id(
 async fn ensure_id(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     name: &str,
 ) -> Result<i64, MembershipError> {
     let name = normalize_name(spec, name)?;
@@ -273,7 +273,7 @@ fn normalize_name(spec: &MembershipSpec, name: &str) -> Result<String, Membershi
 async fn member_exists(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     member_id: i64,
 ) -> Result<bool, MembershipError> {
     let sql = format!(
@@ -292,7 +292,7 @@ async fn member_exists(
 pub async fn set_membership(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     member_ids: &[i64],
     name: &str,
     enable: bool,
@@ -381,7 +381,7 @@ fn clean_ids(ids: &[i64]) -> Vec<i64> {
 pub async fn list_sets(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<Vec<(i64, String)>, MembershipError> {
     let order = order_by_name_ci(engine_of(conn), "name");
     let sql = format!(
@@ -402,7 +402,7 @@ pub async fn list_sets(
 pub async fn get_set(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     id: i64,
 ) -> Result<(i64, String), MembershipError> {
     let sql = format!(
@@ -432,7 +432,7 @@ pub async fn get_set(
 pub async fn create_set(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     name: &str,
 ) -> Result<(i64, String), MembershipError> {
     let name = normalize_name(spec, name)?;
@@ -459,7 +459,7 @@ pub async fn create_set(
 pub async fn rename_set(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     id: i64,
     name: &str,
 ) -> Result<String, MembershipError> {
@@ -493,7 +493,7 @@ pub async fn rename_set(
 pub async fn delete_set(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     id: i64,
 ) -> Result<(), MembershipError> {
     get_set(spec, conn, account_id, id).await?;
@@ -522,7 +522,7 @@ pub async fn delete_set(
 pub async fn list_member_ids_of(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     id: i64,
 ) -> Result<Vec<i64>, MembershipError> {
     get_set(spec, conn, account_id, id).await?;
@@ -548,7 +548,7 @@ pub async fn list_member_ids_of(
 pub async fn patch_members(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     id: i64,
     add: &[i64],
     remove: &[i64],
@@ -620,7 +620,7 @@ pub async fn patch_members(
 pub async fn names_for_item(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     item_id: i64,
 ) -> AnyResult<Vec<String>> {
     let order = order_by_name_ci(engine_of(conn), "n.name");
@@ -647,13 +647,11 @@ pub async fn names_for_item(
 pub async fn names_for_items(
     spec: &'static MembershipSpec,
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     item_ids: &[i64],
 ) -> AnyResult<std::collections::HashMap<i64, Vec<String>>> {
     use crate::db::sql::{fold_in_id_chunks, in_placeholders};
-    let account_id = account_id.to_string();
     fold_in_id_chunks(conn, item_ids, |conn, chunk| {
-        let account_id = account_id.clone();
         Box::pin(async move {
             let placeholders = in_placeholders(2, chunk.len());
             let order = order_by_name_ci(engine_of(conn), "n.name");
@@ -668,7 +666,7 @@ pub async fn names_for_items(
                 name_col = spec.name_column,
                 member_col = spec.member_column,
             );
-            let mut q = sqlx::query_as::<_, (i64, String)>(&sql).bind(&account_id);
+            let mut q = sqlx::query_as::<_, (i64, String)>(&sql).bind(account_id);
             for id in chunk {
                 q = q.bind(*id);
             }

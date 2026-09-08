@@ -18,12 +18,12 @@ import { getSession, logout as vaultLogout } from "./vaultApi";
 interface AuthState {
   serverUrl: string;
   token: string | null;
-  accountId: string | null;
+  accountId: number | null;
   isAuthenticated: boolean;
 }
 
 interface AuthContextValue extends AuthState {
-  login: (serverUrl: string, token: string, accountId: string) => Promise<void>;
+  login: (serverUrl: string, token: string, accountId: number) => Promise<void>;
   /** Save a new session token after the user changes their password. */
   updateToken: (token: string) => void;
   /** Revoke the vault session (best-effort) and clear the saved login. */
@@ -49,7 +49,7 @@ function logoutTimeoutSignal(): AbortSignal {
 }
 
 /** Read the last saved login from browser storage. */
-function loadPersisted(): Partial<AuthState> | null {
+function loadPersisted(): { serverUrl: string; token: string; accountId: number } | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(() => {
     const persisted = loadPersisted();
     // An empty server URL is allowed: it means "same host as this page".
-    if (persisted?.token && persisted?.accountId && typeof persisted.serverUrl === "string") {
+    if (persisted?.token && typeof persisted.serverUrl === "string") {
       // Apply before children mount. Otherwise Contact Groups loads without
       // a token, fails, and the sidebar stays on "No group" only.
       setBaseUrl(persisted.serverUrl);
@@ -180,7 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(
-    async (serverUrl: string, token: string, accountId: string) => {
+    async (serverUrl: string, token: string, accountId: number) => {
       const epoch = ++authEpoch.current;
       // One call, and it cannot be incomplete: every cached vault entry is named
       // with the account that filled it, so this only releases memory.

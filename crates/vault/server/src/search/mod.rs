@@ -70,7 +70,7 @@ pub struct CompileRequest<'a> {
     /// The query string as typed.
     pub query: &'a str,
     /// The signed-in account; every fragment is scoped to it.
-    pub account_id: &'a str,
+    pub account_id: i64,
     /// Which engine's SQL to write.
     pub engine: DbEngine,
     /// Relative dates resolve against this day. Never read from the clock here.

@@ -2,8 +2,8 @@ use super::*;
 use crate::db::engine::test_pool;
 use crate::test_support::{SeedConversation, TestVault, seed_conversation, test_vault};
 
-const A1: &str = "11111111-1111-1111-1111-111111111111";
-const A2: &str = "22222222-2222-2222-2222-222222222222";
+const A1: i64 = 7;
+const A2: i64 = 8;
 
 async fn insert_message(conn: &mut AnyConnection, id: i64, guid: &str, body: &str) {
     sqlx::query(
@@ -23,7 +23,7 @@ async fn insert_message(conn: &mut AnyConnection, id: i64, guid: &str, body: &st
     .unwrap();
 }
 
-async fn conversation_id(conn: &mut AnyConnection, account: &str) -> i64 {
+async fn conversation_id(conn: &mut AnyConnection, account: i64) -> i64 {
     sqlx::query_scalar::<_, i64>("SELECT id FROM conversations WHERE account_id = $1")
         .bind(account)
         .fetch_one(&mut *conn)
@@ -473,7 +473,7 @@ async fn one_running_import_per_account() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
     ensure_vault_schema(&mut conn).await.unwrap();
-    sqlx::query("INSERT INTO accounts (id, username) VALUES ('acct', 'alice')")
+    sqlx::query("INSERT INTO accounts (id, username) VALUES (7, 'alice')")
         .execute(&mut *conn)
         .await
         .unwrap();
@@ -482,7 +482,7 @@ async fn one_running_import_per_account() {
         INSERT INTO vault_imports (
             account_id, source, mode, status, started_at,
             message_count, attachment_count, bytes_uploaded
-        ) VALUES ('acct', 'imessage', 'append', $1, '2026-08-30T00:00:00Z', 0, 0, 0)
+        ) VALUES (7, 'imessage', 'append', $1, '2026-08-30T00:00:00Z', 0, 0, 0)
     ";
 
     sqlx::query(insert)

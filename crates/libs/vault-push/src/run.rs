@@ -259,7 +259,7 @@ pub fn run(cfg: &VaultPushConfig, progress: Option<&mut ProgressFn<'_>>) -> Resu
     }
     let report = PushReport {
         ok: counted.failed == 0 && !aborted,
-        account: session.auth.account_id.clone(),
+        account: session.auth.account_id,
         username: session.username.clone(),
         mode: cfg.mode,
         started_at,
@@ -314,14 +314,13 @@ fn login(cfg: &VaultPushConfig, out: &mut Reporter<'_, '_>) -> Result<Session> {
         .username
         .as_deref()
         .and_then(message_ir::trimmed)
-        .unwrap_or(auth.account_id.as_str())
-        .to_string();
+        .map_or_else(|| auth.account_id.to_string(), str::to_string);
     out.log(&format!(
         "authenticated username={username} account={}",
         auth.account_id
     ));
     out.event(ProgressEvent::Auth {
-        account_id: auth.account_id.clone(),
+        account_id: auth.account_id,
         username: username.clone(),
     });
     out.event(ProgressEvent::Log(format!("Authenticated as {username}")));

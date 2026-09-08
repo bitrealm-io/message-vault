@@ -32,7 +32,7 @@ import {
   trashConversation as trashVaultConversation,
 } from "./vaultApi";
 
-vi.mock("./auth", () => ({ useAuth: () => ({ accountId: "account-1" }) }));
+vi.mock("./auth", () => ({ useAuth: () => ({ accountId: 7 }) }));
 
 vi.mock("./vaultApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./vaultApi")>()),
@@ -80,9 +80,9 @@ describe("useTrashConversation / useRestoreConversation", () => {
     expect(trashConversation).toHaveBeenCalledWith(42, expect.anything());
     expect(invalidatedKeys(invalidate)).toEqual(
       expect.arrayContaining([
-        ["vault", "account-1", "conversations", "list"],
-        ["vault", "account-1", "trash"],
-        ["vault", "account-1", "contacts", "detail"],
+        ["vault", 7, "conversations", "list"],
+        ["vault", 7, "trash"],
+        ["vault", 7, "contacts", "detail"],
       ]),
     );
   });
@@ -95,9 +95,9 @@ describe("useTrashConversation / useRestoreConversation", () => {
     await result.current.mutateAsync(42);
 
     const keys = invalidatedKeys(invalidate);
-    expect(keys).not.toContainEqual(["vault", "account-1", "conversations", "detail"]);
-    expect(keys).not.toContainEqual(["vault", "account-1", "conversations", "messages"]);
-    expect(keys).not.toContainEqual(["vault", "account-1", "contacts", "list"]);
+    expect(keys).not.toContainEqual(["vault", 7, "conversations", "detail"]);
+    expect(keys).not.toContainEqual(["vault", 7, "conversations", "messages"]);
+    expect(keys).not.toContainEqual(["vault", 7, "contacts", "list"]);
   });
 
   it("restore marks the same prefixes trash does", async () => {
@@ -110,9 +110,9 @@ describe("useTrashConversation / useRestoreConversation", () => {
     expect(restoreConversation).toHaveBeenCalledWith(7, expect.anything());
     expect(invalidatedKeys(invalidate)).toEqual(
       expect.arrayContaining([
-        ["vault", "account-1", "conversations", "list"],
-        ["vault", "account-1", "trash"],
-        ["vault", "account-1", "contacts", "detail"],
+        ["vault", 7, "conversations", "list"],
+        ["vault", 7, "trash"],
+        ["vault", 7, "contacts", "detail"],
       ]),
     );
   });
@@ -129,8 +129,8 @@ describe("useTrashContact / useRestoreContact", () => {
     expect(trashContact).toHaveBeenCalledWith(9, expect.anything());
     expect(invalidatedKeys(invalidate)).toEqual(
       expect.arrayContaining([
-        ["vault", "account-1", "contacts", "list"],
-        ["vault", "account-1", "contacts", "detail", "9"],
+        ["vault", 7, "contacts", "list"],
+        ["vault", 7, "contacts", "detail", "9"],
       ]),
     );
   });
@@ -144,9 +144,9 @@ describe("useTrashContact / useRestoreContact", () => {
 
     const keys = invalidatedKeys(invalidate);
     expect(keys.every((key) => (key as string[])[2] !== "conversations")).toBe(true);
-    expect(keys).not.toContainEqual(["vault", "account-1", "trash"]);
+    expect(keys).not.toContainEqual(["vault", 7, "trash"]);
     // Only this contact's own detail is stale, not every open drawer.
-    expect(keys).not.toContainEqual(["vault", "account-1", "contacts", "detail"]);
+    expect(keys).not.toContainEqual(["vault", 7, "contacts", "detail"]);
   });
 
   it("restore addresses and invalidates the same contact it was called with", async () => {
@@ -159,8 +159,8 @@ describe("useTrashContact / useRestoreContact", () => {
     expect(restoreContact).toHaveBeenCalledWith("9", expect.anything());
     expect(invalidatedKeys(invalidate)).toEqual(
       expect.arrayContaining([
-        ["vault", "account-1", "contacts", "list"],
-        ["vault", "account-1", "contacts", "detail", "9"],
+        ["vault", 7, "contacts", "list"],
+        ["vault", 7, "contacts", "detail", "9"],
       ]),
     );
   });
@@ -179,10 +179,10 @@ describe("useDeleteConversation", () => {
     // so its detail, message pages and Sources panel all describe a 404 now.
     expect(invalidatedKeys(invalidate)).toEqual(
       expect.arrayContaining([
-        ["vault", "account-1", "conversations"],
-        ["vault", "account-1", "trash"],
-        ["vault", "account-1", "contacts", "detail"],
-        ["vault", "account-1", "storage"],
+        ["vault", 7, "conversations"],
+        ["vault", 7, "trash"],
+        ["vault", 7, "contacts", "detail"],
+        ["vault", 7, "storage"],
       ]),
     );
   });
@@ -195,8 +195,8 @@ describe("useDeleteConversation", () => {
     await result.current.mutateAsync(42);
 
     const keys = invalidatedKeys(invalidate);
-    expect(keys).not.toContainEqual(["vault", "account-1", "contacts", "list"]);
-    expect(keys).not.toContainEqual(["vault", "account-1", "contacts"]);
+    expect(keys).not.toContainEqual(["vault", 7, "contacts", "list"]);
+    expect(keys).not.toContainEqual(["vault", 7, "contacts"]);
   });
 });
 
@@ -213,10 +213,10 @@ describe("useDeleteContact", () => {
     // shows their handle in place of the name.
     expect(invalidatedKeys(invalidate)).toEqual(
       expect.arrayContaining([
-        ["vault", "account-1", "contacts", "list"],
-        ["vault", "account-1", "contacts", "detail", "9"],
-        ["vault", "account-1", "conversations"],
-        ["vault", "account-1", "contact-groups"],
+        ["vault", 7, "contacts", "list"],
+        ["vault", 7, "contacts", "detail", "9"],
+        ["vault", 7, "conversations"],
+        ["vault", 7, "contact-groups"],
       ]),
     );
   });
@@ -229,8 +229,8 @@ describe("useDeleteContact", () => {
     await result.current.mutateAsync(9);
 
     const keys = invalidatedKeys(invalidate);
-    expect(keys).not.toContainEqual(["vault", "account-1", "trash"]);
-    expect(keys).not.toContainEqual(["vault", "account-1", "storage"]);
+    expect(keys).not.toContainEqual(["vault", 7, "trash"]);
+    expect(keys).not.toContainEqual(["vault", 7, "storage"]);
   });
 });
 
@@ -245,11 +245,11 @@ describe("useEmptyTrash", () => {
     expect(emptyTrash).toHaveBeenCalledTimes(1);
     expect(invalidatedKeys(invalidate)).toEqual(
       expect.arrayContaining([
-        ["vault", "account-1", "conversations"],
-        ["vault", "account-1", "contacts"],
-        ["vault", "account-1", "trash"],
-        ["vault", "account-1", "contact-groups"],
-        ["vault", "account-1", "storage"],
+        ["vault", 7, "conversations"],
+        ["vault", 7, "contacts"],
+        ["vault", 7, "trash"],
+        ["vault", 7, "contact-groups"],
+        ["vault", 7, "storage"],
       ]),
     );
   });

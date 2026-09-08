@@ -9,8 +9,8 @@ use crate::db::dialect::engine_of;
 use crate::db::engine::DbEngine;
 use crate::db::sql::{bind_args, renumber_placeholders};
 
-pub(crate) const ACCOUNT: &str = "00000000-0000-4000-8000-00000000aaaa";
-pub(crate) const OTHER_ACCOUNT: &str = "00000000-0000-4000-8000-00000000bbbb";
+pub(crate) const ACCOUNT: i64 = 7;
+pub(crate) const OTHER_ACCOUNT: i64 = 8;
 
 pub(crate) fn today() -> NaiveDate {
     NaiveDate::from_ymd_opt(2026, 9, 2).unwrap()
@@ -73,7 +73,7 @@ pub(crate) struct Fixture {
 
 pub(crate) async fn handle(
     conn: &mut AnyConnection,
-    account: &str,
+    account: i64,
     raw: &str,
     service: &str,
 ) -> i64 {
@@ -91,7 +91,7 @@ pub(crate) async fn handle(
 
 pub(crate) async fn contact(
     conn: &mut AnyConnection,
-    account: &str,
+    account: i64,
     name: &str,
     handles: &[i64],
 ) -> i64 {
@@ -121,7 +121,7 @@ pub(crate) async fn contact(
 /// given handles, each linked to its contact when one exists.
 pub(crate) async fn conversation(
     conn: &mut AnyConnection,
-    account: &str,
+    account: i64,
     chat: i64,
     kind: &str,
     title: Option<&str>,
@@ -204,7 +204,7 @@ pub(crate) fn msg<'a>(
     }
 }
 
-pub(crate) async fn message(conn: &mut AnyConnection, account: &str, m: Msg<'_>) -> i64 {
+pub(crate) async fn message(conn: &mut AnyConnection, account: i64, m: Msg<'_>) -> i64 {
     sqlx::query_scalar(
         "INSERT INTO messages (conversation_id, account_id, source, timestamp, is_from_me,
                                sender_handle_id, service, subject, body, sort_order)
@@ -246,7 +246,7 @@ pub(crate) async fn attachment(
 
 pub(crate) async fn group(
     conn: &mut AnyConnection,
-    account: &str,
+    account: i64,
     name: &str,
     members: &[i64],
 ) -> i64 {
@@ -271,7 +271,7 @@ pub(crate) async fn group(
 
 pub(crate) async fn tag(
     conn: &mut AnyConnection,
-    account: &str,
+    account: i64,
     name: &str,
     conversations: &[i64],
 ) -> i64 {

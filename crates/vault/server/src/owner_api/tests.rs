@@ -18,7 +18,7 @@ async fn every_owner_route_refuses_an_ordinary_session() {
     let state = vault.state.clone();
     let _owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
     let ordinary = register_via_api(&state, "bob", "hunter2hunter2").await;
-    let target = &ordinary.account_id;
+    let target = ordinary.account_id;
 
     assert_eq!(
         get_status(&state, "/v1/owner/accounts", &ordinary.token).await,
@@ -101,7 +101,7 @@ async fn api_tokens_never_resolve_to_the_owner() {
 
     // A token issued on the owner's own account still resolves to a token.
     let token_auth = crate::server::AuthIdentity {
-        account_id: auth.account_id.clone(),
+        account_id: auth.account_id,
         capability: crate::server::AuthCapability::ApiToken(auth.permissions()),
     };
     assert!(!token_auth.is_owner());
@@ -250,7 +250,7 @@ async fn list_response_has_no_message_content_fields() {
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
-    seed_one_message(&state, &alice.account_id).await;
+    seed_one_message(&state, alice.account_id).await;
 
     let body: serde_json::Value = get_json(&state, "/v1/owner/accounts", &owner.token).await;
     let item = &body["items"][0];
@@ -267,7 +267,7 @@ async fn delete_messages_response_has_no_message_content_fields() {
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
     let victim = register_via_api(&state, "bob", "hunter2hunter2").await;
-    seed_one_message(&state, &victim.account_id).await;
+    seed_one_message(&state, victim.account_id).await;
 
     let body: serde_json::Value = delete_json(
         &state,
@@ -288,7 +288,7 @@ async fn delete_account_is_an_acknowledgement_with_no_body() {
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
     let victim = register_via_api(&state, "bob", "hunter2hunter2").await;
-    seed_one_message(&state, &victim.account_id).await;
+    seed_one_message(&state, victim.account_id).await;
 
     let status = delete_status(
         &state,
@@ -380,7 +380,7 @@ async fn an_account_the_owner_creates_owes_profile_setup() {
     .await;
 
     let mut conn = state.db.acquire().await.unwrap();
-    let auth = crate::db::account_profile::load_account_auth(&mut conn, &created.account_id)
+    let auth = crate::db::account_profile::load_account_auth(&mut conn, created.account_id)
         .await
         .unwrap()
         .unwrap();
@@ -525,8 +525,8 @@ async fn deleting_one_accounts_messages_leaves_the_others_alone() {
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
-    seed_one_message(&state, &alice.account_id).await;
-    seed_one_message(&state, &bob.account_id).await;
+    seed_one_message(&state, alice.account_id).await;
+    seed_one_message(&state, bob.account_id).await;
 
     let _body: serde_json::Value = delete_json(
         &state,
@@ -550,7 +550,7 @@ async fn patch_of_a_missing_account_is_404() {
 
     let status = patch_status(
         &state,
-        "/v1/owner/accounts/does-not-exist",
+        "/v1/owner/accounts/424242",
         &owner.token,
         serde_json::json!({ "disabled": true }),
     )
@@ -566,7 +566,7 @@ async fn setting_a_password_on_a_missing_account_is_404() {
 
     let status = put_status(
         &state,
-        "/v1/owner/accounts/does-not-exist/password",
+        "/v1/owner/accounts/424242/password",
         &owner.token,
         serde_json::json!({ "password": "hunter2hunter2" }),
     )
@@ -580,12 +580,7 @@ async fn deleting_messages_of_a_missing_account_is_404() {
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let status = delete_status(
-        &state,
-        "/v1/owner/accounts/does-not-exist/messages",
-        &owner.token,
-    )
-    .await;
+    let status = delete_status(&state, "/v1/owner/accounts/424242/messages", &owner.token).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
@@ -595,6 +590,6 @@ async fn deleting_a_missing_account_is_404() {
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let status = delete_status(&state, "/v1/owner/accounts/does-not-exist", &owner.token).await;
+    let status = delete_status(&state, "/v1/owner/accounts/424242", &owner.token).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }

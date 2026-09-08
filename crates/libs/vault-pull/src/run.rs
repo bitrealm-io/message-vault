@@ -54,7 +54,7 @@ pub struct VaultPullConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PullReport {
     /// Account id the key resolved to.
-    pub account: String,
+    pub account: i64,
     /// The query the run asked the vault for.
     pub query: String,
     /// Conversations written.
@@ -77,7 +77,7 @@ pub enum ProgressEvent {
     /// The key was accepted; the run knows whose vault it is reading.
     Auth {
         /// Account id the key resolved to.
-        account_id: String,
+        account_id: i64,
         /// Username the vault reports for that account, else the account id.
         username: String,
     },
@@ -225,7 +225,7 @@ struct AssetCounts {
 struct Pull<'a> {
     cfg: &'a VaultPullConfig,
     session: HttpSession,
-    account: String,
+    account: i64,
     username: String,
     /// The search query with surrounding whitespace removed.
     query: String,
@@ -242,12 +242,12 @@ impl<'a> Pull<'a> {
     fn login(cfg: &'a VaultPullConfig, out: &mut Option<&mut ProgressFn<'_>>) -> Result<Self> {
         let auth =
             authenticate(&cfg.base_url, &cfg.key).map_err(|e| anyhow::anyhow!("{}", e.detail()))?;
-        let account = auth.account_id.clone();
-        let username = auth.username.unwrap_or_else(|| account.clone());
+        let account = auth.account_id;
+        let username = auth.username.unwrap_or_else(|| account.to_string());
         emit(
             out,
             ProgressEvent::Auth {
-                account_id: account.clone(),
+                account_id: account,
                 username: username.clone(),
             },
         );
@@ -304,7 +304,7 @@ impl<'a> Pull<'a> {
                         q: &self.query,
                         limit: cfg.page_limit.clamp(1, MAX_PAGE_LIMIT),
                         offset,
-                        account: &self.account,
+                        account: &self.account.to_string(),
                     },
                 )
             })?;
@@ -371,7 +371,7 @@ impl<'a> Pull<'a> {
             session: &self.session,
             base_url: &cfg.base_url,
             key: &cfg.key,
-            account: &self.account,
+            account: &self.account.to_string(),
             assets: &to_download,
             out_dir: &cfg.out_dir,
             workers: cfg.asset_download_workers,

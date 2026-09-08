@@ -62,7 +62,7 @@ export function useUpdateAccountProfile(): UseMutationResult<
  */
 export function fetchAccountProfileFor(
   client: ReturnType<typeof useQueryClient>,
-  accountId: string | null,
+  accountId: number | null,
   force = false,
 ): Promise<AccountProfile | null> {
   const key = vaultQueryKey(accountId ?? ANONYMOUS_ACCOUNT, keys.accountProfile.all);

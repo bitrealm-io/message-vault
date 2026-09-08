@@ -1,6 +1,6 @@
 use super::*;
 
-const TEST_ACCOUNT_ID: &str = "00000000-0000-0000-0000-000000000042";
+const TEST_ACCOUNT_ID: i64 = 7;
 
 #[test]
 fn email_detection() {

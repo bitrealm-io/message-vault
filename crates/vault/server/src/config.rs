@@ -179,17 +179,17 @@ pub fn resolve_under_root(root: &Path, rel: &str) -> Result<PathBuf> {
 
 impl PathsConfig {
     /// Originals: `data_dir/<account_id>/<source_id>/<assets_dir>`.
-    pub fn assets_dir_for_account(&self, account_id: &str, source_id: &str) -> PathBuf {
+    pub fn assets_dir_for_account(&self, account_id: i64, source_id: &str) -> PathBuf {
         self.data_dir
-            .join(account_id)
+            .join(account_id.to_string())
             .join(source_id)
             .join(&self.assets_dir)
     }
 
     /// Converted media: `data_dir/<account_id>/<source_id>/<assets_converted_dir>`.
-    pub fn assets_converted_dir_for_account(&self, account_id: &str, source_id: &str) -> PathBuf {
+    pub fn assets_converted_dir_for_account(&self, account_id: i64, source_id: &str) -> PathBuf {
         self.data_dir
-            .join(account_id)
+            .join(account_id.to_string())
             .join(source_id)
             .join(&self.assets_converted_dir)
     }

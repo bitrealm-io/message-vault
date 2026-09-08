@@ -22,7 +22,7 @@ use crate::paging::{DEFAULT_EXPORT_LIMIT, Page, SortKey, page_params, parse_sort
 #[derive(Debug, Clone)]
 pub struct ExportPageOpts<'a> {
     /// Vault account to export from.
-    pub account_id: &'a str,
+    pub account_id: i64,
     /// Search query string, in the search language.
     pub query: &'a str,
     /// Max messages on the page. Already validated by the handler: `1..=MAX_LIST_LIMIT`.
@@ -40,7 +40,7 @@ pub struct ExportPageOpts<'a> {
 #[derive(Debug, Clone)]
 pub struct ExportCountOpts<'a> {
     /// Vault account to count from.
-    pub account_id: &'a str,
+    pub account_id: i64,
     /// Search query string, in the search language.
     pub query: &'a str,
     /// The account's time zone and today's date in it.
@@ -204,11 +204,11 @@ pub(crate) async fn export_messages_count_handler(
     let q = query.q;
 
     let mut conn = state.db.acquire().await?;
-    let clock = crate::db::account_profile::account_clock(&mut conn, &account).await?;
+    let clock = crate::db::account_profile::account_clock(&mut conn, account).await?;
     let body = export_message_count(
         &mut conn,
         ExportCountOpts {
-            account_id: &account,
+            account_id: account,
             query: &q,
             clock,
         },
@@ -252,11 +252,11 @@ pub(crate) async fn export_messages_handler(
     )?;
 
     let mut conn = state.db.acquire().await?;
-    let clock = crate::db::account_profile::account_clock(&mut conn, &account).await?;
+    let clock = crate::db::account_profile::account_clock(&mut conn, account).await?;
     let body = export_messages(
         &mut conn,
         ExportPageOpts {
-            account_id: &account,
+            account_id: account,
             query: &query.q,
             limit: page.limit,
             offset: page.offset,

@@ -17,6 +17,9 @@ export type VaultQueryKey = readonly unknown[];
  */
 export const ANONYMOUS_ACCOUNT = "anonymous";
 
+/** Who a cache entry belongs to: an account id, or the sign-in screens. */
+export type AccountScope = number | typeof ANONYMOUS_ACCOUNT;
+
 /**
  * Put the account in front of a key.
  *
@@ -24,6 +27,6 @@ export const ANONYMOUS_ACCOUNT = "anonymous";
  * served another's data. See
  * `docs/adr/0002-one-way-to-fetch-data-in-the-web-app.md`.
  */
-export function vaultQueryKey(account: string, key: VaultQueryKey): unknown[] {
+export function vaultQueryKey(account: AccountScope, key: VaultQueryKey): unknown[] {
   return ["vault", account, ...key];
 }

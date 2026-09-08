@@ -136,7 +136,7 @@ fn parse_rfc3339_rejects_unparseable_input() {
     assert_eq!(parse_rfc3339_utc_secs("2015-03-12T18:04:22"), None);
 }
 
-const TEST_ACCOUNT_ID: &str = "00000000-0000-0000-0000-000000000001";
+const TEST_ACCOUNT_ID: i64 = 7;
 
 async fn setup_db(conn: &mut AnyConnection) {
     schema::ensure_vault_schema(conn).await.unwrap();

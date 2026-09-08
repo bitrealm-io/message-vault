@@ -1104,8 +1104,11 @@ export interface components {
     schemas: {
         /** @description The signed-in account's profile. */
         AccountProfileResponse: {
-            /** @description The signed-in account id. */
-            account_id: string;
+            /**
+             * Format: int64
+             * @description The signed-in account id.
+             */
+            account_id: number;
             /** @description May destroy message data. */
             can_delete: boolean;
             /** @description May call the export endpoints. */
@@ -1196,8 +1199,11 @@ export interface components {
             disabled: boolean;
             /** @description Unix-seconds expiry; absent means no expiry. */
             expires_at?: string | null;
-            /** @description Token id (the secret itself is stored hashed). */
-            id: string;
+            /**
+             * Format: int64
+             * @description Token id (the secret itself is stored hashed).
+             */
+            id: number;
             /** @description User-chosen label shown in Settings. */
             label: string;
             /** @description Unix-seconds string of last use; absent when never used. */
@@ -1565,8 +1571,11 @@ export interface components {
             created_at: string;
             /** @description Unix-seconds expiry; absent means no expiry. */
             expires_at?: string | null;
-            /** @description Token id. */
-            id: string;
+            /**
+             * Format: int64
+             * @description Token id.
+             */
+            id: number;
             /** @description User-chosen label. */
             label: string;
             /** @description Plaintext secret — returned once at creation. */
@@ -1766,7 +1775,8 @@ export interface components {
         ImportMode: "replace" | "append";
         /** @description Import result: stats plus optional dedupe counts. */
         ImportResponse: components["schemas"]["ImportStats"] & {
-            account: string;
+            /** Format: int64 */
+            account: number;
             dedupe?: null | components["schemas"]["DedupeResponse"];
             source: string;
         };
@@ -1938,8 +1948,11 @@ export interface components {
          *     what it says.
          */
         ManagedAccount: {
-            /** @description Account id. */
-            account_id: string;
+            /**
+             * Format: int64
+             * @description Account id.
+             */
+            account_id: number;
             /** @description May destroy message data. */
             can_delete: boolean;
             /** @description May call the export endpoints. */
@@ -2413,8 +2426,11 @@ export interface components {
         };
         /** @description The renamed token's id and stored label. */
         RenameApiTokenResponse: {
-            /** @description Token id that was renamed. */
-            id: string;
+            /**
+             * Format: int64
+             * @description Token id that was renamed.
+             */
+            id: number;
             /** @description Stored label after the rename. */
             label: string;
         };
@@ -2447,14 +2463,18 @@ export interface components {
         };
         /** @description The signed-in credential's account, username, and import sources. */
         SessionResponse: {
-            account_id?: string | null;
+            /** Format: int64 */
+            account_id?: number | null;
             sources: string[];
             username?: string | null;
         };
         /** @description Session token plus the account id and username it belongs to. */
         SessionTokenResponse: {
-            /** @description Account id the session belongs to. */
-            account_id: string;
+            /**
+             * Format: int64
+             * @description Account id the session belongs to.
+             */
+            account_id: number;
             /** @description Session token to send as `Authorization: Bearer …`. */
             token: string;
             /** @description Account username (falls back to the account id). */
@@ -2736,7 +2756,7 @@ export interface operations {
             header?: never;
             path: {
                 /** @description API token id */
-                id: string;
+                id: number;
             };
             cookie?: never;
         };
@@ -2781,7 +2801,7 @@ export interface operations {
             header?: never;
             path: {
                 /** @description API token id */
-                id: string;
+                id: number;
             };
             cookie?: never;
         };
@@ -5840,7 +5860,7 @@ export interface operations {
             header?: never;
             path: {
                 /** @description Account id to delete */
-                id: string;
+                id: number;
             };
             cookie?: never;
         };
@@ -5885,7 +5905,7 @@ export interface operations {
             header?: never;
             path: {
                 /** @description Account id to modify */
-                id: string;
+                id: number;
             };
             cookie?: never;
         };
@@ -5951,7 +5971,7 @@ export interface operations {
             header?: never;
             path: {
                 /** @description Account whose messages are destroyed */
-                id: string;
+                id: number;
             };
             cookie?: never;
         };
@@ -5997,7 +6017,7 @@ export interface operations {
             header?: never;
             path: {
                 /** @description Account id whose password is set */
-                id: string;
+                id: number;
             };
             cookie?: never;
         };

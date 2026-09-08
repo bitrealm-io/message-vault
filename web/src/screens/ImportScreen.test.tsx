@@ -242,7 +242,7 @@ describe("ImportScreen entering Import", () => {
     apiPostMock.mockResolvedValue({ unknown: [] });
     apiGetMock.mockReset();
     apiGetMock.mockResolvedValue({
-      account_id: "acct-1",
+      account_id: 7,
       username: "demo",
       preferred_name: null,
       phones: [],
@@ -803,7 +803,7 @@ describe("ImportScreen gates", () => {
     apiPostMock.mockResolvedValue({ unknown: [] });
     apiGetMock.mockReset();
     apiGetMock.mockResolvedValue({
-      account_id: "acct-1",
+      account_id: 7,
       username: "demo",
       preferred_name: null,
       phones: [],

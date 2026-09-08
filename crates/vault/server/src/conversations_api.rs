@@ -134,7 +134,7 @@ type RawConversationRow = (
 /// statement fails.
 pub async fn list_conversations_sorted(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     q: &str,
     order: &[SortKey<ConversationSort>],
     limit: usize,
@@ -191,16 +191,13 @@ pub async fn list_conversations_sorted(
 /// `Internal` when a statement fails.
 pub async fn get_conversation_summary(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     conversation_id: i64,
 ) -> Result<Option<ConversationSummary>, ApiError> {
     let sql = renumber_placeholders(&format!(
         "{CONVERSATION_ROW_SELECT} WHERE c.id = ? AND c.account_id = ?"
     ));
-    let params = [
-        SqlParam::Int(conversation_id),
-        SqlParam::Text(account_id.to_string()),
-    ];
+    let params = [SqlParam::Int(conversation_id), SqlParam::Int(account_id)];
     let out = load_conversation_rows(conn, account_id, &sql, &params).await?;
     Ok(out.into_iter().next())
 }
@@ -227,7 +224,7 @@ const CONVERSATION_ROW_SELECT: &str = "SELECT c.id,
 /// cannot drift into two different notions of what a conversation summary is.
 async fn load_conversation_rows(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     sql: &str,
     params: &[SqlParam],
 ) -> Result<Vec<ConversationSummary>, ApiError> {
@@ -385,7 +382,7 @@ pub struct ConversationSourcesPage {
 /// Returns an internal error when a database statement fails.
 pub async fn list_conversation_source_stats(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     conversation_id: i64,
 ) -> Result<Option<ConversationSourcesPage>, ApiError> {
     if !owns_conversation(conn, account_id, conversation_id).await? {
@@ -441,16 +438,13 @@ pub async fn list_conversation_source_stats(
 /// `BadRequest` when `year` is not a four-digit year.
 fn conversation_messages_where(
     conversation_id: i64,
-    account_id: &str,
+    account_id: i64,
     year: Option<i32>,
     zone: chrono_tz::Tz,
 ) -> Result<(String, Vec<SqlParam>), ApiError> {
     let mut sql =
         "m.conversation_id = ? AND m.account_id = ? AND m.duplicate_of IS NULL".to_string();
-    let mut params = vec![
-        SqlParam::Int(conversation_id),
-        SqlParam::Text(account_id.to_string()),
-    ];
+    let mut params = vec![SqlParam::Int(conversation_id), SqlParam::Int(account_id)];
     if let Some(year) = year {
         // `today` only matters to the relative-span forms (`7d`, `1y`, …)
         // `parse_date_span` also understands; a bare `YYYY` ignores it. The
@@ -482,7 +476,7 @@ fn conversation_messages_where(
 /// statement fails.
 pub async fn get_conversation_messages(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     conversation_id: i64,
     year: Option<i32>,
     order: &[SortKey<MessageSort>],
@@ -561,10 +555,10 @@ pub(crate) async fn conversations_list_handler(
         &CONVERSATION_SORT_KEYS,
         &DEFAULT_CONVERSATION_SORT,
     )?;
-    let clock = crate::db::account_profile::account_clock(&mut conn, &auth.account_id).await?;
+    let clock = crate::db::account_profile::account_clock(&mut conn, auth.account_id).await?;
     let result = list_conversations_sorted(
         &mut conn,
-        &auth.account_id,
+        auth.account_id,
         &q,
         &order,
         page.limit,
@@ -600,7 +594,7 @@ pub(crate) async fn conversation_detail_handler(
 ) -> Result<Json<ConversationSummary>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let conversation =
-        get_conversation_summary(&mut conn, &auth.account_id, conversation_id).await?;
+        get_conversation_summary(&mut conn, auth.account_id, conversation_id).await?;
     conversation
         .map(Json)
         .ok_or_else(|| ApiError::NotFound("conversation not found".into()))
@@ -626,7 +620,7 @@ pub(crate) async fn conversation_sources_handler(
     AxumPath(conversation_id): AxumPath<i64>,
 ) -> Result<Json<ConversationSourcesPage>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let page = list_conversation_source_stats(&mut conn, &auth.account_id, conversation_id).await?;
+    let page = list_conversation_source_stats(&mut conn, auth.account_id, conversation_id).await?;
     page.map(Json)
         .ok_or_else(|| ApiError::NotFound("conversation not found".into()))
 }
@@ -690,7 +684,7 @@ pub(crate) async fn conversation_messages_handler(
     )?;
     let result = get_conversation_messages(
         &mut conn,
-        &auth.account_id,
+        auth.account_id,
         conversation_id,
         query.year,
         &order,
@@ -726,7 +720,7 @@ pub(crate) async fn conversation_trash_handler(
     let mut conn = state.db.acquire().await?;
     if move_to_trash(
         &mut conn,
-        &auth.account_id,
+        auth.account_id,
         Trashable::Conversation(conversation_id),
     )
     .await?
@@ -760,7 +754,7 @@ pub(crate) async fn conversation_restore_handler(
     let mut conn = state.db.acquire().await?;
     if restore(
         &mut conn,
-        &auth.account_id,
+        auth.account_id,
         Trashable::Conversation(conversation_id),
     )
     .await?
@@ -798,7 +792,7 @@ pub(crate) async fn conversation_delete_handler(
         let mut conn = state.db.acquire().await?;
         delete_trashed(
             &mut conn,
-            &auth.account_id,
+            auth.account_id,
             Trashable::Conversation(conversation_id),
         )
         .await?

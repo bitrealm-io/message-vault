@@ -26,7 +26,7 @@ use anyhow::{Context, Result};
 #[derive(Debug, Clone)]
 pub struct AuthInfo {
     /// The vault account id.
-    pub account_id: String,
+    pub account_id: i64,
     /// The display username for the account, if one is set.
     pub username: Option<String>,
 }

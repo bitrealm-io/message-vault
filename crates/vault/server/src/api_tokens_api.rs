@@ -13,7 +13,7 @@ use crate::server::{ApiError, AppState, Created, FullAccess};
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ApiTokenItem {
     /// Token id (the secret itself is stored hashed).
-    pub id: String,
+    pub id: i64,
     /// User-chosen label shown in Settings.
     pub label: String,
     /// May call the import endpoints.
@@ -96,7 +96,7 @@ const fn default_true() -> bool {
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct CreateApiTokenResponse {
     /// Token id.
-    pub id: String,
+    pub id: i64,
     /// User-chosen label.
     pub label: String,
     /// May call the import endpoints.
@@ -127,7 +127,7 @@ pub struct RenameApiTokenRequest {
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct RenameApiTokenResponse {
     /// Token id that was renamed.
-    pub id: String,
+    pub id: i64,
     /// Stored label after the rename.
     pub label: String,
 }
@@ -152,7 +152,7 @@ pub async fn list_api_tokens_handler(
 
     let mut conn = state.db.acquire().await?;
     schema::ensure_accounts_schema(&mut conn).await?;
-    let rows = api_tokens::list_api_tokens(&mut conn, &account_id).await?;
+    let rows = api_tokens::list_api_tokens(&mut conn, account_id).await?;
     let items = rows.into_iter().map(ApiTokenItem::from).collect();
 
     Ok(Json(ListApiTokensResponse { items }))
@@ -194,7 +194,7 @@ pub async fn create_api_token_handler(
     let mut conn = state.db.acquire().await?;
     schema::ensure_accounts_schema(&mut conn).await?;
     let created =
-        api_tokens::create_api_token(&mut conn, &account_id, &label, permissions, expires_in_days)
+        api_tokens::create_api_token(&mut conn, account_id, &label, permissions, expires_in_days)
             .await
             .map_err(map_label_error)?;
 
@@ -220,7 +220,7 @@ pub async fn create_api_token_handler(
     path = "/v1/account/api-tokens/{id}",
     tag = "Account",
     security(("bearer" = [])),
-    params(("id" = String, Path, description = "API token id")),
+    params(("id" = i64, Path, description = "API token id")),
     responses(
         (status = 204, description = "Token deleted"),
         (status = 401, body = crate::problem::Problem),
@@ -231,13 +231,13 @@ pub async fn create_api_token_handler(
 pub async fn delete_api_token_handler(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    AxumPath(id): AxumPath<String>,
+    AxumPath(id): AxumPath<i64>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     let account_id = auth.account_id;
 
     let mut conn = state.db.acquire().await?;
     schema::ensure_accounts_schema(&mut conn).await?;
-    let deleted = api_tokens::delete_api_token(&mut conn, &account_id, &id).await?;
+    let deleted = api_tokens::delete_api_token(&mut conn, account_id, id).await?;
 
     if !deleted {
         return Err(ApiError::NotFound("API token not found".into()));
@@ -251,7 +251,7 @@ pub async fn delete_api_token_handler(
     path = "/v1/account/api-tokens/{id}",
     tag = "Account",
     security(("bearer" = [])),
-    params(("id" = String, Path, description = "API token id")),
+    params(("id" = i64, Path, description = "API token id")),
     request_body = RenameApiTokenRequest,
     responses(
         (status = 200, body = RenameApiTokenResponse),
@@ -265,27 +265,23 @@ pub async fn delete_api_token_handler(
 pub async fn rename_api_token_handler(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    AxumPath(id): AxumPath<String>,
+    AxumPath(id): AxumPath<i64>,
     Json(req): Json<RenameApiTokenRequest>,
 ) -> Result<Json<RenameApiTokenResponse>, ApiError> {
     let account_id = auth.account_id;
     let label = req.label;
-    let id_for_resp = id.clone();
 
     let mut conn = state.db.acquire().await?;
     schema::ensure_accounts_schema(&mut conn).await?;
     let trimmed = label.trim().to_string();
-    let ok = api_tokens::update_api_token_label(&mut conn, &account_id, &id, &trimmed)
+    let ok = api_tokens::update_api_token_label(&mut conn, account_id, id, &trimmed)
         .await
         .map_err(map_label_error)?;
 
     if !ok {
         return Err(ApiError::NotFound("API token not found".into()));
     }
-    Ok(Json(RenameApiTokenResponse {
-        id: id_for_resp,
-        label: trimmed,
-    }))
+    Ok(Json(RenameApiTokenResponse { id, label: trimmed }))
 }
 
 #[cfg(test)]
@@ -344,7 +340,7 @@ mod tests {
         .await;
         assert_eq!(
             location,
-            format!("/v1/account/api-tokens/{}", body["id"].as_str().unwrap())
+            format!("/v1/account/api-tokens/{}", body["id"].as_i64().unwrap())
         );
 
         assert_eq!(
@@ -358,7 +354,7 @@ mod tests {
         let can_delete: i64 = sqlx::query_scalar(
             "SELECT can_delete FROM account_api_tokens WHERE account_id = $1 AND label = $2",
         )
-        .bind(&account.account_id)
+        .bind(account.account_id)
         .bind("cli token")
         .fetch_one(&mut *conn)
         .await

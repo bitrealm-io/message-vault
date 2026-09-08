@@ -44,7 +44,7 @@ pub fn infer_handle_type_from_shape(handle: &str) -> HandleType {
 /// inserted a flagged (review-note) row.
 pub async fn upsert_handle_row(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     raw: &str,
     handle_type: HandleType,
     service: Option<&str>,
@@ -85,7 +85,7 @@ pub async fn upsert_handle_row(
 pub async fn upsert_handle_row_cached(
     conn: &mut AnyConnection,
     cache: &mut HandleIdCache,
-    account_id: &str,
+    account_id: i64,
     raw: &str,
     handle_type: HandleType,
     service: Option<&str>,
@@ -111,7 +111,7 @@ mod tests {
     use super::*;
     use crate::db::schema;
 
-    const TEST_ACCOUNT: &str = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const TEST_ACCOUNT: i64 = 7;
 
     #[tokio::test]
     async fn upsert_handle_row_cached_reuses_id_without_second_row() {

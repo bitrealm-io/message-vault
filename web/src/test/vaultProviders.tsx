@@ -52,7 +52,7 @@ export function renderWithVault(ui: ReactElement, options?: RenderOptions): Rend
  * changing account id is a different cache entry by design.
  */
 export const mockedAuth = {
-  accountId: "test-account",
+  accountId: 7,
   token: "test-token",
   isAuthenticated: true,
 };

@@ -12,7 +12,7 @@ const getVaultSettings = vi.hoisted(() => vi.fn());
 const updateVaultSettings = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/auth", () => ({
-  useAuth: () => ({ logout: vi.fn(), updateToken: vi.fn(), accountId: "owner" }),
+  useAuth: () => ({ logout: vi.fn(), updateToken: vi.fn(), accountId: 1 }),
 }));
 
 vi.mock("../lib/vaultApi", async (importOriginal) => ({
@@ -23,7 +23,7 @@ vi.mock("../lib/vaultApi", async (importOriginal) => ({
 }));
 
 const anAccount = {
-  account_id: "a1",
+  account_id: 101,
   username: "bob",
   disabled: false,
   must_change_password: false,

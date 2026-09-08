@@ -21,7 +21,7 @@ use crate::db::handles::{
 /// is never renamed by an import.
 pub(super) async fn ensure_contact_for_handle(
     tx: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     handle_id: i64,
     backup_name: Option<&str>,
     stats: &mut ImportStats,
@@ -59,7 +59,7 @@ pub(super) async fn ensure_contact_for_handle(
 /// Returns the contact and the display name to record on the participant.
 pub(super) async fn resolve_name_only_participant(
     tx: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     name: Option<&str>,
 ) -> Result<(Option<i64>, Option<String>)> {
     let Some(name) = name.and_then(trimmed) else {
@@ -97,7 +97,7 @@ pub(super) struct IncomingSender<'a> {
 pub(super) async fn resolve_incoming_sender_handle(
     tx: &mut AnyConnection,
     cache: &mut HandleIdCache,
-    account_id: &str,
+    account_id: i64,
     sender: IncomingSender<'_>,
     stats: &mut ImportStats,
 ) -> Result<Option<i64>> {
@@ -133,7 +133,7 @@ pub(super) async fn resolve_incoming_sender_handle(
 /// to that contact.
 pub(super) async fn ensure_sibling_contact_link(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     handle_id: i64,
 ) -> Result<Option<i64>> {
     if let Some(existing) = contacts::contact_id_for_handle(conn, account_id, handle_id).await? {

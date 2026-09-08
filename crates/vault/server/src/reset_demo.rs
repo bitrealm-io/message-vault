@@ -110,7 +110,7 @@ const DEMO_IMPORT_SOURCES: [DemoImportSource; 3] = [
 ];
 
 /// Print the "preparing replacement" header both reset transports share.
-fn print_reset_header(account_id: &str, prepared: &PreparedBundle, db: &dyn std::fmt::Display) {
+fn print_reset_header(account_id: i64, prepared: &PreparedBundle, db: &dyn std::fmt::Display) {
     println!("Reset demo — preparing replacement");
     println!("  account:      {account_id}");
     for source in &DEMO_IMPORT_SOURCES {
@@ -127,7 +127,7 @@ fn print_reset_header(account_id: &str, prepared: &PreparedBundle, db: &dyn std:
 /// (but continue) when some attachments fail conversion.
 async fn dedupe_and_process_assets(
     cfg: &Config,
-    account_id: &str,
+    account_id: i64,
     target: DbTarget<'_>,
 ) -> Result<(dedupe::DedupeStats, process_assets::ProcessAssetsStats)> {
     let (db, db_url) = match target {
@@ -242,7 +242,7 @@ fn refuse_url_config(cfg: &Config) -> Result<()> {
 async fn prepare_config_and_reset(
     bundle: &Path,
     config_dest: &Path,
-    account_id: &str,
+    account_id: i64,
     db_url: Option<&str>,
 ) -> Result<ResetPreparedStats> {
     validate_prepared_bundle(bundle)?;
@@ -294,7 +294,7 @@ async fn prepare_config_and_reset(
 async fn reset_prepared_bundle_at_url(
     cfg: &Config,
     bundle: &Path,
-    account_id: &str,
+    account_id: i64,
     db_url: &str,
 ) -> Result<ResetPreparedStats> {
     let prepared = validate_prepared_bundle(bundle)?;
@@ -306,7 +306,7 @@ async fn reset_prepared_bundle_at_url(
 async fn reset_prepared_bundle(
     cfg: &Config,
     bundle: &Path,
-    account_id: &str,
+    account_id: i64,
     config_dest: &Path,
     prepared_config: &Path,
 ) -> Result<ResetPreparedStats> {
@@ -340,8 +340,8 @@ async fn reset_prepared_bundle(
     .await?;
 
     verify_non_demo_state_preserved(&cfg.paths.db, &prepared_db, account_id).await?;
-    let active_account = cfg.paths.data_dir.join(account_id);
-    let prepared_account = temporary_cfg.paths.data_dir.join(account_id);
+    let active_account = cfg.paths.data_dir.join(account_id.to_string());
+    let prepared_account = temporary_cfg.paths.data_dir.join(account_id.to_string());
     let paths = ResetPaths {
         active_db: &cfg.paths.db,
         prepared_db: &prepared_db,
@@ -389,7 +389,7 @@ async fn install_reset_state_or_keep_work(
 async fn rebuild_demo_account(
     cfg: &Config,
     prepared: &PreparedBundle,
-    account_id: &str,
+    account_id: i64,
     target: DbTarget<'_>,
 ) -> Result<ResetPreparedStats> {
     wipe_demo_account(cfg, account_id, target).await?;
@@ -410,7 +410,7 @@ async fn rebuild_demo_account(
 async fn import_demo_sources(
     cfg: &Config,
     prepared: &PreparedBundle,
-    account_id: &str,
+    account_id: i64,
     target: DbTarget<'_>,
 ) -> Result<import::ImportStats> {
     let mut totals = import::ImportStats::default();
@@ -584,7 +584,7 @@ fn sqlite_sidecar(db: &Path, suffix: &str) -> PathBuf {
 async fn verify_non_demo_state_preserved(
     active: &Path,
     prepared: &Path,
-    demo_id: &str,
+    demo_id: i64,
 ) -> Result<()> {
     if !active.is_file() {
         return Ok(());
@@ -600,7 +600,7 @@ async fn verify_non_demo_state_preserved(
 }
 
 /// Row counts per table for every account except the demo one, used to prove a reset changed nothing else.
-async fn non_demo_state(db: &Path, demo_id: &str) -> Result<BTreeMap<String, i64>> {
+async fn non_demo_state(db: &Path, demo_id: i64) -> Result<BTreeMap<i64, i64>> {
     let pool = engine::open_pool_for_path(db)
         .await
         .with_context(|| format!("open {} to verify non-demo accounts", db.display()))?;
@@ -632,7 +632,7 @@ async fn non_demo_state(db: &Path, demo_id: &str) -> Result<BTreeMap<String, i64
     .await?;
     let mut state = BTreeMap::new();
     for row in rows {
-        let account_id: String = row.try_get(0)?;
+        let account_id: i64 = row.try_get(0)?;
         let message_count: i64 = row.try_get(1)?;
         state.insert(account_id, message_count);
     }
@@ -940,7 +940,7 @@ fn load_demo_seed(path: &Path) -> Result<DemoSeed> {
 }
 
 /// Open the target database and seed the demo account row and profile.
-async fn seed_demo_account(target: DbTarget<'_>, account_id: &str, seed: &DemoSeed) -> Result<()> {
+async fn seed_demo_account(target: DbTarget<'_>, account_id: i64, seed: &DemoSeed) -> Result<()> {
     let pool = target.open().await?;
     let mut conn = pool.acquire().await?;
     schema::ensure_vault_schema(&mut conn).await?;
@@ -986,7 +986,7 @@ async fn seed_demo_owner_on_conn(conn: &mut sqlx::AnyConnection) -> Result<()> {
 /// Create the demo account row and the profile fields the seed names, so the demo signs in without setup.
 async fn seed_demo_account_on_conn(
     conn: &mut sqlx::AnyConnection,
-    account_id: &str,
+    account_id: i64,
     seed: &DemoSeed,
 ) -> Result<()> {
     account_profile::ensure_account_row(conn, account_id).await?;
@@ -1048,7 +1048,7 @@ async fn seed_demo_account_on_conn(
 
 /// Delete the demo account's vault rows (child rows follow via CASCADE) and
 /// on-disk attachments. Leaves the database and other accounts intact.
-async fn wipe_demo_account(cfg: &Config, account_id: &str, target: DbTarget<'_>) -> Result<()> {
+async fn wipe_demo_account(cfg: &Config, account_id: i64, target: DbTarget<'_>) -> Result<()> {
     println!("Reset demo — clearing account data in {target}");
     let pool = target.open().await?;
     let mut conn = pool
@@ -1066,7 +1066,7 @@ async fn wipe_demo_account(cfg: &Config, account_id: &str, target: DbTarget<'_>)
     conn.close().await?;
     pool.close().await;
 
-    let account_root = cfg.paths.data_dir.join(account_id);
+    let account_root = cfg.paths.data_dir.join(account_id.to_string());
     remove_tree_if_exists(&account_root)?;
     Ok(())
 }

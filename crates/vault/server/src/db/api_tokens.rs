@@ -12,7 +12,7 @@ use crate::db::permissions::Permissions;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApiTokenRow {
     /// Token id (the secret itself is stored hashed, never in this row).
-    pub id: String,
+    pub id: i64,
     /// User-chosen label shown in Settings.
     pub label: String,
     /// What this token may do.
@@ -59,7 +59,7 @@ pub fn mask_api_token(token: &str) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApiTokenAuth {
     /// Account the token belongs to.
-    pub account_id: String,
+    pub account_id: i64,
     /// What this token may do (not yet intersected with its owner's grant).
     pub permissions: Permissions,
 }
@@ -114,7 +114,7 @@ pub async fn lookup_account_for_api_token(
     token: &str,
 ) -> Result<Option<ApiTokenAuth>> {
     let token_hash = hash_api_token(token);
-    let row: Option<(String, i64, i64, i64, Option<String>, i64)> = sqlx::query_as(
+    let row: Option<(i64, i64, i64, i64, Option<String>, i64)> = sqlx::query_as(
         "SELECT account_id, can_import, can_export, can_delete, expires_at, disabled
          FROM account_api_tokens WHERE token_hash = $1",
     )
@@ -157,8 +157,8 @@ pub async fn lookup_account_for_api_token(
 /// stores or returns the hash and the masked hint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreatedApiToken {
-    /// Token id (UUID).
-    pub id: String,
+    /// Token id.
+    pub id: i64,
     /// The validated (trimmed) label as stored.
     pub label: String,
     /// What this token may do.
@@ -177,27 +177,26 @@ pub struct CreatedApiToken {
 /// or longer than 120 characters, and `Other` for database failures.
 pub async fn create_api_token(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     label: &str,
     permissions: Permissions,
     expires_in_days: Option<u64>,
 ) -> Result<CreatedApiToken, ApiTokenMutationError> {
     let label = validate_api_token_label(label)?;
-    let id = uuid::Uuid::new_v4().to_string();
     let token = generate_api_token()?;
     let token_hash = hash_api_token(&token);
     let token_hint = mask_api_token(&token);
     let created_at = unix_secs_string();
     let expires_at = api_token_expiry(expires_in_days, &created_at);
     let label_owned = label.to_string();
-    sqlx::query(
+    let id: i64 = sqlx::query_scalar(
         r"
         INSERT INTO account_api_tokens
-            (id, account_id, label, token_hash, can_import, can_export, can_delete, token_hint, created_at, expires_at, disabled)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0)
+            (account_id, label, token_hash, can_import, can_export, can_delete, token_hint, created_at, expires_at, disabled)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0)
+        RETURNING id
         ",
     )
-    .bind(id.as_str())
     .bind(account_id)
     .bind(label_owned.as_str())
     .bind(token_hash.as_str())
@@ -207,7 +206,7 @@ pub async fn create_api_token(
     .bind(token_hint.as_str())
     .bind(created_at.as_str())
     .bind(expires_at.as_deref())
-    .execute(&mut *conn)
+    .fetch_one(&mut *conn)
     .await
     .with_context(|| format!("insert API token for {account_id}"))?;
     Ok(CreatedApiToken {
@@ -223,7 +222,7 @@ pub async fn create_api_token(
 /// Raw row for [`list_api_tokens`] before disabled/expiry mapping into
 /// [`ApiTokenRow`].
 type ApiTokenRowRaw = (
-    String,
+    i64,
     String,
     i64,
     i64,
@@ -242,7 +241,7 @@ type ApiTokenRowRaw = (
 /// Returns an error when the query fails.
 pub async fn list_api_tokens(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<Vec<ApiTokenRow>> {
     // `COLLATE NOCASE` is SQLite-only; Postgres lowercases the label instead.
     let order_by = if dialect::engine_of(conn) == DbEngine::Postgres {
@@ -292,11 +291,7 @@ pub async fn list_api_tokens(
 /// # Errors
 ///
 /// Returns an error when the delete statement fails.
-pub async fn delete_api_token(
-    conn: &mut AnyConnection,
-    account_id: &str,
-    id: &str,
-) -> Result<bool> {
+pub async fn delete_api_token(conn: &mut AnyConnection, account_id: i64, id: i64) -> Result<bool> {
     let n = sqlx::query("DELETE FROM account_api_tokens WHERE id = $1 AND account_id = $2")
         .bind(id)
         .bind(account_id)
@@ -312,7 +307,7 @@ pub async fn delete_api_token(
 /// # Errors
 ///
 /// Returns an error when the delete statement fails.
-pub async fn delete_all_api_tokens(conn: &mut AnyConnection, account_id: &str) -> Result<u64> {
+pub async fn delete_all_api_tokens(conn: &mut AnyConnection, account_id: i64) -> Result<u64> {
     let deleted = sqlx::query("DELETE FROM account_api_tokens WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut *conn)
@@ -328,8 +323,8 @@ pub async fn delete_all_api_tokens(conn: &mut AnyConnection, account_id: &str) -
 /// or longer than 120 characters, and `Other` for database failures.
 pub async fn update_api_token_label(
     conn: &mut AnyConnection,
-    account_id: &str,
-    id: &str,
+    account_id: i64,
+    id: i64,
     label: &str,
 ) -> Result<bool, ApiTokenMutationError> {
     let label = validate_api_token_label(label)?;
@@ -379,13 +374,11 @@ mod tests {
     #[tokio::test]
     async fn create_list_lookup_delete() {
         let vault = crate::test_support::test_vault().await;
-        let account_id = vault
-            .account_with_id("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "alice")
-            .await;
+        let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
         let created = create_api_token(
             &mut conn,
-            &account_id,
+            account_id,
             " laptop CLI ",
             Permissions {
                 import: false,
@@ -416,7 +409,7 @@ mod tests {
             "mv-app-Sd..mE"
         );
 
-        let listed = list_api_tokens(&mut conn, &account_id).await.unwrap();
+        let listed = list_api_tokens(&mut conn, account_id).await.unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].id, id);
         assert_eq!(listed[0].label, "laptop CLI");
@@ -445,7 +438,7 @@ mod tests {
             }
         );
 
-        let listed_after = list_api_tokens(&mut conn, &account_id).await.unwrap();
+        let listed_after = list_api_tokens(&mut conn, account_id).await.unwrap();
         assert!(listed_after[0].last_accessed_at.is_some());
 
         assert!(
@@ -455,9 +448,9 @@ mod tests {
                 .is_none()
         );
 
-        assert!(delete_api_token(&mut conn, &account_id, &id).await.unwrap());
+        assert!(delete_api_token(&mut conn, account_id, id).await.unwrap());
         assert!(
-            list_api_tokens(&mut conn, &account_id)
+            list_api_tokens(&mut conn, account_id)
                 .await
                 .unwrap()
                 .is_empty()
@@ -473,12 +466,10 @@ mod tests {
     #[tokio::test]
     async fn empty_label_rejected() {
         let vault = crate::test_support::test_vault().await;
-        let account_id = vault
-            .account_with_id("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "alice")
-            .await;
+        let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
         assert!(
-            create_api_token(&mut conn, &account_id, "  ", Permissions::all(), None)
+            create_api_token(&mut conn, account_id, "  ", Permissions::all(), None)
                 .await
                 .is_err()
         );
@@ -487,38 +478,31 @@ mod tests {
     #[tokio::test]
     async fn rename_label() {
         let vault = crate::test_support::test_vault().await;
-        let account_id = vault
-            .account_with_id("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "alice")
-            .await;
+        let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
-        let id = create_api_token(&mut conn, &account_id, "old name", Permissions::all(), None)
+        let id = create_api_token(&mut conn, account_id, "old name", Permissions::all(), None)
             .await
             .unwrap()
             .id;
         assert!(
-            update_api_token_label(&mut conn, &account_id, &id, " new name ")
+            update_api_token_label(&mut conn, account_id, id, " new name ")
                 .await
                 .unwrap()
         );
-        let listed = list_api_tokens(&mut conn, &account_id).await.unwrap();
+        let listed = list_api_tokens(&mut conn, account_id).await.unwrap();
         assert_eq!(listed[0].label, "new name");
         assert!(
-            update_api_token_label(&mut conn, &account_id, &id, "  ")
+            update_api_token_label(&mut conn, account_id, id, "  ")
                 .await
                 .is_err()
         );
         assert!(
-            !update_api_token_label(
-                &mut conn,
-                "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-                &id,
-                "stolen"
-            )
-            .await
-            .unwrap()
+            !update_api_token_label(&mut conn, 102, id, "stolen")
+                .await
+                .unwrap()
         );
         assert_eq!(
-            list_api_tokens(&mut conn, &account_id).await.unwrap()[0].label,
+            list_api_tokens(&mut conn, account_id).await.unwrap()[0].label,
             "new name"
         );
     }
@@ -526,12 +510,10 @@ mod tests {
     #[tokio::test]
     async fn label_validation_errors_are_typed() {
         let vault = crate::test_support::test_vault().await;
-        let account_id = vault
-            .account_with_id("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "alice")
-            .await;
+        let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
 
-        let err = create_api_token(&mut conn, &account_id, "  ", Permissions::all(), None)
+        let err = create_api_token(&mut conn, account_id, "  ", Permissions::all(), None)
             .await
             .unwrap_err();
         match err {
@@ -543,7 +525,7 @@ mod tests {
 
         let err = create_api_token(
             &mut conn,
-            &account_id,
+            account_id,
             &"x".repeat(121),
             Permissions::all(),
             None,

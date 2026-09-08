@@ -27,7 +27,7 @@ import {
 import { keys } from "./vaultKeys";
 
 vi.mock("./auth", () => ({
-  useAuth: () => ({ accountId: "account-1" }),
+  useAuth: () => ({ accountId: 7 }),
 }));
 
 let client: QueryClient;
@@ -62,9 +62,9 @@ function groupsOver(routes: NameCollectionRoutes) {
   });
 }
 
-const KEY = ["vault", "account-1", "contact-groups"];
-const PAGE_KEY = ["vault", "account-1", "contacts", "list", ""];
-const DETAIL_KEY = ["vault", "account-1", "contacts", "detail", "1"];
+const KEY = ["vault", 7, "contact-groups"];
+const PAGE_KEY = ["vault", 7, "contacts", "list", ""];
+const DETAIL_KEY = ["vault", 7, "contacts", "detail", "1"];
 
 /** A contact list page and an open contact, as the two queries would hold them. */
 function seedContacts(): void {
@@ -148,8 +148,8 @@ describe("useNameCollectionActions", () => {
     const invalidated = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidated).toEqual(
       expect.arrayContaining([
-        ["vault", "account-1", "contact-groups"],
-        ["vault", "account-1", "contacts"],
+        ["vault", 7, "contact-groups"],
+        ["vault", 7, "contacts"],
       ]),
     );
   });
@@ -313,8 +313,8 @@ describe("useSetNamedSetMembers", () => {
     const { result } = renderHook(() => useSetNamedSetMembers(groupsOver(routes)), { wrapper });
     await result.current.mutateAsync({ name: "Family", patch: { add: [1] } });
     expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toEqual([
-      ["vault", "account-1", "contact-groups"],
-      ["vault", "account-1", "contacts"],
+      ["vault", 7, "contact-groups"],
+      ["vault", 7, "contacts"],
     ]);
   });
 

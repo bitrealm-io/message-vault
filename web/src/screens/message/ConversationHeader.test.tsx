@@ -41,12 +41,15 @@ const PROFILE = {
   phones: ["+15550100"],
   emails: [],
   is_owner: false,
+  disabled: false,
   must_change_password: false,
   must_set_up_profile: false,
   is_demo: false,
   can_import: true,
   can_export: true,
   can_delete: true,
+  message_count: 0,
+  storage_bytes: 0,
 };
 
 /** A group chat: the owner, two people with contacts, one nobody has a contact for. */

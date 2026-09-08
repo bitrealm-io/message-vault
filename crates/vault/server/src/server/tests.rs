@@ -366,7 +366,7 @@ async fn try_demo_route_is_gone() {
 
 #[tokio::test]
 async fn local_auth_routes_exist() {
-    for path in ["/v1/auth/register", "/v1/session"] {
+    for path in ["/v1/accounts", "/v1/session"] {
         assert_ne!(auth_route_status(path).await, StatusCode::NOT_FOUND);
     }
 }
@@ -857,7 +857,7 @@ async fn import_endpoint_honors_can_import_flag() {
     assert_eq!(
         crate::test_support::patch_status(
             &state,
-            &format!("/v1/owner/accounts/{}", user.account_id),
+            &format!("/v1/accounts/{}", user.account_id),
             &owner.token,
             serde_json::json!({ "can_import": false }),
         )
@@ -873,7 +873,7 @@ async fn import_endpoint_honors_can_import_flag() {
     assert_eq!(
         crate::test_support::patch_status(
             &state,
-            &format!("/v1/owner/accounts/{}", user.account_id),
+            &format!("/v1/accounts/{}", user.account_id),
             &owner.token,
             serde_json::json!({ "can_import": true }),
         )
@@ -903,7 +903,7 @@ async fn export_endpoint_honors_can_export_flag() {
     assert_eq!(
         crate::test_support::patch_status(
             &state,
-            &format!("/v1/owner/accounts/{}", user.account_id),
+            &format!("/v1/accounts/{}", user.account_id),
             &owner.token,
             serde_json::json!({ "can_export": false }),
         )
@@ -919,7 +919,7 @@ async fn export_endpoint_honors_can_export_flag() {
     assert_eq!(
         crate::test_support::patch_status(
             &state,
-            &format!("/v1/owner/accounts/{}", user.account_id),
+            &format!("/v1/accounts/{}", user.account_id),
             &owner.token,
             serde_json::json!({ "can_export": true }),
         )
@@ -1062,7 +1062,7 @@ async fn a_wrong_password_is_401_and_the_limit_answers_429_with_retry_after() {
         Some("invalid username or password")
     );
 
-    for _ in 1..crate::auth::AUTH_RATE_MAX {
+    for _ in 1..crate::credentials::AUTH_RATE_MAX {
         assert_eq!(login().await.unwrap().status(), StatusCode::UNAUTHORIZED);
     }
     let limited = login().await.unwrap();
@@ -1079,7 +1079,7 @@ async fn a_wrong_password_is_401_and_the_limit_answers_429_with_retry_after() {
         crate::problem::ProblemType::RateLimited,
     );
     assert_eq!(problem.retry_after, Some(retry_after));
-    assert!((1..=crate::auth::AUTH_RATE_WINDOW.as_secs()).contains(&retry_after));
+    assert!((1..=crate::credentials::AUTH_RATE_WINDOW.as_secs()).contains(&retry_after));
 }
 
 /// `Accept` is checked on the `/v1` routes that produce JSON and nowhere

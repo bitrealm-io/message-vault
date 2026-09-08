@@ -965,7 +965,7 @@ const DEMO_OWNER_PASSWORD: &str = "admin";
 /// is written directly, the way the demo account's own row is, which is what
 /// lets the password be shorter than the policy allows.
 async fn seed_demo_owner_on_conn(conn: &mut sqlx::AnyConnection) -> Result<()> {
-    let hash = crate::auth::hash_password(DEMO_OWNER_PASSWORD)?;
+    let hash = crate::credentials::hash_password(DEMO_OWNER_PASSWORD)?;
     sqlx::query(
         r"
         INSERT INTO accounts (id, username, password_hash)

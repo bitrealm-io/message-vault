@@ -33,7 +33,7 @@ export function ChangePasswordSection({ disabled = false }: { disabled?: boolean
     try {
       const res = await changePassword({
         current_password: currentPw,
-        new_password: newPw,
+        password: newPw,
       });
       // Changing the password rotates the session, so the old token is dead.
       if (res.token) updateToken(res.token);

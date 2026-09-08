@@ -12,16 +12,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./api";
 import {
+  changePassword,
+  createAccount,
+  createApiToken,
   createContactGroup,
   createMessageTag,
+  deleteAccount,
+  deleteAccountById,
+  deleteAccountMessages,
+  deleteAllMessages,
   deleteApiToken,
   deleteContactGroup,
   deleteMessageTag,
   discardImport,
+  getAccountProfile,
+  getAccountStorage,
   getContact,
   getConversation,
   getConversationSources,
   getImport,
+  listAccounts,
+  listApiTokens,
   listContactGroupMembers,
   listContactGroups,
   listContacts,
@@ -31,7 +42,10 @@ import {
   listMessageTags,
   listSavedSearches,
   listSearchFields,
+  setAccountPassword,
   setImportStage,
+  updateAccount,
+  updateAccountProfile,
   updateContact,
   updateContactGroup,
   updateContactGroupMembers,
@@ -48,10 +62,13 @@ vi.mock("./api", () => ({
     patch: vi.fn().mockResolvedValue({}),
     delete: vi.fn().mockResolvedValue({}),
   },
+  // The signed-in account, as `auth.tsx` records it after sign-in.
+  getAccountId: () => 7,
 }));
 
 const get = vi.mocked(apiClient.get);
 const post = vi.mocked(apiClient.post);
+const put = vi.mocked(apiClient.put);
 const patch = vi.mocked(apiClient.patch);
 const del = vi.mocked(apiClient.delete);
 
@@ -155,9 +172,9 @@ describe("verbs", () => {
     });
   });
 
-  it("deletes an API token at its own id", async () => {
+  it("deletes an API token at its own id, under the signed-in account", async () => {
     await deleteApiToken(1);
-    expect(del).toHaveBeenCalledWith("/v1/account/api-tokens/1");
+    expect(del).toHaveBeenCalledWith("/v1/accounts/7/api-tokens/1");
   });
 
   it("reads saved searches with GET", async () => {
@@ -232,5 +249,53 @@ describe("Contact Groups and Message Tags are addressed by id", () => {
       { add: [1], remove: [] },
       undefined,
     );
+  });
+});
+
+describe("accounts are one collection", () => {
+  it("lists and creates on /v1/accounts, for the owner and for a stranger alike", async () => {
+    await listAccounts();
+    expect(lastPath(get)).toBe("/v1/accounts");
+    await createAccount({ username: "carol", password: "hunter2hunter2" });
+    expect(post).toHaveBeenCalledWith("/v1/accounts", {
+      username: "carol",
+      password: "hunter2hunter2",
+    });
+  });
+
+  it("addresses the signed-in account by the id the session carries", async () => {
+    await getAccountProfile();
+    expect(lastPath(get)).toBe("/v1/accounts/7");
+    await updateAccountProfile({ preferred_name: "Ada" });
+    expect(patch).toHaveBeenCalledWith("/v1/accounts/7", { preferred_name: "Ada" });
+    await changePassword({ current_password: "old", password: "newer-one" });
+    expect(put).toHaveBeenCalledWith("/v1/accounts/7/password", {
+      current_password: "old",
+      password: "newer-one",
+    });
+    await deleteAccount({ confirm: true, current_password: "old" });
+    expect(del).toHaveBeenCalledWith("/v1/accounts/7", { confirm: true, current_password: "old" });
+    await deleteAllMessages({ confirm: true });
+    expect(del).toHaveBeenCalledWith("/v1/accounts/7/messages", { confirm: true });
+    await getAccountStorage();
+    expect(lastPath(get)).toBe("/v1/accounts/7/storage");
+  });
+
+  it("addresses another account by the id the owner names", async () => {
+    await updateAccount(12, { disabled: true });
+    expect(patch).toHaveBeenCalledWith("/v1/accounts/12", { disabled: true });
+    await setAccountPassword(12, { password: "resetbytheowner" });
+    expect(put).toHaveBeenCalledWith("/v1/accounts/12/password", { password: "resetbytheowner" });
+    await deleteAccountMessages(12);
+    expect(del).toHaveBeenCalledWith("/v1/accounts/12/messages");
+    await deleteAccountById(12);
+    expect(del).toHaveBeenCalledWith("/v1/accounts/12");
+  });
+
+  it("keeps API tokens under the signed-in account", async () => {
+    await listApiTokens();
+    expect(lastPath(get)).toBe("/v1/accounts/7/api-tokens");
+    await createApiToken({ label: "cli" });
+    expect(post).toHaveBeenCalledWith("/v1/accounts/7/api-tokens", { label: "cli" });
   });
 });

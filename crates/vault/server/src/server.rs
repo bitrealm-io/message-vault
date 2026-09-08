@@ -1,9 +1,10 @@
 //! Router assembly, shared state, auth resolution, and HTTP plumbing.
 //!
-//! Domain handlers live in their own modules: `auth` (login and session),
-//! `profile` (account settings), `contacts_api`, `conversations_api`,
-//! `export_api` (messages and counts), `import` (JSONL ingest and import
-//! sessions), and `assets` (asset bytes and multipart uploads). This module
+//! Domain handlers live in their own modules: `session_api` (signing in and
+//! out), `accounts_api` (the accounts collection), `api_tokens_api`,
+//! `contacts_api`, `conversations_api`, `export_api` (messages and counts),
+//! `import` (JSONL ingest and Import Runs), and `assets` (asset bytes and
+//! multipart uploads). This module
 //! keeps the pieces they share: [`AppState`], [`ApiError`], Bearer token
 //! resolution, body-streaming helpers, and `http_app`, which assembles the
 //! router.
@@ -124,9 +125,9 @@ pub fn require_owner(auth: &AuthIdentity) -> Result<(), ApiError> {
 }
 
 /// Allow any signed-in person, vault owner or ordinary account, and reject
-/// API tokens. The guard for the routes a principal points at its own record —
-/// changing its password, reading and editing its profile — which the vault
-/// owner needs as much as anyone.
+/// API tokens. The guard for the routes under `/v1/accounts/{id}`, where a
+/// handler then decides whether the caller is the owner or the account
+/// itself; the owner needs them for its own row as much as anyone.
 ///
 /// # Errors
 ///
@@ -228,6 +229,25 @@ impl axum::extract::FromRequestParts<AppState> for AuthIdentity {
     }
 }
 
+/// `auth: Option<AuthIdentity>`, for the one route a stranger and the owner
+/// share, `POST /v1/accounts`: `None` when no `Authorization` header was
+/// sent, the resolved credential when one was, and the usual `401` or `403`
+/// when the header names nothing usable. A bad credential is never quietly
+/// treated as no credential.
+impl axum::extract::OptionalFromRequestParts<AppState> for AuthIdentity {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        state: &AppState,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        if parts.headers.get(header::AUTHORIZATION).is_none() {
+            return Ok(None);
+        }
+        resolve_auth(&parts.headers, state).await.map(Some)
+    }
+}
+
 /// Define a newtype extractor that resolves the Bearer credential and runs one
 /// `require_*` capability check, so a route cannot compile without its guard.
 macro_rules! auth_guard {
@@ -283,12 +303,6 @@ auth_guard!(
     require_import_or_export_access
 );
 auth_guard!(
-    /// Credential that may destroy message data; wraps
-    /// [`require_delete_access`].
-    DeleteAccess,
-    require_delete_access
-);
-auth_guard!(
     /// Signed-in session whose account may destroy message data; wraps
     /// [`require_full_delete_access`].
     FullDeleteAccess,
@@ -314,7 +328,7 @@ pub struct AppState {
     /// Sliding-window hit counts for the unauthenticated auth endpoints. Held
     /// here, not in a static, so tests in one binary cannot rate-limit each
     /// other; a served vault has a single state, so the limit still spans it.
-    pub(crate) auth_rate_limits: crate::auth::AuthRateLimits,
+    pub(crate) auth_rate_limits: crate::credentials::AuthRateLimits,
     /// Multipart / asset size limits from `[server]` (env may override part size).
     pub(crate) upload_limits: asset_uploads::UploadLimits,
     /// Axum request body cap (single PUT or one part); equals `asset_max_bytes`.
@@ -701,9 +715,11 @@ fn build_cors_layer(origins: &[String]) -> CorsLayer {
         .allow_headers(AllowHeaders::mirror_request())
 }
 
-/// The public auth routes with a small body limit, so password hashing cannot be fed huge requests.
+/// The routes a stranger may call, with a small body limit so password
+/// hashing cannot be fed huge requests. `POST /v1/accounts` is among them:
+/// the owner's creation shares the route, and a small body is all it needs.
 fn limited_auth_router() -> (Router<AppState>, utoipa::openapi::OpenApi) {
-    let (router, spec) = crate::openapi::auth_public_openapi().split_for_parts();
+    let (router, spec) = crate::openapi::public_openapi().split_for_parts();
     (
         // Auth JSON is tiny; keep a tight limit so Argon2 abuse cannot ship 512 MiB bodies.
         router.layer(RequestBodyLimitLayer::new(32 * 1024)),
@@ -1024,7 +1040,7 @@ pub async fn resolve_auth_on_conn(
 
     // A session on the owner's account resolves to `Owner`, which carries no
     // permissions. An API token never does, whichever account issued it, so
-    // no token can reach `/v1/owner/*`.
+    // no token can reach what the owner reaches.
     let capability = match credential {
         Credential::Session if account_profile::is_vault_owner(account_id) => AuthCapability::Owner,
         Credential::Session => AuthCapability::Session {

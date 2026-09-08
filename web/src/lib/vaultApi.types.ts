@@ -21,29 +21,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/account": {
+    "/v1/accounts": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        post?: never;
         /**
-         * Permanently delete the account and its data directory. The body carries
-         *     the confirmation and the current password: a credential belongs in a
-         *     body, not in a URL or a header of the vault's own invention, and a DELETE
-         *     body has no defined meaning in RFC 9110 but is not forbidden.
+         * List the accounts this vault holds, with their flags, message count, and
+         *     storage use. The owner's own account is not among them: the list holds
+         *     the users of this vault, and the owner is not one of them.
          */
-        delete: operations["delete_account_handler"];
+        get: operations["list_accounts"];
+        put?: never;
+        /**
+         * Create an account.
+         * @description The vault owner may always: the owner picks the first password and the
+         *     account holder replaces it at first sign-in, so the owner's choice survives
+         *     one session and no longer. A stranger with no credential may while the
+         *     vault is open, and is signed in on creation. Registering is the vault's
+         *     only self-service door, shut unless the owner has opened it; an unclaimed
+         *     vault is shut too, because its first act is being claimed, not being
+         *     joined.
+         */
+        post: operations["create_account"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/account/api-tokens": {
+    "/v1/accounts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one account: the owner reads any, an account reads its own. */
+        get: operations["get_account"];
+        put?: never;
+        post?: never;
+        /**
+         * Permanently delete an account: login, profile, contacts, and every
+         *     message it owns, with its data directory.
+         * @description The vault owner deletes any account outright, the demo account included,
+         *     which is how a demo vault is cleared into a real one. An account deletes
+         *     itself with a body carrying the confirmation and its current password: a
+         *     credential belongs in a body, not in a URL or a header of the vault's own
+         *     invention, and a DELETE body has no defined meaning in RFC 9110 but is not
+         *     forbidden. The demo account refuses its own deletion, and nobody deletes
+         *     the owner.
+         */
+        delete: operations["delete_account"];
+        options?: never;
+        head?: never;
+        /**
+         * Change an account. The account itself sets its display name, time zone
+         *     and handles; the vault owner sets another account's disabled flag and
+         *     its import, export and delete permissions. A field the caller may not
+         *     set answers `403 Forbidden`, and the reloaded account is the answer.
+         */
+        patch: operations["patch_account"];
+        trace?: never;
+    };
+    "/v1/accounts/{id}/api-tokens": {
         parameters: {
             query?: never;
             header?: never;
@@ -51,20 +94,20 @@ export interface paths {
             cookie?: never;
         };
         /** List the account's named API tokens with their permissions and masked secrets. */
-        get: operations["list_api_tokens_handler"];
+        get: operations["list_api_tokens"];
         put?: never;
         /**
          * Create a named API token. Returns the plaintext secret once, at creation;
          *     it is never returned again.
          */
-        post: operations["create_api_token_handler"];
+        post: operations["create_api_token"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/account/api-tokens/{id}": {
+    "/v1/accounts/{id}/api-tokens/{token_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -75,14 +118,14 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete one named API token. Requests using it start failing on the next call. */
-        delete: operations["delete_api_token_handler"];
+        delete: operations["delete_api_token"];
         options?: never;
         head?: never;
         /** Rename one named API token. The label is trimmed before storing. */
-        patch: operations["rename_api_token_handler"];
+        patch: operations["rename_api_token"];
         trace?: never;
     };
-    "/v1/account/messages": {
+    "/v1/accounts/{id}/messages": {
         parameters: {
             query?: never;
             header?: never;
@@ -93,16 +136,19 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Delete every conversation, message, and attachment for the account.
-         *     Contacts and the account login survive.
+         * Destroy one account's conversations, messages, and attachments. The
+         *     account itself, its contacts, and its login survive.
+         * @description The vault owner may, on any account. The account itself may with a
+         *     credential that carries the `delete` scope, session or API token, and
+         *     confirms in the body.
          */
-        delete: operations["delete_messages_handler"];
+        delete: operations["delete_account_messages"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/account/password": {
+    "/v1/accounts/{id}/password": {
         parameters: {
             query?: never;
             header?: never;
@@ -111,10 +157,14 @@ export interface paths {
         };
         get?: never;
         /**
-         * Verify the current password, store the new one, revoke API tokens, and
-         *     issue a fresh session token.
+         * Set an account's password.
+         * @description An account changing its own must supply the current one; the change
+         *     revokes its API tokens and answers `200` with a rotated session token.
+         *     The vault owner sets another account's without the current one and
+         *     answers `204`: that account's sessions end, and its holder signs in with
+         *     the new password and is made to replace it.
          */
-        put: operations["change_password_handler"];
+        put: operations["set_account_password"];
         post?: never;
         delete?: never;
         options?: never;
@@ -122,7 +172,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/account/profile": {
+    "/v1/accounts/{id}/storage": {
         parameters: {
             query?: never;
             header?: never;
@@ -130,34 +180,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Load the signed-in account's profile: username, display name, linked
-         *     handles, and the demo flag.
+         * Attachment storage usage for an account: total bytes, count, and the 100
+         *     largest files. The owner reads any account's; an account reads its own.
          */
-        get: operations["account_profile_handler"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Update the account's display name and linked handles, then return the
-         *     reloaded profile.
-         */
-        patch: operations["account_profile_update_handler"];
-        trace?: never;
-    };
-    "/v1/account/storage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Attachment storage usage for the account: total bytes, count, and the 100
-         *     largest files.
-         */
-        get: operations["account_storage_handler"];
+        get: operations["get_account_storage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -256,23 +282,6 @@ export interface paths {
         /** Write one part of a chunked asset upload. */
         put: operations["asset_upload_part_handler"];
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/register": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create a local vault account and return its session token. */
-        post: operations["register_handler"];
         delete?: never;
         options?: never;
         head?: never;
@@ -832,102 +841,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/owner/accounts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List the accounts this vault holds, with their flags, message count, and
-         *     storage use. The owner's own account is not among them.
-         */
-        get: operations["owner_list_accounts"];
-        put?: never;
-        /**
-         * Create an account. The owner picks the first password and the account
-         *     holder replaces it at first sign-in, so the owner's choice survives one
-         *     session and no longer.
-         */
-        post: operations["owner_create_account"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/owner/accounts/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Permanently delete an account: login, profile, contacts, and every message
-         *     it owns. The demo account is deleted like any other, which is how a demo
-         *     vault is cleared into a real one.
-         */
-        delete: operations["owner_delete_account"];
-        options?: never;
-        head?: never;
-        /**
-         * Change an account's disabled flag or its import, export and delete
-         *     permissions.
-         * @description Clearing `can_import` or `can_export` also narrows every API token that
-         *     account has already issued, because a token's permissions are intersected
-         *     with its account's on every request. The owner restrains the account and
-         *     the tokens follow, without ever seeing one.
-         */
-        patch: operations["owner_patch_account"];
-        trace?: never;
-    };
-    "/v1/owner/accounts/{id}/messages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Destroy one account's conversations, messages, and attachments. The
-         *     account itself, its contacts, and its login survive.
-         */
-        delete: operations["owner_delete_account_messages"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/owner/accounts/{id}/password": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Set an account's password. Invalidates that account's existing session
-         *     (unlike a self-service password change, which leaves other sessions alone)
-         *     — after this call the account holder must sign in again with the new
-         *     password, and replace it once they do.
-         */
-        put: operations["owner_set_account_password"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/saved-searches": {
         parameters: {
             query?: never;
@@ -1102,11 +1015,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description The signed-in account's profile. */
-        AccountProfileResponse: {
+        /**
+         * @description One account: who it is, what it may do, and how much it holds. The owner
+         *     and the account itself both read the whole struct; nothing in it is a
+         *     message.
+         */
+        AccountResponse: {
             /**
              * Format: int64
-             * @description The signed-in account id.
+             * @description Account id.
              */
             account_id: number;
             /** @description May destroy message data. */
@@ -1115,12 +1032,19 @@ export interface components {
             can_export: boolean;
             /** @description May call the import endpoints. */
             can_import: boolean;
+            /** @description May not sign in. */
+            disabled: boolean;
             /** @description Email addresses linked to the account. */
             emails: string[];
             /** @description True for the seeded demo account (cannot be deleted). */
             is_demo: boolean;
             /** @description True for the vault owner: manages accounts, holds no messages. */
             is_owner: boolean;
+            /**
+             * Format: int64
+             * @description Messages this account owns.
+             */
+            message_count: number;
             /**
              * @description The vault owner chose this password; it must be replaced before the
              *     account can be used.
@@ -1138,26 +1062,17 @@ export interface components {
             /** @description Display name, when set. */
             preferred_name?: string | null;
             /**
+             * Format: int64
+             * @description Attachment bytes this account owns.
+             */
+            storage_bytes: number;
+            /**
              * @description IANA time zone every message time, day and year is shown in, for
              *     example `America/New_York`. Chosen at profile setup.
              */
             time_zone: string;
-            /** @description Account username (falls back to the account id). */
+            /** @description Login username. */
             username: string;
-        };
-        /** @description Display name and handle changes. */
-        AccountProfileUpdateRequest: {
-            /** @description Handles to add/link onto the account profile. */
-            handles?: components["schemas"]["ProfileHandleInput"][];
-            /** @description Display name to set; `None` (or empty) leaves the current name unchanged. */
-            preferred_name?: string | null;
-            /** @description Handles to unlink from the account profile. */
-            remove_handles?: components["schemas"]["ProfileHandleInput"][];
-            /**
-             * @description IANA time zone to set, for example `America/New_York`; `None` leaves
-             *     the current zone unchanged. An unknown name is a 400.
-             */
-            time_zone?: string | null;
         };
         /** @description Attachment usage and the largest files. */
         AccountStorageResponse: {
@@ -1254,18 +1169,6 @@ export interface components {
             sha256?: string | null;
             /** @description OCR/ASR transcription, when processed. */
             transcription?: string | null;
-        };
-        /** @description Current and new password. */
-        ChangePasswordRequest: {
-            /** @description The account's current password. */
-            current_password: string;
-            /** @description Replacement password. */
-            new_password: string;
-        };
-        /** @description Fresh session token issued after the password change. */
-        ChangePasswordResponse: {
-            /** @description Replacement session token after password change (previous sessions are revoked). */
-            token: string;
         };
         /** @description Body for claiming a vault. */
         ClaimVaultRequest: {
@@ -1532,14 +1435,18 @@ export interface components {
             /** @description Message tags on this conversation. */
             tags: string[];
         };
-        /** @description Body for creating an account as the vault owner. */
+        /** @description Body for creating an account, by the vault owner or by a stranger. */
         CreateAccountRequest: {
             /**
-             * @description Initial password. Must satisfy the vault's password policy. The
-             *     account holder is made to replace it at first sign-in, so it survives
-             *     exactly one session.
+             * @description Local password. The owner must give one, and the account holder
+             *     replaces it at first sign-in. A stranger may leave it absent or empty
+             *     to open an account with no password.
              */
-            password: string;
+            password?: string | null;
+            /** @description Phone number linked to the account. */
+            phone?: string | null;
+            /** @description Display name shown in the vault. */
+            preferred_name?: string | null;
             /** @description Login username. */
             username: string;
         };
@@ -1623,6 +1530,17 @@ export interface components {
             /** @description Login username. */
             username: string;
         };
+        /**
+         * @description The account that was created, and the Session a stranger's registration
+         *     opens on it. The owner's creation opens no session, so `token` is absent.
+         */
+        CreatedAccountResponse: components["schemas"]["AccountResponse"] & {
+            /**
+             * @description Session token to send as `Authorization: Bearer …`. Present only when
+             *     a stranger registered, because they are signed in on creation.
+             */
+            token?: string | null;
+        };
         /** @description Cross-source dedupe outcome. */
         DedupeResponse: {
             /** Format: int64 */
@@ -1634,16 +1552,22 @@ export interface components {
             /** Format: int64 */
             near_flagged: number;
         };
-        /** @description Confirmation flag and the current password when one is set. */
+        /**
+         * @description Confirmation flag and the current password when one is set: the body an
+         *     account sends to delete itself. The owner sends none.
+         */
         DeleteAccountRequest: {
             /** @description Must be `true`; anything else is rejected. */
             confirm: boolean;
             /** @description Required when the account has a local password. */
             current_password?: string | null;
         };
-        /** @description Confirmation flag for deleting all messages. */
+        /**
+         * @description Confirmation flag: the body an account sends to delete its own messages.
+         *     The owner sends none.
+         */
         DeleteMessagesRequest: {
-            /** @description Must be `true`; anything else is rejected with a 400. */
+            /** @description Must be `true`; anything else is rejected. */
             confirm: boolean;
         };
         /** @description Counts of deleted conversations and attachment rows. */
@@ -1930,7 +1854,7 @@ export interface components {
         /** @description Every account in the vault except the owner's own. */
         ListAccountsResponse: {
             /** @description One row per account. */
-            items: components["schemas"]["ManagedAccount"][];
+            items: components["schemas"]["AccountResponse"][];
         };
         /** @description The account's named API tokens. */
         ListApiTokensResponse: {
@@ -1943,39 +1867,6 @@ export interface components {
          * @enum {string}
          */
         ListKind: "contacts" | "conversations" | "messages";
-        /**
-         * @description One account as the vault owner sees it: who it is and what it holds, never
-         *     what it says.
-         */
-        ManagedAccount: {
-            /**
-             * Format: int64
-             * @description Account id.
-             */
-            account_id: number;
-            /** @description May destroy message data. */
-            can_delete: boolean;
-            /** @description May call the export endpoints. */
-            can_export: boolean;
-            /** @description May call the import endpoints. */
-            can_import: boolean;
-            /** @description May not sign in. */
-            disabled: boolean;
-            /**
-             * Format: int64
-             * @description Messages this account owns.
-             */
-            message_count: number;
-            /** @description Still carries the password the owner chose, and must replace it. */
-            must_change_password: boolean;
-            /**
-             * Format: int64
-             * @description Attachment bytes this account owns.
-             */
-            storage_bytes: number;
-            /** @description Login username. */
-            username: string;
-        };
         /** @description Member ids of one set, ascending. */
         MemberIdList: {
             items: number[];
@@ -2332,7 +2223,11 @@ export interface components {
              */
             service?: string | null;
         };
-        /** @description Body for changing an account's flags. Omitted fields are left alone. */
+        /**
+         * @description Body for changing an account. Omitted fields are left alone. The name,
+         *     zone and handles are the account's own to set; the disabled flag and the
+         *     three permissions are the vault owner's.
+         */
         PatchAccountRequest: {
             /** @description Allow or forbid deleting message data. */
             can_delete?: boolean | null;
@@ -2342,6 +2237,17 @@ export interface components {
             can_import?: boolean | null;
             /** @description Disable or re-enable sign-in. */
             disabled?: boolean | null;
+            /** @description Handles to add/link onto the account profile. */
+            handles?: components["schemas"]["ProfileHandleInput"][];
+            /** @description Display name to set; `None` (or empty) leaves the current name unchanged. */
+            preferred_name?: string | null;
+            /** @description Handles to unlink from the account profile. */
+            remove_handles?: components["schemas"]["ProfileHandleInput"][];
+            /**
+             * @description IANA time zone to set, for example `America/New_York`; `None` leaves
+             *     the current zone unchanged. An unknown name is a 422.
+             */
+            time_zone?: string | null;
         };
         /** @description Body for changing the vault's settings. Omitted fields are left alone. */
         PatchVaultSettingsRequest: {
@@ -2407,17 +2313,6 @@ export interface components {
             handle: string;
             /** @description Platform the handle belongs to: `phone`, `email`, or `whatsapp`. */
             service: string;
-        };
-        /** @description Body for local account registration. */
-        RegisterRequest: {
-            /** @description Local password; absent or empty registers an account without one. */
-            password?: string | null;
-            /** @description Phone number linked to the account. */
-            phone?: string | null;
-            /** @description Display name shown in the vault. */
-            preferred_name?: string | null;
-            /** @description Login username. */
-            username: string;
         };
         /** @description Body for renaming a token. */
         RenameApiTokenRequest: {
@@ -2499,10 +2394,20 @@ export interface components {
         SetImportStageResponse: {
             stage: string;
         };
-        /** @description Body for the vault owner setting someone's password. */
+        /** @description The new password, and the current one when an account changes its own. */
         SetPasswordRequest: {
+            /**
+             * @description The account's current password. Required when an account changes its
+             *     own; ignored when the vault owner sets another account's.
+             */
+            current_password?: string | null;
             /** @description The new password. Must satisfy the vault's password policy. */
             password: string;
+        };
+        /** @description Fresh session token issued after an account changed its own password. */
+        SetPasswordResponse: {
+            /** @description Replacement session token (the previous one is revoked). */
+            token: string;
         };
         /** @description One tapback reaction on an exported message. */
         Tapback: {
@@ -2612,7 +2517,42 @@ export interface operations {
             };
         };
     };
-    delete_account_handler: {
+    list_accounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListAccountsResponse"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_account: {
         parameters: {
             query?: never;
             header?: never;
@@ -2621,7 +2561,125 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DeleteAccountRequest"];
+                "application/json": components["schemas"]["CreateAccountRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    /** @description Path of the new account */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedAccountResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The vault is closed, or the credential is not the owner's */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Username taken */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountResponse"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    delete_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account id to delete */
+                id: number;
+            };
+            cookie?: never;
+        };
+        /** @description Sent by an account deleting itself; the owner sends no body */
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["DeleteAccountRequest"];
             };
         };
         responses: {
@@ -2656,6 +2714,14 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2666,11 +2732,80 @@ export interface operations {
             };
         };
     };
-    list_api_tokens_handler: {
+    patch_account: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /** @description Account id to change */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchAccountRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_api_tokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Account id; must be the caller's own */
+                id: number;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -2701,11 +2836,14 @@ export interface operations {
             };
         };
     };
-    create_api_token_handler: {
+    create_api_token: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /** @description Account id; must be the caller's own */
+                id: number;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -2748,15 +2886,25 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
-    delete_api_token_handler: {
+    delete_api_token: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description API token id */
+                /** @description Account id; must be the caller's own */
                 id: number;
+                /** @description API token id */
+                token_id: number;
             };
             cookie?: never;
         };
@@ -2795,13 +2943,15 @@ export interface operations {
             };
         };
     };
-    rename_api_token_handler: {
+    rename_api_token: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description API token id */
+                /** @description Account id; must be the caller's own */
                 id: number;
+                /** @description API token id */
+                token_id: number;
             };
             cookie?: never;
         };
@@ -2861,16 +3011,20 @@ export interface operations {
             };
         };
     };
-    delete_messages_handler: {
+    delete_account_messages: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /** @description Account whose messages are destroyed */
+                id: number;
+            };
             cookie?: never;
         };
-        requestBody: {
+        /** @description Sent by an account deleting its own messages; the owner sends no body */
+        requestBody?: {
             content: {
-                "application/json": components["schemas"]["DeleteMessagesRequest"];
+                "application/json": null | components["schemas"]["DeleteMessagesRequest"];
             };
         };
         responses: {
@@ -2906,6 +3060,14 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2916,26 +3078,37 @@ export interface operations {
             };
         };
     };
-    change_password_handler: {
+    set_account_password: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /** @description Account id whose password is set */
+                id: number;
+            };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ChangePasswordRequest"];
+                "application/json": components["schemas"]["SetPasswordRequest"];
             };
         };
         responses: {
+            /** @description Own password changed; the rotated session token */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ChangePasswordResponse"];
+                    "application/json": components["schemas"]["SetPasswordResponse"];
                 };
+            };
+            /** @description Password set by the vault owner; the account's sessions are ended */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: {
                 headers: {
@@ -2961,89 +3134,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    account_profile_handler: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccountProfileResponse"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    account_profile_update_handler: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AccountProfileUpdateRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AccountProfileResponse"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3061,11 +3152,14 @@ export interface operations {
             };
         };
     };
-    account_storage_handler: {
+    get_account_storage: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /** @description Account id */
+                id: number;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -3087,6 +3181,14 @@ export interface operations {
                 };
             };
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3540,57 +3642,6 @@ export interface operations {
                 };
             };
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    register_handler: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RegisterRequest"];
-            };
-        };
-        responses: {
-            /** @description Session issued */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionTokenResponse"];
-                };
-            };
-            /** @description Invalid input */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Public registration is off */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Rate limited */
-            429: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5753,312 +5804,6 @@ export interface operations {
                 };
             };
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    owner_list_accounts: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListAccountsResponse"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    owner_create_account: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateAccountRequest"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    /** @description Path of the new account */
-                    Location?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ManagedAccount"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    owner_delete_account: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Account id to delete */
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Account deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    owner_patch_account: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Account id to modify */
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PatchAccountRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ManagedAccount"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    owner_delete_account_messages: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Account whose messages are destroyed */
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeleteMessagesResponse"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    owner_set_account_password: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Account id whose password is set */
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetPasswordRequest"];
-            };
-        };
-        responses: {
-            /** @description Password set */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
                 headers: {
                     [name: string]: unknown;
                 };

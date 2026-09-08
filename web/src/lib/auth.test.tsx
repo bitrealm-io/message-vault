@@ -17,12 +17,18 @@ const getCurrentWindow = vi.fn();
 
 let currentToken: string | null = null;
 
+let currentAccountId: number | null = null;
+
 vi.mock("./api", () => ({
   setToken: (token: string | null) => {
     currentToken = token;
     setTokenFn(token);
   },
   getToken: () => currentToken,
+  setAccountId: (id: number | null) => {
+    currentAccountId = id;
+  },
+  getAccountId: () => currentAccountId,
   setBaseUrl: (...args: unknown[]) => setBaseUrl(...args),
 }));
 

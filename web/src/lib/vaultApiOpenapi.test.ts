@@ -95,16 +95,16 @@ const EXERCISED: Record<string, () => unknown> = {
   // Accounts
   listAccounts: () => vaultApi.listAccounts(),
   createAccount: () => vaultApi.createAccount({ username: "matt", password: "hunter2hunter2" }),
-  updateAccount: () => vaultApi.updateAccount(9, { display_name: "Matt" }),
-  setAccountPassword: () => vaultApi.setAccountPassword(9, { new_password: "hunter2hunter2" }),
+  updateAccount: () => vaultApi.updateAccount(9, { preferred_name: "Matt" }),
+  setAccountPassword: () => vaultApi.setAccountPassword(9, { password: "hunter2hunter2" }),
   deleteAccountById: () => vaultApi.deleteAccountById(9),
   deleteAccountMessages: () => vaultApi.deleteAccountMessages(9),
   getAccountProfile: () => vaultApi.getAccountProfile(),
-  updateAccountProfile: () => vaultApi.updateAccountProfile({ display_name: "Matt" }),
+  updateAccountProfile: () => vaultApi.updateAccountProfile({ preferred_name: "Matt" }),
   changePassword: () =>
     vaultApi.changePassword({
       current_password: "hunter2hunter2",
-      new_password: "hunter3hunter3",
+      password: "hunter3hunter3",
     }),
   deleteAccount: () =>
     vaultApi.deleteAccount({ confirm: true, current_password: "hunter2hunter2" }),
@@ -137,9 +137,9 @@ const EXERCISED: Record<string, () => unknown> = {
   // Contacts
   listContacts: () => vaultApi.listContacts({ q: "" }),
   getContact: () => vaultApi.getContact(42),
-  updateContact: () => vaultApi.updateContact(42, { preferred_name: "Sam" }),
-  getContactSummaries: () => vaultApi.getContactSummaries({ contact_ids: [1, 2] }),
-  unmatchedHandles: () => vaultApi.unmatchedHandles({ handles: ["+15555550100"] }),
+  updateContact: () => vaultApi.updateContact(42, { name: "Sam" }),
+  getContactSummaries: () => vaultApi.getContactSummaries({ ids: [1, 2] }),
+  unmatchedHandles: () => vaultApi.unmatchedHandles({ identifiers: ["+15555550100"] }),
   loadAddressBook: () => vaultApi.loadAddressBook("BEGIN:VCARD\nEND:VCARD\n", "text/vcard"),
   trashContact: () => vaultApi.trashContact(42),
   restoreContact: () => vaultApi.restoreContact(42),
@@ -171,7 +171,7 @@ const EXERCISED: Record<string, () => unknown> = {
   // Imports
   listImports: () => vaultApi.listImports(),
   getImport: () => vaultApi.getImport(4),
-  createImport: () => vaultApi.createImport({ source_label: "iPhone" }),
+  createImport: () => vaultApi.createImport({ source: "iPhone" }),
   setImportStage: () => vaultApi.setImportStage(4, { stage: "staged" }),
   completeImport: () => vaultApi.completeImport(4, {}),
   discardImport: () => vaultApi.discardImport(4),

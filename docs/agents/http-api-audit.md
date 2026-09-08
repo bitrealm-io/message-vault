@@ -29,9 +29,10 @@ and `#481` then added `/v1/owner/vault-settings` whose handlers live in
 
 ## Findings
 
-Twenty-one findings. Each names the evidence.
+Twenty-four findings. Each names the evidence. A5 to A7 were found by
+classifying the failures for the RFC 7807 work, not by reading the paths.
 
-### A. Status codes (4 findings)
+### A. Status codes (7 findings)
 
 **A1. No route returns `201 Created`, and no route sends a `Location` header.**
 Seven creating POSTs answer `200 OK`: `/v1/contact-groups`, `/v1/message-tags`,
@@ -43,7 +44,7 @@ creates a resource cannot learn its URL from the response.
 **A2. Two kinds of validation failure answer with two different statuses.**
 A JSON body that fails to deserialize passes Axum's `422 Unprocessable Entity`
 straight through, deliberately (`crates/vault/server/src/extract.rs:122`). The
-vault's own validation never uses it: all 78 `ApiError::BadRequest` sites
+vault's own validation never uses it: all 61 `ApiError::BadRequest` sites
 answer `400 Bad Request` with a single message
 (`crates/vault/server/src/server.rs:381`), so a form with four bad fields
 reports one of them at a time.
@@ -58,6 +59,24 @@ exists either.
 (`crates/vault/server/src/auth.rs:40`) guards login, register and vault claim
 over a 60-second window. Nothing in the published docs says the limit exists
 or what it is.
+
+**A5. Authentication failures answer `400 Bad Request`, not
+`401 Unauthorized`.** A wrong password on login, and a wrong current password
+on account delete, are both `ApiError::BadRequest`
+(`crates/vault/server/src/auth.rs`). The status says the request was malformed
+when the request was fine and the credential was not.
+
+**A6. A duplicate username answers `400 Bad Request`, not `409 Conflict`.**
+Registration refuses a taken username with `BadRequest`
+(`crates/vault/server/src/auth.rs`), while a duplicate Contact Group, Message
+Tag or Saved Search name already answers `409 Conflict`. The interface
+disagrees with itself about what a name collision is.
+
+**A7. A missing import `Content-Type` answers `400 Bad Request`, not
+`415 Unsupported Media Type`.** `import/mod.rs` refuses a body with no
+`Content-Type` using `BadRequest`, while the same module answers
+`415 Unsupported Media Type` for a `Content-Type` it does not accept. Absent
+and wrong are the same class of failure.
 
 ### B. Resource-oriented naming (9 findings)
 
@@ -207,8 +226,10 @@ What the change touches:
 
 - 118 `ApiError` construction sites across `crates/vault/server/src`, each of
   which carries a message today and needs a problem type.
-- 78 of those are `ApiError::BadRequest`. Classifying them is the whole cost of
-  the change; everything else is mechanical.
+- 61 of those are `ApiError::BadRequest` outside test modules. Classifying them
+  is the whole cost of the change; everything else is mechanical. The first
+  pass is `docs/agents/http-api-problem-types.md`, which collapses them into
+  fifteen problem types.
 - The web client reads `message` off a `VaultApiError` parsed once in
   `web/src/lib/api.ts`; that parse moves to `title` and `detail`.
 - Finding A2 closes with it: the vault's own validation moves to
@@ -218,32 +239,54 @@ What the change touches:
   validation problems as a `Vec<String>` (`pipeline.rs:87`), which is the shape
   `errors` wants.
 
-Three sub-questions follow from the shape and are not yet answered:
+Two sub-questions are settled and one is not:
 
-1. **What the `type` URL points at.** RFC 7807 wants a URL a reader can open.
-   That means a page per problem type under
-   `bitrealm.io/vault/developer/errors/`, or the RFC-legal `about:blank` for
-   problems that carry no more meaning than their status.
-2. **How fine the taxonomy is.** One type per status code costs almost nothing
-   and adds nothing a client could not already read from the status. A type per
-   distinct problem is what makes the body machine-readable, and it means
-   classifying all 78 `BadRequest` sites.
-3. **Whether a request id travels in the body.** RFC 7807 allows extension
-   members, so `request_id` can sit beside `detail` and tie a client's failure
-   to the server log line that already records the full context chain
-   (`server.rs:390`). The referenced specification carries no such field.
+1. **The `type` URL points at a real page.** Each problem type gets a page under
+   `bitrealm.io/vault/developer/errors/`, and `type` is that page's URL. Only
+   `500 Internal Server Error` uses `about:blank`, because a page about it could
+   say nothing a reader could act on.
+2. **The taxonomy is per problem, not per status.** The first pass is
+   `docs/agents/http-api-problem-types.md`: fifteen types covering the 61
+   `BadRequest` sites and the other `ApiError` variants.
+3. **Whether a request id travels in the body is still open.** See the question
+   below.
+
+**Sorting is a request parameter, in one spelling, on every list.**
+`sort=-field,field`, comma-separated keys with a `-` prefix for descending, on
+all five list routes. Each route declares which columns it accepts, and an unlisted
+column is a `400 Bad Request` naming the column, matching how the search
+language already refuses an unknown word. This closes findings E1 and E2.
+
+**Filtering stays in the search language, and `fields=` is refused.** ADR-0004
+already says a query only narrows while sort order is a request parameter, so
+query parameters never filter: `q=date:>2019` is the vault's range operator and
+there will not be a second one. `fields=` selection is refused because it turns
+one resource into many shapes, and `web/` generates its types from
+`docs/src/assets/openapi.json`, where a response whose fields depend on a
+parameter can only be typed with every field optional, which is the `?? []` and
+`as`
+casts ADR-0005 exists to have deleted. Pagination already bounds the payload
+size that `fields=` exists to reduce.
 
 ## Open questions
 
-Two remain from the original three. Each changes what the written rule says.
+Two remain. Each changes what the written rule says.
 
-1. **Filtering and sorting.** The search language (ADR-0004) already filters
-   inside `q`. Adopt a standard `sort=-field,field` convention across all five
-   list routes while leaving filtering to the search language, and reject
-   `fields=` selection as contrary to ADR-0005's "a thing is returned as
-   itself"?
+1. **Whether a request id travels in the error body.** The vault deliberately
+   splits what a client sees from what the operator sees: a `500 Internal
+   Server Error` answers one stable sentence while the whole context chain goes
+   to the log (`crates/vault/server/src/server.rs:390`). Nothing joins the two
+   halves, so a person reporting a failure and the log line recording it can
+   only be matched by timestamp. A request id is the join. The vault already
+   runs a `TraceLayer` span per request (`server.rs:600`) and already depends on
+   `tower-http`, whose `request-id` feature is not enabled; turning it on gives
+   `SetRequestIdLayer` and `PropagateRequestIdLayer`. The question is whether
+   the id travels in the response, and where: an `x-request-id` header only, a
+   `request_id` extension member on every problem, or RFC 7807's own `instance`
+   member, which the specification defines as a URI identifying the specific
+   occurrence.
 2. **Content negotiation.** Is `406 Not Acceptable` worth implementing for an
    interface that speaks only `application/json`, given Export selects its
    format by query parameter rather than by `Accept`? The answer now also has
-   to cover `application/problem+json`, which the decision above adds as a
+   to cover `application/problem+json`, which the error decision adds as a
    second response type.

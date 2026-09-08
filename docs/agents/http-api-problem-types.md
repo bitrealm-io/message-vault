@@ -1,0 +1,58 @@
+# HTTP problem type registry
+
+Draft. The vault's failures classified into problem types, one per RFC 7807
+`type` URL. Each type gets a page under `bitrealm.io/vault/developer/errors/`,
+and the `type` member points at it.
+
+Sixty-one `ApiError::BadRequest` sites in `crates/vault/server/src` (excluding
+test modules) plus the other `ApiError` variants collapse into fifteen types.
+Classifying them is what the RFC 7807 decision costs; this file is the first
+pass.
+
+## The types
+
+| Slug | Status | Raised when |
+|---|---|---|
+| `validation-failed` | `422 Unprocessable Entity` | One or more fields break a rule. `errors` lists every failure, not the first. |
+| `missing-parameter` | `400 Bad Request` | A required query parameter or body field is absent. |
+| `malformed-body` | `400 Bad Request` | The body cannot be read, or is not valid JSON or JSONL. |
+| `unsupported-media-type` | `415 Unsupported Media Type` | `Content-Type` is absent or not one the route accepts. |
+| `payload-too-large` | `413 Payload Too Large` | The body is over the configured cap. |
+| `invalid-credentials` | `401 Unauthorized` | A username, password, or current-password check failed. |
+| `rate-limited` | `429 Too Many Requests` | The auth rate limiter refused the attempt. Carries `Retry-After`. |
+| `username-taken` | `409 Conflict` | Registration or a rename collides with an existing username. |
+| `name-taken` | `409 Conflict` | A Contact Group, Message Tag, or Saved Search name collides. |
+| `demo-account-protected` | `403 Forbidden` | The demo account refuses a destructive operation. |
+| `not-the-owner` | `403 Forbidden` | The account is not the vault owner. |
+| `search-query-invalid` | `400 Bad Request` | The search language refused a word. Extension members `word` and `did_you_mean`, per ADR-0004. |
+| `import-state-invalid` | `409 Conflict` | The import session is not in a state that allows the operation. |
+| `asset-upload-invalid` | `400 Bad Request` | A part number, upload id, or completion does not match the upload. |
+| `not-found` | `404 Not Found` | The addressed resource does not exist for this account. |
+
+`500 Internal Server Error` keeps its single stable sentence and gets no type
+page: its `type` is `about:blank`, because a page describing it could say
+nothing a reader could act on.
+
+## Where the sites land
+
+| Module | Sites | Types they become |
+|---|---|---|
+| `auth.rs` | 18 | `validation-failed`, `invalid-credentials`, `username-taken`, `demo-account-protected` |
+| `import/mod.rs` | 12 | `validation-failed`, `missing-parameter`, `malformed-body`, `unsupported-media-type`, `import-state-invalid` |
+| `assets.rs` | 9 | `missing-parameter`, `malformed-body`, `asset-upload-invalid` |
+| `paging.rs` | 3 | `validation-failed` |
+| `contacts_api.rs` | 4 | `validation-failed` |
+| `server.rs`, `extract.rs` | 6 | `malformed-body` |
+| `vault_api.rs`, `owner_api.rs`, `api_tokens_api.rs`, `profile.rs`, `conversations_api.rs` | 8 | `validation-failed` |
+| `search/error.rs` | 1 | `search-query-invalid` |
+
+Sixteen of the sixty-one pass an inner error's `Display` through as the
+message (`e.to_string()`). Those are the ones classification actually changes:
+today they carry whatever sentence the layer below produced, with no type at
+all.
+
+## What classifying found
+
+Three sites answer with the wrong status code today, which only became visible
+once the failures were grouped by what went wrong. They are recorded as
+findings A5, A6 and A7 in `http-api-audit.md`.

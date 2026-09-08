@@ -82,7 +82,7 @@ const developerItems = [
   {
     label: 'HTTP problem types',
     collapsed: true,
-    autogenerate: { directory: 'vault/developer/reference/errors' },
+    items: [{ autogenerate: { directory: 'vault/developer/reference/errors' } }],
   },
   {
     label: 'HTTP API reference',

@@ -184,9 +184,9 @@ describe("verbs", () => {
 });
 
 describe("import session routes", () => {
-  it("addresses a stage change by session id", async () => {
+  it("patches the run to move its stage", async () => {
     await setImportStage(9, { stage: "parse" });
-    expect(post).toHaveBeenCalledWith("/v1/imports/9/stage", { stage: "parse" });
+    expect(patch).toHaveBeenCalledWith("/v1/imports/9", { stage: "parse" });
   });
 
   it("addresses a discard by session id", async () => {

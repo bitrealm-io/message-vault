@@ -1104,14 +1104,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -1198,14 +1190,6 @@
             "name": "source",
             "in": "query",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "string"
             }
@@ -1309,14 +1293,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -1409,14 +1385,6 @@
             "name": "source",
             "in": "query",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "string"
             }
@@ -1531,14 +1499,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -1622,14 +1582,6 @@
             "name": "source",
             "in": "query",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "string"
             }
@@ -1733,14 +1685,6 @@
             "name": "source",
             "in": "query",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "string"
             }
@@ -4172,6 +4116,15 @@
               "type": "integer",
               "minimum": 0
             }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "`started_at` or `-started_at`. Default `-started_at`, newest first.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -4371,6 +4324,103 @@
             "bearer": []
           }
         ]
+      },
+      "patch": {
+        "tags": [
+          "Import"
+        ],
+        "summary": "Move a live import session to another stage.",
+        "description": "The stage is a field of the run, so moving it is a `PATCH` of the run\nrather than a `POST` to a `stage` sub-resource: a path segment names a\nresource, and `stage` is not one (`docs/agents/http-api-rules.md`,\n\"Naming a route\"). The answer is the run itself, the same shape\n`GET /v1/imports/{id}` returns, so a caller reads one record wherever it\nasks.",
+        "operationId": "imports_patch_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Import session id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetImportStageBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/v1/imports/{id}/batches": {
@@ -4382,42 +4432,10 @@
         "operationId": "import_batch_handler",
         "parameters": [
           {
-            "name": "source",
-            "in": "query",
+            "name": "id",
+            "in": "path",
+            "description": "Import Run id",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "mode",
-            "in": "query",
-            "description": "Default append",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "dedupe",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "import_id",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "integer",
               "format": "int64"
@@ -4733,104 +4751,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DiscardImportResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/imports/{id}/stage": {
-      "post": {
-        "tags": [
-          "Import"
-        ],
-        "summary": "Move a live import session to another stage.",
-        "operationId": "imports_stage_handler",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Import session id",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetImportStageBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SetImportStageResponse"
                 }
               }
             }
@@ -8315,7 +8235,7 @@
             "description": "Lifecycle status (`running`, `completed`, `completed_with_issues`,\n`failed`, or `cancelled`)."
           },
           "summary": {
-            "description": "What the user approved at the last gate they passed, or null. The\ncolumn `POST /v1/imports/{id}/stage` writes with its `summary`."
+            "description": "What the user approved at the last gate they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
           },
           "tool": {
             "type": [
@@ -9477,7 +9397,7 @@
                   "description": "Lifecycle status (`running`, `completed`, `completed_with_issues`,\n`failed`, or `cancelled`)."
                 },
                 "summary": {
-                  "description": "What the user approved at the last gate they passed, or null. The\ncolumn `POST /v1/imports/{id}/stage` writes with its `summary`."
+                  "description": "What the user approved at the last gate they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
                 },
                 "tool": {
                   "type": [
@@ -10184,18 +10104,6 @@
           },
           "summary": {
             "description": "What the user approved at the gate they just passed, when they passed one.\n\nRecorded here rather than at completion so an approval survives a\nreload: the summary shown at a gate is recomputed from the folder, but\nwhat was approved is a different question and only the session\nremembers it. Absent leaves the stored `summary_json` untouched —\nmost stage changes carry nothing, and treating absent as null would\nthrow away the plan the outcome is later judged against."
-          }
-        }
-      },
-      "SetImportStageResponse": {
-        "type": "object",
-        "description": "Confirmation that the stage moved.",
-        "required": [
-          "stage"
-        ],
-        "properties": {
-          "stage": {
-            "type": "string"
           }
         }
       },

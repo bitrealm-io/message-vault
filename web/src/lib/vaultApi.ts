@@ -624,11 +624,12 @@ export function createImport(
   return apiClient.post<Schema["CreateImportResponse"]>("/v1/imports", body);
 }
 
+/** Move a live Import Run to another stage; the run comes back. */
 export function setImportStage(
   id: number,
   body: Schema["SetImportStageBody"],
-): Promise<Schema["SetImportStageResponse"]> {
-  return apiClient.post<Schema["SetImportStageResponse"]>(`/v1/imports/${id}/stage`, body);
+): Promise<Schema["ImportDetailResponse"]> {
+  return apiClient.patch<Schema["ImportDetailResponse"]>(`/v1/imports/${id}`, body);
 }
 
 export function completeImport(

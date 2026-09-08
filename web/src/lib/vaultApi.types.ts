@@ -733,7 +733,16 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Move a live import session to another stage.
+         * @description The stage is a field of the run, so moving it is a `PATCH` of the run
+         *     rather than a `POST` to a `stage` sub-resource: a path segment names a
+         *     resource, and `stage` is not one (`docs/agents/http-api-rules.md`,
+         *     "Naming a route"). The answer is the run itself, the same shape
+         *     `GET /v1/imports/{id}` returns, so a caller reads one record wherever it
+         *     asks.
+         */
+        patch: operations["imports_patch_handler"];
         trace?: never;
     };
     "/v1/imports/{id}/batches": {
@@ -804,23 +813,6 @@ export interface paths {
         put?: never;
         /** Discard a live import session, freeing the account's single slot. */
         post: operations["imports_discard_handler"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/imports/{id}/stage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Move a live import session to another stage. */
-        post: operations["imports_stage_handler"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1973,7 +1965,7 @@ export interface components {
             status: string;
             /**
              * @description What the user approved at the last gate they passed, or null. The
-             *     column `POST /v1/imports/{id}/stage` writes with its `summary`.
+             *     column `PATCH /v1/imports/{id}` writes with its `summary`.
              */
             summary: unknown;
             /** @description Importing tool, e.g. `vault-push`. */
@@ -2505,7 +2497,7 @@ export interface components {
                 status: string;
                 /**
                  * @description What the user approved at the last gate they passed, or null. The
-                 *     column `POST /v1/imports/{id}/stage` writes with its `summary`.
+                 *     column `PATCH /v1/imports/{id}` writes with its `summary`.
                  */
                 summary: unknown;
                 /** @description Importing tool, e.g. `vault-push`. */
@@ -2854,10 +2846,6 @@ export interface components {
              *     throw away the plan the outcome is later judged against.
              */
             summary?: unknown;
-        };
-        /** @description Confirmation that the stage moved. */
-        SetImportStageResponse: {
-            stage: string;
         };
         /** @description The new password, and the current one when an account changes its own. */
         SetPasswordRequest: {
@@ -3668,7 +3656,6 @@ export interface operations {
         parameters: {
             query: {
                 source: string;
-                account?: string;
             };
             header?: never;
             path: {
@@ -3734,7 +3721,6 @@ export interface operations {
         parameters: {
             query: {
                 source: string;
-                account?: string;
             };
             header?: never;
             path: {
@@ -3804,7 +3790,6 @@ export interface operations {
         parameters: {
             query: {
                 source: string;
-                account?: string;
             };
             header?: never;
             path: {
@@ -3869,7 +3854,6 @@ export interface operations {
         parameters: {
             query: {
                 source: string;
-                account?: string;
             };
             header?: never;
             path: {
@@ -3934,7 +3918,6 @@ export interface operations {
         parameters: {
             query: {
                 source: string;
-                account?: string;
             };
             header?: never;
             path: {
@@ -3991,7 +3974,6 @@ export interface operations {
         parameters: {
             query: {
                 source: string;
-                account?: string;
             };
             header?: never;
             path: {
@@ -4049,7 +4031,6 @@ export interface operations {
         parameters: {
             query: {
                 source: string;
-                account?: string;
             };
             header?: never;
             path: {
@@ -5672,6 +5653,8 @@ export interface operations {
                 limit?: number;
                 /** @description Rows to skip, at most 50000 */
                 offset?: number;
+                /** @description `started_at` or `-started_at`. Default `-started_at`, newest first. */
+                sort?: string;
             };
             header?: never;
             path?: never;
@@ -5817,18 +5800,80 @@ export interface operations {
             };
         };
     };
+    imports_patch_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Import session id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetImportStageBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDetailResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     import_batch_handler: {
         parameters: {
-            query: {
-                source: string;
-                account?: string;
-                /** @description Default append */
-                mode?: string;
-                dedupe?: boolean;
-                import_id?: number;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /** @description Import Run id */
+                id: number;
+            };
             cookie?: never;
         };
         /** @description message-ir JSONL as application/x-ndjson or application/jsonl. Attachments are uploaded first by SHA-256 through /v1/assets. */
@@ -6042,72 +6087,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiscardImportResponse"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    imports_stage_handler: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Import session id */
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetImportStageBody"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SetImportStageResponse"];
                 };
             };
             400: {

@@ -157,10 +157,12 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::trash_api::empty_trash_handler))
         .routes(routes!(crate::import::imports_list_handler))
         .routes(routes!(crate::import::imports_create_handler))
-        .routes(routes!(crate::import::imports_get_handler))
+        .routes(routes!(
+            crate::import::imports_get_handler,
+            crate::import::imports_patch_handler
+        ))
         .routes(routes!(crate::import::import_contacts_handler))
         .routes(routes!(crate::import::imports_complete_handler))
-        .routes(routes!(crate::import::imports_stage_handler))
         .routes(routes!(crate::import::imports_discard_handler))
         .routes(routes!(crate::import::import_batch_handler))
         .routes(routes!(crate::assets::asset_head_handler))

@@ -62,7 +62,9 @@ Turn on a local explorer with `[server] openapi_ui = true`, then open `/docs` on
 
 An import is an Import Run. `POST /v1/imports` creates one, naming the `source`, the `mode` (`replace` or `append`, default `append`) and whether to `dedupe` across sources afterwards (default false), and answers `201 Created` with its id. Each `POST /v1/imports/{id}/batches` adds one JSONL body to the run; the run's row says how the batch is imported, so the request carries nothing but the body. `POST /v1/imports/{id}/complete` records how the run ended, so Settings → Storage can list history. Messages promoted in the run store `messages.import_id`.
 
-There is no import without a run. A `replace` run wipes the source once, on its first batch, and appends every batch after that. An account has at most one running Import Run; `GET /v1/imports?status=running` finds it, and `GET /v1/imports` is a page of every run, newest first, narrowed by `status` to one of `running`, `completed`, `completed_with_issues`, `failed`, `cancelled`.
+There is no import without a run. A `replace` run wipes the source once, on its first batch, and appends every batch after that. An account has at most one running Import Run; `GET /v1/imports?status=running` finds it, and `GET /v1/imports` is a page of every run, newest first (`sort=started_at` for oldest first), narrowed by `status` to one of `running`, `completed`, `completed_with_issues`, `failed`, `cancelled`.
+
+`PATCH /v1/imports/{id}` moves a live run to another stage, carrying the plan approved at the gate it just passed in `summary` when there is one, and answers the run — the same record `GET /v1/imports/{id}` returns. The stage is a field of the run, so it is written with a `PATCH` rather than posted to a `stage` sub-resource.
 
 A batch opens its own SQLite connection so it does not hold the serve process’s short session mutex across JSONL and asset work. Same-account imports stay serialized. Export and auth open their own connections and can proceed under WAL while an import runs.
 

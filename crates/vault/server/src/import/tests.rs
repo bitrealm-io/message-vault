@@ -1,7 +1,7 @@
 use super::*;
 use crate::assets;
 use crate::test_support::{
-    TestVault, get_json, post_created_json, post_json, register_via_api, test_vault,
+    TestVault, get_json, patch_json, post_created_json, post_json, register_via_api, test_vault,
 };
 use tempfile::TempDir;
 
@@ -15,7 +15,7 @@ fn write_jsonl(dir: &Path, name: &str, body: &str) -> PathBuf {
 
 /// A vault holding one live import session at `awaiting_gate_1` whose
 /// `summary_json` already carries `summary` — as if an earlier
-/// `POST /v1/imports/{id}/stage` recorded a gate approval.
+/// `PATCH /v1/imports/{id}` recorded a gate approval.
 async fn session_with_summary(summary: serde_json::Value) -> (TestVault, String, i64) {
     let vault = test_vault().await;
     let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
@@ -70,9 +70,9 @@ async fn a_stage_change_with_a_summary_stores_it() {
     let import_id = created["id"].as_i64().unwrap();
     assert_eq!(location, format!("/v1/imports/{import_id}"));
 
-    post_json::<serde_json::Value>(
+    patch_json::<serde_json::Value>(
         &vault.state,
-        &format!("/v1/imports/{import_id}/stage"),
+        &format!("/v1/imports/{import_id}"),
         &account.token,
         serde_json::json!({"stage": "awaiting_gate_1", "summary": {"approved": true}}),
     )
@@ -109,13 +109,18 @@ async fn a_stage_change_without_a_summary_does_not_erase_the_stored_one() {
     let (vault, token, import_id) =
         session_with_summary(serde_json::json!({"approved": true})).await;
 
-    post_json::<serde_json::Value>(
+    let run: serde_json::Value = patch_json(
         &vault.state,
-        &format!("/v1/imports/{import_id}/stage"),
+        &format!("/v1/imports/{import_id}"),
         &token,
         serde_json::json!({"stage": "pushing"}),
     )
     .await;
+    assert_eq!(
+        run["id"],
+        serde_json::json!(import_id),
+        "a PATCH answers the run, the same record GET /v1/imports/{{id}} returns"
+    );
 
     assert_eq!(
         stored_summary(&vault, import_id).await,
@@ -679,10 +684,16 @@ async fn promote_stamps_messages_with_import_id() {
     assert_eq!(row.status, "completed");
     assert_eq!(row.message_count, 1);
 
-    let (listed, total) =
-        crate::db::vault_imports::list_imports_page(&mut conn, TEST_ACCOUNT, None, 10, 0)
-            .await
-            .unwrap();
+    let (listed, total) = crate::db::vault_imports::list_imports_page(
+        &mut conn,
+        TEST_ACCOUNT,
+        None,
+        &crate::db::vault_imports::DEFAULT_IMPORT_SORT,
+        10,
+        0,
+    )
+    .await
+    .unwrap();
     assert_eq!((listed.len(), total), (1, 1));
     assert_eq!(listed[0].source, "imessage");
     assert!(!listed[0].started_at.is_empty());

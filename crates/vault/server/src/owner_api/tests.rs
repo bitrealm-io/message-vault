@@ -415,9 +415,9 @@ async fn changing_the_password_clears_the_forced_change() {
     .await;
     let token = login["token"].as_str().unwrap();
 
-    let _changed: serde_json::Value = post_json(
+    let _changed: serde_json::Value = crate::test_support::put_json(
         &state,
-        "/v1/auth/change-password",
+        "/v1/account/password",
         token,
         serde_json::json!({
             "current_password": "hunter2hunter2",

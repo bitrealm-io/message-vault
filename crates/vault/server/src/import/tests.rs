@@ -90,17 +90,16 @@ async fn active_session_reports_the_summary_a_stage_change_stored() {
     // outcome once the run finishes — that is the intended history
     // record. But mid-session, between an approval and completion, a
     // reload has nowhere else to read the approved plan back from:
-    // GET /v1/imports/active must expose it too.
+    // the running run on GET /v1/imports?status=running must expose it too.
     let (vault, token, import_id) =
         session_with_summary(serde_json::json!({"approved": true})).await;
 
-    let active: serde_json::Value = get_json(&vault.state, "/v1/imports/active", &token).await;
+    let page: serde_json::Value =
+        get_json(&vault.state, "/v1/imports?status=running", &token).await;
+    let active = &page["items"][0];
 
-    assert_eq!(active["session"]["id"], serde_json::json!(import_id));
-    assert_eq!(
-        active["session"]["summary"],
-        serde_json::json!({"approved": true})
-    );
+    assert_eq!(active["id"], serde_json::json!(import_id));
+    assert_eq!(active["summary"], serde_json::json!({"approved": true}));
 }
 
 #[tokio::test]
@@ -680,10 +679,11 @@ async fn promote_stamps_messages_with_import_id() {
     assert_eq!(row.status, "completed");
     assert_eq!(row.message_count, 1);
 
-    let listed = crate::db::vault_imports::list_imports_for_account(&mut conn, TEST_ACCOUNT, 10)
-        .await
-        .unwrap();
-    assert_eq!(listed.len(), 1);
+    let (listed, total) =
+        crate::db::vault_imports::list_imports_page(&mut conn, TEST_ACCOUNT, None, 10, 0)
+            .await
+            .unwrap();
+    assert_eq!((listed.len(), total), (1, 1));
     assert_eq!(listed[0].source, "imessage");
     assert!(!listed[0].started_at.is_empty());
     assert!(listed[0].finished_at.is_some());
@@ -698,63 +698,6 @@ async fn promote_stamps_messages_with_import_id() {
             .await
             .unwrap()
             .is_empty()
-    );
-}
-
-/// `run_import_path` (the `POST /v1/import` path) opens
-/// a one-shot session the same way `imports_create_handler` does when the
-/// caller does not pass `import_id`. It must map the same
-/// `StartImportError::AlreadyActive` collision to `ApiError::Conflict`,
-/// not `ApiError::Internal` — otherwise the two endpoints answer the same
-/// condition with different status codes. This calls `run_import_path`
-/// directly (it is private to this module) rather than going through
-/// `import_handler`'s HTTP body/content-type parsing, which is
-/// orthogonal to the session check under test.
-#[tokio::test]
-async fn run_import_path_refuses_a_second_session_with_conflict() {
-    let (pool, tmp) = crate::db::engine::test_pool().await;
-    {
-        let mut conn = pool.acquire().await.unwrap();
-        schema::ensure_vault_schema(&mut conn).await.unwrap();
-        crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
-            .await
-            .unwrap();
-        crate::db::vault_imports::start_import(
-            &mut conn,
-            &crate::db::vault_imports::StartImportArgs::new(
-                TEST_ACCOUNT,
-                "imessage",
-                "append",
-                Some("test"),
-            ),
-        )
-        .await
-        .unwrap();
-    }
-    let data_dir = tmp.path().join("data");
-    let state = crate::server::test_app_state(pool, &data_dir).await;
-
-    let query = ImportQuery {
-        source: "imessage".into(),
-        account: Some(TEST_ACCOUNT.into()),
-        mode: ImportMode::Append,
-        dedupe: false,
-        import_id: None,
-    };
-    // Never read: the session collision is detected before the jsonl
-    // file is opened.
-    let jsonl_path = tmp.path().join("unused.jsonl");
-
-    let err = run_import_path(state, query, jsonl_path).await.unwrap_err();
-    let ApiError::StateConflict(message) = &err else {
-        panic!("expected StateConflict, got {err:?}");
-    };
-    // The 409 has to name the way out: the only place a stranded
-    // session can be resumed or discarded is the desktop app's Import
-    // screen.
-    assert!(
-        message.contains("Import in the desktop app"),
-        "the conflict names how to clear the session: {message}"
     );
 }
 
@@ -1277,22 +1220,30 @@ async fn importer() -> (
     (state, vault, account.token)
 }
 
+/// Create an Import Run for `source` and hand back the path its batches
+/// are posted to.
+async fn batches_path(state: &crate::server::AppState, token: &str, source: &str) -> String {
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        state,
+        "/v1/imports",
+        token,
+        serde_json::json!({ "source": source }),
+    )
+    .await;
+    format!("/v1/imports/{}/batches", created["id"].as_i64().unwrap())
+}
+
 #[tokio::test]
 async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
     let (state, _vault, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
     let body = concat!(
         r#"{"schema_version":3,"export":{"source":"whatsapp","tool":"t","owner_handle":"+15550000001","owner_display_name":"Me"},"#,
         r#""conversation":{"chat_identifier":"+15550000002","conversation_type":"individual","participants":[{"handle":"+15550000002","display_name":"Sam"}]}}"#,
         "\n",
     );
-    let (status, text) = crate::test_support::post_raw(
-        &state,
-        "/v1/import?source=whatsapp",
-        &token,
-        "application/jsonl",
-        body,
-    )
-    .await;
+    let (status, text) =
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body).await;
     assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{text}");
     let err: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(
@@ -1304,9 +1255,10 @@ async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
 #[tokio::test]
 async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line() {
     let (state, _vault, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
     let (status, text) = crate::test_support::post_raw(
         &state,
-        "/v1/import?source=whatsapp",
+        &path,
         &token,
         "application/jsonl",
         "this is not json\n",
@@ -1321,16 +1273,36 @@ async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line() {
     );
 }
 
+/// A batch is refused before its body is read when the run is over: the
+/// row, not the request, says what a batch imports under, and a discarded
+/// run has nothing to import under.
 #[tokio::test]
-async fn http_import_without_source_is_a_json_400() {
+async fn a_batch_into_a_run_that_is_not_running_is_a_state_conflict() {
     let (state, _vault, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let id = path
+        .trim_start_matches("/v1/imports/")
+        .trim_end_matches("/batches")
+        .to_string();
+    post_json::<serde_json::Value>(
+        &state,
+        &format!("/v1/imports/{id}/discard"),
+        &token,
+        serde_json::json!({}),
+    )
+    .await;
+
     let (status, text) =
-        crate::test_support::post_raw(&state, "/v1/import", &token, "application/jsonl", "{}\n")
-            .await;
-    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{text}");
-    let err: serde_json::Value = serde_json::from_str(&text)
-        .unwrap_or_else(|_| panic!("expected a JSON error body, got: {text}"));
-    assert_eq!(err["detail"], "query param source is required");
+        crate::test_support::post_raw(&state, &path, &token, "application/jsonl", "{}\n").await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::StateConflict,
+    );
+    assert_eq!(
+        problem.detail.as_deref(),
+        Some(format!("import {id} is not running (status=cancelled)").as_str())
+    );
 }
 
 /// The import body is JSON Lines and nothing else. `multipart/form-data`
@@ -1347,9 +1319,10 @@ async fn a_multipart_body_is_an_unsupported_media_type() {
     let body = format!(
         "--{boundary}\r\nContent-Disposition: form-data; name=\"jsonl\"\r\n\r\n{{}}\r\n--{boundary}--\r\n"
     );
+    let path = batches_path(&vault.state, &user.token, "imessage").await;
     let (status, text) = crate::test_support::post_raw(
         &vault.state,
-        "/v1/import?source=imessage&mode=append",
+        &path,
         &user.token,
         &format!("multipart/form-data; boundary={boundary}"),
         body,
@@ -1368,59 +1341,36 @@ async fn a_multipart_body_is_an_unsupported_media_type() {
     );
 }
 
-/// `?account=` naming a different account is refused, even with an
-/// otherwise valid token: the account query on `POST /v1/import` is
-/// bound to whoever the Bearer token belongs to
-/// (`resolve_import_account` in `server.rs`), not a free choice of
-/// tenant. This is the only test on that branch — a deleted smoke
-/// script was the only thing checking it before.
+/// A run belongs to the account whose token created it. Another account's
+/// token posting into it finds no such run: the id is scoped to the
+/// account, so an outsider cannot tell it exists.
 #[tokio::test]
-async fn http_import_refuses_an_account_query_naming_someone_else() {
+async fn a_batch_into_another_accounts_run_is_not_found() {
     let vault = crate::test_support::test_vault().await;
     let alice =
         crate::test_support::register_via_api(&vault.state, "alice", "hunter2hunter2").await;
     let bob = crate::test_support::register_via_api(&vault.state, "bob", "hunter2hunter2").await;
-
-    let body = concat!(
-        r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#,
-        "\n",
-        r#"{"guid":"g-cross-account","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}"#,
-        "\n",
-    );
+    let bobs_run = batches_path(&vault.state, &bob.token, "imessage").await;
 
     let (status, text) = crate::test_support::post_raw(
         &vault.state,
-        &format!(
-            "/v1/import?source=imessage&mode=append&account={}",
-            bob.username
-        ),
+        &bobs_run,
         &alice.token,
         "application/jsonl",
-        body,
+        "{}\n",
     )
     .await;
-    assert_eq!(status, axum::http::StatusCode::FORBIDDEN, "{text}");
-    let err: serde_json::Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(
-        err["detail"],
-        "account query does not match token's account"
-    );
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
 
-    // Positive control: naming her own account must not be refused for
-    // the same reason. Without this, the assertion above would still
-    // pass if the route started refusing every import outright — it
-    // need not succeed, since a minimal body can still fail later for
-    // unrelated reasons, but it must not be 403.
-    let (status, text) = crate::test_support::post_raw(
+    // Positive control: her own run takes the batch as far as reading it.
+    let own = batches_path(&vault.state, &alice.token, "imessage").await;
+    let (status, _) = crate::test_support::post_raw(
         &vault.state,
-        &format!(
-            "/v1/import?source=imessage&mode=append&account={}",
-            alice.username
-        ),
+        &own,
         &alice.token,
         "application/jsonl",
-        body,
+        "{}\n",
     )
     .await;
-    assert_ne!(status, axum::http::StatusCode::FORBIDDEN, "{text}");
+    assert_ne!(status, axum::http::StatusCode::NOT_FOUND);
 }

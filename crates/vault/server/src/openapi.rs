@@ -70,8 +70,8 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::server::health))
         .routes(routes!(crate::auth::auth_check))
         .routes(routes!(crate::auth::logout_handler))
-        .routes(routes!(crate::auth::change_password_handler))
-        .routes(routes!(crate::auth::delete_account_handler))
+        .routes(routes!(crate::profile::change_password_handler))
+        .routes(routes!(crate::profile::delete_account_handler))
         .routes(routes!(crate::profile::account_profile_handler))
         .routes(routes!(crate::profile::account_profile_update_handler))
         .routes(routes!(crate::profile::delete_messages_handler))
@@ -89,8 +89,8 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::contacts_api::contact_trash_handler))
         .routes(routes!(crate::contacts_api::contact_restore_handler))
         .routes(routes!(crate::contacts_api::contact_delete_handler))
-        .routes(routes!(crate::contacts_api::contact_match_handler))
-        .routes(routes!(crate::contacts_api::address_book_load_handler))
+        .routes(routes!(crate::contacts_api::unmatched_handles_handler))
+        .routes(routes!(crate::contacts_api::contacts_create_handler))
         .routes(routes!(crate::named_set_api::contact_groups_list))
         .routes(routes!(crate::named_set_api::contact_groups_create))
         .routes(routes!(crate::named_set_api::contact_groups_update))
@@ -141,13 +141,12 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::trash_api::empty_trash_handler))
         .routes(routes!(crate::import::imports_list_handler))
         .routes(routes!(crate::import::imports_create_handler))
-        .routes(routes!(crate::import::imports_active_handler))
         .routes(routes!(crate::import::imports_get_handler))
         .routes(routes!(crate::import::import_contacts_handler))
         .routes(routes!(crate::import::imports_complete_handler))
         .routes(routes!(crate::import::imports_stage_handler))
         .routes(routes!(crate::import::imports_discard_handler))
-        .routes(routes!(crate::import::import_handler))
+        .routes(routes!(crate::import::import_batch_handler))
         .routes(routes!(crate::assets::asset_head_handler))
         .routes(routes!(crate::assets::asset_get_handler))
         .routes(routes!(crate::assets::asset_put_handler))
@@ -232,10 +231,10 @@ mod tests {
             "/v1/auth/login",
             "/v1/auth/check",
             "/v1/auth/logout",
-            "/v1/auth/change-password",
-            "/v1/auth/delete-account",
+            "/v1/account/password",
+            "/v1/account",
             "/v1/account/profile",
-            "/v1/account/delete-messages",
+            "/v1/account/messages",
             "/v1/account/storage",
             "/v1/account/api-tokens",
             "/v1/account/api-tokens/{id}",
@@ -270,7 +269,7 @@ mod tests {
             "/v1/contacts/{id}",
             "/v1/contacts/{id}/trash",
             "/v1/contacts/{id}/restore",
-            "/v1/contacts/match",
+            "/v1/contacts/unmatched-handles",
             "/v1/contact-groups",
             "/v1/contact-groups/{id}",
             "/v1/contact-groups/{id}/members",
@@ -279,7 +278,7 @@ mod tests {
             "/v1/message-tags/{id}/members",
             "/v1/saved-searches",
             "/v1/saved-searches/{id}",
-            "/v1/search/fields",
+            "/v1/search-fields",
             "/v1/conversations",
             "/v1/messages",
             "/v1/conversations/{id}",
@@ -306,7 +305,7 @@ mod tests {
             "/v1/imports",
             "/v1/imports/{id}",
             "/v1/imports/{id}/complete",
-            "/v1/import",
+            "/v1/imports/{id}/batches",
             "/v1/assets/{sha256}",
             "/v1/assets/{sha256}/uploads",
             "/v1/assets/{sha256}/uploads/{upload_id}/parts/{part}",
@@ -335,16 +334,16 @@ mod tests {
         assert!(paths["/v1/owner/accounts/{id}"]["delete"].is_object());
         assert!(paths["/v1/owner/accounts/{id}/password"]["put"].is_object());
         assert!(paths["/v1/owner/accounts/{id}/messages"]["delete"].is_object());
-        let import = &paths["/v1/import"]["post"]["requestBody"]["content"];
+        let import = &paths["/v1/imports/{id}/batches"]["post"]["requestBody"]["content"];
         for ct in ["application/x-ndjson", "application/jsonl"] {
             assert!(
                 import.get(ct).is_some(),
-                "POST /v1/import must document {ct}"
+                "POST /v1/imports/{{id}}/batches must document {ct}"
             );
         }
         assert!(
             import.get("multipart/form-data").is_none(),
-            "POST /v1/import no longer accepts multipart (#337)"
+            "POST /v1/imports/{{id}}/batches no longer accepts multipart (#337)"
         );
         let put = &paths["/v1/assets/{sha256}"]["put"]["requestBody"]["content"];
         assert!(

@@ -178,7 +178,7 @@ async fn the_owner_can_open_and_close_registration() {
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let settings: VaultSettingsResponse =
-        get_json(&state, "/v1/owner/vault-settings", &owner.token).await;
+        get_json(&state, "/v1/vault/settings", &owner.token).await;
     assert!(!settings.public_registration);
 
     assert_eq!(
@@ -194,7 +194,7 @@ async fn the_owner_can_open_and_close_registration() {
 
     let opened: VaultSettingsResponse = crate::test_support::patch_json(
         &state,
-        "/v1/owner/vault-settings",
+        "/v1/vault/settings",
         &owner.token,
         serde_json::json!({ "public_registration": true }),
     )
@@ -216,13 +216,13 @@ async fn only_the_owner_reaches_the_vault_settings() {
     let ordinary = register_via_api(&state, "bob", "hunter2hunter2").await;
 
     assert_eq!(
-        get_status(&state, "/v1/owner/vault-settings", &ordinary.token).await,
+        get_status(&state, "/v1/vault/settings", &ordinary.token).await,
         StatusCode::FORBIDDEN
     );
     assert_eq!(
         patch_status(
             &state,
-            "/v1/owner/vault-settings",
+            "/v1/vault/settings",
             &ordinary.token,
             serde_json::json!({ "public_registration": false }),
         )

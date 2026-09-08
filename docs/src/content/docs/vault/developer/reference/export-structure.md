@@ -7,7 +7,7 @@ The vault imports JSONL (JSON Lines) exports at schema version 4. Version 3 is r
 
 ## Happy path
 
-**Phone backup → JSONL export → vault CLI `import` or `POST /v1/import` → SQLite**
+**Phone backup → JSONL export → vault CLI `import` or `POST /v1/imports/{id}/batches` → SQLite**
 
 The JSONL files are plain text — one JSON object per line. The format is the same whether you import through the desktop app or post to the import API directly.
 

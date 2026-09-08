@@ -21,6 +21,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Permanently delete the account and its data directory. The body carries
+         *     the confirmation and the current password: a credential belongs in a
+         *     body, not in a URL or a header of the vault's own invention, and a DELETE
+         *     body has no defined meaning in RFC 9110 but is not forbidden.
+         */
+        delete: operations["delete_account_handler"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/account/api-tokens": {
         parameters: {
             query?: never;
@@ -60,7 +82,7 @@ export interface paths {
         patch: operations["rename_api_token_handler"];
         trace?: never;
     };
-    "/v1/account/delete-messages": {
+    "/v1/account/messages": {
         parameters: {
             query?: never;
             header?: never;
@@ -69,11 +91,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        post?: never;
         /**
          * Delete every conversation, message, and attachment for the account.
          *     Contacts and the account login survive.
          */
-        post: operations["delete_messages_handler"];
+        delete: operations["delete_messages_handler"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Verify the current password, store the new one, revoke API tokens, and
+         *     issue a fresh session token.
+         */
+        put: operations["change_password_handler"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -93,15 +135,15 @@ export interface paths {
          */
         get: operations["account_profile_handler"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
         /**
          * Update the account's display name and linked handles, then return the
          *     reloaded profile.
          */
-        post: operations["account_profile_update_handler"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
+        patch: operations["account_profile_update_handler"];
         trace?: never;
     };
     "/v1/account/storage": {
@@ -220,26 +262,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/auth/change-password": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Verify the current password, store the new one, revoke API tokens, and
-         *     issue a fresh session token.
-         */
-        post: operations["change_password_handler"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/auth/check": {
         parameters: {
             query?: never;
@@ -254,23 +276,6 @@ export interface paths {
         get: operations["auth_check"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/delete-account": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Permanently delete the account and its data directory. */
-        post: operations["delete_account_handler"];
         delete?: never;
         options?: never;
         head?: never;
@@ -392,48 +397,17 @@ export interface paths {
         /** Page through the account's contacts (id, name, handles, groups). */
         get: operations["contacts_list_handler"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/contacts/address-book": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         /**
-         * Load a VCF or vCard CSV address book into this account.
-         * @description This is a standalone act against the vault, never part of an import run:
+         * Load a VCF or vCard CSV address book into this account. The body is the
+         *     file itself, and `Content-Type` says which: `text/vcard` or `text/csv`.
+         * @description This is a standalone act against the vault, never part of an Import Run:
          *     contacts are vault state, and a person may load them before or after
          *     bringing messages in. Only the rows the address book owns are replaced, so
          *     Contact Groups, names the person typed, and identities an import discovered
-         *     all survive.
+         *     all survive. How the file is read is the open question in #270; this route
+         *     is where that answer lands.
          */
-        post: operations["address_book_load_handler"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/contacts/match": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Report which identifiers this account has no vault contact for. */
-        post: operations["contact_match_handler"];
+        post: operations["contacts_create_handler"];
         delete?: never;
         options?: never;
         head?: never;
@@ -451,6 +425,23 @@ export interface paths {
         put?: never;
         /** First/last message dates and counts for a list of contact ids. */
         post: operations["contact_summaries_handler"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/contacts/unmatched-handles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Report which identifiers this account has no vault contact for. */
+        post: operations["unmatched_handles_handler"];
         delete?: never;
         options?: never;
         head?: never;
@@ -689,23 +680,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/import": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Import one message-ir JSONL body into the vault. */
-        post: operations["import_handler"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/imports": {
         parameters: {
             query?: never;
@@ -713,7 +687,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List past import sessions for the account with their stats. */
+        /**
+         * The account's Import Runs, newest first, as a page. `status=running`
+         *     finds the one run the desktop app may resume.
+         */
         get: operations["imports_list_handler"];
         put?: never;
         /**
@@ -721,23 +698,6 @@ export interface paths {
          *     POST /v1/imports/{id}/complete.
          */
         post: operations["imports_create_handler"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/imports/active": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The account's active import session, if it has one. */
-        get: operations["imports_active_handler"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -755,6 +715,23 @@ export interface paths {
         get: operations["imports_get_handler"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/imports/{id}/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import one message-ir JSONL body into the vault. */
+        post: operations["import_batch_handler"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1005,24 +982,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/owner/vault-settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Read the vault's settings. */
-        get: operations["owner_vault_settings"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Change the vault's settings. */
-        patch: operations["owner_patch_vault_settings"];
-        trace?: never;
-    };
     "/v1/saved-searches": {
         parameters: {
             query?: never;
@@ -1067,7 +1026,7 @@ export interface paths {
         patch: operations["saved_searches_update_handler"];
         trace?: never;
     };
-    "/v1/search/fields": {
+    "/v1/search-fields": {
         parameters: {
             query?: never;
             header?: never;
@@ -1149,6 +1108,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/vault/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the vault's settings. */
+        get: operations["vault_settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change the vault's settings. */
+        patch: operations["patch_vault_settings"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1214,44 +1191,6 @@ export interface components {
             top_attachments: components["schemas"]["TopAttachment"][];
             /** Format: int64 */
             total_bytes: number;
-        };
-        /** @description The account's live session, or null when there is none. */
-        ActiveImportResponse: {
-            session?: null | components["schemas"]["ActiveImportSession"];
-        };
-        /** @description One live import session, as the desktop app needs to resume it. */
-        ActiveImportSession: {
-            device_id?: string | null;
-            /** @description Import form snapshot, or null. */
-            form: unknown;
-            /** Format: int64 */
-            id: number;
-            mode: string;
-            source: string;
-            /** @description Source path, size, mtime, and message count, or null. */
-            source_fingerprint: unknown;
-            /** @description Addresses the backup's device sent from (JSON array), or null. */
-            source_identities: unknown;
-            stage?: string | null;
-            staging_dir?: string | null;
-            started_at: string;
-            status: string;
-            /**
-             * @description What the user approved at the last gate they passed, or null.
-             *
-             *     Same column `POST /v1/imports/{id}/stage` writes with its `summary`
-             *     field — read back here so a reload between an approval and
-             *     completion doesn't lose the plan the eventual outcome is diffed
-             *     against.
-             */
-            summary: unknown;
-        };
-        /** @description Body for `POST /v1/contacts/address-book`. */
-        AddressBookBody: {
-            /** @description The file's text. */
-            content: string;
-            /** @description File name, used only to tell VCF from vCard CSV. */
-            filename: string;
         };
         /** @description What loading an address book changed. */
         AddressBookLoadResponse: {
@@ -1487,20 +1426,6 @@ export interface components {
             /** @description Platform service (`phone`, `email`, or `whatsapp`); inferred when omitted. */
             service?: string | null;
         };
-        /** @description Body for `POST /v1/contacts/match`. */
-        ContactMatchBody: {
-            /** @description Raw identifiers — phone numbers, emails — as they appear in an export. */
-            identifiers: string[];
-        };
-        /** @description Response for `POST /v1/contacts/match`. */
-        ContactMatchResponse: {
-            /**
-             * @description The subset this account has no contact for: trimmed, in first-seen
-             *     order, blanks dropped and duplicates (by normalized form) collapsed
-             *     to their first spelling.
-             */
-            unknown: string[];
-        };
         /** @description Body for `PATCH /v1/contacts/{id}`. Exactly one mutation field should be set. */
         ContactMutationBody: {
             add_handle?: null | components["schemas"]["ContactHandlePayload"];
@@ -1692,9 +1617,13 @@ export interface components {
             /** @description Masked form for the Settings list (also persisted). */
             token_hint: string;
         };
-        /** @description Source, mode, tool, and optional account for a new import session. */
+        /**
+         * @description Source, mode, dedupe and tool for a new Import Run. The bearer token
+         *     names the account.
+         */
         CreateImportBody: {
-            account?: string | null;
+            /** @description Run cross-source soft-dedupe after each batch. */
+            dedupe?: boolean;
             /** @description Which install is creating the session. */
             device_id?: string | null;
             /**
@@ -1710,13 +1639,13 @@ export interface components {
             source_fingerprint?: unknown;
             /** @description Addresses the backup's device sent from, when the client read them. */
             source_identities?: unknown;
-            /** @description Stage the session opens at. Defaults to `parse`. */
+            /** @description Stage the run opens at. Defaults to `parse`. */
             stage?: string | null;
             /** @description Absolute staging path on the client that owns this session. */
             staging_dir?: string | null;
             tool?: string | null;
         };
-        /** @description The new import session id. */
+        /** @description The new Import Run's id. */
         CreateImportResponse: {
             /** Format: int64 */
             id: number;
@@ -1959,11 +1888,14 @@ export interface components {
              */
             tapbacks: number;
         };
-        /** @description Serializable slice of a session used in list responses. */
+        /**
+         * @description One Import Run as `GET /v1/imports` lists it: the counts Settings shows,
+         *     and everything the desktop app needs to resume a running one.
+         */
         ImportSummary: {
             /**
              * Format: int64
-             * @description Attachments counted for the session.
+             * @description Attachments counted for the run.
              */
             attachment_count: number;
             /**
@@ -1971,37 +1903,55 @@ export interface components {
              * @description Bytes uploaded so far.
              */
             bytes_uploaded: number;
+            /** @description Whether cross-source dedupe runs after each batch. */
+            dedupe: boolean;
+            /** @description Which install created the run. */
+            device_id?: string | null;
             /**
              * Format: int64
              * @description Total wall-clock duration, when finished.
              */
             duration_ms?: number | null;
-            /** @description UTC time the session finished, when it has. */
+            /** @description UTC time the run finished, when it has. */
             finished_at?: string | null;
+            /** @description Import form snapshot, or null. */
+            form: unknown;
             /**
              * Format: int64
-             * @description Import session id.
+             * @description Import Run id.
              */
             id: number;
             /**
              * Format: int64
-             * @description Messages counted for the session.
+             * @description Messages counted for the run.
              */
             message_count: number;
             /** @description Import mode (`replace` or `append`). */
             mode: string;
-            /** @description Source id the session imports. */
+            /** @description Source id the run imports. */
             source: string;
-            /** @description UTC time the session started. */
+            /** @description Source path, size, mtime, and message count, or null. */
+            source_fingerprint: unknown;
+            /** @description Addresses the backup's device sent from (JSON array), or null. */
+            source_identities: unknown;
+            /** @description Where a running run is; null once it is over. */
+            stage?: string | null;
+            /** @description Absolute path to the staging folder on the client that owns the run. */
+            staging_dir?: string | null;
+            /** @description UTC time the run started. */
             started_at: string;
-            /** @description Lifecycle status (`running`, `completed`, `completed_with_issues`, or `failed`). */
+            /**
+             * @description Lifecycle status (`running`, `completed`, `completed_with_issues`,
+             *     `failed`, or `cancelled`).
+             */
             status: string;
+            /**
+             * @description What the user approved at the last gate they passed, or null. The
+             *     column `POST /v1/imports/{id}/stage` writes with its `summary`.
+             */
+            summary: unknown;
             /** @description Importing tool, e.g. `vault-push`. */
             tool?: string | null;
-        };
-        /** @description Past import sessions. */
-        ImportsListResponse: {
-            items: components["schemas"]["ImportSummary"][];
         };
         /** @description Every account in the vault except the owner's own. */
         ListAccountsResponse: {
@@ -2224,6 +2174,80 @@ export interface components {
                 service: string;
                 /** @description Message tags on this conversation. */
                 tags: string[];
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_ImportSummary: {
+            /** @description The rows on this page. */
+            items: {
+                /**
+                 * Format: int64
+                 * @description Attachments counted for the run.
+                 */
+                attachment_count: number;
+                /**
+                 * Format: int64
+                 * @description Bytes uploaded so far.
+                 */
+                bytes_uploaded: number;
+                /** @description Whether cross-source dedupe runs after each batch. */
+                dedupe: boolean;
+                /** @description Which install created the run. */
+                device_id?: string | null;
+                /**
+                 * Format: int64
+                 * @description Total wall-clock duration, when finished.
+                 */
+                duration_ms?: number | null;
+                /** @description UTC time the run finished, when it has. */
+                finished_at?: string | null;
+                /** @description Import form snapshot, or null. */
+                form: unknown;
+                /**
+                 * Format: int64
+                 * @description Import Run id.
+                 */
+                id: number;
+                /**
+                 * Format: int64
+                 * @description Messages counted for the run.
+                 */
+                message_count: number;
+                /** @description Import mode (`replace` or `append`). */
+                mode: string;
+                /** @description Source id the run imports. */
+                source: string;
+                /** @description Source path, size, mtime, and message count, or null. */
+                source_fingerprint: unknown;
+                /** @description Addresses the backup's device sent from (JSON array), or null. */
+                source_identities: unknown;
+                /** @description Where a running run is; null once it is over. */
+                stage?: string | null;
+                /** @description Absolute path to the staging folder on the client that owns the run. */
+                staging_dir?: string | null;
+                /** @description UTC time the run started. */
+                started_at: string;
+                /**
+                 * @description Lifecycle status (`running`, `completed`, `completed_with_issues`,
+                 *     `failed`, or `cancelled`).
+                 */
+                status: string;
+                /**
+                 * @description What the user approved at the last gate they passed, or null. The
+                 *     column `POST /v1/imports/{id}/stage` writes with its `summary`.
+                 */
+                summary: unknown;
+                /** @description Importing tool, e.g. `vault-push`. */
+                tool?: string | null;
             }[];
             /** @description Page size used. */
             limit: number;
@@ -2530,6 +2554,20 @@ export interface components {
              */
             size_bytes: number;
         };
+        /** @description Body for `POST /v1/contacts/unmatched-handles`. */
+        UnmatchedHandlesBody: {
+            /** @description Raw identifiers — phone numbers, emails — as they appear in an export. */
+            identifiers: string[];
+        };
+        /** @description Response for `POST /v1/contacts/unmatched-handles`. */
+        UnmatchedHandlesResponse: {
+            /**
+             * @description The subset this account has no contact for: trimmed, in first-seen
+             *     order, blanks dropped and duplicates (by normalized form) collapsed
+             *     to their first spelling.
+             */
+            unknown: string[];
+        };
         /**
          * @description What shape of value a word takes.
          * @enum {string}
@@ -2578,6 +2616,60 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+        };
+    };
+    delete_account_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Account deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -2796,6 +2888,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeleteMessagesResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    change_password_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangePasswordResponse"];
                 };
             };
             400: {
@@ -3410,61 +3557,6 @@ export interface operations {
             };
         };
     };
-    change_password_handler: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChangePasswordRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChangePasswordResponse"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
     auth_check: {
         parameters: {
             query?: {
@@ -3494,60 +3586,6 @@ export interface operations {
                 };
             };
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    delete_account_handler: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DeleteAccountRequest"];
-            };
-        };
-        responses: {
-            /** @description Account deleted */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4074,16 +4112,18 @@ export interface operations {
             };
         };
     };
-    address_book_load_handler: {
+    contacts_create_handler: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
+        /** @description The address book file: a vCard file as text/vcard, or a vCard CSV export as text/csv. */
+        requestBody?: {
             content: {
-                "application/json": components["schemas"]["AddressBookBody"];
+                "text/csv": unknown;
+                "text/vcard": unknown;
             };
         };
         responses: {
@@ -4119,7 +4159,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            422: {
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4127,46 +4167,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-        };
-    };
-    contact_match_handler: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ContactMatchBody"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContactMatchResponse"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4203,6 +4204,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContactSummariesPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    unmatched_handles_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnmatchedHandlesBody"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnmatchedHandlesResponse"];
                 };
             };
             400: {
@@ -4976,100 +5032,15 @@ export interface operations {
             };
         };
     };
-    import_handler: {
-        parameters: {
-            query: {
-                source: string;
-                account?: string;
-                /** @description Default append */
-                mode?: string;
-                dedupe?: boolean;
-                import_id?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** @description message-ir JSONL as application/x-ndjson or application/jsonl. Attachments are uploaded first by SHA-256 through /v1/assets. */
-        requestBody?: {
-            content: {
-                "application/jsonl": unknown;
-                "application/x-ndjson": unknown;
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportResponse"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description The account already has an active import session */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description The body is not JSON Lines (multipart/form-data is not accepted) */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
     imports_list_handler: {
         parameters: {
             query?: {
-                account?: string;
+                /** @description One of running, completed, completed_with_issues, failed, cancelled */
+                status?: string;
+                /** @description Page size, default 40, at most 500 */
+                limit?: number;
+                /** @description Rows to skip, at most 50000 */
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -5082,7 +5053,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportsListResponse"];
+                    "application/json": components["schemas"]["Page_ImportSummary"];
                 };
             };
             401: {
@@ -5094,6 +5065,14 @@ export interface operations {
                 };
             };
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5161,41 +5140,6 @@ export interface operations {
             };
         };
     };
-    imports_active_handler: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ActiveImportResponse"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
     imports_get_handler: {
         parameters: {
             query?: never;
@@ -5233,6 +5177,96 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    import_batch_handler: {
+        parameters: {
+            query: {
+                source: string;
+                account?: string;
+                /** @description Default append */
+                mode?: string;
+                dedupe?: boolean;
+                import_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description message-ir JSONL as application/x-ndjson or application/jsonl. Attachments are uploaded first by SHA-256 through /v1/assets. */
+        requestBody?: {
+            content: {
+                "application/jsonl": unknown;
+                "application/x-ndjson": unknown;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The run is not running */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The body is not JSON Lines (multipart/form-data is not accepted) */
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6168,80 +6202,6 @@ export interface operations {
             };
         };
     };
-    owner_vault_settings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VaultSettingsResponse"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    owner_patch_vault_settings: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PatchVaultSettingsRequest"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VaultSettingsResponse"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
     saved_searches_list_handler: {
         parameters: {
             query?: never;
@@ -6608,6 +6568,80 @@ export interface operations {
                 };
             };
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    vault_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VaultSettingsResponse"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    patch_vault_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchVaultSettingsRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VaultSettingsResponse"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

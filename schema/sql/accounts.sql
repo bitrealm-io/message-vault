@@ -135,6 +135,9 @@ CREATE TABLE IF NOT EXISTS vault_imports (
     tool TEXT,
     -- Import mode string recorded by the importer.
     mode TEXT NOT NULL,
+    -- 1 when cross-source dedupe runs after each batch of this run. Stated
+    -- once, when the run is created, so two batches cannot disagree.
+    dedupe INTEGER NOT NULL DEFAULT 0,
     -- Run status (for example running, completed, failed, cancelled).
     status TEXT NOT NULL,
     -- When the import started.

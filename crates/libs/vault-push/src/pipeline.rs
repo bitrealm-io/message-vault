@@ -11,7 +11,6 @@ use std::collections::BTreeSet;
 use std::sync::Mutex;
 use std::thread::JoinHandle;
 use std::time::Instant;
-use vault_api_types::ImportMode;
 
 use anyhow::Result;
 use message_vault_io_core::check_cancel;
@@ -157,7 +156,6 @@ impl ImportBatch {
 /// Result of one import HTTP request, including timing and the batch that was sent.
 struct ImportHttpOutcome {
     batch: ImportBatch,
-    mode: ImportMode,
     request_ms: u64,
     messages_per_second: f64,
     mebibytes_per_second: f64,
@@ -171,14 +169,15 @@ pub(crate) struct ImportPipeline<'a> {
     cfg: &'a VaultPushConfig,
     session: &'a Session,
     journal: &'a Mutex<SharedJournal>,
-    import_id: Option<i64>,
+    /// The Import Run every batch is posted into. Whether the run replaces
+    /// or appends is the run's, decided when it was created: the vault wipes
+    /// the source on a replace run's first batch and appends after that.
+    import_id: i64,
     batch_size: usize,
     /// Messages waiting to be sent.
     pending: Option<ImportBatch>,
     /// The HTTP import currently running on a background thread, if any.
     inflight: Option<JoinHandle<ImportHttpOutcome>>,
-    /// First import in replace mode uses mode=replace; later ones use append.
-    first_import: bool,
     /// One slot per conversation file, filled once its chunks are queued.
     trackers: Vec<Option<FileTracker>>,
     /// One slot per conversation file, filled as each one finishes or is skipped.
@@ -192,7 +191,7 @@ impl<'a> ImportPipeline<'a> {
         cfg: &'a VaultPushConfig,
         session: &'a Session,
         journal: &'a Mutex<SharedJournal>,
-        import_id: Option<i64>,
+        import_id: i64,
         batch_size: usize,
         total: usize,
     ) -> Self {
@@ -204,7 +203,6 @@ impl<'a> ImportPipeline<'a> {
             batch_size,
             pending: None,
             inflight: None,
-            first_import: true,
             trackers: std::iter::repeat_with(|| None).take(total).collect(),
             results: vec![None; total],
             accounting: MessageAccounting::default(),
@@ -382,12 +380,7 @@ impl<'a> ImportPipeline<'a> {
         if self.is_cancelled() {
             return Ok(false);
         }
-        let mode = if self.cfg.mode == ImportMode::Replace && self.first_import {
-            ImportMode::Replace
-        } else {
-            ImportMode::Append
-        };
-        self.inflight = Some(self.spawn_import(batch, mode));
+        self.inflight = Some(self.spawn_import(batch));
         if wait {
             ok = self.join_inflight(out)?;
         }
@@ -399,7 +392,7 @@ impl<'a> ImportPipeline<'a> {
     /// Running the POST off the main thread lets prepare workers keep hashing
     /// and uploading attachments during the network wait. Only one import is
     /// in flight at a time.
-    fn spawn_import(&self, batch: ImportBatch, mode: ImportMode) -> JoinHandle<ImportHttpOutcome> {
+    fn spawn_import(&self, batch: ImportBatch) -> JoinHandle<ImportHttpOutcome> {
         let session = self.session.clone();
         let max_retries = self.cfg.max_retries;
         let import_id = self.import_id;
@@ -408,14 +401,13 @@ impl<'a> ImportPipeline<'a> {
             let body_bytes = batch.body.len();
             let message_count = batch.messages.len();
             let response = vault_http::with_retries(max_retries, || {
-                session.post_import(&batch.source, mode, import_id, batch.body.clone())
+                session.post_import(import_id, batch.body.clone())
             })
             .map_err(|error| error.to_string());
             let request_ms = elapsed_ms(request_started);
             let seconds = request_started.elapsed().as_secs_f64().max(0.001);
             ImportHttpOutcome {
                 batch,
-                mode,
                 request_ms,
                 messages_per_second: message_count as f64 / seconds,
                 mebibytes_per_second: body_bytes as f64 / message_ir::MIB as f64 / seconds,
@@ -465,10 +457,9 @@ impl<'a> ImportPipeline<'a> {
             .saturating_add(outcome.message_count as u64);
         self.charge_request_time(&represented, outcome.request_ms);
         let stats = format!(
-            "source={} mode={} conversations={} messages={} bytes={} elapsed_ms={} \
+            "source={} conversations={} messages={} bytes={} elapsed_ms={} \
              messages_per_second={:.1} mib_per_second={:.2}",
             outcome.batch.source,
-            outcome.mode,
             outcome.batch.conversations,
             outcome.message_count,
             outcome.body_bytes,
@@ -487,7 +478,6 @@ impl<'a> ImportPipeline<'a> {
                     .accounting
                     .deduped
                     .saturating_add(response.messages_deduped);
-                self.first_import = false;
                 let messages: Vec<JournalMessage> = outcome
                     .batch
                     .messages

@@ -37,7 +37,7 @@ Import and view messages in SQLite
 * `dedupe-cross-source` — Soft-hide the same SMS when it appears under more than one import source
 * `import-contacts` — Import an address book (VCF or vCard CSV) into an existing database
 * `reset-demo` — Regenerate demo bundle, clear demo account data, import, and process assets
-* `serve` — Run HTTP ingest API (`POST /v1/import` with message-ir JSONL)
+* `serve` — Run the HTTP API (`POST /v1/imports/{id}/batches` takes message-ir JSONL)
 * `dump-openapi` — Write the OpenAPI document (JSON) to stdout or --output. Does not open the database
 * `dump-cli-docs` — Write this CLI's docs-site reference page (Markdown) to stdout or --output. Does not open the database
 * `dump-error-docs` — Write one docs-site page per HTTP problem type (Markdown) into the --output directory, or all of them to stdout. Does not open the database
@@ -136,7 +136,7 @@ Regenerate demo bundle, clear demo account data, import, and process assets
 
 ## `message-vault-server serve`
 
-Run HTTP ingest API (`POST /v1/import` with message-ir JSONL)
+Run the HTTP API (`POST /v1/imports/{id}/batches` takes message-ir JSONL)
 
 **Usage:** `message-vault-server serve [OPTIONS]`
 

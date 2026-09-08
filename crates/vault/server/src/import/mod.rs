@@ -3,8 +3,8 @@
 //! The pipeline runs in three stages: `staging` parses JSONL files and writes
 //! staging rows, `promote` copies staging rows into the production tables, and
 //! `contact_name` links handles to vault contacts and merges display names.
-//! The HTTP handlers for `POST /v1/import` and the `/v1/imports` session
-//! routes live at the end of this module.
+//! The HTTP handlers for the `/v1/imports` routes, an Import Run and the
+//! batches posted into it, live at the end of this module.
 
 use std::fs;
 use std::io::{self, Write};
@@ -44,6 +44,7 @@ use staging::StagingInserts;
 
 use crate::dedupe;
 use crate::import::{self};
+use crate::paging::{DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, page_params};
 use crate::server::{
     ApiError, AppState, Created, ImportAccess, content_type_base, is_jsonl_content_type,
     resolve_import_account, stream_body_to_file,
@@ -599,23 +600,35 @@ async fn promote_step(
     Ok(())
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct ImportQuery {
-    /// Source slug the import registers its data under. Required; checked in
-    /// the handler so a missing value is the JSON 400 every other failure is.
-    #[serde(default)]
-    source: String,
-    /// Username or UUID. Optional; when set must match the Bearer token's account.
-    #[serde(default)]
-    account: Option<String>,
-    #[serde(default)]
-    mode: ImportMode,
-    /// Run cross-source soft-dedupe after import.
-    #[serde(default)]
-    dedupe: bool,
-    /// Optional vault import session id from POST /v1/imports.
-    #[serde(default)]
-    import_id: Option<i64>,
+/// What one batch imports under. Every field is read from the Import Run's
+/// row, never from the request: the run was created with them once, so two
+/// batches cannot disagree.
+#[derive(Debug, Clone)]
+pub(crate) struct BatchContext {
+    pub(crate) account: String,
+    pub(crate) import_id: i64,
+    pub(crate) source: String,
+    pub(crate) mode: ImportMode,
+    pub(crate) dedupe: bool,
+}
+
+impl BatchContext {
+    /// The context a running row gives a batch. A mode the row spells in a
+    /// way the enum does not know is read as `append`, the mode that never
+    /// removes anything.
+    pub(crate) fn from_row(row: &crate::db::vault_imports::VaultImportRow) -> Self {
+        let mode = match row.mode.as_str() {
+            "replace" => ImportMode::Replace,
+            _ => ImportMode::Append,
+        };
+        Self {
+            account: row.account_id.clone(),
+            import_id: row.id,
+            source: row.source.clone(),
+            mode,
+            dedupe: row.dedupe,
+        }
+    }
 }
 
 /// Import result: stats plus optional dedupe counts.
@@ -638,17 +651,19 @@ pub(crate) struct DedupeResponse {
     near_flagged: u64,
 }
 
-/// Source, mode, tool, and optional account for a new import session.
+/// Source, mode, dedupe and tool for a new Import Run. The bearer token
+/// names the account.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct CreateImportBody {
     pub(crate) source: String,
     #[serde(default)]
     pub(crate) mode: ImportMode,
+    /// Run cross-source soft-dedupe after each batch.
+    #[serde(default)]
+    pub(crate) dedupe: bool,
     #[serde(default)]
     pub(crate) tool: Option<String>,
-    #[serde(default)]
-    pub(crate) account: Option<String>,
-    /// Stage the session opens at. Defaults to `parse`.
+    /// Stage the run opens at. Defaults to `parse`.
     #[serde(default)]
     pub(crate) stage: Option<String>,
     /// Absolute staging path on the client that owns this session.
@@ -671,7 +686,7 @@ pub(crate) struct CreateImportBody {
     pub(crate) source_identities: Option<serde_json::Value>,
 }
 
-/// The new import session id.
+/// The new Import Run's id.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct CreateImportResponse {
     pub(crate) id: i64,
@@ -788,16 +803,16 @@ pub(crate) struct CompleteImportResponse {
     pub(crate) bytes_uploaded: i64,
 }
 
+/// `GET /v1/imports`: a page, narrowed to one `status` when given. The one
+/// list with a filter parameter (ADR-0009): it has no search language.
 #[derive(Debug, Deserialize)]
 pub(crate) struct ListImportsQuery {
     #[serde(default)]
-    account: Option<String>,
-}
-
-/// Past import sessions.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct ImportsListResponse {
-    items: Vec<crate::db::vault_imports::ImportSummary>,
+    pub(crate) status: Option<String>,
+    #[serde(default)]
+    pub(crate) limit: Option<usize>,
+    #[serde(default)]
+    pub(crate) offset: Option<usize>,
 }
 
 /// One stored import issue.
@@ -831,30 +846,66 @@ pub(crate) struct ImportDetailResponse {
     pub(crate) issues: Vec<ImportDetailIssueResponse>,
 }
 
-/// List past import sessions for the account with their stats.
+/// The account's Import Runs, newest first, as a page. `status=running`
+/// finds the one run the desktop app may resume.
 #[utoipa::path(
     get,
     path = "/v1/imports",
     tag = "Import",
     security(("bearer" = [])),
-    params(("account" = Option<String>, Query)),
+    params(
+        ("status" = Option<String>, Query, description = "One of running, completed, completed_with_issues, failed, cancelled"),
+        ("limit" = Option<usize>, Query, description = "Page size, default 40, at most 500"),
+        ("offset" = Option<usize>, Query, description = "Rows to skip, at most 50000")
+    ),
     responses(
-        (status = 200, body = ImportsListResponse),
+        (status = 200, body = Page<crate::db::vault_imports::ImportSummary>),
         (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
+        (status = 403, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn imports_list_handler(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     Query(query): Query<ListImportsQuery>,
-) -> Result<Json<ImportsListResponse>, ApiError> {
-    let account = resolve_import_account(&auth, query.account.as_deref(), &state.db).await?;
+) -> Result<Json<Page<crate::db::vault_imports::ImportSummary>>, ApiError> {
+    let account = resolve_import_account(&auth, None, &state.db).await?;
+    let page = page_params(
+        query.limit,
+        query.offset,
+        DEFAULT_LIST_LIMIT,
+        Some(MAX_LIST_OFFSET),
+    )?;
+    let status = query
+        .status
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    if let Some(status) = status
+        && !crate::db::vault_imports::IMPORT_STATUSES.contains(&status)
+    {
+        return Err(ApiError::validation(format!(
+            "status: unknown value '{status}'; accepted values are {}",
+            crate::db::vault_imports::IMPORT_STATUSES.join(", ")
+        )));
+    }
 
     let mut conn = state.db.acquire().await?;
-    let items = crate::db::vault_imports::list_imports(&mut conn, &account).await?;
-
-    Ok(Json(ImportsListResponse { items }))
+    let (items, total) = crate::db::vault_imports::list_imports_page(
+        &mut conn,
+        &account,
+        status,
+        page.limit as i64,
+        page.offset as i64,
+    )
+    .await?;
+    Ok(Json(Page {
+        items,
+        total,
+        limit: page.limit,
+        offset: page.offset,
+    }))
 }
 
 /// Status, timings, and issues for one import session.
@@ -920,7 +971,7 @@ pub(crate) async fn imports_create_handler(
         ));
     }
     validate_source_id(&body.source).map_err(|e| ApiError::validation(e.to_string()))?;
-    let account = resolve_import_account(&auth, body.account.as_deref(), &state.db).await?;
+    let account = resolve_import_account(&auth, None, &state.db).await?;
     let stage = match body.stage.as_deref() {
         None => crate::db::vault_imports::ImportStage::Parse,
         Some(raw) => crate::db::vault_imports::ImportStage::parse(raw).ok_or_else(|| {
@@ -943,6 +994,7 @@ pub(crate) async fn imports_create_handler(
         account_id: &account,
         source: &body.source,
         mode: body.mode.as_str(),
+        dedupe: body.dedupe,
         tool: body.tool.as_deref(),
         stage,
         staging_dir: body.staging_dir.as_deref(),
@@ -1240,13 +1292,6 @@ fn import_date_ymd(row: &crate::db::vault_imports::VaultImportRow) -> String {
         )
 }
 
-fn parse_summary_json(summary_json: Option<String>) -> serde_json::Value {
-    match summary_json {
-        Some(raw) => serde_json::from_str(&raw).unwrap_or(serde_json::Value::String(raw)),
-        None => serde_json::Value::Null,
-    }
-}
-
 fn import_detail_response(detail: crate::db::vault_imports::ImportDetail) -> ImportDetailResponse {
     let row = detail.row;
     let issues = detail
@@ -1276,78 +1321,9 @@ fn import_detail_response(detail: crate::db::vault_imports::ImportDetail) -> Imp
         attachments_ms: row.attachments_ms,
         prepare_ms: row.prepare_ms,
         upload_ms: row.upload_ms,
-        summary: parse_summary_json(row.summary_json),
+        summary: crate::db::vault_imports::json_column(row.summary_json),
         issues,
     }
-}
-
-/// One live import session, as the desktop app needs to resume it.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct ActiveImportSession {
-    pub(crate) id: i64,
-    pub(crate) source: String,
-    pub(crate) mode: String,
-    pub(crate) status: String,
-    pub(crate) started_at: String,
-    pub(crate) stage: Option<String>,
-    pub(crate) staging_dir: Option<String>,
-    pub(crate) device_id: Option<String>,
-    /// Import form snapshot, or null.
-    pub(crate) form: serde_json::Value,
-    /// Source path, size, mtime, and message count, or null.
-    pub(crate) source_fingerprint: serde_json::Value,
-    /// Addresses the backup's device sent from (JSON array), or null.
-    pub(crate) source_identities: serde_json::Value,
-    /// What the user approved at the last gate they passed, or null.
-    ///
-    /// Same column `POST /v1/imports/{id}/stage` writes with its `summary`
-    /// field — read back here so a reload between an approval and
-    /// completion doesn't lose the plan the eventual outcome is diffed
-    /// against.
-    pub(crate) summary: serde_json::Value,
-}
-
-/// The account's live session, or null when there is none.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct ActiveImportResponse {
-    pub(crate) session: Option<ActiveImportSession>,
-}
-
-/// The account's active import session, if it has one.
-#[utoipa::path(
-    get,
-    path = "/v1/imports/active",
-    tag = "Import",
-    security(("bearer" = [])),
-    responses(
-        (status = 200, body = ActiveImportResponse),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
-    )
-)]
-pub(crate) async fn imports_active_handler(
-    State(state): State<AppState>,
-    ImportAccess(auth): ImportAccess,
-) -> Result<Json<ActiveImportResponse>, ApiError> {
-    let account = resolve_import_account(&auth, None, &state.db).await?;
-    let mut conn = state.db.acquire().await?;
-    let row = crate::db::vault_imports::get_active_import(&mut conn, &account).await?;
-    Ok(Json(ActiveImportResponse {
-        session: row.map(|row| ActiveImportSession {
-            id: row.id,
-            source: row.source,
-            mode: row.mode,
-            status: row.status,
-            started_at: row.started_at,
-            stage: row.stage,
-            staging_dir: row.staging_dir,
-            device_id: row.device_id,
-            form: parse_summary_json(row.form_json),
-            source_fingerprint: parse_summary_json(row.source_fingerprint),
-            source_identities: parse_summary_json(row.source_identities),
-            summary: parse_summary_json(row.summary_json),
-        }),
-    }))
 }
 
 /// New stage for a live session.
@@ -1457,7 +1433,8 @@ pub(crate) async fn imports_discard_handler(
 /// Import one message-ir JSONL body into the vault.
 #[utoipa::path(
     post,
-    path = "/v1/import",
+    path = "/v1/imports/{id}/batches",
+    params(("id" = i64, Path, description = "Import Run id")),
     tag = "Import",
     security(("bearer" = [])),
     params(
@@ -1483,7 +1460,7 @@ pub(crate) async fn imports_discard_handler(
         (
             status = 409,
             body = crate::problem::Problem,
-            description = "The account already has an active import session"
+            description = "The run is not running"
         ),
         (status = 413, body = crate::problem::Problem),
         (
@@ -1493,11 +1470,11 @@ pub(crate) async fn imports_discard_handler(
         )
     )
 )]
-pub(crate) async fn import_handler(
+pub(crate) async fn import_batch_handler(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
+    AxumPath(import_id): AxumPath<i64>,
     headers: HeaderMap,
-    Query(mut query): Query<ImportQuery>,
     request: Request,
 ) -> Result<Json<ImportResponse>, ApiError> {
     let Some(ct) = content_type_base(&headers) else {
@@ -1506,14 +1483,16 @@ pub(crate) async fn import_handler(
         ));
     };
 
-    if query.source.trim().is_empty() {
-        return Err(ApiError::MissingParameter(
-            "query param source is required".into(),
-        ));
-    }
-    validate_source_id(&query.source).map_err(|e| ApiError::validation(e.to_string()))?;
-    let account = resolve_import_account(&auth, query.account.as_deref(), &state.db).await?;
-    query.account = Some(account);
+    let account = resolve_import_account(&auth, None, &state.db).await?;
+    // The run's row says what the batch imports under; a run that is not
+    // running, or belongs to another account, refuses the batch here before
+    // any of the body is read.
+    let context = {
+        let mut conn = state.db.acquire().await?;
+        let row = crate::db::vault_imports::require_running_import(&mut conn, &account, import_id)
+            .await?;
+        BatchContext::from_row(&row)
+    };
 
     if is_jsonl_content_type(ct) {
         let temp = tempfile::tempdir()
@@ -1528,7 +1507,7 @@ pub(crate) async fn import_handler(
         // import cannot stall unrelated requests.
         let handle = tokio::runtime::Handle::current();
         let response = tokio::task::spawn_blocking(move || {
-            handle.block_on(run_import_path(state, query, jsonl_path))
+            handle.block_on(run_import_path(state, context, jsonl_path))
         })
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("import task failed: {e}")))?;
@@ -1567,11 +1546,11 @@ fn classify_import_error(err: anyhow::Error) -> ApiError {
     }
 }
 
-/// Callers validate `query.source`; `import_handler` is the only entry point,
-/// and `source` names an on-disk directory.
+/// `import_batch_handler` is the only entry point, and the run's `source`,
+/// validated when the run was created, names an on-disk directory.
 async fn run_import_path(
     state: AppState,
-    query: ImportQuery,
+    context: BatchContext,
     jsonl_path: PathBuf,
 ) -> Result<Json<ImportResponse>, ApiError> {
     // An import holds one pooled connection for its whole run (JSONL parse,
@@ -1582,16 +1561,14 @@ async fn run_import_path(
         .acquire()
         .await
         .map_err(|_| ApiError::Internal(anyhow::anyhow!("vault is shutting down")))?;
-    let mode = query.mode;
-
     let cfg = Arc::clone(&state.cfg);
-    let account = query
-        .account
-        .clone()
-        .ok_or_else(|| ApiError::MissingParameter("account is required".into()))?;
-    let source_id = query.source.clone();
-    let do_dedupe = query.dedupe;
-    let query_import_id = query.import_id;
+    let BatchContext {
+        account,
+        import_id,
+        source: source_id,
+        mode: run_mode,
+        dedupe: do_dedupe,
+    } = context;
 
     let _guard = state.account_import_locks.lock(account.clone()).await;
 
@@ -1599,32 +1576,19 @@ async fn run_import_path(
     // taken above keeps enough of the pool free for other requests.
     let mut conn = state.db.acquire().await?;
 
-    // Validate client-owned sessions before staging work so bad ids return 400.
-    if let Some(id) = query_import_id {
-        crate::db::vault_imports::require_reusable_import(
-            &mut conn,
-            &account,
-            id,
-            &source_id,
-            mode.as_str(),
-        )
-        .await?;
-    }
+    // A `replace` run wipes the source once, on its first batch; every batch
+    // after that appends. The row's stamped messages say which this is.
+    let mode = if run_mode == ImportMode::Replace
+        && !crate::db::vault_imports::has_messages(&mut conn, import_id).await?
+    {
+        ImportMode::Replace
+    } else {
+        ImportMode::Append
+    };
 
     // Attachment paths resolve only through assets already uploaded by
     // SHA-256; the import body never carries files of its own.
     let assets_dir = cfg.paths.assets_dir_for_account(&account, &source_id);
-
-    // A client session (vault-push) is closed by the client. Otherwise open
-    // one of our own so the Settings import table records curl and
-    // single-POST runs too.
-    let owned = if query_import_id.is_some() {
-        None
-    } else {
-        crate::db::account_profile::ensure_account_row(&mut conn, &account).await?;
-        Some(OwnedSession::start(&mut conn, &account, &source_id, mode, "http").await?)
-    };
-    let import_id = query_import_id.or_else(|| owned.as_ref().map(|session| session.id));
 
     let opts = ImportOptions::fixed(FixedImportArgs {
         assets_dir: &assets_dir,
@@ -1635,7 +1599,7 @@ async fn run_import_path(
         source: &source_id,
         account_id: &account,
         fill_content_keys: do_dedupe,
-        import_id,
+        import_id: Some(import_id),
     });
     let import_result = import::import_jsonl_files_on_conn(
         &mut conn,
@@ -1644,9 +1608,6 @@ async fn run_import_path(
         import::ImportSchemaMode::AssumeReady,
     )
     .await;
-    if let Some(session) = owned {
-        session.finish(&mut conn, &import_result).await;
-    }
     let stats = import_result.map_err(classify_import_error)?;
     let dedupe_stats = if do_dedupe {
         Some(dedupe::dedupe_cross_source(&mut conn, &account, None, 2).await?)

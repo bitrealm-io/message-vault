@@ -49,7 +49,7 @@ function profile(can_delete: boolean): Awaited<ReturnType<typeof getAccountProfi
   return { can_delete } as unknown as Awaited<ReturnType<typeof getAccountProfile>>;
 }
 
-/** The words each list accepts, as `GET /v1/search/fields` would say: enough of
+/** The words each list accepts, as `GET /v1/search-fields` would say: enough of
  * the registry (search/fields.rs) to tell a shared word from a one-list word. */
 const FIELD_WORDS = {
   contacts: ["name", "handle", "messages", "conversations", "trashed"],

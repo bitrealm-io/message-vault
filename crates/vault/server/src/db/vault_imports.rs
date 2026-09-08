@@ -73,15 +73,18 @@ pub struct VaultImportRow {
     pub tool: Option<String>,
     /// Import mode (`replace` or `append`).
     pub mode: String,
-    /// Lifecycle status (`running`, `completed`, `completed_with_issues`, or `failed`).
+    /// Whether cross-source dedupe runs after each batch.
+    pub dedupe: bool,
+    /// Lifecycle status (`running`, `completed`, `completed_with_issues`,
+    /// `failed`, or `cancelled`).
     pub status: String,
-    /// UTC time the session started.
+    /// UTC time the run started.
     pub started_at: String,
-    /// UTC time the session finished, when it has.
+    /// UTC time the run finished, when it has.
     pub finished_at: Option<String>,
-    /// Messages counted for the session.
+    /// Messages counted for the run.
     pub message_count: i64,
-    /// Attachments counted for the session.
+    /// Attachments counted for the run.
     pub attachment_count: i64,
     /// Bytes uploaded so far.
     pub bytes_uploaded: i64,
@@ -235,6 +238,8 @@ pub struct StartImportArgs<'a> {
     pub source: &'a str,
     /// Import mode recorded by the importer.
     pub mode: &'a str,
+    /// Whether cross-source dedupe runs after each batch.
+    pub dedupe: bool,
     /// Client/tool name, when the caller names one.
     pub tool: Option<&'a str>,
     /// Stage the session opens at.
@@ -262,6 +267,7 @@ impl<'a> StartImportArgs<'a> {
             account_id,
             source,
             mode,
+            dedupe: false,
             tool,
             stage: ImportStage::Parse,
             staging_dir: None,
@@ -305,11 +311,11 @@ pub async fn start_import(
     let inserted: std::result::Result<i64, sqlx::Error> = sqlx::query_scalar(
         r"
         INSERT INTO vault_imports (
-            account_id, source, tool, mode, status, started_at,
+            account_id, source, tool, mode, dedupe, status, started_at,
             message_count, attachment_count, bytes_uploaded,
             stage, staging_dir, device_id, form_json, source_fingerprint,
             source_identities
-        ) VALUES ($1, $2, $3, $4, 'running', $5, 0, 0, 0, $6, $7, $8, $9, $10, $11)
+        ) VALUES ($1, $2, $3, $4, $12, 'running', $5, 0, 0, 0, $6, $7, $8, $9, $10, $11)
         RETURNING id
         ",
     )
@@ -324,6 +330,7 @@ pub async fn start_import(
     .bind(args.form_json)
     .bind(args.source_fingerprint)
     .bind(args.source_identities)
+    .bind(i64::from(args.dedupe))
     .fetch_one(&mut *conn)
     .await;
 
@@ -351,7 +358,7 @@ fn is_unique_violation(err: &sqlx::Error) -> bool {
 const VAULT_IMPORT_COLUMNS: &str = "id, account_id, source, tool, mode, status, started_at, \
      finished_at, message_count, attachment_count, bytes_uploaded, duration_ms, parse_ms, \
      attachments_ms, prepare_ms, upload_ms, summary_json, stage, staging_dir, device_id, \
-     form_json, source_fingerprint, source_identities";
+     form_json, source_fingerprint, source_identities, dedupe";
 
 /// Map one `vault_imports` row by column position.
 fn vault_import_from_row(row: &AnyRow) -> Result<VaultImportRow, sqlx::Error> {
@@ -379,6 +386,7 @@ fn vault_import_from_row(row: &AnyRow) -> Result<VaultImportRow, sqlx::Error> {
         form_json: row.try_get(20)?,
         source_fingerprint: row.try_get(21)?,
         source_identities: row.try_get(22)?,
+        dedupe: row.try_get::<i64, _>(23)? != 0,
     })
 }
 
@@ -403,39 +411,13 @@ pub async fn get_owned_import(
     }
 }
 
-/// The account's live session, if it has one.
-///
-/// "Live" is `status = 'running'` — the same predicate the partial unique
-/// index uses, so this can never return two rows.
-///
-/// # Errors
-///
-/// Returns an error when the query fails.
-pub async fn get_active_import(
-    conn: &mut AnyConnection,
-    account_id: &str,
-) -> Result<Option<VaultImportRow>> {
-    let row = sqlx::query(&format!(
-        "SELECT {VAULT_IMPORT_COLUMNS}
-         FROM vault_imports
-         WHERE account_id = $1 AND status = 'running'"
-    ))
-    .bind(account_id)
-    .fetch_optional(&mut *conn)
-    .await?;
-    match row {
-        Some(data) => Ok(Some(vault_import_from_row(&data)?)),
-        None => Ok(None),
-    }
-}
-
 /// The account's import when it is still running.
 ///
 /// # Errors
 ///
 /// [`ImportLookupError::NotFound`] when the account owns no such import,
 /// [`ImportLookupError::InvalidSession`] when it is no longer running.
-async fn require_running_import(
+pub async fn require_running_import(
     conn: &mut AnyConnection,
     account_id: &str,
     import_id: i64,
@@ -524,40 +506,6 @@ pub async fn discard_import(
     .execute(&mut *conn)
     .await?;
     Ok(())
-}
-
-/// Like [`get_owned_import`], but the session must still be `running` and match
-/// the source/mode the client is about to import with.
-pub async fn require_reusable_import(
-    conn: &mut AnyConnection,
-    account_id: &str,
-    import_id: i64,
-    source: &str,
-    mode: &str,
-) -> std::result::Result<VaultImportRow, ImportLookupError> {
-    let row = get_owned_import(conn, account_id, import_id).await?;
-    if row.status != "running" {
-        return Err(ImportLookupError::InvalidSession {
-            message: format!("import {import_id} is not running (status={})", row.status),
-        });
-    }
-    if row.source != source {
-        return Err(ImportLookupError::InvalidSession {
-            message: format!(
-                "import {import_id} source mismatch (session={}, request={})",
-                row.source, source
-            ),
-        });
-    }
-    if row.mode != mode {
-        return Err(ImportLookupError::InvalidSession {
-            message: format!(
-                "import {import_id} mode mismatch (session={}, request={})",
-                row.mode, mode
-            ),
-        });
-    }
-    Ok(row)
 }
 
 /// Finish an import: prefer client counts, else derive from linked messages.
@@ -723,31 +671,60 @@ pub async fn get_import_detail(
     Ok(ImportDetail { row, issues })
 }
 
-/// Serializable slice of a session used in list responses.
+/// One Import Run as `GET /v1/imports` lists it: the counts Settings shows,
+/// and everything the desktop app needs to resume a running one.
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ImportSummary {
-    /// Import session id.
+    /// Import Run id.
     pub id: i64,
-    /// Source id the session imports.
+    /// Source id the run imports.
     pub source: String,
     /// Importing tool, e.g. `vault-push`.
     pub tool: Option<String>,
     /// Import mode (`replace` or `append`).
     pub mode: String,
-    /// Lifecycle status (`running`, `completed`, `completed_with_issues`, or `failed`).
+    /// Whether cross-source dedupe runs after each batch.
+    pub dedupe: bool,
+    /// Lifecycle status (`running`, `completed`, `completed_with_issues`,
+    /// `failed`, or `cancelled`).
     pub status: String,
-    /// UTC time the session started.
+    /// UTC time the run started.
     pub started_at: String,
-    /// UTC time the session finished, when it has.
+    /// UTC time the run finished, when it has.
     pub finished_at: Option<String>,
-    /// Messages counted for the session.
+    /// Messages counted for the run.
     pub message_count: i64,
-    /// Attachments counted for the session.
+    /// Attachments counted for the run.
     pub attachment_count: i64,
     /// Bytes uploaded so far.
     pub bytes_uploaded: i64,
     /// Total wall-clock duration, when finished.
     pub duration_ms: Option<i64>,
+    /// Where a running run is; null once it is over.
+    pub stage: Option<String>,
+    /// Absolute path to the staging folder on the client that owns the run.
+    pub staging_dir: Option<String>,
+    /// Which install created the run.
+    pub device_id: Option<String>,
+    /// Import form snapshot, or null.
+    pub form: serde_json::Value,
+    /// Source path, size, mtime, and message count, or null.
+    pub source_fingerprint: serde_json::Value,
+    /// Addresses the backup's device sent from (JSON array), or null.
+    pub source_identities: serde_json::Value,
+    /// What the user approved at the last gate they passed, or null. The
+    /// column `POST /v1/imports/{id}/stage` writes with its `summary`.
+    pub summary: serde_json::Value,
+}
+
+/// A JSON text column as a value: the parsed JSON, the raw text when it is
+/// not JSON, and null when the column is.
+#[must_use]
+pub fn json_column(raw: Option<String>) -> serde_json::Value {
+    match raw {
+        Some(raw) => serde_json::from_str(&raw).unwrap_or(serde_json::Value::String(raw)),
+        None => serde_json::Value::Null,
+    }
 }
 
 impl From<VaultImportRow> for ImportSummary {
@@ -757,6 +734,7 @@ impl From<VaultImportRow> for ImportSummary {
             source: r.source,
             tool: r.tool,
             mode: r.mode,
+            dedupe: r.dedupe,
             status: r.status,
             started_at: r.started_at,
             finished_at: r.finished_at,
@@ -764,41 +742,81 @@ impl From<VaultImportRow> for ImportSummary {
             attachment_count: r.attachment_count,
             bytes_uploaded: r.bytes_uploaded,
             duration_ms: r.duration_ms,
+            stage: r.stage,
+            staging_dir: r.staging_dir,
+            device_id: r.device_id,
+            form: json_column(r.form_json),
+            source_fingerprint: json_column(r.source_fingerprint),
+            source_identities: json_column(r.source_identities),
+            summary: json_column(r.summary_json),
         }
     }
 }
 
-/// List imports for an account, newest first. Returns serializable summaries.
-pub async fn list_imports(
-    conn: &mut AnyConnection,
-    account_id: &str,
-) -> Result<Vec<ImportSummary>> {
-    list_imports_for_account(conn, account_id, 100)
-        .await
-        .map(|rows| rows.into_iter().map(Into::into).collect())
-}
+/// The values `vault_imports.status` holds, and so the values
+/// `GET /v1/imports?status=` accepts.
+pub const IMPORT_STATUSES: [&str; 5] = [
+    "running",
+    "completed",
+    "completed_with_issues",
+    "failed",
+    "cancelled",
+];
 
-/// List imports for an account, newest first.
-pub async fn list_imports_for_account(
+/// One page of an account's Import Runs, newest first, narrowed to one
+/// `status` when given, with the total the page is cut from.
+pub async fn list_imports_page(
     conn: &mut AnyConnection,
     account_id: &str,
+    status: Option<&str>,
     limit: i64,
-) -> Result<Vec<VaultImportRow>> {
-    let rows = sqlx::query(&format!(
+    offset: i64,
+) -> Result<(Vec<ImportSummary>, u64)> {
+    let status_sql = if status.is_some() {
+        " AND status = $2"
+    } else {
+        ""
+    };
+    let count_sql = format!("SELECT COUNT(*) FROM vault_imports WHERE account_id = $1{status_sql}");
+    let mut count = sqlx::query_scalar::<_, i64>(&count_sql).bind(account_id);
+    if let Some(status) = status {
+        count = count.bind(status);
+    }
+    let total = count.fetch_one(&mut *conn).await?.max(0) as u64;
+
+    let (limit_param, offset_param) = if status.is_some() {
+        ("$3", "$4")
+    } else {
+        ("$2", "$3")
+    };
+    let sql = format!(
         "SELECT {VAULT_IMPORT_COLUMNS}
          FROM vault_imports
-         WHERE account_id = $1
+         WHERE account_id = $1{status_sql}
          ORDER BY started_at DESC, id DESC
-         LIMIT $2"
-    ))
-    .bind(account_id)
-    .bind(limit)
-    .fetch_all(&mut *conn)
-    .await?;
-    rows.iter()
+         LIMIT {limit_param} OFFSET {offset_param}"
+    );
+    let mut query = sqlx::query(&sql).bind(account_id);
+    if let Some(status) = status {
+        query = query.bind(status);
+    }
+    let rows = query.bind(limit).bind(offset).fetch_all(&mut *conn).await?;
+    let items = rows
+        .iter()
         .map(vault_import_from_row)
-        .collect::<Result<_, _>>()
-        .map_err(Into::into)
+        .map(|r| r.map(Into::into))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((items, total))
+}
+
+/// Whether the run has stamped any message yet: the first batch of a
+/// `replace` run wipes the source, and every batch after it appends.
+pub async fn has_messages(conn: &mut AnyConnection, import_id: i64) -> Result<bool> {
+    let row = sqlx::query("SELECT 1 FROM messages WHERE import_id = $1 LIMIT 1")
+        .bind(import_id)
+        .fetch_optional(&mut *conn)
+        .await?;
+    Ok(row.is_some())
 }
 
 const ACCOUNT_ATTACHMENTS_FROM: &str = r"

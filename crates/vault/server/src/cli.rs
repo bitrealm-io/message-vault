@@ -40,7 +40,7 @@ pub enum Commands {
     /// Regenerate demo bundle, clear demo account data, import, and process assets
     ResetDemo(ResetDemoArgs),
 
-    /// Run HTTP ingest API (`POST /v1/import` with message-ir JSONL)
+    /// Run the HTTP API (`POST /v1/imports/{id}/batches` takes message-ir JSONL)
     Serve(ServeArgs),
 
     /// Write the OpenAPI document (JSON) to stdout or --output. Does not open the database.

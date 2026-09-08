@@ -546,9 +546,9 @@ async fn the_owner_can_change_their_own_password() {
     let state = vault.state.clone();
     let owner = crate::test_support::claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let _changed: serde_json::Value = crate::test_support::post_json(
+    let _changed: serde_json::Value = crate::test_support::put_json(
         &state,
-        "/v1/auth/change-password",
+        "/v1/account/password",
         &owner.token,
         serde_json::json!({
             "current_password": "hunter2hunter2",
@@ -576,9 +576,9 @@ async fn an_account_can_delete_itself() {
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let _bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
-    let status = post_status(
+    let status = crate::test_support::delete_status_with_body(
         &state,
-        "/v1/auth/delete-account",
+        "/v1/account",
         &alice.token,
         serde_json::json!({ "confirm": true, "current_password": "hunter2hunter2" }),
     )

@@ -388,6 +388,63 @@ pub async fn post_status(
     .0
 }
 
+/// PUT a JSON body with a Bearer token, asserting 200 and parsing the body.
+pub async fn put_json<T: DeserializeOwned>(
+    state: &AppState,
+    path: &str,
+    token: &str,
+    body: serde_json::Value,
+) -> T {
+    let (status, text) = request(
+        state,
+        reqwest::Method::PUT,
+        path,
+        Some(token),
+        Some(json_body(body)),
+    )
+    .await;
+    expect_ok(&format!("PUT {path}"), status, &text)
+}
+
+/// DELETE with a JSON body and a Bearer token, returning only the status.
+/// `DELETE /v1/account` and `DELETE /v1/account/messages` carry their
+/// confirmation in the body.
+pub async fn delete_status_with_body(
+    state: &AppState,
+    path: &str,
+    token: &str,
+    body: serde_json::Value,
+) -> StatusCode {
+    request(
+        state,
+        reqwest::Method::DELETE,
+        path,
+        Some(token),
+        Some(json_body(body)),
+    )
+    .await
+    .0
+}
+
+/// DELETE with a JSON body and a Bearer token, asserting 200 and parsing
+/// the body.
+pub async fn delete_json_with_body<T: DeserializeOwned>(
+    state: &AppState,
+    path: &str,
+    token: &str,
+    body: serde_json::Value,
+) -> T {
+    let (status, text) = request(
+        state,
+        reqwest::Method::DELETE,
+        path,
+        Some(token),
+        Some(json_body(body)),
+    )
+    .await;
+    expect_ok(&format!("DELETE {path}"), status, &text)
+}
+
 /// PUT a JSON body with a Bearer token, returning only the status.
 pub async fn put_status(
     state: &AppState,
@@ -481,7 +538,7 @@ pub async fn delete_json<T: DeserializeOwned>(state: &AppState, path: &str, toke
 /// POST a body that is not JSON (JSONL, plain text, an empty body) with a
 /// Bearer token and an explicit Content-Type, returning the status and the
 /// response text. For routes whose contract is the raw body, such as
-/// `POST /v1/import`.
+/// `POST /v1/imports/{id}/batches`.
 pub async fn post_raw(
     state: &AppState,
     path: &str,

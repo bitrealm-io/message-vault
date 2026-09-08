@@ -147,7 +147,7 @@ async fn require_reusable_import_rejects_completed_and_mismatched() {
     .await
     .unwrap();
 
-    let err = require_reusable_import(&mut conn, ACCOUNT_ID, import_id, "ios", "append")
+    let err = require_running_import(&mut conn, ACCOUNT_ID, import_id)
         .await
         .unwrap_err()
         .to_string();
@@ -156,21 +156,12 @@ async fn require_reusable_import_rejects_completed_and_mismatched() {
     let running = start_import(&mut conn, &default_start_args(ACCOUNT_ID))
         .await
         .unwrap();
-    let src_err = require_reusable_import(&mut conn, ACCOUNT_ID, running, "android", "append")
+    let row = require_running_import(&mut conn, ACCOUNT_ID, running)
         .await
-        .unwrap_err()
-        .to_string();
-    assert!(src_err.contains("source mismatch"), "{src_err}");
-    let mode_err = require_reusable_import(&mut conn, ACCOUNT_ID, running, "ios", "replace")
-        .await
-        .unwrap_err()
-        .to_string();
-    assert!(mode_err.contains("mode mismatch"), "{mode_err}");
-    assert!(
-        require_reusable_import(&mut conn, ACCOUNT_ID, running, "ios", "append")
-            .await
-            .is_ok()
-    );
+        .unwrap();
+    // The row is what a batch imports under; nothing in the request says.
+    assert_eq!((row.source.as_str(), row.mode.as_str()), ("ios", "append"));
+    assert!(!row.dedupe);
 }
 
 #[tokio::test]
@@ -256,9 +247,24 @@ async fn list_imports_includes_duration_ms() {
     .await
     .unwrap();
 
-    let imports = list_imports(&mut conn, ACCOUNT_ID).await.unwrap();
-    assert_eq!(imports.len(), 1);
+    let (imports, total) = list_imports_page(&mut conn, ACCOUNT_ID, None, 40, 0)
+        .await
+        .unwrap();
+    assert_eq!((imports.len(), total), (1, 1));
     assert_eq!(imports[0].duration_ms, Some(48_000));
+    let (running, total) = list_imports_page(&mut conn, ACCOUNT_ID, Some("running"), 40, 0)
+        .await
+        .unwrap();
+    assert_eq!((running.len(), total), (0, 0));
+}
+
+/// The account's running Import Run through the list, as the desktop app
+/// finds it: `status=running`, and at most one.
+async fn running_import(conn: &mut AnyConnection, account: &str) -> Option<ImportSummary> {
+    let (items, _) = list_imports_page(conn, account, Some("running"), 1, 0)
+        .await
+        .unwrap();
+    items.into_iter().next()
 }
 
 #[tokio::test]
@@ -268,11 +274,8 @@ async fn active_session_round_trips_and_blocks_a_second() {
     let account = ACCOUNT_ID;
 
     assert!(
-        get_active_import(&mut conn, account)
-            .await
-            .unwrap()
-            .is_none(),
-        "no session before one starts"
+        running_import(&mut conn, account).await.is_none(),
+        "no run before one starts"
     );
 
     let args = StartImportArgs {
@@ -284,10 +287,9 @@ async fn active_session_round_trips_and_blocks_a_second() {
     };
     let id = start_import(&mut conn, &args).await.unwrap();
 
-    let active = get_active_import(&mut conn, account)
+    let active = running_import(&mut conn, account)
         .await
-        .unwrap()
-        .expect("the session is active");
+        .expect("the run is running");
     assert_eq!(active.id, id);
     assert_eq!(active.stage.as_deref(), Some("parse"));
     assert_eq!(
@@ -295,10 +297,7 @@ async fn active_session_round_trips_and_blocks_a_second() {
         Some("/home/u/message-vault/staging-iphone-260830")
     );
     assert_eq!(active.device_id.as_deref(), Some("device-a"));
-    assert_eq!(
-        active.form_json.as_deref(),
-        Some(r#"{"source":"imessage-ios"}"#)
-    );
+    assert_eq!(active.form["source"], "imessage-ios");
 
     assert!(
         matches!(
@@ -320,19 +319,13 @@ async fn stage_advances_and_discard_frees_the_slot() {
     set_import_stage(&mut conn, account, id, ImportStage::Pushing, None)
         .await
         .unwrap();
-    let active = get_active_import(&mut conn, account)
-        .await
-        .unwrap()
-        .unwrap();
+    let active = running_import(&mut conn, account).await.unwrap();
     assert_eq!(active.stage.as_deref(), Some("pushing"));
 
     discard_import(&mut conn, account, id).await.unwrap();
     assert!(
-        get_active_import(&mut conn, account)
-            .await
-            .unwrap()
-            .is_none(),
-        "a discarded session is no longer active"
+        running_import(&mut conn, account).await.is_none(),
+        "a discarded run is no longer running"
     );
     let row = get_owned_import(&mut conn, account, id).await.unwrap();
     assert_eq!(row.status, "cancelled");
@@ -359,12 +352,7 @@ async fn completing_a_session_frees_the_slot_too() {
     )
     .await
     .unwrap();
-    assert!(
-        get_active_import(&mut conn, account)
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(running_import(&mut conn, account).await.is_none());
 }
 
 #[test]

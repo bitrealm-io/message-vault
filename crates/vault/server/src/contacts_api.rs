@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use crate::extract::{Json, Path as AxumPath, Query};
 use anyhow::Result as AnyResult;
 use axum::extract::State;
+use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use message_ir::HandleType;
 use serde::{Deserialize, Serialize};
@@ -21,7 +22,7 @@ use crate::paging::{
     DEFAULT_LIST_LIMIT, MAX_CONTACT_SUMMARY_IDS, MAX_LIST_OFFSET, Page, PageQuery, page_params,
 };
 use crate::search::emit::{NOT_TRASHED_CONTACT, NOT_TRASHED_CONVERSATION};
-use crate::server::{ApiError, AppState, FullAccess, FullDeleteAccess};
+use crate::server::{ApiError, AppState, FullAccess, FullDeleteAccess, content_type_base};
 
 /// Contact row for the list: name, handles, groups.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -621,16 +622,16 @@ type ContactSelectionRow = (
 /// bigger number.
 pub(crate) const MAX_MATCH_IDENTIFIERS: usize = 500;
 
-/// Body for `POST /v1/contacts/match`.
+/// Body for `POST /v1/contacts/unmatched-handles`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct ContactMatchBody {
+pub(crate) struct UnmatchedHandlesBody {
     /// Raw identifiers — phone numbers, emails — as they appear in an export.
     identifiers: Vec<String>,
 }
 
-/// Response for `POST /v1/contacts/match`.
+/// Response for `POST /v1/contacts/unmatched-handles`.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct ContactMatchResponse {
+pub(crate) struct UnmatchedHandlesResponse {
     /// The subset this account has no contact for: trimmed, in first-seen
     /// order, blanks dropped and duplicates (by normalized form) collapsed
     /// to their first spelling.
@@ -713,15 +714,6 @@ async fn unknown_contact_identifiers(
 /// memory before parsing.
 pub(crate) const MAX_ADDRESS_BOOK_BYTES: usize = 8 * 1024 * 1024;
 
-/// Body for `POST /v1/contacts/address-book`.
-#[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct AddressBookBody {
-    /// File name, used only to tell VCF from vCard CSV.
-    filename: String,
-    /// The file's text.
-    content: String,
-}
-
 /// What loading an address book changed.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct AddressBookLoadResponse {
@@ -733,47 +725,64 @@ pub(crate) struct AddressBookLoadResponse {
     pub phones_needing_review: u64,
 }
 
-/// Load a VCF or vCard CSV address book into this account.
+/// Load a VCF or vCard CSV address book into this account. The body is the
+/// file itself, and `Content-Type` says which: `text/vcard` or `text/csv`.
 ///
-/// This is a standalone act against the vault, never part of an import run:
+/// This is a standalone act against the vault, never part of an Import Run:
 /// contacts are vault state, and a person may load them before or after
 /// bringing messages in. Only the rows the address book owns are replaced, so
 /// Contact Groups, names the person typed, and identities an import discovered
-/// all survive.
+/// all survive. How the file is read is the open question in #270; this route
+/// is where that answer lands.
 #[utoipa::path(
     post,
-    path = "/v1/contacts/address-book",
+    path = "/v1/contacts",
     tag = "Contacts",
     security(("bearer" = [])),
-    request_body = AddressBookBody,
+    request_body(
+        content(
+            ("text/vcard"),
+            ("text/csv")
+        ),
+        description = "The address book file: a vCard file as text/vcard, or a vCard CSV export as text/csv."
+    ),
     responses(
         (status = 200, body = AddressBookLoadResponse),
         (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
+        (status = 403, body = crate::problem::Problem),
+        (status = 413, body = crate::problem::Problem),
+        (status = 415, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn address_book_load_handler(
+pub(crate) async fn contacts_create_handler(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    Json(body): Json<AddressBookBody>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
 ) -> Result<Json<AddressBookLoadResponse>, ApiError> {
-    if body.content.len() > MAX_ADDRESS_BOOK_BYTES {
+    let Some(name) = address_book_file_name(content_type_base(&headers)) else {
+        return Err(ApiError::UnsupportedMediaType(
+            "Content-Type must be text/vcard or text/csv".into(),
+        ));
+    };
+    if body.len() > MAX_ADDRESS_BOOK_BYTES {
         return Err(ApiError::PayloadTooLarge(format!(
             "address book is larger than {MAX_ADDRESS_BOOK_BYTES} bytes"
         )));
     }
-    if body.content.trim().is_empty() {
+    let content = std::str::from_utf8(&body)
+        .map_err(|_| ApiError::MalformedBody("address book is not UTF-8 text".into()))?;
+    if content.trim().is_empty() {
         return Err(ApiError::validation("address book is empty"));
     }
     // The loader detects VCF versus vCard CSV from the path, so the upload is
-    // written to a temp file under its own name rather than being sniffed twice.
+    // written to a temp file under the name its media type earns.
     let dir = tempfile::tempdir()
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("create temp dir: {e}")))?;
-    let name = sanitized_address_book_name(&body.filename);
     let path = dir.path().join(name);
-    std::fs::write(&path, body.content.as_bytes())
+    std::fs::write(&path, content.as_bytes())
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("write address book: {e}")))?;
 
     let mut conn = state.db.acquire().await?;
@@ -787,40 +796,37 @@ pub(crate) async fn address_book_load_handler(
     }))
 }
 
-/// A safe temp file name that keeps the extension the format detector reads.
-///
-/// The uploaded name never becomes a path: only its extension matters, and an
-/// unrecognized one falls back to `.csv`, which is what the detector treats as
-/// vCard CSV.
-fn sanitized_address_book_name(raw: &str) -> String {
-    let lower = raw.trim().to_ascii_lowercase();
-    if lower.ends_with(".vcf") || lower.ends_with(".vcard") {
-        "address-book.vcf".to_string()
-    } else {
-        "address-book.csv".to_string()
+/// The temp file name a media type earns, so the loader's extension check
+/// reads the format the client declared. `text/x-vcard` is the older
+/// spelling some exporters still write.
+fn address_book_file_name(content_type: Option<&str>) -> Option<&'static str> {
+    match content_type.map(str::to_ascii_lowercase).as_deref() {
+        Some("text/vcard" | "text/x-vcard") => Some("address-book.vcf"),
+        Some("text/csv") => Some("address-book.csv"),
+        _ => None,
     }
 }
 
 /// Report which identifiers this account has no vault contact for.
 #[utoipa::path(
     post,
-    path = "/v1/contacts/match",
+    path = "/v1/contacts/unmatched-handles",
     tag = "Contacts",
     security(("bearer" = [])),
-    request_body = ContactMatchBody,
+    request_body = UnmatchedHandlesBody,
     responses(
-        (status = 200, body = ContactMatchResponse),
+        (status = 200, body = UnmatchedHandlesResponse),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn contact_match_handler(
+pub(crate) async fn unmatched_handles_handler(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    Json(body): Json<ContactMatchBody>,
-) -> Result<Json<ContactMatchResponse>, ApiError> {
+    Json(body): Json<UnmatchedHandlesBody>,
+) -> Result<Json<UnmatchedHandlesResponse>, ApiError> {
     if body.identifiers.len() > MAX_MATCH_IDENTIFIERS {
         return Err(ApiError::validation(format!(
             "at most {MAX_MATCH_IDENTIFIERS} identifiers"
@@ -829,7 +835,7 @@ pub(crate) async fn contact_match_handler(
     let mut conn = state.db.acquire().await?;
     let unknown =
         unknown_contact_identifiers(&mut conn, &auth.account_id, &body.identifiers).await?;
-    Ok(Json(ContactMatchResponse { unknown }))
+    Ok(Json(UnmatchedHandlesResponse { unknown }))
 }
 
 /// Handle type from the service the caller named, falling back to the handle's shape.

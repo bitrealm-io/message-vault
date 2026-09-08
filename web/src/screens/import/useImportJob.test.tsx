@@ -565,7 +565,7 @@ describe("useImportJob wiring", () => {
     // Decision 36 routes a cancellation mid-transcode to the same recovery
     // as a crash at that stage; decision 37 says only an explicit discard
     // ends a waiting session. Posting /complete would free the one-active-
-    // session slot and drop the session out of GET /v1/imports/active,
+    // session slot and drop the session out of GET /v1/imports?status=running,
     // stranding the staged folder with no session left to resume it
     // through — even though the "canceled" outcome is still shown locally.
     runMock.mockImplementationOnce(async (fn: () => Promise<unknown>) => {

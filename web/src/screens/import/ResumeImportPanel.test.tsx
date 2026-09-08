@@ -160,8 +160,8 @@ describe("ResumeImportPanel", () => {
     const user = userEvent.setup();
     const onResume = vi.fn();
     const onDiscard = vi.fn();
-    // Every session created outside the desktop app — the CLI importer, a
-    // raw POST /v1/import — stores a null staging_dir.
+    // Every Import Run created outside the desktop app — the CLI importer,
+    // a tool of someone's own — stores a null staging_dir.
     const decision: ResumeDecision = {
       kind: "folder_missing",
       session: session({ staging_dir: null }),

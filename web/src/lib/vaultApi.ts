@@ -16,8 +16,8 @@
  * `docs/adr/0002-one-way-to-fetch-data-in-the-web-app.md`.
  *
  * Routes reachable only from the desktop app's Rust side — asset upload and
- * `POST /v1/import` — have no function here, because nothing in the browser
- * calls them.
+ * `POST /v1/imports/{id}/batches` — have no function here, because nothing
+ * in the browser calls them.
  */
 
 import {
@@ -78,11 +78,11 @@ export function logout(opts?: VaultRequestOptions): Promise<void> {
 export function changePassword(
   body: Schema["ChangePasswordRequest"],
 ): Promise<Schema["ChangePasswordResponse"]> {
-  return apiClient.post<Schema["ChangePasswordResponse"]>("/v1/auth/change-password", body);
+  return apiClient.put<Schema["ChangePasswordResponse"]>("/v1/account/password", body);
 }
 
 export function deleteAccount(body: Schema["DeleteAccountRequest"]): Promise<void> {
-  return apiClient.post<void>("/v1/auth/delete-account", body);
+  return apiClient.delete<void>("/v1/account", body);
 }
 
 // ── The vault itself ────────────────────────────────────────────────────────
@@ -152,14 +152,14 @@ export function deleteAccountMessages(accountId: string): Promise<unknown> {
 export function getVaultSettings(
   opts?: VaultRequestOptions,
 ): Promise<Schema["VaultSettingsResponse"]> {
-  return apiClient.get<Schema["VaultSettingsResponse"]>("/v1/owner/vault-settings", opts);
+  return apiClient.get<Schema["VaultSettingsResponse"]>("/v1/vault/settings", opts);
 }
 
 /** Change the vault's settings. Omitted fields are left alone. */
 export function updateVaultSettings(
   body: Schema["PatchVaultSettingsRequest"],
 ): Promise<Schema["VaultSettingsResponse"]> {
-  return apiClient.patch<Schema["VaultSettingsResponse"]>("/v1/owner/vault-settings", body);
+  return apiClient.patch<Schema["VaultSettingsResponse"]>("/v1/vault/settings", body);
 }
 
 // ── Account ─────────────────────────────────────────────────────────────────
@@ -173,7 +173,7 @@ export function getAccountProfile(
 export function updateAccountProfile(
   body: Schema["AccountProfileUpdateRequest"],
 ): Promise<Schema["AccountProfileResponse"]> {
-  return apiClient.post<Schema["AccountProfileResponse"]>("/v1/account/profile", body);
+  return apiClient.patch<Schema["AccountProfileResponse"]>("/v1/account/profile", body);
 }
 
 export function getAccountStorage(
@@ -185,7 +185,7 @@ export function getAccountStorage(
 export function deleteAllMessages(
   body: Schema["DeleteMessagesRequest"],
 ): Promise<Schema["DeleteMessagesResponse"]> {
-  return apiClient.post<Schema["DeleteMessagesResponse"]>("/v1/account/delete-messages", body);
+  return apiClient.delete<Schema["DeleteMessagesResponse"]>("/v1/account/messages", body);
 }
 
 // ── API tokens ──────────────────────────────────────────────────────────────
@@ -394,16 +394,30 @@ export function getContactSummaries(
   return apiClient.post<Schema["ContactSummariesPage"]>("/v1/contacts/summaries", body, opts);
 }
 
-export function matchContacts(
-  body: Schema["ContactMatchBody"],
-): Promise<Schema["ContactMatchResponse"]> {
-  return apiClient.post<Schema["ContactMatchResponse"]>("/v1/contacts/match", body);
+/** Which of these identifiers the account has no contact for. */
+export function unmatchedHandles(
+  body: Schema["UnmatchedHandlesBody"],
+): Promise<Schema["UnmatchedHandlesResponse"]> {
+  return apiClient.post<Schema["UnmatchedHandlesResponse"]>("/v1/contacts/unmatched-handles", body);
 }
 
+/** The media type an address book file is sent as, from its name; null when it is neither. */
+export function addressBookContentType(fileName: string): "text/vcard" | "text/csv" | null {
+  const lower = fileName.trim().toLowerCase();
+  if (lower.endsWith(".vcf") || lower.endsWith(".vcard")) return "text/vcard";
+  if (lower.endsWith(".csv")) return "text/csv";
+  return null;
+}
+
+/**
+ * Load an address book: the file's text is the body, and its media type says
+ * whether it is a vCard file or a vCard CSV export.
+ */
 export function loadAddressBook(
-  body: Schema["AddressBookBody"],
+  content: string,
+  contentType: "text/vcard" | "text/csv",
 ): Promise<Schema["AddressBookLoadResponse"]> {
-  return apiClient.post<Schema["AddressBookLoadResponse"]>("/v1/contacts/address-book", body);
+  return apiClient.postRaw<Schema["AddressBookLoadResponse"]>("/v1/contacts", content, contentType);
 }
 
 /** Put a contact in the trash. Idempotent: trashing an already-trashed one still answers. */
@@ -540,15 +554,25 @@ export function listSearchFields(
   opts?: VaultRequestOptions,
 ): Promise<Schema["SearchFieldsResponse"]> {
   return apiClient.get<Schema["SearchFieldsResponse"]>(
-    withQuery("/v1/search/fields", query({ list })),
+    withQuery("/v1/search-fields", query({ list })),
     opts,
   );
 }
 
 // ── Import Runs ─────────────────────────────────────────────────────────────
 
-export function listImports(opts?: VaultRequestOptions): Promise<Schema["ImportsListResponse"]> {
-  return apiClient.get<Schema["ImportsListResponse"]>("/v1/imports", opts);
+/** The account's Import Runs, newest first, narrowed to one status when given. */
+export type ImportListParams = {
+  status?: "running" | "completed" | "completed_with_issues" | "failed" | "cancelled";
+  limit?: number;
+  offset?: number;
+};
+
+export function listImports(
+  params: ImportListParams = {},
+  opts?: VaultRequestOptions,
+): Promise<Schema["Page_ImportSummary"]> {
+  return apiClient.get<Schema["Page_ImportSummary"]>(withQuery("/v1/imports", query(params)), opts);
 }
 
 export function getImport(
@@ -556,12 +580,6 @@ export function getImport(
   opts?: VaultRequestOptions,
 ): Promise<Schema["ImportDetailResponse"]> {
   return apiClient.get<Schema["ImportDetailResponse"]>(`/v1/imports/${id}`, opts);
-}
-
-export function getActiveImport(
-  opts?: VaultRequestOptions,
-): Promise<Schema["ActiveImportResponse"]> {
-  return apiClient.get<Schema["ActiveImportResponse"]>("/v1/imports/active", opts);
 }
 
 export function createImport(

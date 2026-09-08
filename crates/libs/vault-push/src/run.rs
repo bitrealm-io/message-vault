@@ -137,7 +137,7 @@ pub struct VaultPushConfig {
     pub journal_path: Option<PathBuf>,
     /// Checked between files and uploads; set it to stop the run early.
     pub cancel: Option<CancelFlag>,
-    /// Existing import session to reuse when the caller already created one.
+    /// Existing Import Run to post into when the caller already created one.
     pub import_id: Option<i64>,
 }
 
@@ -237,7 +237,7 @@ pub fn run(cfg: &VaultPushConfig, progress: Option<&mut ProgressFn<'_>>) -> Resu
         );
     }
     out.expect_files(files.len());
-    let import_id = start_import_session(cfg, &session, &paths.input, &mut out);
+    let import_id = start_import_run(cfg, &session, &paths.input, &mut out)?;
     let batch_size = cfg.batch_size.max(1);
 
     let shared = Mutex::new(SharedJournal::new(journal));
@@ -280,9 +280,7 @@ pub fn run(cfg: &VaultPushConfig, progress: Option<&mut ProgressFn<'_>>) -> Resu
         results,
     };
     write_report(&paths.report, &report)?;
-    if cfg.import_id.is_none()
-        && let Some(import_id) = import_id
-    {
+    if cfg.import_id.is_none() {
         complete_import_session(
             &session,
             import_id,
@@ -342,48 +340,39 @@ fn login(cfg: &VaultPushConfig, out: &mut Reporter<'_, '_>) -> Result<Session> {
     })
 }
 
-/// Tell the vault "a new import run is starting", or reuse the session the
-/// caller already created. Best effort: an older server without import
-/// sessions, or a failed request, leaves the run without an id.
-fn start_import_session(
+/// Create the Import Run every batch is posted into, or reuse the one the
+/// caller already created. There is no run without one: a vault that refuses
+/// to start it ends the push here, before any file is read.
+///
+/// # Errors
+///
+/// Returns the vault's refusal, which includes an account that already has a
+/// running Import Run.
+fn start_import_run(
     cfg: &VaultPushConfig,
     session: &Session,
     input: &Path,
     out: &mut Reporter<'_, '_>,
-) -> Option<i64> {
+) -> Result<i64> {
     let source = detect_source(input)
         .ok()
         .flatten()
         .unwrap_or_else(|| "unknown".to_string());
     if let Some(import_id) = cfg.import_id {
         out.show_as(
-            &format!("using provided vault import session id={import_id}"),
-            format!("Reusing import session {import_id} ({source})"),
+            &format!("using provided Import Run id={import_id}"),
+            format!("Reusing Import Run {import_id} ({source})"),
         );
-        return Some(import_id);
+        return Ok(import_id);
     }
-    match session.start_import(&source, cfg.mode, Some("vault-push")) {
-        Ok(Some(id)) => {
-            out.show_as(
-                &format!("vault import session id={id} source={source}"),
-                format!("Recording import session {id} ({source})"),
-            );
-            Some(id)
-        }
-        Ok(None) => {
-            out.log(
-                "vault import sessions not supported by this server; continuing without import_id",
-            );
-            None
-        }
-        Err(error) => {
-            out.show_as(
-                &format!("warning: could not start vault import session: {error}"),
-                format!("Warning: could not start vault import session: {error}"),
-            );
-            None
-        }
-    }
+    let id = session
+        .start_import(&source, cfg.mode, Some("vault-push"))
+        .context("start the Import Run on the vault")?;
+    out.show_as(
+        &format!("Import Run id={id} source={source}"),
+        format!("Recording Import Run {id} ({source})"),
+    );
+    Ok(id)
 }
 
 /// Run the prepare workers and the import loop until every file is consumed

@@ -81,7 +81,7 @@ The product has two pieces:
 | Piece                  | Stack                                                                                                                             |
 |------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
 | Language (Rust crates) | Rust 1.85+ (edition 2024). CI uses latest stable.                                                                                 |
-| Vault server           | Tokio + Axum 0.8 HTTP API. sqlx Any: SQLite (bundled) by default, Postgres via `[database] url`. TOML config. Argon2 passwords, JWT sessions. |
+| Vault server           | Tokio + Axum 0.8 HTTP API. sqlx Any: SQLite (bundled) by default, Postgres via `[database] url`. TOML config. Argon2 passwords, opaque hashed session tokens. |
 | Database               | SQLite file at `data/vault.db`. Table SQL lives in `schema/sql/`. Schema changes bump `SCHEMA_VERSION` in `db/schema.rs`; old vaults are rebuilt empty and need a fresh import. |
 | Desktop app            | Tauri 2 native window. Vite 6 + React 19 + TypeScript SPA in `web/`. React Router 7, React Aria, Tailwind CSS 4. Vitest + ESLint. |
 | Website                | Same `web/` SPA. Dev server on port 5173. Production copy in `static/`, served by the vault on port 8080.                         |

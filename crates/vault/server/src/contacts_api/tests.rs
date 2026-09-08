@@ -68,7 +68,7 @@ async fn contact_match_reports_only_the_identifiers_the_vault_does_not_have() {
         body,
     )
     .await;
-    assert_eq!(response["unknown"], serde_json::json!(["+15550999"]));
+    assert_eq!(response["items"], serde_json::json!(["+15550999"]));
 }
 
 #[tokio::test]
@@ -82,7 +82,7 @@ async fn contact_match_ignores_blank_identifiers_and_de_duplicates() {
         body,
     )
     .await;
-    assert_eq!(response["unknown"], serde_json::json!(["+15550999"]));
+    assert_eq!(response["items"], serde_json::json!(["+15550999"]));
 }
 
 #[tokio::test]
@@ -100,7 +100,7 @@ async fn contact_match_collapses_duplicates_by_normalized_form() {
     )
     .await;
     assert_eq!(
-        response["unknown"],
+        response["items"],
         serde_json::json!(["+1 (555) 010-0100"]),
         "both spellings normalize to the same value, so only the \
          first-seen spelling should come back once"
@@ -123,7 +123,7 @@ async fn contact_match_matches_a_differently_spelled_identifier_against_the_stor
     )
     .await;
     assert_eq!(
-        response["unknown"],
+        response["items"],
         serde_json::json!([]),
         "the differently-spelled identifier normalizes to the stored value, so it is known"
     );
@@ -141,7 +141,7 @@ async fn contact_match_preserves_order_across_multiple_unknowns() {
     )
     .await;
     assert_eq!(
-        response["unknown"],
+        response["items"],
         serde_json::json!(["+15550200", "+15550300"])
     );
 }
@@ -161,7 +161,7 @@ async fn contact_match_counts_a_trashed_contact_as_known() {
         body,
     )
     .await;
-    assert_eq!(response["unknown"], serde_json::json!([]));
+    assert_eq!(response["items"], serde_json::json!([]));
 }
 
 #[tokio::test]
@@ -176,7 +176,7 @@ async fn contact_match_is_scoped_to_the_calling_account() {
         body,
     )
     .await;
-    assert_eq!(response["unknown"], serde_json::json!(["+15550100"]));
+    assert_eq!(response["items"], serde_json::json!(["+15550100"]));
 }
 
 /// A refusal reaches the person as a 400 carrying the sentence written

@@ -124,10 +124,23 @@ There is no `ok` flag on any success; the status carries the meaning.
 Every list route answers a page, `{items, total, limit, offset}`, and takes
 `offset` and `limit`. No exceptions: a list the person curates by hand
 (groups, tags, saved searches, API tokens), a fixed reference list
-(`/v1/search-fields`), and a `POST` that reads all answer a page. A response
-struct named `…Page` is a page. The list key is always `items`.
+(`/v1/search-fields`), and a `POST` that reads all answer a page. The list
+key is always `items`.
 Why: the web app has one paged type and one hook, and a second shape is a
 second convention.
+
+A `POST` that reads the rows its body names — contact summaries, unmatched
+handles — answers the whole of that body as one page and takes no `offset`
+or `limit`: `total` is the row count, `limit` is the cap the body is held to,
+`offset` is 0. Why: the body already says which rows to read and how many it
+may name, so a second bound would only let a caller ask for rows it did not
+name, or hide rows it did.
+
+A count that describes the whole set rather than the page belongs on the
+resource the set hangs off, not beside `items`. An Import Run's tally of
+contacts created and changed is on the run's own record, and the contacts are
+a page. Why: a page can only count its own rows, and a field beside `items`
+that counts something else is a second shape.
 
 `limit` is at least 1 and at most 500, default 40. `offset` is at most 50 000
 on the browse lists. A value outside the range is `validation-failed`, never a

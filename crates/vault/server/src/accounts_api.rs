@@ -26,7 +26,8 @@ use crate::credentials::{
     passwords_match, require_username_free, require_valid_username, validate_password_policy,
 };
 use crate::db::{account_profile, session_tokens, vault_imports, vault_settings};
-use crate::extract::{Json, Path};
+use crate::extract::{Json, Path, Query};
+use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_params};
 use crate::server::{ApiError, AppState, AuthIdentity, Created, Owner, SignedIn};
 
 // ---------------------------------------------------------------------------
@@ -75,13 +76,6 @@ pub struct AccountResponse {
     pub message_count: i64,
     /// Attachment bytes this account owns.
     pub storage_bytes: i64,
-}
-
-/// Every account in the vault except the owner's own.
-#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct ListAccountsResponse {
-    /// One row per account.
-    pub items: Vec<AccountResponse>,
 }
 
 /// Number of messages an account owns. Never touches message content.
@@ -195,8 +189,12 @@ async fn require_owner_or_self(
     tag = "Accounts",
     operation_id = "list_accounts",
     security(("bearer" = [])),
+    params(
+        ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
+        ("offset" = Option<usize>, Query, description = "Page offset")
+    ),
     responses(
-        (status = 200, body = ListAccountsResponse),
+        (status = 200, body = crate::paging::Page<AccountResponse>),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
     )
@@ -204,13 +202,22 @@ async fn require_owner_or_self(
 pub async fn list_accounts_handler(
     State(state): State<AppState>,
     Owner(_auth): Owner,
-) -> Result<Json<ListAccountsResponse>, ApiError> {
+    Query(query): Query<PageQuery>,
+) -> Result<Json<Page<AccountResponse>>, ApiError> {
+    let page = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
-    let ids: Vec<i64> =
-        sqlx::query_scalar("SELECT id FROM accounts WHERE id != $1 ORDER BY username")
-            .bind(account_profile::OWNER_ACCOUNT_ID)
-            .fetch_all(&mut *conn)
-            .await?;
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts WHERE id != $1")
+        .bind(account_profile::OWNER_ACCOUNT_ID)
+        .fetch_one(&mut *conn)
+        .await?;
+    let ids: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM accounts WHERE id != $1 ORDER BY username LIMIT $2 OFFSET $3",
+    )
+    .bind(account_profile::OWNER_ACCOUNT_ID)
+    .bind(page.limit as i64)
+    .bind(page.offset as i64)
+    .fetch_all(&mut *conn)
+    .await?;
 
     let mut items = Vec::with_capacity(ids.len());
     for id in ids {
@@ -218,7 +225,12 @@ pub async fn list_accounts_handler(
             items.push(account);
         }
     }
-    Ok(Json(ListAccountsResponse { items }))
+    Ok(Json(Page {
+        items,
+        total: total.max(0) as u64,
+        limit: page.limit,
+        offset: page.offset,
+    }))
 }
 
 /// Body for creating an account, by the vault owner or by a stranger.

@@ -8,10 +8,12 @@ type ImportContactRow = {
   is_new: boolean;
 };
 
-type ImportContactsResponse = {
-  contacts: ImportContactRow[];
-  new_count: number;
-  changed_count: number;
+/** One page of them, as every list route answers. */
+type ImportContactsPage = {
+  items: ImportContactRow[];
+  total: number;
+  limit: number;
+  offset: number;
 };
 
 /** A contact the run learned an address for but no name yet. */
@@ -24,8 +26,16 @@ const UNNAMED = "(unknown)";
  * person sees who arrived with a given backup. Contacts with no name yet are
  * the ones waiting in the Unknown group.
  */
-export default function ImportContactsPanel({ importId }: { importId: number }) {
-  const [data, setData] = useState<ImportContactsResponse | null>(null);
+export default function ImportContactsPanel({
+  importId,
+  newCount,
+  changedCount,
+}: {
+  importId: number;
+  newCount: number;
+  changedCount: number;
+}) {
+  const [data, setData] = useState<ImportContactsPage | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -52,17 +62,17 @@ export default function ImportContactsPanel({ importId }: { importId: number }) 
 
   if (loading) return <div className="text-[0.813rem] text-muted">Loading contacts…</div>;
   if (error) return <div className="text-[0.813rem] text-danger">{error}</div>;
-  if (!data || data.contacts.length === 0) {
+  if (!data || data.items.length === 0) {
     return <div className="text-[0.813rem] text-muted">This import changed no contacts.</div>;
   }
 
   return (
     <div>
       <p className="mb-2 text-[0.813rem] text-muted">
-        {data.new_count.toLocaleString()} new, {data.changed_count.toLocaleString()} changed
+        {newCount.toLocaleString()} new, {changedCount.toLocaleString()} changed
       </p>
       <ul className="max-h-48 overflow-y-auto text-[0.813rem]">
-        {data.contacts.map((c) => (
+        {data.items.map((c) => (
           <li key={c.id} className="flex items-center justify-between gap-3 py-0.5">
             <span className={c.name.trim() ? "truncate" : "truncate text-muted"}>
               {c.name.trim() || UNNAMED}

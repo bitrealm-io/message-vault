@@ -124,8 +124,8 @@ export function claimVault(
 // account through `ownAccountPath`.
 
 /** The accounts of this vault, for the owner. The owner's own is not among them. */
-export function listAccounts(opts?: VaultRequestOptions): Promise<Schema["ListAccountsResponse"]> {
-  return apiClient.get<Schema["ListAccountsResponse"]>("/v1/accounts", opts);
+export function listAccounts(opts?: VaultRequestOptions): Promise<Schema["Page_AccountResponse"]> {
+  return apiClient.get<Schema["Page_AccountResponse"]>("/v1/accounts", opts);
 }
 
 /**
@@ -226,10 +226,8 @@ export function deleteAllMessages(
 // An account's tokens live under its own row, and nobody else's session
 // reaches them.
 
-export function listApiTokens(
-  opts?: VaultRequestOptions,
-): Promise<Schema["ListApiTokensResponse"]> {
-  return apiClient.get<Schema["ListApiTokensResponse"]>(`${ownAccountPath()}/api-tokens`, opts);
+export function listApiTokens(opts?: VaultRequestOptions): Promise<Schema["Page_ApiTokenItem"]> {
+  return apiClient.get<Schema["Page_ApiTokenItem"]>(`${ownAccountPath()}/api-tokens`, opts);
 }
 
 export function createApiToken(
@@ -348,8 +346,8 @@ export function listMessages(
 export function getConversationSources(
   conversationId: number,
   opts?: VaultRequestOptions,
-): Promise<Schema["ConversationSourcesPage"]> {
-  return apiClient.get<Schema["ConversationSourcesPage"]>(
+): Promise<Schema["Page_ConversationSourceInfo"]> {
+  return apiClient.get<Schema["Page_ConversationSourceInfo"]>(
     `/v1/conversations/${conversationId}/sources`,
     opts,
   );
@@ -426,15 +424,19 @@ export function updateContact(
 export function getContactSummaries(
   body: Schema["ContactSummariesBody"],
   opts?: VaultRequestOptions,
-): Promise<Schema["ContactSummariesPage"]> {
-  return apiClient.post<Schema["ContactSummariesPage"]>("/v1/contacts/summaries", body, opts);
+): Promise<Schema["Page_ContactSelectionSummary"]> {
+  return apiClient.post<Schema["Page_ContactSelectionSummary"]>(
+    "/v1/contacts/summaries",
+    body,
+    opts,
+  );
 }
 
 /** Which of these identifiers the account has no contact for. */
 export function unmatchedHandles(
   body: Schema["UnmatchedHandlesBody"],
-): Promise<Schema["UnmatchedHandlesResponse"]> {
-  return apiClient.post<Schema["UnmatchedHandlesResponse"]>("/v1/contacts/unmatched-handles", body);
+): Promise<Schema["Page_String"]> {
+  return apiClient.post<Schema["Page_String"]>("/v1/contacts/unmatched-handles", body);
 }
 
 /** The media type an address book file is sent as, from its name; null when it is neither. */
@@ -481,8 +483,8 @@ export function deleteContact(contactId: string | number): Promise<void> {
 // A Contact Group is addressed by its id. Screens hold names; the lookup from
 // a name to an id lives in `nameCollection.ts`, not here.
 
-export function listContactGroups(opts?: VaultRequestOptions): Promise<Schema["NamedSetList"]> {
-  return apiClient.get<Schema["NamedSetList"]>("/v1/contact-groups", opts);
+export function listContactGroups(opts?: VaultRequestOptions): Promise<Schema["Page_NamedSet"]> {
+  return apiClient.get<Schema["Page_NamedSet"]>("/v1/contact-groups", opts);
 }
 
 export function createContactGroup(
@@ -507,8 +509,8 @@ export function deleteContactGroup(id: number, opts?: VaultRequestOptions): Prom
 export function listContactGroupMembers(
   id: number,
   opts?: VaultRequestOptions,
-): Promise<Schema["MemberIdList"]> {
-  return apiClient.get<Schema["MemberIdList"]>(`/v1/contact-groups/${id}/members`, opts);
+): Promise<Schema["Page_i64"]> {
+  return apiClient.get<Schema["Page_i64"]>(`/v1/contact-groups/${id}/members`, opts);
 }
 
 export function updateContactGroupMembers(
@@ -521,8 +523,8 @@ export function updateContactGroupMembers(
 
 // ── Message Tags ────────────────────────────────────────────────────────────
 
-export function listMessageTags(opts?: VaultRequestOptions): Promise<Schema["NamedSetList"]> {
-  return apiClient.get<Schema["NamedSetList"]>("/v1/message-tags", opts);
+export function listMessageTags(opts?: VaultRequestOptions): Promise<Schema["Page_NamedSet"]> {
+  return apiClient.get<Schema["Page_NamedSet"]>("/v1/message-tags", opts);
 }
 
 export function createMessageTag(
@@ -547,8 +549,8 @@ export function deleteMessageTag(id: number, opts?: VaultRequestOptions): Promis
 export function listMessageTagMembers(
   id: number,
   opts?: VaultRequestOptions,
-): Promise<Schema["MemberIdList"]> {
-  return apiClient.get<Schema["MemberIdList"]>(`/v1/message-tags/${id}/members`, opts);
+): Promise<Schema["Page_i64"]> {
+  return apiClient.get<Schema["Page_i64"]>(`/v1/message-tags/${id}/members`, opts);
 }
 
 export function updateMessageTagMembers(
@@ -561,10 +563,8 @@ export function updateMessageTagMembers(
 
 // ── Saved Searches ──────────────────────────────────────────────────────────
 
-export function listSavedSearches(
-  opts?: VaultRequestOptions,
-): Promise<Schema["SavedSearchesListResponse"]> {
-  return apiClient.get<Schema["SavedSearchesListResponse"]>("/v1/saved-searches", opts);
+export function listSavedSearches(opts?: VaultRequestOptions): Promise<Schema["Page_SavedSearch"]> {
+  return apiClient.get<Schema["Page_SavedSearch"]>("/v1/saved-searches", opts);
 }
 
 export function createSavedSearch(body: Schema["SavedSearchBody"]): Promise<Schema["SavedSearch"]> {
@@ -588,8 +588,8 @@ export function deleteSavedSearch(id: number): Promise<void> {
 export function listSearchFields(
   list: Schema["ListKind"],
   opts?: VaultRequestOptions,
-): Promise<Schema["SearchFieldsResponse"]> {
-  return apiClient.get<Schema["SearchFieldsResponse"]>(
+): Promise<Schema["Page_FieldDoc"]> {
+  return apiClient.get<Schema["Page_FieldDoc"]>(
     withQuery("/v1/search-fields", query({ list })),
     opts,
   );
@@ -645,8 +645,8 @@ export function discardImport(id: number): Promise<Schema["DiscardImportResponse
 export function getImportContacts(
   id: number,
   opts?: VaultRequestOptions,
-): Promise<Schema["ImportContactsResponse"]> {
-  return apiClient.get<Schema["ImportContactsResponse"]>(`/v1/imports/${id}/contacts`, opts);
+): Promise<Schema["Page_ImportContactRow"]> {
+  return apiClient.get<Schema["Page_ImportContactRow"]>(`/v1/imports/${id}/contacts`, opts);
 }
 
 // ── Export Runs ─────────────────────────────────────────────────────────────

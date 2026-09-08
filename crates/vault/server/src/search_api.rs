@@ -2,8 +2,9 @@
 //! list, so the web's suggestions and the docs read the server's own table.
 
 use crate::extract::{Json, Query};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
+use crate::paging::{DEFAULT_LIST_LIMIT, Page, page_of, page_params};
 use crate::search::{FieldDoc, ListKind, describe};
 use crate::server::{ApiError, FullAccess};
 
@@ -12,12 +13,12 @@ use crate::server::{ApiError, FullAccess};
 pub(crate) struct SearchFieldsQuery {
     /// `contacts`, `conversations`, or `messages`.
     list: ListKind,
-}
-
-/// The words for one list, in the order the docs table shows them.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct SearchFieldsResponse {
-    items: Vec<FieldDoc>,
+    /// Page size, default 40, max 500.
+    #[serde(default)]
+    limit: Option<usize>,
+    /// Page offset.
+    #[serde(default)]
+    offset: Option<usize>,
 }
 
 /// The search words one list accepts.
@@ -28,7 +29,7 @@ pub(crate) struct SearchFieldsResponse {
     security(("bearer" = [])),
     params(SearchFieldsQuery),
     responses(
-        (status = 200, body = SearchFieldsResponse),
+        (status = 200, body = crate::paging::Page<FieldDoc>),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
@@ -38,10 +39,9 @@ pub(crate) struct SearchFieldsResponse {
 pub(crate) async fn search_fields_list(
     FullAccess(_auth): FullAccess,
     Query(query): Query<SearchFieldsQuery>,
-) -> Result<Json<SearchFieldsResponse>, ApiError> {
-    Ok(Json(SearchFieldsResponse {
-        items: describe(query.list),
-    }))
+) -> Result<Json<Page<FieldDoc>>, ApiError> {
+    let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
+    Ok(Json(page_of(describe(query.list), params)))
 }
 
 #[cfg(test)]

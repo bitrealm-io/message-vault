@@ -104,14 +104,17 @@ of, and a search that reads the same everywhere.
 ### Design
 
 - 2026-09-08: **The HTTP interface was rebuilt on one set of conventions.**
-  Every list pages and sorts the same way, every failure comes back in the same
-  shape with a link to a page explaining that kind of failure, every created
-  thing answers with its address, and every response carries an id you can
-  quote when reporting a problem. Signing in, and everything to do with
-  accounts, each moved to one address serving everyone, with the vault deciding
-  what a given caller may see rather than the address saying it. This matters
-  if you wrote something against the interface yourself; nothing in the app or
-  the desktop app changes.
+  Every list pages and sorts the same way — the browse lists and the ones you
+  curate alike, with no list left answering a bare array — every failure comes
+  back in the same shape with a link to a page explaining that kind of failure,
+  every created thing answers with its address, and every response carries an
+  id you can quote when reporting a problem. Signing in, and everything to do
+  with accounts, each moved to one address serving everyone, with the vault
+  deciding what a given caller may see rather than the address saying it. A
+  single message can now be read by its id, so a search result links to the
+  message rather than to a position in a list. This matters if you wrote
+  something against the interface yourself; nothing in the app or the desktop
+  app changes.
 - 2026-09-05: The vault and the desktop app now convert media with the same
   code, so a video converted on import and a preview generated later can no
   longer differ. Previews are better quality than before.

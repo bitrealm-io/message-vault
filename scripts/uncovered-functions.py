@@ -17,8 +17,9 @@ Each Cobertura method is one function with one line, whose hit count is the
 number of times the function ran. The same function appears once per test
 binary that linked it and once per generic instantiation, so hits are summed
 by name. Closures ("{closure#0}") and shims are folded into the function
-that contains them, and generic arguments ("::<T>") are dropped, so one
-source function is one entry. The count here is therefore smaller than the
+that contains them, and generic arguments are dropped, both the turbofish
+("::<T>") and the ones on a self type or trait ("<Json<T> as
+FromRequest<S>>"), so one source function is one entry. The count here is therefore smaller than the
 functions column in the summary table, which counts every instantiation and
 closure separately.
 """
@@ -42,7 +43,8 @@ def strip_generic_args(name: str) -> str:
             while j < len(name):
                 if name[j] == "<":
                     depth += 1
-                elif name[j] == ">":
+                elif name[j] == ">" and name[j - 1] != "-":
+                    # `->` in an `fn(..) -> T` argument is not a closer.
                     depth -= 1
                     if depth == 0:
                         break
@@ -54,8 +56,29 @@ def strip_generic_args(name: str) -> str:
     return "".join(out)
 
 
+def strip_type_generics(name: str) -> str:
+    """Remove the `<...>` after a type or trait name, keeping the `<Type as
+    Trait>` wrapper of a qualified path: `<Json<T> as FromRequest<S>>::f`
+    becomes `<Json as FromRequest>::f`, so one generic function is one entry
+    however many types it was instantiated for."""
+    out = []
+    depth = 0
+    for i, ch in enumerate(name):
+        if depth:
+            if ch == "<":
+                depth += 1
+            elif ch == ">" and name[i - 1] != "-":
+                depth -= 1
+            continue
+        if ch == "<" and i > 0 and (name[i - 1].isalnum() or name[i - 1] == "_"):
+            depth = 1
+            continue
+        out.append(ch)
+    return "".join(out)
+
+
 def function_key(name: str) -> str:
-    name = strip_generic_args(name)
+    name = strip_type_generics(strip_generic_args(name))
     while True:
         folded = BRACE_COMPONENT.sub("", name)
         if folded == name:

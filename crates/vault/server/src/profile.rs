@@ -889,4 +889,135 @@ mod tests {
         let unchanged = load_response(&mut conn, &account.account_id).await.unwrap();
         assert_eq!(unchanged.time_zone, "America/New_York");
     }
+
+    /// The PATCH route is what profile setup saves through: it writes the
+    /// name, zone and handles and answers with the reloaded profile, which
+    /// the GET route then agrees with.
+    #[tokio::test]
+    async fn patching_the_profile_over_http_writes_it_and_the_get_route_reads_it_back() {
+        let vault = test_vault().await;
+        let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+
+        let patched: serde_json::Value = patch_json(
+            &vault.state,
+            "/v1/account/profile",
+            &account.token,
+            serde_json::json!({
+                "preferred_name": "Alex",
+                "time_zone": "America/New_York",
+                "handles": [
+                    { "handle": "+1 (555) 555-0100", "service": "phone" },
+                    { "handle": "Alex@Example.com", "service": "email" }
+                ]
+            }),
+        )
+        .await;
+
+        assert_eq!(patched["account_id"], account.account_id);
+        assert_eq!(patched["username"], "alice");
+        assert_eq!(patched["preferred_name"], "Alex");
+        assert_eq!(patched["time_zone"], "America/New_York");
+        assert_eq!(patched["phones"], serde_json::json!(["+15555550100"]));
+        assert_eq!(patched["emails"], serde_json::json!(["alex@example.com"]));
+        assert_eq!(patched["must_set_up_profile"], false);
+        let read_back: serde_json::Value =
+            get_json(&vault.state, "/v1/account/profile", &account.token).await;
+        assert_eq!(read_back, patched);
+    }
+
+    #[tokio::test]
+    async fn patching_the_profile_with_an_unknown_time_zone_is_a_validation_failure() {
+        let vault = test_vault().await;
+        let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+
+        let (status, sentence) = patch_failure(
+            &vault.state,
+            "/v1/account/profile",
+            &account.token,
+            serde_json::json!({ "time_zone": "Mars/Olympus_Mons" }),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            sentence,
+            "unknown time zone: Mars/Olympus_Mons; use an IANA name such as America/New_York"
+        );
+    }
+
+    /// The storage route sums every attachment row's size and lists the
+    /// largest ones; a row with no recorded size counts, but is not one of
+    /// the largest.
+    #[tokio::test]
+    async fn the_storage_route_sums_attachment_bytes_and_lists_the_largest_first() {
+        let vault = test_vault().await;
+        let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+        let empty: serde_json::Value =
+            get_json(&vault.state, "/v1/account/storage", &account.token).await;
+        assert_eq!(
+            empty,
+            serde_json::json!({
+                "total_bytes": 0,
+                "attachment_count": 0,
+                "top_attachments": []
+            })
+        );
+        let conversation_id = seed_conversation(
+            &vault.state,
+            &SeedConversation {
+                account_id: &account.account_id,
+                handle: "+15555550100",
+                conversation_type: "individual",
+                group_title: None,
+                source_file: "seed.jsonl",
+                messages: &[SeedMessage {
+                    source: "imessage",
+                    timestamp: "2020-01-01T00:00:00Z",
+                    is_from_me: true,
+                    body: "photos",
+                }],
+            },
+        )
+        .await;
+        let mut conn = vault.conn().await;
+        let message_id: i64 =
+            sqlx::query_scalar("SELECT id FROM messages WHERE conversation_id = $1")
+                .bind(conversation_id)
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+        for (name, mime, size) in [
+            ("big.mov", "video/quicktime", Some(3000_i64)),
+            ("small.jpg", "image/jpeg", Some(1000_i64)),
+            ("unsized.bin", "application/octet-stream", None),
+        ] {
+            sqlx::query(
+                "INSERT INTO attachments (message_id, original_name, mime_type, size_bytes)
+                 VALUES ($1, $2, $3, $4)",
+            )
+            .bind(message_id)
+            .bind(name)
+            .bind(mime)
+            .bind(size)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        }
+        drop(conn);
+
+        let storage: serde_json::Value =
+            get_json(&vault.state, "/v1/account/storage", &account.token).await;
+
+        assert_eq!(storage["total_bytes"], 4000);
+        assert_eq!(storage["attachment_count"], 3);
+        let top = storage["top_attachments"].as_array().unwrap();
+        assert_eq!(top.len(), 2);
+        assert_eq!(top[0]["original_name"], "big.mov");
+        assert_eq!(top[0]["mime_type"], "video/quicktime");
+        assert_eq!(top[0]["size_bytes"], 3000);
+        assert_eq!(top[0]["conversation_id"], conversation_id);
+        assert_eq!(top[0]["chat_identifier"], "+15555550100");
+        assert_eq!(top[1]["original_name"], "small.jpg");
+        assert_eq!(top[1]["size_bytes"], 1000);
+    }
 }

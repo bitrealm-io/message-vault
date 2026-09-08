@@ -307,3 +307,184 @@ pub struct WhatsappConfig {
     /// Whether the backup is a WhatsApp Business backup.
     pub business: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    fn config_with_inputs(inputs: Vec<PathBuf>) -> ExporterConfig {
+        ExporterConfig {
+            inputs,
+            output: PathBuf::from("out"),
+            timezone: None,
+            obfuscate: ObfuscateConfig::default(),
+            media: MediaConfig::default(),
+            cancel: None,
+            log: None,
+            progress: None,
+            output_format: OutputFormat::Json,
+            resume: false,
+            source: SourceConfig::Format(FormatConfig {}),
+        }
+    }
+
+    #[test]
+    fn every_output_format_displays_its_label() {
+        assert_eq!(OutputFormat::Csv.to_string(), "CSV (per conversation)");
+        assert_eq!(OutputFormat::Eml.to_string(), "EML archive (mail folders)");
+        assert_eq!(OutputFormat::Mbox.to_string(), "MBOX (per conversation)");
+        assert_eq!(OutputFormat::Json.to_string(), "JSON (common message)");
+        assert_eq!(
+            OutputFormat::Jsonl.to_string(),
+            "JSONL (common message lines)"
+        );
+        assert_eq!(OutputFormat::Xml.to_string(), "XML (SMS Backup & Restore)");
+    }
+
+    #[test]
+    fn parse_accepts_every_format_id_and_its_aliases() {
+        assert_eq!(OutputFormat::parse("csv"), Ok(OutputFormat::Csv));
+        assert_eq!(OutputFormat::parse("eml"), Ok(OutputFormat::Eml));
+        assert_eq!(OutputFormat::parse("mbox"), Ok(OutputFormat::Mbox));
+        assert_eq!(OutputFormat::parse("json"), Ok(OutputFormat::Json));
+        assert_eq!(OutputFormat::parse("jsonl"), Ok(OutputFormat::Jsonl));
+        assert_eq!(OutputFormat::parse("ndjson"), Ok(OutputFormat::Jsonl));
+        assert_eq!(OutputFormat::parse("xml"), Ok(OutputFormat::Xml));
+        assert_eq!(OutputFormat::parse("sbr"), Ok(OutputFormat::Xml));
+        assert_eq!(OutputFormat::parse("smses"), Ok(OutputFormat::Xml));
+    }
+
+    #[test]
+    fn parse_ignores_case_and_surrounding_whitespace() {
+        assert_eq!(OutputFormat::parse("  JSONL\n"), Ok(OutputFormat::Jsonl));
+        assert_eq!(OutputFormat::parse("Csv"), Ok(OutputFormat::Csv));
+    }
+
+    #[test]
+    fn parse_refuses_an_unknown_format_and_lists_the_known_ones() {
+        assert_eq!(
+            OutputFormat::parse("pdf"),
+            Err(
+                "unknown output format 'pdf' (expected csv, eml, mbox, json, jsonl, or xml)"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn emit_log_hands_each_line_to_the_log_sink() {
+        let seen = Arc::new(Mutex::new(Vec::<String>::new()));
+        let sink_seen = Arc::clone(&seen);
+        let mut config = config_with_inputs(Vec::new());
+        config.log = Some(LogSink::new(move |line| {
+            sink_seen.lock().unwrap().push(line.to_string());
+        }));
+
+        config.emit_log("first");
+        config.emit_log(String::from("second"));
+
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec!["first".to_string(), "second".to_string()]
+        );
+    }
+
+    #[test]
+    fn emit_log_without_a_sink_falls_through_to_stderr() {
+        // No sink set: the line goes to stderr and nothing panics.
+        config_with_inputs(Vec::new()).emit_log("unsunk line");
+    }
+
+    #[test]
+    fn emit_progress_hands_each_event_to_the_progress_sink() {
+        let seen = Arc::new(Mutex::new(Vec::<ProgressEvent>::new()));
+        let sink_seen = Arc::clone(&seen);
+        let mut config = config_with_inputs(Vec::new());
+        config.progress = Some(ProgressSink::new(move |event| {
+            sink_seen.lock().unwrap().push(event);
+        }));
+
+        config.emit_progress(ProgressEvent::Parse { done: 1, total: 4 });
+        config.emit_progress(ProgressEvent::Prepare { done: 2, total: 2 });
+
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![
+                ProgressEvent::Parse { done: 1, total: 4 },
+                ProgressEvent::Prepare { done: 2, total: 2 },
+            ]
+        );
+    }
+
+    #[test]
+    fn emit_progress_without_a_sink_is_a_no_op() {
+        config_with_inputs(Vec::new()).emit_progress(ProgressEvent::Parse { done: 1, total: 1 });
+    }
+
+    #[test]
+    fn require_input_returns_the_single_input_path() {
+        let config = config_with_inputs(vec![PathBuf::from("backup/chat.db")]);
+        assert_eq!(config.require_input(), Ok(Path::new("backup/chat.db")));
+    }
+
+    #[test]
+    fn require_input_refuses_a_config_with_no_input() {
+        let config = config_with_inputs(Vec::new());
+        assert_eq!(config.require_input(), Err("input is required".to_string()));
+    }
+
+    #[test]
+    fn require_input_refuses_more_than_one_input() {
+        let config = config_with_inputs(vec![PathBuf::from("a.xml"), PathBuf::from("b.xml")]);
+        assert_eq!(
+            config.require_input(),
+            Err("expected a single input path".to_string())
+        );
+    }
+
+    #[test]
+    fn every_source_names_its_exporter_and_the_format_converter_names_none() {
+        assert_eq!(
+            SourceConfig::GoSmsPro(GoSmsProConfig {
+                owner_phones: Vec::new()
+            })
+            .exporter(),
+            Some(Exporter::GoSmsPro)
+        );
+        assert_eq!(
+            SourceConfig::SmsBackupRestore(SmsBackupRestoreConfig {
+                owner_phones: Vec::new()
+            })
+            .exporter(),
+            Some(Exporter::SmsBackupRestore)
+        );
+        assert_eq!(
+            SourceConfig::SmsBackupPlus(SmsBackupPlusConfig {
+                owner_phones: Vec::new(),
+                owner_emails: Vec::new(),
+                verbose: false,
+                include_summary: false,
+            })
+            .exporter(),
+            Some(Exporter::SmsBackupPlus)
+        );
+        assert_eq!(
+            SourceConfig::OpenExtract(OpenExtractConfig {}).exporter(),
+            Some(Exporter::OpenExtract)
+        );
+        assert_eq!(
+            SourceConfig::Imazing(ImazingConfig {}).exporter(),
+            Some(Exporter::Imazing)
+        );
+        assert_eq!(
+            SourceConfig::Apple(AppleConfig::default()).exporter(),
+            Some(Exporter::Imessage)
+        );
+        assert_eq!(
+            SourceConfig::Whatsapp(WhatsappConfig::default()).exporter(),
+            Some(Exporter::Whatsapp)
+        );
+        assert_eq!(SourceConfig::Format(FormatConfig {}).exporter(), None);
+    }
+}

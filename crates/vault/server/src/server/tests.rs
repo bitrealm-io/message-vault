@@ -1144,3 +1144,223 @@ async fn accept_is_checked_on_v1_json_routes_only() {
         .unwrap();
     assert_ne!(asset.status(), StatusCode::NOT_ACCEPTABLE);
 }
+
+#[test]
+fn every_api_error_answers_the_status_its_problem_type_declares() {
+    let cases: Vec<(ApiError, StatusCode)> = vec![
+        (
+            ApiError::ValidationFailed(vec!["x".into()]),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+        (
+            ApiError::MissingParameter("x".into()),
+            StatusCode::BAD_REQUEST,
+        ),
+        (ApiError::MalformedBody("x".into()), StatusCode::BAD_REQUEST),
+        (
+            ApiError::UnsupportedMediaType("x".into()),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        ),
+        (
+            ApiError::PayloadTooLarge("x".into()),
+            StatusCode::PAYLOAD_TOO_LARGE,
+        ),
+        (
+            ApiError::InvalidCredentials("x".into()),
+            StatusCode::UNAUTHORIZED,
+        ),
+        (
+            ApiError::AuthenticationRequired("x".into()),
+            StatusCode::UNAUTHORIZED,
+        ),
+        (
+            ApiError::RateLimited {
+                retry_after_secs: 30,
+            },
+            StatusCode::TOO_MANY_REQUESTS,
+        ),
+        (ApiError::UsernameTaken("x".into()), StatusCode::CONFLICT),
+        (ApiError::NameTaken("x".into()), StatusCode::CONFLICT),
+        (
+            ApiError::DemoAccountProtected("x".into()),
+            StatusCode::FORBIDDEN,
+        ),
+        (ApiError::NotTheOwner("x".into()), StatusCode::FORBIDDEN),
+        (
+            ApiError::InsufficientScope("x".into()),
+            StatusCode::FORBIDDEN,
+        ),
+        (ApiError::AccountDisabled("x".into()), StatusCode::FORBIDDEN),
+        (
+            ApiError::SearchQueryInvalid {
+                detail: "x".into(),
+                word: None,
+                did_you_mean: None,
+            },
+            StatusCode::BAD_REQUEST,
+        ),
+        (ApiError::StateConflict("x".into()), StatusCode::CONFLICT),
+        (
+            ApiError::AssetUploadInvalid("x".into()),
+            StatusCode::BAD_REQUEST,
+        ),
+        (ApiError::NotFound("x".into()), StatusCode::NOT_FOUND),
+        (
+            ApiError::MethodNotAllowed("x".into()),
+            StatusCode::METHOD_NOT_ALLOWED,
+        ),
+        (
+            ApiError::NotAcceptable("x".into()),
+            StatusCode::NOT_ACCEPTABLE,
+        ),
+        (
+            ApiError::Internal(anyhow::anyhow!("x")),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        ),
+    ];
+    for (error, status) in cases {
+        assert_eq!(error.status(), status, "{error:?}");
+    }
+}
+
+#[test]
+fn every_api_error_displays_its_detail_sentence() {
+    assert_eq!(
+        ApiError::ValidationFailed(vec!["name is required".into(), "name is too long".into()])
+            .to_string(),
+        "name is required; name is too long"
+    );
+    assert_eq!(
+        ApiError::MissingParameter("q is required".into()).to_string(),
+        "q is required"
+    );
+    assert_eq!(
+        ApiError::MalformedBody("body is not JSON".into()).to_string(),
+        "body is not JSON"
+    );
+    assert_eq!(
+        ApiError::UnsupportedMediaType("send application/json".into()).to_string(),
+        "send application/json"
+    );
+    assert_eq!(
+        ApiError::PayloadTooLarge("request body too large".into()).to_string(),
+        "request body too large"
+    );
+    assert_eq!(
+        ApiError::InvalidCredentials("wrong password".into()).to_string(),
+        "wrong password"
+    );
+    assert_eq!(
+        ApiError::AuthenticationRequired("no bearer token".into()).to_string(),
+        "no bearer token"
+    );
+    assert_eq!(
+        ApiError::RateLimited {
+            retry_after_secs: 30
+        }
+        .to_string(),
+        "too many authentication attempts; try again in 30 seconds"
+    );
+    assert_eq!(
+        ApiError::UsernameTaken("alice is taken".into()).to_string(),
+        "alice is taken"
+    );
+    assert_eq!(
+        ApiError::NameTaken("Book Club is taken".into()).to_string(),
+        "Book Club is taken"
+    );
+    assert_eq!(
+        ApiError::DemoAccountProtected("the demo account stays".into()).to_string(),
+        "the demo account stays"
+    );
+    assert_eq!(
+        ApiError::NotTheOwner("owner only".into()).to_string(),
+        "owner only"
+    );
+    assert_eq!(
+        ApiError::InsufficientScope("needs import".into()).to_string(),
+        "needs import"
+    );
+    assert_eq!(
+        ApiError::AccountDisabled("account disabled".into()).to_string(),
+        "account disabled"
+    );
+    assert_eq!(
+        ApiError::SearchQueryInvalid {
+            detail: "unknown word: frm".into(),
+            word: Some("frm"),
+            did_you_mean: Some("from"),
+        }
+        .to_string(),
+        "unknown word: frm"
+    );
+    assert_eq!(
+        ApiError::StateConflict("import already active".into()).to_string(),
+        "import already active"
+    );
+    assert_eq!(
+        ApiError::AssetUploadInvalid("part 3 is missing".into()).to_string(),
+        "part 3 is missing"
+    );
+    assert_eq!(
+        ApiError::NotFound("no such conversation".into()).to_string(),
+        "no such conversation"
+    );
+    assert_eq!(
+        ApiError::MethodNotAllowed("no PUT here".into()).to_string(),
+        "no PUT here"
+    );
+    assert_eq!(
+        ApiError::NotAcceptable("only JSON".into()).to_string(),
+        "only JSON"
+    );
+    assert_eq!(
+        ApiError::Internal(anyhow::anyhow!("disk full").context("stage conversation")).to_string(),
+        "stage conversation: disk full"
+    );
+}
+
+#[test]
+fn a_sqlx_error_becomes_an_internal_error_and_keeps_its_message() {
+    let error = ApiError::from(sqlx::Error::RowNotFound);
+
+    assert!(matches!(error, ApiError::Internal(_)), "{error:?}");
+    assert_eq!(error.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        error.to_string(),
+        "no rows returned by a query that expected to return at least one row"
+    );
+}
+
+#[tokio::test]
+async fn discard_body_drains_a_body_within_the_cap() {
+    let body = axum::body::Body::from(vec![7u8; 1024]);
+
+    let drained = discard_body(body, 1024).await;
+
+    assert!(drained.is_ok(), "{drained:?}");
+}
+
+#[tokio::test]
+async fn discard_body_refuses_a_body_over_the_cap() {
+    let body = axum::body::Body::from(vec![7u8; 1025]);
+
+    let error = discard_body(body, 1024).await.unwrap_err();
+
+    assert_eq!(error.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(error.to_string(), "request body too large");
+}
+
+#[tokio::test]
+async fn discard_body_reports_a_stream_that_fails_midway() {
+    let chunks: Vec<Result<axum::body::Bytes, std::io::Error>> = vec![
+        Ok(axum::body::Bytes::from_static(b"abc")),
+        Err(std::io::Error::other("connection reset")),
+    ];
+    let body = axum::body::Body::from_stream(futures_util::stream::iter(chunks));
+
+    let error = discard_body(body, 1024).await.unwrap_err();
+
+    assert_eq!(error.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(error.to_string(), "failed to read body: connection reset");
+}

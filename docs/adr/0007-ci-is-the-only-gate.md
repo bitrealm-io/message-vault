@@ -50,7 +50,8 @@ The dependency audits live in `audit.yml`, not `ci.yml`. That workflow runs
 Test coverage lives in `coverage.yml` for the same reason seen from the other
 side: it is a report that never fails a pull request, so it has no place in a
 workflow whose every job is required. It runs `scripts/coverage.sh`
-(cargo-llvm-cov over the workspace, with the Postgres suites live) on each push
+(cargo-llvm-cov over the workspace on SQLite, then the server crate again on
+Postgres, both passes in one report) on each push
 to `main` and on demand, and keeps the reports as a workflow artifact.
 
 The docs build on a pull request is the `docs` job in `ci.yml`, not a trigger
@@ -223,12 +224,24 @@ inherit it. A specific site that genuinely wants nine arguments carries a local
 `#[allow]` with a reason.
 
 The `test-postgres` job is gone. Its Postgres service moved onto the `test`
-job, which sets `MV_TEST_POSTGRES_URL` for `cargo test --workspace`. Every
-Postgres-gated test runs in a schema of its own on that server
-(`pg_test_schema_url` in `crates/vault/server/src/db/engine.rs`, #435), so
-running them inside the workspace suite introduces no race, and two checkouts
-can run against one server at the same time. The server crate now compiles once per pull request
-instead of twice.
+job, which runs `cargo test --workspace` on SQLite and then
+`cargo test -p message-vault-server` with `MV_TEST_POSTGRES_URL` set. Only
+the server reads that variable, so the second pass is the server alone.
+Both passes are needed: the tests whose subject is SQLite itself (the schema
+contract, FTS5 triggers, the rebuilds, the password-change rollback) return
+early when the variable is set, and for a while the job set it for its only
+test step, so those tests reported a pass on every pull request without
+asserting anything. Every Postgres-gated test runs in a schema of its own on
+that server (`pg_test_schema_url` in `crates/vault/server/src/db/engine.rs`,
+#435), so running them inside the suite introduces no race, and two checkouts
+can run against one server at the same time. The server crate compiles once
+per pull request; the second pass reuses the build.
+
+The job also installs ffmpeg. The transcode, media and demo-seed tests check
+for it and return early when it is missing, and for a while no runner had it,
+so twenty-six tests, the crash-recovery and resume suite among them, passed
+on every pull request without running. A test that skips itself is not a
+gate, so the tool it needs is part of the job.
 
 The ruleset does not require a branch to be up to date with `main` before it
 merges, so each pull request is checked against the `main` it branched from,

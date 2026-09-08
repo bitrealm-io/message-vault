@@ -134,11 +134,16 @@ jobs:
       - name: Clippy workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-  # ── Rust: build + test, the server suite on Postgres ──────────────────
-  # With MV_TEST_POSTGRES_URL set, the server's shared test pool hands every
-  # test a schema of its own on the service, so the whole suite runs against
-  # Postgres here (#339). Tests whose subject is SQLite itself return early
-  # and say so. Without the variable the same suite runs on SQLite.
+  # ── Rust: build + test on SQLite, then the server suite again on Postgres
+  # The workspace runs once with MV_TEST_POSTGRES_URL unset, which is the
+  # SQLite run every developer gets locally; the tests whose subject is
+  # SQLite itself (the schema contract, FTS5 triggers, rebuilds) only assert
+  # there. The server crate then runs a second time with the variable set:
+  # its shared test pool hands every test a schema of its own on the
+  # service (#339), and the SQLite-only tests return early and say so. Only
+  # the server reads the variable, so nothing else needs the second pass.
+  # ffmpeg is installed because the transcode, media and demo-seed tests
+  # skip themselves without it, and a skipped test asserts nothing.
   test:
     name: Build & Test (Rust)
     needs: changes
@@ -165,7 +170,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev
+          sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev ffmpeg
 
       - uses: actions/cache@v6
         with:
@@ -180,12 +185,15 @@ jobs:
       - name: Build workspace
         run: cargo build --workspace
 
+      - name: Test workspace on SQLite
+        run: cargo test --workspace
+
       # GitHub publishes service ports on localhost; the hostname `postgres`
       # only resolves when the job itself runs in a container.
-      - name: Test workspace
+      - name: Test the server on Postgres
         env:
           MV_TEST_POSTGRES_URL: postgres://vault:vault@127.0.0.1:5432/vault
-        run: cargo test --workspace
+        run: cargo test -p message-vault-server
 
   # ── Rust: check, lint, and test src-tauri ─────────────────────────────
   # src-tauri is not a workspace member, so the workspace jobs above skip

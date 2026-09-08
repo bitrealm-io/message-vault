@@ -17,7 +17,10 @@
 # python3 for scripts/uncovered-functions.py. The
 # instrumented build lives under target/llvm-cov-target, apart from plain
 # `cargo build` output, so the first run compiles the workspace from scratch.
-# Export MV_TEST_POSTGRES_URL to include the Postgres-gated server suites.
+# The workspace always runs on SQLite. Export MV_TEST_POSTGRES_URL and the
+# server crate runs a second time on Postgres, so the Postgres-gated suites
+# count too; both passes feed one report. ffmpeg on PATH matters for the
+# same reason: the transcode and media tests skip themselves without it.
 # src-tauri is not a workspace member and is not measured; its commands are
 # thin wrappers over the exporter and push/pull crates, which are.
 # Test code itself (tests/ directories and the <module>/tests.rs files) is
@@ -39,8 +42,13 @@ OUT="target/llvm-cov"
 IGNORE='(^|/)tests/|/tests\.rs$'
 mkdir -p "${OUT}"
 
-echo "==> cargo llvm-cov (workspace tests, instrumented)"
-cargo llvm-cov --workspace --no-report --ignore-filename-regex "${IGNORE}"
+echo "==> cargo llvm-cov (workspace tests on SQLite, instrumented)"
+env -u MV_TEST_POSTGRES_URL cargo llvm-cov --workspace --no-report --ignore-filename-regex "${IGNORE}"
+
+if [[ -n "${MV_TEST_POSTGRES_URL:-}" ]]; then
+  echo "==> cargo llvm-cov (server tests on Postgres, same profile)"
+  cargo llvm-cov -p message-vault-server --no-report --ignore-filename-regex "${IGNORE}"
+fi
 
 echo "==> reports"
 cargo llvm-cov report --ignore-filename-regex "${IGNORE}" --lcov --output-path "${OUT}/lcov.info"

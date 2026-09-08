@@ -207,6 +207,38 @@ fn committed_demo_seed_toml_parses() {
     assert_eq!(seed.account.username, "demo");
 }
 
+#[test]
+fn a_complete_bundle_is_used_as_it_is_when_there_is_no_seed_file() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let bundle = temp.path().join("bundle");
+    write_tiny_reset_bundle(&bundle);
+    let seed_toml = temp.path().join("demo_seed.toml");
+
+    let stats = maybe_regenerate_bundle(&bundle, &seed_toml).expect("the image bundle is complete");
+
+    assert_eq!(stats, demo_seed::GenStats::default());
+    assert!(
+        bundle.join("staging/imessage/a.jsonl").is_file(),
+        "the bundle's own conversations stay in place"
+    );
+}
+
+#[test]
+fn an_incomplete_bundle_without_a_seed_file_cannot_be_reset() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let bundle = temp.path().join("bundle");
+    fs::create_dir_all(bundle.join("staging").join(IMESSAGE_SOURCE)).expect("imessage dir");
+    let seed_toml = temp.path().join("demo_seed.toml");
+
+    let error = maybe_regenerate_bundle(&bundle, &seed_toml)
+        .expect_err("no seed file and no complete bundle");
+
+    assert!(
+        error.to_string().contains("is not a complete demo bundle"),
+        "{error:#}"
+    );
+}
+
 #[tokio::test]
 async fn the_demo_account_may_import_export_and_delete() {
     let temp = tempfile::tempdir().expect("create test directory");

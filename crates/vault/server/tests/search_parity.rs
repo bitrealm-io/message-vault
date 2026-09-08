@@ -12,7 +12,8 @@
 //! pools come from the crate's test-support re-exports.
 
 use message_vault_server::{
-    ExportPageOpts, ensure_vault_schema, export_messages, pg_test_schema_pool, sqlite_test_pool,
+    ExportPageOpts, ExportScope, ensure_vault_schema, export_messages, pg_test_schema_pool,
+    sqlite_test_pool,
 };
 use serde::Deserialize;
 use sqlx::AnyConnection;
@@ -148,17 +149,18 @@ async fn setup_vault(conn: &mut AnyConnection) {
 }
 
 /// Run the committed query list through the same search entry point the API
-/// uses ([`export_messages`] on `/v1/export/messages`). Returns (query, id set)
-/// pairs in `CASES` order.
+/// uses ([`export_messages`], the `query` scope of an Export Run). Returns
+/// (query, id set) pairs in `CASES` order.
 async fn run_against(conn: &mut AnyConnection) -> Vec<(&'static str, Vec<i64>)> {
     setup_vault(conn).await;
     let mut results = Vec::with_capacity(CASES.len());
     for &(query, _expected) in CASES {
+        let scope = ExportScope::Query { q: query.into() };
         let resp = export_messages(
             conn,
             ExportPageOpts {
                 account_id: ACCOUNT_ID,
-                query,
+                scope: &scope,
                 limit: 100,
                 offset: 0,
                 clock: (
@@ -198,11 +200,12 @@ async fn assert_diacritics_exception(conn: &mut AnyConnection, engine: Engine) {
         Engine::Sqlite => vec![9, 10],
         Engine::Postgres => vec![9],
     };
+    let scope = ExportScope::Query { q: "cafe".into() };
     let resp = export_messages(
         conn,
         ExportPageOpts {
             account_id: ACCOUNT_ID,
-            query: "cafe",
+            scope: &scope,
             limit: 100,
             offset: 0,
             clock: (

@@ -268,7 +268,7 @@ mod tests {
     use super::*;
     use vault_api_types::{MessageConversation, Participant};
 
-    /// One page of `GET /v1/export/messages` exactly as the vault serializes
+    /// One page of `GET /v1/exports/{id}/messages` exactly as the vault serializes
     /// it: `service` on the message rather than on the conversation, an
     /// attachment with no byte length, and a participant the source named
     /// without recording an address, whose `handle` and `service` are `null`.

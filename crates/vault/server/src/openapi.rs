@@ -28,7 +28,7 @@ use crate::server::AppState;
         (name = "Session", description = "The signed-in credential: sign in, check it, sign out"),
         (name = "Accounts", description = "The vault's accounts: the owner manages them, and each account reads and writes its own, API tokens included"),
         (name = "Import", description = "JSONL import sessions and ingest"),
-        (name = "Export", description = "Read-only messages and counts"),
+        (name = "Export", description = "Export Runs: create one, page its messages, close it"),
         (name = "Assets", description = "Attachment bytes"),
         (name = "Contacts", description = "Address book and contact groups"),
         (name = "Conversations", description = "Conversation list and sources"),
@@ -89,8 +89,14 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
             crate::api_tokens_api::rename_api_token_handler,
             crate::api_tokens_api::delete_api_token_handler
         ))
+        .routes(routes!(
+            crate::export_api::exports_list_handler,
+            crate::export_api::exports_create_handler
+        ))
+        .routes(routes!(crate::export_api::exports_get_handler))
         .routes(routes!(crate::export_api::export_messages_handler))
-        .routes(routes!(crate::export_api::export_messages_count_handler))
+        .routes(routes!(crate::export_api::exports_complete_handler))
+        .routes(routes!(crate::export_api::exports_cancel_handler))
         .routes(routes!(crate::contacts_api::contacts_list_handler))
         .routes(routes!(crate::contacts_api::contact_summaries_handler))
         .routes(routes!(crate::contacts_api::contact_detail_handler))
@@ -289,8 +295,6 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&dump_openapi_json()).unwrap();
         let paths = v["paths"].as_object().unwrap();
         for p in [
-            "/v1/export/messages",
-            "/v1/export/messages/count",
             "/v1/contacts",
             "/v1/contacts/summaries",
             "/v1/contacts/{id}",
@@ -333,6 +337,11 @@ mod tests {
             "/v1/imports/{id}",
             "/v1/imports/{id}/complete",
             "/v1/imports/{id}/batches",
+            "/v1/exports",
+            "/v1/exports/{id}",
+            "/v1/exports/{id}/messages",
+            "/v1/exports/{id}/complete",
+            "/v1/exports/{id}/cancel",
             "/v1/assets/{sha256}",
             "/v1/assets/{sha256}/uploads",
             "/v1/assets/{sha256}/uploads/{upload_id}/parts/{part}",

@@ -21,8 +21,36 @@ type Schema = components["schemas"];
 /** One past Import Run, as the imports list returns it. */
 export type ImportRow = Schema["ImportSummary"];
 
+/** One Export Run as the history table lists it. */
+export type ExportRow = Schema["ExportRun"];
+
 /** One large attachment in the storage breakdown. */
 export type TopAttachment = Schema["TopAttachment"];
+
+/**
+ * What an Export Run asked for, in one line: "Everything", the search it
+ * ran, or how many conversations and messages were picked by hand.
+ */
+export function describeExportScope(scope: Schema["ExportScope"]): string {
+  switch (scope.kind) {
+    case "everything":
+      return "Everything";
+    case "query":
+      return `Search: ${scope.q}`;
+    case "selection": {
+      const parts: string[] = [];
+      const conversations = scope.conversation_ids?.length ?? 0;
+      const messages = scope.message_ids?.length ?? 0;
+      if (conversations > 0) {
+        parts.push(`${conversations} conversation${conversations === 1 ? "" : "s"}`);
+      }
+      if (messages > 0) {
+        parts.push(`${messages} message${messages === 1 ? "" : "s"}`);
+      }
+      return `Picked: ${parts.join(", ")}`;
+    }
+  }
+}
 
 /** One Import Run in full, with its issues. */
 export type ImportDetailResponse = Schema["ImportDetailResponse"];

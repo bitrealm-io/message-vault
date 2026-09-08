@@ -10,7 +10,7 @@ use crate::server::ApiError;
 
 /// Default page size for the Contacts and Conversations lists.
 pub const DEFAULT_LIST_LIMIT: usize = 40;
-/// Default page size for `GET /v1/export/messages`.
+/// Default page size for `GET /v1/exports/{id}/messages`.
 pub const DEFAULT_EXPORT_LIMIT: usize = 100;
 /// The largest page any list route returns. One number, one meaning.
 pub const MAX_LIST_LIMIT: usize = 500;

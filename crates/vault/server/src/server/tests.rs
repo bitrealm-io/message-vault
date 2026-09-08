@@ -887,9 +887,8 @@ async fn import_endpoint_honors_can_import_flag() {
     );
 }
 
-/// The `ExportAccess` extractor guards `GET /v1/export/messages/count`:
-/// with `can_export` off, the endpoint refuses; turned back on, it
-/// succeeds.
+/// The `ExportAccess` extractor guards `GET /v1/exports`: with `can_export`
+/// off, the endpoint refuses; turned back on, it succeeds.
 #[tokio::test]
 async fn export_endpoint_honors_can_export_flag() {
     let vault = crate::test_support::test_vault().await;
@@ -911,9 +910,9 @@ async fn export_endpoint_honors_can_export_flag() {
         StatusCode::OK
     );
     assert_eq!(
-        crate::test_support::get_status(&state, "/v1/export/messages/count", &user.token).await,
+        crate::test_support::get_status(&state, "/v1/exports", &user.token).await,
         StatusCode::FORBIDDEN,
-        "can_export=false must refuse GET /v1/export/messages/count"
+        "can_export=false must refuse GET /v1/exports"
     );
 
     assert_eq!(
@@ -927,9 +926,9 @@ async fn export_endpoint_honors_can_export_flag() {
         StatusCode::OK
     );
     assert_eq!(
-        crate::test_support::get_status(&state, "/v1/export/messages/count", &user.token).await,
+        crate::test_support::get_status(&state, "/v1/exports", &user.token).await,
         StatusCode::OK,
-        "can_export=true must allow GET /v1/export/messages/count"
+        "can_export=true must allow GET /v1/exports"
     );
 }
 

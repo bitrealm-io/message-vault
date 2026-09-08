@@ -648,3 +648,40 @@ export function getImportContacts(
 ): Promise<Schema["ImportContactsResponse"]> {
   return apiClient.get<Schema["ImportContactsResponse"]>(`/v1/imports/${id}/contacts`, opts);
 }
+
+// ── Export Runs ─────────────────────────────────────────────────────────────
+//
+// The desktop app pages a run's messages from its Rust side (`vault-pull`),
+// so `GET /v1/exports/{id}/messages` has no function here.
+
+/** The account's Export Runs, newest first, narrowed to one status when given. */
+export type ExportListParams = {
+  status?: "running" | "completed" | "failed" | "cancelled";
+  limit?: number;
+  offset?: number;
+  sort?: "started_at" | "-started_at";
+};
+
+export function listExports(
+  params: ExportListParams = {},
+  opts?: VaultRequestOptions,
+): Promise<Schema["Page_ExportRun"]> {
+  return apiClient.get<Schema["Page_ExportRun"]>(withQuery("/v1/exports", query(params)), opts);
+}
+
+export function getExport(id: number, opts?: VaultRequestOptions): Promise<Schema["ExportRun"]> {
+  return apiClient.get<Schema["ExportRun"]>(`/v1/exports/${id}`, opts);
+}
+
+/** Record an Export Run; the vault answers `201` with the run and its counts. */
+export function createExport(body: Schema["CreateExportBody"]): Promise<Schema["ExportRun"]> {
+  return apiClient.post<Schema["ExportRun"]>("/v1/exports", body);
+}
+
+export function completeExport(id: number): Promise<Schema["ExportRun"]> {
+  return apiClient.post<Schema["ExportRun"]>(`/v1/exports/${id}/complete`, {});
+}
+
+export function cancelExport(id: number): Promise<Schema["ExportRun"]> {
+  return apiClient.post<Schema["ExportRun"]>(`/v1/exports/${id}/cancel`, {});
+}

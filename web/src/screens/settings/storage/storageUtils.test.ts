@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeExportScope,
   formatBytes,
   formatImportDate,
   type ImportDetailResponse,
@@ -113,5 +114,20 @@ describe("toImportSummaryView", () => {
     expect(view.durationMs).toBe(65);
     expect(view.attachmentsMs).toBe(20);
     expect(view.prepareMs).toBe(5);
+  });
+});
+
+describe("describeExportScope", () => {
+  it("names each scope form in one line", () => {
+    expect(describeExportScope({ kind: "everything" })).toBe("Everything");
+    expect(describeExportScope({ kind: "query", q: "from:me pizza" })).toBe(
+      "Search: from:me pizza",
+    );
+    expect(
+      describeExportScope({ kind: "selection", conversation_ids: [1, 2], message_ids: [9] }),
+    ).toBe("Picked: 2 conversations, 1 message");
+    expect(describeExportScope({ kind: "selection", conversation_ids: [4] })).toBe(
+      "Picked: 1 conversation",
+    );
   });
 });

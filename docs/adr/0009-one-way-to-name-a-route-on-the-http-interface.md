@@ -5,7 +5,7 @@ once rather than per pull request.
 
 **A collection is plural, and a member is `/{collection}/{id}`.** A singular
 path is legal only for a singleton: one per vault (`/v1/vault`) or one per
-session (`/v1/account`). `/v1/trash` is a singleton by the same rule.
+signed-in account (`/v1/account`). `/v1/trash` is a singleton by the same rule.
 
 **A path segment names a resource, never a caller's role.** Who may call a
 route is enforced in its handler, so a change to permissions never renames a
@@ -38,9 +38,12 @@ absent or unaccepted answers `415 Unsupported Media Type`.
 **Sorting is a request parameter, in one spelling, on every list**:
 `sort=-field,field`, comma-separated keys with a `-` prefix for descending.
 Each list declares which columns it accepts, and an unlisted column is a
-`400 Bad Request` naming the column. Filtering is the search language and
-nothing else (ADR-0004); query parameters never filter, and there is no
-`fields=` selection.
+`validation-failed` problem (ADR-0010), `422 Unprocessable Entity`, naming the
+column and the accepted set. Filtering is the search language and nothing else
+(ADR-0004), with one exception: a list that has no search language may take a
+filter parameter whose values are the ones its rows store, and imports is the
+only such list (`GET /v1/imports?status=running`). There is no `fields=`
+selection.
 
 **Two levels of nesting, and `/health` is the one route outside `/v1`.** A
 multipart upload is the single exception to the nesting rule, at three. Every
@@ -48,7 +51,7 @@ field on the wire is snake_case.
 
 ## Why
 
-In September 2026 an audit of the interface found twenty-four conformance
+In September 2026 an audit of the interface found twenty-five conformance
 problems across 58 paths, recorded with their evidence in
 `docs/agents/http-api-audit.md`. Ten of them were path names.
 
@@ -95,8 +98,12 @@ a query only narrows while sort order is a request parameter.
 - Ten paths are renamed, among them `POST /v1/imports/{id}/batches`,
   `DELETE /v1/account`, `PUT /v1/account/password`, `/v1/vault/settings` and
   `POST /v1/contacts`.
-- An import session becomes mandatory: the sessionless one-shot import goes,
-  and every Import Run is recorded as CONTEXT.md already says it is.
+- An Import Run becomes mandatory: the sessionless one-shot import goes, and
+  every run is recorded as CONTEXT.md already says it is. The row is an Import
+  Run, not an import session; "session" is the signed-in account's token.
+- `GET /v1/imports` becomes a page like every other list (ADR-0005).
 - Seven creating routes gain `201 Created` and a `Location` header.
-- Four lists gain sorting, and the one that had it gains a direction.
+- Four lists gain sorting, and the one that had it spells direction in the
+  sign rather than in a second `order=` parameter, and refuses an unknown key
+  instead of ignoring it.
 - Breaking changes are accepted, as CLAUDE.md says for every interface.

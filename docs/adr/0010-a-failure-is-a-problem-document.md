@@ -5,11 +5,11 @@ document, served as `application/problem+json`:
 
 ```json
 {
-  "type": "https://bitrealm.io/vault/developer/errors/username-taken",
+  "type": "https://bitrealm.io/vault/developer/reference/errors/username-taken",
   "title": "Username taken",
   "status": 409,
   "detail": "The username 'alice' already belongs to an account.",
-  "request_id": "01K6Q2J8ZC3M4N5P6R7S8T9V0W"
+  "request_id": "3f2b1c0e-8d4a-4b6e-9f21-5c7d8e9a0b1c"
 }
 ```
 
@@ -19,29 +19,46 @@ with `errors`, a list of every field that failed rather than the first:
 
 ```json
 {
-  "type": "https://bitrealm.io/vault/developer/errors/validation-failed",
+  "type": "https://bitrealm.io/vault/developer/reference/errors/validation-failed",
   "title": "Validation failed",
   "status": 422,
   "errors": [
     "limit must be at least 1",
     "offset exceeds maximum of 50000"
   ],
-  "request_id": "01K6Q2J8ZC3M4N5P6R7S8T9V0W"
+  "request_id": "3f2b1c0e-8d4a-4b6e-9f21-5c7d8e9a0b1c"
 }
 ```
 
 **Every response carries a request id**, as an `x-request-id` header on success
-and failure alike, repeated in the problem body as `request_id`. The id joins
-the request's `TraceLayer` span, so every log line the request produces carries
-it too. RFC 7807's `instance` member stays unused: the specification defines it
-as a URI reference, and a bare id is not one.
+and failure alike, repeated in the problem body as `request_id`. The server
+always generates it, a UUID v4; an `x-request-id` a client sends is ignored, so
+an id in the log is one the server made. The id joins the request's
+`TraceLayer` span, so every log line the request produces carries it too.
+RFC 7807's `instance` member stays unused: the specification defines it as a
+URI reference, and a bare id is not one.
+
+**A request that cannot be read is `malformed-body`, `400 Bad Request`; one
+that parsed and then broke a rule is `validation-failed`,
+`422 Unprocessable Entity`**, whether the rule was on a query parameter, a path
+segment or a body field. Axum's own rejections follow the same line, so
+`limit=ten` and a non-numeric id answer `422 Unprocessable Entity` with the
+field named in `errors`.
 
 **`406 Not Acceptable` is answered narrowly**: only when an `Accept` header is
 present and no member of it matches `application/json`,
 `application/problem+json`, or `*/*`. A missing `Accept` is a request for JSON.
+The check runs on the `/v1` routes that produce JSON, which is all of them but
+`GET /v1/assets/{sha256}`, which streams the asset's own bytes with its own
+content type. Nothing outside `/v1` is checked: the web app, `/health` and the
+OpenAPI UI produce other things on purpose.
 
-The problem types, and which failure becomes which, are registered in
-`docs/agents/http-api-problem-types.md`.
+**The code is the registry.** Each problem type is declared once in the server,
+with its slug, status, title and the paragraph its page shows; the pages under
+`bitrealm.io/vault/developer/reference/errors/` and their index are generated
+from that declaration, and a test fails when the checked-in pages drift from
+it. `docs/agents/http-api-problem-types.md` holds the first classification
+until the code carries it, and is deleted then.
 
 ## Why
 
@@ -99,13 +116,18 @@ request.
 
 - ADR-0005's `{"error": "..."}` body is replaced. Its paging shape, its "no
   `ok` flag", and its "the status carries the meaning" all stand.
-- 118 `ApiError` construction sites gain a problem type; 61 of them are
-  `BadRequest` and are the work.
+- 118 `ApiError` construction sites gain a problem type across twenty types;
+  61 of them are `BadRequest` and are the work. The `Unauthorized`, `Forbidden`,
+  `Conflict` and `MethodNotAllowed` variants map to `authentication-required`,
+  `insufficient-scope`, `account-disabled`, `state-conflict` and
+  `method-not-allowed`.
 - The vault's own validation moves to `422 Unprocessable Entity`, matching what
   Axum's deserializer already returns for a body that fails to deserialize.
 - A page per problem type is published under
-  `bitrealm.io/vault/developer/errors/`, and an unpublished type is a broken
-  `type` URL, so the registry and the pages ship together.
+  `bitrealm.io/vault/developer/reference/errors/`, and an unpublished type is a
+  broken `type` URL, so the registry and the pages ship together. The site
+  publishes on a release tag, so the URLs go live with the release that carries
+  the change.
 - `tower-http` gains its `request-id` feature.
 - `web/`'s one error parse moves from `message` to `title` and `detail`, and
   gains the ability to branch on `type`.

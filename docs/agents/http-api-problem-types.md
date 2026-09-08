@@ -1,31 +1,41 @@
 # HTTP problem type registry
 
-Draft. The vault's failures classified into problem types, one per RFC 7807
-`type` URL. Each type gets a page under `bitrealm.io/vault/developer/errors/`,
-and the `type` member points at it.
+The first classification of the vault's failures into problem types, one per
+RFC 7807 `type` URL. Each type gets a page under
+`bitrealm.io/vault/developer/reference/errors/`, and the `type` member points
+at it.
+
+This file is a planning aid, not the registry. ADR-0010 makes the server code
+the registry: each type is declared once with its slug, status, title and page
+text, and the pages are generated from that. When those declarations land this
+file is deleted, so nothing has to be kept in step with it.
 
 Sixty-one `ApiError::BadRequest` sites in `crates/vault/server/src` (excluding
-test modules) plus the other `ApiError` variants collapse into fifteen types.
-Classifying them is what the RFC 7807 decision costs; this file is the first
-pass.
+test modules) plus the other `ApiError` variants collapse into twenty types.
+Classifying them is what the RFC 7807 decision costs.
 
 ## The types
 
 | Slug | Status | Raised when |
 |---|---|---|
-| `validation-failed` | `422 Unprocessable Entity` | One or more fields break a rule. `errors` lists every failure, not the first. |
+| `validation-failed` | `422 Unprocessable Entity` | A query parameter, path segment or body field parsed and then broke a rule, including an unknown `sort` key or `status` value. `errors` lists every failure, not the first. |
 | `missing-parameter` | `400 Bad Request` | A required query parameter or body field is absent. |
-| `malformed-body` | `400 Bad Request` | The body cannot be read, or is not valid JSON or JSONL. |
+| `malformed-body` | `400 Bad Request` | The request cannot be read: not valid JSON or JSONL, or a body that fails to arrive. |
 | `unsupported-media-type` | `415 Unsupported Media Type` | `Content-Type` is absent or not one the route accepts. |
 | `payload-too-large` | `413 Payload Too Large` | The body is over the configured cap. |
 | `invalid-credentials` | `401 Unauthorized` | A username, password, or current-password check failed. |
+| `authentication-required` | `401 Unauthorized` | The bearer token is missing, malformed, unknown or expired. The remedy is to sign in. |
 | `rate-limited` | `429 Too Many Requests` | The auth rate limiter refused the attempt. Carries `Retry-After`. |
 | `username-taken` | `409 Conflict` | Registration or a rename collides with an existing username. |
 | `name-taken` | `409 Conflict` | A Contact Group, Message Tag, or Saved Search name collides. |
 | `demo-account-protected` | `403 Forbidden` | The demo account refuses a destructive operation. |
 | `not-the-owner` | `403 Forbidden` | The account is not the vault owner. |
+| `insufficient-scope` | `403 Forbidden` | The token is valid but lacks the scope the route needs (import, export, full access). |
+| `account-disabled` | `403 Forbidden` | The account exists but may not sign in or act. |
 | `search-query-invalid` | `400 Bad Request` | The search language refused a word. Extension members `word` and `did_you_mean`, per ADR-0004. |
-| `import-state-invalid` | `409 Conflict` | The import session is not in a state that allows the operation. |
+| `state-conflict` | `409 Conflict` | The resource is not in a state that allows the operation: an Import Run past the stage the call needs, a vault that already has an owner, or a delete on something not yet trashed. |
+| `method-not-allowed` | `405 Method Not Allowed` | The path exists and the method does not. |
+| `not-acceptable` | `406 Not Acceptable` | `Accept` is present and no member matches `application/json`, `application/problem+json` or `*/*`, on a `/v1` route that produces JSON. |
 | `asset-upload-invalid` | `400 Bad Request` | A part number, upload id, or completion does not match the upload. |
 | `not-found` | `404 Not Found` | The addressed resource does not exist for this account. |
 
@@ -50,13 +60,20 @@ URI reference identifying the occurrence, and a bare id is not one.
 | Module | Sites | Types they become |
 |---|---|---|
 | `auth.rs` | 18 | `validation-failed`, `invalid-credentials`, `username-taken`, `demo-account-protected` |
-| `import/mod.rs` | 12 | `validation-failed`, `missing-parameter`, `malformed-body`, `unsupported-media-type`, `import-state-invalid` |
+| `import/mod.rs` | 12 | `validation-failed`, `missing-parameter`, `malformed-body`, `unsupported-media-type`, `state-conflict` |
 | `assets.rs` | 9 | `missing-parameter`, `malformed-body`, `asset-upload-invalid` |
 | `paging.rs` | 3 | `validation-failed` |
 | `contacts_api.rs` | 4 | `validation-failed` |
 | `server.rs`, `extract.rs` | 6 | `malformed-body` |
 | `vault_api.rs`, `owner_api.rs`, `api_tokens_api.rs`, `profile.rs`, `conversations_api.rs` | 8 | `validation-failed` |
 | `search/error.rs` | 1 | `search-query-invalid` |
+
+The other variants land too: the eighteen `Unauthorized` and `Forbidden` sites
+in `server.rs` and `auth.rs` become `authentication-required`,
+`insufficient-scope` and `account-disabled`; the three `Conflict` sites outside
+named sets (`vault_api.rs:122`, `conversations_api.rs:842`,
+`contacts_api.rs:1413`) become `state-conflict`; the one `MethodNotAllowed`
+becomes `method-not-allowed`. `ServiceUnavailable` has no caller and goes.
 
 Sixteen of the sixty-one pass an inner error's `Display` through as the
 message (`e.to_string()`). Those are the ones classification actually changes:

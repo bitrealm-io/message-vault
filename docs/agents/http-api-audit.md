@@ -29,8 +29,9 @@ and `#481` then added `/v1/owner/vault-settings` whose handlers live in
 
 ## Findings
 
-Twenty-four findings. Each names the evidence. A5 to A7 were found by
-classifying the failures for the RFC 7807 work, not by reading the paths.
+Twenty-five findings. Each names the evidence. A5 to A7 were found by
+classifying the failures for the RFC 7807 work, not by reading the paths, and
+H1 while planning the fix for B5.
 
 ### A. Status codes (7 findings)
 
@@ -81,7 +82,7 @@ and wrong are the same class of failure.
 ### B. Resource-oriented naming (9 findings)
 
 **B1. `POST /v1/import` is a singular path beside the plural collection it
-writes into.** It appends a JSONL batch to a session created by
+writes into.** It appends a JSONL batch to an Import Run created by
 `POST /v1/imports`; `vault-push` calls both
 (`crates/libs/vault-push/src/http.rs:290`).
 Fix: `POST /v1/imports/{id}/batches`.
@@ -91,8 +92,8 @@ credential already names the account. The parameter is redundant and invites
 a mismatch between the two.
 
 **B3. `POST /v1/import` takes `source`, `mode` and `dedupe` per batch.** Two
-batches of one import session can disagree about how to import. These belong
-on session creation, where they can only be stated once.
+batches of one Import Run can disagree about how to import. These belong on
+the run's creation, where they can only be stated once.
 
 **B4. `import_id` is optional, so a sessionless import exists.**
 `post_import` takes `import_id: Option<i64>`
@@ -103,9 +104,11 @@ Import Run is "recorded permanently whether it succeeded, failed, or was
 cancelled"; a path that skips the record contradicts the domain model.
 
 **B5. `GET /v1/imports/active` is a filter squatting in the member-id
-namespace.** It returns the account's one active session. The path collides
-with `/v1/imports/{id}` and hides a filter in a path segment.
-Fix: `GET /v1/imports?status=active`.
+namespace.** It returns the account's one running Import Run. The path collides
+with `/v1/imports/{id}` and hides a filter in a path segment, and "active" is a
+word the row never stores: `vault_imports.status` holds `running`, `completed`,
+`failed` or `cancelled` (`schema/sql/accounts.sql:189`).
+Fix: `GET /v1/imports?status=running`, accepting the four stored values.
 
 **B6. Three paths spell an HTTP method as a verb.**
 `POST /v1/auth/delete-account`, `POST /v1/account/delete-messages`,
@@ -158,9 +161,12 @@ client asking for a format the vault cannot produce gets JSON anyway.
 `/v1/conversations/{id}/messages` and `/v1/export/messages` take `limit` and
 `offset` with no ordering control.
 
-**E2. The one `sort=` that exists has no direction convention.** `date` and
-`messages` are bare field names; there is no way to ask for ascending or
-descending, and no second sort key.
+**E2. The one `sort=` that exists spells direction as a second parameter.**
+`sort=date|messages` takes its direction from a separate `order=asc|desc`
+(`crates/vault/server/src/conversations_api.rs:52`), which the web sends
+(`web/src/lib/vaultApi.ts:255`). Both are lenient by design: an unknown value
+falls back to the default rather than being refused, so a typo sorts silently.
+There is no second sort key.
 
 ### F. Error format (1 finding)
 
@@ -179,6 +185,12 @@ says to run `curl http://127.0.0.1:8080/v1/auth/mode` when Connect fails.
 There is no `/v1/auth/mode` anywhere in the server, and
 `web/src/screens/LoginScreen.test.tsx:110` asserts the client never calls it.
 The working equivalent is `GET /v1/auth/check`.
+
+### H. Response shape (1 finding)
+
+**H1. `GET /v1/imports` is not a page.** It answers `{items}` with no `total`,
+`limit` or `offset` (`crates/vault/server/src/import/mod.rs:799`). ADR-0005
+already forbids that shape; every other list answers a page.
 
 **G2. CLAUDE.md describes the session token as a JWT.** It is not: there is no
 `jsonwebtoken` dependency in any manifest, and `account_session_tokens`
@@ -228,8 +240,8 @@ What the change touches:
   which carries a message today and needs a problem type.
 - 61 of those are `ApiError::BadRequest` outside test modules. Classifying them
   is the whole cost of the change; everything else is mechanical. The first
-  pass is `docs/agents/http-api-problem-types.md`, which collapses them into
-  fifteen problem types.
+  pass is `docs/agents/http-api-problem-types.md`, which collapses them, and
+  the other variants, into twenty problem types.
 - The web client reads `message` off a `VaultApiError` parsed once in
   `web/src/lib/api.ts`; that parse moves to `title` and `detail`.
 - Finding A2 closes with it: the vault's own validation moves to
@@ -242,12 +254,14 @@ What the change touches:
 All three sub-questions are settled:
 
 1. **The `type` URL points at a real page.** Each problem type gets a page under
-   `bitrealm.io/vault/developer/errors/`, and `type` is that page's URL. Only
+   `bitrealm.io/vault/developer/reference/errors/`, beside every other
+   generated reference page, and `type` is that page's URL. Only
    `500 Internal Server Error` uses `about:blank`, because a page about it could
    say nothing a reader could act on.
 2. **The taxonomy is per problem, not per status.** The first pass is
-   `docs/agents/http-api-problem-types.md`: fifteen types covering the 61
-   `BadRequest` sites and the other `ApiError` variants.
+   `docs/agents/http-api-problem-types.md`: twenty types covering the 61
+   `BadRequest` sites and the other `ApiError` variants. The code becomes the
+   registry when the types land, and that file is deleted then.
 3. **A request id travels in both the header and the body.** `tower-http`'s
    `request-id` feature is switched on, giving `SetRequestIdLayer` and
    `PropagateRequestIdLayer`; the id joins the `TraceLayer` span
@@ -268,13 +282,21 @@ detail, and the id that joins a client's failure to the log line recording it.
 **Sorting is a request parameter, in one spelling, on every list.**
 `sort=-field,field`, comma-separated keys with a `-` prefix for descending, on
 all five list routes. Each route declares which columns it accepts, and an
-unlisted column is a `400 Bad Request` naming the column, matching how the
-search language already refuses an unknown word. This closes findings E1 and E2.
+unlisted column is a `validation-failed` problem, `422 Unprocessable Entity`,
+naming the column and the accepted set; the lenient fallback goes. The
+separate `order=` parameter goes with it. This closes findings E1 and E2.
+
+**The contacts list sorts by `name` only.** A "last heard from" key, the newest
+message a contact's own handles sent, is a contacts feature with a field and a
+column, tracked as #497.
 
 **Filtering stays in the search language, and `fields=` is refused.** ADR-0004
 already says a query only narrows while sort order is a request parameter, so
 query parameters never filter: `q=date:>2019` is the vault's range operator and
-there will not be a second one. `fields=` selection is refused because it turns
+there will not be a second one. The one exception is a list with no search
+language, and imports is the only one: `GET /v1/imports?status=running` takes
+the values the row stores. `GET /v1/imports` becomes a page at the same time,
+closing H1. `fields=` selection is refused because it turns
 one resource into many shapes, and `web/` generates its types from
 `docs/src/assets/openapi.json`, where a response whose fields depend on a
 parameter can only be typed with every field optional, which is the `?? []` and
@@ -282,11 +304,14 @@ parameter can only be typed with every field optional, which is the `?? []` and
 casts ADR-0005 exists to have deleted. Pagination already bounds the payload
 size that `fields=` exists to reduce.
 
-**`406 Not Acceptable` is answered narrowly.** A request is refused only when
-an `Accept` header is present and no member of it matches `application/json`,
-`application/problem+json`, or `*/*`. A missing `Accept` is a request for JSON:
-RFC 9110 says a request without one accepts any media type, and none of the
-vault's own clients send one — `web/src/lib/api.ts:80` sets only
+**`406 Not Acceptable` is answered narrowly, on the `/v1` routes that produce
+JSON.** A request is refused only when an `Accept` header is present and no
+member of it matches `application/json`, `application/problem+json`, or `*/*`.
+`GET /v1/assets/{sha256}` streams the asset's own bytes and is the one route
+exempt; nothing outside `/v1` is checked, because the web app, `/health` and the
+OpenAPI UI produce other things on purpose. A missing `Accept` is a request for
+JSON: RFC 9110 says a request without one accepts any media type, and none of
+the vault's own clients send one — `web/src/lib/api.ts:80` sets only
 `Authorization`, so the browser's `fetch` defaults to `*/*`, and `vault-push`
 and `vault-pull` send no `Accept` at all. A rule that required the header would
 refuse the web app, the desktop app, and the push library on their first
@@ -299,6 +324,29 @@ has already gone wrong. RFC 7807 chose the `+json` suffix for this reason. The
 condition is the whole design; the code is a few lines.
 
 This closes finding D1.
+
+**`POST /v1/contacts` takes the file.** The body is the address book itself,
+with `Content-Type: text/vcard` or `text/csv` naming the format; the
+`{filename, content}` envelope and the filename sniff go, and an unknown
+`Content-Type` is `415 Unsupported Media Type`. How contacts are loaded is
+still open in #270; the route is where that answer will land. This closes
+finding C2.
+
+**The request id is server-made.** A UUID v4 generated on every request; an
+`x-request-id` a client sends is ignored, so an id in the log is one the
+server made.
+
+**Parse against validate has one line.** A request that cannot be read is
+`malformed-body`, `400 Bad Request`; one that parsed and then broke a rule is
+`validation-failed`, `422 Unprocessable Entity`, whether the rule was on a
+query parameter, a path segment or a body field. Today `limit=ten` and a
+non-numeric id answer `400 Bad Request` while a body missing a field answers
+`422 Unprocessable Entity` (`crates/vault/server/src/extract.rs:100–135`); all
+three move to the same side of the line.
+
+**The word is Import Run.** `POST /v1/imports` creates an Import Run, the
+term CONTEXT.md already has; "import session" is retired, since a session is
+the signed-in account's token everywhere else on the interface.
 
 ## Open questions
 

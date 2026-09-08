@@ -43,8 +43,10 @@ _Avoid_: Thread, Chat
 One attempt to bring messages from a backup into the vault, recorded
 permanently whether it succeeded, failed, or was cancelled. The record
 belongs to the account and cannot be deleted by the person; anything in
-the interface that merely points at a run is a shortcut and can be.
-_Avoid_: Import Job, Push
+the interface that merely points at a run is a shortcut and can be. The HTTP
+interface creates one with `POST /v1/imports`; it is not a session, which is
+the signed-in account's token.
+_Avoid_: Import Job, Import Session, Push
 
 **Vault**:
 One installation's store of accounts and their messages. A vault holds

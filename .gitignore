@@ -43,7 +43,7 @@ config/contacts.vcf
 # Starlight documentation output
 /docs/.astro/
 /docs/dist/
-/docs/node_modules/
+/docs/node_modules
 /docs/public/vault/developer/rustdoc/
 
 # PlantUML extension default dump (workspace export goes to docs/maintainers/architecture/puml/img)
@@ -61,11 +61,11 @@ config/contacts.vcf
 /crates/vault/demo-seed/staging/
 
 # Frontend (web/) dependencies and build output
-/web/node_modules/
+/web/node_modules
 /web/dist/
 
 # Restored Next.js browse UI (web-next/)
-/web-next/node_modules/
+/web-next/node_modules
 /web-next/.next/
 /web-next/out/
 .claude/*

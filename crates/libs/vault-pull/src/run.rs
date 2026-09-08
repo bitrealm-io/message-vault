@@ -15,12 +15,14 @@ use vault_http::{auth_check as authenticate, with_retries};
 
 use crate::http::{ExportMessagesArgs, HttpSession};
 use crate::project::{build_document, conversation_key, to_ir_message};
-use vault_api_types::Message;
+use vault_api_types::{ExportRun, ExportScope, Message};
 
-/// Page size for GET /v1/export/messages; the vault's maximum.
+/// Page size for `GET /v1/exports/{id}/messages`; the vault's maximum.
 pub const DEFAULT_PAGE_LIMIT: usize = 500;
-/// The largest page the vault will hand back for GET /v1/export/messages.
+/// The largest page the vault will hand back for `GET /v1/exports/{id}/messages`.
 pub const MAX_PAGE_LIMIT: usize = 500;
+/// The `tool` every run this crate creates is recorded under.
+pub const TOOL_NAME: &str = "vault-pull";
 /// Default number of parallel asset download workers.
 pub const DEFAULT_ASSET_DOWNLOAD_WORKERS: usize = 8;
 /// Extra tries for transient HTTP failures, matching the vault-push default.
@@ -37,11 +39,12 @@ pub struct VaultPullConfig {
     pub username: String,
     /// API token or session token for the vault.
     pub key: String,
-    /// A query in the vault's search language (may be empty).
+    /// A query in the vault's search language. Blank asks for everything the
+    /// account holds; anything else is the run's `query` scope.
     pub query: String,
     /// Write messages only; download no attachments.
     pub skip_attachments: bool,
-    /// Messages per `GET /v1/export/messages` page, clamped to
+    /// Messages per `GET /v1/exports/{id}/messages` page, clamped to
     /// `1..=MAX_PAGE_LIMIT`.
     pub page_limit: usize,
     /// Checked between pages and downloads; set it to stop the run early.
@@ -55,6 +58,8 @@ pub struct VaultPullConfig {
 pub struct PullReport {
     /// Account id the key resolved to.
     pub account: i64,
+    /// The Export Run the vault recorded for this pull.
+    pub export_id: i64,
     /// The query the run asked the vault for.
     pub query: String,
     /// Conversations written.
@@ -168,26 +173,39 @@ pub fn run(
         );
     }
 
-    let fetched = pull.fetch_all_messages(&mut on_progress)?;
-    let assets = if cfg.skip_attachments {
-        AssetCounts::default()
+    // Nothing is recorded for a run the caller already gave up on.
+    check_cancel(cfg.cancel.as_ref())?;
+    let export = pull.start_export(&mut on_progress)?;
+    let outcome = pull.export_into_folder(&export, &mut on_progress);
+    // The client closes the run either way, so the vault's record says how
+    // it ended. A close that fails after the files are written is a warning,
+    // not a failed export: the folder is complete, only the record is not.
+    let action = if outcome.is_ok() {
+        "complete"
     } else {
-        pull.download_assets(&fetched.assets, &mut on_progress)?
+        "cancel"
     };
-    let conversations = pull.write_conversations(fetched.by_conv)?;
-    pull.finish_journal(
-        &mut on_progress,
+    if let Err(error) = pull.close_export(export.id, action) {
+        emit(
+            &mut on_progress,
+            ProgressEvent::Log(format!(
+                "warning: could not {action} export run {} in the vault: {error:#}",
+                export.id
+            )),
+        );
+    }
+    let Written {
         conversations,
-        fetched.total_messages,
-        &assets,
-        fetched.assets,
-    );
+        messages,
+        assets,
+    } = outcome?;
 
     let report = PullReport {
         account: pull.account,
+        export_id: export.id,
         query: pull.query,
         conversations,
-        messages: fetched.total_messages,
+        messages,
         attachments_downloaded: assets.downloaded,
         attachments_skipped: assets.skipped,
         out_dir: cfg.out_dir.display().to_string(),
@@ -218,6 +236,13 @@ struct Fetched {
 struct AssetCounts {
     downloaded: u64,
     skipped: u64,
+}
+
+/// What one run left on disk.
+struct Written {
+    conversations: u64,
+    messages: u64,
+    assets: AssetCounts,
 }
 
 /// One authenticated download run: the connection, the account it resolved
@@ -278,14 +303,103 @@ impl<'a> Pull<'a> {
         })
     }
 
-    /// Page through every matching message, grouping by conversation and
+    /// The scope this pull asks the vault for: the trimmed query, or
+    /// everything when it is blank.
+    fn scope(&self) -> ExportScope {
+        if self.query.is_empty() {
+            ExportScope::Everything
+        } else {
+            ExportScope::Query {
+                q: self.query.clone(),
+            }
+        }
+    }
+
+    /// `POST /v1/exports` for this pull's scope, announcing what the vault
+    /// counted for it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the vault refuses the scope or the request fails.
+    fn start_export(&self, out: &mut Option<&mut ProgressFn<'_>>) -> Result<ExportRun> {
+        let cfg = self.cfg;
+        let export = with_retries(MAX_RETRIES, || {
+            crate::http::create_export(
+                &self.session,
+                &cfg.base_url,
+                &cfg.key,
+                &self.scope(),
+                TOOL_NAME,
+            )
+        })?;
+        emit(
+            out,
+            ProgressEvent::Log(format!(
+                "Export run {}: {} message(s) in {} conversation(s), {} attachment(s) ({})",
+                export.id,
+                export.message_count,
+                export.conversation_count,
+                export.attachment_count,
+                media::format_bytes(u64::try_from(export.total_bytes).unwrap_or(0)),
+            )),
+        );
+        Ok(export)
+    }
+
+    /// Close the run with `complete` or `cancel`, retrying a transient failure.
+    fn close_export(&self, export_id: i64, action: &str) -> Result<ExportRun> {
+        let cfg = self.cfg;
+        with_retries(MAX_RETRIES, || {
+            crate::http::close_export(&self.session, &cfg.base_url, &cfg.key, export_id, action)
+        })
+    }
+
+    /// Page the run's messages, download their attachments, and write the
+    /// conversation files; the journal records the result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a page or download fails after retries, a
+    /// message cannot be converted, a file cannot be written, or the run is
+    /// cancelled.
+    fn export_into_folder(
+        &self,
+        export: &ExportRun,
+        out: &mut Option<&mut ProgressFn<'_>>,
+    ) -> Result<Written> {
+        let fetched = self.fetch_all_messages(export, out)?;
+        let assets = if self.cfg.skip_attachments {
+            AssetCounts::default()
+        } else {
+            self.download_assets(&fetched.assets, out)?
+        };
+        let conversations = self.write_conversations(fetched.by_conv)?;
+        self.finish_journal(
+            out,
+            conversations,
+            fetched.total_messages,
+            &assets,
+            fetched.assets,
+        );
+        Ok(Written {
+            conversations,
+            messages: fetched.total_messages,
+            assets,
+        })
+    }
+
+    /// Page through every message of the run, grouping by conversation and
     /// noting which attachments they reference.
     ///
     /// # Errors
     ///
     /// Returns an error when a page fails after retries, a message cannot be
     /// converted, or the run is cancelled.
-    fn fetch_all_messages(&self, out: &mut Option<&mut ProgressFn<'_>>) -> Result<Fetched> {
+    fn fetch_all_messages(
+        &self,
+        export: &ExportRun,
+        out: &mut Option<&mut ProgressFn<'_>>,
+    ) -> Result<Fetched> {
         let cfg = self.cfg;
         let mut fetched = Fetched {
             by_conv: BTreeMap::new(),
@@ -301,10 +415,9 @@ impl<'a> Pull<'a> {
                     ExportMessagesArgs {
                         base_url: &cfg.base_url,
                         key: &cfg.key,
-                        q: &self.query,
+                        export_id: export.id,
                         limit: cfg.page_limit.clamp(1, MAX_PAGE_LIMIT),
                         offset,
-                        account: &self.account.to_string(),
                     },
                 )
             })?;

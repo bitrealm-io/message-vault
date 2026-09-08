@@ -1,5 +1,7 @@
-//! Pulls messages out of a running vault, a page at a time, through
-//! `GET /v1/export/messages?offset=&limit=`, and writes them as chat files.
+//! Pulls messages out of a running vault as one Export Run: `POST /v1/exports`
+//! records what is asked for, `GET /v1/exports/{id}/messages` pages the rows,
+//! and `complete` or `cancel` closes the run. The messages are written as
+//! chat files.
 //!
 //! The `vault-pull` command and the desktop app Vault Export screen both call
 //! this crate.
@@ -14,5 +16,5 @@ pub use run::{
     DEFAULT_ASSET_DOWNLOAD_WORKERS, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, ProgressEvent, ProgressFn,
     PullReport, VaultPullConfig, run,
 };
-pub use vault_api_types::Message;
+pub use vault_api_types::{ExportRun, ExportScope, Message};
 pub use vault_http::{AuthError, AuthInfo, auth_check as authenticate};

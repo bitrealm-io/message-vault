@@ -9,7 +9,7 @@ Route schemas, status codes, and JSON fields live in the generated [HTTP API ref
 
 ## One shape for every route
 
-- A list takes `?offset=&limit=` and answers `{items, total, limit, offset}`. `limit` is at most 500 and at least 1; `offset` is at most 50 000 on the Contacts and Conversations lists and unlimited on Export.
+- A list takes `?offset=&limit=` and answers `{items, total, limit, offset}`. `limit` is at most 500 and at least 1; `offset` is at most 50 000 on the Contacts and Conversations lists and unlimited on an Export Run's messages.
 - A list takes `?sort=` in one spelling: comma-separated keys, a leading `-` for descending, as in `sort=-messages,date`. Each list names the keys it accepts in the OpenAPI document (Conversations: `date`, `messages`; Contacts: `name`; the three message lists: `date`), and an unlisted key is a `validation-failed` answer naming the accepted set. Filtering is the search language in `q`, never a query parameter.
 - A failure answers an [RFC 7807 problem document](./errors/) as `application/problem+json`: `type` names the page describing the kind of failure, `title` and `status` repeat it, `detail` is one sentence about this occurrence (a validation failure lists every broken rule in `errors` instead), and `request_id` repeats the response's `x-request-id` header. That includes a malformed query parameter, path, or JSON body, an unknown `/v1` path (404), and a wrong method (405). There is no `ok` field on any response.
 - A route with nothing to say on success answers `204 No Content`.
@@ -54,7 +54,7 @@ Send either token as:
 Authorization: Bearer <token>
 ```
 
-An API token may import (write) and export messages and assets (read). It may not change profile, settings, or browse-only website routes. Export routes never delete vault data.
+An API token may import (write) and, through an Export Run it starts, read messages and assets. It may not change profile, settings, or browse-only website routes: outside a run, reading messages needs a session. Export routes never delete vault data.
 
 Turn on a local explorer with `[server] openapi_ui = true`, then open `/docs` on that vault. The explorer is off by default. “Try it” still sends this header.
 
@@ -76,13 +76,31 @@ Request body limit matches `[server] asset_max_bytes` (default 512 MiB).
 
 A file the vault cannot read comes back as a 400 whose `error` names the line, or the schema version the file has and the version the vault reads.
 
+## Export Run
+
+An export is an Export Run. `POST /v1/exports` creates one and answers `201 Created` with the run: what was asked for, and the four counts the vault computed for it at creation — messages, conversations, distinct attachments, and their bytes. The body names a `scope` in one of three forms, stored as given, and an optional `tool`:
+
+```json title="POST /v1/exports"
+{ "scope": { "kind": "everything" }, "tool": "vault-pull" }
+{ "scope": { "kind": "query", "q": "from:me date:>2024" } }
+{ "scope": { "kind": "selection", "conversation_ids": [12, 40], "message_ids": [913] } }
+```
+
+`everything` is every non-trashed message the account holds. `query` is the search language against the Messages list; a blank `q` is refused, because that is the `everything` form. `selection` is conversations and messages picked by hand: a message is selected when its conversation is listed or it is listed itself, either list may be empty but not both, each list holds at most 500 ids, and an id the account does not hold is refused naming it. A selection hides trashed conversations and duplicates the way a browse does.
+
+`GET /v1/exports/{id}/messages` pages the rows the scope selects, oldest first, with a default page of 100 and no offset cap. Each page read raises the run's `messages_delivered` to the rows handed over so far, so an abandoned run shows how far it got. A run that is no longer `running` answers `409`.
+
+The client closes the run: `POST /v1/exports/{id}/complete` or `POST /v1/exports/{id}/cancel` sets the status and `finished_at` and answers the run; a second close is `409`. There is no unrecorded export. `GET /v1/exports` is a page of every run, newest first (`sort=started_at` for oldest first), narrowed by `status` to one of `running`, `completed`, `failed`, `cancelled`; `GET /v1/exports/{id}` is one run. The record holds what was asked for and how much matched, never what the messages said.
+
+Every export route takes the `export` scope on a session or an API token. A program holding an export token reads messages only through a run it started; `GET /v1/messages` and the other browse routes refuse it.
+
 ## Messages across conversations
 
-`GET /v1/messages?q=` answers one row per message matching `q`, paged like every other list, behind a signed-in session. It is a read route: opening a conversation is `GET /v1/conversations/{id}/messages`, downloading is `GET /v1/export/messages`, and searching across messages is this. The thread's find box uses it with `in:#id` so a find reaches every message in the conversation, not the page the browser holds.
+`GET /v1/messages?q=` answers one row per message matching `q`, paged like every other list, behind a signed-in session. It is a read route: opening a conversation is `GET /v1/conversations/{id}/messages`, downloading is an Export Run (`POST /v1/exports`), and searching across messages is this. The thread's find box uses it with `in:#id` so a find reaches every message in the conversation, not the page the browser holds.
 
 ## Search operators (`q`)
 
-`q` is the same search language the website uses — see [Search](/vault/user/how-to/search/) for the full grammar: quoting, `none`/`any`, date and size ranges, `-` to exclude, `or` and parentheses, `avoc*` prefixes. Export compiles `q` against the Messages list, with the same compiler Contacts and Conversations search use elsewhere in the vault, full-text index included for free text. These are the words the Messages list has:
+`q` is the same search language the website uses — see [Search](/vault/user/how-to/search/) for the full grammar: quoting, `none`/`any`, date and size ranges, `-` to exclude, `or` and parentheses, `avoc*` prefixes. An Export Run's `query` scope compiles `q` against the Messages list, with the same compiler Contacts and Conversations search use elsewhere in the vault, full-text index included for free text. These are the words the Messages list has:
 
 - Free text and `"quoted phrases"` match the message body, the subject, and any attachment file name.
 - `body:`, `subject:` — text, `none`, `any`, restricted to that one field.

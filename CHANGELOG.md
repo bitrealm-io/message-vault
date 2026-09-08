@@ -11,6 +11,10 @@ Released version headings also carry a date: `## [0.8.0] - 2026-08-24`.
 
 ## [Unreleased]
 
+### Changed
+
+- 2026-09-08: Export is a recorded resource. `POST /v1/exports` records an Export Run with its scope — everything, a search-language query, or conversations and messages picked by hand — and the four counts the vault computed for it; `GET /v1/exports/{id}/messages` pages the rows and tracks how many were handed over; `complete` and `cancel` close the run. `GET /v1/export/messages` and `/count` are gone, a program with an export token reads messages only through a run, and Settings → Storage lists Export history beside Import history. Every vault rebuilds empty (`SCHEMA_VERSION` 15). (#511)
+
 ### Added
 
 - 2026-09-08: Every list on the HTTP interface takes `sort=-field,field`: comma-separated keys, a leading `-` for descending. Conversations sort by `date` or `messages`, contacts by `name`, the three message lists by `date`; an unknown key is refused naming the accepted set. `GET /v1/conversations` no longer takes a separate `order=`. (#501)

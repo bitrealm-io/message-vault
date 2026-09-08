@@ -1,9 +1,10 @@
-//! HTTP helpers for paging exported messages and downloading attachments.
+//! HTTP helpers for an Export Run: creating it, paging its messages, closing
+//! it, and downloading attachments.
 //!
 //! Calls are blocking so they can run on worker threads without an async
 //! runtime. The session type is [`vault_http::HttpSession`].
 //!
-//! The message shapes are `vault-api-types`, the same definitions the vault
+//! The shapes are `vault-api-types`, the same definitions the vault
 //! serializes from. This file used to mirror them by hand, and three defects
 //! shipped because the mirror and the vault drifted apart with nothing to
 //! notice.
@@ -18,11 +19,11 @@ use reqwest::Method;
 use serde::Deserialize;
 use vault_http::{VaultHttpError, error_sentence, ok_json, trim_base_url};
 
-use vault_api_types::Message;
+use vault_api_types::{ExportRun, ExportScope, Message};
 
 pub use vault_http::HttpSession;
 
-/// One page from `GET /v1/export/messages`: `{items, total, limit, offset}`.
+/// One page from `GET /v1/exports/{id}/messages`: `{items, total, limit, offset}`.
 #[derive(Debug, Deserialize)]
 pub struct ExportMessagesPage {
     #[serde(default)]
@@ -31,48 +32,51 @@ pub struct ExportMessagesPage {
     pub total: u64,
 }
 
-struct ExportUrl<'a> {
-    base_url: &'a str,
-    /// A query in the vault's search language. Sent even when empty.
-    q: &'a str,
-    /// Page size.
-    limit: usize,
-    /// Row offset.
-    offset: usize,
-    /// Vault account name. Left out when blank.
-    account: &'a str,
+/// The body of `POST /v1/exports`.
+#[derive(Debug, serde::Serialize)]
+struct CreateExportBody<'a> {
+    scope: &'a ExportScope,
+    tool: &'a str,
 }
 
-/// Build the request URL for `GET /v1/export/messages`, leaving out `account`
-/// when it is blank.
-fn export_url(request: ExportUrl<'_>) -> Result<reqwest::Url> {
-    let base = trim_base_url(request.base_url);
-    let mut url = reqwest::Url::parse(&format!("{base}/v1/export/messages"))
-        .with_context(|| format!("invalid vault URL {base}"))?;
-    {
-        let mut pairs = url.query_pairs_mut();
-        pairs.append_pair("q", request.q);
-        pairs.append_pair("limit", &request.limit.to_string());
-        pairs.append_pair("offset", &request.offset.to_string());
-        let account = request.account.trim();
-        if !account.is_empty() {
-            pairs.append_pair("account", account);
-        }
-    }
-    Ok(url)
+/// `POST /v1/exports`: record a run for `scope` and return it with the
+/// counts the vault computed.
+///
+/// # Errors
+///
+/// Returns an error when the request fails, the vault refuses the scope, or
+/// the body is not a run.
+pub fn create_export(
+    http: &HttpSession,
+    base_url: &str,
+    key: &str,
+    scope: &ExportScope,
+    tool: &str,
+) -> Result<ExportRun> {
+    let body = serde_json::to_vec(&CreateExportBody { scope, tool })?;
+    let response = http
+        .vault_request(Method::POST, base_url, "/v1/exports", key)
+        .header("Content-Type", "application/json")
+        .body(body)
+        .timeout(Duration::from_secs(120))
+        .send()
+        .context("POST /v1/exports")?;
+    let status = response.status();
+    let text = response.text().unwrap_or_default();
+    ok_json("create export", status, &text)
 }
 
 /// Arguments for [`export_messages`].
 pub(crate) struct ExportMessagesArgs<'a> {
     pub base_url: &'a str,
     pub key: &'a str,
-    pub q: &'a str,
+    /// The run whose messages are paged.
+    pub export_id: i64,
     pub limit: usize,
     pub offset: usize,
-    pub account: &'a str,
 }
 
-/// Fetch one page of messages from `GET /v1/export/messages`.
+/// Fetch one page of messages from `GET /v1/exports/{id}/messages`.
 ///
 /// # Errors
 ///
@@ -84,28 +88,46 @@ pub fn export_messages(
     let ExportMessagesArgs {
         base_url,
         key,
-        q,
+        export_id,
         limit,
         offset,
-        account,
     } = args;
-    let url = export_url(ExportUrl {
-        base_url,
-        q,
-        limit,
-        offset,
-        account,
-    })?;
-
+    let path = format!("/v1/exports/{export_id}/messages");
     let response = http
-        .request_url(Method::GET, url, key)
+        .vault_request(Method::GET, base_url, &path, key)
+        .query(&[("limit", limit.to_string()), ("offset", offset.to_string())])
         .timeout(Duration::from_secs(120))
         .send()
-        .context("GET /v1/export/messages")?;
+        .with_context(|| format!("GET {path}"))?;
 
     let status = response.status();
     let body = response.text().unwrap_or_default();
     ok_json("export messages", status, &body)
+}
+
+/// `POST /v1/exports/{id}/complete` or `.../cancel`: close the run and
+/// return it as it now stands. `action` is `complete` or `cancel`.
+///
+/// # Errors
+///
+/// Returns an error when the request fails, the run is already closed, or
+/// the body is not a run.
+pub fn close_export(
+    http: &HttpSession,
+    base_url: &str,
+    key: &str,
+    export_id: i64,
+    action: &str,
+) -> Result<ExportRun> {
+    let path = format!("/v1/exports/{export_id}/{action}");
+    let response = http
+        .vault_request(Method::POST, base_url, &path, key)
+        .timeout(Duration::from_secs(120))
+        .send()
+        .with_context(|| format!("POST {path}"))?;
+    let status = response.status();
+    let text = response.text().unwrap_or_default();
+    ok_json(&format!("{action} export"), status, &text)
 }
 
 /// Download one attachment by SHA-256 fingerprint to `dest`.
@@ -188,18 +210,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_export_url_carries_q_limit_offset_and_account_only() {
-        let url = export_url(ExportUrl {
-            base_url: "http://127.0.0.1:8080/",
-            q: "from:me",
-            limit: 500,
-            offset: 1000,
-            account: " alice ",
+    fn the_create_body_carries_the_scope_as_given_and_the_tool() {
+        let scope = ExportScope::Query {
+            q: "from:me".into(),
+        };
+        let body = serde_json::to_value(CreateExportBody {
+            scope: &scope,
+            tool: "vault-pull",
         })
         .unwrap();
         assert_eq!(
-            url.as_str(),
-            "http://127.0.0.1:8080/v1/export/messages?q=from%3Ame&limit=500&offset=1000&account=alice"
+            body,
+            serde_json::json!({ "scope": { "kind": "query", "q": "from:me" }, "tool": "vault-pull" })
         );
     }
 

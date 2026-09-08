@@ -598,15 +598,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/export/messages": {
+    "/v1/exports": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Export messages matching a query in the search language, a page at a time. */
-        get: operations["export_messages_handler"];
+        /**
+         * The account's Export Runs as a page, newest first unless `sort` says
+         *     otherwise, narrowed to one `status` when given.
+         */
+        get: operations["exports_list_handler"];
+        put?: never;
+        /**
+         * Start an Export Run: compile the scope, count what it matches, and
+         *     record the run as `running`. Read its messages at
+         *     `GET /v1/exports/{id}/messages`, then close it with `complete` or `cancel`.
+         */
+        post: operations["exports_create_handler"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One Export Run. */
+        get: operations["exports_get_handler"];
         put?: never;
         post?: never;
         delete?: never;
@@ -615,7 +640,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/export/messages/count": {
+    "/v1/exports/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record that the client gave the run up. */
+        post: operations["exports_cancel_handler"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exports/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record that the client finished reading the run. */
+        post: operations["exports_complete_handler"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/exports/{id}/messages": {
         parameters: {
             query?: never;
             header?: never;
@@ -623,10 +682,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Count messages, conversations, and attachment fingerprints matching a
-         *     query.
+         * The messages a running Export Run's scope selects, a page at a time,
+         *     oldest first unless `sort` says otherwise. Each page read raises the
+         *     run's `messages_delivered` to the rows handed over so far.
          */
-        get: operations["export_messages_count_handler"];
+        get: operations["export_messages_handler"];
         put?: never;
         post?: never;
         delete?: never;
@@ -829,8 +889,8 @@ export interface paths {
         };
         /**
          * Messages matching `q`, oldest first unless `sort` says otherwise: the same
-         *     rows `GET /v1/export/messages` would return, behind a signed-in session
-         *     with the list defaults and the list's offset ceiling.
+         *     rows an Export Run with a `query` scope would hand over, behind a signed-in
+         *     session with the list defaults and the list's offset ceiling.
          */
         get: operations["messages_list_handler"];
         put?: never;
@@ -1490,6 +1550,13 @@ export interface components {
             /** @description Masked form for the Settings list (also persisted). */
             token_hint: string;
         };
+        /** @description Body of `POST /v1/exports`: the scope, and the tool that asked. */
+        CreateExportBody: {
+            /** @description What to export. */
+            scope: components["schemas"]["ExportScope"];
+            /** @description Client/tool name recorded on the run, e.g. `vault-pull`. */
+            tool?: string | null;
+        };
         /**
          * @description Source, mode, dedupe and tool for a new Import Run. The bearer token
          *     names the account.
@@ -1589,28 +1656,77 @@ export interface components {
             id: number;
             status: string;
         };
-        /** @description Match counts for an export query. */
-        ExportCountResponse: {
+        /**
+         * @description One Export Run: what was asked for and how much matched, never what
+         *     the messages said. `POST /v1/exports` creates one, every route under
+         *     `/v1/exports/{id}` answers it.
+         */
+        ExportRun: {
             /**
              * Format: int64
-             * @description Unique attachment fingerprints among matching messages.
+             * @description Distinct attachment fingerprints among the matching messages.
              */
-            attachments: number;
+            attachment_count: number;
             /**
              * Format: int64
              * @description Distinct conversations with at least one matching message.
              */
-            conversations: number;
+            conversation_count: number;
+            /** @description UTC time the run finished, when it has. */
+            finished_at?: string | null;
             /**
              * Format: int64
-             * @description Matching messages.
+             * @description Export Run id.
              */
-            messages: number;
+            id: number;
             /**
              * Format: int64
-             * @description Sum of known `size_bytes` for those unique fingerprints (unknown sizes omitted).
+             * @description Messages the scope matched when the run was created.
+             */
+            message_count: number;
+            /**
+             * Format: int64
+             * @description Rows handed over so far through `GET /v1/exports/{id}/messages`,
+             *     so an abandoned run shows how far it got.
+             */
+            messages_delivered: number;
+            /** @description What the run asked for, as given. */
+            scope: components["schemas"]["ExportScope"];
+            /** @description UTC time the run started. */
+            started_at: string;
+            /** @description Lifecycle status: `running`, `completed`, `failed`, or `cancelled`. */
+            status: string;
+            /** @description Exporting tool, e.g. `vault-pull`, when the client named one. */
+            tool?: string | null;
+            /**
+             * Format: int64
+             * @description Sum of the known sizes of those distinct attachments, in bytes.
              */
             total_bytes: number;
+        };
+        /**
+         * @description What an Export Run asked for, stored as given (`docs/agents/http-api-rules.md`,
+         *     "Runs"). One of three forms: everything the account holds, a query in the
+         *     search language, or conversations and messages picked by hand.
+         */
+        ExportScope: {
+            /** @enum {string} */
+            kind: "everything";
+        } | {
+            /** @enum {string} */
+            kind: "query";
+            /**
+             * @description The query, as typed. Never blank: an empty query is the
+             *     `everything` form.
+             */
+            q: string;
+        } | {
+            /** @description Conversation ids whose every message is exported. */
+            conversation_ids?: number[];
+            /** @enum {string} */
+            kind: "selection";
+            /** @description Message ids exported on their own. */
+            message_ids?: number[];
         };
         /** @description One word as the web and the docs see it. */
         FieldDoc: {
@@ -2035,6 +2151,62 @@ export interface components {
                 service: string;
                 /** @description Message tags on this conversation. */
                 tags: string[];
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_ExportRun: {
+            /** @description The rows on this page. */
+            items: {
+                /**
+                 * Format: int64
+                 * @description Distinct attachment fingerprints among the matching messages.
+                 */
+                attachment_count: number;
+                /**
+                 * Format: int64
+                 * @description Distinct conversations with at least one matching message.
+                 */
+                conversation_count: number;
+                /** @description UTC time the run finished, when it has. */
+                finished_at?: string | null;
+                /**
+                 * Format: int64
+                 * @description Export Run id.
+                 */
+                id: number;
+                /**
+                 * Format: int64
+                 * @description Messages the scope matched when the run was created.
+                 */
+                message_count: number;
+                /**
+                 * Format: int64
+                 * @description Rows handed over so far through `GET /v1/exports/{id}/messages`,
+                 *     so an abandoned run shows how far it got.
+                 */
+                messages_delivered: number;
+                /** @description What the run asked for, as given. */
+                scope: components["schemas"]["ExportScope"];
+                /** @description UTC time the run started. */
+                started_at: string;
+                /** @description Lifecycle status: `running`, `completed`, `failed`, or `cancelled`. */
+                status: string;
+                /** @description Exporting tool, e.g. `vault-pull`, when the client named one. */
+                tool?: string | null;
+                /**
+                 * Format: int64
+                 * @description Sum of the known sizes of those distinct attachments, in bytes.
+                 */
+                total_bytes: number;
             }[];
             /** @description Page size used. */
             limit: number;
@@ -4839,18 +5011,17 @@ export interface operations {
             };
         };
     };
-    export_messages_handler: {
+    exports_list_handler: {
         parameters: {
-            query: {
-                /** @description Query in the search language; empty is every non-trashed message */
-                q: string;
-                /** @description Page size, default 100, max 500 */
+            query?: {
+                /** @description One of running, completed, failed, cancelled */
+                status?: string;
+                /** @description Page size, default 40, at most 500 */
                 limit?: number;
-                /** @description Page offset; no cap, an offset past the end is an empty page */
+                /** @description Rows to skip, at most 50000 */
                 offset?: number;
-                /** @description `date` or `-date`. Default `date`, oldest first. */
+                /** @description `started_at` or `-started_at`. Default `-started_at`, newest first. */
                 sort?: string;
-                account?: string;
             };
             header?: never;
             path?: never;
@@ -4863,7 +5034,56 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_Message"];
+                    "application/json": components["schemas"]["Page_ExportRun"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    exports_create_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateExportBody"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    /** @description Path of the new run */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportRun"];
                 };
             };
             400: {
@@ -4900,15 +5120,14 @@ export interface operations {
             };
         };
     };
-    export_messages_count_handler: {
+    exports_get_handler: {
         parameters: {
-            query: {
-                /** @description Query in the search language; empty is every non-trashed message */
-                q: string;
-                account?: string;
-            };
+            query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /** @description Export Run id */
+                id: number;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -4918,7 +5137,170 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ExportCountResponse"];
+                    "application/json": components["schemas"]["ExportRun"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    exports_cancel_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Export Run id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportRun"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The run is already finished */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    exports_complete_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Export Run id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportRun"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The run is already finished */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    export_messages_handler: {
+        parameters: {
+            query?: {
+                /** @description Page size, default 100, max 500 */
+                limit?: number;
+                /** @description Page offset; no cap, an offset past the end is an empty page */
+                offset?: number;
+                /** @description `date` or `-date`. Default `date`, oldest first. */
+                sort?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Export Run id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_Message"];
                 };
             };
             400: {
@@ -4938,6 +5320,23 @@ export interface operations {
                 };
             };
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The run is no longer running */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

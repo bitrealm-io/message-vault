@@ -128,6 +128,65 @@ macro_rules! api_shape {
     };
 }
 
+/// What an Export Run asked for, stored as given (`docs/agents/http-api-rules.md`,
+/// "Runs"). One of three forms: everything the account holds, a query in the
+/// search language, or conversations and messages picked by hand.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(utoipa::ToSchema))]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum ExportScope {
+    /// Every non-trashed message the account holds.
+    Everything,
+    /// The messages a query in the search language matches.
+    Query {
+        /// The query, as typed. Never blank: an empty query is the
+        /// `everything` form.
+        q: String,
+    },
+    /// Conversations and messages picked by hand. A message is selected when
+    /// its conversation is listed or it is listed itself; either list may be
+    /// empty, but not both.
+    Selection {
+        /// Conversation ids whose every message is exported.
+        #[serde(default)]
+        conversation_ids: Vec<i64>,
+        /// Message ids exported on their own.
+        #[serde(default)]
+        message_ids: Vec<i64>,
+    },
+}
+
+api_shape! {
+    /// One Export Run: what was asked for and how much matched, never what
+    /// the messages said. `POST /v1/exports` creates one, every route under
+    /// `/v1/exports/{id}` answers it.
+    pub struct ExportRun {
+        /// Export Run id.
+        pub id: i64,
+        /// What the run asked for, as given.
+        pub scope: ExportScope,
+        /// Exporting tool, e.g. `vault-pull`, when the client named one.
+        pub tool: Option<String>,
+        /// Lifecycle status: `running`, `completed`, `failed`, or `cancelled`.
+        pub status: String,
+        /// UTC time the run started.
+        pub started_at: String,
+        /// UTC time the run finished, when it has.
+        pub finished_at: Option<String>,
+        /// Messages the scope matched when the run was created.
+        pub message_count: i64,
+        /// Distinct conversations with at least one matching message.
+        pub conversation_count: i64,
+        /// Distinct attachment fingerprints among the matching messages.
+        pub attachment_count: i64,
+        /// Sum of the known sizes of those distinct attachments, in bytes.
+        pub total_bytes: i64,
+        /// Rows handed over so far through `GET /v1/exports/{id}/messages`,
+        /// so an abandoned run shows how far it got.
+        pub messages_delivered: i64,
+    }
+}
+
 api_shape! {
     /// One participant of a conversation, carrying the name to show for them:
     /// the Contact's name, else what that backup called them in that
@@ -336,6 +395,36 @@ mod tests {
         assert_eq!(read.conversation.participants[0].handle, None);
         assert_eq!(read.attachments.len(), 1);
         assert_eq!(read.tapbacks[0].kind, "loved");
+    }
+}
+
+#[cfg(test)]
+mod export_scope_tests {
+    use super::*;
+
+    #[test]
+    fn the_three_scope_forms_carry_their_kind_and_read_back() {
+        let everything = serde_json::to_value(ExportScope::Everything).unwrap();
+        assert_eq!(everything, serde_json::json!({ "kind": "everything" }));
+
+        let query = ExportScope::Query {
+            q: "from:me".into(),
+        };
+        assert_eq!(
+            serde_json::to_value(&query).unwrap(),
+            serde_json::json!({ "kind": "query", "q": "from:me" })
+        );
+
+        let selection: ExportScope =
+            serde_json::from_str(r#"{"kind":"selection","conversation_ids":[3]}"#).unwrap();
+        assert_eq!(
+            selection,
+            ExportScope::Selection {
+                conversation_ids: vec![3],
+                message_ids: Vec::new(),
+            }
+        );
+        assert!(serde_json::from_str::<ExportScope>(r#"{"kind":"backup"}"#).is_err());
     }
 }
 

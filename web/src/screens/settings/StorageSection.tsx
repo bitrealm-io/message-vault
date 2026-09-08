@@ -1,3 +1,4 @@
+import ExportHistoryTable from "./storage/ExportHistoryTable";
 import ImportHistoryTable from "./storage/ImportHistoryTable";
 import StorageUsageCard from "./storage/StorageUsageCard";
 import { toImportSummaryView } from "./storage/storageUtils";
@@ -7,6 +8,7 @@ import { useStorageData } from "./storage/useStorageData";
 export function StorageSection() {
   const {
     imports,
+    exports,
     totalBytes,
     attachmentCount,
     topAttachments,
@@ -48,6 +50,8 @@ export function StorageSection() {
         onToggle={toggleImportDetail}
         onCloseDetail={closeImportDetail}
       />
+
+      <ExportHistoryTable exports={exports} />
 
       <TopAttachmentsTable topAttachments={topAttachments} page={page} onPageChange={setPage} />
     </div>

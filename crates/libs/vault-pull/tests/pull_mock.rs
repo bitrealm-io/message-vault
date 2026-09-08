@@ -1,11 +1,13 @@
-//! Mock vault tests for one pull: login, two pages of messages, asset
-//! download, the journal a second run reads, and the progress a caller sees.
+//! Mock vault tests for one pull: login, the Export Run it records, two
+//! pages of messages, asset download, the journal a second run reads, and
+//! the progress a caller sees.
 //!
-//! The mock answers the three routes `run` calls — `GET /v1/session`,
-//! `GET /v1/export/messages`, and `GET /v1/assets/{sha256}` — with the JSON
-//! the vault serializes (`vault-api-types`, `docs/src/assets/openapi.json`).
-//! Every request derives from `VaultPullConfig::base_url`, so the mock's
-//! address is the only seam.
+//! The mock answers the five routes `run` calls — `GET /v1/session`,
+//! `POST /v1/exports`, `GET /v1/exports/{id}/messages`,
+//! `POST /v1/exports/{id}/complete` or `/cancel`, and `GET /v1/assets/{sha256}`
+//! — with the JSON the vault serializes (`vault-api-types`,
+//! `docs/src/assets/openapi.json`). Every request derives from
+//! `VaultPullConfig::base_url`, so the mock's address is the only seam.
 
 use std::collections::HashSet;
 use std::fs;
@@ -30,6 +32,8 @@ const MENU_BYTES: &[u8] = b"%PDF-1.4 menu";
 const PHOTO_BYTES: &[u8] = b"PNG photo";
 /// The file a pull of `+15555550101` from `sms-backup-restore` writes.
 const CONVERSATION_FILE: &str = "+15555550101__sms-backup-restore.jsonl";
+/// The id the mock vault gives every run it records.
+const EXPORT_ID: i64 = 7;
 
 /// The menu attachment as the vault serializes it, at `path`.
 fn menu_attachment(path: Value) -> Value {
@@ -51,7 +55,7 @@ fn photo_attachment() -> Value {
     })
 }
 
-/// One exported message as `GET /v1/export/messages` serializes it: an
+/// One exported message as `GET /v1/exports/{id}/messages` serializes it: an
 /// individual SMS conversation with Sam, `service` on the message rather than
 /// on the conversation.
 fn message(
@@ -92,6 +96,23 @@ fn message(
     })
 }
 
+/// The run the mock vault records for `scope`, in `status`.
+fn export_run(scope: Value, status: &str) -> Value {
+    json!({
+        "id": EXPORT_ID,
+        "scope": scope,
+        "tool": "vault-pull",
+        "status": status,
+        "started_at": "2026-09-08T12:00:00Z",
+        "finished_at": if status == "running" { Value::Null } else { json!("2026-09-08T12:00:09Z") },
+        "message_count": 3,
+        "conversation_count": 1,
+        "attachment_count": 2,
+        "total_bytes": 22,
+        "messages_delivered": if status == "running" { 0 } else { 3 }
+    })
+}
+
 /// The login: the key resolves to account `1`, username `alice`.
 fn mock_auth(server: &MockServer) -> httpmock::Mock<'_> {
     server.mock(|when, then| {
@@ -101,21 +122,61 @@ fn mock_auth(server: &MockServer) -> httpmock::Mock<'_> {
     })
 }
 
-/// Two pages of `GET /v1/export/messages` for `q` at two messages a page:
+/// `POST /v1/exports` for exactly `scope`, recorded as `vault-pull`'s run.
+fn mock_create<'a>(server: &'a MockServer, scope: Value) -> httpmock::Mock<'a> {
+    let body = json!({ "scope": scope.clone(), "tool": "vault-pull" });
+    server.mock(move |when, then| {
+        when.method(POST)
+            .path("/v1/exports")
+            .json_body(body.clone());
+        then.status(201)
+            .header("location", format!("/v1/exports/{EXPORT_ID}"))
+            .json_body(export_run(scope.clone(), "running"));
+    })
+}
+
+/// `POST /v1/exports/{id}/complete`, answering the closed run.
+fn mock_complete(server: &MockServer) -> httpmock::Mock<'_> {
+    server.mock(|when, then| {
+        when.method(POST)
+            .path(format!("/v1/exports/{EXPORT_ID}/complete"));
+        then.status(200)
+            .json_body(export_run(json!({ "kind": "everything" }), "completed"));
+    })
+}
+
+/// `POST /v1/exports/{id}/cancel`, answering the closed run.
+fn mock_cancel(server: &MockServer) -> httpmock::Mock<'_> {
+    server.mock(|when, then| {
+        when.method(POST)
+            .path(format!("/v1/exports/{EXPORT_ID}/cancel"));
+        then.status(200)
+            .json_body(export_run(json!({ "kind": "everything" }), "cancelled"));
+    })
+}
+
+/// The run bookends every test below needs: the everything-scope create and
+/// its complete.
+fn mock_run(server: &MockServer) -> (httpmock::Mock<'_>, httpmock::Mock<'_>) {
+    (
+        mock_create(server, json!({ "kind": "everything" })),
+        mock_complete(server),
+    )
+}
+
+/// Two pages of `GET /v1/exports/{id}/messages` at two messages a page:
 /// messages 1 and 2 with `total` 3, then message 3. The menu is on messages
 /// 1 and 3, so its second mention must not download twice.
 fn mock_pages<'a>(
     server: &'a MockServer,
     source: &str,
-    q: &str,
 ) -> (httpmock::Mock<'a>, httpmock::Mock<'a>) {
+    let path = format!("/v1/exports/{EXPORT_ID}/messages");
     let first = server.mock(|when, then| {
         when.method(GET)
-            .path("/v1/export/messages")
-            .query_param("q", q)
+            .path(&path)
             .query_param("limit", "2")
-            .query_param("offset", "0")
-            .query_param("account", "1");
+            .query_param("offset", "0");
         then.status(200).json_body(json!({
             "items": [
                 message(
@@ -134,11 +195,9 @@ fn mock_pages<'a>(
     });
     let second = server.mock(|when, then| {
         when.method(GET)
-            .path("/v1/export/messages")
-            .query_param("q", q)
+            .path(&path)
             .query_param("limit", "2")
-            .query_param("offset", "2")
-            .query_param("account", "1");
+            .query_param("offset", "2");
         then.status(200).json_body(json!({
             "items": [
                 message(
@@ -192,6 +251,7 @@ fn config(out_dir: &Path, base_url: String) -> VaultPullConfig {
 fn report_for(out_dir: &Path, downloaded: u64, skipped: u64) -> PullReport {
     PullReport {
         account: 1,
+        export_id: EXPORT_ID,
         query: String::new(),
         conversations: 1,
         messages: 3,
@@ -202,10 +262,11 @@ fn report_for(out_dir: &Path, downloaded: u64, skipped: u64) -> PullReport {
 }
 
 #[test]
-fn a_pull_writes_the_conversation_and_every_asset_once_across_two_pages() {
+fn a_pull_records_one_run_and_writes_the_conversation_and_every_asset_once_across_two_pages() {
     let server = MockServer::start();
     let _auth = mock_auth(&server);
-    let (first, second) = mock_pages(&server, "sms-backup-restore", "");
+    let (create, complete) = mock_run(&server);
+    let (first, second) = mock_pages(&server, "sms-backup-restore");
     let menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
     let photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
     let dir = tempdir().unwrap();
@@ -214,10 +275,12 @@ fn a_pull_writes_the_conversation_and_every_asset_once_across_two_pages() {
     let report = run(&config(&out, server.base_url()), None).unwrap();
 
     assert_eq!(report, report_for(&out, 2, 0));
+    create.assert();
     first.assert();
     second.assert();
     menu.assert();
     photo.assert();
+    complete.assert();
     assert!(out.join(EXPORT_SENTINEL).is_file());
     assert_eq!(
         fs::read(out.join("attachments/menu.pdf")).unwrap(),
@@ -262,7 +325,8 @@ fn a_pull_writes_the_conversation_and_every_asset_once_across_two_pages() {
 fn the_journal_lists_every_asset_and_marks_the_run_finished() {
     let server = MockServer::start();
     let _auth = mock_auth(&server);
-    let _pages = mock_pages(&server, "sms-backup-restore", "");
+    let _run = mock_run(&server);
+    let _pages = mock_pages(&server, "sms-backup-restore");
     let _menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
     let _photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
     let dir = tempdir().unwrap();
@@ -282,7 +346,8 @@ fn the_journal_lists_every_asset_and_marks_the_run_finished() {
 fn a_second_run_over_the_same_folder_downloads_nothing_it_already_has() {
     let server = MockServer::start();
     let _auth = mock_auth(&server);
-    let _pages = mock_pages(&server, "sms-backup-restore", "");
+    let (create, complete) = mock_run(&server);
+    let _pages = mock_pages(&server, "sms-backup-restore");
     let menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
     let photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
     let dir = tempdir().unwrap();
@@ -303,6 +368,9 @@ fn a_second_run_over_the_same_folder_downloads_nothing_it_already_has() {
     assert_eq!(report, report_for(&out, 0, 2));
     assert_eq!(menu.calls(), 1);
     assert_eq!(photo.calls(), 1);
+    // Every pull is its own run, whether or not it downloads anything.
+    assert_eq!(create.calls(), 2);
+    assert_eq!(complete.calls(), 2);
     assert_eq!(
         lines,
         [
@@ -310,6 +378,7 @@ fn a_second_run_over_the_same_folder_downloads_nothing_it_already_has() {
             "Backup query: (all messages)".to_string(),
             "Previous backup completed successfully. Running to check for new messages…"
                 .to_string(),
+            "Export run 7: 3 message(s) in 1 conversation(s), 2 attachment(s) (22 B)".to_string(),
             format!("Wrote 1 conversation(s), 3 message(s) → {}", out.display()),
         ]
     );
@@ -319,7 +388,8 @@ fn a_second_run_over_the_same_folder_downloads_nothing_it_already_has() {
 fn a_file_the_journal_lists_but_the_disk_lost_is_fetched_again() {
     let server = MockServer::start();
     let _auth = mock_auth(&server);
-    let _pages = mock_pages(&server, "sms-backup-restore", "");
+    let _run = mock_run(&server);
+    let _pages = mock_pages(&server, "sms-backup-restore");
     let menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
     let photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
     let dir = tempdir().unwrap();
@@ -340,10 +410,12 @@ fn a_file_the_journal_lists_but_the_disk_lost_is_fetched_again() {
 }
 
 #[test]
-fn a_cancel_requested_before_the_run_stops_it_before_the_first_page() {
+fn a_cancel_requested_before_the_run_records_nothing_in_the_vault() {
     let server = MockServer::start();
     let auth = mock_auth(&server);
-    let (first, _second) = mock_pages(&server, "sms-backup-restore", "");
+    let (create, complete) = mock_run(&server);
+    let cancel = mock_cancel(&server);
+    let (first, _second) = mock_pages(&server, "sms-backup-restore");
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
     let cfg = VaultPullConfig {
@@ -355,7 +427,14 @@ fn a_cancel_requested_before_the_run_stops_it_before_the_first_page() {
 
     assert_eq!(error.to_string(), "cancelled");
     assert_eq!(auth.calls(), 1);
+    assert_eq!(
+        create.calls(),
+        0,
+        "a run the caller gave up on is never recorded"
+    );
     assert_eq!(first.calls(), 0);
+    assert_eq!(complete.calls(), 0);
+    assert_eq!(cancel.calls(), 0);
     assert!(!out.join(CONVERSATION_FILE).exists());
     let state = journal::load(&journal::journal_path(&out), &server.base_url(), "alice").unwrap();
     assert!(!state.backup_complete);
@@ -365,7 +444,8 @@ fn a_cancel_requested_before_the_run_stops_it_before_the_first_page() {
 fn a_source_name_with_spaces_and_brackets_becomes_a_file_safe_suffix() {
     let server = MockServer::start();
     let _auth = mock_auth(&server);
-    let _pages = mock_pages(&server, "whatsapp (phone 2)", "");
+    let _run = mock_run(&server);
+    let _pages = mock_pages(&server, "whatsapp (phone 2)");
     let _menu = mock_asset(&server, MENU_SHA, "whatsapp (phone 2)", MENU_BYTES);
     let _photo = mock_asset(&server, PHOTO_SHA, "whatsapp (phone 2)", PHOTO_BYTES);
     let dir = tempdir().unwrap();
@@ -382,7 +462,8 @@ fn a_source_name_with_spaces_and_brackets_becomes_a_file_safe_suffix() {
 fn skipping_attachments_writes_messages_without_files_or_downloads() {
     let server = MockServer::start();
     let _auth = mock_auth(&server);
-    let _pages = mock_pages(&server, "sms-backup-restore", "");
+    let _run = mock_run(&server);
+    let _pages = mock_pages(&server, "sms-backup-restore");
     let menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
     let photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
     let dir = tempdir().unwrap();
@@ -404,10 +485,12 @@ fn skipping_attachments_writes_messages_without_files_or_downloads() {
 }
 
 #[test]
-fn progress_events_narrate_login_paging_downloads_and_the_report() {
+fn a_query_becomes_the_runs_query_scope_and_progress_narrates_the_run() {
     let server = MockServer::start();
     let _auth = mock_auth(&server);
-    let _pages = mock_pages(&server, "sms-backup-restore", "from:sam");
+    let create = mock_create(&server, json!({ "kind": "query", "q": "from:sam" }));
+    let complete = mock_complete(&server);
+    let _pages = mock_pages(&server, "sms-backup-restore");
     let _menu = mock_asset(&server, MENU_SHA, "sms-backup-restore", MENU_BYTES);
     let _photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
     let dir = tempdir().unwrap();
@@ -423,6 +506,8 @@ fn progress_events_narrate_login_paging_downloads_and_the_report() {
         run(&cfg, Some(&mut progress)).unwrap()
     };
 
+    create.assert();
+    complete.assert();
     assert_eq!(
         events,
         vec![
@@ -432,6 +517,9 @@ fn progress_events_narrate_login_paging_downloads_and_the_report() {
             },
             ProgressEvent::Log("Authenticated as alice (1)".into()),
             ProgressEvent::Log("Backup query: from:sam".into()),
+            ProgressEvent::Log(
+                "Export run 7: 3 message(s) in 1 conversation(s), 2 attachment(s) (22 B)".into()
+            ),
             ProgressEvent::Page {
                 messages: 2,
                 total_so_far: 2,
@@ -454,10 +542,12 @@ fn progress_events_narrate_login_paging_downloads_and_the_report() {
 }
 
 #[test]
-fn an_asset_the_vault_does_not_have_fails_the_run_by_fingerprint() {
+fn an_asset_the_vault_does_not_have_fails_the_run_and_cancels_it_in_the_vault() {
     let server = MockServer::start();
     let _auth = mock_auth(&server);
-    let _pages = mock_pages(&server, "sms-backup-restore", "");
+    let (create, complete) = mock_run(&server);
+    let cancel = mock_cancel(&server);
+    let _pages = mock_pages(&server, "sms-backup-restore");
     let menu = server.mock(|when, then| {
         when.method(GET).path(format!("/v1/assets/{MENU_SHA}"));
         then.status(404).json_body(json!({
@@ -478,10 +568,46 @@ fn an_asset_the_vault_does_not_have_fails_the_run_by_fingerprint() {
         format!("asset download failed: asset not found: {MENU_SHA} (source=sms-backup-restore)")
     );
     assert_eq!(menu.calls(), 1, "a 404 Not Found is not retried");
+    create.assert();
+    cancel.assert();
+    assert_eq!(complete.calls(), 0);
     assert!(!out.join("attachments/menu.pdf").exists());
     assert!(!out.join(CONVERSATION_FILE).exists());
     let state = journal::load(&journal::journal_path(&out), &server.base_url(), "alice").unwrap();
     assert!(!state.backup_complete);
+}
+
+#[test]
+fn a_scope_the_vault_refuses_fails_the_run_with_the_vaults_sentence() {
+    let server = MockServer::start();
+    let _auth = mock_auth(&server);
+    let create = server.mock(|when, then| {
+        when.method(POST).path("/v1/exports");
+        then.status(400)
+            .header("content-type", "application/problem+json")
+            .json_body(json!({
+                "type": "https://bitrealm.io/vault/developer/reference/errors/search-query-invalid",
+                "title": "Search query invalid",
+                "status": 400,
+                "detail": "wibble: is not a word the Messages list has"
+            }));
+    });
+    let (first, _second) = mock_pages(&server, "sms-backup-restore");
+    let dir = tempdir().unwrap();
+    let out = dir.path().join("pulled");
+    let cfg = VaultPullConfig {
+        query: "wibble:yes".into(),
+        ..config(&out, server.base_url())
+    };
+
+    let error = run(&cfg, None).unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "create export failed (HTTP 400 Bad Request): wibble: is not a word the Messages list has"
+    );
+    assert_eq!(create.calls(), 1, "a 400 is not retried");
+    assert_eq!(first.calls(), 0);
 }
 
 #[test]

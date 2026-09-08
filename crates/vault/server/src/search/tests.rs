@@ -1960,8 +1960,8 @@ mod docs {
         }
     }
 
-    /// `api.md` describes what `GET /v1/export/messages` accepts, which
-    /// compiles as the Messages list (`export_api::message_filter`). It
+    /// `api.md` describes what an Export Run's `query` scope accepts, which
+    /// compiles as the Messages list (`messages_api::message_filter`). It
     /// should name every word the registry marks for Messages, and no word
     /// the registry does not have at all — the same shape of check as
     /// `the_page_lists_every_word_and_nothing_else`, scoped to one list.

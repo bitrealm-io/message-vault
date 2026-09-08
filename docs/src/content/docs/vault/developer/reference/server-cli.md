@@ -112,6 +112,7 @@ Import an address book (VCF or vCard CSV) into an existing database
   Default value: `config/config.toml`
 * `--contacts <CONTACTS>` — Address book: VCF, or vCard CSV (First Name, Last Name, Phone columns)
 * `--db <DB>` — Output SQLite database path (overrides config)
+* `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
 * `--account <ACCOUNT>` — Account username or UUID (scopes contacts to this vault tenant)
 
 

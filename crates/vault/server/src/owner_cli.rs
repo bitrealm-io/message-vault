@@ -12,46 +12,32 @@
 
 use anyhow::{Result, bail};
 
-use crate::config::Config;
 use crate::db::account_profile;
-use crate::db::engine::DbTarget;
+use crate::open_vault::OpenVault;
 
 /// Create the vault owner, claiming an unclaimed vault.
 ///
 /// # Errors
 ///
 /// Fails when the vault already has an owner, when the username is malformed
-/// or taken, when the password is shorter than the vault's policy allows, or
-/// when the database cannot be opened.
-pub async fn create_owner(
-    config: &std::path::Path,
-    db_url: Option<&str>,
-    username: &str,
-    password: &str,
-) -> Result<String> {
-    let cfg = Config::load(config)?;
-    let url = db_url.or(cfg.database.url.as_deref());
-    let pool = DbTarget::new(url, &cfg.paths.db).open().await?;
-    let mut conn = pool.acquire().await?;
+/// or taken, or when the password is shorter than the vault's policy allows.
+pub async fn create_owner(vault: &OpenVault, username: &str, password: &str) -> Result<String> {
+    let mut conn = vault.conn().await?;
 
     let username = crate::auth::normalize_username(username);
     if !crate::auth::is_valid_username(&username) {
-        pool.close().await;
         bail!("username must be 1–128 chars (alphanumeric, _, -, .)");
     }
     if let Err(e) = crate::auth::validate_password_policy(password) {
-        pool.close().await;
         bail!("{e}");
     }
 
     if account_profile::vault_is_claimed(&mut conn).await? {
-        pool.close().await;
         bail!(
             "this vault already has an owner; use `reset-owner-password` to set a new password for it"
         );
     }
     if let Err(e) = crate::auth::require_username_free(&mut conn, &username).await {
-        pool.close().await;
         bail!("{e}");
     }
 
@@ -65,8 +51,6 @@ pub async fn create_owner(
     )
     .await?;
 
-    drop(conn);
-    pool.close().await;
     Ok(username)
 }
 
@@ -77,24 +61,15 @@ pub async fn create_owner(
 ///
 /// # Errors
 ///
-/// Fails when the vault has no owner, when the password is shorter than the
-/// vault's policy allows, or when the database cannot be opened.
-pub async fn reset_owner_password(
-    config: &std::path::Path,
-    db_url: Option<&str>,
-    password: &str,
-) -> Result<String> {
-    let cfg = Config::load(config)?;
-    let url = db_url.or(cfg.database.url.as_deref());
-    let pool = DbTarget::new(url, &cfg.paths.db).open().await?;
-    let mut conn = pool.acquire().await?;
+/// Fails when the vault has no owner, or when the password is shorter than
+/// the vault's policy allows.
+pub async fn reset_owner_password(vault: &OpenVault, password: &str) -> Result<String> {
+    let mut conn = vault.conn().await?;
 
     if let Err(e) = crate::auth::validate_password_policy(password) {
-        pool.close().await;
         bail!("{e}");
     }
     if !account_profile::vault_is_claimed(&mut conn).await? {
-        pool.close().await;
         bail!("this vault has no owner yet; use `create-owner` to claim it");
     }
 
@@ -113,7 +88,5 @@ pub async fn reset_owner_password(
             .await?
             .unwrap_or_else(|| account_profile::OWNER_ACCOUNT_ID.to_string());
 
-    drop(conn);
-    pool.close().await;
     Ok(username)
 }

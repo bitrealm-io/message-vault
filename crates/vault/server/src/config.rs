@@ -7,6 +7,8 @@ use anyhow::{Context, Result, bail};
 use message_ir_format::UNSAFE_ATTACHMENT_PATH_PREFIX;
 use serde::Deserialize;
 
+use crate::db::engine::{DbEngine, DbTarget, detect_engine};
+
 /// Complete server configuration, loaded from a TOML file.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -257,9 +259,108 @@ fn resolve_path(base: &Path, configured: &Path) -> PathBuf {
     }
 }
 
+impl Config {
+    /// Apply the command line's database flags: `--db` replaces `paths.db`
+    /// and `--db-url` replaces `[database] url`. After this the config alone
+    /// says where the vault's database is; see [`Config::db_target`].
+    pub(crate) fn with_db_overrides(mut self, db: Option<PathBuf>, db_url: Option<String>) -> Self {
+        if let Some(db) = db {
+            self.paths.db = db;
+        }
+        if let Some(url) = db_url {
+            self.database.url = Some(url);
+        }
+        self
+    }
+
+    /// Where the vault's database is: the connection URL when one is set,
+    /// otherwise the SQLite file at `paths.db`. The URL always wins because
+    /// it can name a Postgres server, which a path never can.
+    pub(crate) fn db_target(&self) -> DbTarget<'_> {
+        DbTarget::new(self.database.url.as_deref(), &self.paths.db)
+    }
+
+    /// The engine [`Config::db_target`] selects: SQLite unless the URL's
+    /// scheme says Postgres.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for a URL whose scheme is neither.
+    pub(crate) fn db_engine(&self) -> Result<DbEngine> {
+        match self.database.url.as_deref() {
+            Some(url) => detect_engine(url),
+            None => Ok(DbEngine::Sqlite),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn config_at(db: &str) -> Config {
+        Config {
+            paths: PathsConfig {
+                db: PathBuf::from(db),
+                data_dir: PathBuf::from("/vault/data"),
+                assets_dir: "assets".into(),
+                assets_converted_dir: "assets_converted".into(),
+            },
+            server: None,
+            database: DatabaseConfig::default(),
+        }
+    }
+
+    #[test]
+    fn without_overrides_the_database_is_the_configured_sqlite_file() {
+        let cfg = config_at("/vault/vault.db").with_db_overrides(None, None);
+
+        assert_eq!(cfg.paths.db, PathBuf::from("/vault/vault.db"));
+        assert_eq!(cfg.database.url, None);
+        assert_eq!(cfg.db_target().to_string(), "/vault/vault.db");
+        assert_eq!(cfg.db_engine().unwrap(), DbEngine::Sqlite);
+    }
+
+    #[test]
+    fn db_override_replaces_the_sqlite_path() {
+        let cfg = config_at("/vault/vault.db")
+            .with_db_overrides(Some(PathBuf::from("/elsewhere/other.db")), None);
+
+        assert_eq!(cfg.db_target().to_string(), "/elsewhere/other.db");
+    }
+
+    #[test]
+    fn db_url_override_wins_over_the_path_and_names_the_engine() {
+        let cfg = config_at("/vault/vault.db").with_db_overrides(
+            Some(PathBuf::from("/elsewhere/other.db")),
+            Some("postgres://vault:secret@db.example:5432/vault".into()),
+        );
+
+        assert_eq!(
+            cfg.db_target().to_string(),
+            "postgres://db.example:5432/vault"
+        );
+        assert_eq!(cfg.db_engine().unwrap(), DbEngine::Postgres);
+    }
+
+    #[test]
+    fn a_configured_url_is_honoured_without_any_override() {
+        let mut cfg = config_at("/vault/vault.db");
+        cfg.database.url = Some("sqlite:///elsewhere/other.db".into());
+
+        let cfg = cfg.with_db_overrides(None, None);
+
+        assert_eq!(cfg.db_target().to_string(), "sqlite:///elsewhere/other.db");
+        assert_eq!(cfg.db_engine().unwrap(), DbEngine::Sqlite);
+    }
+
+    #[test]
+    fn an_unknown_url_scheme_is_an_error() {
+        let mut cfg = config_at("/vault/vault.db");
+        cfg.database.url = Some("mysql://db.example/vault".into());
+
+        assert!(cfg.db_engine().is_err());
+    }
 
     #[test]
     fn validate_source_id_accepts_slugs() {

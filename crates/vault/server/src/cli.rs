@@ -3,7 +3,10 @@
 //! Each subcommand is a `clap` argument struct plus one `run_*` function. The
 //! functions here only parse, validate, and print; the work lives in the
 //! module each one calls (`import_cli`, `dedupe`, `reset_demo`, and so on).
+//! Every command that reads the vault opens it the same way: the config with
+//! `--db` and `--db-url` applied, through [`OpenVault`].
 
+use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use crate::import::ImportMode;
@@ -11,9 +14,9 @@ use anyhow::{Result, bail};
 use clap::{Args, Command, CommandFactory, Parser, Subcommand};
 
 use crate::config::{Config, validate_source_id};
-use crate::db::engine::DbTarget;
-use crate::db::{account_profile, contacts as contacts_db};
+use crate::db::contacts as contacts_db;
 use crate::dedupe::DedupeStats;
+use crate::open_vault::OpenVault;
 
 #[derive(Debug, Parser)]
 #[command(name = "message-vault-server")]
@@ -197,6 +200,10 @@ pub struct ImportContactsArgs {
     #[arg(long)]
     pub db: Option<PathBuf>,
 
+    /// Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
+    #[arg(long)]
+    pub db_url: Option<String>,
+
     /// Account username or UUID (scopes contacts to this vault tenant)
     #[arg(long)]
     pub account: String,
@@ -287,8 +294,6 @@ pub fn clap_command() -> Command {
 ///
 /// Returns the subcommand's error, or a validation error for bad flag values.
 pub async fn run(cli: Cli) -> Result<()> {
-    // Register the sqlx Any drivers once before any pool connects.
-    sqlx::any::install_default_drivers();
     match cli.command {
         Commands::Import(args) => run_import(args).await,
         Commands::DedupeCrossSource(args) => run_dedupe(args).await,
@@ -308,25 +313,20 @@ pub async fn run(cli: Cli) -> Result<()> {
 
 /// Claim the vault and report the owner's username.
 async fn run_create_owner(args: CreateOwnerArgs) -> Result<()> {
-    let username = crate::owner_cli::create_owner(
-        &args.config,
-        args.db_url.as_deref(),
-        &args.username,
-        &args.password,
-    )
-    .await?;
+    let cfg = Config::load(&args.config)?.with_db_overrides(None, args.db_url);
+    let vault = OpenVault::open(cfg).await?;
+    let username = crate::owner_cli::create_owner(&vault, &args.username, &args.password).await?;
+    vault.close().await;
     println!("Vault claimed. Sign in as {username}.");
     Ok(())
 }
 
 /// Set the vault owner's password and report the username to sign in with.
 async fn run_reset_owner_password(args: ResetOwnerPasswordArgs) -> Result<()> {
-    let username = crate::owner_cli::reset_owner_password(
-        &args.config,
-        args.db_url.as_deref(),
-        &args.password,
-    )
-    .await?;
+    let cfg = Config::load(&args.config)?.with_db_overrides(None, args.db_url);
+    let vault = OpenVault::open(cfg).await?;
+    let username = crate::owner_cli::reset_owner_password(&vault, &args.password).await?;
+    vault.close().await;
     println!("Owner password set. Sign in as {username}.");
     Ok(())
 }
@@ -341,33 +341,28 @@ fn validate_window_secs(window_secs: i64) -> Result<()> {
 
 /// Import a folder of conversation files, then print the counts.
 async fn run_import(args: ImportArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?;
+    let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
     validate_window_secs(args.window_secs)?;
     if let Some(ref source) = args.source {
         validate_source_id(source)?;
     }
-    let mode = args.mode;
     let media = media::MediaMode::parse(&args.media).ok_or_else(|| {
         anyhow::anyhow!(
             "invalid --media '{}' (expected copy, none, convert, or compress)",
             args.media
         )
     })?;
-    let db_path = args.db.clone().unwrap_or_else(|| cfg.paths.db.clone());
-    let target = DbTarget::new(args.db_url.as_deref(), &db_path);
-    let account = account_profile::resolve_account_ref_at(target, &args.account).await?;
-    let target_label = target.to_string();
+    let vault = OpenVault::open(cfg).await?;
+    let account = vault.account_id(&args.account).await?;
 
     let stats = crate::import_cli::run(
-        &cfg,
+        &vault,
         &crate::import_cli::CliImportOptions {
             account_id: account,
             input_dir: args.input,
-            db_path: args.db,
-            db_url: args.db_url,
             assets_dir: args.assets_dir,
             source_override: args.source,
-            mode,
+            mode: args.mode,
             media,
             contacts: args.contacts,
             overwrite_contacts: args.overwrite_contacts,
@@ -378,89 +373,95 @@ async fn run_import(args: ImportArgs) -> Result<()> {
     .await?;
 
     println!();
-    println!("Import into {target_label}");
+    println!("Import into {}", vault.location());
     println!("  input:         {}", stats.input_dir.display());
     println!("  sources:       {}", stats.sources.join(", "));
-    print_import_stats(&stats.import);
+    print!("{}", format_import_stats(&stats.import));
     match stats.dedupe {
         Some(dedupe) => {
             println!("Cross-source soft-dedupe (hide the same SMS across sources)");
-            print_dedupe_stats(&dedupe);
+            print!("{}", format_dedupe_stats(&dedupe));
         }
         None => println!("Cross-source soft-dedupe skipped (--skip-dedupe)"),
     }
+    vault.close().await;
     Ok(())
 }
 
-/// Print the counts from one import stage.
-fn print_import_stats(import: &crate::import::ImportStats) {
+/// The counts from one import stage, one line each, ready to print.
+fn format_import_stats(import: &crate::import::ImportStats) -> String {
+    let mut out = String::new();
     if import.contacts_skipped {
-        println!(
-            "  contacts:      (skipped — already loaded or no --contacts; use --overwrite-contacts)"
+        out.push_str(
+            "  contacts:      (skipped — already loaded or no --contacts; use --overwrite-contacts)\n",
         );
     } else {
-        println!("  contacts:      {}", import.contacts);
-        println!("  contact handles:{}", import.contact_handles);
+        let _ = writeln!(out, "  contacts:      {}", import.contacts);
+        let _ = writeln!(out, "  contact handles:{}", import.contact_handles);
     }
-    println!("  files:         {}", import.files);
-    println!("  conversations: {}", import.conversations);
-    println!("  participants:  {}", import.participants);
-    println!("  messages:      {}", import.messages);
-    println!("  messages deduped: {}", import.messages_deduped);
+    let _ = writeln!(out, "  files:         {}", import.files);
+    let _ = writeln!(out, "  conversations: {}", import.conversations);
+    let _ = writeln!(out, "  participants:  {}", import.participants);
+    let _ = writeln!(out, "  messages:      {}", import.messages);
+    let _ = writeln!(out, "  messages deduped: {}", import.messages_deduped);
     if import.mode == ImportMode::Append {
-        println!("  messages appended: {}", import.messages_appended);
+        let _ = writeln!(out, "  messages appended: {}", import.messages_appended);
     }
-    println!(
+    let _ = writeln!(
+        out,
         "  attachment records: {} (message↔media links in the database)",
         import.attachments
     );
-    println!("  tapbacks:      {}", import.tapbacks);
-    println!(
+    let _ = writeln!(out, "  tapbacks:      {}", import.tapbacks);
+    let _ = writeln!(
+        out,
         "  media files stored:  {} (unique blobs under assets/)",
         import.assets_copied
     );
-    println!(
+    let _ = writeln!(
+        out,
         "  media files reused:  {} (same content hash already on disk)",
         import.assets_deduped
     );
-    println!(
+    let _ = writeln!(
+        out,
         "  media files missing: {} (attachment path not found on disk)",
         import.assets_missing
     );
     if import.phones_needing_review > 0 {
-        println!(
+        let _ = writeln!(
+            out,
             "  phones needing review: {} (ambiguous numbers — fix them in the vault)",
             import.phones_needing_review
         );
     }
+    out
 }
 
-/// Print the counts from a cross-source dedupe pass.
-fn print_dedupe_stats(stats: &DedupeStats) {
-    println!(
+/// The counts from a cross-source dedupe pass, one line each, ready to print.
+fn format_dedupe_stats(stats: &DedupeStats) -> String {
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
         "  fingerprints set:   {} (one per message; not a duplicate count)",
         stats.keys_filled
     );
-    println!("  exact duplicate groups: {}", stats.exact_groups);
-    println!("  exact duplicates hidden: {}", stats.exact_flagged);
-    println!("  near duplicates flagged: {}", stats.near_flagged);
+    let _ = writeln!(out, "  exact duplicate groups: {}", stats.exact_groups);
+    let _ = writeln!(out, "  exact duplicates hidden: {}", stats.exact_flagged);
+    let _ = writeln!(out, "  near duplicates flagged: {}", stats.near_flagged);
+    out
 }
 
 /// Run the cross-source dedupe pass on its own and print the counts.
 async fn run_dedupe(args: DedupeArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?;
+    let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
     validate_window_secs(args.window_secs)?;
-    let db = args.db.unwrap_or_else(|| cfg.paths.db.clone());
-    let target = DbTarget::new(args.db_url.as_deref(), &db);
-    let account = account_profile::resolve_account_ref_at(target, &args.account).await?;
+    let vault = OpenVault::open(cfg).await?;
+    let account = vault.account_id(&args.account).await?;
+    let mut conn = vault.conn().await?;
+    let priority = crate::dedupe::source_priority_from_db(&mut conn, &account).await?;
 
-    let priority = {
-        let pool = target.open().await?;
-        let mut conn = pool.acquire().await?;
-        crate::dedupe::source_priority_from_db(&mut conn, &account).await?
-    };
-
-    println!("Cross-source dedupe on {target}");
+    println!("Cross-source dedupe on {}", vault.location());
     println!("  config:       {}", args.config.display());
     println!("  account:      {account}");
     println!("  window_secs:  {}", args.window_secs);
@@ -473,36 +474,32 @@ async fn run_dedupe(args: DedupeArgs) -> Result<()> {
         }
     );
 
-    let stats = crate::dedupe::run_dedupe(target, &account, args.window_secs).await?;
-    print_dedupe_stats(&stats);
+    let stats =
+        crate::dedupe::dedupe_cross_source(&mut conn, &account, None, args.window_secs).await?;
+    print!("{}", format_dedupe_stats(&stats));
+    drop(conn);
+    vault.close().await;
     Ok(())
 }
 
-/// Load an address book into an existing SQLite vault and print the counts.
+/// Load an address book into an existing vault and print the counts.
 async fn run_import_contacts(args: ImportContactsArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?;
-    let db = args.db.unwrap_or_else(|| cfg.paths.db.clone());
-    let target = DbTarget::Path(&db);
-    let account = account_profile::resolve_account_ref_at(target, &args.account).await?;
-
-    if let Some(parent) = db.parent()
-        && !parent.as_os_str().is_empty()
-    {
-        std::fs::create_dir_all(parent)?;
-    }
-
-    let pool = target.open().await?;
-    let mut conn = pool.acquire().await?;
+    let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
+    let vault = OpenVault::open(cfg).await?;
+    let account = vault.account_id(&args.account).await?;
+    let mut conn = vault.conn().await?;
     let stats =
         contacts_db::load_contacts_if_needed(&mut conn, Some(&args.contacts), true, &account)
             .await?;
 
-    println!("Imported contacts into {}", db.display());
+    println!("Imported contacts into {}", vault.location());
     println!("  config:       {}", args.config.display());
     println!("  account:      {account}");
     println!("  contacts:     {}", args.contacts.display());
     println!("  rows:         {}", stats.contacts);
     println!("  phones:       {}", stats.phones);
+    drop(conn);
+    vault.close().await;
     Ok(())
 }
 
@@ -558,33 +555,33 @@ async fn run_reset_demo(args: ResetDemoArgs) -> Result<()> {
 
 /// Start the HTTP server with the config, honouring a `--db-url` override.
 async fn run_serve(args: ServeArgs) -> Result<()> {
-    let mut cfg = Config::load(&args.config)?;
-    if let Some(url) = args.db_url {
-        cfg.database.url = Some(url);
-    }
+    let cfg = Config::load(&args.config)?.with_db_overrides(None, args.db_url);
     let _ = cfg.require_server()?;
     crate::server::run(cfg).await
 }
 
 /// Convert stored media into browser previews.
 async fn run_process_assets(args: ProcessAssetsArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?;
+    let cfg = Config::load(&args.config)?.with_db_overrides(args.db, None);
     if let Some(ref source) = args.source {
         validate_source_id(source)?;
     }
+    let vault = OpenVault::open(cfg).await?;
     crate::process_assets::run(
-        &cfg,
+        &vault,
         &crate::process_assets::ProcessAssetsOptions {
             force: args.force,
             dry_run: args.dry_run,
             skip_image: args.skip_image,
             skip_video: args.skip_video,
             skip_audio: args.skip_audio,
-            db: args.db,
             source: args.source,
-            db_url: None,
         },
     )
     .await?;
+    vault.close().await;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

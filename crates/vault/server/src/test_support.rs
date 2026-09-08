@@ -110,7 +110,7 @@ pub async fn test_vault() -> TestVault {
             .await
             .unwrap();
     }
-    let state = crate::server::test_app_state(pool, tmp.path()).await;
+    let state = crate::server::test_app_state(pool, tmp.path());
     TestVault { tmp, state }
 }
 

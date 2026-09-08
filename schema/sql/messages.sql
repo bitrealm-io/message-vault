@@ -89,6 +89,10 @@ CREATE INDEX IF NOT EXISTS ix_messages_conversation_timestamp
 CREATE INDEX IF NOT EXISTS ix_messages_conversation_source_timestamp
     ON messages (conversation_id, source, timestamp);
 CREATE INDEX IF NOT EXISTS ix_messages_account_id ON messages (account_id);
+-- `GET /v1/messages` and `GET /v1/export/messages` page an account's
+-- messages by time; this serves the default sort without a scan.
+CREATE INDEX IF NOT EXISTS ix_messages_account_timestamp
+    ON messages (account_id, timestamp, id);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_messages_account_source_guid
     ON messages (account_id, source, guid)
     WHERE guid IS NOT NULL AND guid != '';

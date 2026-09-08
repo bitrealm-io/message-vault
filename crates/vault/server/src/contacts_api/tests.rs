@@ -264,10 +264,11 @@ async fn list_contacts_uses_preferred_name_and_handle_ids() {
     .await
     .unwrap();
 
-    let page = list_contacts(
+    let page = list_contacts_sorted(
         &mut conn,
         &account,
         "",
+        &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
         crate::search::tests::clock(),
@@ -324,10 +325,11 @@ async fn list_contacts_filters_and_paginates() {
         .unwrap();
     }
 
-    let by_name = list_contacts(
+    let by_name = list_contacts_sorted(
         &mut conn,
         &account,
         "sam",
+        &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
         crate::search::tests::clock(),
@@ -337,10 +339,11 @@ async fn list_contacts_filters_and_paginates() {
     assert_eq!(by_name.total, 1);
     assert_eq!(by_name.items[0].name, "Sam");
 
-    let by_handle = list_contacts(
+    let by_handle = list_contacts_sorted(
         &mut conn,
         &account,
         "handle:5555550200",
+        &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
         crate::search::tests::clock(),
@@ -350,16 +353,32 @@ async fn list_contacts_filters_and_paginates() {
     assert_eq!(by_handle.total, 1);
     assert_eq!(by_handle.items[0].name, "Sam");
 
-    let page0 = list_contacts(&mut conn, &account, "", 2, 0, crate::search::tests::clock())
-        .await
-        .unwrap();
+    let page0 = list_contacts_sorted(
+        &mut conn,
+        &account,
+        "",
+        &DEFAULT_CONTACT_SORT,
+        2,
+        0,
+        crate::search::tests::clock(),
+    )
+    .await
+    .unwrap();
     assert_eq!(page0.total, 3);
     assert_eq!(page0.limit, 2);
     assert_eq!(page0.offset, 0);
     assert_eq!(page0.items.len(), 2);
-    let page1 = list_contacts(&mut conn, &account, "", 2, 2, crate::search::tests::clock())
-        .await
-        .unwrap();
+    let page1 = list_contacts_sorted(
+        &mut conn,
+        &account,
+        "",
+        &DEFAULT_CONTACT_SORT,
+        2,
+        2,
+        crate::search::tests::clock(),
+    )
+    .await
+    .unwrap();
     assert_eq!(page1.total, 3);
     assert_eq!(page1.offset, 2);
     assert_eq!(page1.items.len(), 1);
@@ -911,10 +930,11 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
         .unwrap()
         .unwrap();
     assert!(!detail.last_modified.is_empty());
-    let page = list_contacts(
+    let page = list_contacts_sorted(
         &mut conn,
         &account,
         "",
+        &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
         crate::search::tests::clock(),
@@ -1124,10 +1144,11 @@ async fn list_contacts_filters_has_messages_and_never_messaged() {
     )
     .await;
 
-    let with_msg = list_contacts(
+    let with_msg = list_contacts_sorted(
         &mut conn,
         &account,
         "messages:>0",
+        &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
         crate::search::tests::clock(),
@@ -1137,10 +1158,11 @@ async fn list_contacts_filters_has_messages_and_never_messaged() {
     assert_eq!(with_msg.total, 1);
     assert_eq!(with_msg.items[0].name, "Messaged");
 
-    let never = list_contacts(
+    let never = list_contacts_sorted(
         &mut conn,
         &account,
         "messages:0",
+        &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
         crate::search::tests::clock(),
@@ -1166,10 +1188,11 @@ async fn list_contacts_filters_no_handle() {
         .await
         .unwrap();
 
-    let page = list_contacts(
+    let page = list_contacts_sorted(
         &mut conn,
         &account,
         "handle:none",
+        &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
         crate::search::tests::clock(),
@@ -1219,10 +1242,11 @@ async fn list_contacts_filters_service_or() {
     )
     .await;
 
-    let page = list_contacts(
+    let page = list_contacts_sorted(
         &mut conn,
         &account,
         "service:imessage,sms",
+        &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
         crate::search::tests::clock(),
@@ -1576,10 +1600,11 @@ async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
     .await
     .unwrap();
 
-    let unknown = list_contacts(
+    let unknown = list_contacts_sorted(
         &mut conn,
         &account,
         "group:unknown",
+        &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
         crate::search::tests::clock(),
@@ -1599,10 +1624,11 @@ async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
         .execute(&mut *conn)
         .await
         .unwrap();
-    let after = list_contacts(
+    let after = list_contacts_sorted(
         &mut conn,
         &account,
         "group:unknown",
+        &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
         crate::search::tests::clock(),
@@ -1633,10 +1659,11 @@ async fn list_contacts_filters_by_group_and_no_group() {
     .await
     .unwrap();
 
-    let grouped = list_contacts(
+    let grouped = list_contacts_sorted(
         &mut conn,
         &account,
         "group:Family",
+        &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
         crate::search::tests::clock(),
@@ -1647,10 +1674,11 @@ async fn list_contacts_filters_by_group_and_no_group() {
     assert_eq!(grouped.items[0].name, "Ada");
     assert_eq!(grouped.items[0].groups, vec!["Family".to_string()]);
 
-    let quoted = list_contacts(
+    let quoted = list_contacts_sorted(
         &mut conn,
         &account,
         r#"group:"Family""#,
+        &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
         crate::search::tests::clock(),
@@ -1659,10 +1687,11 @@ async fn list_contacts_filters_by_group_and_no_group() {
     .unwrap();
     assert_eq!(quoted.total, 1);
 
-    let none = list_contacts(
+    let none = list_contacts_sorted(
         &mut conn,
         &account,
         "group:none",
+        &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
         0,
         crate::search::tests::clock(),

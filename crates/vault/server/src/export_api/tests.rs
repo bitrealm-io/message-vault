@@ -14,6 +14,8 @@ async fn export_takes_the_search_language() {
             limit: 50,
             offset: 0,
             clock,
+
+            order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
         },
     )
     .await
@@ -43,6 +45,8 @@ async fn export_takes_the_search_language() {
             limit: 50,
             offset: 0,
             clock,
+
+            order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
         },
     )
     .await
@@ -125,6 +129,8 @@ async fn export_includes_attachment_missing_reason() {
             limit: 100,
             offset: 0,
             clock: crate::search::tests::clock(),
+
+            order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
         },
     )
     .await
@@ -152,6 +158,8 @@ async fn conversation_filter_scopes_messages() {
             limit: 100,
             offset: 0,
             clock: crate::search::tests::clock(),
+
+            order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
         },
     )
     .await
@@ -169,6 +177,8 @@ async fn conversation_filter_scopes_messages() {
             limit: 100,
             offset: 0,
             clock: crate::search::tests::clock(),
+
+            order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
         },
     )
     .await
@@ -184,6 +194,8 @@ async fn conversation_filter_scopes_messages() {
             limit: 100,
             offset: 0,
             clock: crate::search::tests::clock(),
+
+            order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
         },
     )
     .await
@@ -253,6 +265,8 @@ async fn free_text_matches_message_body_via_fts() {
             limit: 100,
             offset: 0,
             clock: crate::search::tests::clock(),
+
+            order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
         },
     )
     .await
@@ -296,6 +310,8 @@ async fn export_boolean_query_preserves_or() {
             limit: 100,
             offset: 0,
             clock: crate::search::tests::clock(),
+
+            order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
         },
     )
     .await
@@ -346,6 +362,8 @@ async fn export_boolean_query_preserves_and_and_not() {
                     limit: 100,
                     offset: 0,
                     clock: crate::search::tests::clock(),
+
+                    order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
                 },
             )
             .await
@@ -400,6 +418,8 @@ async fn export_boolean_query_combines_body_phrases_prefixes_and_nesting() {
                     limit: 100,
                     offset: 0,
                     clock: crate::search::tests::clock(),
+
+                    order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
                 },
             )
             .await
@@ -445,6 +465,8 @@ async fn rejects_an_oversized_query() {
             limit: 10,
             offset: 0,
             clock: crate::search::tests::clock(),
+
+            order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
         },
     )
     .await
@@ -491,6 +513,8 @@ async fn export_does_not_leak_other_account_messages() {
             limit: 100,
             offset: 0,
             clock: crate::search::tests::clock(),
+
+            order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
         },
     )
     .await
@@ -505,6 +529,8 @@ async fn export_does_not_leak_other_account_messages() {
             limit: 100,
             offset: 0,
             clock: crate::search::tests::clock(),
+
+            order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
         },
     )
     .await
@@ -543,6 +569,8 @@ async fn export_pages_by_offset_and_reports_the_total() {
                     limit,
                     offset,
                     clock: crate::search::tests::clock(),
+
+                    order: crate::db::conversation_messages::DEFAULT_MESSAGE_SORT.to_vec(),
                 },
             )
             .await

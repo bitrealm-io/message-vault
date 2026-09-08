@@ -2146,6 +2146,15 @@
               "type": "integer",
               "minimum": 0
             }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "`name` or `-name`. Default `name`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2811,7 +2820,7 @@
         "tags": [
           "Conversations"
         ],
-        "summary": "Page through conversations with participants, message counts, and tags.\nOrdered by most recent activity unless `sort` and `order` say otherwise.",
+        "summary": "Page through conversations with participants, message counts, and tags.\nNewest activity first unless `sort` says otherwise.",
         "operationId": "conversations_list_handler",
         "parameters": [
           {
@@ -2846,16 +2855,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Order by `date` (last message, default) or `messages` (message count)",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "order",
-            "in": "query",
-            "description": "`asc` or `desc` (default)",
+            "description": "Comma-separated keys, `-` for descending: `date` (last message) or `messages` (message count). Default `-date`.",
             "required": false,
             "schema": {
               "type": "string"
@@ -3104,6 +3104,15 @@
             "schema": {
               "type": "integer",
               "format": "int32"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "`date` or `-date`. Default `date`, oldest first.",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -3401,6 +3410,15 @@
             "schema": {
               "type": "integer",
               "minimum": 0
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "`date` or `-date`. Default `date`, oldest first.",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -4757,7 +4775,7 @@
         "tags": [
           "Messages"
         ],
-        "summary": "Messages matching `q`, newest page by page, as the search language ranks\nthem: the same rows `GET /v1/export/messages` would return, behind a\nsigned-in session with the list defaults and the list's offset ceiling.",
+        "summary": "Messages matching `q`, oldest first unless `sort` says otherwise: the same\nrows `GET /v1/export/messages` would return, behind a signed-in session\nwith the list defaults and the list's offset ceiling.",
         "operationId": "messages_list_handler",
         "parameters": [
           {
@@ -4787,6 +4805,15 @@
             "schema": {
               "type": "integer",
               "minimum": 0
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "`date` or `-date`. Default `date`, oldest first.",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],

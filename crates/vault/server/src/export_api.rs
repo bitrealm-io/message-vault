@@ -8,14 +8,15 @@ use sqlx::AnyConnection;
 use sqlx::{Executor, Row};
 
 use crate::db::conversation_messages::{
-    Message, conversation_join_sql, load_messages, messages_from_sql,
+    DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, MessageSort, conversation_join_sql,
+    load_messages, messages_from_sql,
 };
 use crate::db::dialect::engine_of;
 use crate::db::sql::{bind_all, renumber_placeholders};
 use crate::messages_api::{count_matching_messages, message_filter};
 use crate::server::{ApiError, AppState, ExportAccess, resolve_import_account};
 
-use crate::paging::{DEFAULT_EXPORT_LIMIT, Page, page_params};
+use crate::paging::{DEFAULT_EXPORT_LIMIT, Page, SortKey, page_params, parse_sort};
 
 /// Options for one exported page of messages.
 #[derive(Debug, Clone)]
@@ -31,6 +32,8 @@ pub struct ExportPageOpts<'a> {
     /// The account's time zone and today's date in it: the zone anchors the
     /// date words' boundaries, the day anchors relative dates in `query`.
     pub clock: (chrono_tz::Tz, chrono::NaiveDate),
+    /// The parsed `sort`; [`DEFAULT_MESSAGE_SORT`] when the caller has none.
+    pub order: Vec<SortKey<MessageSort>>,
 }
 
 /// Options for one export count query.
@@ -77,6 +80,7 @@ pub async fn export_messages(
         conn,
         filter.where_sql(),
         filter.params(),
+        &opts.order,
         opts.limit as u32,
         opts.offset as u32,
     )
@@ -159,6 +163,9 @@ pub(crate) struct ExportMessagesQuery {
     pub(crate) offset: Option<usize>,
     #[serde(default)]
     pub(crate) account: Option<String>,
+    /// `date` or `-date`.
+    #[serde(default)]
+    pub(crate) sort: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -220,6 +227,7 @@ pub(crate) async fn export_messages_count_handler(
         ("q" = String, Query, description = "Query in the search language; empty is every non-trashed message"),
         ("limit" = Option<usize>, Query, description = "Page size, default 100, max 500"),
         ("offset" = Option<usize>, Query, description = "Page offset; no cap, an offset past the end is an empty page"),
+        ("sort" = Option<String>, Query, description = "`date` or `-date`. Default `date`, oldest first."),
         ("account" = Option<String>, Query)
     ),
     responses(
@@ -237,6 +245,11 @@ pub(crate) async fn export_messages_handler(
 ) -> Result<Json<Page<Message>>, ApiError> {
     let account = resolve_import_account(&auth, query.account.as_deref(), &state.db).await?;
     let page = page_params(query.limit, query.offset, DEFAULT_EXPORT_LIMIT, None)?;
+    let order = parse_sort(
+        query.sort.as_deref(),
+        &MESSAGE_SORT_KEYS,
+        &DEFAULT_MESSAGE_SORT,
+    )?;
 
     let mut conn = state.db.acquire().await?;
     let clock = crate::db::account_profile::account_clock(&mut conn, &account).await?;
@@ -248,6 +261,7 @@ pub(crate) async fn export_messages_handler(
             limit: page.limit,
             offset: page.offset,
             clock,
+            order,
         },
     )
     .await?;

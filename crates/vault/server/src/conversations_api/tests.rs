@@ -19,7 +19,7 @@ async fn list_conversations(
         conn,
         account_id,
         q,
-        ConversationOrder::default(),
+        &DEFAULT_CONVERSATION_SORT,
         limit,
         offset,
         crate::search::tests::clock(),
@@ -267,15 +267,15 @@ async fn list_conversations_sorts_by_date_or_message_count() {
     async fn ids_for(
         pool: &sqlx::AnyPool,
         account: &str,
-        sort: ConversationSort,
-        order: SortOrder,
+        key: ConversationSort,
+        direction: crate::paging::Direction,
     ) -> Vec<i64> {
         let mut conn = pool.acquire().await.unwrap();
         list_conversations_sorted(
             &mut conn,
             account,
             "",
-            ConversationOrder { sort, order },
+            &[crate::paging::SortKey { key, direction }],
             DEFAULT_LIST_LIMIT,
             0,
             crate::search::tests::clock(),
@@ -290,22 +290,46 @@ async fn list_conversations_sorts_by_date_or_message_count() {
 
     // 3 messages ending 2024-06-01 (id 1) vs 1 message on 2024-07-01 (id 2).
     assert_eq!(
-        ids_for(&pool, &account, ConversationSort::Date, SortOrder::Desc).await,
+        ids_for(
+            &pool,
+            &account,
+            ConversationSort::Date,
+            crate::paging::Direction::Desc
+        )
+        .await,
         [2, 1],
         "newest activity first"
     );
     assert_eq!(
-        ids_for(&pool, &account, ConversationSort::Date, SortOrder::Asc).await,
+        ids_for(
+            &pool,
+            &account,
+            ConversationSort::Date,
+            crate::paging::Direction::Asc
+        )
+        .await,
         [1, 2],
         "oldest activity first"
     );
     assert_eq!(
-        ids_for(&pool, &account, ConversationSort::Messages, SortOrder::Desc).await,
+        ids_for(
+            &pool,
+            &account,
+            ConversationSort::Messages,
+            crate::paging::Direction::Desc
+        )
+        .await,
         [1, 2],
         "busiest thread first"
     );
     assert_eq!(
-        ids_for(&pool, &account, ConversationSort::Messages, SortOrder::Asc).await,
+        ids_for(
+            &pool,
+            &account,
+            ConversationSort::Messages,
+            crate::paging::Direction::Asc
+        )
+        .await,
         [2, 1],
         "quietest thread first"
     );
@@ -380,10 +404,11 @@ async fn list_queries_enforce_search_limits() {
     let too_many_nodes = "(".repeat(65);
 
     for query in [&oversized, &too_many_terms, &too_many_nodes] {
-        let contact_error = crate::contacts_api::list_contacts(
+        let contact_error = crate::contacts_api::list_contacts_sorted(
             &mut conn,
             &account,
             query,
+            &crate::contacts_api::DEFAULT_CONTACT_SORT,
             DEFAULT_LIST_LIMIT,
             0,
             crate::search::tests::clock(),
@@ -954,30 +979,33 @@ async fn list_conversations_filters_by_import_id() {
     assert!(matches!(junk, ApiError::SearchQueryInvalid { .. }));
 }
 
-#[test]
-fn sort_params_fall_back_instead_of_failing() {
-    // Before `sort` existed an unknown query parameter was ignored, so an
-    // unrecognised value must still yield a list rather than a 400.
-    assert_eq!(
-        ConversationSort::from_param("messages"),
-        ConversationSort::Messages
+/// `sort` reads through the shared parser: an unknown key is refused,
+/// never silently the default, and two keys compose.
+#[tokio::test]
+async fn sort_is_parsed_against_the_lists_keys() {
+    let vault = crate::test_support::test_vault().await;
+    let state = vault.state.clone();
+    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
+    let (status, text) =
+        crate::test_support::get_raw(&state, "/v1/conversations?sort=colour", &user.token).await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
     );
     assert_eq!(
-        ConversationSort::from_param("MESSAGES"),
-        ConversationSort::Messages
+        problem.errors.as_deref(),
+        Some(&["sort: unknown key 'colour'; accepted keys are date, messages".to_string()][..])
     );
-    assert_eq!(ConversationSort::from_param("date"), ConversationSort::Date);
-    assert_eq!(ConversationSort::from_param(""), ConversationSort::Date);
     assert_eq!(
-        ConversationSort::from_param("oldest"),
-        ConversationSort::Date
+        crate::test_support::get_status(
+            &state,
+            "/v1/conversations?sort=-messages,date",
+            &user.token
+        )
+        .await,
+        StatusCode::OK
     );
-
-    assert_eq!(SortOrder::from_param("asc"), SortOrder::Asc);
-    assert_eq!(SortOrder::from_param(" Asc "), SortOrder::Asc);
-    assert_eq!(SortOrder::from_param("desc"), SortOrder::Desc);
-    assert_eq!(SortOrder::from_param(""), SortOrder::Desc);
-    assert_eq!(SortOrder::from_param("sideways"), SortOrder::Desc);
 }
 
 #[tokio::test]
@@ -1053,16 +1081,21 @@ async fn duplicate_only_threads_sort_last_in_either_date_direction() {
     .await
     .unwrap();
 
-    async fn ids_for(pool: &sqlx::AnyPool, account: &str, q: &str, order: SortOrder) -> Vec<i64> {
+    async fn ids_for(
+        pool: &sqlx::AnyPool,
+        account: &str,
+        q: &str,
+        direction: crate::paging::Direction,
+    ) -> Vec<i64> {
         let mut conn = pool.acquire().await.unwrap();
         list_conversations_sorted(
             &mut conn,
             account,
             q,
-            ConversationOrder {
-                sort: ConversationSort::Date,
-                order,
-            },
+            &[crate::paging::SortKey {
+                key: ConversationSort::Date,
+                direction,
+            }],
             DEFAULT_LIST_LIMIT,
             0,
             crate::search::tests::clock(),
@@ -1077,12 +1110,12 @@ async fn duplicate_only_threads_sort_last_in_either_date_direction() {
 
     let q = format!("import:#{import_a}");
     assert_eq!(
-        ids_for(&pool, &account, &q, SortOrder::Desc).await,
+        ids_for(&pool, &account, &q, crate::paging::Direction::Desc).await,
         [4, 3],
         "a thread with no surviving message sorts last, not first"
     );
     assert_eq!(
-        ids_for(&pool, &account, &q, SortOrder::Asc).await,
+        ids_for(&pool, &account, &q, crate::paging::Direction::Asc).await,
         [4, 3],
         "and stays last when the direction flips"
     );

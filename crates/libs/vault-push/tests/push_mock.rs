@@ -131,7 +131,7 @@ fn text_only_config(dir: &Path, base_url: String) -> VaultPushConfig {
 fn authenticate_and_push_text_only_conversation() {
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -198,7 +198,7 @@ fn authenticate_and_push_text_only_conversation() {
 fn reuses_supplied_import_session_without_starting_or_completing_one() {
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -261,7 +261,7 @@ fn reuses_supplied_import_session_without_starting_or_completing_one() {
 fn aggregates_multiple_conversations_into_one_import_request() {
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -310,7 +310,7 @@ fn aggregates_multiple_conversations_into_one_import_request() {
 fn flushes_at_message_limit_across_two_batches_of_one_run() {
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -359,7 +359,7 @@ fn flushes_at_message_limit_across_two_batches_of_one_run() {
 fn failed_combined_request_only_fails_its_files() {
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -425,7 +425,7 @@ fn failed_combined_request_only_fails_its_files() {
 fn resumes_message_batches_from_compacted_journal() {
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -470,7 +470,7 @@ fn profiles_attachment_upload_phases() {
 
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -629,7 +629,7 @@ fn puts_two_new_assets_without_head() {
 
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -699,7 +699,7 @@ fn heads_later_assets_after_put_reports_already_present() {
 
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -772,7 +772,7 @@ fn preflight_head_skips_puts_when_first_asset_already_present() {
 
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -831,7 +831,7 @@ fn multipart_upload_when_over_proxy_threshold() {
 
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -945,7 +945,7 @@ fn multipart_aborts_on_hash_mismatch_complete() {
 
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -1021,7 +1021,7 @@ fn authenticate_maps_http_failures_to_typed_errors() {
     let server = MockServer::start();
 
     let _unauthorized = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(401).body("unauthorized");
     });
     let err = authenticate(&server.base_url(), "bad").unwrap_err();
@@ -1034,7 +1034,7 @@ fn authenticate_maps_http_failures_to_typed_errors() {
 fn authenticate_maps_html_and_status_failures() {
     let server = MockServer::start();
     let _html = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200)
             .body("<!DOCTYPE html><html><body>browse ui</body></html>");
     });
@@ -1046,7 +1046,7 @@ fn authenticate_maps_html_and_status_failures() {
     // Fresh server for a non-401 status.
     let server = MockServer::start();
     let _forbidden = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(403).body("username does not match vault key");
     });
     let err = authenticate(&server.base_url(), "mv_test").unwrap_err();
@@ -1069,7 +1069,7 @@ fn verify_digests_fails_on_mismatch() {
 
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -1118,7 +1118,7 @@ fn shared_attachment_uploaded_once_across_conversations() {
 
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -1202,7 +1202,7 @@ fn skips_oversized_attachment_keeps_conversation_ok() {
 
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -1319,7 +1319,7 @@ fn skips_missing_attachment_file_keeps_conversation_ok() {
 
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -1420,7 +1420,7 @@ fn skips_missing_attachment_file_keeps_conversation_ok() {
 fn keeps_conversation_ok_when_skipped_attachment_has_no_path() {
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",
@@ -1490,7 +1490,7 @@ fn keeps_conversation_ok_when_skipped_attachment_has_no_path() {
 fn reports_pathless_attachment_without_reason_as_no_path() {
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
             "account_id": "acct-1",
             "username": "alice",

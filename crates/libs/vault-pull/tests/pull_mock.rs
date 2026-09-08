@@ -1,7 +1,7 @@
 //! Mock vault tests for one pull: login, two pages of messages, asset
 //! download, the journal a second run reads, and the progress a caller sees.
 //!
-//! The mock answers the three routes `run` calls — `GET /v1/auth/check`,
+//! The mock answers the three routes `run` calls — `GET /v1/session`,
 //! `GET /v1/export/messages`, and `GET /v1/assets/{sha256}` — with the JSON
 //! the vault serializes (`vault-api-types`, `docs/src/assets/openapi.json`).
 //! Every request derives from `VaultPullConfig::base_url`, so the mock's
@@ -95,7 +95,7 @@ fn message(
 /// The login: the key resolves to account `acct-1`, username `alice`.
 fn mock_auth(server: &MockServer) -> httpmock::Mock<'_> {
     server.mock(|when, then| {
-        when.method(GET).path("/v1/auth/check");
+        when.method(GET).path("/v1/session");
         then.status(200)
             .json_body(json!({ "account_id": "acct-1", "username": "alice" }));
     })

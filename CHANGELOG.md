@@ -44,6 +44,7 @@ Released version headings also carry a date: `## [0.8.0] - 2026-08-24`.
 
 ### Changed
 
+- 2026-09-08: The Session is a singleton on the HTTP interface. `POST /v1/session` signs in (`201 Created`, `Location: /v1/session`), `GET /v1/session` reads the signed-in credential's account, and `DELETE /v1/session` signs out; `/v1/auth/login`, `/v1/auth/check` and `/v1/auth/logout` are gone, and so is the `account=` query on the check, because the credential names the account. (#511)
 - 2026-09-08: Every failure on the HTTP interface is an RFC 7807 problem document served as `application/problem+json`: `type` names a page under bitrealm.io/vault/developer/reference/errors/ describing the kind of failure, `title` and `status` repeat it, `detail` is one sentence about this occurrence, and a validation failure lists every broken rule in `errors` and answers `422 Unprocessable Entity`. A wrong password answers `401 Unauthorized`, a taken username `409 Conflict`, an absent import `Content-Type` `415 Unsupported Media Type`, and `429 Too Many Requests` carries `Retry-After`. A `/v1` route refuses an `Accept` that admits no JSON with `406 Not Acceptable`. (ADR-0010, #499)
 - 2026-09-08: Every route is named by one convention (ADR-0009). An import is an Import Run: `POST /v1/imports` creates it with `source`, `mode` and `dedupe` stated once, `POST /v1/imports/{id}/batches` adds each JSONL body, and there is no import without a run; `GET /v1/imports` is a page narrowed by `status=`, and `/v1/imports/active` is gone. `DELETE /v1/account`, `DELETE /v1/account/messages`, `PUT /v1/account/password` and `PATCH /v1/account/profile` replace the verb paths; vault settings live at `/v1/vault/settings`; `POST /v1/contacts` takes the address book file itself as `text/vcard` or `text/csv`; `POST /v1/contacts/unmatched-handles` and `GET /v1/search-fields` say what they return. Vault schema 13; existing databases are rebuilt empty. (#500)
 - 2026-09-05: Mechanical Rust cleanup from the rust-skills review: `Debug` on every public type, `write!` into existing strings, `clone_from` and `map_or` idioms, relaxed ordering on cancel flags, and the desktop app's synchronous commands marked to run off the main thread. No behaviour changes.
@@ -102,6 +103,7 @@ Released version headings also carry a date: `## [0.8.0] - 2026-08-24`.
 - 2026-08-24: Document and ship CORS origins for packaged desktop builds (`tauri://localhost`, `http://tauri.localhost`, `https://tauri.localhost`). Release AppImages were blocked from Connect when the vault only allowed Vite `:5173` origins.
 
 ### Changed
+
 
 - 2026-08-25: Settings → System applies import staging and ffmpeg directory changes
   immediately (no Save button), keeps both path labels on one line with aligned help

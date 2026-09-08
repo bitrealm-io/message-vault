@@ -59,20 +59,25 @@ function withQuery(path: string, qs: string): string {
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 
-export function login(body: Schema["LoginRequest"]): Promise<Schema["AuthTokenResponse"]> {
-  return apiClient.post<Schema["AuthTokenResponse"]>("/v1/auth/login", body);
+/** Sign in. The Session is a singleton, so the vault answers `201` with `Location: /v1/session`. */
+export function login(
+  body: Schema["CreateSessionRequest"],
+): Promise<Schema["SessionTokenResponse"]> {
+  return apiClient.post<Schema["SessionTokenResponse"]>("/v1/session", body);
 }
 
-export function register(body: Schema["RegisterRequest"]): Promise<Schema["AuthTokenResponse"]> {
-  return apiClient.post<Schema["AuthTokenResponse"]>("/v1/auth/register", body);
+export function register(body: Schema["RegisterRequest"]): Promise<Schema["SessionTokenResponse"]> {
+  return apiClient.post<Schema["SessionTokenResponse"]>("/v1/auth/register", body);
 }
 
-export function checkAuth(opts?: VaultRequestOptions): Promise<Schema["AuthCheckResponse"]> {
-  return apiClient.get<Schema["AuthCheckResponse"]>("/v1/auth/check", opts);
+/** The Session the bearer token names: its account, username, and import sources. */
+export function getSession(opts?: VaultRequestOptions): Promise<Schema["SessionResponse"]> {
+  return apiClient.get<Schema["SessionResponse"]>("/v1/session", opts);
 }
 
+/** Sign out: end the Session. The vault answers `204`. */
 export function logout(opts?: VaultRequestOptions): Promise<void> {
-  return apiClient.post<void>("/v1/auth/logout", {}, opts);
+  return apiClient.delete<void>("/v1/session", undefined, opts);
 }
 
 export function changePassword(
@@ -101,8 +106,8 @@ export function getVaultState(opts?: VaultRequestOptions): Promise<Schema["Vault
 /** Claim an unclaimed vault by creating its owner. Returns their session. */
 export function claimVault(
   body: Schema["ClaimVaultRequest"],
-): Promise<Schema["AuthTokenResponse"]> {
-  return apiClient.post<Schema["AuthTokenResponse"]>("/v1/vault/claim", body);
+): Promise<Schema["SessionTokenResponse"]> {
+  return apiClient.post<Schema["SessionTokenResponse"]>("/v1/vault/claim", body);
 }
 
 // ── The vault owner's account management ────────────────────────────────────

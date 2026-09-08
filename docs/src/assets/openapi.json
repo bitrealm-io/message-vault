@@ -1433,163 +1433,6 @@
         ]
       }
     },
-    "/v1/auth/check": {
-      "get": {
-        "tags": [
-          "Auth"
-        ],
-        "summary": "Check the Bearer token and return the account it resolves to, its username,\nand its import sources.",
-        "operationId": "auth_check",
-        "parameters": [
-          {
-            "name": "account",
-            "in": "query",
-            "description": "Must match the token account",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthCheckResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/auth/login": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "summary": "Verify a local username and password and return a session token.",
-        "operationId": "login_handler",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Session issued",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthTokenResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Invalid credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Account is disabled",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/auth/logout": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "summary": "Revoke the presented session token.",
-        "operationId": "logout_handler",
-        "responses": {
-          "204": {
-            "description": "Signed out"
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
     "/v1/auth/register": {
       "post": {
         "tags": [
@@ -1613,7 +1456,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuthTokenResponse"
+                  "$ref": "#/components/schemas/SessionTokenResponse"
                 }
               }
             }
@@ -5680,6 +5523,156 @@
         ]
       }
     },
+    "/v1/session": {
+      "get": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "The Session the bearer token names: its account, username, and import\nsources. A session token and an API token both answer, because a program\nchecking its token needs the same facts as a browser restoring a sign-in.",
+        "operationId": "get_session_handler",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Sign in: verify a local username and password and answer the Session, a\n`201 Created` whose `Location` is the singleton itself.",
+        "operationId": "create_session_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Signed in; the Session exists",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "`/v1/session`"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionTokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account is disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Sign out: revoke the presented session token, ending the Session.",
+        "operationId": "delete_session_handler",
+        "responses": {
+          "204": {
+            "description": "Signed out"
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/trash": {
       "delete": {
         "tags": [
@@ -5764,7 +5757,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuthTokenResponse"
+                  "$ref": "#/components/schemas/SessionTokenResponse"
                 }
               }
             }
@@ -6289,56 +6282,6 @@
               "null"
             ],
             "description": "OCR/ASR transcription, when processed."
-          }
-        }
-      },
-      "AuthCheckResponse": {
-        "type": "object",
-        "description": "Token check result: account, username, sources.",
-        "required": [
-          "sources"
-        ],
-        "properties": {
-          "account_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "sources": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "username": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
-      "AuthTokenResponse": {
-        "type": "object",
-        "description": "Session token plus the account id and username it belongs to.",
-        "required": [
-          "token",
-          "account_id",
-          "username"
-        ],
-        "properties": {
-          "account_id": {
-            "type": "string",
-            "description": "Account id the session belongs to."
-          },
-          "token": {
-            "type": "string",
-            "description": "Session token to send as `Authorization: Bearer …`."
-          },
-          "username": {
-            "type": "string",
-            "description": "Account username (falls back to the account id)."
           }
         }
       },
@@ -7192,6 +7135,23 @@
           }
         }
       },
+      "CreateSessionRequest": {
+        "type": "object",
+        "description": "Username and password, the body of `POST /v1/session`.",
+        "required": [
+          "username"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "Login password."
+          },
+          "username": {
+            "type": "string",
+            "description": "Login username."
+          }
+        }
+      },
       "DedupeResponse": {
         "type": "object",
         "description": "Cross-source dedupe outcome.",
@@ -7866,23 +7826,6 @@
           "conversations",
           "messages"
         ]
-      },
-      "LoginRequest": {
-        "type": "object",
-        "description": "Username and password.",
-        "required": [
-          "username"
-        ],
-        "properties": {
-          "password": {
-            "type": "string",
-            "description": "Login password."
-          },
-          "username": {
-            "type": "string",
-            "description": "Login username."
-          }
-        }
       },
       "ManagedAccount": {
         "type": "object",
@@ -8996,6 +8939,56 @@
           }
         }
       },
+      "SessionResponse": {
+        "type": "object",
+        "description": "The signed-in credential's account, username, and import sources.",
+        "required": [
+          "sources"
+        ],
+        "properties": {
+          "account_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "SessionTokenResponse": {
+        "type": "object",
+        "description": "Session token plus the account id and username it belongs to.",
+        "required": [
+          "token",
+          "account_id",
+          "username"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "description": "Account id the session belongs to."
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token to send as `Authorization: Bearer …`."
+          },
+          "username": {
+            "type": "string",
+            "description": "Account username (falls back to the account id)."
+          }
+        }
+      },
       "SetImportStageBody": {
         "type": "object",
         "description": "New stage for a live session.",
@@ -9222,7 +9215,11 @@
     },
     {
       "name": "Auth",
-      "description": "Sign-in, session, and token check"
+      "description": "Registration"
+    },
+    {
+      "name": "Session",
+      "description": "The signed-in credential: sign in, check it, sign out"
     },
     {
       "name": "Account",

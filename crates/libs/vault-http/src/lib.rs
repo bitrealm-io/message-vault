@@ -22,7 +22,7 @@ pub use session::{HttpSession, auth_check, bearer_header, looks_like_html, trim_
 
 use anyhow::{Context, Result};
 
-/// Account id and username returned by a successful `GET /v1/auth/check`.
+/// Account id and username returned by a successful `GET /v1/session`.
 #[derive(Debug, Clone)]
 pub struct AuthInfo {
     /// The vault account id.

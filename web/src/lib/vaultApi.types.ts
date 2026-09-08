@@ -262,60 +262,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/auth/check": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Check the Bearer token and return the account it resolves to, its username,
-         *     and its import sources.
-         */
-        get: operations["auth_check"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Verify a local username and password and return a session token. */
-        post: operations["login_handler"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/logout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Revoke the presented session token. */
-        post: operations["logout_handler"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/auth/register": {
         parameters: {
             query?: never;
@@ -1043,6 +989,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The Session the bearer token names: its account, username, and import
+         *     sources. A session token and an API token both answer, because a program
+         *     checking its token needs the same facts as a browser restoring a sign-in.
+         */
+        get: operations["get_session_handler"];
+        put?: never;
+        /**
+         * Sign in: verify a local username and password and answer the Session, a
+         *     `201 Created` whose `Location` is the singleton itself.
+         */
+        post: operations["create_session_handler"];
+        /** Sign out: revoke the presented session token, ending the Session. */
+        delete: operations["delete_session_handler"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/trash": {
         parameters: {
             query?: never;
@@ -1276,21 +1248,6 @@ export interface components {
             sha256?: string | null;
             /** @description OCR/ASR transcription, when processed. */
             transcription?: string | null;
-        };
-        /** @description Token check result: account, username, sources. */
-        AuthCheckResponse: {
-            account_id?: string | null;
-            sources: string[];
-            username?: string | null;
-        };
-        /** @description Session token plus the account id and username it belongs to. */
-        AuthTokenResponse: {
-            /** @description Account id the session belongs to. */
-            account_id: string;
-            /** @description Session token to send as `Authorization: Bearer …`. */
-            token: string;
-            /** @description Account username (falls back to the account id). */
-            username: string;
         };
         /** @description Current and new password. */
         ChangePasswordRequest: {
@@ -1650,6 +1607,13 @@ export interface components {
             /** Format: int64 */
             id: number;
         };
+        /** @description Username and password, the body of `POST /v1/session`. */
+        CreateSessionRequest: {
+            /** @description Login password. */
+            password?: string;
+            /** @description Login username. */
+            username: string;
+        };
         /** @description Cross-source dedupe outcome. */
         DedupeResponse: {
             /** Format: int64 */
@@ -1969,13 +1933,6 @@ export interface components {
          * @enum {string}
          */
         ListKind: "contacts" | "conversations" | "messages";
-        /** @description Username and password. */
-        LoginRequest: {
-            /** @description Login password. */
-            password?: string;
-            /** @description Login username. */
-            username: string;
-        };
         /**
          * @description One account as the vault owner sees it: who it is and what it holds, never
          *     what it says.
@@ -2487,6 +2444,21 @@ export interface components {
         /** @description The words for one list, in the order the docs table shows them. */
         SearchFieldsResponse: {
             items: components["schemas"]["FieldDoc"][];
+        };
+        /** @description The signed-in credential's account, username, and import sources. */
+        SessionResponse: {
+            account_id?: string | null;
+            sources: string[];
+            username?: string | null;
+        };
+        /** @description Session token plus the account id and username it belongs to. */
+        SessionTokenResponse: {
+            /** @description Account id the session belongs to. */
+            account_id: string;
+            /** @description Session token to send as `Authorization: Bearer …`. */
+            token: string;
+            /** @description Account username (falls back to the account id). */
+            username: string;
         };
         /** @description New stage for a live session. */
         SetImportStageBody: {
@@ -3557,130 +3529,6 @@ export interface operations {
             };
         };
     };
-    auth_check: {
-        parameters: {
-            query?: {
-                /** @description Must match the token account */
-                account?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthCheckResponse"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    login_handler: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoginRequest"];
-            };
-        };
-        responses: {
-            /** @description Session issued */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthTokenResponse"];
-                };
-            };
-            /** @description Invalid input */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Invalid credentials */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Account is disabled */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Rate limited */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    logout_handler: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Signed out */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
     register_handler: {
         parameters: {
             query?: never;
@@ -3700,7 +3548,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuthTokenResponse"];
+                    "application/json": components["schemas"]["SessionTokenResponse"];
                 };
             };
             /** @description Invalid input */
@@ -6473,6 +6321,129 @@ export interface operations {
             };
         };
     };
+    get_session_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_session_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Signed in; the Session exists */
+            201: {
+                headers: {
+                    /** @description `/v1/session` */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionTokenResponse"];
+                };
+            };
+            /** @description Invalid input */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid credentials */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Account is disabled */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    delete_session_handler: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed out */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     empty_trash_handler: {
         parameters: {
             query?: never;
@@ -6545,7 +6516,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuthTokenResponse"];
+                    "application/json": components["schemas"]["SessionTokenResponse"];
                 };
             };
             400: {

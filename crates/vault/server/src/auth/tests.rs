@@ -80,61 +80,57 @@ async fn test_conn() -> (tempfile::TempDir, sqlx::pool::PoolConnection<sqlx::Any
     (dir, conn)
 }
 
+/// The Session is a singleton: signing in answers `201 Created` with a
+/// `Location` naming `/v1/session` itself, `GET` reads it back without an
+/// `ok` flag, and `DELETE` ends it with `204 No Content`.
 #[tokio::test]
-async fn auth_check_names_the_account_without_an_ok_flag_and_logout_is_204() {
+async fn a_session_is_created_read_and_deleted_at_one_path() {
     let vault = crate::test_support::test_vault().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
+    crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
+
+    let created = crate::test_support::sign_in(&state, "alice", "hunter2hunter2").await;
+    assert_eq!(created["username"], "alice");
+    let token = created["token"].as_str().unwrap().to_string();
+
     let body: serde_json::Value =
-        crate::test_support::get_json(&state, "/v1/auth/check", &user.token).await;
+        crate::test_support::get_json(&state, "/v1/session", &token).await;
     assert_eq!(body["username"], "alice");
+    assert_eq!(body["account_id"], created["account_id"]);
+    assert!(body["sources"].is_array(), "{body}");
     assert!(
         body.get("ok").is_none() && body.get("account_ok").is_none(),
         "{body}"
     );
-    let status = crate::test_support::post_status(
-        &state,
-        "/v1/auth/logout",
-        &user.token,
-        serde_json::json!({}),
-    )
-    .await;
+
+    let status = crate::test_support::delete_status(&state, "/v1/session", &token).await;
     assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
+    let status = crate::test_support::get_status(&state, "/v1/session", &token).await;
+    assert_eq!(
+        status,
+        axum::http::StatusCode::UNAUTHORIZED,
+        "a deleted session no longer names an account"
+    );
 }
 
-/// `GET /v1/auth/check?account=` naming a different account is refused,
-/// even with an otherwise valid token — the near-identical branch to
-/// `POST /v1/import`'s account query, but with a longer sentence that
-/// names the token's own user.
+/// The credential names the account. There is no `account=` parameter on the
+/// singleton, so a query string naming someone else is not a refusal: it is
+/// nothing, and the reply is still the token's own account.
 #[tokio::test]
-async fn auth_check_refuses_an_account_query_naming_someone_else() {
+async fn a_session_read_ignores_a_query_string() {
     let vault = crate::test_support::test_vault().await;
     let state = vault.state.clone();
     let alice = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     let bob = crate::test_support::register_via_api(&state, "bob", "hunter2hunter2").await;
 
-    let (status, text) = crate::test_support::get_raw(
+    let body: serde_json::Value = crate::test_support::get_json(
         &state,
-        &format!("/v1/auth/check?account={}", bob.username),
+        &format!("/v1/session?account={}", bob.username),
         &alice.token,
     )
     .await;
-    assert_eq!(status, axum::http::StatusCode::FORBIDDEN, "{text}");
-    let err: serde_json::Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(
-        err["detail"],
-        "account query does not match token's account (token is for alice)"
-    );
-
-    // Positive control: naming her own account must succeed outright —
-    // unlike import, a GET has nothing left to fail on afterward.
-    let status = crate::test_support::get_status(
-        &state,
-        &format!("/v1/auth/check?account={}", alice.username),
-        &alice.token,
-    )
-    .await;
-    assert_eq!(status, axum::http::StatusCode::OK, "alice naming herself");
+    assert_eq!(body["username"], "alice");
+    assert_eq!(body["account_id"], alice.account_id);
 }
 
 async fn password_change_setup() -> (
@@ -559,7 +555,7 @@ async fn the_owner_can_change_their_own_password() {
 
     assert_eq!(
         login_status(&state, "keeper", "keeperschoice").await,
-        StatusCode::OK
+        StatusCode::CREATED
     );
     assert_eq!(
         login_status(&state, "keeper", "hunter2hunter2").await,
@@ -591,7 +587,7 @@ async fn an_account_can_delete_itself() {
     );
     assert_eq!(
         login_status(&state, "bob", "hunter2hunter2").await,
-        StatusCode::OK,
+        StatusCode::CREATED,
         "the other account is untouched"
     );
 }

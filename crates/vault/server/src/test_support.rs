@@ -242,17 +242,7 @@ pub async fn claim_vault_as_owner(
     .expect("insert the vault owner");
     drop(conn);
 
-    let (status, text) = request(
-        state,
-        reqwest::Method::POST,
-        "/v1/auth/login",
-        None,
-        Some(json_body(
-            serde_json::json!({ "username": username, "password": password }),
-        )),
-    )
-    .await;
-    let body: serde_json::Value = expect_ok("owner login", status, &text);
+    let body = sign_in(state, username, password).await;
     RegisteredAccount {
         account_id: crate::db::account_profile::OWNER_ACCOUNT_ID.to_string(),
         username: username.to_string(),
@@ -260,12 +250,12 @@ pub async fn claim_vault_as_owner(
     }
 }
 
-/// The status of a login attempt.
+/// The status of a sign-in attempt, `POST /v1/session`.
 pub async fn login_status(state: &AppState, username: &str, password: &str) -> StatusCode {
     request(
         state,
         reqwest::Method::POST,
-        "/v1/auth/login",
+        "/v1/session",
         None,
         Some(json_body(
             serde_json::json!({ "username": username, "password": password }),
@@ -273,6 +263,38 @@ pub async fn login_status(state: &AppState, username: &str, password: &str) -> S
     )
     .await
     .0
+}
+
+/// Sign in through `POST /v1/session`, asserting the `201 Created` and the
+/// `Location: /v1/session` the singleton answers with, and return the body
+/// (`token`, `account_id`, `username`).
+pub async fn sign_in(state: &AppState, username: &str, password: &str) -> serde_json::Value {
+    let server = serve(state).await;
+    let response = reqwest::Client::new()
+        .post(format!("{}/v1/session", server.base()))
+        .json(&serde_json::json!({ "username": username, "password": password }))
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let location = response
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+    let text = response.text().await.unwrap();
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "signing in as {username} must answer 201 Created, got: {text}"
+    );
+    assert_eq!(
+        location.as_deref(),
+        Some("/v1/session"),
+        "signing in must answer Location: /v1/session"
+    );
+    serde_json::from_str(&text)
+        .unwrap_or_else(|e| panic!("POST /v1/session returned non-JSON ({e}): {text}"))
 }
 
 /// GET a path with a Bearer token, returning only the status.

@@ -1,4 +1,4 @@
-//! The shared blocking HTTP session and the `/v1/auth/check` login call.
+//! The shared blocking HTTP session and the `GET /v1/session` login call.
 //!
 //! `vault-push` and `vault-pull` both talk to the vault through one
 //! [`HttpSession`]. The session owns base-URL trimming and bearer-header
@@ -65,7 +65,7 @@ impl HttpSession {
             .header("Authorization", bearer_header(key))
     }
 
-    /// Call `GET /v1/auth/check` and return the account id on success.
+    /// Call `GET /v1/session` and return the account id on success.
     ///
     /// # Errors
     ///
@@ -87,9 +87,9 @@ impl HttpSession {
                 });
             }
         };
-        let url = format!("{base}/v1/auth/check");
+        let url = format!("{base}/v1/session");
         let response = self
-            .vault_request(Method::GET, base, "/v1/auth/check", key)
+            .vault_request(Method::GET, base, "/v1/session", key)
             .timeout(Duration::from_secs(15))
             .send()
             .map_err(|error| classify_auth_transport_error(&url, error))?;
@@ -112,7 +112,7 @@ impl HttpSession {
         if !status.is_success() {
             return Err(classify_auth_http_status(status_code, text));
         }
-        let parsed: AuthCheckResponse =
+        let parsed: SessionResponse =
             serde_json::from_str(&text).map_err(|_| AuthError::BadJson {
                 url: url.clone(),
                 status: status_code,
@@ -129,8 +129,9 @@ impl HttpSession {
     }
 }
 
+/// The fields of `GET /v1/session` the clients read.
 #[derive(Debug, Deserialize)]
-struct AuthCheckResponse {
+struct SessionResponse {
     #[serde(default)]
     account_id: Option<String>,
     #[serde(default)]
@@ -174,7 +175,7 @@ fn classify_auth_transport_error(url: &str, error: reqwest::Error) -> AuthError 
     }
 }
 
-/// Map a non-success HTTP status from `/v1/auth/check` onto [`AuthError`].
+/// Map a non-success HTTP status from `GET /v1/session` onto [`AuthError`].
 fn classify_auth_http_status(status: u16, body: String) -> AuthError {
     match status {
         403 => AuthError::Forbidden { status, body },
@@ -204,7 +205,7 @@ mod tests {
     #[test]
     fn unauthorized_http_to_https_redirect_asks_for_https() {
         let requested = reqwest::Url::parse("http://app.bitrealm.io").unwrap();
-        let final_url = reqwest::Url::parse("https://app.bitrealm.io/v1/auth/check").unwrap();
+        let final_url = reqwest::Url::parse("https://app.bitrealm.io/v1/session").unwrap();
         let err = classify_unauthorized("http://app.bitrealm.io", &requested, &final_url);
         assert_eq!(err.kind(), "https_required");
         assert!(err.user_message().contains("https://"));
@@ -214,7 +215,7 @@ mod tests {
     #[test]
     fn unauthorized_same_scheme_is_invalid_key() {
         let requested = reqwest::Url::parse("https://app.bitrealm.io").unwrap();
-        let final_url = reqwest::Url::parse("https://app.bitrealm.io/v1/auth/check").unwrap();
+        let final_url = reqwest::Url::parse("https://app.bitrealm.io/v1/session").unwrap();
         let err = classify_unauthorized("https://app.bitrealm.io", &requested, &final_url);
         assert_eq!(err.kind(), "invalid_key");
     }
@@ -222,7 +223,7 @@ mod tests {
     #[test]
     fn unauthorized_local_http_is_invalid_key() {
         let requested = reqwest::Url::parse("http://127.0.0.1:8080").unwrap();
-        let final_url = reqwest::Url::parse("http://127.0.0.1:8080/v1/auth/check").unwrap();
+        let final_url = reqwest::Url::parse("http://127.0.0.1:8080/v1/session").unwrap();
         let err = classify_unauthorized("http://127.0.0.1:8080", &requested, &final_url);
         assert_eq!(err.kind(), "invalid_key");
     }

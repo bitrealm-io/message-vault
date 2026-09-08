@@ -94,7 +94,7 @@ pub async fn vault_state_handler(
     operation_id = "claim_vault",
     request_body = ClaimVaultRequest,
     responses(
-        (status = 200, description = "Vault claimed; session issued", body = crate::auth::AuthTokenResponse),
+        (status = 200, description = "Vault claimed; session issued", body = crate::auth::SessionTokenResponse),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 409, description = "Already claimed", body = crate::problem::Problem),
@@ -104,7 +104,7 @@ pub async fn vault_state_handler(
 pub async fn claim_vault_handler(
     State(state): State<AppState>,
     Json(req): Json<ClaimVaultRequest>,
-) -> Result<Json<crate::auth::AuthTokenResponse>, ApiError> {
+) -> Result<Json<crate::auth::SessionTokenResponse>, ApiError> {
     let username = crate::auth::normalize_username(&req.username);
     if !crate::auth::is_valid_username(&username) {
         return Err(ApiError::validation(
@@ -142,7 +142,7 @@ pub async fn claim_vault_handler(
     .map_err(ApiError::Internal)?;
     tx.commit().await?;
 
-    Ok(Json(crate::auth::AuthTokenResponse {
+    Ok(Json(crate::auth::SessionTokenResponse {
         token,
         account_id: account_profile::OWNER_ACCOUNT_ID.to_string(),
         username,

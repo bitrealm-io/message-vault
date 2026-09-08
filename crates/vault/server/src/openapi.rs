@@ -25,7 +25,8 @@ use crate::server::AppState;
     components(schemas(crate::search::ListKind)),
     tags(
         (name = "Health", description = "Process liveness"),
-        (name = "Auth", description = "Sign-in, session, and token check"),
+        (name = "Auth", description = "Registration"),
+        (name = "Session", description = "The signed-in credential: sign in, check it, sign out"),
         (name = "Account", description = "Profile, storage, and API tokens"),
         (name = "Import", description = "JSONL import sessions and ingest"),
         (name = "Export", description = "Read-only messages and counts"),
@@ -55,21 +56,23 @@ impl Modify for BearerAddon {
     }
 }
 
-/// Unauthenticated auth JSON (register and login).
+/// Unauthenticated auth JSON (register and sign in).
 pub fn auth_public_openapi() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(crate::auth::register_handler))
-        .routes(routes!(crate::auth::login_handler))
+        .routes(routes!(crate::auth::create_session_handler))
         .routes(routes!(crate::vault_api::vault_state_handler))
         .routes(routes!(crate::vault_api::claim_vault_handler))
 }
 
-/// Health, session-backed auth, account settings, and browse routes.
+/// Health, the signed-in Session, account settings, and browse routes.
 pub fn api_openapi() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(crate::server::health))
-        .routes(routes!(crate::auth::auth_check))
-        .routes(routes!(crate::auth::logout_handler))
+        .routes(routes!(
+            crate::auth::get_session_handler,
+            crate::auth::delete_session_handler
+        ))
         .routes(routes!(crate::profile::change_password_handler))
         .routes(routes!(crate::profile::delete_account_handler))
         .routes(routes!(crate::profile::account_profile_handler))
@@ -228,9 +231,7 @@ mod tests {
         let paths = v["paths"].as_object().unwrap();
         for p in [
             "/v1/auth/register",
-            "/v1/auth/login",
-            "/v1/auth/check",
-            "/v1/auth/logout",
+            "/v1/session",
             "/v1/account/password",
             "/v1/account",
             "/v1/account/profile",
@@ -246,8 +247,16 @@ mod tests {
             "register is public"
         );
         assert!(
-            operation_has_bearer(&paths["/v1/auth/check"]["get"]),
-            "GET /v1/auth/check must require bearer"
+            !operation_has_bearer(&paths["/v1/session"]["post"]),
+            "signing in is public"
+        );
+        assert!(
+            operation_has_bearer(&paths["/v1/session"]["get"]),
+            "GET /v1/session must require bearer"
+        );
+        assert!(
+            operation_has_bearer(&paths["/v1/session"]["delete"]),
+            "DELETE /v1/session must require bearer"
         );
     }
 

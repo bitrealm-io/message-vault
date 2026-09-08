@@ -757,3 +757,268 @@ async fn assert_reset_test_database(path: &Path) {
     }
     close_test_db(pool, conn).await;
 }
+
+#[test]
+fn parent_dir_or_cwd_returns_the_parent_or_the_current_directory() {
+    assert_eq!(
+        parent_dir_or_cwd(Path::new("data/vault.db")),
+        Path::new("data")
+    );
+    assert_eq!(parent_dir_or_cwd(Path::new("vault.db")), Path::new("."));
+    assert_eq!(parent_dir_or_cwd(Path::new("/")), Path::new("."));
+}
+
+#[test]
+fn the_reset_work_directory_is_created_inside_the_data_directory() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let data_dir = temp.path().join("data");
+
+    let work = reset_account_work_dir(&data_dir).expect("create work directory");
+
+    assert!(
+        data_dir.is_dir(),
+        "a missing data directory is created first"
+    );
+    assert_eq!(work.path().parent(), Some(data_dir.as_path()));
+    assert!(work.path().is_dir());
+    let name = work
+        .path()
+        .file_name()
+        .and_then(|name| name.to_str())
+        .expect("work directory name");
+    assert!(name.starts_with(".reset-demo-data-"), "{name}");
+}
+
+/// The SQLite tables in `db`, by name, without touching the schema.
+async fn sqlite_table_names(db: &Path) -> Vec<String> {
+    sqlx::any::install_default_drivers();
+    let pool = engine::open_pool_for_path(db).await.expect("open database");
+    let mut conn = pool.acquire().await.expect("acquire");
+    let names: Vec<String> =
+        sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+            .fetch_all(&mut *conn)
+            .await
+            .expect("list tables");
+    conn.close().await.expect("close");
+    pool.close().await;
+    names
+}
+
+#[tokio::test]
+async fn the_database_snapshot_carries_the_active_tables_and_rows() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let active = temp.path().join("active/vault.db");
+    fs::create_dir_all(active.parent().expect("database parent")).expect("create database parent");
+    seed_reset_test_database(&active).await;
+    let prepared = temp.path().join("prepared/vault.db");
+    fs::create_dir_all(prepared.parent().expect("prepared parent"))
+        .expect("create prepared parent");
+
+    prepare_database_snapshot(&active, &prepared)
+        .await
+        .expect("snapshot the active database");
+
+    assert!(prepared.is_file());
+    let active_tables = sqlite_table_names(&active).await;
+    let prepared_tables = sqlite_table_names(&prepared).await;
+    assert!(
+        active_tables.iter().any(|table| table == "accounts"),
+        "{active_tables:?}"
+    );
+    assert_eq!(prepared_tables, active_tables);
+    assert_reset_test_database(&prepared).await;
+    assert_reset_test_database(&active).await;
+}
+
+#[tokio::test]
+async fn the_snapshot_of_a_missing_database_is_an_empty_vault_with_the_schema() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let active = temp.path().join("missing/vault.db");
+    let prepared = temp.path().join("prepared.db");
+
+    prepare_database_snapshot(&active, &prepared)
+        .await
+        .expect("create the prepared database");
+
+    assert!(!active.exists(), "nothing is written at the active path");
+    let tables = sqlite_table_names(&prepared).await;
+    assert!(tables.iter().any(|table| table == "accounts"), "{tables:?}");
+    assert!(tables.iter().any(|table| table == "messages"), "{tables:?}");
+    let (pool, mut conn) = test_db(&prepared).await;
+    let accounts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
+        .fetch_one(&mut *conn)
+        .await
+        .expect("count accounts");
+    assert_eq!(accounts, 0);
+    close_test_db(pool, conn).await;
+}
+
+/// The work directories a reset hands to the install step, created inside
+/// `root` with the prefixes the reset uses.
+fn reset_work_dirs(root: &Path) -> (tempfile::TempDir, tempfile::TempDir) {
+    let db_work = tempfile::Builder::new()
+        .prefix(".reset-demo-db-")
+        .tempdir_in(root)
+        .expect("create database work directory");
+    let data_work = tempfile::Builder::new()
+        .prefix(".reset-demo-data-")
+        .tempdir_in(root)
+        .expect("create account work directory");
+    (db_work, data_work)
+}
+
+#[tokio::test]
+async fn a_successful_install_removes_the_work_directories() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let (db_work, data_work) = reset_work_dirs(temp.path());
+    let db_work_path = db_work.path().to_path_buf();
+    let data_work_path = data_work.path().to_path_buf();
+    let prepared_db = db_work.path().join("vault.db");
+    seed_reset_test_database(&prepared_db).await;
+    let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID);
+    fs::create_dir_all(&prepared_account).expect("create prepared account");
+    fs::write(prepared_account.join("sentinel"), b"new data").expect("write new data");
+    let prepared_config = temp.path().join("prepared-config/config.toml");
+    fs::create_dir_all(prepared_config.parent().expect("prepared config parent"))
+        .expect("create prepared config parent");
+    fs::write(&prepared_config, b"new config").expect("write prepared config");
+    let active_db = temp.path().join("active/vault.db");
+    fs::create_dir_all(active_db.parent().expect("active database parent"))
+        .expect("create active database parent");
+    let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID);
+    let active_config = temp.path().join("config/config.toml");
+    fs::create_dir_all(active_config.parent().expect("active config parent"))
+        .expect("create active config parent");
+
+    install_reset_state_or_keep_work(
+        &ResetPaths {
+            active_db: &active_db,
+            prepared_db: &prepared_db,
+            active_account: &active_account,
+            prepared_account: &prepared_account,
+            active_config: &active_config,
+            prepared_config: &prepared_config,
+        },
+        db_work,
+        data_work,
+    )
+    .await
+    .expect("install the prepared state");
+
+    assert_reset_test_database(&active_db).await;
+    assert_eq!(
+        fs::read(active_account.join("sentinel")).expect("read installed account"),
+        b"new data"
+    );
+    assert_eq!(
+        fs::read(&active_config).expect("read installed config"),
+        b"new config"
+    );
+    assert!(
+        !db_work_path.exists(),
+        "the database work directory is removed after a successful install"
+    );
+    assert!(
+        !data_work_path.exists(),
+        "the account work directory is removed after a successful install"
+    );
+}
+
+#[tokio::test]
+async fn a_failed_install_with_nothing_left_in_the_work_directories_removes_them() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let (db_work, data_work) = reset_work_dirs(temp.path());
+    let db_work_path = db_work.path().to_path_buf();
+    let data_work_path = data_work.path().to_path_buf();
+    // No prepared database, account or config: the install refuses before
+    // any rename, so there is no rollback and nothing to keep.
+    let prepared_db = db_work.path().join("vault.db");
+    let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID);
+    let prepared_config = temp.path().join("prepared-config/config.toml");
+    let active_db = temp.path().join("active/vault.db");
+    let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID);
+    let active_config = temp.path().join("config/config.toml");
+
+    let error = install_reset_state_or_keep_work(
+        &ResetPaths {
+            active_db: &active_db,
+            prepared_db: &prepared_db,
+            active_account: &active_account,
+            prepared_account: &prepared_account,
+            active_config: &active_config,
+            prepared_config: &prepared_config,
+        },
+        db_work,
+        data_work,
+    )
+    .await
+    .expect_err("an incomplete prepared state must fail");
+
+    let text = format!("{error:#}");
+    assert!(
+        text.contains("prepared reset state is incomplete"),
+        "{text}"
+    );
+    assert!(!text.contains("rollback was incomplete"), "{text}");
+    assert!(!db_work_path.exists(), "{}", db_work_path.display());
+    assert!(!data_work_path.exists(), "{}", data_work_path.display());
+}
+
+#[tokio::test]
+async fn a_failed_install_that_left_previous_state_in_the_work_directories_keeps_them() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let (db_work, data_work) = reset_work_dirs(temp.path());
+    let db_work_path = db_work.path().to_path_buf();
+    let data_work_path = data_work.path().to_path_buf();
+    // A backup the rollback could not put back stands in the database work
+    // directory, the way a rename that failed midway would leave it.
+    fs::write(
+        db_work.path().join("previous-vault.db"),
+        b"previous database",
+    )
+    .expect("write leftover backup");
+    let prepared_db = db_work.path().join("vault.db");
+    let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID);
+    let prepared_config = temp.path().join("prepared-config/config.toml");
+    let active_db = temp.path().join("active/vault.db");
+    let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID);
+    let active_config = temp.path().join("config/config.toml");
+
+    let error = install_reset_state_or_keep_work(
+        &ResetPaths {
+            active_db: &active_db,
+            prepared_db: &prepared_db,
+            active_account: &active_account,
+            prepared_account: &prepared_account,
+            active_config: &active_config,
+            prepared_config: &prepared_config,
+        },
+        db_work,
+        data_work,
+    )
+    .await
+    .expect_err("an incomplete prepared state must fail");
+
+    let text = format!("{error:#}");
+    assert!(
+        text.contains("reset-demo rollback was incomplete"),
+        "{text}"
+    );
+    assert!(text.contains(&db_work_path.display().to_string()), "{text}");
+    assert!(
+        text.contains(&data_work_path.display().to_string()),
+        "{text}"
+    );
+    assert!(
+        text.contains("prepared reset state is incomplete"),
+        "{text}"
+    );
+    assert_eq!(
+        fs::read(db_work_path.join("previous-vault.db")).expect("read kept backup"),
+        b"previous database"
+    );
+    assert!(
+        data_work_path.is_dir(),
+        "the account work directory is kept alongside the database one"
+    );
+}

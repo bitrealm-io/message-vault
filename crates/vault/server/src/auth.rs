@@ -21,8 +21,8 @@ use crate::server::{ApiError, AppState, AuthIdentity, FullAccess, SignedIn};
 const MAX_PASSWORD_BYTES: usize = 1024;
 const MIN_PASSWORD_CHARS: usize = 8;
 /// Sliding window for unauthenticated auth endpoints.
-const AUTH_RATE_WINDOW: Duration = Duration::from_secs(60);
-const AUTH_RATE_MAX: usize = 20;
+pub(crate) const AUTH_RATE_WINDOW: Duration = Duration::from_secs(60);
+pub(crate) const AUTH_RATE_MAX: usize = 20;
 
 static DUMMY_PASSWORD_HASH: OnceLock<String> = OnceLock::new();
 
@@ -65,9 +65,14 @@ fn check_auth_rate_limit_at(
         entry.pop_front();
     }
     if entry.len() >= AUTH_RATE_MAX {
-        return Err(ApiError::TooManyRequests(
-            "too many authentication attempts; try again shortly".into(),
-        ));
+        // The oldest hit inside the window is the next to leave it; until it
+        // does, every attempt is refused. Never zero: a client told to wait
+        // nothing would retry at once and be refused again.
+        let oldest = entry.front().copied().unwrap_or(now);
+        let remaining = AUTH_RATE_WINDOW.saturating_sub(now.duration_since(oldest));
+        return Err(ApiError::RateLimited {
+            retry_after_secs: remaining.as_secs().max(1),
+        });
     }
     entry.push_back(now);
     Ok(())
@@ -195,12 +200,12 @@ fn verify_login_password(password_hash: Option<&str>, password: &str) -> bool {
 /// Reject passwords that are too short or too long.
 pub(crate) fn validate_password_policy(password: &str) -> Result<(), ApiError> {
     if password.len() < MIN_PASSWORD_CHARS {
-        return Err(ApiError::BadRequest(format!(
+        return Err(ApiError::validation(format!(
             "password must be at least {MIN_PASSWORD_CHARS} characters"
         )));
     }
     if password.len() > MAX_PASSWORD_BYTES {
-        return Err(ApiError::BadRequest("password is too long".into()));
+        return Err(ApiError::validation("password is too long"));
     }
     Ok(())
 }
@@ -250,8 +255,8 @@ pub(crate) struct AuthCheckResponse {
     params(("account" = Option<String>, Query, description = "Must match the token account")),
     responses(
         (status = 200, body = AuthCheckResponse),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn auth_check(
@@ -270,7 +275,7 @@ pub(crate) async fn auth_check(
         };
         if !matches {
             let for_user = username.as_deref().unwrap_or(account_id.as_str());
-            return Err(ApiError::Forbidden(format!(
+            return Err(ApiError::InsufficientScope(format!(
                 "account query does not match token's account (token is for {for_user})"
             )));
         }
@@ -324,10 +329,10 @@ pub(crate) async fn require_username_free(
 ) -> Result<(), ApiError> {
     if account_profile::lookup_account_ref(conn, username)
         .await
-        .map_err(|e| ApiError::BadRequest(e.to_string()))?
+        .map_err(ApiError::Internal)?
         .is_some()
     {
-        return Err(ApiError::BadRequest(format!(
+        return Err(ApiError::UsernameTaken(format!(
             "username already taken: {username}"
         )));
     }
@@ -342,9 +347,9 @@ pub(crate) async fn require_username_free(
     request_body = RegisterRequest,
     responses(
         (status = 200, description = "Session issued", body = AuthTokenResponse),
-        (status = 400, description = "Invalid input", body = crate::server::ErrorBody),
-        (status = 403, description = "Public registration is off", body = crate::server::ErrorBody),
-        (status = 429, description = "Rate limited", body = crate::server::ErrorBody)
+        (status = 400, description = "Invalid input", body = crate::problem::Problem),
+        (status = 403, description = "Public registration is off", body = crate::problem::Problem),
+        (status = 429, description = "Rate limited", body = crate::problem::Problem)
     )
 )]
 pub async fn register_handler(
@@ -353,8 +358,8 @@ pub async fn register_handler(
 ) -> Result<Json<AuthTokenResponse>, ApiError> {
     let username = normalize_username(&req.username);
     if !is_valid_username(&username) {
-        return Err(ApiError::BadRequest(
-            "username must be 1–128 chars (alphanumeric, _, -, .)".into(),
+        return Err(ApiError::validation(
+            "username must be 1–128 chars (alphanumeric, _, -, .)",
         ));
     }
     check_auth_rate_limit(&state.auth_rate_limits, &format!("register:{username}"))?;
@@ -368,7 +373,7 @@ pub async fn register_handler(
             .await?
             .public_registration
         {
-            return Err(ApiError::Forbidden(
+            return Err(ApiError::NotTheOwner(
                 "this vault does not accept new accounts; ask its owner for one".into(),
             ));
         }
@@ -402,12 +407,12 @@ pub async fn register_handler(
         preferred_name.as_deref(),
     )
     .await
-    .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    .map_err(ApiError::Internal)?;
 
     if let Some(ref phone) = phone {
         account_profile::upsert_account_phone(&mut tx, &account_id, phone)
             .await
-            .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+            .map_err(ApiError::Internal)?;
     }
 
     // A registration that named nothing leaves an account with no display
@@ -417,15 +422,15 @@ pub async fn register_handler(
     if preferred_name.is_none() && phone.is_none() {
         account_profile::set_must_set_up_profile(&mut tx, &account_id, true)
             .await
-            .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+            .map_err(ApiError::Internal)?;
     }
 
     let token = session_tokens::insert_account_session_token(&mut tx, &account_id)
         .await
-        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+        .map_err(ApiError::Internal)?;
     tx.commit()
         .await
-        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+        .map_err(|e| ApiError::Internal(e.into()))?;
     Ok(Json(AuthTokenResponse {
         token,
         account_id,
@@ -441,10 +446,10 @@ pub async fn register_handler(
     request_body = LoginRequest,
     responses(
         (status = 200, description = "Session issued", body = AuthTokenResponse),
-        (status = 400, description = "Invalid input", body = crate::server::ErrorBody),
-        (status = 401, description = "Invalid credentials", body = crate::server::ErrorBody),
-        (status = 403, description = "Account is disabled", body = crate::server::ErrorBody),
-        (status = 429, description = "Rate limited", body = crate::server::ErrorBody)
+        (status = 400, description = "Invalid input", body = crate::problem::Problem),
+        (status = 401, description = "Invalid credentials", body = crate::problem::Problem),
+        (status = 403, description = "Account is disabled", body = crate::problem::Problem),
+        (status = 429, description = "Rate limited", body = crate::problem::Problem)
     )
 )]
 pub async fn login_handler(
@@ -453,11 +458,11 @@ pub async fn login_handler(
 ) -> Result<Json<AuthTokenResponse>, ApiError> {
     let username = normalize_username(&req.username);
     if username.is_empty() {
-        return Err(ApiError::BadRequest("username is required".into()));
+        return Err(ApiError::validation("username is required"));
     }
     check_auth_rate_limit(&state.auth_rate_limits, &format!("login:{username}"))?;
     if req.password.len() > MAX_PASSWORD_BYTES {
-        return Err(ApiError::BadRequest("password is too long".into()));
+        return Err(ApiError::validation("password is too long"));
     }
 
     let password = req.password.clone();
@@ -465,23 +470,23 @@ pub async fn login_handler(
     let mut conn = state.db.acquire().await?;
     let Some(account_id) = account_profile::lookup_account_ref(&mut conn, &username).await? else {
         let _ = verify_password(dummy_password_hash(), &password);
-        return Err(ApiError::Unauthorized(
+        return Err(ApiError::InvalidCredentials(
             "invalid username or password".into(),
         ));
     };
 
     let password_hash = account_profile::load_password_hash(&mut conn, &account_id).await?;
     if !verify_login_password(password_hash.as_deref(), &password) {
-        return Err(ApiError::Unauthorized(
+        return Err(ApiError::InvalidCredentials(
             "invalid username or password".into(),
         ));
     }
 
     let auth = account_profile::load_account_auth(&mut conn, &account_id)
         .await?
-        .ok_or_else(|| ApiError::BadRequest("invalid username or password".into()))?;
+        .ok_or_else(|| ApiError::InvalidCredentials("invalid username or password".into()))?;
     if auth.disabled {
-        return Err(ApiError::Forbidden("this account is disabled".into()));
+        return Err(ApiError::AccountDisabled("this account is disabled".into()));
     }
 
     let response = AuthTokenResponse::for_existing_account(&mut conn, account_id).await?;
@@ -539,7 +544,9 @@ impl From<sqlx::Error> for ChangePasswordError {
 impl From<ChangePasswordError> for ApiError {
     fn from(e: ChangePasswordError) -> Self {
         match e {
-            err @ ChangePasswordError::IncorrectPassword => Self::BadRequest(err.to_string()),
+            err @ ChangePasswordError::IncorrectPassword => {
+                Self::InvalidCredentials(err.to_string())
+            }
             ChangePasswordError::Db(err) => Self::Internal(err),
         }
     }
@@ -593,7 +600,7 @@ async fn logout_on_conn(conn: &mut AnyConnection, token: &str) -> Result<()> {
     security(("bearer" = [])),
     responses(
         (status = 204, description = "Signed out"),
-        (status = 401, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem)
     )
 )]
 pub async fn logout_handler(
@@ -617,9 +624,10 @@ pub async fn logout_handler(
     request_body = ChangePasswordRequest,
     responses(
         (status = 200, body = ChangePasswordResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn change_password_handler(
@@ -630,7 +638,7 @@ pub async fn change_password_handler(
     let new_password = req.new_password.trim();
     validate_password_policy(new_password)?;
     if req.current_password.len() > MAX_PASSWORD_BYTES {
-        return Err(ApiError::BadRequest("password is too long".into()));
+        return Err(ApiError::validation("password is too long"));
     }
     let account_id = auth.account_id;
     let current_password = req.current_password.clone();
@@ -652,9 +660,10 @@ pub async fn change_password_handler(
     request_body = DeleteAccountRequest,
     responses(
         (status = 204, description = "Account deleted"),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn delete_account_handler(
@@ -663,13 +672,11 @@ pub async fn delete_account_handler(
     Json(req): Json<DeleteAccountRequest>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     if !req.confirm {
-        return Err(ApiError::BadRequest(
-            "confirmation flag must be true".into(),
-        ));
+        return Err(ApiError::validation("confirmation flag must be true"));
     }
     let account_id = auth.account_id;
     if account_profile::is_demo_account(&account_id) {
-        return Err(ApiError::BadRequest(
+        return Err(ApiError::DemoAccountProtected(
             "the demo account cannot be deleted; use reset-demo to restore it".into(),
         ));
     }
@@ -681,12 +688,14 @@ pub async fn delete_account_handler(
     let has_local_password = matches!(password_hash.as_deref(), Some(hash) if !hash.is_empty());
     if has_local_password {
         let Some(pw) = current_password.as_deref() else {
-            return Err(ApiError::BadRequest(
-                "current password is required to delete this account".into(),
+            return Err(ApiError::validation(
+                "current password is required to delete this account",
             ));
         };
         if !passwords_match(password_hash.as_deref(), pw) {
-            return Err(ApiError::BadRequest("current password is incorrect".into()));
+            return Err(ApiError::InvalidCredentials(
+                "current password is incorrect".into(),
+            ));
         }
     }
     account_profile::delete_account(&mut conn, &account_id).await?;

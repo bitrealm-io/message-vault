@@ -161,7 +161,7 @@ async fn a_word_the_messages_list_does_not_have_is_a_400_with_a_sentence() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{text}");
     let body: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert!(
-        body["error"].as_str().unwrap().contains("conversations"),
+        body["detail"].as_str().unwrap().contains("conversations"),
         "{text}"
     );
 }
@@ -171,7 +171,7 @@ async fn the_route_refuses_an_offset_past_the_ceiling_and_requires_a_session() {
     let (vault, alice, _direct, _group) = seeded().await;
     assert_eq!(
         get_status(&vault.state, "/v1/messages?offset=50001", &alice.token).await,
-        StatusCode::BAD_REQUEST
+        StatusCode::UNPROCESSABLE_ENTITY
     );
     assert_eq!(
         get_status(&vault.state, "/v1/messages?offset=50000", &alice.token).await,

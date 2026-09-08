@@ -348,6 +348,28 @@ pub async fn post_created_json<T: DeserializeOwned>(
     (location, parsed)
 }
 
+/// The problem document a failure answered, or a panic naming the body
+/// that was not one.
+pub fn problem(text: &str) -> vault_api_types::Problem {
+    serde_json::from_str(text).unwrap_or_else(|e| panic!("not a problem document ({e}): {text}"))
+}
+
+/// Assert a failure is a problem of `kind` with the status the registry
+/// gives it, and hand the document back for any further check.
+pub fn expect_problem(
+    status: StatusCode,
+    text: &str,
+    kind: crate::problem::ProblemType,
+) -> vault_api_types::Problem {
+    let problem = problem(text);
+    assert_eq!(status, kind.status(), "{text}");
+    assert_eq!(problem.status, kind.status().as_u16(), "{text}");
+    assert_eq!(problem.kind, kind.url(), "{text}");
+    assert_eq!(problem.title, kind.title(), "{text}");
+    assert!(problem.request_id.is_some(), "no request_id: {text}");
+    problem
+}
+
 /// POST a JSON body with a Bearer token, returning only the status.
 pub async fn post_status(
     state: &AppState,
@@ -422,9 +444,7 @@ pub async fn patch_failure(
         Some(json_body(body)),
     )
     .await;
-    let body: serde_json::Value = serde_json::from_str(&text).unwrap();
-    let sentence = body["error"].as_str().unwrap_or_default().to_string();
-    (status, sentence)
+    (status, problem(&text).sentence())
 }
 
 /// PATCH a JSON body with a Bearer token and decode the JSON response.

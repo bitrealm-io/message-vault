@@ -145,7 +145,7 @@ async fn claiming_enforces_the_password_policy() {
     .await;
     assert_eq!(
         status,
-        StatusCode::BAD_REQUEST,
+        StatusCode::UNPROCESSABLE_ENTITY,
         "a real owner's password cannot be five characters"
     );
 

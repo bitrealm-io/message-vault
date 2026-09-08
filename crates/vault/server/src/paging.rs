@@ -63,10 +63,10 @@ pub fn page_params(
 ) -> Result<PageParams, ApiError> {
     let limit = limit.unwrap_or(default_limit);
     if limit == 0 {
-        return Err(ApiError::BadRequest("limit must be at least 1".into()));
+        return Err(ApiError::validation("limit must be at least 1"));
     }
     if limit > MAX_LIST_LIMIT {
-        return Err(ApiError::BadRequest(format!(
+        return Err(ApiError::validation(format!(
             "limit exceeds maximum of {MAX_LIST_LIMIT}"
         )));
     }
@@ -74,7 +74,7 @@ pub fn page_params(
     if let Some(max) = max_offset
         && offset > max
     {
-        return Err(ApiError::BadRequest(format!(
+        return Err(ApiError::validation(format!(
             "offset exceeds maximum of {max}"
         )));
     }
@@ -100,7 +100,9 @@ mod tests {
     #[test]
     fn a_limit_above_the_cap_is_refused_not_clamped() {
         let err = page_params(Some(501), None, 40, None).unwrap_err();
-        assert!(matches!(err, ApiError::BadRequest(m) if m == "limit exceeds maximum of 500"));
+        assert!(
+            matches!(err, ApiError::ValidationFailed(m) if m == ["limit exceeds maximum of 500"])
+        );
         let p = page_params(Some(500), None, 40, None).unwrap();
         assert_eq!(p.limit, 500);
     }
@@ -108,13 +110,15 @@ mod tests {
     #[test]
     fn a_zero_limit_is_refused() {
         let err = page_params(Some(0), None, 40, None).unwrap_err();
-        assert!(matches!(err, ApiError::BadRequest(m) if m == "limit must be at least 1"));
+        assert!(matches!(err, ApiError::ValidationFailed(m) if m == ["limit must be at least 1"]));
     }
 
     #[test]
     fn an_offset_past_the_cap_is_refused_only_when_a_cap_is_given() {
         let err = page_params(None, Some(50_001), 40, Some(MAX_LIST_OFFSET)).unwrap_err();
-        assert!(matches!(err, ApiError::BadRequest(m) if m == "offset exceeds maximum of 50000"));
+        assert!(
+            matches!(err, ApiError::ValidationFailed(m) if m == ["offset exceeds maximum of 50000"])
+        );
         let p = page_params(None, Some(50_001), 40, None).unwrap();
         assert_eq!(p.offset, 50_001);
     }

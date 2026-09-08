@@ -34,8 +34,8 @@ pub(crate) struct SavedSearchesListResponse {
     security(("bearer" = [])),
     responses(
         (status = 200, body = SavedSearchesListResponse),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn saved_searches_list_handler(
@@ -61,10 +61,10 @@ pub(crate) async fn saved_searches_list_handler(
             body = SavedSearch,
             headers(("Location" = String, description = "Path of the new saved search"))
         ),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 409, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 409, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn saved_searches_create_handler(
@@ -97,11 +97,12 @@ pub(crate) async fn saved_searches_create_handler(
     request_body = SavedSearchBody,
     responses(
         (status = 200, body = SavedSearch),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody),
-        (status = 409, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem),
+        (status = 409, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn saved_searches_update_handler(
@@ -129,9 +130,9 @@ pub(crate) async fn saved_searches_update_handler(
     params(("id" = i64, Path, description = "Saved search id")),
     responses(
         (status = 204, description = "Saved search deleted"),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn saved_searches_delete_handler(

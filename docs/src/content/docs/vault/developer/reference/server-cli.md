@@ -20,6 +20,7 @@ This document contains the help content for the `message-vault-server` command-l
 * [`message-vault-server serve`↴](#message-vault-server-serve)
 * [`message-vault-server dump-openapi`↴](#message-vault-server-dump-openapi)
 * [`message-vault-server dump-cli-docs`↴](#message-vault-server-dump-cli-docs)
+* [`message-vault-server dump-error-docs`↴](#message-vault-server-dump-error-docs)
 * [`message-vault-server process-assets`↴](#message-vault-server-process-assets)
 * [`message-vault-server create-owner`↴](#message-vault-server-create-owner)
 * [`message-vault-server reset-owner-password`↴](#message-vault-server-reset-owner-password)
@@ -39,6 +40,7 @@ Import and view messages in SQLite
 * `serve` — Run HTTP ingest API (`POST /v1/import` with message-ir JSONL)
 * `dump-openapi` — Write the OpenAPI document (JSON) to stdout or --output. Does not open the database
 * `dump-cli-docs` — Write this CLI's docs-site reference page (Markdown) to stdout or --output. Does not open the database
+* `dump-error-docs` — Write one docs-site page per HTTP problem type (Markdown) into the --output directory, or all of them to stdout. Does not open the database
 * `process-assets` — Convert media under assets/ into browser previews under `assets_converted/`
 * `create-owner` — Claim an unclaimed vault by creating its owner. Refuses a vault that already has one
 * `reset-owner-password` — Set a new password for the vault owner, ending their sessions. Refuses a vault that has no owner yet
@@ -155,7 +157,7 @@ Write the OpenAPI document (JSON) to stdout or --output. Does not open the datab
 
 ###### **Options:**
 
-* `--output <OUTPUT>` — Destination file. Omit to print stdout
+* `--output <OUTPUT>` — Destination file (a directory for `dump-error-docs`). Omit to print stdout
 
 
 
@@ -167,7 +169,19 @@ Write this CLI's docs-site reference page (Markdown) to stdout or --output. Does
 
 ###### **Options:**
 
-* `--output <OUTPUT>` — Destination file. Omit to print stdout
+* `--output <OUTPUT>` — Destination file (a directory for `dump-error-docs`). Omit to print stdout
+
+
+
+## `message-vault-server dump-error-docs`
+
+Write one docs-site page per HTTP problem type (Markdown) into the --output directory, or all of them to stdout. Does not open the database
+
+**Usage:** `message-vault-server dump-error-docs [OPTIONS]`
+
+###### **Options:**
+
+* `--output <OUTPUT>` — Destination file (a directory for `dump-error-docs`). Omit to print stdout
 
 
 

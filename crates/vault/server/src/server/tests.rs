@@ -106,7 +106,7 @@ async fn disabling_an_account_kills_its_live_session() {
 
     let err = resolve_auth_on_conn(&mut conn, &token).await.unwrap_err();
     assert!(
-        matches!(err, ApiError::Forbidden(_)),
+        matches!(err, ApiError::AccountDisabled(_)),
         "a disabled account's existing token must stop working, got {err:?}"
     );
 }
@@ -134,7 +134,7 @@ async fn disabling_an_account_kills_its_live_api_token() {
 
     let err = resolve_auth_on_conn(&mut conn, &token).await.unwrap_err();
     assert!(
-        matches!(err, ApiError::Forbidden(_)),
+        matches!(err, ApiError::AccountDisabled(_)),
         "a disabled account's existing API token must stop working, got {err:?}"
     );
 }
@@ -470,7 +470,7 @@ async fn imports_complete_rejects_unknown_status() {
     )
     .await
     .unwrap_err();
-    assert!(matches!(err, ApiError::BadRequest(_)));
+    assert!(matches!(err, ApiError::ValidationFailed(_)));
 
     // The session is untouched.
     let mut conn = state.db.acquire().await.unwrap();
@@ -515,10 +515,10 @@ async fn imports_complete_rejects_invalid_issue_kind_before_db_write() {
     .unwrap_err();
 
     match err {
-        ApiError::BadRequest(msg) => {
-            assert!(msg.contains("invalid import issue kind"));
+        ApiError::ValidationFailed(errors) => {
+            assert!(errors[0].contains("invalid import issue kind"));
         }
-        other => panic!("expected bad request, got {other:?}"),
+        other => panic!("expected validation-failed, got {other:?}"),
     }
 
     let status: String = sqlx::query_scalar("SELECT status FROM vault_imports WHERE id = $1")
@@ -719,8 +719,8 @@ async fn a_second_session_is_refused_with_conflict() {
     )
     .await
     .unwrap_err();
-    let ApiError::Conflict(message) = &err else {
-        panic!("expected Conflict, got {err:?}");
+    let ApiError::StateConflict(message) = &err else {
+        panic!("expected StateConflict, got {err:?}");
     };
     // The 409 has to name the way out: the only place a stranded
     // session can be resumed or discarded is the desktop app's Import
@@ -762,7 +762,7 @@ async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
     )
     .await
     .unwrap_err();
-    assert!(matches!(err, ApiError::BadRequest(_)));
+    assert!(matches!(err, ApiError::ValidationFailed(_)));
 }
 
 #[tokio::test]
@@ -967,5 +967,167 @@ async fn the_fast_413_carries_cors_headers() {
         response.headers()
     );
     let body: serde_json::Value = response.json().await.unwrap();
-    assert!(body["error"].is_string(), "{body}");
+    assert!(body["detail"].is_string(), "{body}");
+}
+
+/// Every response carries an id the server made, a failure repeats it in the
+/// body, and an id the client sends is dropped rather than kept.
+#[tokio::test]
+async fn every_response_carries_a_server_made_request_id_and_a_problem_repeats_it() {
+    let vault = crate::test_support::test_vault().await;
+    let state = vault.state.clone();
+    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
+    let server = crate::test_support::serve(&state).await;
+    let client = reqwest::Client::new();
+
+    let ok = client
+        .get(format!("{}/v1/conversations", server.base()))
+        .bearer_auth(&user.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::OK);
+    let id = ok.headers()[crate::request_id::HEADER]
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(uuid::Uuid::parse_str(&id).is_ok(), "not a UUID: {id}");
+
+    let failed = client
+        .get(format!("{}/v1/conversations/abc/sources", server.base()))
+        .bearer_auth(&user.token)
+        .header(crate::request_id::HEADER, "chosen-by-the-client")
+        .send()
+        .await
+        .unwrap();
+    let header = failed.headers()[crate::request_id::HEADER]
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert_ne!(header, "chosen-by-the-client");
+    assert_eq!(
+        failed.headers()[header::CONTENT_TYPE],
+        crate::problem::Problem::CONTENT_TYPE
+    );
+    let status = failed.status();
+    let text = failed.text().await.unwrap();
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(problem.request_id.as_deref(), Some(header.as_str()));
+    assert!(problem.errors.is_some_and(|e| !e.is_empty()), "{text}");
+}
+
+/// A wrong password is `invalid-credentials` at 401, and the attempt after
+/// the limit is `rate-limited` with a `Retry-After` the body repeats.
+#[tokio::test]
+async fn a_wrong_password_is_401_and_the_limit_answers_429_with_retry_after() {
+    let vault = crate::test_support::test_vault().await;
+    let state = vault.state.clone();
+    crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
+    let server = crate::test_support::serve(&state).await;
+    let client = reqwest::Client::new();
+    let login = || {
+        client
+            .post(format!("{}/v1/auth/login", server.base()))
+            .json(&serde_json::json!({ "username": "alice", "password": "not-it-at-all" }))
+            .send()
+    };
+
+    let wrong = login().await.unwrap();
+    let status = wrong.status();
+    let text = wrong.text().await.unwrap();
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::InvalidCredentials,
+    );
+    assert_eq!(
+        problem.detail.as_deref(),
+        Some("invalid username or password")
+    );
+
+    for _ in 1..crate::auth::AUTH_RATE_MAX {
+        assert_eq!(login().await.unwrap().status(), StatusCode::UNAUTHORIZED);
+    }
+    let limited = login().await.unwrap();
+    let retry_after: u64 = limited.headers()[header::RETRY_AFTER]
+        .to_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let status = limited.status();
+    let text = limited.text().await.unwrap();
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::RateLimited,
+    );
+    assert_eq!(problem.retry_after, Some(retry_after));
+    assert!((1..=crate::auth::AUTH_RATE_WINDOW.as_secs()).contains(&retry_after));
+}
+
+/// `Accept` is checked on the `/v1` routes that produce JSON and nowhere
+/// else: not on the static app, and not on the asset download.
+#[tokio::test]
+async fn accept_is_checked_on_v1_json_routes_only() {
+    let vault = crate::test_support::test_vault().await;
+    let state = vault.state.clone();
+    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
+    let server = crate::test_support::serve(&state).await;
+    let client = reqwest::Client::new();
+
+    let refused = client
+        .get(format!("{}/v1/conversations", server.base()))
+        .bearer_auth(&user.token)
+        .header(header::ACCEPT, "text/html")
+        .send()
+        .await
+        .unwrap();
+    let status = refused.status();
+    let text = refused.text().await.unwrap();
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotAcceptable);
+
+    for accept in [
+        "application/json",
+        "*/*",
+        "text/html, */*;q=0.1",
+        "application/*",
+    ] {
+        let allowed = client
+            .get(format!("{}/v1/conversations", server.base()))
+            .bearer_auth(&user.token)
+            .header(header::ACCEPT, accept)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(allowed.status(), StatusCode::OK, "Accept: {accept}");
+    }
+
+    // A browser navigation: the static app is served, or 404 without a
+    // static dir here, but never refused for its Accept.
+    let page = client
+        .get(format!("{}/", server.base()))
+        .header(header::ACCEPT, "text/html")
+        .send()
+        .await
+        .unwrap();
+    assert_ne!(page.status(), StatusCode::NOT_ACCEPTABLE);
+
+    // The one /v1 route that streams bytes takes any Accept; the route then
+    // refuses for its own reasons (no source named), never for the header.
+    let asset = client
+        .get(format!(
+            "{}/v1/assets/{}",
+            server.base(),
+            crate::test_support::fake_sha256('a')
+        ))
+        .bearer_auth(&user.token)
+        .header(header::ACCEPT, "image/jpeg")
+        .send()
+        .await
+        .unwrap();
+    assert_ne!(asset.status(), StatusCode::NOT_ACCEPTABLE);
 }

@@ -122,7 +122,7 @@ async fn auth_check_refuses_an_account_query_naming_someone_else() {
     assert_eq!(status, axum::http::StatusCode::FORBIDDEN, "{text}");
     let err: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(
-        err["error"],
+        err["detail"],
         "account query does not match token's account (token is for alice)"
     );
 
@@ -224,8 +224,10 @@ fn auth_rate_limit_trips_after_max() {
     }
     let err = check_auth_rate_limit(&limits, bucket).unwrap_err();
     match err {
-        ApiError::TooManyRequests(_) => {}
-        other => panic!("expected TooManyRequests, got {other:?}"),
+        ApiError::RateLimited { retry_after_secs } => {
+            assert!((1..=AUTH_RATE_WINDOW.as_secs()).contains(&retry_after_secs));
+        }
+        other => panic!("expected RateLimited, got {other:?}"),
     }
 }
 

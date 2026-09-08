@@ -10,7 +10,7 @@ Route schemas, status codes, and JSON fields live in the generated [HTTP API ref
 ## One shape for every route
 
 - A list takes `?offset=&limit=` and answers `{items, total, limit, offset}`. `limit` is at most 500 and at least 1; `offset` is at most 50 000 on the Contacts and Conversations lists and unlimited on Export.
-- A failure answers `{"error": "<sentence>"}` with the HTTP status. That includes a malformed query parameter, path, or JSON body, an unknown `/v1` path (404), and a wrong method (405). There is no `ok` field on any response.
+- A failure answers an [RFC 7807 problem document](./errors/) as `application/problem+json`: `type` names the page describing the kind of failure, `title` and `status` repeat it, `detail` is one sentence about this occurrence (a validation failure lists every broken rule in `errors` instead), and `request_id` repeats the response's `x-request-id` header. That includes a malformed query parameter, path, or JSON body, an unknown `/v1` path (404), and a wrong method (405). There is no `ok` field on any response.
 - A route with nothing to say on success answers `204 No Content`.
 - Every id is an integer, except API token ids and account ids, which are opaque strings.
 

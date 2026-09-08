@@ -14,7 +14,7 @@ use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::named_membership::{self, MembershipSpec};
-use crate::server::{ApiError, AppState, Created, ErrorBody, FullAccess};
+use crate::server::{ApiError, AppState, Created, FullAccess};
 
 /// One Contact Group or Message Tag: its id and name.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -193,8 +193,8 @@ macro_rules! named_set_routes {
             security(("bearer" = [])),
             responses(
                 (status = 200, body = NamedSetList),
-                (status = 401, body = ErrorBody),
-                (status = 403, body = ErrorBody)
+                (status = 401, body = crate::problem::Problem),
+                (status = 403, body = crate::problem::Problem)
             )
         )]
         pub(crate) async fn $list_fn(
@@ -217,10 +217,10 @@ macro_rules! named_set_routes {
                     body = NamedSet,
                     headers(("Location" = String, description = "Path of the new set"))
                 ),
-                (status = 400, body = ErrorBody),
-                (status = 401, body = ErrorBody),
-                (status = 403, body = ErrorBody),
-                (status = 409, body = ErrorBody)
+                (status = 400, body = crate::problem::Problem),
+                (status = 401, body = crate::problem::Problem),
+                (status = 403, body = crate::problem::Problem),
+                (status = 409, body = crate::problem::Problem)
             )
         )]
         pub(crate) async fn $create_fn(
@@ -241,11 +241,12 @@ macro_rules! named_set_routes {
             request_body = NamedSetBody,
             responses(
                 (status = 200, body = NamedSet),
-                (status = 400, body = ErrorBody),
-                (status = 401, body = ErrorBody),
-                (status = 403, body = ErrorBody),
-                (status = 404, body = ErrorBody),
-                (status = 409, body = ErrorBody)
+                (status = 400, body = crate::problem::Problem),
+                (status = 422, body = crate::problem::Problem),
+                (status = 401, body = crate::problem::Problem),
+                (status = 403, body = crate::problem::Problem),
+                (status = 404, body = crate::problem::Problem),
+                (status = 409, body = crate::problem::Problem)
             )
         )]
         pub(crate) async fn $update_fn(
@@ -266,9 +267,9 @@ macro_rules! named_set_routes {
             params(("id" = i64, Path, description = $id_description)),
             responses(
                 (status = 204),
-                (status = 401, body = ErrorBody),
-                (status = 403, body = ErrorBody),
-                (status = 404, body = ErrorBody)
+                (status = 401, body = crate::problem::Problem),
+                (status = 403, body = crate::problem::Problem),
+                (status = 404, body = crate::problem::Problem)
             )
         )]
         pub(crate) async fn $delete_fn(
@@ -288,9 +289,9 @@ macro_rules! named_set_routes {
             params(("id" = i64, Path, description = $id_description)),
             responses(
                 (status = 200, body = MemberIdList),
-                (status = 401, body = ErrorBody),
-                (status = 403, body = ErrorBody),
-                (status = 404, body = ErrorBody)
+                (status = 401, body = crate::problem::Problem),
+                (status = 403, body = crate::problem::Problem),
+                (status = 404, body = crate::problem::Problem)
             )
         )]
         pub(crate) async fn $members_list_fn(
@@ -311,10 +312,11 @@ macro_rules! named_set_routes {
             request_body = MembersPatch,
             responses(
                 (status = 200, body = MembersChanged),
-                (status = 400, body = ErrorBody),
-                (status = 401, body = ErrorBody),
-                (status = 403, body = ErrorBody),
-                (status = 404, body = ErrorBody)
+                (status = 400, body = crate::problem::Problem),
+                (status = 422, body = crate::problem::Problem),
+                (status = 401, body = crate::problem::Problem),
+                (status = 403, body = crate::problem::Problem),
+                (status = 404, body = crate::problem::Problem)
             )
         )]
         pub(crate) async fn $members_update_fn(

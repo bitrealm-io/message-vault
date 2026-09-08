@@ -23,9 +23,9 @@
 import {
   type ApiRequestOptions,
   apiClient,
-  errorMessageFromBody,
   getBaseUrl,
   getToken,
+  problemFromBody,
   VaultApiError,
 } from "./api";
 import { buildAssetPath } from "./assetUrl";
@@ -238,7 +238,7 @@ export async function fetchAssetObjectUrl(
   const res = await fetch(`${getBaseUrl()}${path}`, { method: "GET", headers, signal });
   if (!res.ok) {
     const text = await res.text();
-    throw new VaultApiError(res.status, errorMessageFromBody(res.status, text));
+    throw problemFromBody(res.status, text);
   }
   const blob = await res.blob();
   return URL.createObjectURL(blob);

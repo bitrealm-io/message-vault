@@ -11,6 +11,7 @@ reqwest = { workspace = true, features = ["blocking"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+vault-api-types = { path = "../vault-api-types" }
 
 [dev-dependencies]
 httpmock = "0.8"

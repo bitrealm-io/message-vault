@@ -746,8 +746,8 @@ async fn run_import_path_refuses_a_second_session_with_conflict() {
     let jsonl_path = tmp.path().join("unused.jsonl");
 
     let err = run_import_path(state, query, jsonl_path).await.unwrap_err();
-    let ApiError::Conflict(message) = &err else {
-        panic!("expected Conflict, got {err:?}");
+    let ApiError::StateConflict(message) = &err else {
+        panic!("expected StateConflict, got {err:?}");
     };
     // The 409 has to name the way out: the only place a stranded
     // session can be resumed or discarded is the desktop app's Import
@@ -1296,7 +1296,7 @@ async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
     assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{text}");
     let err: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(
-        err["error"],
+        err["detail"],
         "This file is schema version 3; the vault reads version 4 (line 1)."
     );
 }
@@ -1314,7 +1314,7 @@ async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line() {
     .await;
     assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{text}");
     let err: serde_json::Value = serde_json::from_str(&text).unwrap();
-    let message = err["error"].as_str().unwrap();
+    let message = err["detail"].as_str().unwrap();
     assert!(
         message.starts_with("Could not read line 1 of the file:"),
         "{message}"
@@ -1330,7 +1330,7 @@ async fn http_import_without_source_is_a_json_400() {
     assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{text}");
     let err: serde_json::Value = serde_json::from_str(&text)
         .unwrap_or_else(|_| panic!("expected a JSON error body, got: {text}"));
-    assert_eq!(err["error"], "query param source is required");
+    assert_eq!(err["detail"], "query param source is required");
 }
 
 /// The import body is JSON Lines and nothing else. `multipart/form-data`
@@ -1363,7 +1363,7 @@ async fn a_multipart_body_is_an_unsupported_media_type() {
         "{text}"
     );
     assert_eq!(
-        parsed["error"],
+        parsed["detail"],
         "Content-Type must be application/x-ndjson or application/jsonl"
     );
 }
@@ -1401,7 +1401,10 @@ async fn http_import_refuses_an_account_query_naming_someone_else() {
     .await;
     assert_eq!(status, axum::http::StatusCode::FORBIDDEN, "{text}");
     let err: serde_json::Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(err["error"], "account query does not match token's account");
+    assert_eq!(
+        err["detail"],
+        "account query does not match token's account"
+    );
 
     // Positive control: naming her own account must not be refused for
     // the same reason. Without this, the assertion above would still

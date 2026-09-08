@@ -22,7 +22,7 @@ use tokio::io::AsyncWriteExt;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::ServeDir;
-use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
+use tower_http::trace::{DefaultOnResponse, TraceLayer};
 use tracing::Level;
 
 use crate::asset_uploads;
@@ -34,6 +34,7 @@ use crate::db::permissions::Permissions;
 use crate::db::schema;
 use crate::db::session_tokens;
 use crate::keyed_locks::KeyedLocks;
+use crate::problem::{Problem, ProblemType};
 
 /// What a Bearer credential is allowed to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,7 +102,7 @@ pub fn require_full_access(auth: &AuthIdentity) -> Result<(), ApiError> {
     if auth.is_session() {
         return Ok(());
     }
-    Err(ApiError::Forbidden(
+    Err(ApiError::InsufficientScope(
         "this endpoint requires a signed-in session; use an API token only for import/export"
             .into(),
     ))
@@ -116,7 +117,7 @@ pub fn require_owner(auth: &AuthIdentity) -> Result<(), ApiError> {
     if auth.is_owner() {
         return Ok(());
     }
-    Err(ApiError::Forbidden(
+    Err(ApiError::NotTheOwner(
         "this endpoint requires the vault owner's session".into(),
     ))
 }
@@ -133,7 +134,7 @@ pub fn require_signed_in(auth: &AuthIdentity) -> Result<(), ApiError> {
     if auth.is_signed_in() {
         return Ok(());
     }
-    Err(ApiError::Forbidden(
+    Err(ApiError::InsufficientScope(
         "this endpoint requires a signed-in session; use an API token only for import/export"
             .into(),
     ))
@@ -148,7 +149,9 @@ pub fn require_import_access(auth: &AuthIdentity) -> Result<(), ApiError> {
     if auth.permissions().import {
         return Ok(());
     }
-    Err(ApiError::Forbidden("import is not permitted".into()))
+    Err(ApiError::InsufficientScope(
+        "import is not permitted".into(),
+    ))
 }
 
 /// Allow a credential that may export.
@@ -160,7 +163,9 @@ pub fn require_export_access(auth: &AuthIdentity) -> Result<(), ApiError> {
     if auth.permissions().export {
         return Ok(());
     }
-    Err(ApiError::Forbidden("export is not permitted".into()))
+    Err(ApiError::InsufficientScope(
+        "export is not permitted".into(),
+    ))
 }
 
 /// Allow a credential that may import or export, for asset probes.
@@ -173,7 +178,7 @@ pub fn require_import_or_export_access(auth: &AuthIdentity) -> Result<(), ApiErr
     if p.import || p.export {
         return Ok(());
     }
-    Err(ApiError::Forbidden(
+    Err(ApiError::InsufficientScope(
         "this credential cannot access assets".into(),
     ))
 }
@@ -187,7 +192,7 @@ pub fn require_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
     if auth.permissions().delete {
         return Ok(());
     }
-    Err(ApiError::Forbidden(
+    Err(ApiError::InsufficientScope(
         "deleting messages is not permitted for this account".into(),
     ))
 }
@@ -317,13 +322,6 @@ pub struct AppState {
     pub(crate) max_body_bytes: usize,
 }
 
-/// The body of every failure: one sentence, with the HTTP status carrying the meaning.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct ErrorBody {
-    /// Human-readable description of the failure.
-    pub error: String,
-}
-
 /// The answer to a request that made one new resource: `201 Created`, a
 /// `Location` header naming it, and the JSON body the route documents.
 ///
@@ -347,33 +345,183 @@ impl<T: Serialize> IntoResponse for Created<T> {
     }
 }
 
-/// API error returned as a JSON envelope with a matching HTTP status.
+/// A failure, as one of the registered problem types (ADR-0010).
+///
+/// A variant names what went wrong, never a status: the status, the `type`
+/// URL and the title come from the type's declaration in [`crate::problem`],
+/// so no call site picks a status by hand. The `String` a variant carries is
+/// the `detail`, one sentence written for the person reading it; a
+/// `500 Internal Server Error` carries the whole error chain for the log and
+/// shows the client a fixed sentence.
 #[derive(Debug)]
 pub enum ApiError {
-    /// `401` — no valid session or API token.
-    Unauthorized(String),
-    /// `403` — the credential lacks permission for this route.
-    Forbidden(String),
-    /// `400` — malformed request or invalid parameter.
-    BadRequest(String),
-    /// `409` — the request conflicts with current state.
-    Conflict(String),
-    /// `404` — the requested resource does not exist.
+    /// `422` — fields that parsed and then broke a rule, every one of them.
+    ValidationFailed(Vec<String>),
+    /// `400` — a required query parameter or body field is absent.
+    MissingParameter(String),
+    /// `400` — the request cannot be read at all.
+    MalformedBody(String),
+    /// `415` — `Content-Type` absent or not one the route accepts.
+    UnsupportedMediaType(String),
+    /// `413` — the body is over the configured cap.
+    PayloadTooLarge(String),
+    /// `401` — a username, password or current-password check failed.
+    InvalidCredentials(String),
+    /// `401` — no usable bearer token.
+    AuthenticationRequired(String),
+    /// `429` — the auth rate limiter refused the attempt; `Retry-After` in seconds.
+    RateLimited {
+        /// Seconds until an attempt may succeed.
+        retry_after_secs: u64,
+    },
+    /// `409` — the username already belongs to an account.
+    UsernameTaken(String),
+    /// `409` — a Contact Group, Message Tag or Saved Search name collides.
+    NameTaken(String),
+    /// `403` — the demo account refuses a destructive operation.
+    DemoAccountProtected(String),
+    /// `403` — the route belongs to the vault owner.
+    NotTheOwner(String),
+    /// `403` — the credential is valid but lacks the scope the route needs.
+    InsufficientScope(String),
+    /// `403` — the account may not sign in or act.
+    AccountDisabled(String),
+    /// `400` — the search language refused a word.
+    SearchQueryInvalid {
+        /// The sentence, naming the word and the list.
+        detail: String,
+        /// The `word:` the query used, when there is one.
+        word: Option<&'static str>,
+        /// A word the language does have, when one is close.
+        did_you_mean: Option<&'static str>,
+    },
+    /// `409` — the resource is not in a state that allows the operation.
+    StateConflict(String),
+    /// `400` — a part, upload id or completion does not match the upload.
+    AssetUploadInvalid(String),
+    /// `404` — the addressed resource does not exist for this account.
     NotFound(String),
     /// `405` — the path exists but not for this method.
     MethodNotAllowed(String),
-    /// `429` — rate limit hit.
-    TooManyRequests(String),
-    /// `503` — a dependency is temporarily unavailable.
-    ServiceUnavailable(String),
-    /// `500` — unexpected failure. The whole context chain goes to stderr;
-    /// the client sees a fixed string.
+    /// `406` — `Accept` names nothing the route can produce.
+    NotAcceptable(String),
+    /// `500` — unexpected failure. The whole context chain goes to the log;
+    /// the client sees a fixed sentence and `about:blank`.
     Internal(anyhow::Error),
-    /// An explicit status the caller already picked, such as Axum's own
-    /// answer to a rejected `Json` extraction (413 over the body limit, 415
-    /// for the wrong `Content-Type`). ADR-0005 says the status carries the
-    /// meaning, so these must not be flattened to 400.
-    Status(StatusCode, String),
+}
+
+impl ApiError {
+    /// A validation failure with one sentence.
+    pub fn validation(sentence: impl Into<String>) -> Self {
+        Self::ValidationFailed(vec![sentence.into()])
+    }
+
+    /// The registered type, or `None` for an internal error.
+    #[must_use]
+    pub fn problem_type(&self) -> Option<ProblemType> {
+        Some(match self {
+            Self::ValidationFailed(_) => ProblemType::ValidationFailed,
+            Self::MissingParameter(_) => ProblemType::MissingParameter,
+            Self::MalformedBody(_) => ProblemType::MalformedBody,
+            Self::UnsupportedMediaType(_) => ProblemType::UnsupportedMediaType,
+            Self::PayloadTooLarge(_) => ProblemType::PayloadTooLarge,
+            Self::InvalidCredentials(_) => ProblemType::InvalidCredentials,
+            Self::AuthenticationRequired(_) => ProblemType::AuthenticationRequired,
+            Self::RateLimited { .. } => ProblemType::RateLimited,
+            Self::UsernameTaken(_) => ProblemType::UsernameTaken,
+            Self::NameTaken(_) => ProblemType::NameTaken,
+            Self::DemoAccountProtected(_) => ProblemType::DemoAccountProtected,
+            Self::NotTheOwner(_) => ProblemType::NotTheOwner,
+            Self::InsufficientScope(_) => ProblemType::InsufficientScope,
+            Self::AccountDisabled(_) => ProblemType::AccountDisabled,
+            Self::SearchQueryInvalid { .. } => ProblemType::SearchQueryInvalid,
+            Self::StateConflict(_) => ProblemType::StateConflict,
+            Self::AssetUploadInvalid(_) => ProblemType::AssetUploadInvalid,
+            Self::NotFound(_) => ProblemType::NotFound,
+            Self::MethodNotAllowed(_) => ProblemType::MethodNotAllowed,
+            Self::NotAcceptable(_) => ProblemType::NotAcceptable,
+            Self::Internal(_) => return None,
+        })
+    }
+
+    /// The status this failure answers.
+    #[must_use]
+    pub fn status(&self) -> StatusCode {
+        self.problem_type()
+            .map_or(StatusCode::INTERNAL_SERVER_ERROR, ProblemType::status)
+    }
+
+    /// The problem document this failure answers with. An internal error is
+    /// logged here, once, with its whole chain; the document says nothing of it.
+    #[must_use]
+    pub fn to_problem(&self) -> Problem {
+        let request_id = crate::request_id::current();
+        let Some(kind) = self.problem_type() else {
+            let Self::Internal(err) = self else {
+                unreachable!("every variant but Internal has a problem type");
+            };
+            tracing::error!(error = %error_chain(err), "internal server error");
+            return Problem {
+                kind: crate::problem::INTERNAL_TYPE.to_string(),
+                title: "Internal server error".to_string(),
+                status: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+                detail: Some("internal server error".to_string()),
+                errors: None,
+                request_id,
+                word: None,
+                did_you_mean: None,
+                retry_after: None,
+            };
+        };
+        let mut problem = Problem {
+            kind: kind.url(),
+            title: kind.title().to_string(),
+            status: kind.status().as_u16(),
+            detail: None,
+            errors: None,
+            request_id,
+            word: None,
+            did_you_mean: None,
+            retry_after: None,
+        };
+        match self {
+            Self::ValidationFailed(errors) => problem.errors = Some(errors.clone()),
+            Self::RateLimited { retry_after_secs } => {
+                problem.retry_after = Some(*retry_after_secs);
+                problem.detail = Some(format!(
+                    "too many authentication attempts; try again in {retry_after_secs} seconds"
+                ));
+            }
+            Self::SearchQueryInvalid {
+                detail,
+                word,
+                did_you_mean,
+            } => {
+                problem.detail = Some(detail.clone());
+                problem.word = word.map(str::to_string);
+                problem.did_you_mean = did_you_mean.map(str::to_string);
+            }
+            Self::MissingParameter(m)
+            | Self::MalformedBody(m)
+            | Self::UnsupportedMediaType(m)
+            | Self::PayloadTooLarge(m)
+            | Self::InvalidCredentials(m)
+            | Self::AuthenticationRequired(m)
+            | Self::UsernameTaken(m)
+            | Self::NameTaken(m)
+            | Self::DemoAccountProtected(m)
+            | Self::NotTheOwner(m)
+            | Self::InsufficientScope(m)
+            | Self::AccountDisabled(m)
+            | Self::StateConflict(m)
+            | Self::AssetUploadInvalid(m)
+            | Self::NotFound(m)
+            | Self::MethodNotAllowed(m)
+            | Self::NotAcceptable(m) => problem.detail = Some(m.clone()),
+            Self::Internal(_) => unreachable!("handled above"),
+        }
+        problem
+    }
 }
 
 /// The message a person reads when the failure does not travel over HTTP —
@@ -383,42 +531,51 @@ pub enum ApiError {
 impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Unauthorized(m)
-            | Self::Forbidden(m)
-            | Self::BadRequest(m)
-            | Self::Conflict(m)
+            Self::Internal(e) => f.write_str(&error_chain(e)),
+            Self::ValidationFailed(errors) => f.write_str(&errors.join("; ")),
+            Self::RateLimited { retry_after_secs } => write!(
+                f,
+                "too many authentication attempts; try again in {retry_after_secs} seconds"
+            ),
+            Self::SearchQueryInvalid { detail, .. } => f.write_str(detail),
+            Self::MissingParameter(m)
+            | Self::MalformedBody(m)
+            | Self::UnsupportedMediaType(m)
+            | Self::PayloadTooLarge(m)
+            | Self::InvalidCredentials(m)
+            | Self::AuthenticationRequired(m)
+            | Self::UsernameTaken(m)
+            | Self::NameTaken(m)
+            | Self::DemoAccountProtected(m)
+            | Self::NotTheOwner(m)
+            | Self::InsufficientScope(m)
+            | Self::AccountDisabled(m)
+            | Self::StateConflict(m)
+            | Self::AssetUploadInvalid(m)
             | Self::NotFound(m)
             | Self::MethodNotAllowed(m)
-            | Self::TooManyRequests(m)
-            | Self::ServiceUnavailable(m)
-            | Self::Status(_, m) => f.write_str(m),
-            Self::Internal(e) => f.write_str(&error_chain(e)),
+            | Self::NotAcceptable(m) => f.write_str(m),
         }
     }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let (status, message) = match self {
-            Self::Unauthorized(m) => (StatusCode::UNAUTHORIZED, m),
-            Self::Forbidden(m) => (StatusCode::FORBIDDEN, m),
-            Self::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
-            Self::Conflict(m) => (StatusCode::CONFLICT, m),
-            Self::NotFound(m) => (StatusCode::NOT_FOUND, m),
-            Self::MethodNotAllowed(m) => (StatusCode::METHOD_NOT_ALLOWED, m),
-            Self::TooManyRequests(m) => (StatusCode::TOO_MANY_REQUESTS, m),
-            Self::ServiceUnavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, m),
-            Self::Internal(m) => {
-                // Keep diagnostics server-side; clients only see a stable message.
-                tracing::error!(error = %error_chain(&m), "internal server error");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "internal server error".into(),
-                )
-            }
-            Self::Status(status, m) => (status, m),
-        };
-        (status, Json(ErrorBody { error: message })).into_response()
+        let problem = self.to_problem();
+        let status = StatusCode::from_u16(problem.status).expect("a registered status");
+        let mut response = (
+            status,
+            [(header::CONTENT_TYPE, Problem::CONTENT_TYPE)],
+            Json(&problem),
+        )
+            .into_response();
+        if let Some(secs) = problem.retry_after {
+            response.headers_mut().insert(
+                header::RETRY_AFTER,
+                HeaderValue::from_str(&secs.to_string()).expect("digits are a valid header value"),
+            );
+        }
+        response
     }
 }
 
@@ -436,7 +593,7 @@ impl From<crate::db::vault_imports::ImportLookupError> for ApiError {
                 Self::NotFound(format!("import {import_id} not found for this account"))
             }
             crate::db::vault_imports::ImportLookupError::InvalidSession { message } => {
-                Self::BadRequest(message)
+                Self::StateConflict(message)
             }
             crate::db::vault_imports::ImportLookupError::Db(err) => Self::Internal(err),
         }
@@ -449,7 +606,7 @@ impl From<crate::db::vault_imports::StartImportError> for ApiError {
             err @ crate::db::vault_imports::StartImportError::AlreadyActive => {
                 // One wording for the 409, shared with the CLI paths that
                 // surface the same error through anyhow.
-                Self::Conflict(err.to_string())
+                Self::StateConflict(err.to_string())
             }
             crate::db::vault_imports::StartImportError::Db(err) => Self::Internal(err),
         }
@@ -552,35 +709,77 @@ async fn api_method_not_allowed(method: axum::http::Method, uri: axum::http::Uri
 /// bypassing every extractor, the moment a `Content-Length` header already
 /// announces a payload over the limit — `extract::Json`'s own 413 handling
 /// only ever sees a body that had to be read to discover it was too long.
-/// Rewrite that one plain-text response into the vault's `{error}` envelope
-/// so a body over the limit answers the same way however the client
-/// declares its size.
-async fn json_body_limit_response(mut response: Response) -> Response {
+/// Rewrite that one plain-text response into the `payload-too-large` problem
+/// so a body over the limit answers the same way however the client declares
+/// its size.
+async fn json_body_limit_response(response: Response) -> Response {
     if response.status() != StatusCode::PAYLOAD_TOO_LARGE {
         return response;
     }
-    let already_json = response
+    let already_problem = response
         .headers()
         .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
-        .is_some_and(|v| v.starts_with("application/json"));
-    if already_json {
+        .is_some_and(|v| v.starts_with(Problem::CONTENT_TYPE));
+    if already_problem {
         return response;
     }
-    let bytes = serde_json::to_vec(&ErrorBody {
-        error: "the request body is too large".to_string(),
-    })
-    .expect("ErrorBody always serializes");
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/json"),
-    );
-    response.headers_mut().insert(
-        header::CONTENT_LENGTH,
-        HeaderValue::from_str(&bytes.len().to_string()).expect("digits are a valid header value"),
-    );
-    *response.body_mut() = axum::body::Body::from(bytes);
-    response
+    ApiError::PayloadTooLarge("the request body is too large".to_string()).into_response()
+}
+
+/// Refuse a request whose `Accept` names nothing this route can produce
+/// (ADR-0010). Narrow on purpose: only when the header is present and none of
+/// its members is `application/json`, `application/problem+json`,
+/// `application/*` or `*/*`. A missing `Accept` is a request for JSON, which
+/// is what every one of the vault's own clients sends.
+///
+/// Applied to the `/v1` routes only, through `route_layer`, so the static app,
+/// `/health` and the OpenAPI UI keep producing what they produce. The asset
+/// download is the one `/v1` route that streams something other than JSON,
+/// and is let through here by path.
+async fn require_json_acceptable(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    if is_asset_download(&request) {
+        return next.run(request).await;
+    }
+    if let Some(accept) = request
+        .headers()
+        .get(header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        && !accepts_json(accept)
+    {
+        return ApiError::NotAcceptable(format!(
+            "this route answers application/json, and Accept was {accept}"
+        ))
+        .into_response();
+    }
+    next.run(request).await
+}
+
+/// `GET /v1/assets/{sha256}`: the asset's own bytes, in its own media type.
+fn is_asset_download(request: &axum::extract::Request) -> bool {
+    request.method() == axum::http::Method::GET
+        && request
+            .uri()
+            .path()
+            .strip_prefix("/v1/assets/")
+            .is_some_and(|rest| !rest.is_empty() && !rest.contains('/'))
+}
+
+/// Whether an `Accept` header admits a JSON answer.
+fn accepts_json(accept: &str) -> bool {
+    accept
+        .split(',')
+        .filter_map(|member| member.split(';').next())
+        .map(str::trim)
+        .any(|media| {
+            media == "*/*"
+                || media.eq_ignore_ascii_case("application/*")
+                || media.eq_ignore_ascii_case("application/json")
+                || media.eq_ignore_ascii_case(Problem::CONTENT_TYPE)
+        })
 }
 
 /// Assemble the full router: API routes, auth routes, the optional OpenAPI UI, CORS, and the static web app.
@@ -606,6 +805,9 @@ pub(crate) fn http_app(state: AppState) -> Router {
         .route("/v1", axum::routing::any(api_not_found))
         .route("/v1/", axum::routing::any(api_not_found))
         .route("/v1/{*rest}", axum::routing::any(api_not_found))
+        // `route_layer`, not `layer`: the `Accept` check belongs to the API
+        // routes above and never to the static app served by the fallback.
+        .route_layer(axum::middleware::from_fn(require_json_acceptable))
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback_service(ServeDir::new("static"))
         .layer(RequestBodyLimitLayer::new(state.max_body_bytes))
@@ -621,9 +823,23 @@ pub(crate) fn http_app(state: AppState) -> Router {
         // level must match the line's or the default `info` filter drops it.
         .layer(
             TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .make_span_with(|request: &axum::extract::Request| {
+                    tracing::info_span!(
+                        "request",
+                        method = %request.method(),
+                        uri = %request.uri(),
+                        request_id = request
+                            .headers()
+                            .get(crate::request_id::HEADER)
+                            .and_then(|v| v.to_str().ok())
+                            .unwrap_or("")
+                    )
+                })
                 .on_response(DefaultOnResponse::new().level(Level::INFO)),
-        );
+        )
+        // Outermost of all: the request id is made before the trace span
+        // reads it and stays in scope while every problem body is built.
+        .layer(axum::middleware::from_fn(crate::request_id::layer));
 
     if openapi_ui {
         api = api.merge(utoipa_swagger_ui::SwaggerUi::new("/docs").url("/openapi.json", spec));
@@ -730,7 +946,7 @@ async fn resolve_account_ref_async(
     let mut conn = pool.acquire().await?;
     account_profile::resolve_account_ref(&mut conn, account_ref)
         .await
-        .map_err(|e| ApiError::BadRequest(e.to_string()))
+        .map_err(|e| ApiError::validation(e.to_string()))
 }
 
 /// Read the Bearer token from `Authorization`.
@@ -740,21 +956,21 @@ async fn resolve_account_ref_async(
 /// Returns unauthorized when the header is missing or not a Bearer value.
 pub fn bearer_token(headers: &HeaderMap) -> Result<String, ApiError> {
     let Some(value) = headers.get(header::AUTHORIZATION) else {
-        return Err(ApiError::Unauthorized(
+        return Err(ApiError::AuthenticationRequired(
             "missing Authorization: Bearer <token>".into(),
         ));
     };
     let value = value
         .to_str()
-        .map_err(|_| ApiError::Unauthorized("invalid Authorization header".into()))?;
+        .map_err(|_| ApiError::AuthenticationRequired("invalid Authorization header".into()))?;
     let Some(token) = value.strip_prefix("Bearer ") else {
-        return Err(ApiError::Unauthorized(
+        return Err(ApiError::AuthenticationRequired(
             "Authorization must be Bearer <token>".into(),
         ));
     };
     let token = token.trim();
     if token.is_empty() {
-        return Err(ApiError::Unauthorized("empty API token".into()));
+        return Err(ApiError::AuthenticationRequired("empty API token".into()));
     }
     Ok(token.to_string())
 }
@@ -804,14 +1020,14 @@ pub async fn resolve_auth_on_conn(
     };
 
     let Some((account_id, credential)) = resolved else {
-        return Err(ApiError::Unauthorized("invalid API token".into()));
+        return Err(ApiError::AuthenticationRequired("invalid API token".into()));
     };
 
     let auth = account_profile::load_account_auth(&mut *conn, &account_id)
         .await?
-        .ok_or_else(|| ApiError::Unauthorized("account no longer exists".into()))?;
+        .ok_or_else(|| ApiError::AuthenticationRequired("account no longer exists".into()))?;
     if auth.disabled {
-        return Err(ApiError::Forbidden("this account is disabled".into()));
+        return Err(ApiError::AccountDisabled("this account is disabled".into()));
     }
 
     // A session on the owner's account resolves to `Owner`, which carries no
@@ -846,7 +1062,7 @@ pub(crate) async fn resolve_import_account(
     if let Some(q) = query {
         let resolved = resolve_account_ref_async(pool, q).await?;
         if resolved != auth.account_id {
-            return Err(ApiError::Forbidden(
+            return Err(ApiError::InsufficientScope(
                 "account query does not match token's account".into(),
             ));
         }
@@ -884,12 +1100,10 @@ pub(crate) async fn read_body_limited(
     let mut out = Vec::new();
     let mut stream = body.into_data_stream();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| ApiError::BadRequest(format!("failed to read body: {e}")))?;
+        let chunk =
+            chunk.map_err(|e| ApiError::MalformedBody(format!("failed to read body: {e}")))?;
         if out.len().saturating_add(chunk.len()) > max_bytes {
-            return Err(ApiError::Status(
-                StatusCode::PAYLOAD_TOO_LARGE,
-                "request body too large".into(),
-            ));
+            return Err(ApiError::PayloadTooLarge("request body too large".into()));
         }
         out.extend_from_slice(&chunk);
     }
@@ -904,13 +1118,11 @@ pub(crate) async fn discard_body(
     let mut stream = body.into_data_stream();
     let mut seen = 0usize;
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| ApiError::BadRequest(format!("failed to read body: {e}")))?;
+        let chunk =
+            chunk.map_err(|e| ApiError::MalformedBody(format!("failed to read body: {e}")))?;
         seen = seen.saturating_add(chunk.len());
         if seen > max_body_bytes {
-            return Err(ApiError::Status(
-                StatusCode::PAYLOAD_TOO_LARGE,
-                "request body too large".into(),
-            ));
+            return Err(ApiError::PayloadTooLarge("request body too large".into()));
         }
     }
     Ok(())
@@ -938,13 +1150,11 @@ pub(crate) async fn stream_body_to_file(
     let mut written = 0u64;
     let mut stream = body.into_data_stream();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| ApiError::BadRequest(format!("failed to read body: {e}")))?;
+        let chunk =
+            chunk.map_err(|e| ApiError::MalformedBody(format!("failed to read body: {e}")))?;
         written = written.saturating_add(chunk.len() as u64);
         if written > max_body_bytes as u64 {
-            return Err(ApiError::Status(
-                StatusCode::PAYLOAD_TOO_LARGE,
-                "request body too large".into(),
-            ));
+            return Err(ApiError::PayloadTooLarge("request body too large".into()));
         }
         file.write_all(&chunk)
             .await

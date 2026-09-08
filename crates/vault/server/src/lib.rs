@@ -3,6 +3,7 @@
 pub mod cli;
 pub mod cli_docs;
 pub mod config;
+pub mod error_docs;
 
 pub(crate) mod api_tokens_api;
 pub(crate) mod asset_uploads;
@@ -29,8 +30,10 @@ pub(crate) mod operation_lock;
 pub(crate) mod owner_api;
 pub(crate) mod owner_cli;
 pub(crate) mod paging;
+pub mod problem;
 pub(crate) mod process_assets;
 pub(crate) mod profile;
+pub mod request_id;
 pub(crate) mod reset_demo;
 pub(crate) mod saved_searches_api;
 pub(crate) mod search;
@@ -41,7 +44,7 @@ pub mod test_support;
 pub(crate) mod trash_api;
 pub(crate) mod vault_api;
 
-pub use server::{ApiError, AppState, AuthCapability, AuthIdentity, ErrorBody, resolve_auth, run};
+pub use server::{ApiError, AppState, AuthCapability, AuthIdentity, resolve_auth, run};
 
 // Integration tests (crates/vault/server/tests) cannot see `pub(crate)`
 // modules, so the search-parity suite reaches the test pools and the schema

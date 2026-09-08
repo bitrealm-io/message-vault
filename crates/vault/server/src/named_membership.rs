@@ -38,9 +38,9 @@ impl From<sqlx::Error> for MembershipError {
 impl From<MembershipError> for crate::server::ApiError {
     fn from(e: MembershipError) -> Self {
         match e {
-            MembershipError::BadRequest(m) => Self::BadRequest(m),
+            MembershipError::BadRequest(m) => Self::validation(m),
             MembershipError::NotFound(m) => Self::NotFound(m),
-            MembershipError::Conflict(m) => Self::Conflict(m),
+            MembershipError::Conflict(m) => Self::NameTaken(m),
             MembershipError::Internal(e) => Self::Internal(e),
         }
     }

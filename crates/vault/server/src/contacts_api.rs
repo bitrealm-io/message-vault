@@ -748,9 +748,10 @@ pub(crate) struct AddressBookLoadResponse {
     request_body = AddressBookBody,
     responses(
         (status = 200, body = AddressBookLoadResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn address_book_load_handler(
@@ -759,12 +760,12 @@ pub(crate) async fn address_book_load_handler(
     Json(body): Json<AddressBookBody>,
 ) -> Result<Json<AddressBookLoadResponse>, ApiError> {
     if body.content.len() > MAX_ADDRESS_BOOK_BYTES {
-        return Err(ApiError::BadRequest(format!(
+        return Err(ApiError::PayloadTooLarge(format!(
             "address book is larger than {MAX_ADDRESS_BOOK_BYTES} bytes"
         )));
     }
     if body.content.trim().is_empty() {
-        return Err(ApiError::BadRequest("address book is empty".into()));
+        return Err(ApiError::validation("address book is empty"));
     }
     // The loader detects VCF versus vCard CSV from the path, so the upload is
     // written to a temp file under its own name rather than being sniffed twice.
@@ -809,9 +810,10 @@ fn sanitized_address_book_name(raw: &str) -> String {
     request_body = ContactMatchBody,
     responses(
         (status = 200, body = ContactMatchResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn contact_match_handler(
@@ -820,7 +822,7 @@ pub(crate) async fn contact_match_handler(
     Json(body): Json<ContactMatchBody>,
 ) -> Result<Json<ContactMatchResponse>, ApiError> {
     if body.identifiers.len() > MAX_MATCH_IDENTIFIERS {
-        return Err(ApiError::BadRequest(format!(
+        return Err(ApiError::validation(format!(
             "at most {MAX_MATCH_IDENTIFIERS} identifiers"
         )));
     }
@@ -879,7 +881,7 @@ impl From<anyhow::Error> for ContactEditError {
 impl From<ContactEditError> for ApiError {
     fn from(error: ContactEditError) -> Self {
         match error {
-            ContactEditError::Refused(message) => Self::BadRequest(message),
+            ContactEditError::Refused(message) => Self::validation(message),
             ContactEditError::Failed(cause) => Self::Internal(cause),
         }
     }
@@ -1203,9 +1205,10 @@ impl ContactEditor<'_> {
     ),
     responses(
         (status = 200, body = Page<ContactSummary>),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn contacts_list_handler(
@@ -1243,9 +1246,10 @@ pub(crate) async fn contacts_list_handler(
     request_body = ContactSummariesBody,
     responses(
         (status = 200, body = ContactSummariesPage),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn contact_summaries_handler(
@@ -1254,7 +1258,7 @@ pub(crate) async fn contact_summaries_handler(
     Json(body): Json<ContactSummariesBody>,
 ) -> Result<Json<ContactSummariesPage>, ApiError> {
     if body.ids.len() > MAX_CONTACT_SUMMARY_IDS {
-        return Err(ApiError::BadRequest(format!(
+        return Err(ApiError::validation(format!(
             "at most {MAX_CONTACT_SUMMARY_IDS} contact ids"
         )));
     }
@@ -1275,9 +1279,9 @@ pub(crate) async fn contact_summaries_handler(
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 200, body = ContactDetail),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn contact_detail_handler(
@@ -1302,10 +1306,11 @@ pub(crate) async fn contact_detail_handler(
     request_body = ContactMutationBody,
     responses(
         (status = 200, body = ContactDetail),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn contact_mutate_handler(
@@ -1335,9 +1340,9 @@ pub(crate) async fn contact_mutate_handler(
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 204, description = "Trashed"),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn contact_trash_handler(
@@ -1363,9 +1368,9 @@ pub(crate) async fn contact_trash_handler(
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 204, description = "Restored"),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn contact_restore_handler(
@@ -1394,10 +1399,10 @@ pub(crate) async fn contact_restore_handler(
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 204, description = "Deleted: the contact is Unknown again"),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody),
-        (status = 409, body = crate::server::ErrorBody, description = "The contact is not in the trash")
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem),
+        (status = 409, body = crate::problem::Problem, description = "The contact is not in the trash")
     )
 )]
 pub(crate) async fn contact_delete_handler(
@@ -1410,7 +1415,7 @@ pub(crate) async fn contact_delete_handler(
         // A contact owns no files, so there is nothing to remove from disk.
         DeleteOutcome::Deleted(_) => Ok(StatusCode::NO_CONTENT),
         DeleteOutcome::NotOwned => Err(ApiError::NotFound("contact not found".into())),
-        DeleteOutcome::NotTrashed => Err(ApiError::Conflict(
+        DeleteOutcome::NotTrashed => Err(ApiError::StateConflict(
             "the contact is not in the trash; move it to the trash first".into(),
         )),
     }

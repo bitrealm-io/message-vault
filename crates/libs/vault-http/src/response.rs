@@ -1,40 +1,38 @@
 //! Reading the vault's answer: the value on success, the vault's own sentence
 //! on failure.
 //!
-//! Every route the vault serves answers a failure with `{"error": "..."}`
-//! (ADR-0005), and that sentence is written for the person to read. Both
-//! client crates were reading it themselves — `vault-push` with an `ok_json`
-//! helper, `vault-pull` with an `error_sentence` one — over two private copies
-//! of the same `ErrorBody` struct. One copy of the reading lives here, so a
-//! change to the vault's failure shape is one edit rather than a hunt.
+//! Every route the vault serves answers a failure with an RFC 7807 problem
+//! document (ADR-0010), and its `detail` is written for the person to read.
+//! Both client crates were reading it themselves — `vault-push` with an
+//! `ok_json` helper, `vault-pull` with an `error_sentence` one — over two
+//! private copies of the same struct. One copy of the reading lives here, over
+//! the shared [`Problem`] type, so a change to the vault's failure shape is
+//! one edit rather than a hunt.
 
 use anyhow::Result;
-use serde::Deserialize;
 use serde::de::DeserializeOwned;
+use vault_api_types::Problem;
 
 use crate::retry::VaultHttpError;
 use crate::truncate;
-
-/// The vault's failure body: `{error}`.
-#[derive(Debug, Deserialize)]
-struct ErrorBody {
-    #[serde(default)]
-    error: Option<String>,
-}
 
 /// Longest failure body repeated back to the person. A vault sentence is far
 /// shorter; a proxy's HTML error page is not, and none of it helps.
 const MAX_BODY_SNIPPET: usize = 300;
 
-/// The sentence to show for a failed response: the body's `error` when it has
-/// one, otherwise the body itself, clipped. The status is the caller's to
-/// report — [`ok_json`] does, once — so a body that carries no sentence does
-/// not end up naming the status twice.
+/// The sentence to show for a failed response: the problem's `detail` (or its
+/// `errors`) when the body is one, followed by the request id so a person can
+/// quote it, otherwise the body itself, clipped. The status is the caller's
+/// to report — [`ok_json`] does, once — so a body that carries no sentence
+/// does not end up naming the status twice.
 #[must_use]
 pub fn error_sentence(body: &str) -> String {
-    match serde_json::from_str::<ErrorBody>(body) {
-        Ok(ErrorBody { error: Some(text) }) if !text.trim().is_empty() => text,
-        _ => truncate(body, MAX_BODY_SNIPPET),
+    match serde_json::from_str::<Problem>(body) {
+        Ok(problem) => match &problem.request_id {
+            Some(id) => format!("{} (request id {id})", problem.sentence()),
+            None => problem.sentence(),
+        },
+        Err(_) => truncate(body, MAX_BODY_SNIPPET),
     }
 }
 
@@ -74,6 +72,8 @@ pub fn ok_json<T: DeserializeOwned>(
 
 #[cfg(test)]
 mod tests {
+    use serde::Deserialize;
+
     use super::*;
 
     #[derive(Debug, Deserialize)]
@@ -87,12 +87,12 @@ mod tests {
         let err = ok_json::<Answer>(
             "asset upload",
             reqwest::StatusCode::BAD_REQUEST,
-            r#"{"error":"sha256 mismatch: claimed abc, got def"}"#,
+            r#"{"type":"https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid","title":"Asset upload invalid","status":400,"detail":"sha256 mismatch: claimed abc, got def","request_id":"3f2b1c0e-8d4a-4b6e-9f21-5c7d8e9a0b1c"}"#,
         )
         .unwrap_err();
         assert_eq!(
             err.to_string(),
-            "asset upload failed (HTTP 400 Bad Request): sha256 mismatch: claimed abc, got def"
+            "asset upload failed (HTTP 400 Bad Request): sha256 mismatch: claimed abc, got def (request id 3f2b1c0e-8d4a-4b6e-9f21-5c7d8e9a0b1c)"
         );
     }
 

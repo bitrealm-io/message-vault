@@ -80,6 +80,11 @@ const developerItems = [
   'vault/developer/docker',
   'vault/developer/reference/api',
   {
+    label: 'HTTP problem types',
+    collapsed: true,
+    items: [{ autogenerate: { directory: 'vault/developer/reference/errors' } }],
+  },
+  {
     label: 'HTTP API reference',
     link: '/vault/developer/rustdoc/http/',
     attrs: { target: '_self' },

@@ -477,7 +477,7 @@ async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
     assert_eq!(status, StatusCode::NOT_FOUND, "{text}");
     let body: serde_json::Value =
         serde_json::from_str(&text).unwrap_or_else(|_| panic!("non-JSON body: {text}"));
-    assert!(body["error"].is_string(), "{body}");
+    assert!(body["detail"].is_string(), "{body}");
 }
 
 /// A part body past `upload_limits.part_size` is a 413. This is the one
@@ -513,7 +513,7 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
     let body: serde_json::Value =
         serde_json::from_str(&text).unwrap_or_else(|_| panic!("non-JSON body: {text}"));
     assert_eq!(
-        body["error"], "request body too large",
+        body["detail"], "request body too large",
         "the sentence must be the handler's own, proving the layer did not answer: {body}"
     );
 }

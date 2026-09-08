@@ -240,8 +240,9 @@ What the change touches:
   which carries a message today and needs a problem type.
 - 61 of those are `ApiError::BadRequest` outside test modules. Classifying them
   is the whole cost of the change; everything else is mechanical. The first
-  pass is `docs/agents/http-api-problem-types.md`, which collapses them, and
-  the other variants, into twenty problem types.
+  pass, a markdown registry since replaced by the declarations in
+  `crates/vault/server/src/problem.rs`, collapsed them, and the other
+  variants, into twenty problem types.
 - The web client reads `message` off a `VaultApiError` parsed once in
   `web/src/lib/api.ts`; that parse moves to `title` and `detail`.
 - Finding A2 closes with it: the vault's own validation moves to
@@ -258,15 +259,15 @@ All three sub-questions are settled:
    generated reference page, and `type` is that page's URL. Only
    `500 Internal Server Error` uses `about:blank`, because a page about it could
    say nothing a reader could act on.
-2. **The taxonomy is per problem, not per status.** The first pass is
-   `docs/agents/http-api-problem-types.md`: twenty types covering the 61
-   `BadRequest` sites and the other `ApiError` variants. The code becomes the
-   registry when the types land, and that file is deleted then.
-3. **A request id travels in both the header and the body.** `tower-http`'s
-   `request-id` feature is switched on, giving `SetRequestIdLayer` and
-   `PropagateRequestIdLayer`; the id joins the `TraceLayer` span
-   (`crates/vault/server/src/server.rs:600`) so every log line under a request
-   carries it. Every response returns it as `x-request-id`, successes included,
+2. **The taxonomy is per problem, not per status.** Twenty types cover the
+   61 `BadRequest` sites and the other `ApiError` variants, declared once in
+   `crates/vault/server/src/problem.rs`, which is the registry; the markdown
+   draft that preceded it is gone.
+3. **A request id travels in both the header and the body.** One middleware,
+   `crates/vault/server/src/request_id.rs`, the outermost layer on the router,
+   makes a UUID v4 per request, puts it on the request and the response, and
+   holds it in a task local while the request is served; the id joins the
+   `TraceLayer` span so every log line under a request carries it. Every response returns it as `x-request-id`, successes included,
    so a caller can quote an id for a request that answered `200 OK` and did the
    wrong thing. Every problem body repeats it as a `request_id` extension
    member, which RFC 7807 permits, so the person reading the failure can quote

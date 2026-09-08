@@ -90,8 +90,8 @@ async fn load_response(
     security(("bearer" = [])),
     responses(
         (status = 200, body = AccountProfileResponse),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn account_profile_handler(
@@ -157,7 +157,7 @@ impl From<ProfileUpdateError> for ApiError {
     fn from(e: ProfileUpdateError) -> Self {
         match e {
             err @ (ProfileUpdateError::UnsupportedService(_)
-            | ProfileUpdateError::UnknownTimeZone(_)) => Self::BadRequest(err.to_string()),
+            | ProfileUpdateError::UnknownTimeZone(_)) => Self::validation(err.to_string()),
             ProfileUpdateError::Db(err) => Self::Internal(err),
         }
     }
@@ -299,9 +299,10 @@ fn parse_profile_service(
     request_body = AccountProfileUpdateRequest,
     responses(
         (status = 200, body = AccountProfileResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn account_profile_update_handler(
@@ -373,9 +374,10 @@ pub(crate) fn remove_account_asset_trees(
     request_body = DeleteMessagesRequest,
     responses(
         (status = 200, body = DeleteMessagesResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn delete_messages_handler(
@@ -384,9 +386,7 @@ pub async fn delete_messages_handler(
     Json(req): Json<DeleteMessagesRequest>,
 ) -> Result<Json<DeleteMessagesResponse>, ApiError> {
     if !req.confirm {
-        return Err(ApiError::BadRequest(
-            "confirmation flag must be true".into(),
-        ));
+        return Err(ApiError::validation("confirmation flag must be true"));
     }
     let account_id = auth.account_id;
     let data_dir = state.cfg.paths.data_dir.clone();
@@ -420,8 +420,8 @@ pub(crate) struct AccountStorageResponse {
     security(("bearer" = [])),
     responses(
         (status = 200, body = AccountStorageResponse),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn account_storage_handler(
@@ -755,7 +755,7 @@ mod tests {
             matches!(err, ProfileUpdateError::UnknownTimeZone(_)),
             "{err}"
         );
-        assert!(matches!(ApiError::from(err), ApiError::BadRequest(_)));
+        assert!(matches!(ApiError::from(err), ApiError::ValidationFailed(_)));
         let unchanged = load_response(&mut conn, &account.account_id).await.unwrap();
         assert_eq!(unchanged.time_zone, "America/New_York");
     }

@@ -209,7 +209,9 @@ mod tests {
             serde_json::from_str(r#"{"items":[],"total":7,"limit":500,"offset":0}"#).unwrap();
         assert_eq!((page.items.len(), page.total), (0, 7));
         assert_eq!(
-            error_sentence(r#"{"error":"limit exceeds maximum of 500"}"#),
+            error_sentence(
+                r#"{"type":"https://bitrealm.io/vault/developer/reference/errors/validation-failed","title":"Validation failed","status":422,"errors":["limit exceeds maximum of 500"]}"#
+            ),
             "limit exceeds maximum of 500"
         );
         assert_eq!(error_sentence("<html>"), "<html>");

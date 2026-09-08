@@ -4,8 +4,10 @@ Every route on the vault's HTTP interface follows one convention, decided
 once rather than per route file. A thing is read by its id and returned as
 itself. A list takes `offset` and `limit` and returns `{items, total, limit,
 offset}`. A failure returns `{error}` with the HTTP status carrying the
-meaning, including failures Axum raises on its own. There is no `ok` flag on
-success. Every id is an integer. Reading is never done through Export:
+meaning, including failures Axum raises on its own. **Amended by ADR-0010**: a
+failure is now an RFC 7807 problem document served as
+`application/problem+json`. Everything else here stands. There is no `ok` flag
+on success. Every id is an integer. Reading is never done through Export:
 `GET /v1/conversations/{id}` and `GET /v1/conversations/{id}/messages` are
 the read path for one Conversation, and `GET /v1/export/messages` is for
 downloading only.

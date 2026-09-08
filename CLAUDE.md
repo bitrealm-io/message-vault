@@ -67,6 +67,14 @@ After `web/` UI changes, verify in the browser with the Playwright MCP (`plugin-
 
 ## Rules that are easy to get wrong
 
+- **No backwards compatibility, anywhere.** Endpoint names, request and response
+  shapes, config keys, on-disk layout: all of it changes whenever a better design
+  is found, and breaking a client is an accepted, expected cost. There are no
+  users to protect — only developers, who rebuild. Never add a compatibility
+  alias, a deprecation window, a version handshake, or a migration path for an
+  old client, and never argue against a change on the grounds that something
+  already calls it. ADR-0005 says this for the HTTP interface; it holds for every
+  interface. Do not raise this as an open question.
 - **Version lockstep** (current `0.8.3`): `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `web/package.json`, `crates/vault/server/Cargo.toml` all carry the product version. Leave other crates at `0.1.0`; never bump `web-next` (`0.3.0`).
 - **Pushing a `v*` tag ships a release** — CI builds the Docker image and desktop installers, creates a GitHub Release, and publishes the docs site to bitrealm.io. A merge to `main` publishes nothing. Never create or push tags unless asked.
 - **CI gates** (all in `ci.yml`, all required by the ruleset on `main`): rustfmt, Clippy at `-D warnings` (workspace and `src-tauri`), workspace build + test with the Postgres suites live, `src-tauri` check/clippy/test, web Biome `ci` + generated-types check + build + Vitest, docs `astro check` + build, license, Docker context, a build of the release Dockerfile when it or a Cargo manifest changes, product version lockstep (and on a `v*` tag, that the tag matches). A `changes` job skips what a PR doesn't touch. Dependency audits run in `audit.yml` on lockfile changes and weekly, not on every PR. Test coverage (`./scripts/coverage.sh`, cargo-llvm-cov) is a report, not a gate, and function coverage is the number to chase: `coverage.yml` runs it on each push to `main`. Why: `docs/adr/0007-ci-is-the-only-gate.md`.

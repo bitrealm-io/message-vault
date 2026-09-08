@@ -78,6 +78,16 @@ Versions, dates, counts, sizes, paths, command names. `MAME version 0.191,
 released Oct 24, 2017`, not "a recent version". "Three tests fail: `test_auth`,
 `test_retry`, `test_paging`", not "several tests are failing".
 
+## HTTP status codes carry their name
+
+A status code is written as the number and its reason phrase together: `400 Bad
+Request`, `503 Service Unavailable`, `422 Unprocessable Entity`. A bare number
+asks the reader to recall a table; the pair reads on its own, and the two
+together are what a reader searches for. The rule holds in prose, in tables, in
+commit messages, and in the interface's own documentation. The reason phrase is
+the one the code uses (`http`'s `StatusCode` constants), so `413 Payload Too
+Large`, not the newer `Content Too Large`.
+
 ## Primary sources, cited by exact location
 
 A citation names the vendor's own documentation, the schematic, the source file,

@@ -26,8 +26,12 @@ POST that reads is named for what it returns, never for the verb that computes
 it.
 
 **A creation answers `201 Created` with a `Location` header** naming the new
-resource. A write with nothing to return answers `204 No Content`. A name
-collision answers `409 Conflict`. A failed credential answers
+resource. A create that takes a batch is the exception: it answers `200 OK`
+with a summary of what was created, updated and skipped, because no single
+resource was made and no URL can be named. A whole-batch failure is one
+problem document; per-row outcomes are data, not errors. A write with nothing
+to return answers `204 No Content`. A name collision answers `409 Conflict`.
+A failed credential answers
 `401 Unauthorized`, and a refused one `403 Forbidden`. A `Content-Type` that is
 absent or unaccepted answers `415 Unsupported Media Type`.
 

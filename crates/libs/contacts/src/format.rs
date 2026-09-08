@@ -226,4 +226,109 @@ mod tests {
         let vcf = write(&dir, "ok.vcf", "BEGIN:VCARD\nFN:Ada\nEND:VCARD\n");
         assert_eq!(detect_contacts_format(&vcf).unwrap(), ContactsFormat::Vcf);
     }
+
+    /// A vCard needs both markers, and needs them in one file.
+    ///
+    /// `has_begin && has_end` could become `has_begin || has_end` with nothing
+    /// failing, and the three `if !has_*` guards on the error detail could each
+    /// be deleted. A half-written export — the tail of a file that was cut off
+    /// mid-transfer — would then be accepted as a vCard and read as empty.
+    #[test]
+    fn a_vcard_needs_both_markers() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let begin_only = write(&dir, "begin.vcf", "BEGIN:VCARD\nFN:Ada\n");
+        let err = detect_contacts_format(&begin_only).unwrap_err();
+        assert_eq!(err.message, UNRECOGNIZED_CONTACTS_FORMAT);
+        assert!(
+            err.details.iter().any(|d| d.contains("missing END:VCARD")),
+            "the message must name what is missing: {:?}",
+            err.details
+        );
+        assert!(
+            !err.details
+                .iter()
+                .any(|d| d.contains("missing BEGIN:VCARD")),
+            "BEGIN is present, so it must not be reported missing: {:?}",
+            err.details
+        );
+
+        let end_only = write(&dir, "end.vcf", "FN:Ada\nEND:VCARD\n");
+        let err = detect_contacts_format(&end_only).unwrap_err();
+        assert!(
+            err.details
+                .iter()
+                .any(|d| d.contains("missing BEGIN:VCARD")),
+            "{:?}",
+            err.details
+        );
+        assert!(
+            !err.details.iter().any(|d| d.contains("missing END:VCARD")),
+            "{:?}",
+            err.details
+        );
+
+        // Neither, which must name both.
+        let neither = write(&dir, "neither.vcf", "just some notes\n");
+        let err = detect_contacts_format(&neither).unwrap_err();
+        assert!(
+            err.details
+                .iter()
+                .any(|d| d.contains("missing BEGIN:VCARD"))
+        );
+        assert!(err.details.iter().any(|d| d.contains("missing END:VCARD")));
+
+        // The markers are matched ignoring case, as vCard allows.
+        let lowercase = write(&dir, "lower.vcf", "begin:vcard\nfn:Ada\nend:vcard\n");
+        assert_eq!(
+            detect_contacts_format(&lowercase).unwrap(),
+            ContactsFormat::Vcf
+        );
+    }
+
+    /// A CSV needs all three column kinds, and the failure says which one is
+    /// absent. Each `if !has_*` guard could be deleted without failing a test,
+    /// so the person given the message learned nothing about their file.
+    #[test]
+    fn a_contacts_csv_needs_a_first_name_a_last_name_and_a_phone() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let no_phone = write(&dir, "no-phone.csv", "First Name,Last Name\nAda,Lovelace\n");
+        let err = detect_contacts_format(&no_phone).unwrap_err();
+        assert!(
+            err.details
+                .iter()
+                .any(|d| d.contains("missing Phone column")),
+            "{:?}",
+            err.details
+        );
+        assert!(
+            !err.details.iter().any(|d| d.contains("missing First Name")),
+            "First Name is present: {:?}",
+            err.details
+        );
+
+        let no_first = write(
+            &dir,
+            "no-first.csv",
+            "Last Name,Mobile Phone\nLovelace,+15551234567\n",
+        );
+        let err = detect_contacts_format(&no_first).unwrap_err();
+        assert!(err.details.iter().any(|d| d.contains("missing First Name")));
+        assert!(!err.details.iter().any(|d| d.contains("missing Last Name")));
+
+        // When a phone column is there, the failure names which ones it found,
+        // so the reader can see the header was understood.
+        let named = write(
+            &dir,
+            "named.csv",
+            "First Name,Home Phone\nAda,+15551234567\n",
+        );
+        let err = detect_contacts_format(&named).unwrap_err();
+        assert!(
+            err.details.iter().any(|d| d.contains("phone columns:")),
+            "{:?}",
+            err.details
+        );
+    }
 }

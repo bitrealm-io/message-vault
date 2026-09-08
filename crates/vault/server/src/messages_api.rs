@@ -8,7 +8,7 @@
 //! than whatever page the browser happens to hold (#313).
 
 use crate::extract::{Json, Query};
-use axum::extract::State;
+use axum::extract::{Path, State};
 use sqlx::AnyConnection;
 use sqlx::{Executor, Row};
 
@@ -17,7 +17,7 @@ use crate::db::conversation_messages::{
 };
 use crate::db::dialect::engine_of;
 use crate::db::engine::DbEngine;
-use crate::db::sql::{bind_all, renumber_placeholders};
+use crate::db::sql::{SqlParam, bind_all, renumber_placeholders};
 use crate::paging::{
     DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, PageQuery, page_params, parse_sort,
 };
@@ -127,6 +127,52 @@ pub(crate) async fn messages_list_handler(
         limit: page.limit,
         offset: page.offset,
     }))
+}
+
+/// One message by id: the row the Messages list would show, looked up
+/// directly.
+///
+/// Read-only. A message is never written through this route: an import
+/// writes messages, and trashing is a conversation operation
+/// (`docs/agents/http-api-rules.md`, "Methods"). The lookup carries the
+/// list's own defaults — the caller's account, no trashed conversation, no
+/// duplicate — so a row the list hides is `404` here too, and a link out of
+/// a search result never reaches further than the search did.
+#[utoipa::path(
+    get,
+    path = "/v1/messages/{id}",
+    tag = "Messages",
+    security(("bearer" = [])),
+    params(("id" = i64, Path, description = "Message id")),
+    responses(
+        (status = 200, body = Message),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
+    )
+)]
+pub(crate) async fn message_handler(
+    State(state): State<AppState>,
+    FullAccess(auth): FullAccess,
+    Path(message_id): Path<i64>,
+) -> Result<Json<Message>, ApiError> {
+    let mut conn = state.db.acquire().await?;
+    let clock = crate::db::account_profile::account_clock(&mut conn, auth.account_id).await?;
+    let filter = message_filter(engine_of(&conn), auth.account_id, "", clock)?
+        .and_where("m.id = ?", [SqlParam::Int(message_id)]);
+    let mut items = load_messages(
+        &mut conn,
+        filter.where_sql(),
+        filter.params(),
+        &DEFAULT_MESSAGE_SORT,
+        1,
+        0,
+    )
+    .await?;
+    items
+        .pop()
+        .map(Json)
+        .ok_or_else(|| ApiError::NotFound(format!("no message {message_id}")))
 }
 
 #[cfg(test)]

@@ -18,6 +18,8 @@ function detail(partial: Partial<ImportDetailResponse> = {}): ImportDetailRespon
     started_at: "2026-08-11T12:00:00Z",
     finished_at: "2026-08-11T12:01:00Z",
     message_count: 10,
+    contacts_new: 0,
+    contacts_changed: 0,
     attachment_count: 0,
     bytes_uploaded: 0,
     duration_ms: 1000,

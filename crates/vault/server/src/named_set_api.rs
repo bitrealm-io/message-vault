@@ -9,11 +9,12 @@
 //! through a generic or a `concat!`. The two invocations below name every
 //! path, so both collections' routes stay greppable here.
 
-use crate::extract::Json;
+use crate::extract::{Json, Query};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::named_membership::{self, MembershipSpec};
+use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
 use crate::server::{ApiError, AppState, Created, FullAccess};
 
 /// One Contact Group or Message Tag: its id and name.
@@ -23,22 +24,10 @@ pub(crate) struct NamedSet {
     pub(crate) name: String,
 }
 
-/// The account's sets of one kind, A–Z.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct NamedSetList {
-    pub(crate) items: Vec<NamedSet>,
-}
-
 /// A name to create, or the new name for an existing set.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct NamedSetBody {
     pub(crate) name: String,
-}
-
-/// Member ids of one set, ascending.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct MemberIdList {
-    pub(crate) items: Vec<i64>,
 }
 
 /// Members to put in and take out of one set, in one request.
@@ -63,14 +52,16 @@ pub(crate) async fn list(
     spec: &'static MembershipSpec,
     state: &AppState,
     account_id: i64,
-) -> Result<Json<NamedSetList>, ApiError> {
+    query: PageQuery,
+) -> Result<Json<Page<NamedSet>>, ApiError> {
+    let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
-    let items = named_membership::list_sets(spec, &mut conn, account_id)
+    let rows: Vec<NamedSet> = named_membership::list_sets(spec, &mut conn, account_id)
         .await?
         .into_iter()
         .map(|(id, name)| NamedSet { id, name })
         .collect();
-    Ok(Json(NamedSetList { items }))
+    Ok(Json(page_of(rows, params)))
 }
 
 /// Create a set and answer `201 Created` with its id and trimmed name, and a
@@ -126,10 +117,12 @@ pub(crate) async fn members_list(
     state: &AppState,
     account_id: i64,
     id: i64,
-) -> Result<Json<MemberIdList>, ApiError> {
+    query: PageQuery,
+) -> Result<Json<Page<i64>>, ApiError> {
+    let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
-    let items = named_membership::list_member_ids_of(spec, &mut conn, account_id, id).await?;
-    Ok(Json(MemberIdList { items }))
+    let rows = named_membership::list_member_ids_of(spec, &mut conn, account_id, id).await?;
+    Ok(Json(page_of(rows, params)))
 }
 
 /// Add and remove members of one set in one call, answering how many
@@ -191,8 +184,12 @@ macro_rules! named_set_routes {
             path = $root_path,
             tag = $tag,
             security(("bearer" = [])),
+            params(
+                ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
+                ("offset" = Option<usize>, Query, description = "Page offset")
+            ),
             responses(
-                (status = 200, body = NamedSetList),
+                (status = 200, body = crate::paging::Page<NamedSet>),
                 (status = 401, body = crate::problem::Problem),
                 (status = 403, body = crate::problem::Problem)
             )
@@ -200,8 +197,9 @@ macro_rules! named_set_routes {
         pub(crate) async fn $list_fn(
             axum::extract::State(state): axum::extract::State<AppState>,
             FullAccess(auth): FullAccess,
-        ) -> Result<Json<NamedSetList>, ApiError> {
-            list($spec(), &state, auth.account_id).await
+            Query(query): Query<PageQuery>,
+        ) -> Result<Json<Page<NamedSet>>, ApiError> {
+            list($spec(), &state, auth.account_id, query).await
         }
 
         #[doc = $create_doc]
@@ -286,9 +284,13 @@ macro_rules! named_set_routes {
             path = $members_path,
             tag = $tag,
             security(("bearer" = [])),
-            params(("id" = i64, Path, description = $id_description)),
+            params(
+                ("id" = i64, Path, description = $id_description),
+                ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
+                ("offset" = Option<usize>, Query, description = "Page offset")
+            ),
             responses(
-                (status = 200, body = MemberIdList),
+                (status = 200, body = crate::paging::Page<i64>),
                 (status = 401, body = crate::problem::Problem),
                 (status = 403, body = crate::problem::Problem),
                 (status = 404, body = crate::problem::Problem)
@@ -298,8 +300,9 @@ macro_rules! named_set_routes {
             axum::extract::State(state): axum::extract::State<AppState>,
             FullAccess(auth): FullAccess,
             crate::extract::Path(id): crate::extract::Path<i64>,
-        ) -> Result<Json<MemberIdList>, ApiError> {
-            members_list($spec(), &state, auth.account_id, id).await
+            Query(query): Query<PageQuery>,
+        ) -> Result<Json<Page<i64>>, ApiError> {
+            members_list($spec(), &state, auth.account_id, id, query).await
         }
 
         #[doc = $members_update_doc]

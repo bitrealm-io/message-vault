@@ -97,7 +97,11 @@ export default function ImportDetailPanel({
           <ImportSummaryPanel summary={selectedImportSummary} />
           <div className="mt-4">
             <h4 className="mb-1 font-medium text-[0.813rem]">Contacts</h4>
-            <ImportContactsPanel importId={selectedImport.id} />
+            <ImportContactsPanel
+              importId={selectedImport.id}
+              newCount={selectedImport.contacts_new}
+              changedCount={selectedImport.contacts_changed}
+            />
           </div>
         </>
       ) : null}

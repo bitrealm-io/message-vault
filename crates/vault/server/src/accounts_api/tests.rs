@@ -188,7 +188,8 @@ async fn the_owner_sees_every_account_but_no_messages() {
     let _alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let _bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
-    let body: ListAccountsResponse = get_json(&state, "/v1/accounts", &owner.token).await;
+    let body: crate::paging::Page<AccountResponse> =
+        get_json(&state, "/v1/accounts", &owner.token).await;
 
     assert_eq!(body.items.len(), 2);
     let bob = body.items.iter().find(|a| a.username == "bob").unwrap();
@@ -204,7 +205,8 @@ async fn the_owner_is_absent_from_the_account_list() {
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
     let _alice = register_via_api(&state, "alice", "hunter2hunter2").await;
 
-    let body: ListAccountsResponse = get_json(&state, "/v1/accounts", &owner.token).await;
+    let body: crate::paging::Page<AccountResponse> =
+        get_json(&state, "/v1/accounts", &owner.token).await;
 
     assert_eq!(body.items.len(), 1, "only the one ordinary account");
     assert!(
@@ -853,7 +855,8 @@ async fn deleting_one_accounts_messages_leaves_the_others_alone() {
         "the answer carries counts, never message content"
     );
 
-    let body: ListAccountsResponse = get_json(&state, "/v1/accounts", &owner.token).await;
+    let body: crate::paging::Page<AccountResponse> =
+        get_json(&state, "/v1/accounts", &owner.token).await;
     let alice_row = body.items.iter().find(|a| a.username == "alice").unwrap();
     let bob_row = body.items.iter().find(|a| a.username == "bob").unwrap();
     assert_eq!(alice_row.message_count, 0);
@@ -969,7 +972,8 @@ async fn the_owner_deletes_any_account_outright() {
         StatusCode::NO_CONTENT
     );
 
-    let body: ListAccountsResponse = get_json(&state, "/v1/accounts", &owner.token).await;
+    let body: crate::paging::Page<AccountResponse> =
+        get_json(&state, "/v1/accounts", &owner.token).await;
     assert!(body.items.is_empty(), "both are gone");
     assert_eq!(
         login_status(&state, "bob", "hunter2hunter2").await,

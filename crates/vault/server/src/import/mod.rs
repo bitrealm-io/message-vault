@@ -44,7 +44,7 @@ use staging::StagingInserts;
 
 use crate::dedupe;
 use crate::import::{self};
-use crate::paging::{DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, page_params};
+use crate::paging::{DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, PageQuery, page_params};
 use crate::server::{
     ApiError, AppState, Created, ImportAccess, content_type_base, is_jsonl_content_type,
     resolve_import_account, stream_body_to_file,
@@ -844,6 +844,10 @@ pub(crate) struct ImportDetailResponse {
     pub(crate) upload_ms: Option<i64>,
     pub(crate) summary: serde_json::Value,
     pub(crate) issues: Vec<ImportDetailIssueResponse>,
+    /// Contacts this run created.
+    pub(crate) contacts_new: u64,
+    /// Contacts it only changed.
+    pub(crate) contacts_changed: u64,
 }
 
 /// The account's Import Runs, newest first, as a page. `status=running`
@@ -931,8 +935,9 @@ pub(crate) async fn imports_get_handler(
     let detail = crate::db::vault_imports::get_import_detail(&mut conn, auth.account_id, import_id)
         .await
         .map_err(ApiError::from)?;
+    let contacts = contact_counts(&mut conn, auth.account_id, &detail.row.started_at).await?;
 
-    Ok(Json(import_detail_response(detail)))
+    Ok(Json(import_detail_response(detail, contacts)))
 }
 
 /// Start an import session and return its id. Finish the session at
@@ -1136,30 +1141,62 @@ pub(crate) struct ImportContactRow {
     pub is_new: bool,
 }
 
-/// Response for `GET /v1/imports/{id}/contacts`.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct ImportContactsResponse {
-    /// Contacts the run created or changed, newest first.
-    pub contacts: Vec<ImportContactRow>,
-    /// How many of them the run created.
-    pub new_count: u64,
-    /// How many it only changed.
-    pub changed_count: u64,
+/// How many contacts one run created and how many it only changed.
+///
+/// The two numbers belong to the run, not to a page of its contacts: a page
+/// can only count its own rows, and the panel states the whole run's tally.
+/// So they are read with the record at `GET /v1/imports/{id}` and the
+/// contacts themselves are a page like every other list
+/// (`docs/agents/http-api-rules.md`, "Lists").
+pub(crate) struct ContactCounts {
+    pub(crate) new_count: u64,
+    pub(crate) changed_count: u64,
 }
 
-/// List the contacts one import run created or changed.
+/// Count the contacts a run created and changed, telling them apart by
+/// comparing each contact's `created_at` against the moment the run started:
+/// a contact first recorded during the run is new, one merely touched is
+/// changed.
+async fn contact_counts(
+    conn: &mut sqlx::AnyConnection,
+    account_id: i64,
+    started_at: &str,
+) -> Result<ContactCounts, ApiError> {
+    let (new_count, changed_count): (i64, i64) = sqlx::query_as(
+        "SELECT COALESCE(SUM(CASE WHEN created_at >= $2 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN created_at < $2 THEN 1 ELSE 0 END), 0)
+         FROM contacts
+         WHERE account_id = $1 AND (created_at >= $2 OR last_modified >= $2)",
+    )
+    .bind(account_id)
+    .bind(started_at)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("count import contacts: {e}")))?;
+    Ok(ContactCounts {
+        new_count: new_count.max(0) as u64,
+        changed_count: changed_count.max(0) as u64,
+    })
+}
+
+/// List the contacts one import run created or changed, newest first.
 ///
 /// New and changed are told apart by comparing each contact's `created_at`
 /// against the moment the run started: a contact first recorded during the run
-/// is new, one merely touched is changed.
+/// is new, one merely touched is changed. How many of each the run made is on
+/// the run's own record, `GET /v1/imports/{id}`.
 #[utoipa::path(
     get,
     path = "/v1/imports/{id}/contacts",
     tag = "Import",
     security(("bearer" = [])),
-    params(("id" = i64, Path, description = "Import session id")),
+    params(
+        ("id" = i64, Path, description = "Import session id"),
+        ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
+        ("offset" = Option<usize>, Query, description = "Page offset")
+    ),
     responses(
-        (status = 200, body = ImportContactsResponse),
+        (status = 200, body = Page<ImportContactRow>),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (status = 404, body = crate::problem::Problem)
@@ -1169,43 +1206,53 @@ pub(crate) async fn import_contacts_handler(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath(import_id): AxumPath<i64>,
-) -> Result<Json<ImportContactsResponse>, ApiError> {
+    Query(query): Query<PageQuery>,
+) -> Result<Json<Page<ImportContactRow>>, ApiError> {
+    let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
     let detail = crate::db::vault_imports::get_import_detail(&mut conn, auth.account_id, import_id)
         .await
         .map_err(ApiError::from)?;
     let started_at = detail.row.started_at.clone();
 
-    let rows: Vec<(i64, String, String)> = sqlx::query_as(
-        "SELECT id, preferred_name, created_at FROM contacts
-         WHERE account_id = $1 AND (created_at >= $2 OR last_modified >= $2)
-         ORDER BY created_at DESC, id DESC",
+    let total: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM contacts
+         WHERE account_id = $1 AND (created_at >= $2 OR last_modified >= $2)",
     )
     .bind(auth.account_id)
     .bind(&started_at)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("count import contacts: {e}")))?;
+
+    let rows: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT id, preferred_name, created_at FROM contacts
+         WHERE account_id = $1 AND (created_at >= $2 OR last_modified >= $2)
+         ORDER BY created_at DESC, id DESC
+         LIMIT $3 OFFSET $4",
+    )
+    .bind(auth.account_id)
+    .bind(&started_at)
+    .bind(params.limit as i64)
+    .bind(params.offset as i64)
     .fetch_all(&mut *conn)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("list import contacts: {e}")))?;
 
-    let mut new_count = 0u64;
-    let mut changed_count = 0u64;
-    let contacts = rows
+    let items = rows
         .into_iter()
-        .map(|(id, name, created_at)| {
-            let is_new = created_at >= started_at;
-            if is_new {
-                new_count += 1;
-            } else {
-                changed_count += 1;
-            }
-            ImportContactRow { id, name, is_new }
+        .map(|(id, name, created_at)| ImportContactRow {
+            id,
+            name,
+            is_new: created_at >= started_at,
         })
         .collect();
 
-    Ok(Json(ImportContactsResponse {
-        contacts,
-        new_count,
-        changed_count,
+    Ok(Json(Page {
+        items,
+        total: total.max(0) as u64,
+        limit: params.limit,
+        offset: params.offset,
     }))
 }
 
@@ -1290,7 +1337,10 @@ fn import_date_ymd(row: &crate::db::vault_imports::VaultImportRow) -> String {
         )
 }
 
-fn import_detail_response(detail: crate::db::vault_imports::ImportDetail) -> ImportDetailResponse {
+fn import_detail_response(
+    detail: crate::db::vault_imports::ImportDetail,
+    contacts: ContactCounts,
+) -> ImportDetailResponse {
     let row = detail.row;
     let issues = detail
         .issues
@@ -1321,6 +1371,8 @@ fn import_detail_response(detail: crate::db::vault_imports::ImportDetail) -> Imp
         upload_ms: row.upload_ms,
         summary: crate::db::vault_imports::json_column(row.summary_json),
         issues,
+        contacts_new: contacts.new_count,
+        contacts_changed: contacts.changed_count,
     }
 }
 

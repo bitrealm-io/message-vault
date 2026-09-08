@@ -778,10 +778,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List the contacts one import run created or changed.
+         * List the contacts one import run created or changed, newest first.
          * @description New and changed are told apart by comparing each contact's `created_at`
          *     against the moment the run started: a contact first recorded during the run
-         *     is new, one merely touched is changed.
+         *     is new, one merely touched is changed. How many of each the run made is on
+         *     the run's own record, `GET /v1/imports/{id}`.
          */
         get: operations["import_contacts_handler"];
         put?: never;
@@ -893,6 +894,32 @@ export interface paths {
          *     session with the list defaults and the list's offset ceiling.
          */
         get: operations["messages_list_handler"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/messages/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One message by id: the row the Messages list would show, looked up
+         *     directly.
+         * @description Read-only. A message is never written through this route: an import
+         *     writes messages, and trashing is a conversation operation
+         *     (`docs/agents/http-api-rules.md`, "Methods"). The lookup carries the
+         *     list's own defaults — the caller's account, no trashed conversation, no
+         *     duplicate — so a row the list hides is `404` here too, and a link out of
+         *     a search result never reaches further than the search did.
+         */
+        get: operations["message_handler"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1406,11 +1433,6 @@ export interface components {
             /** @description Contact ids to summarize; an empty list covers every contact. */
             ids?: number[];
         };
-        /** @description Response for `POST /v1/contacts/summaries`. */
-        ContactSummariesPage: {
-            /** @description One summary per requested contact. */
-            items: components["schemas"]["ContactSelectionSummary"][];
-        };
         /** @description Contact row for the list: name, handles, groups. */
         ContactSummary: {
             /** @description Group names on this contact (A–Z). */
@@ -1460,11 +1482,6 @@ export interface components {
              * @description Messages only this source has (not hidden duplicates).
              */
             unique_count: number;
-        };
-        /** @description Per-source counts for one conversation. */
-        ConversationSourcesPage: {
-            /** @description One entry per source that contributed messages. */
-            items: components["schemas"]["ConversationSourceInfo"][];
         };
         /** @description Conversation row for the list: participants, counts, tags. */
         ConversationSummary: {
@@ -1756,21 +1773,6 @@ export interface components {
             /** @description Preferred name; empty when the run learned an address and no name. */
             name: string;
         };
-        /** @description Response for `GET /v1/imports/{id}/contacts`. */
-        ImportContactsResponse: {
-            /**
-             * Format: int64
-             * @description How many it only changed.
-             */
-            changed_count: number;
-            /** @description Contacts the run created or changed, newest first. */
-            contacts: components["schemas"]["ImportContactRow"][];
-            /**
-             * Format: int64
-             * @description How many of them the run created.
-             */
-            new_count: number;
-        };
         /** @description One stored import issue. */
         ImportDetailIssueResponse: {
             item: string;
@@ -1786,6 +1788,16 @@ export interface components {
             attachments_ms?: number | null;
             /** Format: int64 */
             bytes_uploaded: number;
+            /**
+             * Format: int64
+             * @description Contacts it only changed.
+             */
+            contacts_changed: number;
+            /**
+             * Format: int64
+             * @description Contacts this run created.
+             */
+            contacts_new: number;
             /** Format: int64 */
             duration_ms?: number | null;
             finished_at?: string | null;
@@ -1967,26 +1979,12 @@ export interface components {
             /** @description Importing tool, e.g. `vault-push`. */
             tool?: string | null;
         };
-        /** @description Every account in the vault except the owner's own. */
-        ListAccountsResponse: {
-            /** @description One row per account. */
-            items: components["schemas"]["AccountResponse"][];
-        };
-        /** @description The account's named API tokens. */
-        ListApiTokensResponse: {
-            /** @description The account's tokens. */
-            items: components["schemas"]["ApiTokenItem"][];
-        };
         /**
          * @description Which list a query is compiled for. Each list accepts its own subset of
          *     the words, and every filter is expressed against that list's base row.
          * @enum {string}
          */
         ListKind: "contacts" | "conversations" | "messages";
-        /** @description Member ids of one set, ascending. */
-        MemberIdList: {
-            items: number[];
-        };
         /** @description How many memberships a patch created and how many it removed. */
         MembersChanged: {
             /** Format: int64 */
@@ -2084,9 +2082,156 @@ export interface components {
         NamedSetBody: {
             name: string;
         };
-        /** @description The account's sets of one kind, A–Z. */
-        NamedSetList: {
-            items: components["schemas"]["NamedSet"][];
+        /** @description One page of a list. */
+        Page_AccountResponse: {
+            /** @description The rows on this page. */
+            items: {
+                /**
+                 * Format: int64
+                 * @description Account id.
+                 */
+                account_id: number;
+                /** @description May destroy message data. */
+                can_delete: boolean;
+                /** @description May call the export endpoints. */
+                can_export: boolean;
+                /** @description May call the import endpoints. */
+                can_import: boolean;
+                /** @description May not sign in. */
+                disabled: boolean;
+                /** @description Email addresses linked to the account. */
+                emails: string[];
+                /** @description True for the seeded demo account (cannot be deleted). */
+                is_demo: boolean;
+                /** @description True for the vault owner: manages accounts, holds no messages. */
+                is_owner: boolean;
+                /**
+                 * Format: int64
+                 * @description Messages this account owns.
+                 */
+                message_count: number;
+                /**
+                 * @description The vault owner chose this password; it must be replaced before the
+                 *     account can be used.
+                 */
+                must_change_password: boolean;
+                /**
+                 * @description The account holder has not set up their profile yet, so profile setup
+                 *     is owed before the account can be used. The vault decides this, not the
+                 *     client: the same answer reaches every app, and it survives cleared site
+                 *     data and a second browser.
+                 */
+                must_set_up_profile: boolean;
+                /** @description Phone handles linked to the account. */
+                phones: string[];
+                /** @description Display name, when set. */
+                preferred_name?: string | null;
+                /**
+                 * Format: int64
+                 * @description Attachment bytes this account owns.
+                 */
+                storage_bytes: number;
+                /**
+                 * @description IANA time zone every message time, day and year is shown in, for
+                 *     example `America/New_York`. Chosen at profile setup.
+                 */
+                time_zone: string;
+                /** @description Login username. */
+                username: string;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_ApiTokenItem: {
+            /** @description The rows on this page. */
+            items: {
+                /** @description May destroy message data. */
+                can_delete: boolean;
+                /** @description May call the export endpoints. */
+                can_export: boolean;
+                /** @description May call the import endpoints. */
+                can_import: boolean;
+                /** @description Creation time as a Unix-seconds string. */
+                created_at: string;
+                /** @description True when the token is disabled and rejects requests. */
+                disabled: boolean;
+                /** @description Unix-seconds expiry; absent means no expiry. */
+                expires_at?: string | null;
+                /**
+                 * Format: int64
+                 * @description Token id (the secret itself is stored hashed).
+                 */
+                id: number;
+                /** @description User-chosen label shown in Settings. */
+                label: string;
+                /** @description Unix-seconds string of last use; absent when never used. */
+                last_accessed_at?: string | null;
+                /** @description Masked secret for Settings (e.g. `mv-api-Sd..mE`). */
+                token_hint: string;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_ContactSelectionSummary: {
+            /** @description The rows on this page. */
+            items: {
+                /** @description Date of the contact's last message. */
+                end_date?: string | null;
+                /**
+                 * Format: int64
+                 * @description Group conversations with the contact.
+                 */
+                group_conversations: number;
+                /**
+                 * Format: int64
+                 * @description Messages in group conversations with the contact.
+                 */
+                group_message_count: number;
+                /**
+                 * Format: int64
+                 * @description Contact id.
+                 */
+                id: number;
+                /**
+                 * Format: int64
+                 * @description 1:1 conversations with the contact.
+                 */
+                individual_conversations: number;
+                /**
+                 * Format: int64
+                 * @description Messages in 1:1 conversations with the contact.
+                 */
+                individual_message_count: number;
+                /** @description Contact display name. */
+                name: string;
+                /** @description Date of the contact's first message. */
+                start_date?: string | null;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
         };
         /** @description One page of a list. */
         Page_ContactSummary: {
@@ -2110,6 +2255,38 @@ export interface components {
                 last_modified: string;
                 /** @description Contact display name. */
                 name: string;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_ConversationSourceInfo: {
+            /** @description The rows on this page. */
+            items: {
+                /** @description Backup source name. */
+                backup_name: string;
+                /**
+                 * Format: int64
+                 * @description Messages in this conversation from this source.
+                 */
+                message_count: number;
+                /**
+                 * Format: double
+                 * @description Share of the conversation's unique messages, 0–100.
+                 */
+                percentage: number;
+                /**
+                 * Format: int64
+                 * @description Messages only this source has (not hidden duplicates).
+                 */
+                unique_count: number;
             }[];
             /** @description Page size used. */
             limit: number;
@@ -2207,6 +2384,58 @@ export interface components {
                  * @description Sum of the known sizes of those distinct attachments, in bytes.
                  */
                 total_bytes: number;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_FieldDoc: {
+            /** @description The rows on this page. */
+            items: {
+                /** @description One example, ready to type. */
+                example: string;
+                /** @description One line of help. */
+                help: string;
+                /** @description What shape of value it takes. */
+                value_type: components["schemas"]["ValueType"];
+                /** @description Keyword or fixed values the word accepts. */
+                values: string[];
+                /** @description The spelling, without the colon. */
+                word: string;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_ImportContactRow: {
+            /** @description The rows on this page. */
+            items: {
+                /**
+                 * Format: int64
+                 * @description Contact id.
+                 */
+                id: number;
+                /**
+                 * @description True when this run created the contact, false when it only changed one
+                 *     that already existed.
+                 */
+                is_new: boolean;
+                /** @description Preferred name; empty when the run learned an address and no name. */
+                name: string;
             }[];
             /** @description Page size used. */
             limit: number;
@@ -2353,6 +2582,78 @@ export interface components {
                  */
                 timestamp: string;
             }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_NamedSet: {
+            /** @description The rows on this page. */
+            items: {
+                /** Format: int64 */
+                id: number;
+                name: string;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_SavedSearch: {
+            /** @description The rows on this page. */
+            items: {
+                /**
+                 * Format: int64
+                 * @description Saved search id, unique across the vault.
+                 */
+                id: number;
+                /** @description `manual` or `import`. */
+                kind: string;
+                /** @description Display name, unique per account. */
+                name: string;
+                /** @description Query string, run against the conversation list. */
+                query: string;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_String: {
+            /** @description The rows on this page. */
+            items: string[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_i64: {
+            /** @description The rows on this page. */
+            items: number[];
             /** @description Page size used. */
             limit: number;
             /** @description Page offset used. */
@@ -2520,14 +2821,6 @@ export interface components {
             name: string;
             query: string;
         };
-        /** @description The account's saved searches, A–Z. */
-        SavedSearchesListResponse: {
-            items: components["schemas"]["SavedSearch"][];
-        };
-        /** @description The words for one list, in the order the docs table shows them. */
-        SearchFieldsResponse: {
-            items: components["schemas"]["FieldDoc"][];
-        };
         /** @description The signed-in credential's account, username, and import sources. */
         SessionResponse: {
             /** Format: int64 */
@@ -2628,15 +2921,6 @@ export interface components {
             /** @description Raw identifiers — phone numbers, emails — as they appear in an export. */
             identifiers: string[];
         };
-        /** @description Response for `POST /v1/contacts/unmatched-handles`. */
-        UnmatchedHandlesResponse: {
-            /**
-             * @description The subset this account has no contact for: trimmed, in first-seen
-             *     order, blanks dropped and duplicates (by normalized form) collapsed
-             *     to their first spelling.
-             */
-            unknown: string[];
-        };
         /**
          * @description What shape of value a word takes.
          * @enum {string}
@@ -2691,7 +2975,12 @@ export interface operations {
     };
     list_accounts: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size, default 40, max 500 */
+                limit?: number;
+                /** @description Page offset */
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2703,7 +2992,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ListAccountsResponse"];
+                    "application/json": components["schemas"]["Page_AccountResponse"];
                 };
             };
             401: {
@@ -2972,7 +3261,12 @@ export interface operations {
     };
     list_api_tokens: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size, default 40, max 500 */
+                limit?: number;
+                /** @description Page offset */
+                offset?: number;
+            };
             header?: never;
             path: {
                 /** @description Account id; must be the caller's own */
@@ -2987,7 +3281,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ListApiTokensResponse"];
+                    "application/json": components["schemas"]["Page_ApiTokenItem"];
                 };
             };
             401: {
@@ -3825,7 +4119,12 @@ export interface operations {
     };
     contact_groups_list: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size, default 40, max 500 */
+                limit?: number;
+                /** @description Page offset */
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3837,7 +4136,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NamedSetList"];
+                    "application/json": components["schemas"]["Page_NamedSet"];
                 };
             };
             401: {
@@ -4035,7 +4334,12 @@ export interface operations {
     };
     contact_group_members_list: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size, default 40, max 500 */
+                limit?: number;
+                /** @description Page offset */
+                offset?: number;
+            };
             header?: never;
             path: {
                 /** @description Contact Group id */
@@ -4050,7 +4354,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MemberIdList"];
+                    "application/json": components["schemas"]["Page_i64"];
                 };
             };
             401: {
@@ -4296,7 +4600,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ContactSummariesPage"];
+                    "application/json": components["schemas"]["Page_ContactSelectionSummary"];
                 };
             };
             400: {
@@ -4351,7 +4655,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UnmatchedHandlesResponse"];
+                    "application/json": components["schemas"]["Page_String"];
                 };
             };
             400: {
@@ -4922,7 +5226,12 @@ export interface operations {
     };
     conversation_sources_handler: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size, default 40, max 500 */
+                limit?: number;
+                /** @description Page offset */
+                offset?: number;
+            };
             header?: never;
             path: {
                 /** @description Conversation id */
@@ -4937,7 +5246,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConversationSourcesPage"];
+                    "application/json": components["schemas"]["Page_ConversationSourceInfo"];
                 };
             };
             401: {
@@ -5666,7 +5975,12 @@ export interface operations {
     };
     import_contacts_handler: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size, default 40, max 500 */
+                limit?: number;
+                /** @description Page offset */
+                offset?: number;
+            };
             header?: never;
             path: {
                 /** @description Import session id */
@@ -5681,7 +5995,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportContactsResponse"];
+                    "application/json": components["schemas"]["Page_ImportContactRow"];
                 };
             };
             401: {
@@ -5840,7 +6154,12 @@ export interface operations {
     };
     message_tags_list: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size, default 40, max 500 */
+                limit?: number;
+                /** @description Page offset */
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5852,7 +6171,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NamedSetList"];
+                    "application/json": components["schemas"]["Page_NamedSet"];
                 };
             };
             401: {
@@ -6050,7 +6369,12 @@ export interface operations {
     };
     message_tag_members_list: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size, default 40, max 500 */
+                limit?: number;
+                /** @description Page offset */
+                offset?: number;
+            };
             header?: never;
             path: {
                 /** @description Message Tag id */
@@ -6065,7 +6389,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MemberIdList"];
+                    "application/json": components["schemas"]["Page_i64"];
                 };
             };
             401: {
@@ -6220,9 +6544,60 @@ export interface operations {
             };
         };
     };
-    saved_searches_list_handler: {
+    message_handler: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                /** @description Message id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    saved_searches_list_handler: {
+        parameters: {
+            query?: {
+                /** @description Page size, default 40, max 500 */
+                limit?: number;
+                /** @description Page offset */
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6234,7 +6609,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SavedSearchesListResponse"];
+                    "application/json": components["schemas"]["Page_SavedSearch"];
                 };
             };
             401: {
@@ -6436,6 +6811,10 @@ export interface operations {
             query: {
                 /** @description `contacts`, `conversations`, or `messages`. */
                 list: components["schemas"]["ListKind"];
+                /** @description Page size, default 40, max 500. */
+                limit?: number | null;
+                /** @description Page offset. */
+                offset?: number | null;
             };
             header?: never;
             path?: never;
@@ -6448,7 +6827,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SearchFieldsResponse"];
+                    "application/json": components["schemas"]["Page_FieldDoc"];
                 };
             };
             400: {

@@ -9,7 +9,7 @@ Route schemas, status codes, and JSON fields live in the generated [HTTP API ref
 
 ## One shape for every route
 
-- A list takes `?offset=&limit=` and answers `{items, total, limit, offset}`. `limit` is at most 500 and at least 1; `offset` is at most 50 000 on the Contacts and Conversations lists and unlimited on an Export Run's messages.
+- Every list takes `?offset=&limit=` and answers `{items, total, limit, offset}`, with no exceptions: the browse lists, the ones a person curates (Contact Groups, Message Tags, saved searches, API tokens, the accounts a vault holds), and the fixed reference list at `/v1/search-fields` alike. `limit` is at most 500 and at least 1, default 40; `offset` is at most 50 000 on the Contacts and Conversations lists and unlimited elsewhere. The one variation is a `POST` that reads the rows its body names — `/v1/contacts/summaries` and `/v1/contacts/unmatched-handles` — which answers the whole of that body as one page and takes no `offset` or `limit`, because the body already says which rows to read and may name at most 500.
 - A list takes `?sort=` in one spelling: comma-separated keys, a leading `-` for descending, as in `sort=-messages,date`. Each list names the keys it accepts in the OpenAPI document (Conversations: `date`, `messages`; Contacts: `name`; the three message lists: `date`), and an unlisted key is a `validation-failed` answer naming the accepted set. Filtering is the search language in `q`, never a query parameter.
 - A failure answers an [RFC 7807 problem document](./errors/) as `application/problem+json`: `type` names the page describing the kind of failure, `title` and `status` repeat it, `detail` is one sentence about this occurrence (a validation failure lists every broken rule in `errors` instead), and `request_id` repeats the response's `x-request-id` header. That includes a malformed query parameter, path, or JSON body, an unknown `/v1` path (404), and a wrong method (405). There is no `ok` field on any response.
 - A route with nothing to say on success answers `204 No Content`.
@@ -97,6 +97,8 @@ Every export route takes the `export` scope on a session or an API token. A prog
 ## Messages across conversations
 
 `GET /v1/messages?q=` answers one row per message matching `q`, paged like every other list, behind a signed-in session. It is a read route: opening a conversation is `GET /v1/conversations/{id}/messages`, downloading is an Export Run (`POST /v1/exports`), and searching across messages is this. The thread's find box uses it with `in:#id` so a find reaches every message in the conversation, not the page the browser holds.
+
+`GET /v1/messages/{id}` is the same row looked up by id, so a search result links to a message rather than to an offset. It is read-only: an import writes messages and trashing is a conversation operation. The lookup carries the list's own defaults — the caller's account, no trashed conversation, no duplicate — so a row the list hides answers `404` here too, and another account's message is absent rather than forbidden.
 
 ## Search operators (`q`)
 

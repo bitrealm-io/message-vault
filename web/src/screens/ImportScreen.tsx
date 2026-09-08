@@ -277,7 +277,7 @@ export default function ImportScreen() {
         for (let i = 0; i < identifiers.length; i += MAX_MATCH_IDENTIFIERS) {
           const batch = identifiers.slice(i, i + MAX_MATCH_IDENTIFIERS);
           const res = await unmatchedHandles({ identifiers: batch });
-          total += res.unknown.length;
+          total += res.items.length;
         }
         if (!cancelled) setUnknownContacts(total);
       } catch {

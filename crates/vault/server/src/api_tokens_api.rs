@@ -5,7 +5,8 @@
 //! one account's messages, and the owner never reaches those. A signed-in
 //! session is required; a token cannot mint, rename or revoke tokens.
 
-use crate::extract::{Json, Path};
+use crate::extract::{Json, Path, Query};
+use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
 
@@ -78,13 +79,6 @@ fn map_label_error(e: crate::db::api_tokens::ApiTokenMutationError) -> ApiError 
     }
 }
 
-/// The account's named API tokens.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct ListApiTokensResponse {
-    /// The account's tokens.
-    pub items: Vec<ApiTokenItem>,
-}
-
 /// Body for creating a token: label, permissions, optional expiry.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct CreateApiTokenRequest {
@@ -155,9 +149,13 @@ pub struct RenameApiTokenResponse {
     tag = "Accounts",
     operation_id = "list_api_tokens",
     security(("bearer" = [])),
-    params(("id" = i64, Path, description = "Account id; must be the caller's own")),
+    params(
+        ("id" = i64, Path, description = "Account id; must be the caller's own"),
+        ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
+        ("offset" = Option<usize>, Query, description = "Page offset")
+    ),
     responses(
-        (status = 200, body = ListApiTokensResponse),
+        (status = 200, body = crate::paging::Page<ApiTokenItem>),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
     )
@@ -166,15 +164,17 @@ pub async fn list_api_tokens_handler(
     State(state): State<AppState>,
     Path(account_id): Path<i64>,
     FullAccess(auth): FullAccess,
-) -> Result<Json<ListApiTokensResponse>, ApiError> {
+    Query(query): Query<PageQuery>,
+) -> Result<Json<Page<ApiTokenItem>>, ApiError> {
     require_own_tokens(&auth, account_id)?;
+    let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
 
     let mut conn = state.db.acquire().await?;
     schema::ensure_accounts_schema(&mut conn).await?;
     let rows = api_tokens::list_api_tokens(&mut conn, account_id).await?;
-    let items = rows.into_iter().map(ApiTokenItem::from).collect();
+    let items: Vec<ApiTokenItem> = rows.into_iter().map(ApiTokenItem::from).collect();
 
-    Ok(Json(ListApiTokensResponse { items }))
+    Ok(Json(page_of(items, params)))
 }
 
 /// Create a named API token. Returns the plaintext secret once, at creation;

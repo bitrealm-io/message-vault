@@ -31,7 +31,7 @@ vi.mock("./api", () => ({
 vi.mock("./vaultApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./vaultApi")>()),
   logout: (...args: unknown[]) => post(...args),
-  checkAuth: (...args: unknown[]) => get(...args),
+  getSession: (...args: unknown[]) => get(...args),
   getAccountProfile: (...args: unknown[]) => getProfile(...args),
 }));
 

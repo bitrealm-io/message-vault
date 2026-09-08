@@ -189,7 +189,7 @@ mod tests {
             serde_json::json!({ "username": padding, "password": "hunter2hunter2" }).to_string();
         let (status, text) = crate::test_support::post_raw(
             &state,
-            "/v1/auth/login",
+            "/v1/session",
             "unused-token",
             "application/json",
             body,

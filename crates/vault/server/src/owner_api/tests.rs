@@ -3,8 +3,8 @@ use axum::http::StatusCode;
 use super::*;
 use crate::test_support::{
     claim_vault_as_owner, delete_json, delete_status, get_json, get_status, login_status,
-    patch_status, post_created_json, post_json, post_status, put_status, register_via_api,
-    seed_one_message, test_vault,
+    patch_status, post_created_json, post_status, put_status, register_via_api, seed_one_message,
+    sign_in, test_vault,
 };
 
 /// One case per route: an ordinary session gets 403 on every handler, not
@@ -210,7 +210,7 @@ async fn the_owners_own_id_is_not_reachable_through_these_routes() {
     // And the refusals changed nothing: the owner still signs in.
     assert_eq!(
         login_status(&state, "keeper", "hunter2hunter2").await,
-        StatusCode::OK
+        StatusCode::CREATED
     );
 }
 
@@ -344,7 +344,7 @@ async fn a_created_account_must_replace_the_password_the_owner_chose() {
     assert!(created.can_import, "and is otherwise an ordinary account");
     assert_eq!(
         login_status(&state, "carol", "hunter2hunter2").await,
-        StatusCode::OK,
+        StatusCode::CREATED,
         "the owner's password signs in once"
     );
 }
@@ -406,13 +406,7 @@ async fn changing_the_password_clears_the_forced_change() {
     .await;
     assert!(created.must_change_password);
 
-    let login: serde_json::Value = post_json(
-        &state,
-        "/v1/auth/login",
-        "",
-        serde_json::json!({ "username": "carol", "password": "hunter2hunter2" }),
-    )
-    .await;
+    let login = sign_in(&state, "carol", "hunter2hunter2").await;
     let token = login["token"].as_str().unwrap();
 
     let _changed: serde_json::Value = crate::test_support::put_json(
@@ -452,7 +446,7 @@ async fn setting_a_password_lets_the_new_password_sign_in_and_owes_a_change() {
 
     assert_eq!(
         login_status(&state, "bob", "resetbytheowner").await,
-        StatusCode::OK
+        StatusCode::CREATED
     );
     assert_eq!(
         login_status(&state, "bob", "hunter2hunter2").await,

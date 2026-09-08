@@ -13,7 +13,7 @@ import { getToken, setBaseUrl, setToken } from "./api";
 import { parsePersistedAuth } from "./authGuards";
 import { isTauri } from "./tauri-check";
 import { fetchAccountProfileFor } from "./useAccountProfile";
-import { checkAuth, logout as vaultLogout } from "./vaultApi";
+import { getSession, logout as vaultLogout } from "./vaultApi";
 
 interface AuthState {
   serverUrl: string;
@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         setBaseUrl(state.serverUrl);
         setToken(state.token);
-        await checkAuth();
+        await getSession();
         if (cancelled) return;
 
         // Warm the profile before the app renders. Whether this account still

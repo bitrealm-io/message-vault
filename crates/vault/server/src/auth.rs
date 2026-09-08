@@ -1,10 +1,10 @@
-//! Authentication handlers: register, login, session check, and logout.
+//! Registration, and the Session singleton: `POST`, `GET` and `DELETE /v1/session`.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use crate::extract::{Json, Query};
+use crate::extract::Json;
 use anyhow::Result;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use axum::extract::State;
@@ -15,7 +15,7 @@ use sqlx::{AnyConnection, AnyPool};
 
 use crate::db::{account_profile, api_tokens, schema, session_tokens};
 use crate::dedupe;
-use crate::server::{ApiError, AppState, AuthIdentity};
+use crate::server::{ApiError, AppState, AuthIdentity, Created};
 
 /// Max password bytes accepted before hashing (registration / login / change).
 pub(crate) const MAX_PASSWORD_BYTES: usize = 1024;
@@ -27,7 +27,7 @@ pub(crate) const AUTH_RATE_MAX: usize = 20;
 static DUMMY_PASSWORD_HASH: OnceLock<String> = OnceLock::new();
 
 /// Sliding-window hit counts for the unauthenticated auth endpoints, keyed by
-/// bucket (`register:<username>`, `login:<username>`).
+/// bucket (`register:<username>`, `session:<username>`).
 ///
 /// This lives on [`AppState`] rather than in a process-global static: a served
 /// vault builds exactly one state, so the limiter still spans the whole server,
@@ -98,9 +98,9 @@ pub struct RegisterRequest {
     pub phone: Option<String>,
 }
 
-/// Username and password.
+/// Username and password, the body of `POST /v1/session`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct LoginRequest {
+pub struct CreateSessionRequest {
     /// Login username.
     pub username: String,
     /// Login password.
@@ -110,7 +110,7 @@ pub struct LoginRequest {
 
 /// Session token plus the account id and username it belongs to.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct AuthTokenResponse {
+pub struct SessionTokenResponse {
     /// Session token to send as `Authorization: Bearer …`.
     pub token: String,
     /// Account id the session belongs to.
@@ -119,18 +119,18 @@ pub struct AuthTokenResponse {
     pub username: String,
 }
 
-impl AuthTokenResponse {
+impl SessionTokenResponse {
     /// Issue (or reuse) the session token for an existing account. Uses the
     /// account id when the row has no username.
     async fn for_existing_account(
         conn: &mut AnyConnection,
         account_id: String,
-    ) -> Result<AuthTokenResponse> {
+    ) -> Result<SessionTokenResponse> {
         let token = session_tokens::get_or_create_session_token(conn, &account_id).await?;
         let username = account_profile::username_for_account(conn, &account_id)
             .await?
             .unwrap_or_else(|| account_id.clone());
-        Ok(AuthTokenResponse {
+        Ok(SessionTokenResponse {
             token,
             account_id,
             username,
@@ -229,15 +229,9 @@ pub(crate) fn is_valid_username(s: &str) -> bool {
         .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct AuthCheckQuery {
-    #[serde(default)]
-    account: Option<String>,
-}
-
-/// Token check result: account, username, sources.
+/// The signed-in credential's account, username, and import sources.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct AuthCheckResponse {
+pub(crate) struct SessionResponse {
     sources: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     account_id: Option<String>,
@@ -245,43 +239,28 @@ pub(crate) struct AuthCheckResponse {
     username: Option<String>,
 }
 
-/// Check the Bearer token and return the account it resolves to, its username,
-/// and its import sources.
+/// The Session the bearer token names: its account, username, and import
+/// sources. A session token and an API token both answer, because a program
+/// checking its token needs the same facts as a browser restoring a sign-in.
 #[utoipa::path(
     get,
-    path = "/v1/auth/check",
-    tag = "Auth",
+    path = "/v1/session",
+    tag = "Session",
     security(("bearer" = [])),
-    params(("account" = Option<String>, Query, description = "Must match the token account")),
     responses(
-        (status = 200, body = AuthCheckResponse),
+        (status = 200, body = SessionResponse),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn auth_check(
+pub(crate) async fn get_session_handler(
     State(state): State<AppState>,
     auth: AuthIdentity,
-    Query(query): Query<AuthCheckQuery>,
-) -> Result<Json<AuthCheckResponse>, ApiError> {
+) -> Result<Json<SessionResponse>, ApiError> {
     let account_id = auth.account_id;
     let username = load_username(&state.db, &account_id).await?;
-
-    if let Some(q) = query.account.as_deref().and_then(message_ir::trimmed) {
-        let resolved = lookup_or_resolve_query(&state.db, q).await?;
-        let matches = match resolved {
-            Some(resolved) => resolved == account_id,
-            None => q == account_id,
-        };
-        if !matches {
-            let for_user = username.as_deref().unwrap_or(account_id.as_str());
-            return Err(ApiError::InsufficientScope(format!(
-                "account query does not match token's account (token is for {for_user})"
-            )));
-        }
-    }
     let sources = list_account_sources(&state.db, &account_id).await?;
-    Ok(Json(AuthCheckResponse {
+    Ok(Json(SessionResponse {
         sources,
         account_id: Some(account_id),
         username,
@@ -294,16 +273,6 @@ async fn list_account_sources(pool: &AnyPool, account_id: &str) -> Result<Vec<St
     // Read-only: do not run ensure_vault_schema (avoids write locks on auth).
     let mut conn = pool.acquire().await?;
     Ok(dedupe::source_priority_from_db(&mut conn, &account_id).await?)
-}
-
-/// Account id for a username or UUID, or `None` when no account matches.
-async fn lookup_or_resolve_query(
-    pool: &AnyPool,
-    account_ref: &str,
-) -> Result<Option<String>, ApiError> {
-    let account_ref = account_ref.to_string();
-    let mut conn = pool.acquire().await?;
-    Ok(account_profile::lookup_account_ref(&mut conn, &account_ref).await?)
 }
 
 /// Username for an account id, when the account has one.
@@ -346,7 +315,7 @@ pub(crate) async fn require_username_free(
     tag = "Auth",
     request_body = RegisterRequest,
     responses(
-        (status = 200, description = "Session issued", body = AuthTokenResponse),
+        (status = 200, description = "Session issued", body = SessionTokenResponse),
         (status = 400, description = "Invalid input", body = crate::problem::Problem),
         (status = 403, description = "Public registration is off", body = crate::problem::Problem),
         (status = 429, description = "Rate limited", body = crate::problem::Problem)
@@ -355,7 +324,7 @@ pub(crate) async fn require_username_free(
 pub async fn register_handler(
     State(state): State<AppState>,
     Json(req): Json<RegisterRequest>,
-) -> Result<Json<AuthTokenResponse>, ApiError> {
+) -> Result<Json<SessionTokenResponse>, ApiError> {
     let username = normalize_username(&req.username);
     if !is_valid_username(&username) {
         return Err(ApiError::validation(
@@ -431,36 +400,42 @@ pub async fn register_handler(
     tx.commit()
         .await
         .map_err(|e| ApiError::Internal(e.into()))?;
-    Ok(Json(AuthTokenResponse {
+    Ok(Json(SessionTokenResponse {
         token,
         account_id,
         username,
     }))
 }
 
-/// Verify a local username and password and return a session token.
+/// Sign in: verify a local username and password and answer the Session, a
+/// `201 Created` whose `Location` is the singleton itself.
 #[utoipa::path(
     post,
-    path = "/v1/auth/login",
-    tag = "Auth",
-    request_body = LoginRequest,
+    path = "/v1/session",
+    tag = "Session",
+    request_body = CreateSessionRequest,
     responses(
-        (status = 200, description = "Session issued", body = AuthTokenResponse),
+        (
+            status = 201,
+            description = "Signed in; the Session exists",
+            body = SessionTokenResponse,
+            headers(("Location" = String, description = "`/v1/session`"))
+        ),
         (status = 400, description = "Invalid input", body = crate::problem::Problem),
         (status = 401, description = "Invalid credentials", body = crate::problem::Problem),
         (status = 403, description = "Account is disabled", body = crate::problem::Problem),
         (status = 429, description = "Rate limited", body = crate::problem::Problem)
     )
 )]
-pub async fn login_handler(
+pub async fn create_session_handler(
     State(state): State<AppState>,
-    Json(req): Json<LoginRequest>,
-) -> Result<Json<AuthTokenResponse>, ApiError> {
+    Json(req): Json<CreateSessionRequest>,
+) -> Result<Created<SessionTokenResponse>, ApiError> {
     let username = normalize_username(&req.username);
     if username.is_empty() {
         return Err(ApiError::validation("username is required"));
     }
-    check_auth_rate_limit(&state.auth_rate_limits, &format!("login:{username}"))?;
+    check_auth_rate_limit(&state.auth_rate_limits, &format!("session:{username}"))?;
     if req.password.len() > MAX_PASSWORD_BYTES {
         return Err(ApiError::validation("password is too long"));
     }
@@ -489,9 +464,12 @@ pub async fn login_handler(
         return Err(ApiError::AccountDisabled("this account is disabled".into()));
     }
 
-    let response = AuthTokenResponse::for_existing_account(&mut conn, account_id).await?;
+    let body = SessionTokenResponse::for_existing_account(&mut conn, account_id).await?;
 
-    Ok(Json(response))
+    Ok(Created {
+        location: "/v1/session".to_string(),
+        body,
+    })
 }
 
 /// Why a password change was refused.
@@ -553,7 +531,7 @@ pub(crate) async fn change_password_on_conn(
 }
 
 // ---------------------------------------------------------------------------
-// Change-password / delete-account / logout handlers
+// Change-password and sign-out handlers
 // ---------------------------------------------------------------------------
 
 /// Revoke the session token.
@@ -562,18 +540,18 @@ async fn logout_on_conn(conn: &mut AnyConnection, token: &str) -> Result<()> {
     Ok(())
 }
 
-/// Revoke the presented session token.
+/// Sign out: revoke the presented session token, ending the Session.
 #[utoipa::path(
-    post,
-    path = "/v1/auth/logout",
-    tag = "Auth",
+    delete,
+    path = "/v1/session",
+    tag = "Session",
     security(("bearer" = [])),
     responses(
         (status = 204, description = "Signed out"),
         (status = 401, body = crate::problem::Problem)
     )
 )]
-pub async fn logout_handler(
+pub async fn delete_session_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<axum::http::StatusCode, ApiError> {

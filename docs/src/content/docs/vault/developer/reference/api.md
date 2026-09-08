@@ -95,7 +95,7 @@ A file the vault cannot read comes back as a 400 whose `error` names the line, o
 ## Verify a token
 
 ```bash title="Verify a token"
-curl -sS "http://127.0.0.1:8080/v1/auth/check" \
+curl -sS "http://127.0.0.1:8080/v1/session" \
   -H "Authorization: Bearer <import-api-token-from-settings>"
 ```
 

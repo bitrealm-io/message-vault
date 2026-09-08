@@ -1,9 +1,9 @@
-//! Typed login failures from `GET /v1/auth/check`.
+//! Typed login failures from `GET /v1/session`.
 //!
 //! Each variant has a stable `kind()` string for tests and a short
 //! `user_message()` for the desktop app banner.
 
-/// Failure from `GET /v1/auth/check`.
+/// Failure from `GET /v1/session`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AuthError {
     /// The vault URL could not be parsed as a valid HTTP URL.
@@ -37,14 +37,14 @@ pub enum AuthError {
         detail: String,
     },
     /// Connected, but the response body could not be read.
-    #[error("read auth/check body: {detail}")]
+    #[error("read session body: {detail}")]
     ReadResponse {
         /// The underlying read error.
         detail: String,
     },
     /// The endpoint returned HTML instead of the vault API.
     #[error(
-        "auth/check returned HTML from {url} (HTTP {status}). Vault URL must point at the vault host (TLS site or port 8080), not the Next.js browse UI alone (port 3000)"
+        "GET /v1/session returned HTML from {url} (HTTP {status}). Vault URL must point at the vault host (TLS site or port 8080), not the Next.js browse UI alone (port 3000)"
     )]
     WrongHostHtml {
         /// The endpoint that returned HTML.
@@ -64,7 +64,7 @@ pub enum AuthError {
     #[error("invalid vault key")]
     InvalidKey,
     /// The API key does not have permission for this vault.
-    #[error("auth/check failed (HTTP {status}): {body}")]
+    #[error("session check failed (HTTP {status}): {body}")]
     Forbidden {
         /// The HTTP status code returned.
         status: u16,
@@ -72,7 +72,7 @@ pub enum AuthError {
         body: String,
     },
     /// The vault API was not found at this URL.
-    #[error("auth/check failed (HTTP {status}): {body}")]
+    #[error("session check failed (HTTP {status}): {body}")]
     ApiNotFound {
         /// The HTTP status code returned.
         status: u16,
@@ -80,7 +80,7 @@ pub enum AuthError {
         body: String,
     },
     /// The vault rejected the request because it was rate limited.
-    #[error("auth/check failed (HTTP {status}): {body}")]
+    #[error("session check failed (HTTP {status}): {body}")]
     RateLimited {
         /// The HTTP status code returned.
         status: u16,
@@ -88,7 +88,7 @@ pub enum AuthError {
         body: String,
     },
     /// The vault failed while verifying the credentials.
-    #[error("auth/check failed (HTTP {status}): {body}")]
+    #[error("session check failed (HTTP {status}): {body}")]
     ServerError {
         /// The HTTP status code returned.
         status: u16,
@@ -96,7 +96,7 @@ pub enum AuthError {
         body: String,
     },
     /// The vault returned an unexpected HTTP status.
-    #[error("auth/check failed (HTTP {status}): {body}")]
+    #[error("session check failed (HTTP {status}): {body}")]
     HttpStatus {
         /// The HTTP status code returned.
         status: u16,
@@ -104,7 +104,7 @@ pub enum AuthError {
         body: String,
     },
     /// The response body was not recognizable JSON.
-    #[error("parse auth/check JSON from {url} (HTTP {status}): {snippet}")]
+    #[error("parse session JSON from {url} (HTTP {status}): {snippet}")]
     BadJson {
         /// The endpoint whose response could not be parsed.
         url: String,
@@ -114,13 +114,13 @@ pub enum AuthError {
         snippet: String,
     },
     /// The vault rejected the supplied credentials.
-    #[error("auth/check rejected: {message}")]
+    #[error("session check rejected: {message}")]
     Rejected {
         /// The rejection message from the vault.
         message: String,
     },
     /// The vault did not return an account id.
-    #[error("auth/check did not return account_id")]
+    #[error("session check did not return account_id")]
     MissingAccountId,
 }
 
@@ -180,7 +180,7 @@ impl AuthError {
                 "This API key does not have permission to access the specified vault.".into()
             }
             Self::ApiNotFound { .. } => {
-                "The vault API was not found at this URL. Enter the vault’s base URL without `/v1/auth/check`.".into()
+                "The vault API was not found at this URL. Enter the vault’s base URL without `/v1/session`.".into()
             }
             Self::RateLimited { .. } => {
                 "Too many verification attempts. Wait a moment, then try again.".into()
@@ -235,14 +235,14 @@ mod tests {
             ),
             (
                 AuthError::Network {
-                    url: "https://v/v1/auth/check".into(),
+                    url: "https://v/v1/session".into(),
                     detail: "dns".into(),
                 },
                 "network",
             ),
             (
                 AuthError::Timeout {
-                    url: "https://v/v1/auth/check".into(),
+                    url: "https://v/v1/session".into(),
                     detail: "timed out".into(),
                 },
                 "timeout",
@@ -255,7 +255,7 @@ mod tests {
             ),
             (
                 AuthError::WrongHostHtml {
-                    url: "https://app/v1/auth/check".into(),
+                    url: "https://app/v1/session".into(),
                     status: 200,
                 },
                 "wrong_host",
@@ -304,7 +304,7 @@ mod tests {
             ),
             (
                 AuthError::BadJson {
-                    url: "https://v/v1/auth/check".into(),
+                    url: "https://v/v1/session".into(),
                     status: 200,
                     snippet: "{".into(),
                 },

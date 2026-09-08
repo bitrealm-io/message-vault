@@ -366,7 +366,7 @@ async fn try_demo_route_is_gone() {
 
 #[tokio::test]
 async fn local_auth_routes_exist() {
-    for path in ["/v1/auth/register", "/v1/auth/login"] {
+    for path in ["/v1/auth/register", "/v1/session"] {
         assert_ne!(auth_route_status(path).await, StatusCode::NOT_FOUND);
     }
 }
@@ -1044,7 +1044,7 @@ async fn a_wrong_password_is_401_and_the_limit_answers_429_with_retry_after() {
     let client = reqwest::Client::new();
     let login = || {
         client
-            .post(format!("{}/v1/auth/login", server.base()))
+            .post(format!("{}/v1/session", server.base()))
             .json(&serde_json::json!({ "username": "alice", "password": "not-it-at-all" }))
             .send()
     };

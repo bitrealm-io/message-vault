@@ -239,7 +239,7 @@ What the change touches:
   validation problems as a `Vec<String>` (`pipeline.rs:87`), which is the shape
   `errors` wants.
 
-Two sub-questions are settled and one is not:
+All three sub-questions are settled:
 
 1. **The `type` URL points at a real page.** Each problem type gets a page under
    `bitrealm.io/vault/developer/errors/`, and `type` is that page's URL. Only
@@ -248,8 +248,22 @@ Two sub-questions are settled and one is not:
 2. **The taxonomy is per problem, not per status.** The first pass is
    `docs/agents/http-api-problem-types.md`: fifteen types covering the 61
    `BadRequest` sites and the other `ApiError` variants.
-3. **Whether a request id travels in the body is still open.** See the question
-   below.
+3. **A request id travels in both the header and the body.** `tower-http`'s
+   `request-id` feature is switched on, giving `SetRequestIdLayer` and
+   `PropagateRequestIdLayer`; the id joins the `TraceLayer` span
+   (`crates/vault/server/src/server.rs:600`) so every log line under a request
+   carries it. Every response returns it as `x-request-id`, successes included,
+   so a caller can quote an id for a request that answered `200 OK` and did the
+   wrong thing. Every problem body repeats it as a `request_id` extension
+   member, which RFC 7807 permits, so the person reading the failure can quote
+   it without opening developer tools. It appears on every problem rather than
+   only on `5xx`: ADR-0005's thesis is one shape for every response, and a body
+   whose fields vary by status is the drift it exists to stop. RFC 7807's own
+   `instance` member is left unused, because the specification defines it as a
+   URI reference and a bare id is not one.
+
+This closes finding F1: the error body carries a type, a title, a status, a
+detail, and the id that joins a client's failure to the log line recording it.
 
 **Sorting is a request parameter, in one spelling, on every list.**
 `sort=-field,field`, comma-separated keys with a `-` prefix for descending, on
@@ -270,23 +284,10 @@ size that `fields=` exists to reduce.
 
 ## Open questions
 
-Two remain. Each changes what the written rule says.
+One remains.
 
-1. **Whether a request id travels in the error body.** The vault deliberately
-   splits what a client sees from what the operator sees: a `500 Internal
-   Server Error` answers one stable sentence while the whole context chain goes
-   to the log (`crates/vault/server/src/server.rs:390`). Nothing joins the two
-   halves, so a person reporting a failure and the log line recording it can
-   only be matched by timestamp. A request id is the join. The vault already
-   runs a `TraceLayer` span per request (`server.rs:600`) and already depends on
-   `tower-http`, whose `request-id` feature is not enabled; turning it on gives
-   `SetRequestIdLayer` and `PropagateRequestIdLayer`. The question is whether
-   the id travels in the response, and where: an `x-request-id` header only, a
-   `request_id` extension member on every problem, or RFC 7807's own `instance`
-   member, which the specification defines as a URI identifying the specific
-   occurrence.
-2. **Content negotiation.** Is `406 Not Acceptable` worth implementing for an
+1. **Content negotiation.** Is `406 Not Acceptable` worth implementing for an
    interface that speaks only `application/json`, given Export selects its
-   format by query parameter rather than by `Accept`? The answer now also has
-   to cover `application/problem+json`, which the error decision adds as a
-   second response type.
+   format by query parameter rather than by `Accept`? The answer also has to
+   cover `application/problem+json`, which the error decision adds as a second
+   response type.

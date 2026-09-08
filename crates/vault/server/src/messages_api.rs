@@ -12,11 +12,15 @@ use axum::extract::State;
 use sqlx::AnyConnection;
 use sqlx::{Executor, Row};
 
-use crate::db::conversation_messages::{Message, load_messages, messages_from_sql};
+use crate::db::conversation_messages::{
+    DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, load_messages, messages_from_sql,
+};
 use crate::db::dialect::engine_of;
 use crate::db::engine::DbEngine;
 use crate::db::sql::{bind_all, renumber_placeholders};
-use crate::paging::{DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, PageQuery, page_params};
+use crate::paging::{
+    DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, PageQuery, page_params, parse_sort,
+};
 use crate::server::{ApiError, AppState, FullAccess};
 
 /// Compile a query against the Messages list of the search language.
@@ -61,9 +65,9 @@ pub(crate) async fn count_matching_messages(
     Ok(n.max(0) as u64)
 }
 
-/// Messages matching `q`, newest page by page, as the search language ranks
-/// them: the same rows `GET /v1/export/messages` would return, behind a
-/// signed-in session with the list defaults and the list's offset ceiling.
+/// Messages matching `q`, oldest first unless `sort` says otherwise: the same
+/// rows `GET /v1/export/messages` would return, behind a signed-in session
+/// with the list defaults and the list's offset ceiling.
 #[utoipa::path(
     get,
     path = "/v1/messages",
@@ -72,7 +76,8 @@ pub(crate) async fn count_matching_messages(
     params(
         ("q" = Option<String>, Query, description = "Search query in the Messages list's words; empty matches every message"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
-        ("offset" = Option<usize>, Query, description = "Page offset, max 50000")
+        ("offset" = Option<usize>, Query, description = "Page offset, max 50000"),
+        ("sort" = Option<String>, Query, description = "`date` or `-date`. Default `date`, oldest first.")
     ),
     responses(
         (status = 200, body = crate::paging::Page<Message>),
@@ -101,11 +106,17 @@ pub(crate) async fn messages_list_handler(
         query.q.as_deref().unwrap_or(""),
         clock,
     )?;
+    let order = parse_sort(
+        query.sort.as_deref(),
+        &MESSAGE_SORT_KEYS,
+        &DEFAULT_MESSAGE_SORT,
+    )?;
     let total = count_matching_messages(&mut conn, &filter).await?;
     let items = load_messages(
         &mut conn,
         filter.where_sql(),
         filter.params(),
+        &order,
         page.limit as u32,
         page.offset as u32,
     )

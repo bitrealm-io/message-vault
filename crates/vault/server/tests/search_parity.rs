@@ -165,6 +165,8 @@ async fn run_against(conn: &mut AnyConnection) -> Vec<(&'static str, Vec<i64>)> 
                     chrono_tz::UTC,
                     chrono::NaiveDate::from_ymd_opt(2026, 9, 2).unwrap(),
                 ),
+
+                order: message_vault_server::DEFAULT_MESSAGE_SORT.to_vec(),
             },
         )
         .await
@@ -207,6 +209,8 @@ async fn assert_diacritics_exception(conn: &mut AnyConnection, engine: Engine) {
                 chrono_tz::UTC,
                 chrono::NaiveDate::from_ymd_opt(2026, 9, 2).unwrap(),
             ),
+
+            order: message_vault_server::DEFAULT_MESSAGE_SORT.to_vec(),
         },
     )
     .await

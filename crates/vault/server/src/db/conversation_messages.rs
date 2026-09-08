@@ -18,6 +18,7 @@ pub use vault_api_types::{Attachment, Message, MessageConversation, Tapback};
 
 use crate::db::participant_names::load_for_conversations;
 use crate::db::sql::{SqlParam, bind_all, group_rows_by_id, renumber_placeholders};
+use crate::paging::{Direction, SortKey};
 use crate::server::ApiError;
 
 /// Sorted, deduplicated ids for an `IN` list.
@@ -86,13 +87,37 @@ pub(crate) fn conversation_join_sql() -> String {
 /// # Errors
 ///
 /// Returns an error when a database statement fails.
+/// The one key every message list accepts in `sort=`: `date`, the message's
+/// timestamp, with `sort_order` and `id` breaking ties the same way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageSort {
+    /// The message's timestamp, ties broken by `sort_order` then `id`.
+    Date,
+}
+
+/// The accepted keys, as `sort=` spells them.
+pub const MESSAGE_SORT_KEYS: [(&str, MessageSort); 1] = [("date", MessageSort::Date)];
+
+/// Oldest first: what every message list shows when `sort` is absent, so a
+/// conversation reads top to bottom.
+pub const DEFAULT_MESSAGE_SORT: [SortKey<MessageSort>; 1] = [SortKey {
+    key: MessageSort::Date,
+    direction: Direction::Asc,
+}];
+
 pub async fn load_messages(
     conn: &mut AnyConnection,
     where_sql: &str,
     params: &[SqlParam],
+    order: &[SortKey<MessageSort>],
     limit: u32,
     offset: u32,
 ) -> Result<Vec<Message>, ApiError> {
+    let direction = order
+        .iter()
+        .find(|k| k.key == MessageSort::Date)
+        .map_or(Direction::Asc, |k| k.direction)
+        .sql();
     let mut sql = format!(
         "SELECT m.id, m.conversation_id, m.source, m.service, m.guid, m.timestamp,
                 m.sort_order, m.is_from_me, hs.raw AS sender, m.subject, m.body,
@@ -104,7 +129,9 @@ pub async fn load_messages(
         messages_from_sql = messages_from_sql(),
     );
     let mut params = params.to_vec();
-    sql.push_str(" ORDER BY m.timestamp ASC, m.sort_order ASC, m.id ASC LIMIT ? OFFSET ?");
+    sql.push_str(&format!(
+        " ORDER BY m.timestamp {direction}, m.sort_order {direction}, m.id {direction} LIMIT ? OFFSET ?"
+    ));
     params.push(SqlParam::Int(limit as i64));
     params.push(SqlParam::Int(offset as i64));
 

@@ -251,8 +251,8 @@ export type ConversationListParams = {
   q?: string;
   limit?: number;
   offset?: number;
+  /** `sort=-field,field`: `date` or `messages`, a leading `-` for descending. */
   sort?: string;
-  order?: string;
   count_only?: boolean;
 };
 

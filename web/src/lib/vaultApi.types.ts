@@ -525,7 +525,7 @@ export interface paths {
         };
         /**
          * Page through conversations with participants, message counts, and tags.
-         *     Ordered by most recent activity unless `sort` and `order` say otherwise.
+         *     Newest activity first unless `sort` says otherwise.
          */
         get: operations["conversations_list_handler"];
         put?: never;
@@ -873,9 +873,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Messages matching `q`, newest page by page, as the search language ranks
-         *     them: the same rows `GET /v1/export/messages` would return, behind a
-         *     signed-in session with the list defaults and the list's offset ceiling.
+         * Messages matching `q`, oldest first unless `sort` says otherwise: the same
+         *     rows `GET /v1/export/messages` would return, behind a signed-in session
+         *     with the list defaults and the list's offset ceiling.
          */
         get: operations["messages_list_handler"];
         put?: never;
@@ -4063,6 +4063,8 @@ export interface operations {
                 limit?: number;
                 /** @description Page offset, max 50000 */
                 offset?: number;
+                /** @description `name` or `-name`. Default `name`. */
+                sort?: string;
             };
             header?: never;
             path?: never;
@@ -4560,10 +4562,8 @@ export interface operations {
                 limit?: number;
                 /** @description Page offset, max 50000 */
                 offset?: number;
-                /** @description Order by `date` (last message, default) or `messages` (message count) */
+                /** @description Comma-separated keys, `-` for descending: `date` (last message) or `messages` (message count). Default `-date`. */
                 sort?: string;
-                /** @description `asc` or `desc` (default) */
-                order?: string;
             };
             header?: never;
             path?: never;
@@ -4722,6 +4722,8 @@ export interface operations {
                 offset?: number;
                 /** @description Narrow to one calendar year, in the vault's stored offset */
                 year?: number;
+                /** @description `date` or `-date`. Default `date`, oldest first. */
+                sort?: string;
             };
             header?: never;
             path: {
@@ -4927,6 +4929,8 @@ export interface operations {
                 limit?: number;
                 /** @description Page offset; no cap, an offset past the end is an empty page */
                 offset?: number;
+                /** @description `date` or `-date`. Default `date`, oldest first. */
+                sort?: string;
                 account?: string;
             };
             header?: never;
@@ -5847,6 +5851,8 @@ export interface operations {
                 limit?: number;
                 /** @description Page offset, max 50000 */
                 offset?: number;
+                /** @description `date` or `-date`. Default `date`, oldest first. */
+                sort?: string;
             };
             header?: never;
             path?: never;

@@ -44,6 +44,95 @@ pub struct PageQuery {
     pub limit: Option<usize>,
     #[serde(default)]
     pub offset: Option<usize>,
+    /// `sort=-field,field`, parsed by [`parse_sort`] against the keys the
+    /// route accepts.
+    #[serde(default)]
+    pub sort: Option<String>,
+}
+
+/// Which way a sort key runs, from the sign in front of it: `-date` descends,
+/// `date` ascends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Asc,
+    Desc,
+}
+
+impl Direction {
+    /// The SQL keyword.
+    #[must_use]
+    pub const fn sql(self) -> &'static str {
+        match self {
+            Self::Asc => "ASC",
+            Self::Desc => "DESC",
+        }
+    }
+}
+
+/// One key of a `sort=` parameter: the column, as the route names it, and
+/// which way it runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SortKey<K> {
+    pub key: K,
+    pub direction: Direction,
+}
+
+/// Parse `sort=-field,field` against the keys a list accepts (ADR-0009):
+/// comma-separated keys, a leading `-` for descending. Absent or blank is
+/// `default`. An unknown or repeated key is `validation-failed`, naming the
+/// key and the accepted set, the way the search language refuses an unknown
+/// word; nothing falls back silently.
+///
+/// # Errors
+///
+/// `validation-failed` for a key the route does not accept, a key named
+/// twice, or an empty member such as `sort=,`.
+pub fn parse_sort<K: Copy + PartialEq>(
+    raw: Option<&str>,
+    accepted: &[(&str, K)],
+    default: &[SortKey<K>],
+) -> Result<Vec<SortKey<K>>, ApiError> {
+    let raw = raw.map(str::trim).unwrap_or_default();
+    if raw.is_empty() {
+        return Ok(default.to_vec());
+    }
+    let names = || {
+        accepted
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let mut keys: Vec<SortKey<K>> = Vec::new();
+    for member in raw.split(',') {
+        let member = member.trim();
+        let (name, direction) = match member.strip_prefix('-') {
+            Some(rest) => (rest.trim(), Direction::Desc),
+            None => (member, Direction::Asc),
+        };
+        if name.is_empty() {
+            return Err(ApiError::validation(format!(
+                "sort: empty key in '{raw}'; accepted keys are {}",
+                names()
+            )));
+        }
+        let Some((_, key)) = accepted.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)) else {
+            return Err(ApiError::validation(format!(
+                "sort: unknown key '{name}'; accepted keys are {}",
+                names()
+            )));
+        };
+        if keys.iter().any(|k| k.key == *key) {
+            return Err(ApiError::validation(format!(
+                "sort: key '{name}' is named twice"
+            )));
+        }
+        keys.push(SortKey {
+            key: *key,
+            direction,
+        });
+    }
+    Ok(keys)
 }
 
 /// A validated `limit` and `offset`.
@@ -84,6 +173,56 @@ pub fn page_params(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Key {
+        Date,
+        Messages,
+    }
+    const KEYS: [(&str, Key); 2] = [("date", Key::Date), ("messages", Key::Messages)];
+    const DEFAULT: [SortKey<Key>; 1] = [SortKey {
+        key: Key::Date,
+        direction: Direction::Desc,
+    }];
+
+    #[test]
+    fn a_sort_is_keys_with_a_sign_and_blank_is_the_default() {
+        let parsed = parse_sort(Some("-messages, date"), &KEYS, &DEFAULT).unwrap();
+        assert_eq!(
+            parsed,
+            [
+                SortKey {
+                    key: Key::Messages,
+                    direction: Direction::Desc
+                },
+                SortKey {
+                    key: Key::Date,
+                    direction: Direction::Asc
+                }
+            ]
+        );
+        assert_eq!(parse_sort(None, &KEYS, &DEFAULT).unwrap(), DEFAULT);
+        assert_eq!(parse_sort(Some("  "), &KEYS, &DEFAULT).unwrap(), DEFAULT);
+        assert_eq!(
+            parse_sort(Some("DATE"), &KEYS, &DEFAULT).unwrap()[0].key,
+            Key::Date
+        );
+    }
+
+    #[test]
+    fn an_unknown_or_repeated_key_is_refused_naming_the_accepted_set() {
+        let err = parse_sort(Some("colour"), &KEYS, &DEFAULT).unwrap_err();
+        assert!(matches!(
+            err,
+            ApiError::ValidationFailed(m)
+                if m == ["sort: unknown key 'colour'; accepted keys are date, messages"]
+        ));
+        let err = parse_sort(Some("date,-date"), &KEYS, &DEFAULT).unwrap_err();
+        assert!(
+            matches!(err, ApiError::ValidationFailed(m) if m == ["sort: key 'date' is named twice"])
+        );
+        assert!(parse_sort(Some("date,"), &KEYS, &DEFAULT).is_err());
+    }
 
     #[test]
     fn defaults_fill_in_when_nothing_is_sent() {

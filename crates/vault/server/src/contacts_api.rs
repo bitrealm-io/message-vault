@@ -14,12 +14,13 @@ use serde::{Deserialize, Serialize};
 use sqlx::AnyConnection;
 
 use crate::db::contacts::{self, contact_id_for_handle};
-use crate::db::dialect::{engine_of, group_concat_unit_separator, order_by_name_ci};
+use crate::db::dialect::{engine_of, group_concat_unit_separator, name_ci_expr};
 use crate::db::handles::{infer_handle_type_from_shape, normalize_handle};
 use crate::db::sql::{SqlParam, bind_args, in_placeholders, renumber_placeholders};
 use crate::db::trash::{DeleteOutcome, Trashable, delete_trashed, move_to_trash, restore};
 use crate::paging::{
-    DEFAULT_LIST_LIMIT, MAX_CONTACT_SUMMARY_IDS, MAX_LIST_OFFSET, Page, PageQuery, page_params,
+    DEFAULT_LIST_LIMIT, Direction, MAX_CONTACT_SUMMARY_IDS, MAX_LIST_OFFSET, Page, PageQuery,
+    SortKey, page_params, parse_sort,
 };
 use crate::search::emit::{NOT_TRASHED_CONTACT, NOT_TRASHED_CONVERSATION};
 use crate::server::{ApiError, AppState, FullAccess, FullDeleteAccess, content_type_base};
@@ -209,10 +210,28 @@ fn involves_contact_sql() -> String {
 ///
 /// `BadRequest` for a query the language refuses; `Internal` when a
 /// statement fails.
-pub async fn list_contacts(
+/// The keys `GET /v1/contacts` accepts in `sort=`. One today; a key with
+/// no caller is a key not offered (last heard from is #497).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContactSort {
+    /// Display name, case-folded.
+    Name,
+}
+
+/// The accepted keys, as `sort=` spells them.
+pub const CONTACT_SORT_KEYS: [(&str, ContactSort); 1] = [("name", ContactSort::Name)];
+
+/// A to Z: what the list shows when `sort` is absent.
+pub const DEFAULT_CONTACT_SORT: [SortKey<ContactSort>; 1] = [SortKey {
+    key: ContactSort::Name,
+    direction: Direction::Asc,
+}];
+
+pub async fn list_contacts_sorted(
     conn: &mut AnyConnection,
     account_id: &str,
     q: &str,
+    order: &[SortKey<ContactSort>],
     limit: usize,
     offset: usize,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
@@ -239,8 +258,21 @@ pub async fn list_contacts(
 
     // `name` is a select-list alias and the sort applies lower() to it. SQLite
     // allows that; Postgres only allows a bare alias in ORDER BY, so the rows
-    // are sorted as a derived table where `name` is a real column.
-    let order_by = format!("{}, ct.id", order_by_name_ci(engine, "name"));
+    // are sorted as a derived table where `name` is a real column. `ct.id`
+    // breaks ties in the same direction, so paging cannot repeat a row.
+    let order_by = {
+        let mut parts: Vec<String> = order
+            .iter()
+            .map(|k| match k.key {
+                ContactSort::Name => {
+                    format!("{} {}", name_ci_expr(engine, "name"), k.direction.sql())
+                }
+            })
+            .collect();
+        let tie = order.last().map_or(Direction::Asc, |k| k.direction);
+        parts.push(format!("ct.id {}", tie.sql()));
+        format!("ORDER BY {}", parts.join(", "))
+    };
     let sql = renumber_placeholders(&format!(
         "SELECT * FROM (SELECT ct.id,
                 COALESCE(NULLIF(trim(ct.preferred_name), ''), '(unknown)') AS name,
@@ -1207,7 +1239,8 @@ impl ContactEditor<'_> {
     params(
         ("q" = Option<String>, Query, description = "Contact search; empty lists all"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
-        ("offset" = Option<usize>, Query, description = "Page offset, max 50000")
+        ("offset" = Option<usize>, Query, description = "Page offset, max 50000"),
+        ("sort" = Option<String>, Query, description = "`name` or `-name`. Default `name`.")
     ),
     responses(
         (status = 200, body = Page<ContactSummary>),
@@ -1230,11 +1263,17 @@ pub(crate) async fn contacts_list_handler(
         DEFAULT_LIST_LIMIT,
         Some(MAX_LIST_OFFSET),
     )?;
+    let order = parse_sort(
+        query.sort.as_deref(),
+        &CONTACT_SORT_KEYS,
+        &DEFAULT_CONTACT_SORT,
+    )?;
     let clock = crate::db::account_profile::account_clock(&mut conn, &auth.account_id).await?;
-    let result = list_contacts(
+    let result = list_contacts_sorted(
         &mut conn,
         &auth.account_id,
         &q,
+        &order,
         page.limit,
         page.offset,
         clock,

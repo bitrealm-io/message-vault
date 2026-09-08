@@ -9,7 +9,9 @@ use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use sqlx::AnyConnection;
 
-use crate::db::conversation_messages::{Message, load_messages};
+use crate::db::conversation_messages::{
+    DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, MessageSort, load_messages,
+};
 use crate::db::dialect::engine_of;
 use crate::db::ownership::owns_conversation;
 use crate::db::participant_names::{Participant, load_for_conversations};
@@ -17,88 +19,63 @@ use crate::db::sql::{
     SqlParam, bind_args, fold_in_id_chunks, in_placeholders, renumber_placeholders,
 };
 use crate::db::trash::{DeleteOutcome, Trashable, delete_trashed, move_to_trash, restore};
-use crate::paging::{DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, page_params};
+use crate::paging::{
+    DEFAULT_LIST_LIMIT, Direction, MAX_LIST_OFFSET, Page, PageQuery, SortKey, page_params,
+    parse_sort,
+};
 use crate::server::{ApiError, AppState, FullAccess, FullDeleteAccess};
 use crate::trash_api::remove_orphaned_files;
 
-/// Column the conversation list is ordered by.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// The keys `GET /v1/conversations` accepts in `sort=`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConversationSort {
     /// Timestamp of the most recent non-duplicate message in the thread.
-    #[default]
     Date,
     /// Number of non-duplicate messages in the thread.
     Messages,
 }
 
-impl ConversationSort {
-    /// Read a `sort=` value, falling back to the default.
-    ///
-    /// Deliberately lenient: before this parameter existed an unrecognised
-    /// query parameter was ignored, and a stale bookmark or a third-party
-    /// client sending `sort=` or `sort=oldest` should still get a conversation
-    /// list rather than a 400 for the whole request.
-    fn from_param(raw: &str) -> Self {
-        match raw.trim().to_ascii_lowercase().as_str() {
-            "messages" => Self::Messages,
-            _ => Self::Date,
-        }
-    }
-}
+/// The accepted keys, as `sort=` spells them.
+pub const CONVERSATION_SORT_KEYS: [(&str, ConversationSort); 2] = [
+    ("date", ConversationSort::Date),
+    ("messages", ConversationSort::Messages),
+];
 
-/// Ascending or descending.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum SortOrder {
-    Asc,
-    #[default]
-    Desc,
-}
+/// Newest activity first: what the list shows when `sort` is absent.
+pub const DEFAULT_CONVERSATION_SORT: [SortKey<ConversationSort>; 1] = [SortKey {
+    key: ConversationSort::Date,
+    direction: Direction::Desc,
+}];
 
-impl SortOrder {
-    /// Read an `order=` value, falling back to the default. Lenient for the
-    /// same reason as [`ConversationSort::from_param`].
-    fn from_param(raw: &str) -> Self {
-        match raw.trim().to_ascii_lowercase().as_str() {
-            "asc" => Self::Asc,
-            _ => Self::Desc,
-        }
-    }
-}
-
-/// How to order a conversation page. Defaults to newest activity first.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct ConversationOrder {
-    pub sort: ConversationSort,
-    pub order: SortOrder,
-}
-
-impl ConversationOrder {
-    /// The `ORDER BY` body for this ordering.
-    ///
-    /// Every arm is a fixed literal chosen by matching on an enum, so no part
-    /// of the request reaches the SQL text. Both columns are output aliases of
-    /// the page query, which SQLite and Postgres each allow in `ORDER BY`.
-    /// `c.id` breaks ties so paging cannot repeat or skip a row.
-    ///
-    /// `last_message_at` is NULL for a thread whose every message is a
-    /// duplicate, and the two engines disagree about where NULLs belong:
-    /// SQLite sorts them lowest, while Postgres defaults to NULLS LAST when
-    /// ascending and NULLS FIRST when descending. Leading with
-    /// `(last_message_at IS NULL)` — false before true on both — pins those
-    /// threads to the end in either direction and keeps the two engines
-    /// agreeing.
-    fn order_by_sql(self) -> &'static str {
-        match (self.sort, self.order) {
-            (ConversationSort::Date, SortOrder::Desc) => {
-                "(last_message_at IS NULL) ASC, last_message_at DESC, c.id DESC"
-            }
-            (ConversationSort::Date, SortOrder::Asc) => {
-                "(last_message_at IS NULL) ASC, last_message_at ASC, c.id ASC"
-            }
-            (ConversationSort::Messages, SortOrder::Desc) => "message_count DESC, c.id DESC",
-            (ConversationSort::Messages, SortOrder::Asc) => "message_count ASC, c.id ASC",
-        }
-    }
+/// The `ORDER BY` body for a parsed `sort`.
+///
+/// Every part is a fixed literal chosen by matching on the enum, so no part
+/// of the request reaches the SQL text. Both columns are output aliases of
+/// the page query, which SQLite and Postgres each allow in `ORDER BY`.
+/// `c.id` breaks ties, in the direction of the last key, so paging cannot
+/// repeat or skip a row.
+///
+/// `last_message_at` is NULL for a thread whose every message is a
+/// duplicate, and the two engines disagree about where NULLs belong:
+/// SQLite sorts them lowest, while Postgres defaults to NULLS LAST when
+/// ascending and NULLS FIRST when descending. Leading with
+/// `(last_message_at IS NULL)` — false before true on both — pins those
+/// threads to the end in either direction and keeps the two engines
+/// agreeing.
+fn conversation_order_by(keys: &[SortKey<ConversationSort>]) -> String {
+    let mut parts: Vec<String> = keys
+        .iter()
+        .map(|k| match k.key {
+            ConversationSort::Date => format!(
+                "(last_message_at IS NULL) ASC, last_message_at {}",
+                k.direction.sql()
+            ),
+            ConversationSort::Messages => format!("message_count {}", k.direction.sql()),
+        })
+        .collect();
+    let tie = keys.last().map_or(Direction::Desc, |k| k.direction);
+    parts.push(format!("c.id {}", tie.sql()));
+    parts.join(", ")
 }
 
 /// Conversation row for the list: participants, counts, tags.
@@ -159,7 +136,7 @@ pub async fn list_conversations_sorted(
     conn: &mut AnyConnection,
     account_id: &str,
     q: &str,
-    order: ConversationOrder,
+    order: &[SortKey<ConversationSort>],
     limit: usize,
     offset: usize,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
@@ -194,7 +171,7 @@ pub async fn list_conversations_sorted(
     let sql = renumber_placeholders(&format!(
         "SELECT * FROM ({select} WHERE {where_sql}) AS c ORDER BY {order_by} LIMIT ? OFFSET ?",
         select = CONVERSATION_ROW_SELECT,
-        order_by = order.order_by_sql(),
+        order_by = conversation_order_by(order),
     ));
     let out = load_conversation_rows(conn, account_id, &sql, &params).await?;
     Ok(Page {
@@ -508,6 +485,7 @@ pub async fn get_conversation_messages(
     account_id: &str,
     conversation_id: i64,
     year: Option<i32>,
+    order: &[SortKey<MessageSort>],
     limit: usize,
     offset: usize,
 ) -> Result<Option<Page<Message>>, ApiError> {
@@ -526,7 +504,15 @@ pub async fn get_conversation_messages(
         .await?;
     let total = total.max(0) as u64;
 
-    let items = load_messages(conn, &where_sql, &params, limit as u32, offset as u32).await?;
+    let items = load_messages(
+        conn,
+        &where_sql,
+        &params,
+        order,
+        limit as u32,
+        offset as u32,
+    )
+    .await?;
 
     Ok(Some(Page {
         items,
@@ -536,29 +522,8 @@ pub async fn get_conversation_messages(
     }))
 }
 
-/// Query string for the conversation list.
-///
-/// Its own type rather than [`crate::paging::PageQuery`] because `sort` and
-/// `order` are meaningful here and nowhere else.
-#[derive(Debug, Deserialize)]
-pub(crate) struct ConversationsPageQuery {
-    #[serde(default)]
-    q: Option<String>,
-    #[serde(default)]
-    limit: Option<usize>,
-    #[serde(default)]
-    offset: Option<usize>,
-    /// Raw so an unrecognised value falls back to the default instead of
-    /// failing the request; parsed by [`ConversationSort::from_param`].
-    #[serde(default)]
-    sort: Option<String>,
-    /// Raw for the same reason as `sort`.
-    #[serde(default)]
-    order: Option<String>,
-}
-
 /// Page through conversations with participants, message counts, and tags.
-/// Ordered by most recent activity unless `sort` and `order` say otherwise.
+/// Newest activity first unless `sort` says otherwise.
 #[utoipa::path(
     get,
     path = "/v1/conversations",
@@ -568,8 +533,7 @@ pub(crate) struct ConversationsPageQuery {
         ("q" = Option<String>, Query, description = "Conversation search; empty lists all non-trashed"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
         ("offset" = Option<usize>, Query, description = "Page offset, max 50000"),
-        ("sort" = Option<String>, Query, description = "Order by `date` (last message, default) or `messages` (message count)"),
-        ("order" = Option<String>, Query, description = "`asc` or `desc` (default)")
+        ("sort" = Option<String>, Query, description = "Comma-separated keys, `-` for descending: `date` (last message) or `messages` (message count). Default `-date`.")
     ),
     responses(
         (status = 200, body = crate::paging::Page<crate::conversations_api::ConversationSummary>),
@@ -582,7 +546,7 @@ pub(crate) struct ConversationsPageQuery {
 pub(crate) async fn conversations_list_handler(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    Query(query): Query<ConversationsPageQuery>,
+    Query(query): Query<PageQuery>,
 ) -> Result<Json<Page<ConversationSummary>>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let q = query.q.unwrap_or_default();
@@ -592,22 +556,17 @@ pub(crate) async fn conversations_list_handler(
         DEFAULT_LIST_LIMIT,
         Some(MAX_LIST_OFFSET),
     )?;
-    let order = ConversationOrder {
-        sort: query
-            .sort
-            .as_deref()
-            .map_or_else(ConversationSort::default, ConversationSort::from_param),
-        order: query
-            .order
-            .as_deref()
-            .map_or_else(SortOrder::default, SortOrder::from_param),
-    };
+    let order = parse_sort(
+        query.sort.as_deref(),
+        &CONVERSATION_SORT_KEYS,
+        &DEFAULT_CONVERSATION_SORT,
+    )?;
     let clock = crate::db::account_profile::account_clock(&mut conn, &auth.account_id).await?;
     let result = list_conversations_sorted(
         &mut conn,
         &auth.account_id,
         &q,
-        order,
+        &order,
         page.limit,
         page.offset,
         clock,
@@ -683,6 +642,8 @@ pub(crate) struct ConversationMessagesQuery {
     /// year `date:YYYY` matches in the search language.
     #[serde(default)]
     year: Option<i32>,
+    #[serde(default)]
+    sort: Option<String>,
 }
 
 /// A conversation's messages, ascending by timestamp then `sort_order`. The
@@ -697,7 +658,8 @@ pub(crate) struct ConversationMessagesQuery {
         ("id" = i64, Path, description = "Conversation id"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
         ("offset" = Option<usize>, Query, description = "Page offset, max 50000"),
-        ("year" = Option<i32>, Query, description = "Narrow to one calendar year, in the vault's stored offset")
+        ("year" = Option<i32>, Query, description = "Narrow to one calendar year, in the vault's stored offset"),
+        ("sort" = Option<String>, Query, description = "`date` or `-date`. Default `date`, oldest first.")
     ),
     responses(
         (status = 200, body = crate::paging::Page<vault_api_types::Message>),
@@ -721,11 +683,17 @@ pub(crate) async fn conversation_messages_handler(
         DEFAULT_LIST_LIMIT,
         Some(MAX_LIST_OFFSET),
     )?;
+    let order = parse_sort(
+        query.sort.as_deref(),
+        &MESSAGE_SORT_KEYS,
+        &DEFAULT_MESSAGE_SORT,
+    )?;
     let result = get_conversation_messages(
         &mut conn,
         &auth.account_id,
         conversation_id,
         query.year,
+        &order,
         page.limit,
         page.offset,
     )

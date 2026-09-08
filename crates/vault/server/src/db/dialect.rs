@@ -37,9 +37,16 @@ pub fn name_eq_ci(engine: DbEngine, column: &str, placeholder: &str) -> String {
 /// `column` is the full column expression (`name`, `n.name`); append further
 /// sort keys with a leading comma.
 pub fn order_by_name_ci(engine: DbEngine, column: &str) -> String {
+    format!("ORDER BY {}", name_ci_expr(engine, column))
+}
+
+/// The case-folded form of a name column for an `ORDER BY`, so a caller can
+/// put its own direction after it: `name COLLATE NOCASE` on SQLite,
+/// `lower(name)` on Postgres.
+pub fn name_ci_expr(engine: DbEngine, column: &str) -> String {
     match engine {
-        DbEngine::Sqlite => format!("ORDER BY {column} COLLATE NOCASE"),
-        DbEngine::Postgres => format!("ORDER BY lower({column})"),
+        DbEngine::Sqlite => format!("{column} COLLATE NOCASE"),
+        DbEngine::Postgres => format!("lower({column})"),
     }
 }
 

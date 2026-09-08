@@ -44,6 +44,7 @@ pub mod test_support;
 pub(crate) mod trash_api;
 pub(crate) mod vault_api;
 
+pub use db::conversation_messages::{DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, MessageSort};
 pub use server::{ApiError, AppState, AuthCapability, AuthIdentity, resolve_auth, run};
 
 // Integration tests (crates/vault/server/tests) cannot see `pub(crate)`

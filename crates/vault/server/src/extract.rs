@@ -1,7 +1,7 @@
 //! Axum's `Query`, `Path`, and `Json`, answering as problem documents.
 //!
 //! Axum's extractors reject a bad request with a plain-text body. Every other
-//! failure on this interface is a problem document (ADR-0010), so these three
+//! failure on this interface is a problem document (`docs/agents/http-api-rules.md`), so these three
 //! wrappers turn each rejection into the [`ApiError`] on the right side of one
 //! line: a request that cannot be read is `malformed-body`, one that parsed
 //! and then broke a rule is `validation-failed`. Handlers use these names in

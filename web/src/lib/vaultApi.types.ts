@@ -2380,7 +2380,7 @@ export interface components {
         };
         /**
          * @description An RFC 7807 problem document: the body of every failure the vault answers,
-         *     served as `application/problem+json` (ADR-0010).
+         *     served as `application/problem+json` (`docs/agents/http-api-rules.md`).
          *
          *     `type` is the URL of the page describing this kind of failure, one page per
          *     type, or `about:blank` for an internal error. A validation failure carries

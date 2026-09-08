@@ -8768,7 +8768,7 @@
       },
       "Problem": {
         "type": "object",
-        "description": "An RFC 7807 problem document: the body of every failure the vault answers,\nserved as `application/problem+json` (ADR-0010).\n\n`type` is the URL of the page describing this kind of failure, one page per\ntype, or `about:blank` for an internal error. A validation failure carries\n`errors`, every field that failed, in place of `detail`. Every problem\nrepeats the response's `x-request-id` as `request_id`, so the person\nreading the failure and the operator reading the log are looking at the\nsame request.\n\nThe extension members belong to one type each: `word` and `did_you_mean`\nto `search-query-invalid`, `retry_after` to `rate-limited`.",
+        "description": "An RFC 7807 problem document: the body of every failure the vault answers,\nserved as `application/problem+json` (`docs/agents/http-api-rules.md`).\n\n`type` is the URL of the page describing this kind of failure, one page per\ntype, or `about:blank` for an internal error. A validation failure carries\n`errors`, every field that failed, in place of `detail`. Every problem\nrepeats the response's `x-request-id` as `request_id`, so the person\nreading the failure and the operator reading the log are looking at the\nsame request.\n\nThe extension members belong to one type each: `word` and `did_you_mean`\nto `search-query-invalid`, `retry_after` to `rate-limited`.",
         "required": [
           "type",
           "title",

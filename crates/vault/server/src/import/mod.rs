@@ -804,7 +804,7 @@ pub(crate) struct CompleteImportResponse {
 }
 
 /// `GET /v1/imports`: a page, narrowed to one `status` when given. The one
-/// list with a filter parameter (ADR-0009): it has no search language.
+/// list with a filter parameter (`docs/agents/http-api-rules.md`): it has no search language.
 #[derive(Debug, Deserialize)]
 pub(crate) struct ListImportsQuery {
     #[serde(default)]

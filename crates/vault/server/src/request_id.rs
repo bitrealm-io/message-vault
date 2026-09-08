@@ -1,5 +1,5 @@
 //! One id per request, made by the server, carried on every response and
-//! repeated in every problem body (ADR-0010).
+//! repeated in every problem body (`docs/agents/http-api-rules.md`).
 //!
 //! The id is set by [`layer`], the outermost layer on the router, and read by
 //! [`current`] wherever a problem document is built. It travels as a task

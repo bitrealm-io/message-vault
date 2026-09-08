@@ -15,7 +15,7 @@ Route schemas, status codes, and JSON fields live in the generated [HTTP API ref
 - A route with nothing to say on success answers `204 No Content`.
 - Every id is an integer, except API token ids and account ids, which are opaque strings.
 
-Why: [ADR-0005](https://github.com/bitrealm-io/message-vault/blob/main/docs/adr/0005-one-shape-for-every-route-on-the-http-interface.md).
+The full set of rules, with the reason behind each: [HTTP interface rules](https://github.com/bitrealm-io/message-vault/blob/main/docs/agents/http-api-rules.md).
 
 ## Trash is the only door to deletion
 

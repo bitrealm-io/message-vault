@@ -81,7 +81,7 @@ async fn the_messages_route_is_a_page_across_every_conversation() {
     assert_eq!(page["limit"], serde_json::json!(40));
     assert_eq!(page["offset"], serde_json::json!(0));
     assert_eq!(page["items"].as_array().unwrap().len(), 3);
-    // ADR-0005: a list is {items, total, limit, offset} and nothing else.
+    // `docs/agents/http-api-rules.md`: a list is {items, total, limit, offset} and nothing else.
     let keys: Vec<&str> = page
         .as_object()
         .unwrap()

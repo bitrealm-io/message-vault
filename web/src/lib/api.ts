@@ -22,7 +22,7 @@ export function getBaseUrl(): string {
 
 /**
  * The body of every failure the vault answers: an RFC 7807 problem document
- * (ADR-0010). `type` is the URL of the page describing the kind of failure,
+ * (`docs/agents/http-api-rules.md`). `type` is the URL of the page describing the kind of failure,
  * or `about:blank` for an internal error.
  */
 export type Problem = {

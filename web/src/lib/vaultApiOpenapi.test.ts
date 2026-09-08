@@ -168,6 +168,13 @@ const EXERCISED: Record<string, () => unknown> = {
   deleteSavedSearch: () => vaultApi.deleteSavedSearch(8),
   listSearchFields: () => vaultApi.listSearchFields("contacts"),
 
+  // Exports
+  listExports: () => vaultApi.listExports(),
+  getExport: () => vaultApi.getExport(2),
+  createExport: () => vaultApi.createExport({ scope: { kind: "everything" }, tool: "vault-pull" }),
+  completeExport: () => vaultApi.completeExport(2),
+  cancelExport: () => vaultApi.cancelExport(2),
+
   // Imports
   listImports: () => vaultApi.listImports(),
   getImport: () => vaultApi.getImport(4),

@@ -726,7 +726,7 @@ fn validate_complete_import_issues(issues: &[CompleteImportIssueBody]) -> Result
         match issue.kind.as_str() {
             "error" | "skip" => {}
             other => {
-                return Err(ApiError::BadRequest(format!(
+                return Err(ApiError::validation(format!(
                     "invalid import issue kind '{other}'; expected 'error' or 'skip'"
                 )));
             }
@@ -738,7 +738,7 @@ fn validate_complete_import_issues(issues: &[CompleteImportIssueBody]) -> Result
 fn validate_import_status(status: Option<&str>) -> Result<(), ApiError> {
     match status {
         None | Some("completed" | "completed_with_issues" | "failed") => Ok(()),
-        Some(other) => Err(ApiError::BadRequest(format!(
+        Some(other) => Err(ApiError::validation(format!(
             "invalid import status '{other}'; expected 'completed', 'completed_with_issues', or 'failed'"
         ))),
     }
@@ -840,8 +840,8 @@ pub(crate) struct ImportDetailResponse {
     params(("account" = Option<String>, Query)),
     responses(
         (status = 200, body = ImportsListResponse),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn imports_list_handler(
@@ -866,9 +866,9 @@ pub(crate) async fn imports_list_handler(
     params(("id" = i64, Path, description = "Import session id")),
     responses(
         (status = 200, body = ImportDetailResponse),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn imports_get_handler(
@@ -899,12 +899,12 @@ pub(crate) async fn imports_get_handler(
             body = CreateImportResponse,
             headers(("Location" = String, description = "Path of the new import"))
         ),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
+        (status = 400, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
         (
             status = 409,
-            body = crate::server::ErrorBody,
+            body = crate::problem::Problem,
             description = "The account already has an active import session"
         )
     )
@@ -915,14 +915,16 @@ pub(crate) async fn imports_create_handler(
     Json(body): Json<CreateImportBody>,
 ) -> Result<Created<CreateImportResponse>, ApiError> {
     if body.source.trim().is_empty() {
-        return Err(ApiError::BadRequest("body field source is required".into()));
+        return Err(ApiError::MissingParameter(
+            "body field source is required".into(),
+        ));
     }
-    validate_source_id(&body.source).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    validate_source_id(&body.source).map_err(|e| ApiError::validation(e.to_string()))?;
     let account = resolve_import_account(&auth, body.account.as_deref(), &state.db).await?;
     let stage = match body.stage.as_deref() {
         None => crate::db::vault_imports::ImportStage::Parse,
         Some(raw) => crate::db::vault_imports::ImportStage::parse(raw).ok_or_else(|| {
-            ApiError::BadRequest(format!(
+            ApiError::validation(format!(
                 "invalid import stage '{raw}'; expected one of parse, write, awaiting_gate_1, transcode, awaiting_gate_2, pushing"
             ))
         })?,
@@ -967,10 +969,11 @@ pub(crate) async fn imports_create_handler(
     request_body = CompleteImportBody,
     responses(
         (status = 200, body = CompleteImportResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn imports_complete_handler(
@@ -1106,9 +1109,9 @@ pub(crate) struct ImportContactsResponse {
     params(("id" = i64, Path, description = "Import session id")),
     responses(
         (status = 200, body = ImportContactsResponse),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn import_contacts_handler(
@@ -1318,8 +1321,8 @@ pub(crate) struct ActiveImportResponse {
     security(("bearer" = [])),
     responses(
         (status = 200, body = ActiveImportResponse),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn imports_active_handler(
@@ -1379,10 +1382,11 @@ pub(crate) struct SetImportStageResponse {
     request_body = SetImportStageBody,
     responses(
         (status = 200, body = SetImportStageResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn imports_stage_handler(
@@ -1393,7 +1397,7 @@ pub(crate) async fn imports_stage_handler(
 ) -> Result<Json<SetImportStageResponse>, ApiError> {
     let account = resolve_import_account(&auth, None, &state.db).await?;
     let stage = crate::db::vault_imports::ImportStage::parse(&body.stage).ok_or_else(|| {
-        ApiError::BadRequest(format!(
+        ApiError::validation(format!(
             "invalid import stage '{}'; expected one of parse, write, awaiting_gate_1, transcode, awaiting_gate_2, pushing",
             body.stage
         ))
@@ -1429,10 +1433,11 @@ pub(crate) struct DiscardImportResponse {
     params(("id" = i64, Path, description = "Import session id")),
     responses(
         (status = 200, body = DiscardImportResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn imports_discard_handler(
@@ -1471,19 +1476,19 @@ pub(crate) async fn imports_discard_handler(
     ),
     responses(
         (status = 200, body = ImportResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody),
+        (status = 400, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem),
         (
             status = 409,
-            body = crate::server::ErrorBody,
+            body = crate::problem::Problem,
             description = "The account already has an active import session"
         ),
-        (status = 413, body = crate::server::ErrorBody),
+        (status = 413, body = crate::problem::Problem),
         (
             status = 415,
-            body = crate::server::ErrorBody,
+            body = crate::problem::Problem,
             description = "The body is not JSON Lines (multipart/form-data is not accepted)"
         )
     )
@@ -1496,17 +1501,17 @@ pub(crate) async fn import_handler(
     request: Request,
 ) -> Result<Json<ImportResponse>, ApiError> {
     let Some(ct) = content_type_base(&headers) else {
-        return Err(ApiError::BadRequest(
+        return Err(ApiError::UnsupportedMediaType(
             "Content-Type required (application/x-ndjson or application/jsonl)".into(),
         ));
     };
 
     if query.source.trim().is_empty() {
-        return Err(ApiError::BadRequest(
+        return Err(ApiError::MissingParameter(
             "query param source is required".into(),
         ));
     }
-    validate_source_id(&query.source).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    validate_source_id(&query.source).map_err(|e| ApiError::validation(e.to_string()))?;
     let account = resolve_import_account(&auth, query.account.as_deref(), &state.db).await?;
     query.account = Some(account);
 
@@ -1516,7 +1521,7 @@ pub(crate) async fn import_handler(
         let jsonl_path = temp.path().join("_import.jsonl");
         let n = stream_body_to_file(request.into_body(), &jsonl_path, state.max_body_bytes).await?;
         if n == 0 {
-            return Err(ApiError::BadRequest("request body is empty".into()));
+            return Err(ApiError::MalformedBody("request body is empty".into()));
         }
         // The import pipeline does blocking file IO (JSONL parse, asset
         // hashing and copies) — run it off the async workers so a large
@@ -1534,8 +1539,7 @@ pub(crate) async fn import_handler(
     // Only JSON Lines is an import body. Attachments never travel with it:
     // they are uploaded first, by SHA-256, through `/v1/assets`. A body in
     // another type is the wrong media type, not a malformed request.
-    Err(ApiError::Status(
-        axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE,
+    Err(ApiError::UnsupportedMediaType(
         "Content-Type must be application/x-ndjson or application/jsonl".into(),
     ))
 }
@@ -1553,12 +1557,12 @@ fn import_semaphore() -> &'static tokio::sync::Semaphore {
 /// Turn an import's error into the HTTP failure a caller should see.
 ///
 /// The two failures a sender can fix by changing the file travel up the
-/// pipeline as `ImportFailure` and become a 400 with their own sentence.
+/// pipeline as `ImportFailure` and become `malformed-body` with their own sentence.
 /// Everything else (a disk or database error, a bug) is a 500: the message
 /// goes to stderr and the client sees "internal server error".
 fn classify_import_error(err: anyhow::Error) -> ApiError {
     match ImportFailure::in_error(&err) {
-        Some(failure) => ApiError::BadRequest(failure.to_string()),
+        Some(failure) => ApiError::MalformedBody(failure.to_string()),
         None => ApiError::Internal(anyhow::anyhow!("{err:#}")),
     }
 }
@@ -1584,7 +1588,7 @@ async fn run_import_path(
     let account = query
         .account
         .clone()
-        .ok_or_else(|| ApiError::BadRequest("account is required".into()))?;
+        .ok_or_else(|| ApiError::MissingParameter("account is required".into()))?;
     let source_id = query.source.clone();
     let do_dedupe = query.dedupe;
     let query_import_id = query.import_id;

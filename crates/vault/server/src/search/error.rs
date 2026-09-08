@@ -29,8 +29,8 @@ pub enum QueryErrorKind {
 pub struct QueryError {
     /// Why the query was refused.
     pub kind: QueryErrorKind,
-    /// The 400 body. Names the word and the list; never names a spelling the
-    /// language does not have.
+    /// The problem's `detail`. Names the word and the list; never names a
+    /// spelling the language does not have.
     pub message: String,
     /// Byte range in the input the message is about.
     pub span: Range<usize>,
@@ -59,6 +59,10 @@ impl QueryError {
 
 impl From<QueryError> for ApiError {
     fn from(e: QueryError) -> Self {
-        ApiError::BadRequest(e.message)
+        ApiError::SearchQueryInvalid {
+            detail: e.message,
+            word: e.field,
+            did_you_mean: e.did_you_mean,
+        }
     }
 }

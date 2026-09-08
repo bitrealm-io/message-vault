@@ -57,7 +57,7 @@ impl From<api_tokens::ApiTokenRow> for ApiTokenItem {
 fn map_label_error(e: crate::db::api_tokens::ApiTokenMutationError) -> ApiError {
     use crate::db::api_tokens::ApiTokenMutationError;
     match e {
-        ApiTokenMutationError::InvalidLabel(err) => ApiError::BadRequest(err.to_string()),
+        ApiTokenMutationError::InvalidLabel(err) => ApiError::validation(err.to_string()),
         ApiTokenMutationError::Other(err) => ApiError::Internal(err),
     }
 }
@@ -140,8 +140,8 @@ pub struct RenameApiTokenResponse {
     security(("bearer" = [])),
     responses(
         (status = 200, body = ListApiTokensResponse),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn list_api_tokens_handler(
@@ -172,9 +172,9 @@ pub async fn list_api_tokens_handler(
             body = CreateApiTokenResponse,
             headers(("Location" = String, description = "Path of the new token"))
         ),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn create_api_token_handler(
@@ -223,9 +223,9 @@ pub async fn create_api_token_handler(
     params(("id" = String, Path, description = "API token id")),
     responses(
         (status = 204, description = "Token deleted"),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub async fn delete_api_token_handler(
@@ -255,10 +255,11 @@ pub async fn delete_api_token_handler(
     request_body = RenameApiTokenRequest,
     responses(
         (status = 200, body = RenameApiTokenResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub async fn rename_api_token_handler(
@@ -298,7 +299,7 @@ mod tests {
             ApiTokenLabelError::Required,
         ));
         match err {
-            ApiError::BadRequest(msg) => assert_eq!(msg, "label is required"),
+            ApiError::ValidationFailed(msg) => assert_eq!(msg, ["label is required"]),
             other => panic!("expected BadRequest, got {other:?}"),
         }
 
@@ -306,7 +307,9 @@ mod tests {
             ApiTokenLabelError::TooLong,
         ));
         match err {
-            ApiError::BadRequest(msg) => assert_eq!(msg, "label must be at most 120 characters"),
+            ApiError::ValidationFailed(msg) => {
+                assert_eq!(msg, ["label must be at most 120 characters"]);
+            }
             other => panic!("expected BadRequest, got {other:?}"),
         }
     }

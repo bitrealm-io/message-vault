@@ -391,7 +391,7 @@ async fn list_queries_enforce_search_limits() {
         .await
         .unwrap_err();
         assert!(
-            matches!(contact_error, ApiError::BadRequest(_)),
+            matches!(contact_error, ApiError::SearchQueryInvalid { .. }),
             "contact query should be rejected: {query}"
         );
 
@@ -400,7 +400,7 @@ async fn list_queries_enforce_search_limits() {
                 .await
                 .unwrap_err();
         assert!(
-            matches!(conversation_error, ApiError::BadRequest(_)),
+            matches!(conversation_error, ApiError::SearchQueryInvalid { .. }),
             "conversation query should be rejected: {query}"
         );
     }
@@ -422,7 +422,7 @@ async fn malformed_boolean_queries_are_bad_requests_for_export() {
         )
         .await
         .unwrap_err();
-        assert!(matches!(export_error, ApiError::BadRequest(_)));
+        assert!(matches!(export_error, ApiError::SearchQueryInvalid { .. }));
     }
 }
 
@@ -951,7 +951,7 @@ async fn list_conversations_filters_by_import_id() {
     )
     .await
     .unwrap_err();
-    assert!(matches!(junk, ApiError::BadRequest(_)));
+    assert!(matches!(junk, ApiError::SearchQueryInvalid { .. }));
 }
 
 #[test]
@@ -1314,7 +1314,7 @@ async fn the_conversation_list_is_a_page_with_integer_ids() {
 }
 
 #[tokio::test]
-async fn a_limit_past_the_cap_or_an_offset_past_the_cap_is_a_400() {
+async fn a_limit_past_the_cap_or_an_offset_past_the_cap_is_a_422() {
     let vault = crate::test_support::test_vault().await;
     let state = vault.state.clone();
     let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
@@ -1325,7 +1325,11 @@ async fn a_limit_past_the_cap_or_an_offset_past_the_cap_is_a_400() {
         "/v1/conversations?offset=50001",
     ] {
         let status = crate::test_support::get_status(&state, path, &user.token).await;
-        assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{path}");
+        assert_eq!(
+            status,
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+            "{path}"
+        );
     }
 }
 
@@ -2273,6 +2277,10 @@ async fn conversation_messages_bad_limit_is_refused_like_other_paged_routes() {
         format!("/v1/conversations/{conversation_id}/messages?offset=50001"),
     ] {
         let status = crate::test_support::get_status(&vault.state, &path, &user.token).await;
-        assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{path}");
+        assert_eq!(
+            status,
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+            "{path}"
+        );
     }
 }

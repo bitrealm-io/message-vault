@@ -57,8 +57,9 @@ OpenAPI UI produce other things on purpose.
 with its slug, status, title and the paragraph its page shows; the pages under
 `bitrealm.io/vault/developer/reference/errors/` and their index are generated
 from that declaration, and a test fails when the checked-in pages drift from
-it. `docs/agents/http-api-problem-types.md` holds the first classification
-until the code carries it, and is deleted then.
+it. The first classification was drafted in
+`docs/agents/http-api-problem-types.md` and that file was deleted when the
+code took it over.
 
 ## Why
 
@@ -128,6 +129,7 @@ request.
   broken `type` URL, so the registry and the pages ship together. The site
   publishes on a release tag, so the URLs go live with the release that carries
   the change.
-- `tower-http` gains its `request-id` feature.
+- One middleware makes the request id and holds it in a task local for the
+  problem body; no request-id library is added.
 - `web/`'s one error parse moves from `message` to `title` and `detail`, and
   gains the ability to branch on `type`.

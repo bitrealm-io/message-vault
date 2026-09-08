@@ -339,3 +339,130 @@ mod tests {
         assert_eq!(read.tapbacks[0].kind, "loved");
     }
 }
+
+/// An RFC 7807 problem document: the body of every failure the vault answers,
+/// served as `application/problem+json` (ADR-0010).
+///
+/// `type` is the URL of the page describing this kind of failure, one page per
+/// type, or `about:blank` for an internal error. A validation failure carries
+/// `errors`, every field that failed, in place of `detail`. Every problem
+/// repeats the response's `x-request-id` as `request_id`, so the person
+/// reading the failure and the operator reading the log are looking at the
+/// same request.
+///
+/// The extension members belong to one type each: `word` and `did_you_mean`
+/// to `search-query-invalid`, `retry_after` to `rate-limited`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(utoipa::ToSchema))]
+pub struct Problem {
+    /// URL of the page describing this kind of failure; `about:blank` for a
+    /// `500 Internal Server Error`.
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// The type's fixed, human-readable name.
+    pub title: String,
+    /// The HTTP status, repeated in the body.
+    pub status: u16,
+    /// One sentence about this occurrence. Absent on a validation failure,
+    /// which lists `errors` instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// Every rule the request broke, one sentence each. Only on
+    /// `validation-failed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub errors: Option<Vec<String>>,
+    /// The `x-request-id` of the response this came in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    /// `search-query-invalid`: the `word:` the query used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub word: Option<String>,
+    /// `search-query-invalid`: a word the language does have, within a small
+    /// edit distance of the one used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub did_you_mean: Option<String>,
+    /// `rate-limited`: seconds until an attempt may succeed, the same figure
+    /// as the `Retry-After` header.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_after: Option<u64>,
+}
+
+impl Problem {
+    /// The media type every problem is served as.
+    pub const CONTENT_TYPE: &'static str = "application/problem+json";
+
+    /// The last segment of the `type` URL, or `None` for `about:blank`: the
+    /// name a client branches on.
+    #[must_use]
+    pub fn slug(&self) -> Option<&str> {
+        if self.kind == "about:blank" {
+            return None;
+        }
+        self.kind.rsplit('/').next().filter(|s| !s.is_empty())
+    }
+
+    /// The sentence a person reads: `detail`, else `errors` joined with
+    /// semicolons, else the title.
+    #[must_use]
+    pub fn sentence(&self) -> String {
+        if let Some(detail) = self.detail.as_deref().map(str::trim)
+            && !detail.is_empty()
+        {
+            return detail.to_string();
+        }
+        if let Some(errors) = &self.errors
+            && !errors.is_empty()
+        {
+            return errors.join("; ");
+        }
+        self.title.clone()
+    }
+}
+
+#[cfg(test)]
+mod problem_tests {
+    use super::Problem;
+
+    #[test]
+    fn a_problem_round_trips_and_names_its_slug() {
+        let text = r#"{"type":"https://bitrealm.io/vault/developer/reference/errors/username-taken","title":"Username taken","status":409,"detail":"The username 'alice' already belongs to an account.","request_id":"3f2b1c0e-8d4a-4b6e-9f21-5c7d8e9a0b1c"}"#;
+        let problem: Problem = serde_json::from_str(text).unwrap();
+        assert_eq!(problem.slug(), Some("username-taken"));
+        assert_eq!(
+            problem.sentence(),
+            "The username 'alice' already belongs to an account."
+        );
+        assert_eq!(serde_json::to_string(&problem).unwrap(), text);
+    }
+
+    #[test]
+    fn a_validation_failure_reads_as_its_errors_and_an_internal_error_has_no_slug() {
+        let problem = Problem {
+            kind: "about:blank".into(),
+            title: "Internal server error".into(),
+            status: 500,
+            detail: None,
+            errors: None,
+            request_id: None,
+            word: None,
+            did_you_mean: None,
+            retry_after: None,
+        };
+        assert_eq!(problem.slug(), None);
+        assert_eq!(problem.sentence(), "Internal server error");
+        let problem = Problem {
+            kind: "https://bitrealm.io/vault/developer/reference/errors/validation-failed".into(),
+            title: "Validation failed".into(),
+            status: 422,
+            errors: Some(vec![
+                "limit must be at least 1".into(),
+                "offset exceeds maximum of 50000".into(),
+            ]),
+            ..problem
+        };
+        assert_eq!(
+            problem.sentence(),
+            "limit must be at least 1; offset exceeds maximum of 50000"
+        );
+    }
+}

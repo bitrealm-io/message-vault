@@ -149,7 +149,7 @@ async fn contact_match_is_scoped_to_the_calling_account() {
 /// way. Both went through a downcast on the error's type before
 /// `ContactEditError` existed.
 #[tokio::test]
-async fn a_refused_contact_edit_answers_400_with_the_persons_sentence() {
+async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
     let (vault, token, account) = contacts_fixture_with_handles(&[]).await;
     let mut conn = vault.state.db.acquire().await.unwrap();
     let first =
@@ -165,7 +165,7 @@ async fn a_refused_contact_edit_answers_400_with_the_persons_sentence() {
         serde_json::json!({ "add_handle": { "handle": "+15555550200" } }),
     )
     .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(sentence, "handle already linked to another contact");
 
     // No edit named at all.
@@ -176,7 +176,7 @@ async fn a_refused_contact_edit_answers_400_with_the_persons_sentence() {
         serde_json::json!({}),
     )
     .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[tokio::test]
@@ -192,7 +192,7 @@ async fn contact_match_rejects_an_oversized_batch() {
         serde_json::json!({ "identifiers": identifiers }),
     )
     .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[tokio::test]
@@ -1688,8 +1688,10 @@ fn a_refusal_is_the_persons_sentence_and_anything_else_is_internal() {
     match ApiError::from(ContactEditError::Refused(
         "handle already linked to another contact".into(),
     )) {
-        ApiError::BadRequest(m) => assert_eq!(m, "handle already linked to another contact"),
-        other => panic!("expected BadRequest, got {other:?}"),
+        ApiError::ValidationFailed(m) => {
+            assert_eq!(m, ["handle already linked to another contact"])
+        }
+        other => panic!("expected ValidationFailed, got {other:?}"),
     }
     // A database error reaches this type through `?`, so it is a failure
     // by construction rather than by inspection of its message.
@@ -1717,7 +1719,7 @@ async fn the_contact_list_is_a_page_and_summaries_are_items() {
 
     let status =
         crate::test_support::get_status(&state, "/v1/contacts?limit=501", &user.token).await;
-    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(status, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
 
     let summaries: serde_json::Value = crate::test_support::post_json(
         &state,
@@ -2152,9 +2154,13 @@ async fn the_contacts_route_refuses_an_offset_past_the_ceiling() {
 
     let (status, text) =
         crate::test_support::get_raw(&vault.state, "/v1/contacts?offset=50001", &user.token).await;
-    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{text}");
+    assert_eq!(
+        status,
+        axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+        "{text}"
+    );
     let body: serde_json::Value = serde_json::from_str(&text).unwrap();
-    assert!(body["error"].is_string(), "{body}");
+    assert!(body["errors"].is_array(), "{body}");
 
     let ok =
         crate::test_support::get_status(&vault.state, "/v1/contacts?offset=50000", &user.token)

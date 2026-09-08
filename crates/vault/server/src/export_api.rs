@@ -182,9 +182,10 @@ pub(crate) struct ExportMessagesCountQuery {
     ),
     responses(
         (status = 200, body = crate::export_api::ExportCountResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn export_messages_count_handler(
@@ -223,9 +224,10 @@ pub(crate) async fn export_messages_count_handler(
     ),
     responses(
         (status = 200, body = crate::paging::Page<vault_api_types::Message>),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn export_messages_handler(

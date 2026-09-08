@@ -50,6 +50,10 @@ pub enum Commands {
     /// --output. Does not open the database.
     DumpCliDocs(DumpArgs),
 
+    /// Write one docs-site page per HTTP problem type (Markdown) into the
+    /// --output directory, or all of them to stdout. Does not open the database.
+    DumpErrorDocs(DumpArgs),
+
     /// Convert media under assets/ into browser previews under `assets_converted/`
     ProcessAssets(ProcessAssetsArgs),
 
@@ -228,10 +232,10 @@ pub struct ServeArgs {
     pub db_url: Option<String>,
 }
 
-/// Options shared by `dump-openapi` and `dump-cli-docs`.
+/// Options shared by `dump-openapi`, `dump-cli-docs` and `dump-error-docs`.
 #[derive(Debug, Args)]
 pub struct DumpArgs {
-    /// Destination file. Omit to print stdout.
+    /// Destination file (a directory for `dump-error-docs`). Omit to print stdout.
     #[arg(long)]
     pub output: Option<PathBuf>,
 }
@@ -293,6 +297,9 @@ pub async fn run(cli: Cli) -> Result<()> {
         Commands::Serve(args) => run_serve(args).await,
         Commands::DumpOpenapi(args) => crate::openapi::write_openapi(args.output.as_deref()),
         Commands::DumpCliDocs(args) => crate::cli_docs::write_cli_docs(args.output.as_deref()),
+        Commands::DumpErrorDocs(args) => {
+            crate::error_docs::write_error_docs(args.output.as_deref())
+        }
         Commands::ProcessAssets(args) => run_process_assets(args).await,
         Commands::CreateOwner(args) => run_create_owner(args).await,
         Commands::ResetOwnerPassword(args) => run_reset_owner_password(args).await,

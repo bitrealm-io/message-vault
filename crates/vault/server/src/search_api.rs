@@ -29,9 +29,10 @@ pub(crate) struct SearchFieldsResponse {
     params(SearchFieldsQuery),
     responses(
         (status = 200, body = SearchFieldsResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn search_fields_list(
@@ -71,7 +72,7 @@ mod tests {
         assert!(first["help"].is_string() && first["example"].is_string());
         assert_eq!(
             get_status(&vault.state, "/v1/search/fields?list=nope", &account.token).await,
-            StatusCode::BAD_REQUEST
+            StatusCode::UNPROCESSABLE_ENTITY
         );
         assert_eq!(
             get_status(

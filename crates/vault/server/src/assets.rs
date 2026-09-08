@@ -668,11 +668,11 @@ async fn resolve_asset_lookup(
         AssetAccess::Write | AssetAccess::Probe => true,
     };
     if query.source.trim().is_empty() {
-        return Err(ApiError::BadRequest(
+        return Err(ApiError::MissingParameter(
             "query param source is required".into(),
         ));
     }
-    validate_source_id(&query.source).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    validate_source_id(&query.source).map_err(|e| ApiError::validation(e.to_string()))?;
     let account = resolve_import_account(auth, query.account.as_deref(), &state.db).await?;
     let source_id = query.source.clone();
 
@@ -710,10 +710,11 @@ async fn resolve_asset_lookup(
     ),
     responses(
         (status = 200, body = AssetPutResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn asset_head_handler(
@@ -745,10 +746,11 @@ pub(crate) async fn asset_head_handler(
     ),
     responses(
         (status = 200, description = "Raw asset bytes", content_type = "application/octet-stream"),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn asset_get_handler(
@@ -825,10 +827,11 @@ pub(crate) async fn asset_get_handler(
     request_body(content_type = "application/octet-stream", description = "Raw asset bytes"),
     responses(
         (status = 200, body = AssetPutResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 413, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 413, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn asset_put_handler(
@@ -873,7 +876,7 @@ pub(crate) async fn asset_put_handler(
     };
     if n == 0 {
         let _ = tokio::fs::remove_file(&tmp_path).await;
-        return Err(ApiError::BadRequest("request body is empty".into()));
+        return Err(ApiError::MalformedBody("request body is empty".into()));
     }
 
     let sha = sha256.clone();
@@ -892,7 +895,7 @@ pub(crate) async fn asset_put_handler(
     })
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("asset upload task: {e}")))?
-    .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
 
     // Rename consumes the temp file; remove leftovers after errors / already_present races.
     let _ = tokio::fs::remove_file(&tmp_path).await;
@@ -953,9 +956,9 @@ pub(crate) struct AssetUploadPartResponse {
             body = AssetUploadStartResponse,
             description = "The asset is already stored; nothing was created"
         ),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn asset_upload_start_handler(
@@ -977,7 +980,7 @@ pub(crate) async fn asset_upload_start_handler(
     })
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload start task: {e}")))?
-    .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
 
     // Only a fresh upload is a creation. An asset already in the store made
     // nothing, so it answers 200 OK with where the bytes already are.
@@ -1023,10 +1026,11 @@ pub(crate) async fn asset_upload_start_handler(
     request_body(content_type = "application/octet-stream", description = "Raw part bytes"),
     responses(
         (status = 200, body = AssetUploadPartResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 413, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 413, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn asset_upload_part_handler(
@@ -1039,7 +1043,7 @@ pub(crate) async fn asset_upload_part_handler(
     let (account, source_id, _existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
     if part == 0 {
-        return Err(ApiError::BadRequest("part number must be >= 1".into()));
+        return Err(ApiError::validation("part number must be >= 1"));
     }
     let body = read_body_limited(request.into_body(), state.upload_limits.part_size).await?;
     let assets_dir = state.cfg.paths.assets_dir_for_account(&account, &source_id);
@@ -1050,7 +1054,7 @@ pub(crate) async fn asset_upload_part_handler(
     })
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload part task: {e}")))?
-    .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
     Ok(Json(AssetUploadPartResponse {
         part,
         bytes: written,
@@ -1072,9 +1076,10 @@ pub(crate) async fn asset_upload_part_handler(
     ),
     responses(
         (status = 200, body = AssetPutResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn asset_upload_complete_handler(
@@ -1119,7 +1124,7 @@ pub(crate) async fn asset_upload_complete_handler(
     })
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload complete task: {e}")))?
-    .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
 
     Ok(AssetPutResponse::stored(stored, already_present))
 }
@@ -1138,9 +1143,10 @@ pub(crate) async fn asset_upload_complete_handler(
     ),
     responses(
         (status = 204, description = "Upload aborted"),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn asset_upload_abort_handler(
@@ -1157,7 +1163,7 @@ pub(crate) async fn asset_upload_abort_handler(
     tokio::task::spawn_blocking(move || asset_uploads::abort_upload(&assets_dir, &sha, &uid))
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload abort task: {e}")))?
-        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+        .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 

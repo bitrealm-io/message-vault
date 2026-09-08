@@ -481,7 +481,7 @@ fn conversation_messages_where(
         // zone, the same rule `date:YYYY` uses.
         let today = crate::search::today_in(zone);
         let span = crate::search::value::parse_date_span(&year.to_string(), today)
-            .ok_or_else(|| ApiError::BadRequest("year must be a four-digit year".into()))?;
+            .ok_or_else(|| ApiError::validation("year must be a four-digit year"))?;
         sql.push_str(" AND m.timestamp >= ? AND m.timestamp < ?");
         params.push(SqlParam::Text(crate::search::value::utc_instant(
             zone, span.start,
@@ -573,9 +573,10 @@ pub(crate) struct ConversationsPageQuery {
     ),
     responses(
         (status = 200, body = crate::paging::Page<crate::conversations_api::ConversationSummary>),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn conversations_list_handler(
@@ -628,9 +629,9 @@ pub(crate) async fn conversations_list_handler(
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 200, body = crate::conversations_api::ConversationSummary),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn conversation_detail_handler(
@@ -655,9 +656,9 @@ pub(crate) async fn conversation_detail_handler(
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 200, body = crate::conversations_api::ConversationSourcesPage),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn conversation_sources_handler(
@@ -700,10 +701,11 @@ pub(crate) struct ConversationMessagesQuery {
     ),
     responses(
         (status = 200, body = crate::paging::Page<vault_api_types::Message>),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn conversation_messages_handler(
@@ -743,9 +745,9 @@ pub(crate) async fn conversation_messages_handler(
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 204, description = "Trashed"),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn conversation_trash_handler(
@@ -777,9 +779,9 @@ pub(crate) async fn conversation_trash_handler(
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 204, description = "Restored"),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn conversation_restore_handler(
@@ -813,10 +815,10 @@ pub(crate) async fn conversation_restore_handler(
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 204, description = "Deleted"),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody),
-        (status = 409, body = crate::server::ErrorBody, description = "The conversation is not in the trash")
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem),
+        (status = 409, body = crate::problem::Problem, description = "The conversation is not in the trash")
     )
 )]
 pub(crate) async fn conversation_delete_handler(
@@ -839,7 +841,7 @@ pub(crate) async fn conversation_delete_handler(
             Ok(StatusCode::NO_CONTENT)
         }
         DeleteOutcome::NotOwned => Err(ApiError::NotFound("conversation not found".into())),
-        DeleteOutcome::NotTrashed => Err(ApiError::Conflict(
+        DeleteOutcome::NotTrashed => Err(ApiError::StateConflict(
             "the conversation is not in the trash; move it to the trash first".into(),
         )),
     }

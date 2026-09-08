@@ -117,8 +117,8 @@ fn remove_if_present(path: &Path) -> Result<(), ApiError> {
     security(("bearer" = [])),
     responses(
         (status = 204, description = "Trash emptied"),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn empty_trash_handler(

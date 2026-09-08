@@ -1,11 +1,15 @@
-//! Axum's `Query`, `Path`, and `Json`, answering in the vault's own error body.
+//! Axum's `Query`, `Path`, and `Json`, answering as problem documents.
 //!
 //! Axum's extractors reject a bad request with a plain-text body. Every other
-//! failure on this interface is `{"error": "<sentence>"}` with the status, so
-//! these three wrappers turn each rejection into an [`ApiError::BadRequest`]
-//! carrying Axum's sentence. Handlers use these names in place of Axum's.
+//! failure on this interface is a problem document (ADR-0010), so these three
+//! wrappers turn each rejection into the [`ApiError`] on the right side of one
+//! line: a request that cannot be read is `malformed-body`, one that parsed
+//! and then broke a rule is `validation-failed`. Handlers use these names in
+//! place of Axum's.
 
+use axum::extract::rejection::JsonRejection;
 use axum::extract::{FromRequest, FromRequestParts, Request};
+use axum::http::StatusCode;
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
@@ -13,7 +17,8 @@ use serde::de::DeserializeOwned;
 
 use crate::server::ApiError;
 
-/// Axum's `Query`, rejecting as `{error}`.
+/// Axum's `Query`, rejecting as `validation-failed`: the string was read and
+/// a value in it does not fit the parameter.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Query<T>(pub T);
 
@@ -27,12 +32,13 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         match axum::extract::Query::<T>::from_request_parts(parts, state).await {
             Ok(axum::extract::Query(value)) => Ok(Query(value)),
-            Err(rejection) => Err(ApiError::BadRequest(rejection.body_text())),
+            Err(rejection) => Err(ApiError::validation(rejection.body_text())),
         }
     }
 }
 
-/// Axum's `Path`, rejecting as `{error}`.
+/// Axum's `Path`, rejecting as `validation-failed`: a segment that is not
+/// the number the route expects.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Path<T>(pub T);
 
@@ -46,12 +52,12 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         match axum::extract::Path::<T>::from_request_parts(parts, state).await {
             Ok(axum::extract::Path(value)) => Ok(Path(value)),
-            Err(rejection) => Err(ApiError::BadRequest(rejection.body_text())),
+            Err(rejection) => Err(ApiError::validation(rejection.body_text())),
         }
     }
 }
 
-/// Axum's `Json`, rejecting as `{error}` and answering as JSON.
+/// Axum's `Json`, rejecting as a problem and answering as JSON.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Json<T>(pub T);
 
@@ -65,10 +71,17 @@ where
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         match axum::Json::<T>::from_request(req, state).await {
             Ok(axum::Json(value)) => Ok(Json(value)),
-            // Axum already picked the right status (413 over the body limit,
-            // 415 for a missing/wrong Content-Type, 400 for malformed JSON);
-            // keep it rather than flattening everything to 400.
-            Err(rejection) => Err(ApiError::Status(rejection.status(), rejection.body_text())),
+            // Well-formed JSON that does not fit the target type parsed and
+            // then broke a rule; everything else could not be read.
+            Err(JsonRejection::JsonDataError(e)) => Err(ApiError::validation(e.body_text())),
+            Err(JsonRejection::JsonSyntaxError(e)) => Err(ApiError::MalformedBody(e.body_text())),
+            Err(JsonRejection::MissingJsonContentType(e)) => {
+                Err(ApiError::UnsupportedMediaType(e.body_text()))
+            }
+            Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+                Err(ApiError::PayloadTooLarge(rejection.body_text()))
+            }
+            Err(rejection) => Err(ApiError::MalformedBody(rejection.body_text())),
         }
     }
 }
@@ -98,24 +111,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_query_parameter_of_the_wrong_type_is_a_json_400() {
+    async fn a_query_parameter_of_the_wrong_type_is_a_validation_422() {
         let vault = test_vault().await;
         let state = vault.state.clone();
         let user = register_via_api(&state, "alice", "hunter2hunter2").await;
         let (status, body) = get(&state, "/v1/conversations?limit=ten", &user.token).await;
-        assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert!(body["error"].as_str().unwrap().contains("limit"), "{body}");
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(
+            body["errors"][0].as_str().unwrap().contains("limit"),
+            "{body}"
+        );
         assert!(body.get("ok").is_none());
     }
 
     #[tokio::test]
-    async fn a_path_id_that_is_not_a_number_is_a_json_400() {
+    async fn a_path_id_that_is_not_a_number_is_a_validation_422() {
         let vault = test_vault().await;
         let state = vault.state.clone();
         let user = register_via_api(&state, "alice", "hunter2hunter2").await;
         let (status, body) = get(&state, "/v1/conversations/abc/sources", &user.token).await;
-        assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert!(body["error"].is_string(), "{body}");
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(body["errors"][0].is_string(), "{body}");
     }
 
     #[tokio::test]
@@ -137,7 +153,10 @@ mod tests {
         // whatever status Axum picked, this answers 422, not 400.
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
         let body: serde_json::Value = serde_json::from_str(&text).unwrap();
-        assert!(body["error"].as_str().unwrap().contains("query"), "{body}");
+        assert!(
+            body["errors"][0].as_str().unwrap().contains("query"),
+            "{body}"
+        );
     }
 
     #[tokio::test]
@@ -156,7 +175,7 @@ mod tests {
         assert_eq!(status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
         let body: serde_json::Value =
             serde_json::from_str(&text).unwrap_or_else(|_| panic!("non-JSON body: {text}"));
-        assert!(body["error"].is_string(), "{body}");
+        assert!(body["detail"].is_string(), "{body}");
     }
 
     #[tokio::test]
@@ -179,7 +198,7 @@ mod tests {
         assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
         let body: serde_json::Value =
             serde_json::from_str(&text).unwrap_or_else(|_| panic!("non-JSON body: {text}"));
-        assert!(body["error"].is_string(), "{body}");
+        assert!(body["detail"].is_string(), "{body}");
     }
 
     #[tokio::test]
@@ -189,13 +208,13 @@ mod tests {
         let user = register_via_api(&state, "alice", "hunter2hunter2").await;
         let (status, body) = get(&state, "/v1/no-such-thing", &user.token).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
-        assert_eq!(body["error"], "no route at /v1/no-such-thing");
+        assert_eq!(body["detail"], "no route at /v1/no-such-thing");
 
         let (status, text) =
             crate::test_support::delete_raw(&state, "/v1/conversations", &user.token).await;
         assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
         let body: serde_json::Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(body["error"], "DELETE is not allowed at /v1/conversations");
+        assert_eq!(body["detail"], "DELETE is not allowed at /v1/conversations");
     }
 
     #[tokio::test]
@@ -207,7 +226,7 @@ mod tests {
             assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
             let body: serde_json::Value = serde_json::from_str(&text)
                 .unwrap_or_else(|_| panic!("{path} answered non-JSON: {text}"));
-            assert!(body["error"].is_string(), "{path}: {body}");
+            assert!(body["detail"].is_string(), "{path}: {body}");
         }
     }
 }

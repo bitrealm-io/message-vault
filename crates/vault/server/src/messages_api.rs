@@ -76,9 +76,10 @@ pub(crate) async fn count_matching_messages(
     ),
     responses(
         (status = 200, body = crate::paging::Page<Message>),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn messages_list_handler(

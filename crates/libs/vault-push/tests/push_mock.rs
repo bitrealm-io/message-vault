@@ -363,7 +363,10 @@ fn failed_combined_request_only_fails_its_files() {
             .body_includes("+15555550101")
             .body_includes("+15555550102");
         then.status(500).json_body(json!({
-            "error": "intentional batch failure"
+            "type": "about:blank",
+            "title": "Internal server error",
+            "status": 500,
+            "detail": "intentional batch failure"
         }));
     });
     let succeeded = server.mock(|when, then| {
@@ -468,7 +471,10 @@ fn profiles_attachment_upload_phases() {
     let head = server.mock(|when, then| {
         when.method("HEAD").path(format!("/v1/assets/{digest}"));
         then.status(404).json_body(json!({
-            "error": "asset not found"
+            "type": "https://bitrealm.io/vault/developer/reference/errors/not-found",
+            "title": "Not found",
+            "status": 404,
+            "detail": "asset not found"
         }));
     });
     let asset = server.mock(|when, then| {
@@ -822,7 +828,10 @@ fn multipart_upload_when_over_proxy_threshold() {
     let head = server.mock(|when, then| {
         when.method("HEAD").path(format!("/v1/assets/{digest}"));
         then.status(404).json_body(json!({
-            "error": "asset not found"
+            "type": "https://bitrealm.io/vault/developer/reference/errors/not-found",
+            "title": "Not found",
+            "status": 404,
+            "detail": "asset not found"
         }));
     });
     let start = server.mock(|when, then| {
@@ -951,7 +960,10 @@ fn multipart_aborts_on_hash_mismatch_complete() {
         when.method(POST)
             .path(format!("/v1/assets/{digest}/uploads/up-bad/complete"));
         then.status(400).json_body(json!({
-            "error": "sha256 mismatch: claimed abc, got def"
+            "type": "https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid",
+            "title": "Asset upload invalid",
+            "status": 400,
+            "detail": "sha256 mismatch: claimed abc, got def"
         }));
     });
     let abort = server.mock(|when, then| {
@@ -1098,8 +1110,12 @@ fn shared_attachment_uploaded_once_across_conversations() {
     });
     let head = server.mock(|when, then| {
         when.method("HEAD").path(format!("/v1/assets/{digest}"));
-        then.status(404)
-            .json_body(json!({ "error": "asset not found" }));
+        then.status(404).json_body(json!({
+            "type": "https://bitrealm.io/vault/developer/reference/errors/not-found",
+            "title": "Not found",
+            "status": 404,
+            "detail": "asset not found"
+        }));
     });
     let put = server.mock(|when, then| {
         when.method(PUT).path(format!("/v1/assets/{digest}"));

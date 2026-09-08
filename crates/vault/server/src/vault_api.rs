@@ -95,9 +95,10 @@ pub async fn vault_state_handler(
     request_body = ClaimVaultRequest,
     responses(
         (status = 200, description = "Vault claimed; session issued", body = crate::auth::AuthTokenResponse),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 409, description = "Already claimed", body = crate::server::ErrorBody),
-        (status = 429, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 409, description = "Already claimed", body = crate::problem::Problem),
+        (status = 429, body = crate::problem::Problem)
     )
 )]
 pub async fn claim_vault_handler(
@@ -106,8 +107,8 @@ pub async fn claim_vault_handler(
 ) -> Result<Json<crate::auth::AuthTokenResponse>, ApiError> {
     let username = crate::auth::normalize_username(&req.username);
     if !crate::auth::is_valid_username(&username) {
-        return Err(ApiError::BadRequest(
-            "username must be 1–128 chars (alphanumeric, _, -, .)".into(),
+        return Err(ApiError::validation(
+            "username must be 1–128 chars (alphanumeric, _, -, .)",
         ));
     }
     crate::auth::check_auth_rate_limit(&state.auth_rate_limits, "claim")?;
@@ -119,7 +120,9 @@ pub async fn claim_vault_handler(
     // for an unclaimed vault must not both believe they won it.
     let mut tx = sqlx::Connection::begin(&mut *conn).await?;
     if account_profile::vault_is_claimed(&mut tx).await? {
-        return Err(ApiError::Conflict("this vault already has an owner".into()));
+        return Err(ApiError::StateConflict(
+            "this vault already has an owner".into(),
+        ));
     }
     crate::auth::require_username_free(&mut tx, &username).await?;
     account_profile::insert_account(
@@ -130,13 +133,13 @@ pub async fn claim_vault_handler(
         None,
     )
     .await
-    .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    .map_err(ApiError::Internal)?;
     let token = crate::db::session_tokens::insert_account_session_token(
         &mut tx,
         account_profile::OWNER_ACCOUNT_ID,
     )
     .await
-    .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    .map_err(ApiError::Internal)?;
     tx.commit().await?;
 
     Ok(Json(crate::auth::AuthTokenResponse {
@@ -170,8 +173,8 @@ pub struct PatchVaultSettingsRequest {
     security(("bearer" = [])),
     responses(
         (status = 200, body = VaultSettingsResponse),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn vault_settings_handler(
@@ -195,8 +198,8 @@ pub async fn vault_settings_handler(
     request_body = PatchVaultSettingsRequest,
     responses(
         (status = 200, body = VaultSettingsResponse),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn patch_vault_settings_handler(

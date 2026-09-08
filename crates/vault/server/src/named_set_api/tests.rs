@@ -166,11 +166,11 @@ async fn create_and_update_refuse_duplicate_empty_and_reserved_names() {
         );
         assert_eq!(
             post_status(state, kind.base(), &user.token, json!({ "name": "Trash" })).await,
-            StatusCode::BAD_REQUEST
+            StatusCode::UNPROCESSABLE_ENTITY
         );
         assert_eq!(
             post_status(state, kind.base(), &user.token, json!({ "name": "  " })).await,
-            StatusCode::BAD_REQUEST
+            StatusCode::UNPROCESSABLE_ENTITY
         );
         assert_eq!(
             patch_status(
@@ -190,7 +190,7 @@ async fn create_and_update_refuse_duplicate_empty_and_reserved_names() {
                 json!({ "name": "" })
             )
             .await,
-            StatusCode::BAD_REQUEST
+            StatusCode::UNPROCESSABLE_ENTITY
         );
     }
 }
@@ -261,7 +261,7 @@ async fn members_patch_adds_and_removes_in_one_call() {
 
         assert_eq!(
             patch_status(state, &members, &user.token, json!({})).await,
-            StatusCode::BAD_REQUEST
+            StatusCode::UNPROCESSABLE_ENTITY
         );
     }
 }

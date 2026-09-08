@@ -47,7 +47,7 @@ async fn export_takes_the_search_language() {
     )
     .await
     .unwrap_err();
-    assert!(matches!(err, ApiError::BadRequest(_)));
+    assert!(matches!(err, ApiError::SearchQueryInvalid { .. }));
 }
 
 /// A vault with account `a1` and two individual conversations
@@ -450,7 +450,7 @@ async fn rejects_an_oversized_query() {
     .await
     .unwrap_err();
     assert!(
-        matches!(&err, ApiError::BadRequest(m) if m.contains("longer than")),
+        matches!(&err, ApiError::SearchQueryInvalid { detail, .. } if detail.contains("longer than")),
         "{err:?}"
     );
 }
@@ -583,7 +583,7 @@ async fn the_export_route_answers_a_page_and_refuses_a_bad_limit() {
     let status =
         crate::test_support::get_status(&state, "/v1/export/messages?q=&limit=501", &user.token)
             .await;
-    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(status, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
 
     let count: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/export/messages/count?q=", &user.token).await;
@@ -690,7 +690,7 @@ async fn the_export_route_refuses_a_word_the_language_does_not_have() {
     .await;
     assert_eq!(status, axum::http::StatusCode::BAD_REQUEST, "{text}");
     let body: serde_json::Value = serde_json::from_str(&text).unwrap();
-    assert!(body["error"].is_string(), "{body}");
+    assert!(body["detail"].is_string(), "{body}");
 }
 
 /// Export must never reach another account's messages, whatever the query.

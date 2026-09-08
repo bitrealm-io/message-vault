@@ -158,8 +158,8 @@ async fn require_managed_account(
     security(("bearer" = [])),
     responses(
         (status = 200, body = ListAccountsResponse),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn list_accounts_handler(
@@ -198,9 +198,9 @@ pub async fn list_accounts_handler(
             body = ManagedAccount,
             headers(("Location" = String, description = "Path of the new account"))
         ),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn create_account_handler(
@@ -210,8 +210,8 @@ pub async fn create_account_handler(
 ) -> Result<Created<ManagedAccount>, ApiError> {
     let username = crate::auth::normalize_username(&req.username);
     if !crate::auth::is_valid_username(&username) {
-        return Err(ApiError::BadRequest(
-            "username must be 1–128 chars (alphanumeric, _, -, .)".into(),
+        return Err(ApiError::validation(
+            "username must be 1–128 chars (alphanumeric, _, -, .)",
         ));
     }
     crate::auth::validate_password_policy(&req.password)?;
@@ -227,7 +227,7 @@ pub async fn create_account_handler(
     let account_id = uuid::Uuid::new_v4().to_string();
     account_profile::insert_account(&mut tx, &account_id, &username, Some(&password_hash), None)
         .await
-        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+        .map_err(ApiError::Internal)?;
     account_profile::set_must_change_password(&mut tx, &account_id, true).await?;
     // The owner names a username and a password and nothing else, so the
     // account arrives with no display name and no handles. Its holder sets
@@ -263,10 +263,11 @@ pub async fn create_account_handler(
     request_body = PatchAccountRequest,
     responses(
         (status = 200, body = ManagedAccount),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub async fn patch_account_handler(
@@ -315,10 +316,11 @@ pub async fn patch_account_handler(
     request_body = SetPasswordRequest,
     responses(
         (status = 204, description = "Password set"),
-        (status = 400, body = crate::server::ErrorBody),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub async fn set_account_password_handler(
@@ -349,9 +351,9 @@ pub async fn set_account_password_handler(
     params(("id" = String, Path, description = "Account whose messages are destroyed")),
     responses(
         (status = 200, body = crate::profile::DeleteMessagesResponse),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub async fn delete_account_messages_handler(
@@ -388,9 +390,9 @@ pub async fn delete_account_messages_handler(
     params(("id" = String, Path, description = "Account id to delete")),
     responses(
         (status = 204, description = "Account deleted"),
-        (status = 401, body = crate::server::ErrorBody),
-        (status = 403, body = crate::server::ErrorBody),
-        (status = 404, body = crate::server::ErrorBody)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub async fn delete_account_handler(

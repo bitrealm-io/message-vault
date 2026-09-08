@@ -1,7 +1,7 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
 use message_ir_format::{ExportTransforms, FormatSinkResult};
-use message_vault_io_core::testutil::assert_csv_header;
+use message_vault_io_core::testutil::{assert_csv_header, assert_csv_row, csv_files};
 use message_vault_io_core::{ExportReport, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -58,7 +58,40 @@ fn convert_export_smoke_on_sample_fixture() {
             "subject",
         ],
         &["date_ms", "contact_name", "xml_fields_json"],
-        "sms-backup-restore",
+        // The fixture's first `<sms>`, read back out of the export. The
+        // previous needle here was "sms-backup-restore", the value of the
+        // `export_source` column, which is written whether or not a single
+        // message survived the parse.
+        &[
+            ("text", "hello"),
+            ("direction", "incoming"),
+            ("timestamp_unix_ms", "1400773261000"),
+            ("chat_identifier", "+15555550101"),
+        ],
+    );
+
+    let csv = &csv_files(tmp.path())[0];
+    // `type` 2 is outgoing, which is the one decision the direction column
+    // records and the only place a swapped mapping would show.
+    assert_csv_row(
+        csv,
+        &[
+            ("text", "hey"),
+            ("direction", "outgoing"),
+            ("timestamp_unix_ms", "1400773321000"),
+        ],
+    );
+    // The `<mms>` is a different parse: its text lives in a `text/plain` part
+    // beside the image part, and it must arrive as a message with the image
+    // attached rather than as a bare attachment or an empty row.
+    assert_csv_row(
+        csv,
+        &[
+            ("text", "mms hi"),
+            ("direction", "incoming"),
+            ("message_kind", "mms"),
+            ("timestamp_unix_ms", "1400773400000"),
+        ],
     );
 
     let attachments = tmp.path().join("attachments");
@@ -337,6 +370,10 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
 
     let (report, _) = run(false).expect("convert");
     assert!(report.conversations >= 1);
+    assert_eq!(
+        report.conversations_skipped, 0,
+        "a first run into an empty folder skips nothing"
+    );
 
     let jsonl_files = |dir: &Path| -> Vec<String> {
         let mut names: Vec<String> = fs::read_dir(dir)
@@ -355,7 +392,19 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
         .map(|n| fs::read_to_string(out.join(n)).expect("read jsonl"))
         .collect();
 
-    run(true).expect("resume convert");
+    // The file bytes alone prove nothing here: the writer is deterministic, so
+    // a resumed run that quietly rewrote every conversation would produce the
+    // same bytes and this test would still pass. `conversations_skipped` is
+    // the only observable difference between resuming and starting over.
+    let (resumed, _) = run(true).expect("resume convert");
+    assert_eq!(
+        resumed.conversations_skipped, report.conversations,
+        "a resumed run must skip every conversation the first run wrote"
+    );
+    assert!(
+        resumed.conversations_skipped > 0,
+        "the fixture must produce at least one conversation to skip"
+    );
 
     assert_eq!(jsonl_files(&out), first, "same file set after a resume");
     for (name, before) in first.iter().zip(bodies) {

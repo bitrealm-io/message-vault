@@ -57,3 +57,6 @@ pub fn copy_if_missing(src: &Path, dest: &Path) -> Result<bool> {
         .with_context(|| format!("copy {} to {}", src.display(), dest.display()))?;
     Ok(true)
 }
+
+#[cfg(test)]
+mod tests;

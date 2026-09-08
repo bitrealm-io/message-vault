@@ -317,7 +317,11 @@ Clippy is a CI job (`-D warnings`, workspace and `src-tauri`). `./scripts/check-
 
 ### Releases and versions
 
-The product follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (`MAJOR.MINOR.PATCH`). Record user-visible changes in `CHANGELOG.md` ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)) under `[Unreleased]` until a tag ships. Every changelog bullet must start with an ISO date (`YYYY-MM-DD`); released version headings use `## [0.8.0] - 2026-08-24`.
+The product follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (`MAJOR.MINOR.PATCH`). Record user-visible changes in `CHANGELOG.md` under the heading for the version in development (`## [0.9.0] — in development`), which becomes `## [0.9.0] - 2026-09-08` when the tag ships.
+
+**`CHANGELOG.md` is written for the people who use Message Vault, not for developers.** Group every entry as **Features** (something a person can now do), **Fixes** (something that was wrong and now behaves correctly), or **Design** (a change in how the product works that is worth knowing about). Say what changed for the reader in plain language: no route paths, status codes, schema versions, type or crate names, or file paths. Internal rework earns a sentence about what it changes for the reader, or one line saying the internals were reworked with nothing visible — never a list of what was moved where. The developer-facing detail already lives in the pull request, the ADRs under `docs/adr/`, and the commit message.
+
+Bullets under the in-development heading start with an ISO date (`YYYY-MM-DD`), the day the change landed. Released sections carry their date on the heading alone. Where a change forces someone to do something — a config key that must be deleted, a database that is rebuilt empty — put it under an **Upgrading** heading in that release, in a sentence they can act on.
 
 Three version numbers are easy to mix up:
 
@@ -339,7 +343,7 @@ Leave most other `Cargo.toml` files at `0.1.0`. Do not bump `web-next/` (`0.3.0`
 **Ship a release**
 
 1. Merge the work to `main`.
-2. Move `[Unreleased]` notes in `CHANGELOG.md` under the new version heading.
+2. In `CHANGELOG.md`, change the in-development heading to the dated form (`## [0.9.0] - 2026-09-08`) and drop the per-bullet dates, which the heading now carries. Add the next in-development heading above it when work resumes.
 3. Set the four product version files to the new number (for example `0.8.0`).
 4. Push a git tag `v0.8.0` on that commit. Pushing the tag is what ships. Push/PR to `main` does not. The `version` job fails the tag run if the four files, their lockfiles, or the changelog heading disagree with the tag, and nothing is built or published.
 

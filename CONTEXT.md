@@ -39,6 +39,21 @@ searching all resolve to whole conversations even where the interface
 speaks of messages.
 _Avoid_: Thread, Chat
 
+**Message**:
+One thing sent or received inside a Conversation: who sent it, when, what
+it said, and what was attached. A message can be read and pointed at on its
+own, and picked by hand for an Export Run, but it is never acted on alone:
+tagging, trashing and deleting happen to its Conversation.
+_Avoid_: Text, Post, Item, Row
+
+**Asset**:
+The bytes of one attachment, stored once and named by the hash of its
+contents, so the same file sent in ten messages is one asset. An asset is
+the only thing in the vault addressed by a hash rather than a row number,
+because the file exists before the vault does and its contents are its
+identity.
+_Avoid_: Attachment file, Blob, Media, Upload
+
 **Import Run**:
 One attempt to bring messages from a backup into the vault, recorded
 permanently whether it succeeded, failed, or was cancelled. The record
@@ -120,6 +135,25 @@ claimed vault is closed or open, depending on whether it lets strangers
 create their own accounts.
 _Avoid_: Setup, First run, Provisioning
 
+**Session**:
+One account's signed-in state, made by signing in with the account's
+password and ended by signing out or by expiry. There is one per signed-in
+account, and it is what the browser and the desktop app hold between
+requests. It is not an API token: a token is a named, scoped credential the
+person makes for a program, and it never signs in. Nothing else on the
+product is a session; the record of an import attempt is an Import Run.
+_Avoid_: Login, Auth, Import session, Token
+
+**API Token**:
+A named credential an account makes so a program can act for it without
+signing in, limited to the scopes the person chose: importing, exporting, or
+deleting. A program holding one can bring messages in, or take them out
+through an Export Run it starts, but it can never browse: reading messages
+outside a run needs a Session. The secret is shown once when the token is
+made; afterwards the account sees only its name, a masked hint, and when it
+was last used.
+_Avoid_: App password, Key, Credential, Session
+
 **User**:
 The person operating Message Vault, in the browser or in the desktop app. A
 user has an account in the vault, and "user" is the colloquial word for that
@@ -131,8 +165,19 @@ _Avoid_: Member, Operator, End user
 
 **Export**:
 Moving messages out of the vault into files on disk, in a format the
-person chooses. It reads the vault, never a phone backup.
+person chooses. It reads the vault, never a phone backup. Every export is
+recorded as an Export Run.
 _Avoid_: Extract, Pull, Download
+
+**Export Run**:
+One attempt to move messages out of the vault, recorded permanently whether
+it completed, failed, or was cancelled. The record holds what was asked for
+and how much matched, never what the messages said. A person asks in one of
+three ways: everything the account holds, whatever a search currently shows,
+or conversations and messages they have picked by hand. Exporting everything
+is still an Export Run; it is not called a backup, because a backup is the
+phone's file that Import reads.
+_Avoid_: Export Job, Backup, Download
 
 **Convert**:
 Rewriting a folder of already-exported files into a different format,

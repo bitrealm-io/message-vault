@@ -1,4 +1,4 @@
-//! One shape for every paged list on the HTTP interface (ADR-0005).
+//! One shape for every paged list on the HTTP interface (`docs/agents/http-api-rules.md`).
 //!
 //! A list takes `?offset=&limit=` and answers `{items, total, limit, offset}`.
 //! A `limit` above the cap or a zero `limit` is a 400, never a silent clamp,
@@ -77,7 +77,7 @@ pub struct SortKey<K> {
     pub direction: Direction,
 }
 
-/// Parse `sort=-field,field` against the keys a list accepts (ADR-0009):
+/// Parse `sort=-field,field` against the keys a list accepts (`docs/agents/http-api-rules.md`):
 /// comma-separated keys, a leading `-` for descending. Absent or blank is
 /// `default`. An unknown or repeated key is `validation-failed`, naming the
 /// key and the accepted set, the way the search language refuses an unknown

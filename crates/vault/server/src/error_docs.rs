@@ -1,4 +1,4 @@
-//! Generate the docs-site pages for the HTTP problem types (ADR-0010).
+//! Generate the docs-site pages for the HTTP problem types (`docs/agents/http-api-rules.md`).
 //!
 //! One page per [`ProblemType`] plus an index, under
 //! `docs/src/content/docs/vault/developer/reference/errors/`, regenerated with

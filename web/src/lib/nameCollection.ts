@@ -18,7 +18,7 @@ import {
  * hold names. The lookup from one to the other lives here and nowhere else:
  * the id comes from the cached list, or from the vault once when the cached
  * list does not hold the name, and a name the vault does not know is an error
- * before any request is sent. See `docs/adr/0003`.
+ * before any request is sent. See `docs/agents/http-api-rules.md`, Identifiers.
  */
 
 /** One set as the vault answers it. */

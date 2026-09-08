@@ -73,7 +73,7 @@ After `web/` UI changes, verify in the browser with the Playwright MCP (`plugin-
   users to protect — only developers, who rebuild. Never add a compatibility
   alias, a deprecation window, a version handshake, or a migration path for an
   old client, and never argue against a change on the grounds that something
-  already calls it. ADR-0005 says this for the HTTP interface; it holds for every
+  already calls it. `docs/agents/http-api-rules.md` says this for the HTTP interface; it holds for every
   interface. Do not raise this as an open question.
 - **Version lockstep** (current `0.9.0`): `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `web/package.json`, `crates/vault/server/Cargo.toml` all carry the product version. Leave other crates at `0.1.0`; never bump `web-next` (`0.3.0`).
 - **Pushing a `v*` tag ships a release** — CI builds the Docker image and desktop installers, creates a GitHub Release, and publishes the docs site to bitrealm.io. A merge to `main` publishes nothing. Never create or push tags unless asked.
@@ -101,3 +101,7 @@ The five canonical triage labels, unchanged: `needs-triage`, `needs-info`, `read
 ### Domain docs
 
 Single-context: one `CONTEXT.md` at the repo root plus `docs/adr/`. See `docs/agents/domain.md`.
+
+### HTTP interface rules
+
+Every rule for `/v1` routes is in `docs/agents/http-api-rules.md`, with its reason. The HTTP interface has no ADRs (`docs/adr/0011`); a change to a rule lands in that file in the same PR as the code.

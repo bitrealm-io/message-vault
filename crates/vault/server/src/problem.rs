@@ -1,5 +1,5 @@
 //! The registry of problem types: what each kind of failure is, the status it
-//! answers, the page that describes it (ADR-0010).
+//! answers, the page that describes it (`docs/agents/http-api-rules.md`).
 //!
 //! This is the one place a type is declared. [`crate::server::ApiError`] names
 //! one per variant, the OpenAPI document describes the body through

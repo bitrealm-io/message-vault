@@ -1,6 +1,6 @@
 [package]
 name = "message-vault-io-tauri"
-version = "0.8.3"
+version = "0.9.0"
 edition = "2024"
 license = "LicenseRef-FCL-1.0-ALv2"
 description = "Tauri desktop app for message-vault-io"

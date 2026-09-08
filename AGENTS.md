@@ -323,11 +323,11 @@ Three version numbers are easy to mix up:
 
 | What            | Example             | Meaning                                                                                |
 |-----------------|---------------------|----------------------------------------------------------------------------------------|
-| Product version | `0.8.3`             | Desktop app + vault image. Git tag is `v0.8.3`.                                        |
-| Docker Hub tag  | `0.8.3` (no `v`)    | `bitrealm/message-vault:0.8.3`. Also `0.8`, `latest`, and `sha-…`.                     |
+| Product version | `0.9.0`             | Desktop app + vault image. Git tag is `v0.9.0`.                                        |
+| Docker Hub tag  | `0.9.0` (no `v`)    | `bitrealm/message-vault:0.9.0`. Also `0.9`, `latest`, and `sha-…`.                     |
 | JSONL schema    | `schema_version: 4` | Shared chat file format. Independent of the product version. Version 3 is refused, never upgraded. |
 
-**Product version files** (keep these in lockstep; current value is `0.8.3`; CI's `version` job fails when they disagree, and on a `v*` tag when the tag disagrees with them):
+**Product version files** (keep these in lockstep; current value is `0.9.0`; CI's `version` job fails when they disagree, and on a `v*` tag when the tag disagrees with them):
 
 - `src-tauri/Cargo.toml` — the value the other three are compared against
 - `src-tauri/tauri.conf.json` — installer version

@@ -104,7 +104,6 @@ Released version headings also carry a date: `## [0.8.0] - 2026-08-24`.
 
 ### Changed
 
-- 2026-09-08: The Session is a singleton on the HTTP interface. `POST /v1/session` signs in (`201 Created`, `Location: /v1/session`), `GET /v1/session` reads the signed-in credential's account, and `DELETE /v1/session` signs out; `/v1/auth/login`, `/v1/auth/check` and `/v1/auth/logout` are gone, and so is the `account=` query on the check, because the credential names the account. (#511)
 
 - 2026-08-25: Settings → System applies import staging and ffmpeg directory changes
   immediately (no Save button), keeps both path labels on one line with aligned help

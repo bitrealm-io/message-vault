@@ -657,7 +657,7 @@ async fn resolve_asset_lookup(
     sha256: &str,
     query: &AssetPutQuery,
     access: AssetAccess,
-) -> Result<(String, String, Option<StoredAsset>), ApiError> {
+) -> Result<(i64, String, Option<StoredAsset>), ApiError> {
     // The handler's extractor already checked the capability for this access
     // mode; here the mode only picks the lookup strategy. A download streams
     // the file itself, so hashing it during lookup would read every byte
@@ -678,12 +678,9 @@ async fn resolve_asset_lookup(
 
     let cfg = Arc::clone(&state.cfg);
     let sha_lookup = sha256.to_string();
-    let account_lookup = account.clone();
     let source_lookup = source_id.clone();
     let existing = tokio::task::spawn_blocking(move || {
-        let assets_dir = cfg
-            .paths
-            .assets_dir_for_account(&account_lookup, &source_lookup);
+        let assets_dir = cfg.paths.assets_dir_for_account(account, &source_lookup);
         if verify_stored_bytes {
             lookup_by_sha256(&assets_dir, &sha_lookup)
         } else {
@@ -765,7 +762,7 @@ pub(crate) async fn asset_get_handler(
         return Err(ApiError::NotFound("asset not found".into()));
     };
 
-    let assets_dir = state.cfg.paths.assets_dir_for_account(&account, &source_id);
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
     let path = assets_dir.join(&stored.assets_path);
     // Reject symlinks / missing files before streaming.
     let meta = tokio::fs::symlink_metadata(&path).await.map_err(|e| {
@@ -854,7 +851,7 @@ pub(crate) async fn asset_put_handler(
 
     // Write the upload into the account assets tree so verify can rename into place
     // instead of copying across filesystems (tempfile often lives on another mount).
-    let assets_dir = state.cfg.paths.assets_dir_for_account(&account, &source_id);
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
     let incoming_dir = assets_dir.join(".incoming");
     tokio::fs::create_dir_all(&incoming_dir)
         .await
@@ -970,7 +967,7 @@ pub(crate) async fn asset_upload_start_handler(
 ) -> Result<Response, ApiError> {
     let (account, source_id, _existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
-    let assets_dir = state.cfg.paths.assets_dir_for_account(&account, &source_id);
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
     let mime = body.mime.clone();
     let bytes = body.bytes;
     let sha = sha256.clone();
@@ -1046,7 +1043,7 @@ pub(crate) async fn asset_upload_part_handler(
         return Err(ApiError::validation("part number must be >= 1"));
     }
     let body = read_body_limited(request.into_body(), state.upload_limits.part_size).await?;
-    let assets_dir = state.cfg.paths.assets_dir_for_account(&account, &source_id);
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
     let sha = sha256.clone();
     let uid = upload_id.clone();
     let written = tokio::task::spawn_blocking(move || {
@@ -1092,7 +1089,7 @@ pub(crate) async fn asset_upload_complete_handler(
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
     if let Some(stored) = existing {
         // Drop staging if a concurrent single-PUT won the race.
-        let assets_dir = state.cfg.paths.assets_dir_for_account(&account, &source_id);
+        let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
         let sha = sha256.clone();
         let uid = upload_id.clone();
         let dropped = tokio::task::spawn_blocking(move || {
@@ -1116,7 +1113,7 @@ pub(crate) async fn asset_upload_complete_handler(
         .lock(format!("{account}:{sha256}"))
         .await;
 
-    let assets_dir = state.cfg.paths.assets_dir_for_account(&account, &source_id);
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
     let sha = sha256.clone();
     let uid = upload_id.clone();
     let (stored, already_present) = tokio::task::spawn_blocking(move || {
@@ -1157,7 +1154,7 @@ pub(crate) async fn asset_upload_abort_handler(
 ) -> Result<axum::http::StatusCode, ApiError> {
     let (account, source_id, _existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
-    let assets_dir = state.cfg.paths.assets_dir_for_account(&account, &source_id);
+    let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
     let sha = sha256.clone();
     let uid = upload_id.clone();
     tokio::task::spawn_blocking(move || asset_uploads::abort_upload(&assets_dir, &sha, &uid))

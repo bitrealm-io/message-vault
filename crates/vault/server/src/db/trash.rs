@@ -71,7 +71,7 @@ impl Trashable {
     async fn is_owned(
         self,
         conn: &mut AnyConnection,
-        account_id: &str,
+        account_id: i64,
     ) -> Result<bool, sqlx::Error> {
         match self {
             Self::Conversation(id) => owns_conversation(conn, account_id, id).await,
@@ -83,7 +83,7 @@ impl Trashable {
     async fn is_trashed(
         self,
         conn: &mut AnyConnection,
-        account_id: &str,
+        account_id: i64,
     ) -> Result<bool, sqlx::Error> {
         let (table, id_column) = self.marker();
         let found: Option<i64> = sqlx::query_scalar(&format!(
@@ -105,7 +105,7 @@ impl Trashable {
 /// Returns a database error when a statement fails.
 pub async fn move_to_trash(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     target: Trashable,
 ) -> Result<bool, sqlx::Error> {
     if !target.is_owned(conn, account_id).await? {
@@ -132,7 +132,7 @@ pub async fn move_to_trash(
 /// Returns a database error when a statement fails.
 pub async fn restore(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     target: Trashable,
 ) -> Result<bool, sqlx::Error> {
     if !target.is_owned(conn, account_id).await? {
@@ -156,7 +156,7 @@ pub async fn restore(
 /// # Errors
 ///
 /// Returns a database error when a statement fails.
-pub async fn purge_account(conn: &mut AnyConnection, account_id: &str) -> Result<(), sqlx::Error> {
+pub async fn purge_account(conn: &mut AnyConnection, account_id: i64) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM trashed_conversations WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut *conn)
@@ -215,7 +215,7 @@ pub enum OrphanedFile {
 /// rolled back.
 pub async fn delete_trashed(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     target: Trashable,
 ) -> Result<DeleteOutcome, sqlx::Error> {
     if !target.is_owned(conn, account_id).await? {
@@ -246,7 +246,7 @@ pub async fn delete_trashed(
 /// rolled back.
 pub async fn empty_trash(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<Vec<OrphanedFile>, sqlx::Error> {
     let mut tx = conn.begin().await?;
     let conversation_ids: Vec<i64> = sqlx::query_scalar(
@@ -298,7 +298,7 @@ type AttachmentFilesRow = (
 /// the one that shows.
 async fn delete_conversations(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     ids: &[i64],
 ) -> Result<Vec<OrphanedFile>, sqlx::Error> {
     if ids.is_empty() {
@@ -346,7 +346,7 @@ async fn delete_conversations(
 /// deleted messages sharing one file report it once.
 async fn orphaned_files(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     candidates: Vec<AttachmentFilesRow>,
 ) -> Result<Vec<OrphanedFile>, sqlx::Error> {
     let mut out = Vec::new();
@@ -382,7 +382,7 @@ async fn orphaned_files(
 /// not lose it.
 async fn asset_is_referenced(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     source: &str,
     column: &'static str,
     sha256: &str,
@@ -414,7 +414,7 @@ async fn asset_is_referenced(
 /// them as one participant — by handle now, since the name is blank.
 async fn forget_contacts(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     ids: &[i64],
 ) -> Result<(), sqlx::Error> {
     if ids.is_empty() {

@@ -229,7 +229,7 @@ pub const DEFAULT_CONTACT_SORT: [SortKey<ContactSort>; 1] = [SortKey {
 
 pub async fn list_contacts_sorted(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     q: &str,
     order: &[SortKey<ContactSort>],
     limit: usize,
@@ -361,7 +361,7 @@ type ContactRow = (i64, String, i64, Option<String>, String, Option<String>);
 /// Returns an internal error when a database statement fails.
 pub async fn get_contact_detail(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     contact_id: i64,
 ) -> Result<Option<ContactDetail>, ApiError> {
     let Some((name, last_modified)) =
@@ -395,7 +395,7 @@ pub async fn get_contact_detail(
 /// stamp, or `None` when it is missing, another account's, or in the trash.
 async fn contact_name_and_modified(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     contact_id: i64,
 ) -> Result<Option<(String, String)>, ApiError> {
     Ok(sqlx::query_as(&format!(
@@ -455,7 +455,7 @@ impl From<ContactHandleRow> for ContactHandleInfo {
 /// that include it, trashed conversations excluded.
 async fn contact_handle_stats(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     contact_id: i64,
 ) -> Result<Vec<ContactHandleInfo>, ApiError> {
     let rows: Vec<ContactHandleRow> = sqlx::query_as(&format!(
@@ -500,7 +500,7 @@ struct ContactTotals {
 /// messages table dominated drawer latency.
 async fn contact_totals(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     contact_id: i64,
 ) -> Result<ContactTotals, ApiError> {
     let (direct, groups, messages): (i64, i64, i64) = sqlx::query_as(&format!(
@@ -542,7 +542,7 @@ async fn contact_totals(
 /// Returns an internal error when a database statement fails.
 pub async fn get_contact_summaries(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     ids: &[i64],
 ) -> Result<Vec<ContactSelectionSummary>, ApiError> {
     let mut seen = HashSet::new();
@@ -688,7 +688,7 @@ pub(crate) struct UnmatchedHandlesResponse {
 /// Returns an error when a database statement fails.
 async fn unknown_contact_identifiers(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     identifiers: &[String],
 ) -> AnyResult<Vec<String>> {
     let mut seen_normalized = HashSet::new();
@@ -818,7 +818,7 @@ pub(crate) async fn contacts_create_handler(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("write address book: {e}")))?;
 
     let mut conn = state.db.acquire().await?;
-    let stats = contacts::load_contacts_if_needed(&mut conn, Some(&path), true, &auth.account_id)
+    let stats = contacts::load_contacts_if_needed(&mut conn, Some(&path), true, auth.account_id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("load address book: {e}")))?;
     Ok(Json(AddressBookLoadResponse {
@@ -866,7 +866,7 @@ pub(crate) async fn unmatched_handles_handler(
     }
     let mut conn = state.db.acquire().await?;
     let unknown =
-        unknown_contact_identifiers(&mut conn, &auth.account_id, &body.identifiers).await?;
+        unknown_contact_identifiers(&mut conn, auth.account_id, &body.identifiers).await?;
     Ok(Json(UnmatchedHandlesResponse { unknown }))
 }
 
@@ -975,7 +975,7 @@ impl ContactMutationBody {
 /// Returns an error when the mutation is invalid or a database write fails.
 pub async fn mutate_contact(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     contact_id: i64,
     body: &ContactMutationBody,
 ) -> Result<bool, ContactEditError> {
@@ -995,7 +995,7 @@ pub async fn mutate_contact(
 /// the edits are methods.
 struct ContactEditor<'a> {
     conn: &'a mut AnyConnection,
-    account_id: &'a str,
+    account_id: i64,
     contact_id: i64,
 }
 
@@ -1268,10 +1268,10 @@ pub(crate) async fn contacts_list_handler(
         &CONTACT_SORT_KEYS,
         &DEFAULT_CONTACT_SORT,
     )?;
-    let clock = crate::db::account_profile::account_clock(&mut conn, &auth.account_id).await?;
+    let clock = crate::db::account_profile::account_clock(&mut conn, auth.account_id).await?;
     let result = list_contacts_sorted(
         &mut conn,
-        &auth.account_id,
+        auth.account_id,
         &q,
         &order,
         page.limit,
@@ -1308,7 +1308,7 @@ pub(crate) async fn contact_summaries_handler(
         )));
     }
     let mut conn = state.db.acquire().await?;
-    let page = get_contact_summaries(&mut conn, &auth.account_id, &body.ids)
+    let page = get_contact_summaries(&mut conn, auth.account_id, &body.ids)
         .await
         .map(|items| ContactSummariesPage { items })?;
     Ok(Json(page))
@@ -1335,7 +1335,7 @@ pub(crate) async fn contact_detail_handler(
     AxumPath(contact_id): AxumPath<i64>,
 ) -> Result<Json<ContactDetail>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let detail = get_contact_detail(&mut conn, &auth.account_id, contact_id).await?;
+    let detail = get_contact_detail(&mut conn, auth.account_id, contact_id).await?;
     detail
         .map(Json)
         .ok_or_else(|| ApiError::NotFound("contact not found".into()))
@@ -1365,10 +1365,10 @@ pub(crate) async fn contact_mutate_handler(
     Json(body): Json<ContactMutationBody>,
 ) -> Result<Json<ContactDetail>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    match mutate_contact(&mut conn, &auth.account_id, contact_id, &body).await {
+    match mutate_contact(&mut conn, auth.account_id, contact_id, &body).await {
         Ok(false) => Err(ApiError::NotFound("contact not found".into())),
         Err(e) => Err(e.into()),
-        Ok(true) => get_contact_detail(&mut conn, &auth.account_id, contact_id)
+        Ok(true) => get_contact_detail(&mut conn, auth.account_id, contact_id)
             .await?
             .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("contact missing after mutate")))
             .map(Json),
@@ -1396,7 +1396,7 @@ pub(crate) async fn contact_trash_handler(
     AxumPath(contact_id): AxumPath<i64>,
 ) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
-    if move_to_trash(&mut conn, &auth.account_id, Trashable::Contact(contact_id)).await? {
+    if move_to_trash(&mut conn, auth.account_id, Trashable::Contact(contact_id)).await? {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(ApiError::NotFound("contact not found".into()))
@@ -1424,7 +1424,7 @@ pub(crate) async fn contact_restore_handler(
     AxumPath(contact_id): AxumPath<i64>,
 ) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
-    if restore(&mut conn, &auth.account_id, Trashable::Contact(contact_id)).await? {
+    if restore(&mut conn, auth.account_id, Trashable::Contact(contact_id)).await? {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(ApiError::NotFound("contact not found".into()))
@@ -1456,7 +1456,7 @@ pub(crate) async fn contact_delete_handler(
     AxumPath(contact_id): AxumPath<i64>,
 ) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
-    match delete_trashed(&mut conn, &auth.account_id, Trashable::Contact(contact_id)).await? {
+    match delete_trashed(&mut conn, auth.account_id, Trashable::Contact(contact_id)).await? {
         // A contact owns no files, so there is nothing to remove from disk.
         DeleteOutcome::Deleted(_) => Ok(StatusCode::NO_CONTENT),
         DeleteOutcome::NotOwned => Err(ApiError::NotFound("contact not found".into())),

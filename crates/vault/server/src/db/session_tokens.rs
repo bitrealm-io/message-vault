@@ -65,9 +65,9 @@ fn now_unix_secs() -> u64 {
 pub async fn lookup_account_for_token(
     conn: &mut AnyConnection,
     token: &str,
-) -> Result<Option<String>> {
+) -> Result<Option<i64>> {
     let token_hash = hash_api_token(token);
-    let found: Option<(String, String)> = sqlx::query_as(
+    let found: Option<(i64, String)> = sqlx::query_as(
         "SELECT account_id, expires_at FROM account_session_tokens WHERE token_hash = $1",
     )
     .bind(token_hash.as_str())
@@ -96,7 +96,7 @@ pub async fn lookup_account_for_token(
 /// Returns an error when a token cannot be generated or the write fails.
 pub async fn rotate_account_session_token(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<String> {
     let token = generate_session_token()?;
     let token_hash = hash_api_token(&token);
@@ -129,7 +129,7 @@ pub async fn rotate_account_session_token(
 /// Returns an error when a token cannot be generated or the insert fails.
 pub async fn insert_account_session_token(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<String> {
     insert_account_session_token_with_ttl(conn, account_id, SESSION_TTL_SECS).await
 }
@@ -141,7 +141,7 @@ pub async fn insert_account_session_token(
 /// Returns an error when a token cannot be generated or the insert fails.
 pub async fn insert_account_session_token_with_ttl(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     ttl_secs: u64,
 ) -> Result<String> {
     let token = generate_session_token()?;
@@ -169,7 +169,7 @@ pub async fn insert_account_session_token_with_ttl(
 /// Returns an error when the lookup or token write fails.
 pub async fn get_or_create_session_token(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<String> {
     let existing: Option<String> =
         sqlx::query_scalar("SELECT token_hash FROM account_session_tokens WHERE account_id = $1")
@@ -201,7 +201,7 @@ pub async fn revoke_session_token(conn: &mut AnyConnection, token: &str) -> Resu
 /// one row). Used when an administrator resets someone else's password, so
 /// the reset actually ends their existing sign-in rather than merely
 /// changing what a future one would need.
-pub async fn revoke_account_sessions(conn: &mut AnyConnection, account_id: &str) -> Result<()> {
+pub async fn revoke_account_sessions(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
     sqlx::query("DELETE FROM account_session_tokens WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut *conn)
@@ -243,11 +243,11 @@ mod tests {
         let mut conn = pool.acquire().await.unwrap();
         schema::ensure_accounts_schema(&mut conn).await.unwrap();
         sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
-            .bind("a1")
+            .bind(7_i64)
             .execute(&mut *conn)
             .await
             .unwrap();
-        let token = insert_account_session_token(&mut conn, "a1").await.unwrap();
+        let token = insert_account_session_token(&mut conn, 7).await.unwrap();
         // Force expiry into the past.
         sqlx::query("UPDATE account_session_tokens SET expires_at = '1'")
             .execute(&mut *conn)
@@ -267,17 +267,17 @@ mod tests {
         let mut conn = pool.acquire().await.unwrap();
         schema::ensure_accounts_schema(&mut conn).await.unwrap();
         sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
-            .bind("a1")
+            .bind(7_i64)
             .execute(&mut *conn)
             .await
             .unwrap();
         let before = now_unix_secs();
-        let token = insert_account_session_token_with_ttl(&mut conn, "a1", 120)
+        let token = insert_account_session_token_with_ttl(&mut conn, 7, 120)
             .await
             .unwrap();
         assert!(token.starts_with("mv-user-"));
         let expires: String = sqlx::query_scalar(
-            "SELECT expires_at FROM account_session_tokens WHERE account_id = 'a1'",
+            "SELECT expires_at FROM account_session_tokens WHERE account_id = 7",
         )
         .fetch_one(&mut *conn)
         .await
@@ -293,11 +293,11 @@ mod tests {
         let mut conn = pool.acquire().await.unwrap();
         schema::ensure_accounts_schema(&mut conn).await.unwrap();
         sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
-            .bind("a1")
+            .bind(7_i64)
             .execute(&mut *conn)
             .await
             .unwrap();
-        let token = insert_account_session_token(&mut conn, "a1").await.unwrap();
+        let token = insert_account_session_token(&mut conn, 7).await.unwrap();
         assert!(
             lookup_account_for_token(&mut conn, &token)
                 .await

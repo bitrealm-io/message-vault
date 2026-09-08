@@ -16,7 +16,7 @@ import { createApiToken, deleteApiToken, listApiTokens, renameApiToken } from ".
 import type { ApiTokenItem } from "./apiTokensUtils";
 import { useApiTokens } from "./useApiTokens";
 
-vi.mock("../../lib/auth", () => ({ useAuth: () => ({ accountId: "account-1" }) }));
+vi.mock("../../lib/auth", () => ({ useAuth: () => ({ accountId: 7 }) }));
 
 vi.mock("../../lib/vaultApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../lib/vaultApi")>()),
@@ -38,7 +38,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 const token: ApiTokenItem = {
-  id: "tok_1",
+  id: 1,
   label: "Laptop",
   can_import: true,
   can_export: true,
@@ -129,7 +129,7 @@ describe("useApiTokens", () => {
       finish();
     });
     await waitFor(() => expect(result.current.busy).toBe(false));
-    expect(rename).toHaveBeenCalledWith("tok_1", { label: "Desktop" });
+    expect(rename).toHaveBeenCalledWith(1, { label: "Desktop" });
     expect(result.current.renameTarget).toBeNull();
   });
 });

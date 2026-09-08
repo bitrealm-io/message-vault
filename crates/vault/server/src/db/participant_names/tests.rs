@@ -1,7 +1,7 @@
 use super::*;
 use crate::db::schema;
 
-const TEST_ACCOUNT: &str = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+const TEST_ACCOUNT: i64 = 7;
 
 /// Insert an account, one conversation, and one participant on `handle`
 /// whose backup name is `name_alias`. Returns (conversation_id, handle_id).

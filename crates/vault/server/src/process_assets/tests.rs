@@ -33,7 +33,7 @@ fn pass<'a>(
     SourcePass {
         opts,
         work_dir,
-        account_id: "acc",
+        account_id: 7,
         source_id: "imessage",
         assets_dir: assets_dir.to_path_buf(),
         converted_dir: converted_dir.to_path_buf(),
@@ -275,10 +275,7 @@ fn a_label_names_the_account_the_source_and_the_stored_path() {
     let opts = ProcessAssetsOptions::default();
     let dir = tempfile::tempdir().unwrap();
     let pass = pass(&opts, dir.path(), dir.path(), dir.path());
-    assert_eq!(
-        pass.label(&row("aa/photo.jpg")),
-        "acc/imessage/aa/photo.jpg"
-    );
+    assert_eq!(pass.label(&row("aa/photo.jpg")), "7/imessage/aa/photo.jpg");
 }
 
 #[test]
@@ -422,27 +419,27 @@ async fn store_and_update_derived_db() {
         .await
         .unwrap();
     let mut conn = pool.acquire().await.unwrap();
-    sqlx::query("INSERT INTO accounts (id, username) VALUES ('acc', 'demo')")
+    sqlx::query("INSERT INTO accounts (id, username) VALUES (7, 'demo')")
         .execute(&mut *conn)
         .await
         .unwrap();
     sqlx::query(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES ('acc', '+1', '+1', 'phone', 'phone')",
+         VALUES (7, '+1', '+1', 'phone', 'phone')",
     )
     .execute(&mut *conn)
     .await
     .unwrap();
     sqlx::query(
         "INSERT INTO conversations (id, account_id, chat_handle_id, conversation_type, source_file)
-         VALUES (1, 'acc', 1, 'individual', 't')",
+         VALUES (1, 7, 1, 'individual', 't')",
     )
     .execute(&mut *conn)
     .await
     .unwrap();
     sqlx::query(
         "INSERT INTO messages (id, conversation_id, account_id, source, timestamp, is_from_me, sort_order)
-         VALUES (1, 1, 'acc', 'imessage', '2020-01-01T00:00:00Z', 0, 0)",
+         VALUES (1, 1, 7, 'imessage', '2020-01-01T00:00:00Z', 0, 0)",
     )
     .execute(&mut *conn)
     .await
@@ -460,7 +457,7 @@ async fn store_and_update_derived_db() {
     let blob = store_derived_bytes(&converted, b"jpeg-bytes", ".jpg").unwrap();
     assert!(converted.join(&blob.assets_path).is_file());
 
-    update_derived(&mut conn, "acc", "imessage", "aa11", &blob)
+    update_derived(&mut conn, 7, "imessage", "aa11", &blob)
         .await
         .unwrap();
 
@@ -483,15 +480,15 @@ async fn listed_attachments_carry_name_hints_for_extensionless_blobs() {
         .unwrap();
     let mut conn = pool.acquire().await.unwrap();
     for statement in [
-        "INSERT INTO accounts (id, username) VALUES ('acc', 'demo')".to_string(),
+        "INSERT INTO accounts (id, username) VALUES (7, 'demo')".to_string(),
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-            VALUES ('acc', '+1', '+1', 'phone', 'phone')"
+            VALUES (7, '+1', '+1', 'phone', 'phone')"
             .to_string(),
         "INSERT INTO conversations (id, account_id, chat_handle_id, conversation_type, source_file)
-            VALUES (1, 'acc', 1, 'individual', 't')"
+            VALUES (1, 7, 1, 'individual', 't')"
             .to_string(),
         "INSERT INTO messages (id, conversation_id, account_id, source, timestamp, is_from_me, sort_order)
-            VALUES (1, 1, 'acc', 'imessage', '2020-01-01T00:00:00Z', 0, 0)"
+            VALUES (1, 1, 7, 'imessage', '2020-01-01T00:00:00Z', 0, 0)"
             .to_string(),
         format!(
             "INSERT INTO attachments (id, message_id, sha256, assets_path, mime_type, original_name, path)
@@ -501,9 +498,7 @@ async fn listed_attachments_carry_name_hints_for_extensionless_blobs() {
         sqlx::query(&statement).execute(&mut *conn).await.unwrap();
     }
 
-    let rows = list_attachments(&mut conn, "acc", "imessage")
-        .await
-        .unwrap();
+    let rows = list_attachments(&mut conn, 7, "imessage").await.unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(
         plan(&rows[0], &ProcessAssetsOptions::default(), FRESH).unwrap(),

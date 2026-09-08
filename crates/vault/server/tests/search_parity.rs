@@ -18,7 +18,7 @@ use serde::Deserialize;
 use sqlx::AnyConnection;
 
 /// Account used for the corpus vault (the same id the crate's unit tests use).
-const ACCOUNT_ID: &str = "11111111-1111-1111-1111-111111111111";
+const ACCOUNT_ID: i64 = 7;
 
 /// One corpus message; `k` is bound as the message id (both engines accept
 /// explicit ids: SQLite `INTEGER PRIMARY KEY`, Postgres `BY DEFAULT AS IDENTITY`).

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use super::*;
 use crate::db::account_profile;
 
-const ALICE: &str = "00000000-0000-4000-8000-000000000001";
+const ALICE: i64 = 7;
 
 /// A one-conversation JSON Lines export with no messages, enough for the
 /// import to record a conversation under source `imessage`.
@@ -47,7 +47,7 @@ async fn open(config: &Path) -> OpenVault {
 async fn with_alice(config: &Path) {
     let vault = open(config).await;
     let mut conn = vault.conn().await.unwrap();
-    account_profile::insert_account(&mut conn, ALICE, "alice", None, None)
+    account_profile::insert_account_at(&mut conn, ALICE, "alice", None, None)
         .await
         .unwrap();
 }
@@ -221,7 +221,7 @@ async fn import_contacts_loads_the_address_book_for_the_account() {
     assert_eq!(
         count(
             &config,
-            "SELECT COUNT(*) FROM contacts WHERE account_id = '00000000-0000-4000-8000-000000000001'"
+            "SELECT COUNT(*) FROM contacts WHERE account_id = 7"
         )
         .await,
         1
@@ -307,7 +307,7 @@ async fn import_refuses_an_unknown_account() {
 
     assert_eq!(
         err.to_string(),
-        "account not found: alice (use an existing username or account UUID)"
+        "account not found: alice (use an existing username or account id)"
     );
 }
 

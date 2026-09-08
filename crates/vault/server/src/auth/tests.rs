@@ -67,8 +67,8 @@ use crate::db::permissions::Permissions;
 use crate::test_support::*;
 use axum::http::StatusCode;
 
-const TEST_ACCOUNT: &str = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const OTHER_ACCOUNT: &str = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const TEST_ACCOUNT: i64 = 7;
+const OTHER_ACCOUNT: i64 = 8;
 
 /// Test database with the vault schema applied. The temp dir is returned
 /// too: dropping it deletes the database file out from under the checked-out
@@ -144,10 +144,10 @@ async fn password_change_setup() -> (
     let mut conn = pool.acquire().await.unwrap();
     schema::ensure_vault_schema(&mut conn).await.unwrap();
     let old_hash = hash_password("old-password").unwrap();
-    account_profile::insert_account(&mut conn, TEST_ACCOUNT, "alice", Some(&old_hash), None)
+    account_profile::insert_account_at(&mut conn, TEST_ACCOUNT, "alice", Some(&old_hash), None)
         .await
         .unwrap();
-    account_profile::insert_account(&mut conn, OTHER_ACCOUNT, "bob", Some(&old_hash), None)
+    account_profile::insert_account_at(&mut conn, OTHER_ACCOUNT, "bob", Some(&old_hash), None)
         .await
         .unwrap();
     let old_session = session_tokens::insert_account_session_token(&mut conn, TEST_ACCOUNT)
@@ -264,8 +264,7 @@ async fn change_password_transaction_updates_all_credentials() {
     assert_eq!(
         session_tokens::lookup_account_for_token(&mut conn, &new_session)
             .await
-            .unwrap()
-            .as_deref(),
+            .unwrap(),
         Some(TEST_ACCOUNT)
     );
     for api_token in api_tokens {
@@ -289,7 +288,7 @@ async fn change_password_transaction_updates_all_credentials() {
 #[tokio::test]
 async fn logout_on_conn_leaves_registered_account() {
     let (_dir, mut conn) = test_conn().await;
-    account_profile::insert_account(&mut conn, TEST_ACCOUNT, "alice", None, None)
+    account_profile::insert_account_at(&mut conn, TEST_ACCOUNT, "alice", None, None)
         .await
         .unwrap();
     let token = session_tokens::insert_account_session_token(&mut conn, TEST_ACCOUNT)
@@ -346,8 +345,7 @@ async fn change_password_transaction_rolls_back_every_credential() {
     assert_eq!(
         session_tokens::lookup_account_for_token(&mut conn, &old_session)
             .await
-            .unwrap()
-            .as_deref(),
+            .unwrap(),
         Some(TEST_ACCOUNT)
     );
     for api_token in api_tokens {
@@ -376,7 +374,7 @@ async fn disabled_account_cannot_sign_in() {
 
     let mut conn = state.db.acquire().await.unwrap();
     sqlx::query("UPDATE accounts SET disabled = 1 WHERE id = $1")
-        .bind(&created.account_id)
+        .bind(created.account_id)
         .execute(&mut *conn)
         .await
         .unwrap();
@@ -408,7 +406,7 @@ async fn registration_never_produces_the_vault_owner() {
         "registering accounts does not claim the vault"
     );
 
-    let auth = account_profile::load_account_auth(&mut conn, &first.account_id)
+    let auth = account_profile::load_account_auth(&mut conn, first.account_id)
         .await
         .unwrap()
         .unwrap();
@@ -430,7 +428,7 @@ async fn a_registration_that_names_nothing_owes_profile_setup() {
     let account = register_via_api(&state, "alice", "hunter2hunter2").await;
 
     let mut conn = state.db.acquire().await.unwrap();
-    let auth = account_profile::load_account_auth(&mut conn, &account.account_id)
+    let auth = account_profile::load_account_auth(&mut conn, account.account_id)
         .await
         .unwrap()
         .unwrap();
@@ -461,12 +459,12 @@ async fn a_registration_that_names_the_account_owes_no_profile_setup() {
     assert_eq!(status, StatusCode::OK);
 
     let mut conn = state.db.acquire().await.unwrap();
-    let account_id: String = sqlx::query_scalar("SELECT id FROM accounts WHERE username = $1")
+    let account_id: i64 = sqlx::query_scalar("SELECT id FROM accounts WHERE username = $1")
         .bind("sam")
         .fetch_one(&mut *conn)
         .await
         .unwrap();
-    let auth = account_profile::load_account_auth(&mut conn, &account_id)
+    let auth = account_profile::load_account_auth(&mut conn, account_id)
         .await
         .unwrap()
         .unwrap();
@@ -486,7 +484,7 @@ async fn the_vault_owner_owes_no_profile_setup() {
     let owner = crate::test_support::claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let mut conn = state.db.acquire().await.unwrap();
-    let auth = account_profile::load_account_auth(&mut conn, &owner.account_id)
+    let auth = account_profile::load_account_auth(&mut conn, owner.account_id)
         .await
         .unwrap()
         .unwrap();

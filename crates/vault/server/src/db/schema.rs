@@ -44,7 +44,7 @@ const DROP_MESSAGES_FTS_TRIGGERS_PG_SQL: &str =
 /// `PRAGMA user_version`. Bump this whenever any `schema/sql/*.sql` file
 /// changes; a database at any other version is rebuilt empty (see
 /// [`migrate_vault_schema`]).
-pub const SCHEMA_VERSION: i64 = 13;
+pub const SCHEMA_VERSION: i64 = 14;
 
 /// Bring the database to [`SCHEMA_VERSION`].
 ///
@@ -588,7 +588,7 @@ const MESSAGE_IDS_FOR_SOURCE: &str = "SELECT m.id FROM messages m \
 /// Returns an error when a delete or update statement fails.
 pub async fn delete_messages_for_source(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     source: &str,
 ) -> Result<u64> {
     sqlx::query(&format!(
@@ -635,7 +635,7 @@ pub async fn delete_messages_for_source(
 /// # Errors
 ///
 /// Returns an error when schema setup or the delete fails.
-pub async fn reset_staging_for_account(conn: &mut AnyConnection, account_id: &str) -> Result<()> {
+pub async fn reset_staging_for_account(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
     ensure_vault_schema(conn).await?;
     sqlx::query("DELETE FROM staging_conversations WHERE account_id = $1")
         .bind(account_id)

@@ -13,7 +13,7 @@ vi.mock("../lib/auth", () => ({
     logout,
     token: "t",
     serverUrl: "",
-    accountId: "acct",
+    accountId: 7,
   }),
 }));
 

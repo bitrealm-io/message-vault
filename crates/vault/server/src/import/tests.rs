@@ -5,7 +5,7 @@ use crate::test_support::{
 };
 use tempfile::TempDir;
 
-const TEST_ACCOUNT: &str = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+const TEST_ACCOUNT: i64 = 7;
 
 fn write_jsonl(dir: &Path, name: &str, body: &str) -> PathBuf {
     let path = dir.join(name);
@@ -30,7 +30,7 @@ async fn session_with_summary(summary: serde_json::Value) -> (TestVault, String,
     let mut conn = vault.state.db.acquire().await.unwrap();
     crate::db::vault_imports::set_import_stage(
         &mut conn,
-        &account.account_id,
+        account.account_id,
         import_id,
         crate::db::vault_imports::ImportStage::AwaitingGate1,
         Some(&summary.to_string()),

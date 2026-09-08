@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAccountProfile, useUpdateAccountProfile } from "./useAccountProfile";
 import { getAccountProfile, updateAccountProfile } from "./vaultApi";
 
-vi.mock("./auth", () => ({ useAuth: () => ({ accountId: "account-1" }) }));
+vi.mock("./auth", () => ({ useAuth: () => ({ accountId: 7 }) }));
 
 vi.mock("./vaultApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./vaultApi")>()),

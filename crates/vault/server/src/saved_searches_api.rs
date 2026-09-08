@@ -43,7 +43,7 @@ pub(crate) async fn saved_searches_list_handler(
     FullAccess(auth): FullAccess,
 ) -> Result<Json<SavedSearchesListResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let items = saved_searches::list(&mut conn, &auth.account_id).await?;
+    let items = saved_searches::list(&mut conn, auth.account_id).await?;
     Ok(Json(SavedSearchesListResponse { items }))
 }
 
@@ -75,7 +75,7 @@ pub(crate) async fn saved_searches_create_handler(
     let mut conn = state.db.acquire().await?;
     let row = saved_searches::create(
         &mut conn,
-        &auth.account_id,
+        auth.account_id,
         &body.name,
         &body.query,
         SavedSearchKind::Manual,
@@ -113,7 +113,7 @@ pub(crate) async fn saved_searches_update_handler(
 ) -> Result<Json<SavedSearch>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let row =
-        saved_searches::update(&mut conn, &auth.account_id, id, &body.name, &body.query).await?;
+        saved_searches::update(&mut conn, auth.account_id, id, &body.name, &body.query).await?;
     Ok(Json(row))
 }
 
@@ -141,7 +141,7 @@ pub(crate) async fn saved_searches_delete_handler(
     Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
-    saved_searches::delete(&mut conn, &auth.account_id, id).await?;
+    saved_searches::delete(&mut conn, auth.account_id, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

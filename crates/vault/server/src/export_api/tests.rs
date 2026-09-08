@@ -65,11 +65,11 @@ async fn export_takes_the_search_language() {
 /// field and several tests assert `message.service == Some("sms")`.
 async fn seeded_export_vault() -> (TestVault, i64, i64) {
     let vault = test_vault().await;
-    let account = vault.account_with_id("a1", "alice").await;
+    let account = vault.account_with_id(101, "alice").await;
     let conv1 = seed_conversation(
         &vault.state,
         &SeedConversation {
-            account_id: &account,
+            account_id: account,
             handle: "+1555",
             conversation_type: "individual",
             group_title: None,
@@ -81,7 +81,7 @@ async fn seeded_export_vault() -> (TestVault, i64, i64) {
     let conv2 = seed_conversation(
         &vault.state,
         &SeedConversation {
-            account_id: &account,
+            account_id: account,
             handle: "+1666",
             conversation_type: "individual",
             group_title: None,
@@ -94,8 +94,8 @@ async fn seeded_export_vault() -> (TestVault, i64, i64) {
     let mut conn = vault.conn().await;
     sqlx::query(
         "INSERT INTO messages (id, conversation_id, account_id, source, service, timestamp, is_from_me, sort_order, body)
-         VALUES (1, $1, 'a1', 'sms', 'sms', '2020-01-01T00:00:00Z', 0, 0, 'hello one'),
-                (2, $2, 'a1', 'sms', 'sms', '2020-01-02T00:00:00Z', 0, 0, 'hello two')",
+         VALUES (1, $1, 101, 'sms', 'sms', '2020-01-01T00:00:00Z', 0, 0, 'hello one'),
+                (2, $2, 101, 'sms', 'sms', '2020-01-02T00:00:00Z', 0, 0, 'hello two')",
     )
     .bind(conv1)
     .bind(conv2)
@@ -124,7 +124,7 @@ async fn export_includes_attachment_missing_reason() {
     let res = export_messages(
         &mut conn,
         ExportPageOpts {
-            account_id: "a1",
+            account_id: 101,
             query: &query,
             limit: 100,
             offset: 0,
@@ -153,7 +153,7 @@ async fn conversation_filter_scopes_messages() {
     let res = export_messages(
         &mut conn,
         ExportPageOpts {
-            account_id: "a1",
+            account_id: 101,
             query: &query1,
             limit: 100,
             offset: 0,
@@ -172,7 +172,7 @@ async fn conversation_filter_scopes_messages() {
     let res = export_messages(
         &mut conn,
         ExportPageOpts {
-            account_id: "a1",
+            account_id: 101,
             query: &query2,
             limit: 100,
             offset: 0,
@@ -189,7 +189,7 @@ async fn conversation_filter_scopes_messages() {
     let res = export_messages(
         &mut conn,
         ExportPageOpts {
-            account_id: "a1",
+            account_id: 101,
             query: "",
             limit: 100,
             offset: 0,
@@ -209,7 +209,7 @@ async fn export_message_count_supports_handle_filters() {
     let mut conn = vault.conn().await;
     let sender_id: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES ('a1', 'alice', 'alice', 'other', 'other') RETURNING id",
+         VALUES (101, 'alice', 'alice', 'other', 'other') RETURNING id",
     )
     .fetch_one(&mut *conn)
     .await
@@ -240,7 +240,7 @@ async fn export_message_count_supports_handle_filters() {
         let counts = export_message_count(
             &mut conn,
             ExportCountOpts {
-                account_id: "a1",
+                account_id: 101,
                 query,
                 clock: crate::search::tests::clock(),
             },
@@ -260,7 +260,7 @@ async fn free_text_matches_message_body_via_fts() {
     let res = export_messages(
         &mut conn,
         ExportPageOpts {
-            account_id: "a1",
+            account_id: 101,
             query: "one",
             limit: 100,
             offset: 0,
@@ -293,7 +293,7 @@ async fn export_boolean_query_preserves_or() {
             id, conversation_id, account_id, source, service, timestamp,
             is_from_me, sort_order, body
          ) VALUES (
-            3, $1, 'a1', 'sms', 'sms', '2020-01-03T00:00:00Z',
+            3, $1, 101, 'sms', 'sms', '2020-01-03T00:00:00Z',
             0, 0, 'foo bar'
          )",
     )
@@ -305,7 +305,7 @@ async fn export_boolean_query_preserves_or() {
     let result = export_messages(
         &mut conn,
         ExportPageOpts {
-            account_id: "a1",
+            account_id: 101,
             query: "foo OR bar",
             limit: 100,
             offset: 0,
@@ -338,7 +338,7 @@ async fn export_boolean_query_preserves_and_and_not() {
             id, conversation_id, account_id, source, service, timestamp,
             is_from_me, sort_order, body
          ) VALUES (
-            3, $1, 'a1', 'sms', 'sms', '2020-01-03T00:00:00Z',
+            3, $1, 101, 'sms', 'sms', '2020-01-03T00:00:00Z',
             0, 0, 'foo bar'
          )",
     )
@@ -357,7 +357,7 @@ async fn export_boolean_query_preserves_and_and_not() {
             export_messages(
                 &mut conn,
                 ExportPageOpts {
-                    account_id: "a1",
+                    account_id: 101,
                     query,
                     limit: 100,
                     offset: 0,
@@ -413,7 +413,7 @@ async fn export_boolean_query_combines_body_phrases_prefixes_and_nesting() {
             export_messages(
                 &mut conn,
                 ExportPageOpts {
-                    account_id: "a1",
+                    account_id: 101,
                     query,
                     limit: 100,
                     offset: 0,
@@ -443,7 +443,7 @@ async fn export_boolean_query_combines_body_phrases_prefixes_and_nesting() {
 
     sqlx::query(
         "INSERT INTO trashed_conversations (account_id, conversation_id)
-         VALUES ('a1', $1)",
+         VALUES (101, $1)",
     )
     .bind(conv2)
     .execute(&mut *conn)
@@ -460,7 +460,7 @@ async fn rejects_an_oversized_query() {
     let err = export_messages(
         &mut conn,
         ExportPageOpts {
-            account_id: "a1",
+            account_id: 101,
             query: &huge,
             limit: 10,
             offset: 0,
@@ -480,18 +480,18 @@ async fn rejects_an_oversized_query() {
 #[tokio::test]
 async fn export_does_not_leak_other_account_messages() {
     let (vault, _conv1, _conv2) = seeded_export_vault().await;
-    vault.account_with_id("a2", "bob").await;
+    vault.account_with_id(102, "bob").await;
     let mut conn = vault.conn().await;
     let bob_handle: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES ('a2', '+1777', '+1777', 'phone', 'phone') RETURNING id",
+         VALUES (102, '+1777', '+1777', 'phone', 'phone') RETURNING id",
     )
     .fetch_one(&mut *conn)
     .await
     .unwrap();
     sqlx::query(
         "INSERT INTO conversations (id, account_id, chat_handle_id, conversation_type, source_file)
-         VALUES (99, 'a2', $1, 'individual', 'bob.jsonl')",
+         VALUES (99, 102, $1, 'individual', 'bob.jsonl')",
     )
     .bind(bob_handle)
     .execute(&mut *conn)
@@ -499,7 +499,7 @@ async fn export_does_not_leak_other_account_messages() {
     .unwrap();
     sqlx::query(
         "INSERT INTO messages (id, conversation_id, account_id, source, service, timestamp, is_from_me, sort_order, body)
-         VALUES (99, 99, 'a2', 'sms', 'sms', '2020-02-01T00:00:00Z', 0, 0, 'bob secret')",
+         VALUES (99, 99, 102, 'sms', 'sms', '2020-02-01T00:00:00Z', 0, 0, 'bob secret')",
     )
     .execute(&mut *conn)
     .await
@@ -508,7 +508,7 @@ async fn export_does_not_leak_other_account_messages() {
     let alice = export_messages(
         &mut conn,
         ExportPageOpts {
-            account_id: "a1",
+            account_id: 101,
             query: "secret",
             limit: 100,
             offset: 0,
@@ -524,7 +524,7 @@ async fn export_does_not_leak_other_account_messages() {
     let alice_all = export_messages(
         &mut conn,
         ExportPageOpts {
-            account_id: "a1",
+            account_id: 101,
             query: "",
             limit: 100,
             offset: 0,
@@ -548,7 +548,7 @@ async fn export_pages_by_offset_and_reports_the_total() {
             id, conversation_id, account_id, source, service, timestamp,
             is_from_me, sort_order, body
          ) VALUES (
-            3, $1, 'a1', 'sms', 'sms', '2020-01-03T00:00:00Z',
+            3, $1, 101, 'sms', 'sms', '2020-01-03T00:00:00Z',
             0, 0, 'third'
          )",
     )
@@ -564,7 +564,7 @@ async fn export_pages_by_offset_and_reports_the_total() {
             export_messages(
                 &mut conn,
                 ExportPageOpts {
-                    account_id: "a1",
+                    account_id: 101,
                     query: "",
                     limit,
                     offset,
@@ -598,7 +598,7 @@ async fn the_export_route_answers_a_page_and_refuses_a_bad_limit() {
     let vault = crate::test_support::test_vault().await;
     let state = vault.state.clone();
     let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
-    crate::test_support::seed_one_message(&state, &user.account_id).await;
+    crate::test_support::seed_one_message(&state, user.account_id).await;
 
     let page: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/export/messages?q=&limit=10", &user.token).await;
@@ -628,7 +628,7 @@ async fn export_sql_placeholders_match_params_order() {
     let conn = vault.conn().await;
     let filter = message_filter(
         engine_of(&conn),
-        "a1",
+        101,
         r#"from:alice to:bo subject:hello tag:work ("alpha phrase" OR report*)"#,
         crate::search::tests::clock(),
     )
@@ -662,7 +662,7 @@ async fn the_export_route_runs_the_search_language() {
     crate::test_support::seed_conversation(
         &vault.state,
         &crate::test_support::SeedConversation {
-            account_id: &user.account_id,
+            account_id: user.account_id,
             handle: "+15555550100",
             conversation_type: "individual",
             group_title: None,
@@ -728,7 +728,7 @@ async fn the_export_route_does_not_leak_another_account() {
     let alice =
         crate::test_support::register_via_api(&vault.state, "alice", "hunter2hunter2").await;
     let bob = crate::test_support::register_via_api(&vault.state, "bob", "hunter2hunter2").await;
-    crate::test_support::seed_one_message(&vault.state, &alice.account_id).await;
+    crate::test_support::seed_one_message(&vault.state, alice.account_id).await;
 
     let page: serde_json::Value =
         crate::test_support::get_json(&vault.state, "/v1/export/messages?q=&limit=50", &bob.token)

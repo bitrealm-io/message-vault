@@ -167,7 +167,7 @@ fn prepare_attachments(
 /// multi-row chunks. Handle ids are remembered so the same sender is not
 /// looked up on every message.
 pub(super) struct StagingInserts {
-    account_id: String,
+    account_id: i64,
     import_id: Option<i64>,
     handles: HandleIdCache,
 }
@@ -217,9 +217,9 @@ INSERT INTO staging_tapbacks (
 
 impl StagingInserts {
     /// Fresh insert state for one import run.
-    pub(super) fn new(account_id: &str, import_id: Option<i64>) -> Self {
+    pub(super) fn new(account_id: i64, import_id: Option<i64>) -> Self {
         Self {
-            account_id: account_id.to_string(),
+            account_id,
             import_id,
             handles: HandleIdCache::new(),
         }
@@ -448,7 +448,7 @@ impl FileStaging<'_> {
         let (chat_handle_id, flagged, cached) = upsert_handle_row_cached(
             self.tx,
             &mut self.stmts.handles,
-            &self.stmts.account_id,
+            self.stmts.account_id,
             &conversation.chat_identifier,
             infer_handle_type(&conversation.chat_identifier),
             Some(platform.as_str()),
@@ -460,7 +460,7 @@ impl FileStaging<'_> {
         if !cached {
             let _ = ensure_contact_for_handle(
                 self.tx,
-                &self.stmts.account_id,
+                self.stmts.account_id,
                 chat_handle_id,
                 None,
                 &mut stats,
@@ -468,7 +468,7 @@ impl FileStaging<'_> {
             .await?;
         }
         let conversation_id: i64 = sqlx::query_scalar(INSERT_CONVERSATION)
-            .bind(&self.stmts.account_id)
+            .bind(self.stmts.account_id)
             .bind(chat_handle_id)
             .bind(conversation.conversation_type)
             .bind(conversation.group_title)
@@ -574,7 +574,7 @@ async fn insert_participant(
         // Nothing but a contact can hold a name with no identity, so the
         // participant is bound to one and carries no handle.
         let (contact_id, name_alias) =
-            resolve_name_only_participant(tx, &stmts.account_id, name_alias.as_deref()).await?;
+            resolve_name_only_participant(tx, stmts.account_id, name_alias.as_deref()).await?;
         // `resolve_name_only_participant` returns `(None, None)` when
         // there is nothing to create and nothing to show; honor that here
         // instead of inserting a row that names no one.
@@ -596,7 +596,7 @@ async fn insert_participant(
     let (handle_id, flagged, _cached) = upsert_handle_row_cached(
         tx,
         &mut stmts.handles,
-        &stmts.account_id,
+        stmts.account_id,
         &handle,
         handle_type,
         Some(platform.as_str()),
@@ -608,7 +608,7 @@ async fn insert_participant(
     let backup_name = name_alias.as_deref().and_then(nonempty);
     let contact_id = ensure_contact_for_handle(
         tx,
-        &stmts.account_id,
+        stmts.account_id,
         handle_id,
         backup_name.as_deref(),
         stats,
@@ -655,7 +655,7 @@ async fn resolve_message_rows(
         let sender_handle_id = resolve_incoming_sender_handle(
             tx,
             &mut stmts.handles,
-            &stmts.account_id,
+            stmts.account_id,
             IncomingSender {
                 is_from_me: msg.is_from_me,
                 address: msg.sender.as_deref(),
@@ -765,7 +765,7 @@ async fn insert_message_rows(
     for row in chunk {
         q = q
             .bind(conversation_id)
-            .bind(&stmts.account_id)
+            .bind(stmts.account_id)
             .bind(source)
             .bind(row.msg.guid.as_deref())
             .bind(&row.msg.timestamp)
@@ -841,7 +841,7 @@ async fn tapback_row(
     let sender_handle_id = resolve_incoming_sender_handle(
         tx,
         &mut stmts.handles,
-        &stmts.account_id,
+        stmts.account_id,
         IncomingSender {
             is_from_me: tap.is_from_me,
             address: tap.sender.as_deref(),

@@ -16,7 +16,7 @@ import { useContactDetail, useUpdateContact } from "./contactDetail";
 import { getContact, updateContact } from "./vaultApi";
 import { keys } from "./vaultKeys";
 
-vi.mock("./auth", () => ({ useAuth: () => ({ accountId: "account-1" }) }));
+vi.mock("./auth", () => ({ useAuth: () => ({ accountId: 7 }) }));
 
 vi.mock("./vaultApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./vaultApi")>()),
@@ -80,21 +80,20 @@ describe("useUpdateContact", () => {
     const { result } = renderHook(() => useUpdateContact(), { wrapper });
     await result.current.mutateAsync({ contactId: "7", body: { name: "Ada Lovelace" } });
     expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toEqual([
-      ["vault", "account-1", "contacts", "list"],
+      ["vault", 7, "contacts", "list"],
     ]);
-    expect(client.getQueryData(["vault", "account-1", ...keys.contacts.detail("7")])).toBeDefined();
+    expect(client.getQueryData(["vault", 7, ...keys.contacts.detail("7")])).toBeDefined();
   });
 
   it("reports a refusal instead of writing anything", async () => {
-    client.setQueryData(["vault", "account-1", "contacts", "detail", "7"], contact("Ada"));
+    client.setQueryData(["vault", 7, "contacts", "detail", "7"], contact("Ada"));
     write.mockRejectedValue(new Error("handle already linked"));
     const { result } = renderHook(() => useUpdateContact(), { wrapper });
     await expect(
       result.current.mutateAsync({ contactId: "7", body: { name: "Ada Lovelace" } }),
     ).rejects.toThrow("handle already linked");
     expect(
-      client.getQueryData<{ name: string }>(["vault", "account-1", "contacts", "detail", "7"])
-        ?.name,
+      client.getQueryData<{ name: string }>(["vault", 7, "contacts", "detail", "7"])?.name,
     ).toBe("Ada");
   });
 });

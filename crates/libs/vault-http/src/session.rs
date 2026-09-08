@@ -118,10 +118,7 @@ impl HttpSession {
                 status: status_code,
                 snippet: truncate(&text, 200),
             })?;
-        let account_id = parsed
-            .account_id
-            .filter(|s| !s.is_empty())
-            .ok_or(AuthError::MissingAccountId)?;
+        let account_id = parsed.account_id.ok_or(AuthError::MissingAccountId)?;
         Ok(AuthInfo {
             account_id,
             username: parsed.username,
@@ -133,7 +130,7 @@ impl HttpSession {
 #[derive(Debug, Deserialize)]
 struct SessionResponse {
     #[serde(default)]
-    account_id: Option<String>,
+    account_id: Option<i64>,
     #[serde(default)]
     username: Option<String>,
 }

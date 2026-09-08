@@ -133,7 +133,7 @@ fn authenticate_and_push_text_only_conversation() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
             "sources": ["sms-backup-restore"]
         }));
@@ -158,7 +158,7 @@ fn authenticate_and_push_text_only_conversation() {
         when.method(POST).path("/v1/imports/42/batches");
         then.status(200).json_body(json!({
             "source": "sms-backup-restore",
-            "account": "acct-1",
+            "account": 1,
             "messages": 1,
             "messages_appended": 1,
             "conversations": 1,
@@ -170,7 +170,7 @@ fn authenticate_and_push_text_only_conversation() {
     });
 
     let info = authenticate(&server.base_url(), "mv_test").unwrap();
-    assert_eq!(info.account_id, "acct-1");
+    assert_eq!(info.account_id, 1);
 
     let dir = tempdir().unwrap();
     write_jsonl(dir.path(), &sample_doc());
@@ -200,7 +200,7 @@ fn reuses_supplied_import_session_without_starting_or_completing_one() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
         }));
     });
@@ -226,7 +226,7 @@ fn reuses_supplied_import_session_without_starting_or_completing_one() {
         when.method(POST).path("/v1/imports/99/batches");
         then.status(200).json_body(json!({
             "source": "sms-backup-restore",
-            "account": "acct-1",
+            "account": 1,
             "messages": 1,
             "messages_appended": 1,
             "conversations": 1,
@@ -263,7 +263,7 @@ fn aggregates_multiple_conversations_into_one_import_request() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
         }));
     });
@@ -312,7 +312,7 @@ fn flushes_at_message_limit_across_two_batches_of_one_run() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
         }));
     });
@@ -361,7 +361,7 @@ fn failed_combined_request_only_fails_its_files() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
         }));
     });
@@ -427,7 +427,7 @@ fn resumes_message_batches_from_compacted_journal() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
         }));
     });
@@ -472,7 +472,7 @@ fn profiles_attachment_upload_phases() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
             "sources": ["sms-backup-restore"]
         }));
@@ -631,7 +631,7 @@ fn puts_two_new_assets_without_head() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
             "sources": ["sms-backup-restore"]
         }));
@@ -701,7 +701,7 @@ fn heads_later_assets_after_put_reports_already_present() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
             "sources": ["sms-backup-restore"]
         }));
@@ -774,7 +774,7 @@ fn preflight_head_skips_puts_when_first_asset_already_present() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
             "sources": ["sms-backup-restore"]
         }));
@@ -833,7 +833,7 @@ fn multipart_upload_when_over_proxy_threshold() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
             "sources": ["sms-backup-restore"]
         }));
@@ -947,7 +947,7 @@ fn multipart_aborts_on_hash_mismatch_complete() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
             "sources": ["sms-backup-restore"]
         }));
@@ -1071,7 +1071,7 @@ fn verify_digests_fails_on_mismatch() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
             "sources": ["sms-backup-restore"]
         }));
@@ -1120,7 +1120,7 @@ fn shared_attachment_uploaded_once_across_conversations() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
             "sources": ["sms-backup-restore"]
         }));
@@ -1204,7 +1204,7 @@ fn skips_oversized_attachment_keeps_conversation_ok() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
             "sources": ["sms-backup-restore"]
         }));
@@ -1321,7 +1321,7 @@ fn skips_missing_attachment_file_keeps_conversation_ok() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
             "sources": ["sms-backup-restore"]
         }));
@@ -1422,7 +1422,7 @@ fn keeps_conversation_ok_when_skipped_attachment_has_no_path() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
             "sources": ["sms-backup-restore"]
         }));
@@ -1492,7 +1492,7 @@ fn reports_pathless_attachment_without_reason_as_no_path() {
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200).json_body(json!({
-            "account_id": "acct-1",
+            "account_id": 1,
             "username": "alice",
             "sources": ["sms-backup-restore"]
         }));

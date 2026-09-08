@@ -30,7 +30,7 @@ pub(crate) fn not_trashed_conversation(conv: &str) -> String {
 pub(crate) fn compile(
     list: ListKind,
     expr: Option<&Expr>,
-    account_id: &str,
+    account_id: i64,
     engine: DbEngine,
     zone: chrono_tz::Tz,
 ) -> Result<Filter, QueryError> {
@@ -44,7 +44,7 @@ pub(crate) fn compile(
     out.push("(");
     out.push(ctx.account_col());
     out.push(" = ");
-    out.bind_text(ctx.account_id);
+    out.bind_int(ctx.account_id);
     let uses = |word: &str| expr.is_some_and(|e| e.uses(word));
     match list {
         ListKind::Contacts => {
@@ -94,7 +94,7 @@ pub(crate) fn compile(
 }
 
 /// Write the SQL for one expression node, recursing into and, or, and not.
-fn emit_expr(ctx: &ListCtx<'_>, out: &mut Sql, expr: &Expr) -> Result<(), QueryError> {
+fn emit_expr(ctx: &ListCtx, out: &mut Sql, expr: &Expr) -> Result<(), QueryError> {
     match expr {
         Expr::And(parts) | Expr::Or(parts) => {
             let joiner = if matches!(expr, Expr::And(_)) {
@@ -173,7 +173,7 @@ const PARTICIPANTS_WITH_CONTACT: &str = "participants p \
      LEFT JOIN contacts pct ON pct.id = pch.contact_id AND pct.account_id = c.account_id";
 
 /// Free text: the row's own text, one meaning applied per row type.
-fn emit_text(ctx: &ListCtx<'_>, out: &mut Sql, term: &TextTerm) {
+fn emit_text(ctx: &ListCtx, out: &mut Sql, term: &TextTerm) {
     let e = ctx.engine;
     match ctx.list {
         ListKind::Contacts => {
@@ -227,7 +227,7 @@ fn emit_text(ctx: &ListCtx<'_>, out: &mut Sql, term: &TextTerm) {
 /// either. Every word in the registry has an arm in `emit_one`; a word that
 /// somehow reaches it without one is refused by name rather than quietly
 /// matching.
-fn emit_field(ctx: &ListCtx<'_>, out: &mut Sql, term: &FieldTerm) -> Result<(), QueryError> {
+fn emit_field(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm) -> Result<(), QueryError> {
     out.push("(");
     for (i, value) in term.values.iter().enumerate() {
         if i > 0 {
@@ -240,12 +240,7 @@ fn emit_field(ctx: &ListCtx<'_>, out: &mut Sql, term: &FieldTerm) -> Result<(), 
 }
 
 /// One value of one word, written against the innermost alias it needs.
-fn emit_one(
-    ctx: &ListCtx<'_>,
-    out: &mut Sql,
-    term: &FieldTerm,
-    v: &Value,
-) -> Result<(), QueryError> {
+fn emit_one(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
     match term.spec.word {
         "body" | "subject" | "name" | "title" | "handle" | "filename" => {
             emit_text_word(ctx, out, term, v)
@@ -321,7 +316,7 @@ fn text_match(
 /// messages (and their attachments); `title:` always looks at the
 /// conversation.
 fn emit_text_word(
-    ctx: &ListCtx<'_>,
+    ctx: &ListCtx,
     out: &mut Sql,
     term: &FieldTerm,
     v: &Value,
@@ -478,7 +473,7 @@ fn participant_matches(
 /// Some party to conversation `c` is `v`: its chat handle, a participant's
 /// handle, or a participant the source only named (see `participant_matches`).
 fn with_person(
-    ctx: &ListCtx<'_>,
+    ctx: &ListCtx,
     out: &mut Sql,
     term: &FieldTerm,
     v: &Value,
@@ -604,7 +599,7 @@ impl NamedSet {
 /// they read `m.` directly; `with:`, `group:`, `tag:`, and `import:` go
 /// through the bridges so they work on every list the registry allows.
 fn emit_people_word(
-    ctx: &ListCtx<'_>,
+    ctx: &ListCtx,
     out: &mut Sql,
     term: &FieldTerm,
     v: &Value,
@@ -623,12 +618,7 @@ fn emit_people_word(
 
 /// `from:me` is the outgoing flag; `from:<person>` is an incoming message
 /// whose sender handle is that person.
-fn emit_from(
-    ctx: &ListCtx<'_>,
-    out: &mut Sql,
-    term: &FieldTerm,
-    v: &Value,
-) -> Result<(), QueryError> {
+fn emit_from(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
     if matches!(v, Value::Keyword("me")) {
         out.push("m.is_from_me = 1");
         return Ok(());
@@ -641,12 +631,7 @@ fn emit_from(
 
 /// `to:me` is any incoming message; `to:<person>` is a message in a
 /// conversation with that person that they did not send themselves.
-fn emit_to(
-    ctx: &ListCtx<'_>,
-    out: &mut Sql,
-    term: &FieldTerm,
-    v: &Value,
-) -> Result<(), QueryError> {
+fn emit_to(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
     if matches!(v, Value::Keyword("me")) {
         out.push("m.is_from_me = 0");
         return Ok(());
@@ -663,12 +648,7 @@ fn emit_to(
 
 /// `in:#id` names a conversation; `in:<text>` matches its group title or its
 /// chat handle.
-fn emit_in(
-    ctx: &ListCtx<'_>,
-    out: &mut Sql,
-    term: &FieldTerm,
-    v: &Value,
-) -> Result<(), QueryError> {
+fn emit_in(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
     match v {
         Value::Id(id) => {
             out.push("m.conversation_id = ");
@@ -697,7 +677,7 @@ fn emit_in(
 /// "no row they reach is in any set": a contact with one tagged conversation
 /// is out of `tag:none` even when their other conversations carry no tag.
 fn emit_set_word(
-    ctx: &ListCtx<'_>,
+    ctx: &ListCtx,
     out: &mut Sql,
     term: &FieldTerm,
     v: &Value,
@@ -737,7 +717,7 @@ fn emit_set_word(
 /// directly on Messages (whose own duplicate default is already skipped for
 /// `import:` in `compile`).
 fn emit_import(
-    ctx: &ListCtx<'_>,
+    ctx: &ListCtx,
     out: &mut Sql,
     term: &FieldTerm,
     v: &Value,
@@ -757,7 +737,7 @@ fn emit_import(
         out.bind_int(id)
     } else {
         out.push("(SELECT MAX(vi.id) FROM vault_imports vi WHERE vi.account_id = ");
-        out.bind_text(ctx.account_id.to_string());
+        out.bind_int(ctx.account_id);
         out.push(")");
     }
     if !on_messages {
@@ -828,7 +808,7 @@ fn source_id(choice: &str) -> &'static str {
 /// reads `ct.`/`c.` directly, the base row's own alias; on Messages, where
 /// `c` is not in scope, it goes through the `conversation` bridge instead.
 fn emit_kind_word(
-    ctx: &ListCtx<'_>,
+    ctx: &ListCtx,
     out: &mut Sql,
     term: &FieldTerm,
     v: &Value,
@@ -950,7 +930,7 @@ fn date_sql(out: &mut Sql, expr: &str, cmp: &DateCmp, zone: chrono_tz::Tz) {
 /// Contacts only, so they read `ct.` directly; `attachments:` is registered
 /// for Messages only, so it reads `m.` directly.
 fn emit_measure_word(
-    ctx: &ListCtx<'_>,
+    ctx: &ListCtx,
     out: &mut Sql,
     term: &FieldTerm,
     v: &Value,

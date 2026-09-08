@@ -279,7 +279,7 @@ async fn failed_reset_preserves_existing_demo_account() {
     let temp = tempfile::tempdir().expect("create test directory");
     let db = temp.path().join("vault.db");
     let data_dir = temp.path().join("data");
-    let account_root = data_dir.join(DEMO_ACCOUNT_ID);
+    let account_root = data_dir.join(DEMO_ACCOUNT_ID.to_string());
     fs::create_dir_all(&account_root).expect("create account data directory");
     let sentinel = account_root.join("existing.bin");
     let original_data = b"existing account data\n";
@@ -435,8 +435,11 @@ async fn failures_after_database_and_account_install_restore_all_active_state() 
         fs::copy(&active_db, &prepared_db).expect("copy prepared database");
         make_prepared_reset_database_observably_different(&prepared_db).await;
 
-        let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID);
-        let prepared_account = temp.path().join("prepared-data").join(DEMO_ACCOUNT_ID);
+        let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
+        let prepared_account = temp
+            .path()
+            .join("prepared-data")
+            .join(DEMO_ACCOUNT_ID.to_string());
         fs::create_dir_all(&active_account).expect("create active account");
         fs::create_dir_all(&prepared_account).expect("create prepared account");
         fs::write(active_account.join("sentinel"), b"old data").expect("write old data");
@@ -497,8 +500,11 @@ async fn active_sidecars_are_cleaned_immediately_before_database_rename() {
         .expect("create prepared database parent");
     fs::copy(&active_db, &prepared_db).expect("copy prepared database");
 
-    let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID);
-    let prepared_account = temp.path().join("prepared-data").join(DEMO_ACCOUNT_ID);
+    let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
+    let prepared_account = temp
+        .path()
+        .join("prepared-data")
+        .join(DEMO_ACCOUNT_ID.to_string());
     fs::create_dir_all(&active_account).expect("create active account");
     fs::create_dir_all(&prepared_account).expect("create prepared account");
     let active_config = temp.path().join("config/config.toml");
@@ -630,7 +636,7 @@ async fn seed_reset_test_database(path: &Path) {
         .await
         .expect("create reset test schema");
     seed_reset_test_account(&mut conn, DEMO_ACCOUNT_ID, "demo-existing").await;
-    seed_reset_test_account(&mut conn, "non-demo-account", "non-demo-existing").await;
+    seed_reset_test_account(&mut conn, 9, "non-demo-existing").await;
     close_test_db(pool, conn).await;
     // Pool close does not reliably checkpoint WAL sidecars, so an
     // fs::copy of this file would miss everything written to the -wal.
@@ -684,7 +690,7 @@ async fn make_prepared_reset_database_observably_different(path: &Path) {
     close_test_db(pool, conn).await;
 }
 
-async fn seed_reset_test_account(conn: &mut AnyConnection, account_id: &str, guid: &str) {
+async fn seed_reset_test_account(conn: &mut AnyConnection, account_id: i64, guid: &str) {
     account_profile::ensure_account_row(conn, account_id)
         .await
         .expect("seed reset test account");
@@ -727,10 +733,7 @@ async fn seed_reset_test_account(conn: &mut AnyConnection, account_id: &str, gui
 
 async fn assert_reset_test_database(path: &Path) {
     let (pool, mut conn) = test_db(path).await;
-    for (account_id, guid) in [
-        (DEMO_ACCOUNT_ID, "demo-existing"),
-        ("non-demo-account", "non-demo-existing"),
-    ] {
+    for (account_id, guid) in [(DEMO_ACCOUNT_ID, "demo-existing"), (9, "non-demo-existing")] {
         let account_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts WHERE id = $1")
             .bind(account_id)
             .fetch_one(&mut *conn)
@@ -751,7 +754,7 @@ async fn assert_reset_test_database(path: &Path) {
         .await
         .expect("count restored message");
         assert_eq!(account_count, 1, "account {account_id}");
-        assert_eq!(username, account_id, "username {account_id}");
+        assert_eq!(username, account_id.to_string(), "username {account_id}");
         assert_eq!(message_count, 1, "message {guid}");
         assert_eq!(body, "keep me", "message body {guid}");
     }
@@ -875,7 +878,7 @@ async fn a_successful_install_removes_the_work_directories() {
     let data_work_path = data_work.path().to_path_buf();
     let prepared_db = db_work.path().join("vault.db");
     seed_reset_test_database(&prepared_db).await;
-    let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID);
+    let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID.to_string());
     fs::create_dir_all(&prepared_account).expect("create prepared account");
     fs::write(prepared_account.join("sentinel"), b"new data").expect("write new data");
     let prepared_config = temp.path().join("prepared-config/config.toml");
@@ -885,7 +888,7 @@ async fn a_successful_install_removes_the_work_directories() {
     let active_db = temp.path().join("active/vault.db");
     fs::create_dir_all(active_db.parent().expect("active database parent"))
         .expect("create active database parent");
-    let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID);
+    let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
     let active_config = temp.path().join("config/config.toml");
     fs::create_dir_all(active_config.parent().expect("active config parent"))
         .expect("create active config parent");
@@ -933,10 +936,10 @@ async fn a_failed_install_with_nothing_left_in_the_work_directories_removes_them
     // No prepared database, account or config: the install refuses before
     // any rename, so there is no rollback and nothing to keep.
     let prepared_db = db_work.path().join("vault.db");
-    let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID);
+    let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID.to_string());
     let prepared_config = temp.path().join("prepared-config/config.toml");
     let active_db = temp.path().join("active/vault.db");
-    let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID);
+    let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
     let active_config = temp.path().join("config/config.toml");
 
     let error = install_reset_state_or_keep_work(
@@ -978,10 +981,10 @@ async fn a_failed_install_that_left_previous_state_in_the_work_directories_keeps
     )
     .expect("write leftover backup");
     let prepared_db = db_work.path().join("vault.db");
-    let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID);
+    let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID.to_string());
     let prepared_config = temp.path().join("prepared-config/config.toml");
     let active_db = temp.path().join("active/vault.db");
-    let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID);
+    let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
     let active_config = temp.path().join("config/config.toml");
 
     let error = install_reset_state_or_keep_work(

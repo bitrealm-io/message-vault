@@ -31,7 +31,7 @@ use crate::server::{ApiError, AppState, FullDeleteAccess};
 /// and the message is logged rather than shown.
 pub(crate) async fn remove_orphaned_files(
     cfg: Arc<Config>,
-    account_id: String,
+    account_id: i64,
     files: Vec<OrphanedFile>,
 ) -> Result<(), ApiError> {
     if files.is_empty() {
@@ -39,7 +39,7 @@ pub(crate) async fn remove_orphaned_files(
     }
     tokio::task::spawn_blocking(move || {
         for file in files {
-            for path in paths_to_remove(&cfg, &account_id, &file)? {
+            for path in paths_to_remove(&cfg, account_id, &file)? {
                 remove_if_present(&path)?;
             }
         }
@@ -52,7 +52,7 @@ pub(crate) async fn remove_orphaned_files(
 /// The absolute paths one orphaned file occupies on disk.
 fn paths_to_remove(
     cfg: &Config,
-    account_id: &str,
+    account_id: i64,
     file: &OrphanedFile,
 ) -> Result<Vec<PathBuf>, ApiError> {
     match file {
@@ -127,7 +127,7 @@ pub(crate) async fn empty_trash_handler(
 ) -> Result<StatusCode, ApiError> {
     let orphaned = {
         let mut conn = state.db.acquire().await?;
-        empty_trash(&mut conn, &auth.account_id).await?
+        empty_trash(&mut conn, auth.account_id).await?
     };
     remove_orphaned_files(Arc::clone(&state.cfg), auth.account_id, orphaned).await?;
     Ok(StatusCode::NO_CONTENT)

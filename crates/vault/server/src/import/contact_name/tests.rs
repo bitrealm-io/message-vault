@@ -1,7 +1,7 @@
 use super::*;
 use crate::db::schema;
 
-const TEST_ACCOUNT: &str = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+const TEST_ACCOUNT: i64 = 7;
 
 #[tokio::test]
 async fn an_import_creates_the_contact_with_the_backup_name() {

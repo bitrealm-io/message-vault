@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OffsetPage } from "./vaultQuery";
 import { useVaultCache, useVaultPagedList, useVaultQuery } from "./vaultQuery";
 
-const account = { current: "account-1" };
+const account = { current: 7 };
 vi.mock("./auth", () => ({
   useAuth: () => ({ accountId: account.current }),
 }));
@@ -27,7 +27,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 beforeEach(() => {
-  account.current = "account-1";
+  account.current = 7;
   client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
   });
@@ -39,7 +39,7 @@ describe("useVaultQuery", () => {
       wrapper,
     });
     await waitFor(() => expect(result.current.data).toEqual(["Family"]));
-    expect(client.getQueryData(["vault", "account-1", "contact-groups"])).toEqual(["Family"]);
+    expect(client.getQueryData(["vault", 7, "contact-groups"])).toEqual(["Family"]);
   });
 
   it("does not hand one account the entry another account filled", async () => {
@@ -63,7 +63,7 @@ describe("useVaultQuery", () => {
     first.unmount();
 
     // A different account asks for the same thing.
-    account.current = "account-2";
+    account.current = 8;
     fetchGroups.mockResolvedValue(["Work"]);
     const second = renderHook(() => useVaultQuery(["contact-groups"], fetchGroups), { wrapper });
 
@@ -207,13 +207,13 @@ describe("useVaultCache", () => {
     act(() => {
       result.current.set(["contact-groups"], [{ id: 1, name: "Family" }]);
     });
-    expect(client.getQueryData(["vault", "account-1", "contact-groups"])).toEqual([
+    expect(client.getQueryData(["vault", 7, "contact-groups"])).toEqual([
       { id: 1, name: "Family" },
     ]);
     expect(result.current.read(["contact-groups"])).toEqual([{ id: 1, name: "Family" }]);
 
     // Another account's entry is not this account's to read.
-    client.setQueryData(["vault", "account-2", "contact-groups"], [{ id: 9, name: "Work" }]);
+    client.setQueryData(["vault", 8, "contact-groups"], [{ id: 9, name: "Work" }]);
     expect(result.current.read(["contact-groups"])).toEqual([{ id: 1, name: "Family" }]);
   });
 
@@ -222,13 +222,13 @@ describe("useVaultCache", () => {
     await expect(result.current.fetch(["contact-groups"], async () => ["Family"])).resolves.toEqual(
       ["Family"],
     );
-    expect(client.getQueryData(["vault", "account-1", "contact-groups"])).toEqual(["Family"]);
+    expect(client.getQueryData(["vault", 7, "contact-groups"])).toEqual(["Family"]);
   });
 
   it("patches every entry under one prefix and puts them all back from a snapshot", () => {
-    client.setQueryData(["vault", "account-1", "contacts", "list", ""], { total: 1 });
-    client.setQueryData(["vault", "account-1", "contacts", "list", "ada"], { total: 2 });
-    client.setQueryData(["vault", "account-1", "conversations", "list", ""], { total: 3 });
+    client.setQueryData(["vault", 7, "contacts", "list", ""], { total: 1 });
+    client.setQueryData(["vault", 7, "contacts", "list", "ada"], { total: 2 });
+    client.setQueryData(["vault", 7, "conversations", "list", ""], { total: 3 });
     const { result } = renderHook(() => useVaultCache(), { wrapper });
 
     const taken = result.current.snapshot(["contacts"]);
@@ -239,24 +239,24 @@ describe("useVaultCache", () => {
         entry ? { total: entry.total + 10 } : entry,
       );
     });
-    expect(client.getQueryData(["vault", "account-1", "contacts", "list", ""])).toEqual({
+    expect(client.getQueryData(["vault", 7, "contacts", "list", ""])).toEqual({
       total: 11,
     });
-    expect(client.getQueryData(["vault", "account-1", "contacts", "list", "ada"])).toEqual({
+    expect(client.getQueryData(["vault", 7, "contacts", "list", "ada"])).toEqual({
       total: 12,
     });
     // A different resource under a different prefix is untouched.
-    expect(client.getQueryData(["vault", "account-1", "conversations", "list", ""])).toEqual({
+    expect(client.getQueryData(["vault", 7, "conversations", "list", ""])).toEqual({
       total: 3,
     });
 
     act(() => {
       result.current.restore(taken);
     });
-    expect(client.getQueryData(["vault", "account-1", "contacts", "list", ""])).toEqual({
+    expect(client.getQueryData(["vault", 7, "contacts", "list", ""])).toEqual({
       total: 1,
     });
-    expect(client.getQueryData(["vault", "account-1", "contacts", "list", "ada"])).toEqual({
+    expect(client.getQueryData(["vault", 7, "contacts", "list", "ada"])).toEqual({
       total: 2,
     });
   });
@@ -266,8 +266,8 @@ describe("useVaultCache", () => {
     const { result } = renderHook(() => useVaultCache(), { wrapper });
     await result.current.invalidate(["message-tags"], ["conversations"]);
     expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toEqual([
-      ["vault", "account-1", "message-tags"],
-      ["vault", "account-1", "conversations"],
+      ["vault", 7, "message-tags"],
+      ["vault", 7, "conversations"],
     ]);
   });
 });

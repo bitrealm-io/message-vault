@@ -13,7 +13,7 @@ async fn seed(vault: &TestVault, account: &RegisteredAccount, handle: &str) -> i
     seed_conversation(
         &vault.state,
         &SeedConversation {
-            account_id: &account.account_id,
+            account_id: account.account_id,
             handle,
             conversation_type: "individual",
             group_title: None,
@@ -35,7 +35,7 @@ async fn seed_named_contact(vault: &TestVault, account: &RegisteredAccount, name
     sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name, origin) VALUES ($1, $2, 'user') RETURNING id",
     )
-    .bind(&account.account_id)
+    .bind(account.account_id)
     .bind(name)
     .fetch_one(&mut *conn)
     .await
@@ -45,7 +45,7 @@ async fn seed_named_contact(vault: &TestVault, account: &RegisteredAccount, name
 async fn trash(vault: &TestVault, account: &RegisteredAccount, target: Trashable) {
     let mut conn = vault.conn().await;
     assert!(
-        move_to_trash(&mut conn, &account.account_id, target)
+        move_to_trash(&mut conn, account.account_id, target)
             .await
             .unwrap()
     );
@@ -67,12 +67,12 @@ async fn empty_trash_deletes_trashed_conversations_and_forgets_trashed_contacts(
     let only_in_doomed = fake_sha256('b');
 
     let doomed = seed(&vault, &alice, "+15550001").await;
-    let shared_file = attach_stored_file(&vault.state, &alice.account_id, doomed, &shared).await;
+    let shared_file = attach_stored_file(&vault.state, alice.account_id, doomed, &shared).await;
     let doomed_file =
-        attach_stored_file(&vault.state, &alice.account_id, doomed, &only_in_doomed).await;
+        attach_stored_file(&vault.state, alice.account_id, doomed, &only_in_doomed).await;
     let kept = seed(&vault, &alice, "+15550002").await;
     // The kept conversation points at the same stored bytes as `shared`.
-    attach_stored_file(&vault.state, &alice.account_id, kept, &shared).await;
+    attach_stored_file(&vault.state, alice.account_id, kept, &shared).await;
     let sidecar = doomed_file
         .parent()
         .unwrap()
@@ -173,7 +173,7 @@ async fn empty_trash_needs_the_delete_permission() {
     {
         let mut conn = vault.conn().await;
         sqlx::query("UPDATE accounts SET can_delete = 0 WHERE id = $1")
-            .bind(&alice.account_id)
+            .bind(alice.account_id)
             .execute(&mut *conn)
             .await
             .unwrap();

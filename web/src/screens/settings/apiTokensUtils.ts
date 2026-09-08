@@ -29,7 +29,7 @@ export function permissionsLabel(token: {
 }
 
 export type ApiTokenItem = {
-  id: string;
+  id: number;
   label: string;
   can_import: boolean;
   can_export: boolean;

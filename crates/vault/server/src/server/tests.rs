@@ -46,7 +46,7 @@ fn internal_error_keeps_the_chain_and_answers_500() {
     );
 }
 
-const TEST_ACCOUNT: &str = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+const TEST_ACCOUNT: i64 = 7;
 
 /// Test database with the vault schema applied. The temp dir is returned
 /// too: dropping it deletes the database file out from under the checked-out
@@ -61,7 +61,7 @@ async fn test_conn() -> (TempDir, sqlx::pool::PoolConnection<sqlx::Any>) {
 #[tokio::test]
 async fn api_token_cannot_exceed_its_owner() {
     let (_dir, mut conn) = test_conn().await;
-    account_profile::insert_account(&mut conn, TEST_ACCOUNT, "alice", None, None)
+    account_profile::insert_account_at(&mut conn, TEST_ACCOUNT, "alice", None, None)
         .await
         .unwrap();
     sqlx::query("UPDATE accounts SET can_import = 0 WHERE id = $1")
@@ -88,7 +88,7 @@ async fn api_token_cannot_exceed_its_owner() {
 #[tokio::test]
 async fn disabling_an_account_kills_its_live_session() {
     let (_dir, mut conn) = test_conn().await;
-    account_profile::insert_account(&mut conn, TEST_ACCOUNT, "alice", None, None)
+    account_profile::insert_account_at(&mut conn, TEST_ACCOUNT, "alice", None, None)
         .await
         .unwrap();
     let token = session_tokens::insert_account_session_token(&mut conn, TEST_ACCOUNT)
@@ -114,7 +114,7 @@ async fn disabling_an_account_kills_its_live_session() {
 #[tokio::test]
 async fn disabling_an_account_kills_its_live_api_token() {
     let (_dir, mut conn) = test_conn().await;
-    account_profile::insert_account(&mut conn, TEST_ACCOUNT, "alice", None, None)
+    account_profile::insert_account_at(&mut conn, TEST_ACCOUNT, "alice", None, None)
         .await
         .unwrap();
     let created =

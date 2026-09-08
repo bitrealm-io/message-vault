@@ -62,7 +62,7 @@ pub(crate) struct MembersChanged {
 pub(crate) async fn list(
     spec: &'static MembershipSpec,
     state: &AppState,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<Json<NamedSetList>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let items = named_membership::list_sets(spec, &mut conn, account_id)
@@ -80,7 +80,7 @@ pub(crate) async fn create(
     spec: &'static MembershipSpec,
     root_path: &str,
     state: &AppState,
-    account_id: &str,
+    account_id: i64,
     body: NamedSetBody,
 ) -> Result<Created<NamedSet>, ApiError> {
     let mut conn = state.db.acquire().await?;
@@ -97,7 +97,7 @@ pub(crate) async fn create(
 pub(crate) async fn update(
     spec: &'static MembershipSpec,
     state: &AppState,
-    account_id: &str,
+    account_id: i64,
     id: i64,
     body: NamedSetBody,
 ) -> Result<Json<NamedSet>, ApiError> {
@@ -111,7 +111,7 @@ pub(crate) async fn update(
 pub(crate) async fn delete(
     spec: &'static MembershipSpec,
     state: &AppState,
-    account_id: &str,
+    account_id: i64,
     id: i64,
 ) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
@@ -124,7 +124,7 @@ pub(crate) async fn delete(
 pub(crate) async fn members_list(
     spec: &'static MembershipSpec,
     state: &AppState,
-    account_id: &str,
+    account_id: i64,
     id: i64,
 ) -> Result<Json<MemberIdList>, ApiError> {
     let mut conn = state.db.acquire().await?;
@@ -138,7 +138,7 @@ pub(crate) async fn members_list(
 pub(crate) async fn members_update(
     spec: &'static MembershipSpec,
     state: &AppState,
-    account_id: &str,
+    account_id: i64,
     id: i64,
     body: MembersPatch,
 ) -> Result<Json<MembersChanged>, ApiError> {
@@ -201,7 +201,7 @@ macro_rules! named_set_routes {
             axum::extract::State(state): axum::extract::State<AppState>,
             FullAccess(auth): FullAccess,
         ) -> Result<Json<NamedSetList>, ApiError> {
-            list($spec(), &state, &auth.account_id).await
+            list($spec(), &state, auth.account_id).await
         }
 
         #[doc = $create_doc]
@@ -228,7 +228,7 @@ macro_rules! named_set_routes {
             FullAccess(auth): FullAccess,
             Json(body): Json<NamedSetBody>,
         ) -> Result<Created<NamedSet>, ApiError> {
-            create($spec(), $root_path, &state, &auth.account_id, body).await
+            create($spec(), $root_path, &state, auth.account_id, body).await
         }
 
         #[doc = $update_doc]
@@ -255,7 +255,7 @@ macro_rules! named_set_routes {
             crate::extract::Path(id): crate::extract::Path<i64>,
             Json(body): Json<NamedSetBody>,
         ) -> Result<Json<NamedSet>, ApiError> {
-            update($spec(), &state, &auth.account_id, id, body).await
+            update($spec(), &state, auth.account_id, id, body).await
         }
 
         #[doc = $delete_doc]
@@ -277,7 +277,7 @@ macro_rules! named_set_routes {
             FullAccess(auth): FullAccess,
             crate::extract::Path(id): crate::extract::Path<i64>,
         ) -> Result<StatusCode, ApiError> {
-            delete($spec(), &state, &auth.account_id, id).await
+            delete($spec(), &state, auth.account_id, id).await
         }
 
         #[doc = $members_list_doc]
@@ -299,7 +299,7 @@ macro_rules! named_set_routes {
             FullAccess(auth): FullAccess,
             crate::extract::Path(id): crate::extract::Path<i64>,
         ) -> Result<Json<MemberIdList>, ApiError> {
-            members_list($spec(), &state, &auth.account_id, id).await
+            members_list($spec(), &state, auth.account_id, id).await
         }
 
         #[doc = $members_update_doc]
@@ -325,7 +325,7 @@ macro_rules! named_set_routes {
             crate::extract::Path(id): crate::extract::Path<i64>,
             Json(body): Json<MembersPatch>,
         ) -> Result<Json<MembersChanged>, ApiError> {
-            members_update($spec(), &state, &auth.account_id, id, body).await
+            members_update($spec(), &state, auth.account_id, id, body).await
         }
     };
 }

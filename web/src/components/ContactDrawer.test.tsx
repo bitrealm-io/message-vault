@@ -10,7 +10,7 @@ import { keys } from "../lib/vaultKeys";
 import { vaultQueryKey } from "../lib/vaultQueryKey";
 import ContactDrawer from "./ContactDrawer";
 
-vi.mock("../lib/auth", () => ({ useAuth: () => ({ accountId: "test-account" }) }));
+vi.mock("../lib/auth", () => ({ useAuth: () => ({ accountId: 7 }) }));
 
 let client: QueryClient;
 
@@ -25,7 +25,7 @@ function render(ui: ReactElement) {
 
 /** Put a contact in the cache, as an earlier open of the drawer would have. */
 function seed(detail: ContactDetail): void {
-  client.setQueryData(vaultQueryKey("test-account", keys.contacts.detail(detail.id)), detail);
+  client.setQueryData(vaultQueryKey(7, keys.contacts.detail(detail.id)), detail);
 }
 
 const get = vi.fn();

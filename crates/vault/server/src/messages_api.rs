@@ -31,7 +31,7 @@ use crate::server::{ApiError, AppState, FullAccess};
 /// the Messages list does not have.
 pub(crate) fn message_filter(
     engine: DbEngine,
-    account_id: &str,
+    account_id: i64,
     query: &str,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
 ) -> Result<crate::search::Filter, ApiError> {
@@ -99,10 +99,10 @@ pub(crate) async fn messages_list_handler(
         Some(MAX_LIST_OFFSET),
     )?;
     let mut conn = state.db.acquire().await?;
-    let clock = crate::db::account_profile::account_clock(&mut conn, &auth.account_id).await?;
+    let clock = crate::db::account_profile::account_clock(&mut conn, auth.account_id).await?;
     let filter = message_filter(
         engine_of(&conn),
-        &auth.account_id,
+        auth.account_id,
         query.q.as_deref().unwrap_or(""),
         clock,
     )?;

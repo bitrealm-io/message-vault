@@ -126,31 +126,28 @@ export function createAccount(
 
 /** Change an account's disabled flag or its import, export and delete grants. */
 export function updateAccount(
-  accountId: string,
+  accountId: number,
   body: Schema["PatchAccountRequest"],
 ): Promise<Schema["ManagedAccount"]> {
-  return apiClient.patch<Schema["ManagedAccount"]>(
-    `/v1/owner/accounts/${encodeURIComponent(accountId)}`,
-    body,
-  );
+  return apiClient.patch<Schema["ManagedAccount"]>(`/v1/owner/accounts/${accountId}`, body);
 }
 
 /** Set an account's password, ending its sessions. */
 export function setAccountPassword(
-  accountId: string,
+  accountId: number,
   body: Schema["SetPasswordRequest"],
 ): Promise<void> {
-  return apiClient.put<void>(`/v1/owner/accounts/${encodeURIComponent(accountId)}/password`, body);
+  return apiClient.put<void>(`/v1/owner/accounts/${accountId}/password`, body);
 }
 
 /** Delete an account: its login, profile, contacts, and every message it owns. */
-export function deleteAccountById(accountId: string): Promise<void> {
-  return apiClient.delete<void>(`/v1/owner/accounts/${encodeURIComponent(accountId)}`);
+export function deleteAccountById(accountId: number): Promise<void> {
+  return apiClient.delete<void>(`/v1/owner/accounts/${accountId}`);
 }
 
 /** Destroy one account's messages. The account, its contacts and login survive. */
-export function deleteAccountMessages(accountId: string): Promise<unknown> {
-  return apiClient.delete<unknown>(`/v1/owner/accounts/${encodeURIComponent(accountId)}/messages`);
+export function deleteAccountMessages(accountId: number): Promise<unknown> {
+  return apiClient.delete<unknown>(`/v1/owner/accounts/${accountId}/messages`);
 }
 
 /** Settings that belong to the whole vault. */
@@ -208,17 +205,14 @@ export function createApiToken(
 }
 
 export function renameApiToken(
-  id: string,
+  id: number,
   body: Schema["RenameApiTokenRequest"],
 ): Promise<Schema["RenameApiTokenResponse"]> {
-  return apiClient.patch<Schema["RenameApiTokenResponse"]>(
-    `/v1/account/api-tokens/${encodeURIComponent(id)}`,
-    body,
-  );
+  return apiClient.patch<Schema["RenameApiTokenResponse"]>(`/v1/account/api-tokens/${id}`, body);
 }
 
-export function deleteApiToken(id: string): Promise<void> {
-  return apiClient.delete<void>(`/v1/account/api-tokens/${encodeURIComponent(id)}`);
+export function deleteApiToken(id: number): Promise<void> {
+  return apiClient.delete<void>(`/v1/account/api-tokens/${id}`);
 }
 
 // ── Assets ──────────────────────────────────────────────────────────────────

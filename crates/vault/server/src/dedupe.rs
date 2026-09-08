@@ -171,7 +171,7 @@ pub struct DedupeStats {
 /// Source preference for survivors: first imported source (min message id), then name.
 pub async fn source_priority_from_db(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<Vec<String>> {
     let rows: Vec<(String,)> = sqlx::query_as(
         r"
@@ -197,7 +197,7 @@ pub async fn source_priority_from_db(
 /// Optional `source_priority` overrides (tests); `None` loads order from the DB.
 pub async fn dedupe_cross_source(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     source_priority: Option<&[String]>,
     near_window_secs: i64,
 ) -> Result<DedupeStats> {
@@ -275,7 +275,7 @@ pub async fn dedupe_cross_source(
 }
 
 /// Compute `content_key` for production rows that still lack one (after attachments exist).
-pub async fn fill_missing_content_keys(conn: &mut AnyConnection, account_id: &str) -> Result<u64> {
+pub async fn fill_missing_content_keys(conn: &mut AnyConnection, account_id: i64) -> Result<u64> {
     recompute_content_keys(conn, true, account_id).await
 }
 
@@ -317,7 +317,7 @@ async fn insert_content_key_rows(conn: &mut AnyConnection, keys: &[(i64, String)
 async fn recompute_content_keys(
     conn: &mut AnyConnection,
     missing_only: bool,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<u64> {
     let Some(inputs) = ContentKeyInputs::load(conn, account_id, missing_only).await? else {
         return Ok(0);
@@ -350,7 +350,7 @@ impl ContentKeyInputs {
     /// `None` when no message needs a key.
     async fn load(
         conn: &mut AnyConnection,
-        account_id: &str,
+        account_id: i64,
         missing_only: bool,
     ) -> Result<Option<Self>> {
         let filter = if missing_only {
@@ -480,7 +480,7 @@ struct Cand {
 /// Hide every message that shares a fingerprint with a preferred-source twin. Returns (groups, hidden).
 async fn flag_exact_content_key_dupes(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     prio: &HashMap<&str, usize>,
 ) -> Result<(u64, u64)> {
     // One scan of messages + one aggregated attachment pass, then group in Rust.
@@ -610,7 +610,7 @@ impl NearRow {
 /// not on the exact second. Returns how many were flagged.
 async fn flag_near_time_dupes(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     prio: &HashMap<&str, usize>,
     window_secs: i64,
 ) -> Result<u64> {
@@ -628,7 +628,7 @@ async fn flag_near_time_dupes(
 /// clustering does no per-message lookups.
 async fn load_near_rows(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<HashMap<i64, Vec<NearRow>>> {
     type NearDedupeRow = (i64, i64, String, i64, String, Option<String>, String);
     let msg_rows: Vec<NearDedupeRow> = sqlx::query_as(

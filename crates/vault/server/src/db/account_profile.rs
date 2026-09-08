@@ -22,7 +22,7 @@ pub struct AccountProfile {
 /// when nothing is linked.
 pub async fn load_account_profile(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<AccountProfile> {
     let emails = query_account_strings(
         conn,
@@ -46,7 +46,7 @@ pub async fn load_account_profile(
 async fn query_account_strings(
     conn: &mut AnyConnection,
     sql: &str,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<Vec<String>> {
     Ok(sqlx::query_scalar::<_, String>(sql)
         .bind(account_id)
@@ -54,13 +54,16 @@ async fn query_account_strings(
         .await?)
 }
 
-/// Ensure `accounts` row exists (stub username = id) for CLI imports.
-pub async fn ensure_account_row(conn: &mut AnyConnection, account_id: &str) -> Result<()> {
+/// Ensure an `accounts` row exists at `account_id`, with the id as its stub
+/// username. The demo reset and the tests use it to place a row at a chosen
+/// id; every other account is made by [`insert_account`].
+pub async fn ensure_account_row(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
     sqlx::query(
-        "INSERT INTO accounts (id, username) VALUES ($1, $1)
+        "INSERT INTO accounts (id, username) VALUES ($1, $2)
          ON CONFLICT DO NOTHING",
     )
     .bind(account_id)
+    .bind(account_id.to_string())
     .execute(&mut *conn)
     .await
     .with_context(|| format!("failed to ensure account row for {account_id}"))?;
@@ -71,7 +74,7 @@ pub async fn ensure_account_row(conn: &mut AnyConnection, account_id: &str) -> R
 /// Returns the handle id.
 pub async fn link_account_handle(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     raw: &str,
     handle_type: HandleType,
 ) -> Result<i64> {
@@ -82,7 +85,7 @@ pub async fn link_account_handle(
 /// (`phone` | `whatsapp`). Missing/`None` defaults to `phone`.
 pub async fn link_account_handle_with_service(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     raw: &str,
     handle_type: HandleType,
     service: Option<&str>,
@@ -99,62 +102,61 @@ pub async fn link_account_handle_with_service(
     Ok(handle_id)
 }
 
-/// True for the 8-4-4-4-12 hex shape of a UUID.
-fn looks_like_uuid(s: &str) -> bool {
-    let s = s.trim();
-    if s.len() != 36 {
-        return false;
-    }
-    let b = s.as_bytes();
-    if b[8] != b'-' || b[13] != b'-' || b[18] != b'-' || b[23] != b'-' {
-        return false;
-    }
-    s.chars()
-        .enumerate()
-        .all(|(i, c)| matches!(i, 8 | 13 | 18 | 23) || c.is_ascii_hexdigit())
-}
-
-/// Look up an existing account by UUID or username (case-insensitive).
-/// Returns `None` when no row matches (does not create stubs).
-pub async fn lookup_account_ref(
+/// The id of the account whose username is `username`, compared without
+/// regard to case. `None` when no account has that username.
+///
+/// Sign-in and the username-free check use this, never
+/// [`lookup_account_ref`]: a username is what a person types, and an account
+/// whose username happens to be digits must not be mistaken for an id.
+pub async fn lookup_account_by_username(
     conn: &mut AnyConnection,
-    account_ref: &str,
-) -> Result<Option<String>> {
-    let account_ref = account_ref.trim();
-    if account_ref.is_empty() {
+    username: &str,
+) -> Result<Option<i64>> {
+    let username = username.trim();
+    if username.is_empty() {
         return Ok(None);
     }
     schema::ensure_accounts_schema(conn).await?;
-
-    let by_id: Option<String> = sqlx::query_scalar("SELECT id FROM accounts WHERE id = $1")
-        .bind(account_ref)
-        .fetch_optional(&mut *conn)
-        .await?;
-    if by_id.is_some() {
-        return Ok(by_id);
-    }
-
     // `COLLATE NOCASE` is SQLite-only; Postgres lowercases both sides (the
     // CI index from the schema is on `lower(username)`).
-    let by_user: Option<String> = if dialect::engine_of(conn) == DbEngine::Postgres {
+    let by_user: Option<i64> = if dialect::engine_of(conn) == DbEngine::Postgres {
         sqlx::query_scalar("SELECT id FROM accounts WHERE lower(username) = lower($1)")
-            .bind(account_ref)
+            .bind(username)
             .fetch_optional(&mut *conn)
             .await?
     } else {
         sqlx::query_scalar("SELECT id FROM accounts WHERE username = $1 COLLATE NOCASE")
-            .bind(account_ref)
+            .bind(username)
             .fetch_optional(&mut *conn)
             .await?
     };
     Ok(by_user)
 }
 
-/// Resolve an account reference to `accounts.id` for import.
-///
-/// Accepts UUID or username. Unknown usernames error. Unknown UUID-shaped
-/// values are returned as-is so CLI import can still stub-create the row.
-pub async fn resolve_account_ref(conn: &mut AnyConnection, account_ref: &str) -> Result<String> {
+/// Look up an existing account by id or by username (case-insensitive), for
+/// a command line's `--account`. A reference that parses as an integer is
+/// tried as an id first. `None` when no row matches.
+pub async fn lookup_account_ref(
+    conn: &mut AnyConnection,
+    account_ref: &str,
+) -> Result<Option<i64>> {
+    let account_ref = account_ref.trim();
+    if let Ok(id) = account_ref.parse::<i64>() {
+        schema::ensure_accounts_schema(conn).await?;
+        let by_id: Option<i64> = sqlx::query_scalar("SELECT id FROM accounts WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&mut *conn)
+            .await?;
+        if by_id.is_some() {
+            return Ok(by_id);
+        }
+    }
+    lookup_account_by_username(conn, account_ref).await
+}
+
+/// Resolve a command line's `--account` to `accounts.id`. Accepts an id or a
+/// username; anything else is an error naming the reference.
+pub async fn resolve_account_ref(conn: &mut AnyConnection, account_ref: &str) -> Result<i64> {
     let account_ref = account_ref.trim();
     if account_ref.is_empty() {
         bail!("account is empty");
@@ -162,16 +164,13 @@ pub async fn resolve_account_ref(conn: &mut AnyConnection, account_ref: &str) ->
     if let Some(id) = lookup_account_ref(conn, account_ref).await? {
         return Ok(id);
     }
-    if looks_like_uuid(account_ref) {
-        return Ok(account_ref.to_string());
-    }
-    bail!("account not found: {account_ref} (use an existing username or account UUID)");
+    bail!("account not found: {account_ref} (use an existing username or account id)");
 }
 
 /// Username for an account id, if the row exists.
 pub async fn username_for_account(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<Option<String>> {
     schema::ensure_accounts_schema(conn).await?;
     let name: Option<String> = sqlx::query_scalar("SELECT username FROM accounts WHERE id = $1")
@@ -187,7 +186,7 @@ pub async fn username_for_account(
 /// column (NULL/empty means passwordless login).
 pub async fn load_password_hash(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<Option<String>> {
     let hash: Option<Option<String>> =
         sqlx::query_scalar("SELECT password_hash FROM accounts WHERE id = $1")
@@ -200,7 +199,7 @@ pub async fn load_password_hash(
 /// Replace the argon2 password hash for an account.
 pub async fn update_password_hash(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     password_hash: &str,
 ) -> Result<()> {
     sqlx::query("UPDATE accounts SET password_hash = $1 WHERE id = $2")
@@ -215,7 +214,7 @@ pub async fn update_password_hash(
 /// Permanently delete an account. All dependent rows are removed by
 /// ON DELETE CASCADE (messages, conversations, contacts, `vault_imports`,
 /// `account_handles/emails/api_tokens`).
-pub async fn delete_account(conn: &mut AnyConnection, account_id: &str) -> Result<()> {
+pub async fn delete_account(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
     sqlx::query("DELETE FROM accounts WHERE id = $1")
         .bind(account_id)
         .execute(&mut *conn)
@@ -225,10 +224,10 @@ pub async fn delete_account(conn: &mut AnyConnection, account_id: &str) -> Resul
 }
 
 /// Stable id for the seeded demo account (`reset-demo`).
-pub const DEMO_ACCOUNT_ID: &str = "00000000-0000-0000-0000-00000000d001";
+pub const DEMO_ACCOUNT_ID: i64 = 2;
 
 /// True when `account_id` is the seeded demo account.
-pub fn is_demo_account(account_id: &str) -> bool {
+pub fn is_demo_account(account_id: i64) -> bool {
     account_id == DEMO_ACCOUNT_ID
 }
 
@@ -236,10 +235,10 @@ pub fn is_demo_account(account_id: &str) -> bool {
 /// is what makes "one" structural: there is no flag to set, no second owner to
 /// create, and nothing to promote. A vault holding no row at this id is
 /// unclaimed. See `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
-pub const OWNER_ACCOUNT_ID: &str = "00000000-0000-0000-0000-00000000a001";
+pub const OWNER_ACCOUNT_ID: i64 = 1;
 
 /// True when `account_id` is the vault owner.
-pub fn is_vault_owner(account_id: &str) -> bool {
+pub fn is_vault_owner(account_id: i64) -> bool {
     account_id == OWNER_ACCOUNT_ID
 }
 
@@ -270,7 +269,7 @@ pub struct AccountAuth {
 /// Load one account's authorization row. `None` when the account is gone.
 pub async fn load_account_auth(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<Option<AccountAuth>> {
     schema::ensure_accounts_schema(conn).await?;
     let row: Option<(i64, i64, i64, i64, i64, i64)> = sqlx::query_as(
@@ -295,7 +294,7 @@ pub async fn load_account_auth(
 /// chose for it, or clear the mark once they have.
 pub async fn set_must_change_password(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     must_change: bool,
 ) -> Result<()> {
     schema::ensure_accounts_schema(conn).await?;
@@ -316,7 +315,7 @@ pub async fn set_must_change_password(
 /// browser.
 pub async fn set_must_set_up_profile(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     must_set_up: bool,
 ) -> Result<()> {
     schema::ensure_accounts_schema(conn).await?;
@@ -342,7 +341,7 @@ pub struct DeletedMessagesStats {
 /// Contacts, groups, login details, and import tokens are retained.
 pub async fn delete_all_messages_for_account(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<DeletedMessagesStats> {
     schema::ensure_vault_schema(conn).await?;
     let attachment_count: i64 = sqlx::query_scalar(
@@ -380,7 +379,7 @@ pub async fn delete_all_messages_for_account(
 /// The account's IANA time zone. UTC when the row is missing or the stored
 /// name is not one chrono-tz knows, so a bad value degrades to Greenwich
 /// rather than to an error on every list.
-pub async fn load_time_zone(conn: &mut AnyConnection, account_id: &str) -> Result<chrono_tz::Tz> {
+pub async fn load_time_zone(conn: &mut AnyConnection, account_id: i64) -> Result<chrono_tz::Tz> {
     let name: Option<String> = sqlx::query_scalar("SELECT time_zone FROM accounts WHERE id = $1")
         .bind(account_id)
         .fetch_optional(&mut *conn)
@@ -393,7 +392,7 @@ pub async fn load_time_zone(conn: &mut AnyConnection, account_id: &str) -> Resul
 /// Store the account's time zone.
 pub async fn set_time_zone(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     zone: chrono_tz::Tz,
 ) -> Result<()> {
     sqlx::query("UPDATE accounts SET time_zone = $1 WHERE id = $2")
@@ -408,7 +407,7 @@ pub async fn set_time_zone(
 /// every year boundary needs.
 pub async fn account_clock(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<(chrono_tz::Tz, chrono::NaiveDate)> {
     let zone = load_time_zone(conn, account_id).await?;
     Ok((zone, crate::search::today_in(zone)))
@@ -417,7 +416,7 @@ pub async fn account_clock(
 /// Load the `preferred_name` for an account, if set.
 pub async fn load_preferred_name(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<Option<String>> {
     let name: Option<Option<String>> =
         sqlx::query_scalar("SELECT preferred_name FROM accounts WHERE id = $1")
@@ -435,7 +434,37 @@ pub async fn load_preferred_name(
 /// afterward if needed.
 pub async fn insert_account(
     conn: &mut AnyConnection,
-    id: &str,
+    username: &str,
+    password_hash: Option<&str>,
+    preferred_name: Option<&str>,
+) -> Result<i64> {
+    schema::ensure_accounts_schema(conn).await?;
+    // The id is chosen here rather than by the database's own generator,
+    // because that generator would hand out 1 on an empty table, and 1 is
+    // the owner. Ids below `FIRST_GENERATED_ACCOUNT_ID` belong to the accounts
+    // the vault makes itself; every other account takes the next id above
+    // both that floor and the highest id present, so a fixed id inserted
+    // later never lands on a row that already exists.
+    let highest: Option<i64> = sqlx::query_scalar("SELECT MAX(id) FROM accounts")
+        .fetch_one(&mut *conn)
+        .await?;
+    let id = highest.map_or(FIRST_GENERATED_ACCOUNT_ID, |highest| {
+        highest.max(FIRST_GENERATED_ACCOUNT_ID - 1) + 1
+    });
+    insert_account_at(conn, id, username, password_hash, preferred_name).await?;
+    Ok(id)
+}
+
+/// The first id [`insert_account`] hands out. Everything below it is reserved
+/// for accounts the vault makes itself: [`OWNER_ACCOUNT_ID`] and
+/// [`DEMO_ACCOUNT_ID`].
+pub const FIRST_GENERATED_ACCOUNT_ID: i64 = 100;
+
+/// Insert an account at a fixed id: the vault owner at [`OWNER_ACCOUNT_ID`],
+/// the demo account at [`DEMO_ACCOUNT_ID`], and a test's chosen row.
+pub async fn insert_account_at(
+    conn: &mut AnyConnection,
+    id: i64,
     username: &str,
     password_hash: Option<&str>,
     preferred_name: Option<&str>,
@@ -450,14 +479,14 @@ pub async fn insert_account(
     .bind(preferred_name)
     .execute(&mut *conn)
     .await
-    .with_context(|| format!("insert account {username}"))?;
+    .with_context(|| format!("insert account {username} at id {id}"))?;
     Ok(())
 }
 
 /// Ensure a phone handle is linked to the account via `account_handles`.
 pub async fn upsert_account_phone(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     phone: &str,
 ) -> Result<()> {
     link_account_handle(conn, account_id, phone, HandleType::Phone).await?;
@@ -467,7 +496,7 @@ pub async fn upsert_account_phone(
 /// Upsert an `account_emails` row.
 pub async fn upsert_account_email(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     email: &str,
     is_primary: bool,
 ) -> Result<()> {
@@ -489,7 +518,7 @@ pub async fn upsert_account_email(
 /// `handles` row is left in place so conversation history stays intact.
 pub async fn unlink_account_handle(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     raw: &str,
     handle_type: HandleType,
 ) -> Result<bool> {
@@ -539,7 +568,7 @@ pub async fn unlink_account_handle(
 mod tests {
     use super::*;
 
-    const ACCOUNT_ID: &str = "00000000-0000-4000-8000-000000000001";
+    const ACCOUNT_ID: i64 = 7;
 
     #[tokio::test]
     async fn resolve_by_username_case_insensitive() {
@@ -557,13 +586,60 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resolve_by_uuid() {
+    async fn resolve_by_id() {
         let vault = crate::test_support::test_vault().await;
         vault.account_with_id(ACCOUNT_ID, "Alice").await;
         let mut conn = vault.conn().await;
         assert_eq!(
-            resolve_account_ref(&mut conn, ACCOUNT_ID).await.unwrap(),
+            resolve_account_ref(&mut conn, &ACCOUNT_ID.to_string())
+                .await
+                .unwrap(),
             ACCOUNT_ID
+        );
+    }
+
+    #[tokio::test]
+    async fn a_username_made_of_digits_is_a_username_at_sign_in() {
+        let vault = crate::test_support::test_vault().await;
+        vault.account_with_id(ACCOUNT_ID, "Alice").await;
+        let digits = vault.account("7").await;
+        let mut conn = vault.conn().await;
+        // `--account 7` names the id; signing in as "7" names the username.
+        assert_eq!(
+            resolve_account_ref(&mut conn, "7").await.unwrap(),
+            ACCOUNT_ID
+        );
+        assert_eq!(
+            lookup_account_by_username(&mut conn, "7").await.unwrap(),
+            Some(digits)
+        );
+    }
+
+    #[tokio::test]
+    async fn generated_ids_start_above_the_reserved_range_and_climb() {
+        let vault = crate::test_support::test_vault().await;
+        let mut conn = vault.conn().await;
+        // On an empty table the first generated id is the floor, never 1.
+        let first = insert_account(&mut conn, "alice", None, None)
+            .await
+            .unwrap();
+        assert_eq!(first, FIRST_GENERATED_ACCOUNT_ID);
+        // The owner and the demo account still fit below it afterwards.
+        insert_account_at(&mut conn, OWNER_ACCOUNT_ID, "owner", None, None)
+            .await
+            .unwrap();
+        insert_account_at(&mut conn, DEMO_ACCOUNT_ID, "demo", None, None)
+            .await
+            .unwrap();
+        let next = insert_account(&mut conn, "bob", None, None).await.unwrap();
+        assert_eq!(next, first + 1);
+        // A fixed id above the floor is never handed out twice.
+        insert_account_at(&mut conn, 500, "carol", None, None)
+            .await
+            .unwrap();
+        assert_eq!(
+            insert_account(&mut conn, "dave", None, None).await.unwrap(),
+            501
         );
     }
 
@@ -580,12 +656,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unknown_uuid_passthrough() {
+    async fn an_unknown_id_is_not_found() {
         let vault = crate::test_support::test_vault().await;
         vault.account_with_id(ACCOUNT_ID, "Alice").await;
         let mut conn = vault.conn().await;
-        let id = "11111111-1111-4111-8111-111111111111";
-        assert_eq!(resolve_account_ref(&mut conn, id).await.unwrap(), id);
+        let err = resolve_account_ref(&mut conn, "4321")
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("not found"), "{err}");
     }
 
     #[tokio::test]

@@ -10,7 +10,7 @@ use sqlx::{AnyConnection, Connection};
 /// Bump `contacts.last_modified` after an address-book shape change.
 pub async fn touch_contact(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     contact_id: i64,
 ) -> Result<()> {
     let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
@@ -78,7 +78,7 @@ impl Origin {
 /// Returns an error when a statement fails.
 pub async fn propose_name(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     contact_id: i64,
     name: &str,
     by: Origin,
@@ -126,7 +126,7 @@ pub async fn propose_name(
 /// Returns an error when the insert fails.
 pub async fn create_contact(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     preferred_name: &str,
     origin: Origin,
 ) -> Result<i64> {
@@ -150,7 +150,7 @@ pub async fn create_contact(
 /// Returns an error when the insert fails.
 pub async fn link_handle_to_contact(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     handle_id: i64,
     contact_id: i64,
     origin: Origin,
@@ -182,7 +182,7 @@ pub async fn link_handle_to_contact(
 /// Returns an error when the query fails.
 pub async fn contact_id_of_sibling_handle(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     handle_id: i64,
 ) -> Result<Option<i64>> {
     let contact_id: Option<i64> = sqlx::query_scalar(
@@ -216,7 +216,7 @@ pub async fn contact_id_of_sibling_handle(
 /// Returns an error when the query fails.
 pub async fn contact_id_by_preferred_name(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     name: &str,
 ) -> Result<Option<i64>> {
     let name = name.trim();
@@ -251,7 +251,7 @@ pub async fn contact_id_by_preferred_name(
 /// Returns an error when the query fails.
 pub async fn contacts_touched_since(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     since: &str,
 ) -> Result<Vec<i64>> {
     let ids: Vec<i64> = sqlx::query_scalar(
@@ -273,7 +273,7 @@ pub async fn contacts_touched_since(
 /// Returns an error when the update fails.
 pub async fn set_group_kind(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     name: &str,
     kind: &str,
 ) -> Result<()> {
@@ -303,7 +303,7 @@ pub const UNKNOWN_CONTACT_SQL: &str = "(
 /// Contact linked to a handle via `contact_handles`, if any.
 pub async fn contact_id_for_handle(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     handle_id: i64,
 ) -> Result<Option<i64>> {
     let found: Option<i64> = sqlx::query_scalar(
@@ -392,7 +392,7 @@ pub async fn load_contacts_if_needed(
     conn: &mut AnyConnection,
     contacts_path: Option<&Path>,
     overwrite: bool,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<ContactLoadStats> {
     crate::db::schema::ensure_vault_schema(conn).await?;
     crate::db::account_profile::ensure_account_row(conn, account_id).await?;
@@ -447,7 +447,7 @@ pub async fn load_contacts_if_needed(
 /// special case unnecessary — an address book is phone-only, so email
 /// identities simply carry a different origin and are not the book's to
 /// remove.
-async fn delete_address_book_contacts(conn: &mut AnyConnection, account_id: &str) -> Result<()> {
+async fn delete_address_book_contacts(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
     let book = Origin::AddressBook.as_str();
     sqlx::query(
         "DELETE FROM contact_group_members
@@ -479,7 +479,7 @@ async fn delete_address_book_contacts(conn: &mut AnyConnection, account_id: &str
 async fn load_from_vcard_csv(
     conn: &mut AnyConnection,
     csv_path: &Path,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<ContactLoadStats> {
     let rows = read_vcard_csv_rows(csv_path)
         .with_context(|| format!("failed to read contacts CSV {}", csv_path.display()))?;
@@ -506,7 +506,7 @@ async fn load_from_vcard_csv(
 async fn load_from_vcf(
     conn: &mut AnyConnection,
     vcf_path: &Path,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<ContactLoadStats> {
     let cards = parse_vcf(vcf_path)?;
     let mut drafts = Vec::new();
@@ -594,7 +594,7 @@ fn collapse_inner_whitespace(s: &str) -> String {
 /// card must not take them with it.
 async fn adoptable_contact_for_draft(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     phones: &[(String, Option<String>)],
 ) -> Result<Option<(i64, String)>> {
     for (phone, _note) in phones {
@@ -623,7 +623,7 @@ async fn adoptable_contact_for_draft(
 /// Insert the drafts as contacts, handles, and group links inside one transaction, merging drafts that share a phone.
 async fn insert_contact_drafts(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     drafts: Vec<ContactDraft>,
 ) -> Result<ContactLoadStats> {
     let mut stats = ContactLoadStats::default();

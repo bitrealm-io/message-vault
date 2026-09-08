@@ -16,7 +16,7 @@ async fn contacts_fixture_with_handles(handles: &[&str]) -> (TestVault, String, 
         for (i, handle) in handles.iter().enumerate() {
             insert_contact_with_handle(
                 &mut conn,
-                &account.account_id,
+                account.account_id,
                 &format!("Contact {i}"),
                 handle,
             )
@@ -36,9 +36,9 @@ async fn contacts_fixture_with_trashed_handle(
     let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
     let mut conn = vault.state.db.acquire().await.unwrap();
     let contact_id =
-        insert_contact_with_handle(&mut conn, &account.account_id, "Trashed", handle).await;
+        insert_contact_with_handle(&mut conn, account.account_id, "Trashed", handle).await;
     sqlx::query("INSERT INTO trashed_contacts (account_id, contact_id) VALUES ($1, $2)")
-        .bind(&account.account_id)
+        .bind(account.account_id)
         .bind(contact_id)
         .execute(&mut *conn)
         .await
@@ -53,7 +53,7 @@ async fn contacts_fixture_with_trashed_handle(
 async fn account_with_handle(vault: &TestVault, handle: &str) -> RegisteredAccount {
     let account = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
     let mut conn = vault.state.db.acquire().await.unwrap();
-    insert_contact_with_handle(&mut conn, &account.account_id, "Other", handle).await;
+    insert_contact_with_handle(&mut conn, account.account_id, "Other", handle).await;
     account
 }
 
@@ -188,8 +188,8 @@ async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
     let (vault, token, account) = contacts_fixture_with_handles(&[]).await;
     let mut conn = vault.state.db.acquire().await.unwrap();
     let first =
-        insert_contact_with_handle(&mut conn, &account.account_id, "Ada", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, &account.account_id, "Grace", "+15555550200").await;
+        insert_contact_with_handle(&mut conn, account.account_id, "Ada", "+15555550100").await;
+    insert_contact_with_handle(&mut conn, account.account_id, "Grace", "+15555550200").await;
     drop(conn);
 
     // Taking a handle that is already another contact's.
@@ -233,31 +233,25 @@ async fn contact_match_rejects_an_oversized_batch() {
 #[tokio::test]
 async fn list_contacts_uses_preferred_name_and_handle_ids() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let contact_id: i64 = sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Pat') RETURNING id",
     )
-    .bind(&account)
+    .bind(account)
     .fetch_one(&mut *conn)
     .await
     .unwrap();
-    let handle_id = account_profile::link_account_handle(
-        &mut conn,
-        &account,
-        "+15555550100",
-        HandleType::Phone,
-    )
-    .await
-    .unwrap();
+    let handle_id =
+        account_profile::link_account_handle(&mut conn, account, "+15555550100", HandleType::Phone)
+            .await
+            .unwrap();
     // link_account_handle puts it on account_handles; also link as contact handle.
     sqlx::query(
         "INSERT INTO contact_handles (account_id, handle_id, contact_id)
          VALUES ($1, $2, $3)",
     )
-    .bind(&account)
+    .bind(account)
     .bind(handle_id)
     .bind(contact_id)
     .execute(&mut *conn)
@@ -266,7 +260,7 @@ async fn list_contacts_uses_preferred_name_and_handle_ids() {
 
     let page = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
@@ -292,9 +286,7 @@ async fn list_contacts_uses_preferred_name_and_handle_ids() {
 #[tokio::test]
 async fn list_contacts_filters_and_paginates() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     for (name, phone) in [
         ("Pat", "+15555550100"),
@@ -304,20 +296,20 @@ async fn list_contacts_filters_and_paginates() {
         let contact_id: i64 = sqlx::query_scalar(
             "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, $2) RETURNING id",
         )
-        .bind(&account)
+        .bind(account)
         .bind(name)
         .fetch_one(&mut *conn)
         .await
         .unwrap();
         let handle_id =
-            account_profile::link_account_handle(&mut conn, &account, phone, HandleType::Phone)
+            account_profile::link_account_handle(&mut conn, account, phone, HandleType::Phone)
                 .await
                 .unwrap();
         sqlx::query(
             "INSERT INTO contact_handles (account_id, handle_id, contact_id)
              VALUES ($1, $2, $3)",
         )
-        .bind(&account)
+        .bind(account)
         .bind(handle_id)
         .bind(contact_id)
         .execute(&mut *conn)
@@ -327,7 +319,7 @@ async fn list_contacts_filters_and_paginates() {
 
     let by_name = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "sam",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
@@ -341,7 +333,7 @@ async fn list_contacts_filters_and_paginates() {
 
     let by_handle = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "handle:5555550200",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
@@ -355,7 +347,7 @@ async fn list_contacts_filters_and_paginates() {
 
     let page0 = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "",
         &DEFAULT_CONTACT_SORT,
         2,
@@ -370,7 +362,7 @@ async fn list_contacts_filters_and_paginates() {
     assert_eq!(page0.items.len(), 2);
     let page1 = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "",
         &DEFAULT_CONTACT_SORT,
         2,
@@ -387,30 +379,24 @@ async fn list_contacts_filters_and_paginates() {
 #[tokio::test]
 async fn get_contact_detail_counts_direct_group_and_messages() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let contact_id: i64 = sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Sam') RETURNING id",
     )
-    .bind(&account)
+    .bind(account)
     .fetch_one(&mut *conn)
     .await
     .unwrap();
-    let peer = account_profile::link_account_handle(
-        &mut conn,
-        &account,
-        "+15555550200",
-        HandleType::Phone,
-    )
-    .await
-    .unwrap();
+    let peer =
+        account_profile::link_account_handle(&mut conn, account, "+15555550200", HandleType::Phone)
+            .await
+            .unwrap();
     sqlx::query(
         "INSERT INTO contact_handles (account_id, handle_id, contact_id)
          VALUES ($1, $2, $3)",
     )
-    .bind(&account)
+    .bind(account)
     .bind(peer)
     .bind(contact_id)
     .execute(&mut *conn)
@@ -423,7 +409,7 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
             id, account_id, chat_handle_id, conversation_type, source_file
          ) VALUES (1, $1, $2, 'individual', 'd.jsonl')",
     )
-    .bind(&account)
+    .bind(account)
     .bind(peer)
     .execute(&mut *conn)
     .await
@@ -445,7 +431,7 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
                 conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
              ) VALUES (1, $1, 'imessage', $2, 0, 0, $3)",
         )
-        .bind(&account)
+        .bind(account)
         .bind(ts)
         .bind(body)
         .execute(&mut *conn)
@@ -456,7 +442,7 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
     // Group conversation that includes Sam, with 1 message.
     let group_chat = account_profile::link_account_handle(
         &mut conn,
-        &account,
+        account,
         "chat-sam-group",
         HandleType::Other,
     )
@@ -467,7 +453,7 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
             id, account_id, chat_handle_id, conversation_type, group_title, source_file
          ) VALUES (2, $1, $2, 'group', 'Sam Group', 'g.jsonl')",
     )
-    .bind(&account)
+    .bind(account)
     .bind(group_chat)
     .execute(&mut *conn)
     .await
@@ -485,26 +471,22 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
             conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
          ) VALUES (2, $1, 'imessage', '2024-07-01T12:00:00Z', 0, 0, 'group hi')",
     )
-    .bind(&account)
+    .bind(account)
     .execute(&mut *conn)
     .await
     .unwrap();
 
     // Unrelated conversation should not be counted.
-    let other = account_profile::link_account_handle(
-        &mut conn,
-        &account,
-        "+15555550999",
-        HandleType::Phone,
-    )
-    .await
-    .unwrap();
+    let other =
+        account_profile::link_account_handle(&mut conn, account, "+15555550999", HandleType::Phone)
+            .await
+            .unwrap();
     sqlx::query(
         "INSERT INTO conversations (
             id, account_id, chat_handle_id, conversation_type, source_file
          ) VALUES (9, $1, $2, 'individual', 'other.jsonl')",
     )
-    .bind(&account)
+    .bind(account)
     .bind(other)
     .execute(&mut *conn)
     .await
@@ -514,12 +496,12 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
             conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
          ) VALUES (9, $1, 'imessage', '2024-08-01T12:00:00Z', 0, 0, 'nope')",
     )
-    .bind(&account)
+    .bind(account)
     .execute(&mut *conn)
     .await
     .unwrap();
 
-    let detail = get_contact_detail(&mut conn, &account, contact_id)
+    let detail = get_contact_detail(&mut conn, account, contact_id)
         .await
         .unwrap()
         .expect("contact exists");
@@ -543,31 +525,25 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
 #[tokio::test]
 async fn get_contact_summaries_counts_two_contacts_in_one_query() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
 
     let sam_id: i64 = sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Sam') RETURNING id",
     )
-    .bind(&account)
+    .bind(account)
     .fetch_one(&mut *conn)
     .await
     .unwrap();
-    let sam_handle = account_profile::link_account_handle(
-        &mut conn,
-        &account,
-        "+15555550200",
-        HandleType::Phone,
-    )
-    .await
-    .unwrap();
+    let sam_handle =
+        account_profile::link_account_handle(&mut conn, account, "+15555550200", HandleType::Phone)
+            .await
+            .unwrap();
     sqlx::query(
         "INSERT INTO contact_handles (account_id, handle_id, contact_id)
          VALUES ($1, $2, $3)",
     )
-    .bind(&account)
+    .bind(account)
     .bind(sam_handle)
     .bind(sam_id)
     .execute(&mut *conn)
@@ -578,7 +554,7 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
             id, account_id, chat_handle_id, conversation_type, source_file
          ) VALUES (1, $1, $2, 'individual', 'd.jsonl')",
     )
-    .bind(&account)
+    .bind(account)
     .bind(sam_handle)
     .execute(&mut *conn)
     .await
@@ -600,7 +576,7 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
                 conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
              ) VALUES (1, $1, 'imessage', $2, 0, 0, $3)",
         )
-        .bind(&account)
+        .bind(account)
         .bind(ts)
         .bind(body)
         .execute(&mut *conn)
@@ -609,7 +585,7 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
     }
     let group_chat = account_profile::link_account_handle(
         &mut conn,
-        &account,
+        account,
         "chat-sam-group",
         HandleType::Other,
     )
@@ -620,7 +596,7 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
             id, account_id, chat_handle_id, conversation_type, group_title, source_file
          ) VALUES (2, $1, $2, 'group', 'Sam Group', 'g.jsonl')",
     )
-    .bind(&account)
+    .bind(account)
     .bind(group_chat)
     .execute(&mut *conn)
     .await
@@ -638,7 +614,7 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
             conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
          ) VALUES (2, $1, 'imessage', '2024-07-01T12:00:00Z', 0, 0, 'group hi')",
     )
-    .bind(&account)
+    .bind(account)
     .execute(&mut *conn)
     .await
     .unwrap();
@@ -646,23 +622,19 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
     let pat_id: i64 = sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Pat') RETURNING id",
     )
-    .bind(&account)
+    .bind(account)
     .fetch_one(&mut *conn)
     .await
     .unwrap();
-    let pat_handle = account_profile::link_account_handle(
-        &mut conn,
-        &account,
-        "+15555550100",
-        HandleType::Phone,
-    )
-    .await
-    .unwrap();
+    let pat_handle =
+        account_profile::link_account_handle(&mut conn, account, "+15555550100", HandleType::Phone)
+            .await
+            .unwrap();
     sqlx::query(
         "INSERT INTO contact_handles (account_id, handle_id, contact_id)
          VALUES ($1, $2, $3)",
     )
-    .bind(&account)
+    .bind(account)
     .bind(pat_handle)
     .bind(pat_id)
     .execute(&mut *conn)
@@ -673,7 +645,7 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
             id, account_id, chat_handle_id, conversation_type, source_file
          ) VALUES (3, $1, $2, 'individual', 'pat.jsonl')",
     )
-    .bind(&account)
+    .bind(account)
     .bind(pat_handle)
     .execute(&mut *conn)
     .await
@@ -691,12 +663,12 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
             conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
          ) VALUES (3, $1, 'imessage', '2024-05-01T09:00:00Z', 0, 0, 'hey')",
     )
-    .bind(&account)
+    .bind(account)
     .execute(&mut *conn)
     .await
     .unwrap();
 
-    let summaries = get_contact_summaries(&mut conn, &account, &[sam_id, pat_id, 99_999])
+    let summaries = get_contact_summaries(&mut conn, account, &[sam_id, pat_id, 99_999])
         .await
         .unwrap();
     assert_eq!(summaries.len(), 2);
@@ -735,14 +707,12 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
 #[tokio::test]
 async fn mutate_contact_add_update_remove_handle_and_rename() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let contact_id: i64 = sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Sam') RETURNING id",
     )
-    .bind(&account)
+    .bind(account)
     .fetch_one(&mut *conn)
     .await
     .unwrap();
@@ -750,7 +720,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
     assert!(
         mutate_contact(
             &mut conn,
-            &account,
+            account,
             contact_id,
             &ContactMutationBody {
                 name: None,
@@ -766,7 +736,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
         .unwrap()
     );
 
-    let detail = get_contact_detail(&mut conn, &account, contact_id)
+    let detail = get_contact_detail(&mut conn, account, contact_id)
         .await
         .unwrap()
         .unwrap();
@@ -776,7 +746,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
     assert!(
         mutate_contact(
             &mut conn,
-            &account,
+            account,
             contact_id,
             &ContactMutationBody {
                 name: Some("Samantha".into()),
@@ -788,7 +758,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
         .await
         .unwrap()
     );
-    let renamed = get_contact_detail(&mut conn, &account, contact_id)
+    let renamed = get_contact_detail(&mut conn, account, contact_id)
         .await
         .unwrap()
         .unwrap();
@@ -797,7 +767,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
     assert!(
         mutate_contact(
             &mut conn,
-            &account,
+            account,
             contact_id,
             &ContactMutationBody {
                 name: None,
@@ -813,7 +783,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
         .await
         .unwrap()
     );
-    let updated = get_contact_detail(&mut conn, &account, contact_id)
+    let updated = get_contact_detail(&mut conn, account, contact_id)
         .await
         .unwrap()
         .unwrap();
@@ -823,7 +793,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
     assert!(
         mutate_contact(
             &mut conn,
-            &account,
+            account,
             contact_id,
             &ContactMutationBody {
                 name: None,
@@ -838,7 +808,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
         .await
         .unwrap()
     );
-    let empty = get_contact_detail(&mut conn, &account, contact_id)
+    let empty = get_contact_detail(&mut conn, account, contact_id)
         .await
         .unwrap()
         .unwrap();
@@ -848,14 +818,12 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
 #[tokio::test]
 async fn mutate_contact_rejects_trashed_contact() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let contact_id =
-        insert_contact_with_handle(&mut conn, &account, "Trashed", "+15555550100").await;
+        insert_contact_with_handle(&mut conn, account, "Trashed", "+15555550100").await;
     sqlx::query("INSERT INTO trashed_contacts (account_id, contact_id) VALUES ($1, $2)")
-        .bind(&account)
+        .bind(account)
         .bind(contact_id)
         .execute(&mut *conn)
         .await
@@ -863,7 +831,7 @@ async fn mutate_contact_rejects_trashed_contact() {
 
     let changed = mutate_contact(
         &mut conn,
-        &account,
+        account,
         contact_id,
         &ContactMutationBody {
             name: Some("Changed".into()),
@@ -879,14 +847,14 @@ async fn mutate_contact_rejects_trashed_contact() {
     let name: String =
         sqlx::query_scalar("SELECT preferred_name FROM contacts WHERE id = $1 AND account_id = $2")
             .bind(contact_id)
-            .bind(&account)
+            .bind(account)
             .fetch_one(&mut *conn)
             .await
             .unwrap();
     assert_eq!(name, "Trashed");
 }
 
-async fn contact_last_modified(conn: &mut AnyConnection, account: &str, contact_id: i64) -> String {
+async fn contact_last_modified(conn: &mut AnyConnection, account: i64, contact_id: i64) -> String {
     sqlx::query_scalar("SELECT last_modified FROM contacts WHERE id = $1 AND account_id = $2")
         .bind(contact_id)
         .bind(account)
@@ -897,7 +865,7 @@ async fn contact_last_modified(conn: &mut AnyConnection, account: &str, contact_
 
 async fn set_contact_last_modified(
     conn: &mut AnyConnection,
-    account: &str,
+    account: i64,
     contact_id: i64,
     value: &str,
 ) {
@@ -913,26 +881,24 @@ async fn set_contact_last_modified(
 #[tokio::test]
 async fn mutate_contact_bumps_last_modified_on_shape_changes() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let contact_id: i64 = sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Sam') RETURNING id",
     )
-    .bind(&account)
+    .bind(account)
     .fetch_one(&mut *conn)
     .await
     .unwrap();
 
-    let detail = get_contact_detail(&mut conn, &account, contact_id)
+    let detail = get_contact_detail(&mut conn, account, contact_id)
         .await
         .unwrap()
         .unwrap();
     assert!(!detail.last_modified.is_empty());
     let page = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
@@ -944,11 +910,11 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
     assert_eq!(page.items[0].last_modified, detail.last_modified);
 
     const OLD: &str = "2000-01-01 00:00:00";
-    set_contact_last_modified(&mut conn, &account, contact_id, OLD).await;
+    set_contact_last_modified(&mut conn, account, contact_id, OLD).await;
     assert!(
         mutate_contact(
             &mut conn,
-            &account,
+            account,
             contact_id,
             &ContactMutationBody {
                 name: Some("Samantha".into()),
@@ -960,14 +926,14 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
         .await
         .unwrap()
     );
-    let after_rename = contact_last_modified(&mut conn, &account, contact_id).await;
+    let after_rename = contact_last_modified(&mut conn, account, contact_id).await;
     assert_ne!(after_rename, OLD);
 
-    set_contact_last_modified(&mut conn, &account, contact_id, OLD).await;
+    set_contact_last_modified(&mut conn, account, contact_id, OLD).await;
     assert!(
         mutate_contact(
             &mut conn,
-            &account,
+            account,
             contact_id,
             &ContactMutationBody {
                 name: None,
@@ -982,15 +948,15 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
         .await
         .unwrap()
     );
-    let after_add = contact_last_modified(&mut conn, &account, contact_id).await;
+    let after_add = contact_last_modified(&mut conn, account, contact_id).await;
     assert_ne!(after_add, OLD);
 
     // Re-adding the same handle is a no-op and must not bump.
-    set_contact_last_modified(&mut conn, &account, contact_id, OLD).await;
+    set_contact_last_modified(&mut conn, account, contact_id, OLD).await;
     assert!(
         mutate_contact(
             &mut conn,
-            &account,
+            account,
             contact_id,
             &ContactMutationBody {
                 name: None,
@@ -1006,15 +972,15 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
         .unwrap()
     );
     assert_eq!(
-        contact_last_modified(&mut conn, &account, contact_id).await,
+        contact_last_modified(&mut conn, account, contact_id).await,
         OLD
     );
 
-    set_contact_last_modified(&mut conn, &account, contact_id, OLD).await;
+    set_contact_last_modified(&mut conn, account, contact_id, OLD).await;
     assert!(
         mutate_contact(
             &mut conn,
-            &account,
+            account,
             contact_id,
             &ContactMutationBody {
                 name: None,
@@ -1030,14 +996,14 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
         .unwrap()
     );
     assert_ne!(
-        contact_last_modified(&mut conn, &account, contact_id).await,
+        contact_last_modified(&mut conn, account, contact_id).await,
         OLD
     );
 }
 
 async fn insert_contact_with_handle(
     conn: &mut AnyConnection,
-    account: &str,
+    account: i64,
     name: &str,
     phone: &str,
 ) -> i64 {
@@ -1068,7 +1034,7 @@ async fn insert_contact_with_handle(
 
 async fn insert_direct_conversation(
     conn: &mut AnyConnection,
-    account: &str,
+    account: i64,
     conversation_id: i64,
     phone: &str,
     service: &str,
@@ -1128,15 +1094,13 @@ async fn insert_direct_conversation(
 #[tokio::test]
 async fn list_contacts_filters_has_messages_and_never_messaged() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
-    insert_contact_with_handle(&mut conn, &account, "Messaged", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, &account, "Silent", "+15555550200").await;
+    insert_contact_with_handle(&mut conn, account, "Messaged", "+15555550100").await;
+    insert_contact_with_handle(&mut conn, account, "Silent", "+15555550200").await;
     insert_direct_conversation(
         &mut conn,
-        &account,
+        account,
         1,
         "+15555550100",
         "imessage",
@@ -1146,7 +1110,7 @@ async fn list_contacts_filters_has_messages_and_never_messaged() {
 
     let with_msg = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "messages:>0",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
@@ -1160,7 +1124,7 @@ async fn list_contacts_filters_has_messages_and_never_messaged() {
 
     let never = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "messages:0",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
@@ -1176,13 +1140,11 @@ async fn list_contacts_filters_has_messages_and_never_messaged() {
 #[tokio::test]
 async fn list_contacts_filters_no_handle() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
-    insert_contact_with_handle(&mut conn, &account, "WithHandle", "+15555550100").await;
+    insert_contact_with_handle(&mut conn, account, "WithHandle", "+15555550100").await;
     sqlx::query("INSERT INTO contacts (account_id, preferred_name) VALUES ($1, $2)")
-        .bind(&account)
+        .bind(account)
         .bind("Orphan")
         .execute(&mut *conn)
         .await
@@ -1190,7 +1152,7 @@ async fn list_contacts_filters_no_handle() {
 
     let page = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "handle:none",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
@@ -1207,16 +1169,14 @@ async fn list_contacts_filters_no_handle() {
 #[tokio::test]
 async fn list_contacts_filters_service_or() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
-    insert_contact_with_handle(&mut conn, &account, "IMsg", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, &account, "Sms", "+15555550200").await;
-    insert_contact_with_handle(&mut conn, &account, "Wa", "+15555550300").await;
+    insert_contact_with_handle(&mut conn, account, "IMsg", "+15555550100").await;
+    insert_contact_with_handle(&mut conn, account, "Sms", "+15555550200").await;
+    insert_contact_with_handle(&mut conn, account, "Wa", "+15555550300").await;
     insert_direct_conversation(
         &mut conn,
-        &account,
+        account,
         1,
         "+15555550100",
         "iMessage",
@@ -1225,7 +1185,7 @@ async fn list_contacts_filters_service_or() {
     .await;
     insert_direct_conversation(
         &mut conn,
-        &account,
+        account,
         2,
         "+15555550200",
         "sms",
@@ -1234,7 +1194,7 @@ async fn list_contacts_filters_service_or() {
     .await;
     insert_direct_conversation(
         &mut conn,
-        &account,
+        account,
         3,
         "+15555550300",
         "whatsapp",
@@ -1244,7 +1204,7 @@ async fn list_contacts_filters_service_or() {
 
     let page = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "service:imessage,sms",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
@@ -1281,15 +1241,13 @@ fn the_media_type_alone_decides_the_address_book_format() {
 #[tokio::test]
 async fn an_address_book_renames_a_contact_an_import_named() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let dir = vault.dir();
     let mut conn = vault.conn().await;
 
     // What an import leaves behind: a contact named by the backup, holding
     // the phone, marked as the import's.
-    let discovered = insert_contact_with_handle(&mut conn, &account, "Bobby", "+15551234567").await;
+    let discovered = insert_contact_with_handle(&mut conn, account, "Bobby", "+15551234567").await;
     sqlx::query("UPDATE contacts SET origin = 'import' WHERE id = $1")
         .bind(discovered)
         .execute(&mut *conn)
@@ -1302,14 +1260,14 @@ async fn an_address_book_renames_a_contact_an_import_named() {
         "BEGIN:VCARD\nVERSION:3.0\nFN:Robert Smith\nN:Smith;Robert;;;\nTEL:+15551234567\nEND:VCARD\n",
     )
     .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, &account)
+    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
         .await
         .unwrap();
 
     let names: Vec<String> = sqlx::query_scalar(
         "SELECT preferred_name FROM contacts WHERE account_id = $1 ORDER BY preferred_name",
     )
-    .bind(&account)
+    .bind(account)
     .fetch_all(&mut *conn)
     .await
     .unwrap();
@@ -1339,15 +1297,13 @@ async fn an_address_book_renames_a_contact_an_import_named() {
 #[tokio::test]
 async fn a_nameless_card_does_not_blank_an_imported_name() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let dir = vault.dir();
     let mut conn = vault.conn().await;
 
     // An import already named this person; the book only lists their
     // number, nothing more.
-    let discovered = insert_contact_with_handle(&mut conn, &account, "Bobby", "+15551234567").await;
+    let discovered = insert_contact_with_handle(&mut conn, account, "Bobby", "+15551234567").await;
     sqlx::query("UPDATE contacts SET origin = 'import' WHERE id = $1")
         .bind(discovered)
         .execute(&mut *conn)
@@ -1360,7 +1316,7 @@ async fn a_nameless_card_does_not_blank_an_imported_name() {
         "BEGIN:VCARD\nVERSION:3.0\nTEL:+15551234567\nEND:VCARD\n",
     )
     .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, &account)
+    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
         .await
         .unwrap();
 
@@ -1384,15 +1340,13 @@ async fn a_nameless_card_does_not_blank_an_imported_name() {
 #[tokio::test]
 async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let dir = vault.dir();
     let mut conn = vault.conn().await;
 
     // An import discovered this person and gave them the name that backup
     // used, holding the phone the book is about to load a card for.
-    let hand_typed = insert_contact_with_handle(&mut conn, &account, "Bobby", "+15551234567").await;
+    let hand_typed = insert_contact_with_handle(&mut conn, account, "Bobby", "+15551234567").await;
     sqlx::query("UPDATE contacts SET origin = 'import' WHERE id = $1")
         .bind(hand_typed)
         .execute(&mut *conn)
@@ -1402,7 +1356,7 @@ async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
     crate::named_membership::set_membership(
         crate::named_membership::group_spec(),
         &mut conn,
-        &account,
+        account,
         &[hand_typed],
         "Family",
         true,
@@ -1415,7 +1369,7 @@ async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
     // makes the row theirs.
     mutate_contact(
         &mut conn,
-        &account,
+        account,
         hand_typed,
         &ContactMutationBody {
             name: Some("My Friend Bob".to_string()),
@@ -1439,7 +1393,7 @@ async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
         "BEGIN:VCARD\nVERSION:3.0\nFN:Robert Smith\nN:Smith;Robert;;;\nTEL:+15551234567\nEND:VCARD\n",
     )
     .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, &account)
+    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
         .await
         .unwrap();
 
@@ -1459,7 +1413,7 @@ async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
     // person.
     let ids: Vec<i64> =
         sqlx::query_scalar("SELECT id FROM contacts WHERE account_id = $1 ORDER BY id")
-            .bind(&account)
+            .bind(account)
             .fetch_all(&mut *conn)
             .await
             .unwrap();
@@ -1474,7 +1428,7 @@ async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
         "SELECT h.raw FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id
          WHERE ch.account_id = $1 AND ch.contact_id = $2",
     )
-    .bind(&account)
+    .bind(account)
     .bind(hand_typed)
     .fetch_all(&mut *conn)
     .await
@@ -1487,7 +1441,7 @@ async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
          JOIN contact_groups g ON g.id = gm.group_id
          WHERE g.account_id = $1 AND g.name = 'Family'",
     )
-    .bind(&account)
+    .bind(account)
     .fetch_all(&mut *conn)
     .await
     .unwrap();
@@ -1497,16 +1451,14 @@ async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
 #[tokio::test]
 async fn loading_an_address_book_replaces_only_its_own_rows() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let dir = vault.dir();
     let mut conn = vault.conn().await;
 
     // An identity the vault learned from imported messages, and a Contact
     // Group the person built by hand.
     let discovered =
-        insert_contact_with_handle(&mut conn, &account, "From Import", "+15555550999").await;
+        insert_contact_with_handle(&mut conn, account, "From Import", "+15555550999").await;
     sqlx::query("UPDATE contacts SET origin = 'import' WHERE id = $1")
         .bind(discovered)
         .execute(&mut *conn)
@@ -1515,7 +1467,7 @@ async fn loading_an_address_book_replaces_only_its_own_rows() {
     crate::named_membership::set_membership(
         crate::named_membership::group_spec(),
         &mut conn,
-        &account,
+        account,
         &[discovered],
         "Family",
         true,
@@ -1529,7 +1481,7 @@ async fn loading_an_address_book_replaces_only_its_own_rows() {
         "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nN:Lovelace;Ada;;;\nTEL:+15551234567\nEND:VCARD\n",
     )
     .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, &account)
+    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
         .await
         .unwrap();
 
@@ -1541,14 +1493,14 @@ async fn loading_an_address_book_replaces_only_its_own_rows() {
         "BEGIN:VCARD\nVERSION:3.0\nFN:Grace Hopper\nN:Hopper;Grace;;;\nTEL:+15557654321\nEND:VCARD\n",
     )
     .unwrap();
-    contacts::load_contacts_if_needed(&mut conn, Some(&book2), true, &account)
+    contacts::load_contacts_if_needed(&mut conn, Some(&book2), true, account)
         .await
         .unwrap();
 
     let names: Vec<String> = sqlx::query_scalar(
         "SELECT preferred_name FROM contacts WHERE account_id = $1 ORDER BY preferred_name",
     )
-    .bind(&account)
+    .bind(account)
     .fetch_all(&mut *conn)
     .await
     .unwrap();
@@ -1567,7 +1519,7 @@ async fn loading_an_address_book_replaces_only_its_own_rows() {
 
     let groups: Vec<String> =
         sqlx::query_scalar("SELECT name FROM contact_groups WHERE account_id = $1 ORDER BY name")
-            .bind(&account)
+            .bind(account)
             .fetch_all(&mut *conn)
             .await
             .unwrap();
@@ -1581,19 +1533,17 @@ async fn loading_an_address_book_replaces_only_its_own_rows() {
 #[tokio::test]
 async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
 
     // Knows who and how to reach them: not Unknown.
-    insert_contact_with_handle(&mut conn, &account, "Ada", "+15555550100").await;
+    insert_contact_with_handle(&mut conn, account, "Ada", "+15555550100").await;
     // Has an identity, no preferred name: Unknown by the second clause.
-    insert_contact_with_handle(&mut conn, &account, "", "+15555550200").await;
+    insert_contact_with_handle(&mut conn, account, "", "+15555550200").await;
     // Has a name, no identity at all: Unknown by the first clause.
     crate::db::contacts::create_contact(
         &mut conn,
-        &account,
+        account,
         "Sarah",
         crate::db::contacts::Origin::Import,
     )
@@ -1602,7 +1552,7 @@ async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
 
     let unknown = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "group:unknown",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
@@ -1620,13 +1570,13 @@ async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
     // Naming the nameless one takes it out of Unknown, because membership
     // is computed rather than stored.
     sqlx::query("UPDATE contacts SET preferred_name = 'Ben' WHERE account_id = $1 AND trim(preferred_name) = ''")
-        .bind(&account)
+        .bind(account)
         .execute(&mut *conn)
         .await
         .unwrap();
     let after = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "group:unknown",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
@@ -1642,16 +1592,14 @@ async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
 #[tokio::test]
 async fn list_contacts_filters_by_group_and_no_group() {
     let vault = test_vault().await;
-    let account = vault
-        .account_with_id("00000000-0000-4000-8000-0000000000c1", "alice")
-        .await;
+    let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
-    let family = insert_contact_with_handle(&mut conn, &account, "Ada", "+15555550100").await;
-    insert_contact_with_handle(&mut conn, &account, "Ben", "+15555550200").await;
+    let family = insert_contact_with_handle(&mut conn, account, "Ada", "+15555550100").await;
+    insert_contact_with_handle(&mut conn, account, "Ben", "+15555550200").await;
     crate::named_membership::set_membership(
         crate::named_membership::group_spec(),
         &mut conn,
-        &account,
+        account,
         &[family],
         "Family",
         true,
@@ -1661,7 +1609,7 @@ async fn list_contacts_filters_by_group_and_no_group() {
 
     let grouped = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "group:Family",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
@@ -1676,7 +1624,7 @@ async fn list_contacts_filters_by_group_and_no_group() {
 
     let quoted = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         r#"group:"Family""#,
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
@@ -1689,7 +1637,7 @@ async fn list_contacts_filters_by_group_and_no_group() {
 
     let none = list_contacts_sorted(
         &mut conn,
-        &account,
+        account,
         "group:none",
         &DEFAULT_CONTACT_SORT,
         DEFAULT_LIST_LIMIT,
@@ -1711,12 +1659,12 @@ async fn contact_list_takes_the_search_language() {
         let group_id: i64 = sqlx::query_scalar(
             "INSERT INTO contact_groups (account_id, name) VALUES ($1, 'Family') RETURNING id",
         )
-        .bind(&account.account_id)
+        .bind(account.account_id)
         .fetch_one(&mut *conn)
         .await
         .unwrap();
         let first: i64 = sqlx::query_scalar("SELECT MIN(id) FROM contacts WHERE account_id = $1")
-            .bind(&account.account_id)
+            .bind(account.account_id)
             .fetch_one(&mut *conn)
             .await
             .unwrap();
@@ -1794,7 +1742,7 @@ async fn the_contact_list_is_a_page_and_summaries_are_items() {
     assert!(summaries.get("contacts").is_none());
 }
 
-async fn trashed_contact_row_count(conn: &mut AnyConnection, account_id: &str, id: i64) -> i64 {
+async fn trashed_contact_row_count(conn: &mut AnyConnection, account_id: i64, id: i64) -> i64 {
     sqlx::query_scalar(
         "SELECT COUNT(*) FROM trashed_contacts WHERE account_id = $1 AND contact_id = $2",
     )
@@ -1813,7 +1761,7 @@ async fn trashed_contact_fixture() -> (TestVault, RegisteredAccount, i64) {
     let mut conn = vault.conn().await;
     insert_direct_conversation(
         &mut conn,
-        &account.account_id,
+        account.account_id,
         1,
         "+15550100",
         "imessage",
@@ -1821,7 +1769,7 @@ async fn trashed_contact_fixture() -> (TestVault, RegisteredAccount, i64) {
     )
     .await;
     let id: i64 = sqlx::query_scalar("SELECT id FROM contacts WHERE account_id = $1")
-        .bind(&account.account_id)
+        .bind(account.account_id)
         .fetch_one(&mut *conn)
         .await
         .unwrap();
@@ -1863,7 +1811,7 @@ async fn contact_delete_makes_it_unknown_and_leaves_its_conversations_alone() {
         "the name goes and the row is an import's again"
     );
     assert_eq!(
-        trashed_contact_row_count(&mut conn, &account.account_id, id).await,
+        trashed_contact_row_count(&mut conn, account.account_id, id).await,
         0,
         "it leaves the trash"
     );
@@ -1945,7 +1893,7 @@ async fn contact_delete_needs_the_delete_permission() {
     {
         let mut conn = vault.conn().await;
         sqlx::query("UPDATE accounts SET can_delete = 0 WHERE id = $1")
-            .bind(&account.account_id)
+            .bind(account.account_id)
             .execute(&mut *conn)
             .await
             .unwrap();
@@ -2015,7 +1963,7 @@ async fn contact_trash_twice_is_204_with_no_second_marker() {
 
     let mut conn = vault.state.db.acquire().await.unwrap();
     assert_eq!(
-        trashed_contact_row_count(&mut conn, &account.account_id, id).await,
+        trashed_contact_row_count(&mut conn, account.account_id, id).await,
         1,
         "trashing twice must not create a second marker row"
     );
@@ -2076,7 +2024,7 @@ async fn contact_restore_twice_is_204_with_marker_gone() {
 
     let mut conn = vault.state.db.acquire().await.unwrap();
     assert_eq!(
-        trashed_contact_row_count(&mut conn, &account.account_id, id).await,
+        trashed_contact_row_count(&mut conn, account.account_id, id).await,
         0,
         "restoring twice must leave no marker row"
     );
@@ -2132,7 +2080,7 @@ async fn contact_trash_404s_for_another_accounts_contact() {
 
     let mut conn = vault.state.db.acquire().await.unwrap();
     assert_eq!(
-        trashed_contact_row_count(&mut conn, &alice.account_id, alice_contact_id).await,
+        trashed_contact_row_count(&mut conn, alice.account_id, alice_contact_id).await,
         0,
         "Bob's request must not trash Alice's contact"
     );
@@ -2146,7 +2094,7 @@ async fn contact_restore_404s_for_another_accounts_contact() {
     let alice_contact_id = alice_list["items"][0]["id"].as_i64().unwrap();
     let mut conn = vault.state.db.acquire().await.unwrap();
     sqlx::query("INSERT INTO trashed_contacts (account_id, contact_id) VALUES ($1, $2)")
-        .bind(&alice.account_id)
+        .bind(alice.account_id)
         .bind(alice_contact_id)
         .execute(&mut *conn)
         .await
@@ -2166,7 +2114,7 @@ async fn contact_restore_404s_for_another_accounts_contact() {
 
     let mut conn = vault.state.db.acquire().await.unwrap();
     assert_eq!(
-        trashed_contact_row_count(&mut conn, &alice.account_id, alice_contact_id).await,
+        trashed_contact_row_count(&mut conn, alice.account_id, alice_contact_id).await,
         1,
         "Bob's request must not restore Alice's contact"
     );

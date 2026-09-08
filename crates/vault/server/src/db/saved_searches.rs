@@ -121,7 +121,7 @@ fn normalize_query(query: &str) -> Result<String> {
 /// Id of an account's saved search with this name, case-insensitively.
 async fn find_id_by_name(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     name: &str,
 ) -> Result<Option<i64>> {
     let sql = format!(
@@ -137,7 +137,7 @@ async fn find_id_by_name(
 }
 
 /// One account's saved searches, A–Z.
-pub async fn list(conn: &mut AnyConnection, account_id: &str) -> Result<Vec<SavedSearch>> {
+pub async fn list(conn: &mut AnyConnection, account_id: i64) -> Result<Vec<SavedSearch>> {
     let sql = format!(
         "SELECT id, name, query, kind FROM saved_searches WHERE account_id = $1 {}",
         order_by_name_ci(engine_of(conn), "name")
@@ -152,7 +152,7 @@ pub async fn list(conn: &mut AnyConnection, account_id: &str) -> Result<Vec<Save
 /// One saved search by id, scoped to the account that owns it.
 pub async fn get(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     id: i64,
 ) -> Result<Option<SavedSearch>> {
     let row = sqlx::query(
@@ -168,7 +168,7 @@ pub async fn get(
 /// Create a saved search. The name must be free within the account.
 pub async fn create(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     name: &str,
     query: &str,
     kind: SavedSearchKind,
@@ -206,7 +206,7 @@ pub async fn create(
 /// how the row was born.
 pub async fn update(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     id: i64,
     name: &str,
     query: &str,
@@ -246,7 +246,7 @@ pub async fn update(
 ///
 /// This never touches `vault_imports`: an import-created saved search is a
 /// shortcut to a run's messages, and the run's own record is permanent.
-pub async fn delete(conn: &mut AnyConnection, account_id: &str, id: i64) -> Result<()> {
+pub async fn delete(conn: &mut AnyConnection, account_id: i64, id: i64) -> Result<()> {
     let result = sqlx::query("DELETE FROM saved_searches WHERE account_id = $1 AND id = $2")
         .bind(account_id)
         .bind(id)
@@ -262,7 +262,7 @@ pub async fn delete(conn: &mut AnyConnection, account_id: &str, id: i64) -> Resu
 /// already used the plain name on the same day.
 async fn unique_import_name(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     source: &str,
     date_ymd: &str,
 ) -> Result<String> {
@@ -291,7 +291,7 @@ async fn unique_import_name(
 /// still recorded in `vault_imports` either way.
 pub async fn create_for_import(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     import_id: i64,
     source: &str,
     date_ymd: &str,

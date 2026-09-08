@@ -83,7 +83,7 @@ pub struct PushReport {
     /// `true` when no conversation failed and the run was not cancelled.
     pub ok: bool,
     /// Account id the key resolved to.
-    pub account: String,
+    pub account: i64,
     /// Username the vault reports for that account, else the account id.
     pub username: String,
     /// `append` or `replace`.
@@ -288,7 +288,7 @@ mod tests {
     fn sample_report() -> PushReport {
         PushReport {
             ok: true,
-            account: "acct".into(),
+            account: 1,
             username: "user".into(),
             mode: ImportMode::Append,
             started_at: "2026-08-29T00:00:00Z".into(),

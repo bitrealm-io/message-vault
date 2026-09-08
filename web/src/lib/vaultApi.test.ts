@@ -156,8 +156,8 @@ describe("verbs", () => {
   });
 
   it("deletes an API token at its own id", async () => {
-    await deleteApiToken("tok_1");
-    expect(del).toHaveBeenCalledWith("/v1/account/api-tokens/tok_1");
+    await deleteApiToken(1);
+    expect(del).toHaveBeenCalledWith("/v1/account/api-tokens/1");
   });
 
   it("reads saved searches with GET", async () => {
@@ -180,13 +180,6 @@ describe("import session routes", () => {
   it("addresses one past run by id", async () => {
     await getImport(12);
     expect(lastPath(get)).toBe("/v1/imports/12");
-  });
-});
-
-describe("path parameters are escaped", () => {
-  it("escapes an id containing a slash rather than building a deeper path", async () => {
-    await deleteApiToken("a/b");
-    expect(del).toHaveBeenCalledWith("/v1/account/api-tokens/a%2Fb");
   });
 });
 

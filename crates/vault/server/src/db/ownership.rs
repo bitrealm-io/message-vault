@@ -16,7 +16,7 @@ use sqlx::AnyConnection;
 /// Returns a database error when the query fails.
 pub async fn owns_conversation(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     conversation_id: i64,
 ) -> Result<bool, sqlx::Error> {
     owns_row(conn, "conversations", account_id, conversation_id).await
@@ -29,7 +29,7 @@ pub async fn owns_conversation(
 /// Returns a database error when the query fails.
 pub async fn owns_contact(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     contact_id: i64,
 ) -> Result<bool, sqlx::Error> {
     owns_row(conn, "contacts", account_id, contact_id).await
@@ -43,7 +43,7 @@ pub async fn owns_contact(
 async fn owns_row(
     conn: &mut AnyConnection,
     table: &'static str,
-    account_id: &str,
+    account_id: i64,
     id: i64,
 ) -> Result<bool, sqlx::Error> {
     let found: Option<i64> = sqlx::query_scalar(&format!(
@@ -61,8 +61,8 @@ mod tests {
     use super::*;
     use crate::db::schema;
 
-    const ACCOUNT_A: &str = "00000000-0000-4000-8000-000000000001";
-    const ACCOUNT_B: &str = "00000000-0000-4000-8000-000000000002";
+    const ACCOUNT_A: i64 = 7;
+    const ACCOUNT_B: i64 = 8;
 
     async fn setup() -> (sqlx::AnyPool, tempfile::TempDir) {
         let (pool, dir) = crate::db::engine::test_pool().await;
@@ -78,7 +78,7 @@ mod tests {
         (pool, dir)
     }
 
-    async fn insert_contact(conn: &mut AnyConnection, account_id: &str) -> i64 {
+    async fn insert_contact(conn: &mut AnyConnection, account_id: i64) -> i64 {
         sqlx::query_scalar(
             "INSERT INTO contacts (account_id, preferred_name, origin)
              VALUES ($1, 'Ada', 'user') RETURNING id",

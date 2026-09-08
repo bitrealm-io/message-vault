@@ -97,7 +97,7 @@ pub async fn run(vault: &OpenVault, opts: &ProcessAssetsOptions) -> Result<Proce
     let work = TempDir::new().context("create temp dir for derived media")?;
     let mut stats = ProcessAssetsStats::default();
 
-    for account_id in &account_ids {
+    for &account_id in &account_ids {
         let source_ids = sources_to_process(&mut conn, cfg, opts, account_id).await?;
         if source_ids.is_empty() {
             eprintln!("account {account_id}: no sources found — skip");
@@ -148,7 +148,7 @@ async fn sources_to_process(
     conn: &mut AnyConnection,
     cfg: &Config,
     opts: &ProcessAssetsOptions,
-    account_id: &str,
+    account_id: i64,
 ) -> Result<Vec<String>> {
     let mut source_ids =
         discover_source_ids(conn, account_id, &cfg.paths.data_dir, &cfg.paths.assets_dir).await?;
@@ -167,7 +167,7 @@ async fn sources_to_process(
 struct SourcePass<'a> {
     opts: &'a ProcessAssetsOptions,
     work_dir: &'a Path,
-    account_id: &'a str,
+    account_id: i64,
     source_id: &'a str,
     assets_dir: PathBuf,
     converted_dir: PathBuf,
@@ -194,7 +194,7 @@ impl<'a> SourcePass<'a> {
         cfg: &Config,
         opts: &'a ProcessAssetsOptions,
         work_dir: &'a Path,
-        account_id: &'a str,
+        account_id: i64,
         source_id: &'a str,
     ) -> Result<Option<Self>> {
         let assets_dir = cfg.paths.assets_dir_for_account(account_id, source_id);
@@ -327,23 +327,27 @@ impl<'a> SourcePass<'a> {
 }
 
 /// Account ids from the database, falling back to the folder names under `data_dir` when the table does not exist yet.
-async fn list_account_ids(conn: &mut AnyConnection, data_dir: &Path) -> Result<Vec<String>> {
+async fn list_account_ids(conn: &mut AnyConnection, data_dir: &Path) -> Result<Vec<i64>> {
     // Engine-branched: sqlite_master does not exist on Postgres.
     let mut ids = Vec::new();
     if schema::table_exists(conn, "accounts").await? {
-        let rows = sqlx::query_scalar::<_, String>("SELECT id FROM accounts ORDER BY id")
+        let rows = sqlx::query_scalar::<_, i64>("SELECT id FROM accounts ORDER BY id")
             .fetch_all(&mut *conn)
             .await?;
         ids = rows;
     }
     if ids.is_empty() && data_dir.is_dir() {
+        // Account folders are named by id; anything else under `data/` is
+        // not an account.
         for entry in fs::read_dir(data_dir)? {
             let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                ids.push(entry.file_name().to_string_lossy().into_owned());
+            if entry.file_type()?.is_dir()
+                && let Ok(id) = entry.file_name().to_string_lossy().parse::<i64>()
+            {
+                ids.push(id);
             }
         }
-        ids.sort();
+        ids.sort_unstable();
     }
     Ok(ids)
 }
@@ -351,7 +355,7 @@ async fn list_account_ids(conn: &mut AnyConnection, data_dir: &Path) -> Result<V
 /// Source ids for one account: those with messages in the database plus any folder under the account's data dir.
 async fn discover_source_ids(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     data_dir: &Path,
     assets_name: &str,
 ) -> Result<Vec<String>> {
@@ -377,7 +381,7 @@ async fn discover_source_ids(
         }
     }
 
-    let account_root = data_dir.join(account_id);
+    let account_root = data_dir.join(account_id.to_string());
     if account_root.is_dir() {
         for entry in fs::read_dir(&account_root)? {
             let entry = entry?;
@@ -396,7 +400,7 @@ async fn discover_source_ids(
 /// One row per stored blob for this account and source, with the names that could hint at its media type.
 async fn list_attachments(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     source_id: &str,
 ) -> Result<Vec<AssetRow>> {
     // One row per stored blob. Several messages can share a blob under different
@@ -457,7 +461,7 @@ async fn list_attachments(
 /// Point every attachment row for `original_sha` at its new derived blob.
 async fn update_derived(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     source_id: &str,
     original_sha: &str,
     blob: &DerivedBlob,

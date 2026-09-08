@@ -1,12 +1,12 @@
 use super::*;
-const ACCOUNT_A: &str = "00000000-0000-4000-8000-000000000001";
-const ACCOUNT_B: &str = "00000000-0000-4000-8000-000000000002";
+const ACCOUNT_A: i64 = 7;
+const ACCOUNT_B: i64 = 8;
 
 /// Insert a conversation owned by `account_id`, returning its id. Each
 /// call creates its own chat handle so repeat calls for the same
 /// account don't collide on `conversations`' `(account_id,
 /// chat_handle_id)` uniqueness.
-async fn insert_conversation(conn: &mut AnyConnection, account_id: &str) -> i64 {
+async fn insert_conversation(conn: &mut AnyConnection, account_id: i64) -> i64 {
     sqlx::query(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
          VALUES ($1, '+15555550100', '+15555550100', 'phone', 'phone')",
@@ -39,7 +39,7 @@ async fn insert_conversation(conn: &mut AnyConnection, account_id: &str) -> i64 
 }
 
 /// Insert a contact owned by `account_id`, returning its id.
-async fn insert_contact(conn: &mut AnyConnection, account_id: &str) -> i64 {
+async fn insert_contact(conn: &mut AnyConnection, account_id: i64) -> i64 {
     sqlx::query("INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Pat')")
         .bind(account_id)
         .execute(&mut *conn)
@@ -52,7 +52,7 @@ async fn insert_contact(conn: &mut AnyConnection, account_id: &str) -> i64 {
         .unwrap()
 }
 
-async fn trashed_conversation_count(conn: &mut AnyConnection, account_id: &str) -> i64 {
+async fn trashed_conversation_count(conn: &mut AnyConnection, account_id: i64) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM trashed_conversations WHERE account_id = $1")
         .bind(account_id)
         .fetch_one(&mut *conn)
@@ -60,7 +60,7 @@ async fn trashed_conversation_count(conn: &mut AnyConnection, account_id: &str) 
         .unwrap()
 }
 
-async fn trashed_contact_count(conn: &mut AnyConnection, account_id: &str) -> i64 {
+async fn trashed_contact_count(conn: &mut AnyConnection, account_id: i64) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM trashed_contacts WHERE account_id = $1")
         .bind(account_id)
         .fetch_one(&mut *conn)
@@ -72,7 +72,7 @@ async fn trashed_contact_count(conn: &mut AnyConnection, account_id: &str) -> i6
 async fn trash_conversation_marks_an_owned_row() {
     let vault = crate::test_support::test_vault().await;
     for account in [ACCOUNT_A, ACCOUNT_B] {
-        vault.account_with_id(account, account).await;
+        vault.account_with_id(account, &account.to_string()).await;
     }
     let mut conn = vault.conn().await;
     let id = insert_conversation(&mut conn, ACCOUNT_A).await;
@@ -89,7 +89,7 @@ async fn trash_conversation_marks_an_owned_row() {
 async fn trash_conversation_twice_stays_one_row() {
     let vault = crate::test_support::test_vault().await;
     for account in [ACCOUNT_A, ACCOUNT_B] {
-        vault.account_with_id(account, account).await;
+        vault.account_with_id(account, &account.to_string()).await;
     }
     let mut conn = vault.conn().await;
     let id = insert_conversation(&mut conn, ACCOUNT_A).await;
@@ -111,7 +111,7 @@ async fn trash_conversation_twice_stays_one_row() {
 async fn restore_conversation_removes_the_marker() {
     let vault = crate::test_support::test_vault().await;
     for account in [ACCOUNT_A, ACCOUNT_B] {
-        vault.account_with_id(account, account).await;
+        vault.account_with_id(account, &account.to_string()).await;
     }
     let mut conn = vault.conn().await;
     let id = insert_conversation(&mut conn, ACCOUNT_A).await;
@@ -131,7 +131,7 @@ async fn restore_conversation_removes_the_marker() {
 async fn restore_conversation_not_trashed_is_a_noop() {
     let vault = crate::test_support::test_vault().await;
     for account in [ACCOUNT_A, ACCOUNT_B] {
-        vault.account_with_id(account, account).await;
+        vault.account_with_id(account, &account.to_string()).await;
     }
     let mut conn = vault.conn().await;
     let id = insert_conversation(&mut conn, ACCOUNT_A).await;
@@ -148,7 +148,7 @@ async fn restore_conversation_not_trashed_is_a_noop() {
 async fn conversation_operations_refuse_another_accounts_id() {
     let vault = crate::test_support::test_vault().await;
     for account in [ACCOUNT_A, ACCOUNT_B] {
-        vault.account_with_id(account, account).await;
+        vault.account_with_id(account, &account.to_string()).await;
     }
     let mut conn = vault.conn().await;
     let id = insert_conversation(&mut conn, ACCOUNT_A).await;
@@ -177,7 +177,7 @@ async fn conversation_operations_refuse_another_accounts_id() {
 async fn trash_contact_marks_an_owned_row() {
     let vault = crate::test_support::test_vault().await;
     for account in [ACCOUNT_A, ACCOUNT_B] {
-        vault.account_with_id(account, account).await;
+        vault.account_with_id(account, &account.to_string()).await;
     }
     let mut conn = vault.conn().await;
     let id = insert_contact(&mut conn, ACCOUNT_A).await;
@@ -194,7 +194,7 @@ async fn trash_contact_marks_an_owned_row() {
 async fn trash_contact_twice_stays_one_row() {
     let vault = crate::test_support::test_vault().await;
     for account in [ACCOUNT_A, ACCOUNT_B] {
-        vault.account_with_id(account, account).await;
+        vault.account_with_id(account, &account.to_string()).await;
     }
     let mut conn = vault.conn().await;
     let id = insert_contact(&mut conn, ACCOUNT_A).await;
@@ -216,7 +216,7 @@ async fn trash_contact_twice_stays_one_row() {
 async fn restore_contact_removes_the_marker() {
     let vault = crate::test_support::test_vault().await;
     for account in [ACCOUNT_A, ACCOUNT_B] {
-        vault.account_with_id(account, account).await;
+        vault.account_with_id(account, &account.to_string()).await;
     }
     let mut conn = vault.conn().await;
     let id = insert_contact(&mut conn, ACCOUNT_A).await;
@@ -236,7 +236,7 @@ async fn restore_contact_removes_the_marker() {
 async fn restore_contact_not_trashed_is_a_noop() {
     let vault = crate::test_support::test_vault().await;
     for account in [ACCOUNT_A, ACCOUNT_B] {
-        vault.account_with_id(account, account).await;
+        vault.account_with_id(account, &account.to_string()).await;
     }
     let mut conn = vault.conn().await;
     let id = insert_contact(&mut conn, ACCOUNT_A).await;
@@ -253,7 +253,7 @@ async fn restore_contact_not_trashed_is_a_noop() {
 async fn contact_operations_refuse_another_accounts_id() {
     let vault = crate::test_support::test_vault().await;
     for account in [ACCOUNT_A, ACCOUNT_B] {
-        vault.account_with_id(account, account).await;
+        vault.account_with_id(account, &account.to_string()).await;
     }
     let mut conn = vault.conn().await;
     let id = insert_contact(&mut conn, ACCOUNT_A).await;
@@ -281,7 +281,7 @@ async fn contact_operations_refuse_another_accounts_id() {
 async fn purge_account_clears_only_that_accounts_trash() {
     let vault = crate::test_support::test_vault().await;
     for account in [ACCOUNT_A, ACCOUNT_B] {
-        vault.account_with_id(account, account).await;
+        vault.account_with_id(account, &account.to_string()).await;
     }
     let mut conn = vault.conn().await;
     let conv_a = insert_conversation(&mut conn, ACCOUNT_A).await;
@@ -314,7 +314,7 @@ async fn purge_account_clears_only_that_accounts_trash() {
 /// Insert a conversation owned by `account_id` on its own handle `raw`,
 /// returning its id. Unlike [`insert_conversation`], the handle is the
 /// caller's, so a test can put two conversations on two different people.
-async fn insert_conversation_on(conn: &mut AnyConnection, account_id: &str, raw: &str) -> i64 {
+async fn insert_conversation_on(conn: &mut AnyConnection, account_id: i64, raw: &str) -> i64 {
     let handle_id: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
          VALUES ($1, $2, $2, 'phone', 'phone') RETURNING id",
@@ -339,7 +339,7 @@ async fn insert_conversation_on(conn: &mut AnyConnection, account_id: &str, raw:
 /// Insert one `imessage` message into `conversation_id`, returning its id.
 async fn insert_message(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     conversation_id: i64,
     sort_order: i64,
 ) -> i64 {
@@ -395,7 +395,7 @@ fn sha(tag: char) -> String {
 #[tokio::test]
 async fn delete_trashed_conversation_removes_it_and_its_messages() {
     let vault = crate::test_support::test_vault().await;
-    vault.account_with_id(ACCOUNT_A, ACCOUNT_A).await;
+    vault.account_with_id(ACCOUNT_A, "a").await;
     let mut conn = vault.conn().await;
     let id = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550001").await;
     insert_message(&mut conn, ACCOUNT_A, id, 0).await;
@@ -433,7 +433,7 @@ async fn delete_trashed_conversation_removes_it_and_its_messages() {
 #[tokio::test]
 async fn delete_conversation_not_in_the_trash_is_refused_and_changes_nothing() {
     let vault = crate::test_support::test_vault().await;
-    vault.account_with_id(ACCOUNT_A, ACCOUNT_A).await;
+    vault.account_with_id(ACCOUNT_A, "a").await;
     let mut conn = vault.conn().await;
     let id = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550001").await;
     insert_message(&mut conn, ACCOUNT_A, id, 0).await;
@@ -458,7 +458,7 @@ async fn delete_conversation_not_in_the_trash_is_refused_and_changes_nothing() {
 async fn delete_refuses_another_accounts_conversation_even_when_trashed() {
     let vault = crate::test_support::test_vault().await;
     for account in [ACCOUNT_A, ACCOUNT_B] {
-        vault.account_with_id(account, account).await;
+        vault.account_with_id(account, &account.to_string()).await;
     }
     let mut conn = vault.conn().await;
     let id = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550001").await;
@@ -485,7 +485,7 @@ async fn delete_refuses_another_accounts_conversation_even_when_trashed() {
 #[tokio::test]
 async fn delete_reports_only_the_files_no_remaining_message_uses() {
     let vault = crate::test_support::test_vault().await;
-    vault.account_with_id(ACCOUNT_A, ACCOUNT_A).await;
+    vault.account_with_id(ACCOUNT_A, "a").await;
     let mut conn = vault.conn().await;
     let shared = sha('a');
     let only_here = sha('b');
@@ -578,7 +578,7 @@ async fn delete_reports_only_the_files_no_remaining_message_uses() {
 /// on its handle; returns `(contact_id, conversation_id)`.
 async fn insert_named_contact_in_a_conversation(
     conn: &mut AnyConnection,
-    account_id: &str,
+    account_id: i64,
     raw: &str,
 ) -> (i64, i64) {
     let contact_id: i64 = sqlx::query_scalar(
@@ -635,7 +635,7 @@ async fn contact_row(conn: &mut AnyConnection, contact_id: i64) -> Option<(Strin
 #[tokio::test]
 async fn delete_trashed_contact_makes_it_unknown_and_leaves_its_conversations() {
     let vault = crate::test_support::test_vault().await;
-    vault.account_with_id(ACCOUNT_A, ACCOUNT_A).await;
+    vault.account_with_id(ACCOUNT_A, "a").await;
     let mut conn = vault.conn().await;
     let (contact_id, conversation_id) =
         insert_named_contact_in_a_conversation(&mut conn, ACCOUNT_A, "+15550001").await;
@@ -689,7 +689,7 @@ async fn delete_trashed_contact_makes_it_unknown_and_leaves_its_conversations() 
 #[tokio::test]
 async fn delete_contact_not_in_the_trash_is_refused_and_keeps_the_name() {
     let vault = crate::test_support::test_vault().await;
-    vault.account_with_id(ACCOUNT_A, ACCOUNT_A).await;
+    vault.account_with_id(ACCOUNT_A, "a").await;
     let mut conn = vault.conn().await;
     let (contact_id, _) =
         insert_named_contact_in_a_conversation(&mut conn, ACCOUNT_A, "+15550001").await;
@@ -709,7 +709,7 @@ async fn delete_contact_not_in_the_trash_is_refused_and_keeps_the_name() {
 async fn empty_trash_takes_everything_trashed_and_only_that() {
     let vault = crate::test_support::test_vault().await;
     for account in [ACCOUNT_A, ACCOUNT_B] {
-        vault.account_with_id(account, account).await;
+        vault.account_with_id(account, &account.to_string()).await;
     }
     let mut conn = vault.conn().await;
     let trashed_conversation = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550001").await;
@@ -783,7 +783,7 @@ async fn empty_trash_takes_everything_trashed_and_only_that() {
 #[tokio::test]
 async fn empty_trash_on_an_empty_trash_is_a_noop() {
     let vault = crate::test_support::test_vault().await;
-    vault.account_with_id(ACCOUNT_A, ACCOUNT_A).await;
+    vault.account_with_id(ACCOUNT_A, "a").await;
     let mut conn = vault.conn().await;
     let id = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550001").await;
 

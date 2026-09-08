@@ -24,7 +24,7 @@ import {
   updateSavedSearch as updateVaultSavedSearch,
 } from "./vaultApi";
 
-const account = { current: "account-1" };
+const account = { current: 7 };
 vi.mock("./auth", () => ({ useAuth: () => ({ accountId: account.current }) }));
 
 vi.mock("./vaultApi", async (importOriginal) => ({
@@ -52,7 +52,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  account.current = "account-1";
+  account.current = 7;
   client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0, staleTime: 0 } },
   });
@@ -96,7 +96,7 @@ describe("useSavedSearches", () => {
     );
     first.unmount();
 
-    account.current = "account-2";
+    account.current = 8;
     list.mockResolvedValue({ items: [search(2, "Bob's Work")] });
     const second = renderHook(() => useSavedSearches(), { wrapper });
 

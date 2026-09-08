@@ -58,7 +58,7 @@ pub enum AuthCapability {
 #[derive(Debug, Clone)]
 pub struct AuthIdentity {
     /// The authenticated vault account.
-    pub account_id: String,
+    pub account_id: i64,
     /// What this credential is allowed to do.
     pub capability: AuthCapability,
 }
@@ -930,11 +930,11 @@ pub(crate) async fn health() -> (StatusCode, &'static str) {
     (StatusCode::OK, "ok\n")
 }
 
-/// Resolve a username or UUID to an account id, reporting an unknown account as a bad request.
+/// Resolve a username or id to an account id, reporting an unknown account as a bad request.
 async fn resolve_account_ref_async(
     pool: &sqlx::AnyPool,
     account_ref: &str,
-) -> Result<String, ApiError> {
+) -> Result<i64, ApiError> {
     let mut conn = pool.acquire().await?;
     account_profile::resolve_account_ref(&mut conn, account_ref)
         .await
@@ -1015,7 +1015,7 @@ pub async fn resolve_auth_on_conn(
         return Err(ApiError::AuthenticationRequired("invalid API token".into()));
     };
 
-    let auth = account_profile::load_account_auth(&mut *conn, &account_id)
+    let auth = account_profile::load_account_auth(&mut *conn, account_id)
         .await?
         .ok_or_else(|| ApiError::AuthenticationRequired("account no longer exists".into()))?;
     if auth.disabled {
@@ -1026,9 +1026,7 @@ pub async fn resolve_auth_on_conn(
     // permissions. An API token never does, whichever account issued it, so
     // no token can reach `/v1/owner/*`.
     let capability = match credential {
-        Credential::Session if account_profile::is_vault_owner(&account_id) => {
-            AuthCapability::Owner
-        }
+        Credential::Session if account_profile::is_vault_owner(account_id) => AuthCapability::Owner,
         Credential::Session => AuthCapability::Session {
             permissions: auth.permissions,
         },
@@ -1044,12 +1042,12 @@ pub async fn resolve_auth_on_conn(
 }
 
 /// Resolve the account id for an import or export: Bearer token binds the account.
-/// Optional query may be username or UUID and must match the token.
+/// Optional query may be username or id and must match the token.
 pub(crate) async fn resolve_import_account(
     auth: &AuthIdentity,
     query_account: Option<&str>,
     pool: &sqlx::AnyPool,
-) -> Result<String, ApiError> {
+) -> Result<i64, ApiError> {
     let query = query_account.and_then(message_ir::trimmed);
     if let Some(q) = query {
         let resolved = resolve_account_ref_async(pool, q).await?;
@@ -1059,7 +1057,7 @@ pub(crate) async fn resolve_import_account(
             ));
         }
     }
-    Ok(auth.account_id.clone())
+    Ok(auth.account_id)
 }
 
 /// The media type from `Content-Type` without its parameters.

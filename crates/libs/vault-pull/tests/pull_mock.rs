@@ -92,12 +92,12 @@ fn message(
     })
 }
 
-/// The login: the key resolves to account `acct-1`, username `alice`.
+/// The login: the key resolves to account `1`, username `alice`.
 fn mock_auth(server: &MockServer) -> httpmock::Mock<'_> {
     server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(200)
-            .json_body(json!({ "account_id": "acct-1", "username": "alice" }));
+            .json_body(json!({ "account_id": 1, "username": "alice" }));
     })
 }
 
@@ -115,7 +115,7 @@ fn mock_pages<'a>(
             .query_param("q", q)
             .query_param("limit", "2")
             .query_param("offset", "0")
-            .query_param("account", "acct-1");
+            .query_param("account", "1");
         then.status(200).json_body(json!({
             "items": [
                 message(
@@ -138,7 +138,7 @@ fn mock_pages<'a>(
             .query_param("q", q)
             .query_param("limit", "2")
             .query_param("offset", "2")
-            .query_param("account", "acct-1");
+            .query_param("account", "1");
         then.status(200).json_body(json!({
             "items": [
                 message(
@@ -165,7 +165,7 @@ fn mock_asset<'a>(
         when.method(GET)
             .path(format!("/v1/assets/{sha256}"))
             .query_param("source", source)
-            .query_param("account", "acct-1");
+            .query_param("account", "1");
         then.status(200)
             .header("content-type", "application/octet-stream")
             .body(bytes);
@@ -191,7 +191,7 @@ fn config(out_dir: &Path, base_url: String) -> VaultPullConfig {
 /// The report `run` returns for the three-message fixture.
 fn report_for(out_dir: &Path, downloaded: u64, skipped: u64) -> PullReport {
     PullReport {
-        account: "acct-1".into(),
+        account: 1,
         query: String::new(),
         conversations: 1,
         messages: 3,
@@ -306,7 +306,7 @@ fn a_second_run_over_the_same_folder_downloads_nothing_it_already_has() {
     assert_eq!(
         lines,
         [
-            "Authenticated as alice (acct-1)".to_string(),
+            "Authenticated as alice (1)".to_string(),
             "Backup query: (all messages)".to_string(),
             "Previous backup completed successfully. Running to check for new messages…"
                 .to_string(),
@@ -427,10 +427,10 @@ fn progress_events_narrate_login_paging_downloads_and_the_report() {
         events,
         vec![
             ProgressEvent::Auth {
-                account_id: "acct-1".into(),
+                account_id: 1,
                 username: "alice".into(),
             },
-            ProgressEvent::Log("Authenticated as alice (acct-1)".into()),
+            ProgressEvent::Log("Authenticated as alice (1)".into()),
             ProgressEvent::Log("Backup query: from:sam".into()),
             ProgressEvent::Page {
                 messages: 2,

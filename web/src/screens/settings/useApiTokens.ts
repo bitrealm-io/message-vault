@@ -28,9 +28,9 @@ export function useCreateApiToken(): UseMutationResult<CreatedToken, Error, NewT
 export function useRenameApiToken(): UseMutationResult<
   Awaited<ReturnType<typeof renameApiToken>>,
   Error,
-  { id: string; label: string }
+  { id: number; label: string }
 > {
-  return useApiTokenWrite(({ id, label }: { id: string; label: string }) =>
+  return useApiTokenWrite(({ id, label }: { id: number; label: string }) =>
     renameApiToken(id, { label }),
   );
 }
@@ -38,9 +38,9 @@ export function useRenameApiToken(): UseMutationResult<
 export function useRevokeApiToken(): UseMutationResult<
   Awaited<ReturnType<typeof deleteApiToken>>,
   Error,
-  string
+  number
 > {
-  return useApiTokenWrite((id: string) => deleteApiToken(id));
+  return useApiTokenWrite((id: number) => deleteApiToken(id));
 }
 
 /**

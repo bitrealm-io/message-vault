@@ -218,7 +218,7 @@ mod tests {
     fn finished_push_event_reports_complete_upload_and_totals() {
         let report = PushReport {
             ok: true,
-            account: "account".into(),
+            account: 1,
             username: "user".into(),
             mode: ImportMode::Append,
             started_at: "2026-08-11T00:00:00Z".into(),

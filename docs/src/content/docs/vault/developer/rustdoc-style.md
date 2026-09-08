@@ -51,7 +51,7 @@ Write each HTTP handler's doc comment as plain prose. The summary says what the 
 Keep `# Errors` rustdoc sections out of handler docs that become OpenAPI descriptions. Fold failure cases into the description prose.
 
 - `crates/vault/server/src/api_tokens_api.rs:112` — "`GET /v1/account/api-tokens` … `# Errors` … Returns an API error when the caller is not a signed-in session or the list cannot be loaded." — Bad: the heading leaks rustdoc boilerplate into the OpenAPI description (flagged ERRORS-SECTION-IN-DESCRIPTION).
-- `crates/vault/server/src/profile.rs:202` — "`POST /v1/account/profile` … `# Errors` … Returns an API error when the caller is not a signed-in session, a handle service is unsupported, or the update fails." — Bad: same boilerplate; describe the error cases as prose instead.
+- `crates/vault/server/src/profile.rs:202` — "`PATCH /v1/account/profile` … `# Errors` … Returns an API error when the caller is not a signed-in session, a handle service is unsupported, or the update fails." — Bad: same boilerplate; describe the error cases as prose instead.
 
 ## Cover every public item
 

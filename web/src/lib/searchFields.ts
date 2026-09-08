@@ -1,7 +1,7 @@
 /**
  * The search language, as the vault describes it.
  *
- * The browser keeps no list of words of its own: `GET /v1/search/fields` says
+ * The browser keeps no list of words of its own: `GET /v1/search-fields` says
  * which words one list accepts, what kind of value each takes, and which values
  * a choice word allows, and the search box builds its suggestions from that.
  * What is left here are two rules about the *shape* of a query — whether it

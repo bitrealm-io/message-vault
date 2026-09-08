@@ -114,7 +114,7 @@ describe("browse routes", () => {
 
   it("listSearchFields asks for one list's words", async () => {
     await listSearchFields("contacts");
-    expect(get).toHaveBeenCalledWith("/v1/search/fields?list=contacts", undefined);
+    expect(get).toHaveBeenCalledWith("/v1/search-fields?list=contacts", undefined);
   });
 });
 

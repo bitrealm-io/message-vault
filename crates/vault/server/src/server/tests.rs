@@ -3,8 +3,8 @@ use crate::extract::{Json, Path as AxumPath};
 use crate::import::ImportMode;
 use crate::import::{
     CompleteImportBody, CompleteImportIssueBody, CreateImportBody, SetImportStageBody,
-    imports_active_handler, imports_complete_handler, imports_create_handler,
-    imports_discard_handler, imports_get_handler, imports_stage_handler,
+    imports_complete_handler, imports_create_handler, imports_discard_handler, imports_get_handler,
+    imports_list_handler, imports_stage_handler,
 };
 use axum::extract::State;
 use tempfile::TempDir;
@@ -180,6 +180,29 @@ fn auth_headers(token: &str) -> HeaderMap {
         format!("Bearer {token}").parse().unwrap(),
     );
     headers
+}
+
+/// The account's running Import Run through `GET /v1/imports?status=running`,
+/// as the desktop app finds it.
+async fn running_import(
+    state: &AppState,
+    token: &str,
+) -> Option<crate::db::vault_imports::ImportSummary> {
+    imports_list_handler(
+        State(state.clone()),
+        import_access(state, token).await,
+        crate::extract::Query(crate::import::ListImportsQuery {
+            status: Some("running".into()),
+            limit: None,
+            offset: None,
+        }),
+    )
+    .await
+    .unwrap()
+    .0
+    .items
+    .into_iter()
+    .next()
 }
 
 /// Resolve the token the way the `ImportAccess` extractor would, for
@@ -554,10 +577,10 @@ async fn active_session_is_empty_then_reports_the_live_one() {
     let (_dir, state, token, import_id) = test_state().await;
 
     let body = CreateImportBody {
+        dedupe: false,
         source: "imessage".into(),
         mode: ImportMode::Append,
         tool: Some("message-vault-io".into()),
-        account: None,
         stage: Some("write".into()),
         staging_dir: Some("/home/u/message-vault/staging-260830".into()),
         device_id: Some("device-a".into()),
@@ -582,10 +605,9 @@ async fn active_session_is_empty_then_reports_the_live_one() {
     .await
     .unwrap();
 
-    let active = imports_active_handler(State(state.clone()), import_access(&state, &token).await)
+    let session = running_import(&state, &token)
         .await
-        .unwrap();
-    let session = active.0.session.expect("a live session is reported");
+        .expect("a running run is listed");
     assert_eq!(session.id, created.body.id);
     assert_eq!(session.stage.as_deref(), Some("write"));
     assert_eq!(
@@ -610,10 +632,10 @@ async fn a_stored_form_snapshot_drops_credentials() {
     .unwrap();
 
     let body = CreateImportBody {
+        dedupe: false,
         source: "imessage".into(),
         mode: ImportMode::Append,
         tool: None,
-        account: None,
         stage: None,
         staging_dir: None,
         device_id: None,
@@ -634,10 +656,9 @@ async fn a_stored_form_snapshot_drops_credentials() {
     .await
     .unwrap();
 
-    let active = imports_active_handler(State(state.clone()), import_access(&state, &token).await)
+    let session = running_import(&state, &token)
         .await
-        .unwrap();
-    let session = active.0.session.expect("a live session is reported");
+        .expect("a running run is listed");
     assert_eq!(
         session.form["source"], "imessage-ios",
         "the rest of the snapshot is kept"
@@ -668,10 +689,10 @@ async fn imports_create_stores_source_identities() {
     .unwrap();
 
     let body = CreateImportBody {
+        dedupe: false,
         source: "imessage".into(),
         mode: ImportMode::Append,
         tool: None,
-        account: None,
         stage: None,
         staging_dir: None,
         device_id: None,
@@ -687,10 +708,9 @@ async fn imports_create_stores_source_identities() {
     .await
     .unwrap();
 
-    let active = imports_active_handler(State(state.clone()), import_access(&state, &token).await)
+    let session = running_import(&state, &token)
         .await
-        .unwrap();
-    let session = active.0.session.expect("a live session is reported");
+        .expect("a running run is listed");
     assert_eq!(
         session.source_identities,
         serde_json::json!(["+15550001111", "owner@example.com"])
@@ -701,10 +721,10 @@ async fn imports_create_stores_source_identities() {
 async fn a_second_session_is_refused_with_conflict() {
     let (_dir, state, token, _import_id) = test_state().await;
     let body = CreateImportBody {
+        dedupe: false,
         source: "imessage".into(),
         mode: ImportMode::Append,
         tool: None,
-        account: None,
         stage: None,
         staging_dir: None,
         device_id: None,
@@ -746,10 +766,14 @@ async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
     )
     .await
     .unwrap();
-    let active = imports_active_handler(State(state.clone()), import_access(&state, &token).await)
-        .await
-        .unwrap();
-    assert_eq!(active.0.session.unwrap().stage.as_deref(), Some("pushing"));
+    assert_eq!(
+        running_import(&state, &token)
+            .await
+            .unwrap()
+            .stage
+            .as_deref(),
+        Some("pushing")
+    );
 
     let err = imports_stage_handler(
         State(state.clone()),
@@ -775,30 +799,15 @@ async fn discard_frees_the_slot() {
     )
     .await
     .unwrap();
-    let active = imports_active_handler(State(state.clone()), import_access(&state, &token).await)
-        .await
-        .unwrap();
-    assert!(active.0.session.is_none());
+    assert!(running_import(&state, &token).await.is_none());
 }
 
-/// `/v1/imports/active` is a literal route registered alongside
-/// `/v1/imports/{id}`; if router registration order ever let the `{id}`
-/// extractor swallow it, `active` would fail to parse as an `i64` and
-/// this would come back 400 instead of 200.
-#[tokio::test]
-async fn active_route_is_not_captured_by_the_id_route() {
-    let (_dir, state, token, _import_id) = test_state().await;
-    let status = crate::test_support::get_status(&state, "/v1/imports/active", &token).await;
-    assert_eq!(status, StatusCode::OK);
-}
-
-/// `/v1/contacts/{id}` takes an `i64`, and three literal routes sit beside
-/// it: `summaries`, `match`, and `address-book`. All three are `POST`, and
-/// editing a contact is now a `PATCH`, so if the `{id}` route ever
-/// swallowed one of them the request would come back 405 (no `POST` on
-/// `/v1/contacts/{id}`) instead of reaching its own handler. Each
-/// assertion below distinguishes "matched my route and rejected my body"
-/// from "matched the wrong route".
+/// `/v1/contacts/{id}` takes an `i64`, and two literal routes sit beside
+/// it: `summaries` and `unmatched-handles`. Both are `POST`, and editing a
+/// contact is a `PATCH`, so if the `{id}` route ever swallowed one of them
+/// the request would come back 405 (no `POST` on `/v1/contacts/{id}`)
+/// instead of reaching its own handler. Each assertion below distinguishes
+/// "matched my route and rejected my body" from "matched the wrong route".
 #[tokio::test]
 async fn literal_contact_routes_are_not_captured_by_the_id_route() {
     let vault = crate::test_support::test_vault().await;
@@ -818,11 +827,7 @@ async fn literal_contact_routes_are_not_captured_by_the_id_route() {
         StatusCode::NOT_FOUND
     );
 
-    for path in [
-        "/v1/contacts/summaries",
-        "/v1/contacts/match",
-        "/v1/contacts/address-book",
-    ] {
+    for path in ["/v1/contacts/summaries", "/v1/contacts/unmatched-handles"] {
         let status =
             crate::test_support::post_status(&state, path, &user.token, serde_json::json!({}))
                 .await;
@@ -943,11 +948,19 @@ async fn the_fast_413_carries_cors_headers() {
     state.max_body_bytes = 1024;
     let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
 
+    let (_, created): (String, serde_json::Value) = crate::test_support::post_created_json(
+        &state,
+        "/v1/imports",
+        &user.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
     let server = crate::test_support::serve(&state).await;
     let response = reqwest::Client::new()
         .post(format!(
-            "{}/v1/import?source=imessage&mode=append",
-            server.base()
+            "{}/v1/imports/{}/batches",
+            server.base(),
+            created["id"]
         ))
         .bearer_auth(&user.token)
         .header(header::ORIGIN, "https://app.example")

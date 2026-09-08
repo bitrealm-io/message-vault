@@ -157,6 +157,28 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+async function requestRaw<T>(
+  method: string,
+  path: string,
+  body: string,
+  contentType: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": contentType };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+  const res = await fetch(`${baseUrl}${path}`, { method, headers, body, signal });
+  if (!res.ok) {
+    const text = await res.text();
+    throw problemFromBody(res.status, text);
+  }
+  if (res.status === 204) {
+    return undefined as T;
+  }
+  return res.json() as Promise<T>;
+}
+
 export type ApiRequestOptions = {
   signal?: AbortSignal;
 };
@@ -164,6 +186,15 @@ export type ApiRequestOptions = {
 export const apiClient = {
   get<T>(path: string, opts?: ApiRequestOptions): Promise<T> {
     return request<T>("GET", path, undefined, opts?.signal);
+  },
+  /** POST a body that is not JSON — a file's text — under its own media type. */
+  postRaw<T>(
+    path: string,
+    body: string,
+    contentType: string,
+    opts?: ApiRequestOptions,
+  ): Promise<T> {
+    return requestRaw<T>("POST", path, body, contentType, opts?.signal);
   },
   post<T>(path: string, body?: unknown, opts?: ApiRequestOptions): Promise<T> {
     return request<T>("POST", path, body, opts?.signal);

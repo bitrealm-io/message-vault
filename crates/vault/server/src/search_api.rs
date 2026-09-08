@@ -1,4 +1,4 @@
-//! `GET /v1/search/fields`: the words the search language accepts on one
+//! `GET /v1/search-fields`: the words the search language accepts on one
 //! list, so the web's suggestions and the docs read the server's own table.
 
 use crate::extract::{Json, Query};
@@ -23,7 +23,7 @@ pub(crate) struct SearchFieldsResponse {
 /// The search words one list accepts.
 #[utoipa::path(
     get,
-    path = "/v1/search/fields",
+    path = "/v1/search-fields",
     tag = "Search",
     security(("bearer" = [])),
     params(SearchFieldsQuery),
@@ -56,7 +56,7 @@ mod tests {
         let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
         let body: serde_json::Value = get_json(
             &vault.state,
-            "/v1/search/fields?list=contacts",
+            "/v1/search-fields?list=contacts",
             &account.token,
         )
         .await;
@@ -71,13 +71,13 @@ mod tests {
         let first = &body["items"][0];
         assert!(first["help"].is_string() && first["example"].is_string());
         assert_eq!(
-            get_status(&vault.state, "/v1/search/fields?list=nope", &account.token).await,
+            get_status(&vault.state, "/v1/search-fields?list=nope", &account.token).await,
             StatusCode::UNPROCESSABLE_ENTITY
         );
         assert_eq!(
             get_status(
                 &vault.state,
-                "/v1/search/fields?list=messages",
+                "/v1/search-fields?list=messages",
                 "not-a-token"
             )
             .await,

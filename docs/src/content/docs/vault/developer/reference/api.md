@@ -1,6 +1,6 @@
 ---
 title: HTTP API
-description: Tokens, import sessions, search syntax, and JSONL upload for people writing tools against the vault.
+description: Tokens, Import Runs, search syntax, and JSONL upload for people writing tools against the vault.
 ---
 
 Route schemas, status codes, and JSON fields live in the generated [HTTP API reference](/vault/developer/rustdoc/http/). Crate types and functions live in [Rust crate docs](/vault/developer/rustdoc/). This page is the prose those tools need that is not a JSON schema.
@@ -24,7 +24,7 @@ Why: [ADR-0005](https://github.com/bitrealm-io/message-vault/blob/main/docs/adr/
 - `DELETE /v1/contacts/{id}` does what a phone's Delete Contact does: the name, the person's edits and their Contact Group memberships go, the contact becomes Unknown and leaves the trash, and every conversation stays as it is, showing the handle. A contact that is not in the trash answers 409.
 - `DELETE /v1/trash` does both for everything in the trash.
 
-All three answer `204`. The demo account may delete like any other account. The one deletion it is refused is its own: `POST /v1/auth/delete-account` answers 400 for it, and `reset-demo` restores the vault instead. An Import Run's record on `/v1/imports` does not change when messages it brought in are later deleted.
+All three answer `204`. The demo account may delete like any other account. The one deletion it is refused is its own: `DELETE /v1/account` answers `403 Forbidden` (`demo-account-protected`) for it, and `reset-demo` restores the vault instead. An Import Run's record on `/v1/imports` does not change when messages it brought in are later deleted.
 
 ## Tokens
 
@@ -42,13 +42,13 @@ An API token may import (write) and export messages and assets (read). It may no
 
 Turn on a local explorer with `[server] openapi_ui = true`, then open `/docs` on that vault. The explorer is off by default. “Try it” still sends this header.
 
-## Import session
+## Import Run
 
-Import starts a session with `POST /v1/imports`, passes `import_id` on each `POST /v1/import`, then `POST /v1/imports/{id}/complete` so Settings → Storage can list history. Messages promoted in that session store `messages.import_id`.
+An import is an Import Run. `POST /v1/imports` creates one, naming the `source`, the `mode` (`replace` or `append`, default `append`) and whether to `dedupe` across sources afterwards (default false), and answers `201 Created` with its id. Each `POST /v1/imports/{id}/batches` adds one JSONL body to the run; the run's row says how the batch is imported, so the request carries nothing but the body. `POST /v1/imports/{id}/complete` records how the run ended, so Settings → Storage can list history. Messages promoted in the run store `messages.import_id`.
 
-If `import_id` is omitted on `POST /v1/import`, the server starts and finishes a one-shot session so Storage still records the import.
+There is no import without a run. A `replace` run wipes the source once, on its first batch, and appends every batch after that. An account has at most one running Import Run; `GET /v1/imports?status=running` finds it, and `GET /v1/imports` is a page of every run, newest first, narrowed by `status` to one of `running`, `completed`, `completed_with_issues`, `failed`, `cancelled`.
 
-Bulk `POST /v1/import` opens its own SQLite connection so it does not hold the serve process’s short session mutex across JSONL and asset work. Same-account imports stay serialized. Export and auth open their own connections and can proceed under WAL while an import runs.
+A batch opens its own SQLite connection so it does not hold the serve process’s short session mutex across JSONL and asset work. Same-account imports stay serialized. Export and auth open their own connections and can proceed under WAL while an import runs.
 
 ## Import body
 
@@ -56,7 +56,7 @@ Bulk `POST /v1/import` opens its own SQLite connection so it does not hold the s
 
 Request body limit matches `[server] asset_max_bytes` (default 512 MiB).
 
-HTTP `mode` defaults to `append` (CLI `import` defaults to `replace`). HTTP `dedupe` defaults to false (CLI runs dedupe unless `--skip-dedupe`). HTTP `source` is a required query parameter. `account` is optional when the Bearer token already identifies the tenant.
+`mode`, `dedupe` and `source` belong to the run, stated once on `POST /v1/imports`; the CLI `import` defaults to `replace` and runs dedupe unless `--skip-dedupe`. The Bearer token names the account.
 
 A file the vault cannot read comes back as a 400 whose `error` names the line, or the schema version the file has and the version the vault reads.
 

@@ -5,9 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadAddressBook } from "../../lib/vaultApi";
 import { AddressBookSection } from "./AddressBookSection";
 
-vi.mock("../../lib/vaultApi", () => ({
-  loadAddressBook: vi.fn(),
-}));
+vi.mock("../../lib/vaultApi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/vaultApi")>();
+  return { addressBookContentType: actual.addressBookContentType, loadAddressBook: vi.fn() };
+});
 
 vi.mock("../../lib/contactGroups", () => ({
   useContactGroupActions: () => ({ invalidate: vi.fn() }),
@@ -31,16 +32,21 @@ describe("AddressBookSection", () => {
     cleanup();
   });
 
-  it("sends the file's name and text to the vault", async () => {
+  it("sends the file's text under the media type its name earns", async () => {
     post.mockResolvedValue({ contacts: 2, phones: 3, phones_needing_review: 0 });
     render(<AddressBookSection />);
     chooseFile("Contacts.vcf", "BEGIN:VCARD\nEND:VCARD\n");
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
-    expect(post).toHaveBeenCalledWith({
-      filename: "Contacts.vcf",
-      content: "BEGIN:VCARD\nEND:VCARD\n",
-    });
+    expect(post).toHaveBeenCalledWith("BEGIN:VCARD\nEND:VCARD\n", "text/vcard");
+  });
+
+  it("refuses a file that is neither vCard nor CSV, without asking the server", async () => {
+    render(<AddressBookSection />);
+    chooseFile("contacts.json", "[]");
+
+    expect(await screen.findByText("Choose a .vcf or .csv file.")).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
   });
 
   it("reports what the load changed", async () => {

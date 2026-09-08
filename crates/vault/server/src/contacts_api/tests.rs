@@ -48,7 +48,7 @@ async fn contacts_fixture_with_trashed_handle(
 }
 
 /// A second signed-in account in the same vault, with `handle` linked to
-/// one of its contacts. Used to prove `/v1/contacts/match` is scoped to
+/// one of its contacts. Used to prove `/v1/contacts/unmatched-handles` is scoped to
 /// the calling account rather than the whole vault database.
 async fn account_with_handle(vault: &TestVault, handle: &str) -> RegisteredAccount {
     let account = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
@@ -61,8 +61,13 @@ async fn account_with_handle(vault: &TestVault, handle: &str) -> RegisteredAccou
 async fn contact_match_reports_only_the_identifiers_the_vault_does_not_have() {
     let (vault, token, _account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let body = serde_json::json!({ "identifiers": ["+15550100", "+15550999"] });
-    let response =
-        post_json::<serde_json::Value>(&vault.state, "/v1/contacts/match", &token, body).await;
+    let response = post_json::<serde_json::Value>(
+        &vault.state,
+        "/v1/contacts/unmatched-handles",
+        &token,
+        body,
+    )
+    .await;
     assert_eq!(response["unknown"], serde_json::json!(["+15550999"]));
 }
 
@@ -70,8 +75,13 @@ async fn contact_match_reports_only_the_identifiers_the_vault_does_not_have() {
 async fn contact_match_ignores_blank_identifiers_and_de_duplicates() {
     let (vault, token, _account) = contacts_fixture_with_handles(&[]).await;
     let body = serde_json::json!({ "identifiers": ["+15550999", "  ", "+15550999", ""] });
-    let response =
-        post_json::<serde_json::Value>(&vault.state, "/v1/contacts/match", &token, body).await;
+    let response = post_json::<serde_json::Value>(
+        &vault.state,
+        "/v1/contacts/unmatched-handles",
+        &token,
+        body,
+    )
+    .await;
     assert_eq!(response["unknown"], serde_json::json!(["+15550999"]));
 }
 
@@ -82,8 +92,13 @@ async fn contact_match_collapses_duplicates_by_normalized_form() {
     // double-counts a single human written two ways.
     let (vault, token, _account) = contacts_fixture_with_handles(&[]).await;
     let body = serde_json::json!({ "identifiers": ["+1 (555) 010-0100", "+15550100100"] });
-    let response =
-        post_json::<serde_json::Value>(&vault.state, "/v1/contacts/match", &token, body).await;
+    let response = post_json::<serde_json::Value>(
+        &vault.state,
+        "/v1/contacts/unmatched-handles",
+        &token,
+        body,
+    )
+    .await;
     assert_eq!(
         response["unknown"],
         serde_json::json!(["+1 (555) 010-0100"]),
@@ -100,8 +115,13 @@ async fn contact_match_matches_a_differently_spelled_identifier_against_the_stor
     // request asks about a spaced-out spelling of the same number.
     let (vault, token, _account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let body = serde_json::json!({ "identifiers": ["+1 555 0100"] });
-    let response =
-        post_json::<serde_json::Value>(&vault.state, "/v1/contacts/match", &token, body).await;
+    let response = post_json::<serde_json::Value>(
+        &vault.state,
+        "/v1/contacts/unmatched-handles",
+        &token,
+        body,
+    )
+    .await;
     assert_eq!(
         response["unknown"],
         serde_json::json!([]),
@@ -113,8 +133,13 @@ async fn contact_match_matches_a_differently_spelled_identifier_against_the_stor
 async fn contact_match_preserves_order_across_multiple_unknowns() {
     let (vault, token, _account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let body = serde_json::json!({ "identifiers": ["+15550100", "+15550200", "+15550300"] });
-    let response =
-        post_json::<serde_json::Value>(&vault.state, "/v1/contacts/match", &token, body).await;
+    let response = post_json::<serde_json::Value>(
+        &vault.state,
+        "/v1/contacts/unmatched-handles",
+        &token,
+        body,
+    )
+    .await;
     assert_eq!(
         response["unknown"],
         serde_json::json!(["+15550200", "+15550300"])
@@ -129,8 +154,13 @@ async fn contact_match_counts_a_trashed_contact_as_known() {
     // would promise a contact the import is not going to create (#328).
     let (vault, token, _account) = contacts_fixture_with_trashed_handle("+15550100").await;
     let body = serde_json::json!({ "identifiers": ["+15550100"] });
-    let response =
-        post_json::<serde_json::Value>(&vault.state, "/v1/contacts/match", &token, body).await;
+    let response = post_json::<serde_json::Value>(
+        &vault.state,
+        "/v1/contacts/unmatched-handles",
+        &token,
+        body,
+    )
+    .await;
     assert_eq!(response["unknown"], serde_json::json!([]));
 }
 
@@ -139,8 +169,13 @@ async fn contact_match_is_scoped_to_the_calling_account() {
     let (vault, token, _mine) = contacts_fixture_with_handles(&[]).await;
     let _other = account_with_handle(&vault, "+15550100").await;
     let body = serde_json::json!({ "identifiers": ["+15550100"] });
-    let response =
-        post_json::<serde_json::Value>(&vault.state, "/v1/contacts/match", &token, body).await;
+    let response = post_json::<serde_json::Value>(
+        &vault.state,
+        "/v1/contacts/unmatched-handles",
+        &token,
+        body,
+    )
+    .await;
     assert_eq!(response["unknown"], serde_json::json!(["+15550100"]));
 }
 
@@ -187,7 +222,7 @@ async fn contact_match_rejects_an_oversized_batch() {
         .collect();
     let status = post_status(
         &vault.state,
-        "/v1/contacts/match",
+        "/v1/contacts/unmatched-handles",
         &token,
         serde_json::json!({ "identifiers": identifiers }),
     )
@@ -1201,24 +1236,22 @@ async fn list_contacts_filters_service_or() {
 }
 
 #[test]
-fn address_book_upload_name_only_decides_the_format() {
+fn the_media_type_alone_decides_the_address_book_format() {
     assert_eq!(
-        sanitized_address_book_name("Contacts.vcf"),
-        "address-book.vcf"
+        address_book_file_name(Some("text/vcard")),
+        Some("address-book.vcf")
     );
     assert_eq!(
-        sanitized_address_book_name("  contacts.VCARD "),
-        "address-book.vcf"
+        address_book_file_name(Some("Text/X-VCard")),
+        Some("address-book.vcf")
     );
     assert_eq!(
-        sanitized_address_book_name("export.csv"),
-        "address-book.csv"
+        address_book_file_name(Some("text/csv")),
+        Some("address-book.csv")
     );
-    // A name that tries to escape the temp directory is never used as a path.
-    assert_eq!(
-        sanitized_address_book_name("../../etc/passwd"),
-        "address-book.csv"
-    );
+    // No file name is ever read, so nothing can name a path.
+    assert_eq!(address_book_file_name(Some("application/json")), None);
+    assert_eq!(address_book_file_name(None), None);
 }
 
 #[tokio::test]

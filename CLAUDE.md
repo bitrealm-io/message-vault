@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Message Vault pulls conversations out of chat apps (iMessage, WhatsApp, SMS backups) and stores them in a self-hosted, searchable vault. Three pieces:
 
-- **Vault server** (`crates/vault/server/`) — Axum HTTP API (`/v1/*`) over SQLite at `data/vault.db` by default; set the `[database] url` config (or `serve --db-url`) to run on Postgres instead. Login is a local vault account (Argon2 + JWT session tokens); named API tokens with import/export scopes also exist.
+- **Vault server** (`crates/vault/server/`) — Axum HTTP API (`/v1/*`) over SQLite at `data/vault.db` by default; set the `[database] url` config (or `serve --db-url`) to run on Postgres instead. Login is a local vault account: an Argon2 password hash, and an opaque `mv-user-` session token stored hashed with an expiry (not a JWT); named API tokens with import/export scopes also exist.
 - **Desktop app** (`src-tauri/` + `web/`) — Tauri v2 shell around a Vite + React 19 + TypeScript SPA. It reads phone backups, writes JSONL, and imports into a running vault. Browse/search work in the browser too; importing needs the desktop app.
 - **Website** — the same `web/` SPA served from the vault's `static/`.
 

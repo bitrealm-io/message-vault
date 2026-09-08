@@ -49,7 +49,7 @@ pub(crate) struct AssetUpload<'a> {
     pub multipart_threshold: usize,
 }
 
-/// How an import session ended, for `/v1/imports/{id}/complete`.
+/// How an Import Run ended, for `/v1/imports/{id}/complete`.
 pub(crate) struct ImportOutcome<'a> {
     pub ok: bool,
     /// `completed`, `completed_with_issues`, or `failed`.
@@ -59,11 +59,10 @@ pub(crate) struct ImportOutcome<'a> {
     pub bytes_uploaded: u64,
 }
 
-#[derive(Debug, Deserialize)]
 /// Body of the `/v1/imports` and `/v1/imports/{id}/complete` replies.
-struct ImportSessionResponse {
-    #[serde(default)]
-    id: Option<i64>,
+#[derive(Debug, Deserialize)]
+struct ImportRunResponse {
+    id: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -256,19 +255,15 @@ impl Session {
         completed
     }
 
-    /// POST one JSON Lines batch to `/v1/import`.
+    /// POST one JSON Lines batch into the Import Run at
+    /// `/v1/imports/{id}/batches`. The run's row says the source, the mode
+    /// and whether to dedupe; the request carries only the body.
     ///
     /// # Errors
     ///
     /// Returns a 413 before sending when the body is over the proxy limit,
     /// and the vault's error otherwise.
-    pub(crate) fn post_import(
-        &self,
-        source: &str,
-        mode: ImportMode,
-        import_id: Option<i64>,
-        ndjson: Vec<u8>,
-    ) -> Result<ImportResponse> {
+    pub(crate) fn post_import(&self, import_id: i64, ndjson: Vec<u8>) -> Result<ImportResponse> {
         let body_len = ndjson.len();
         if body_len > crate::run::MAX_PROXY_BODY_BYTES {
             return Err(VaultHttpError::new(
@@ -277,23 +272,15 @@ impl Session {
             )
             .into());
         }
-        let mut query: Vec<(&str, String)> = vec![
-            ("source", source.to_string()),
-            ("account", self.username.clone()),
-            ("mode", mode.to_string()),
-        ];
-        if let Some(id) = import_id {
-            query.push(("import_id", id.to_string()));
-        }
+        let path = format!("/v1/imports/{import_id}/batches");
         let response = self
             .http
-            .vault_request(Method::POST, &self.url, "/v1/import", &self.key)
-            .query(&query)
+            .vault_request(Method::POST, &self.url, &path, &self.key)
             .timeout(Duration::from_secs(600))
             .header("Content-Type", "application/jsonl")
             .body(ndjson)
             .send()
-            .context("POST /v1/import")?;
+            .with_context(|| format!("POST {path}"))?;
         let status = response.status();
         let text = response.text().context("read import response")?;
         if looks_like_payload_too_large(status, &text) {
@@ -306,22 +293,22 @@ impl Session {
         ok_json::<ImportResponse>("import batch", status, &text)
     }
 
-    /// Start a vault import session. Returns `None` when the vault is older and
-    /// does not expose `/v1/imports` (push continues without message linking).
+    /// Create an Import Run on the vault and return its id. Every batch is
+    /// posted into it; the bearer token names the account.
     ///
     /// # Errors
     ///
-    /// Returns an error when the vault rejects the request (other than 404).
+    /// Returns an error when the vault refuses, which includes an account
+    /// that already has a running Import Run.
     pub(crate) fn start_import(
         &self,
         source: &str,
         mode: ImportMode,
         tool: Option<&str>,
-    ) -> Result<Option<i64>> {
+    ) -> Result<i64> {
         let mut body = serde_json::json!({
             "source": source,
             "mode": mode,
-            "account": self.username,
         });
         if let Some(tool) = tool {
             body["tool"] = serde_json::Value::String(tool.to_string());
@@ -335,19 +322,16 @@ impl Session {
             .send()
             .context("POST /v1/imports")?;
         let status = response.status();
-        if status.as_u16() == 404 {
-            return Ok(None);
-        }
         let text = response.text().context("read start-import response")?;
-        let parsed: ImportSessionResponse = ok_json("import session", status, &text)?;
+        let parsed: ImportRunResponse = ok_json("import run", status, &text)?;
         Ok(parsed.id)
     }
 
-    /// Complete a vault import session. Soft-fails with `Ok(())` on 404.
+    /// Record how the Import Run ended.
     ///
     /// # Errors
     ///
-    /// Returns an error when the vault rejects the request (other than 404).
+    /// Returns an error when the vault refuses.
     pub(crate) fn complete_import(
         &self,
         import_id: i64,
@@ -374,11 +358,8 @@ impl Session {
             .send()
             .with_context(|| format!("POST /v1/imports/{import_id}/complete"))?;
         let status = response.status();
-        if status.as_u16() == 404 {
-            return Ok(());
-        }
         let text = response.text().context("read complete-import response")?;
-        let _: ImportSessionResponse = ok_json("import session complete", status, &text)?;
+        let _: ImportRunResponse = ok_json("import run complete", status, &text)?;
         Ok(())
     }
 }

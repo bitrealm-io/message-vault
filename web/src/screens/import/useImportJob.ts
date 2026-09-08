@@ -546,7 +546,7 @@ export function useImportJob() {
    * decision 37 says only an explicit discard ends a waiting session —
    * `/complete` is what ends one. Posting it here would free the
    * one-active-session slot and drop the session out of
-   * `GET /v1/imports/active`, stranding the staged folder (and the time
+   * `GET /v1/imports?status=running`, stranding the staged folder (and the time
    * already spent on it) with no session left to resume it through. The
    * caller sets this for a cancelled media pass and for a cancelled copy:
    * both stages resume from what is already on disk, so both are worth

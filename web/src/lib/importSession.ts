@@ -1,5 +1,5 @@
 import type { PathStat } from "./tauri";
-import { discardImport, getActiveImport, setImportStage as setStage } from "./vaultApi";
+import { discardImport, listImports, setImportStage as setStage } from "./vaultApi";
 
 /** Where a live import session is. Mirrors the vault's `ImportStage`. */
 export const IMPORT_STAGES = [
@@ -46,9 +46,12 @@ export type ActiveImportSession = {
   summary: unknown;
 };
 
-/** The account's live session, or null when there is none. */
+/**
+ * The account's running Import Run, or null when there is none. At most one
+ * runs at a time, so the first item of `status=running` is the one.
+ */
 export async function getActiveImportSession(): Promise<ActiveImportSession | null> {
-  const session = (await getActiveImport()).session;
+  const session = (await listImports({ status: "running", limit: 1 })).items[0];
   if (!session) return null;
   return {
     ...session,

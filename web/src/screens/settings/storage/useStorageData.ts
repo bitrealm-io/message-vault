@@ -14,7 +14,7 @@ type StorageOverview = {
 
 async function fetchOverview(signal: AbortSignal): Promise<StorageOverview> {
   const [importsRes, usageRes] = await Promise.all([
-    listImports({ signal }),
+    listImports({}, { signal }),
     getAccountStorage({ signal }),
   ]);
   return {

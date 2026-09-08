@@ -292,7 +292,7 @@ fn parse_profile_service(
 /// Update the account's display name and linked handles, then return the
 /// reloaded profile.
 #[utoipa::path(
-    post,
+    patch,
     path = "/v1/account/profile",
     tag = "Account",
     security(("bearer" = [])),
@@ -367,8 +367,8 @@ pub(crate) fn remove_account_asset_trees(
 /// Delete every conversation, message, and attachment for the account.
 /// Contacts and the account login survive.
 #[utoipa::path(
-    post,
-    path = "/v1/account/delete-messages",
+    delete,
+    path = "/v1/account/messages",
     tag = "Account",
     security(("bearer" = [])),
     request_body = DeleteMessagesRequest,
@@ -443,6 +443,136 @@ pub(crate) async fn account_storage_handler(
     };
 
     Ok(Json(result))
+}
+
+// ---------------------------------------------------------------------------
+// Password change and account deletion
+// ---------------------------------------------------------------------------
+
+/// Current and new password.
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub struct ChangePasswordRequest {
+    /// The account's current password.
+    pub current_password: String,
+    /// Replacement password.
+    pub new_password: String,
+}
+
+/// Fresh session token issued after the password change.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct ChangePasswordResponse {
+    /// Replacement session token after password change (previous sessions are revoked).
+    pub token: String,
+}
+
+/// Confirmation flag and the current password when one is set.
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub struct DeleteAccountRequest {
+    /// Must be `true`; anything else is rejected.
+    pub confirm: bool,
+    /// Required when the account has a local password.
+    #[serde(default)]
+    pub current_password: Option<String>,
+}
+
+/// Verify the current password, store the new one, revoke API tokens, and
+/// issue a fresh session token.
+#[utoipa::path(
+    put,
+    path = "/v1/account/password",
+    tag = "Account",
+    security(("bearer" = [])),
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 200, body = ChangePasswordResponse),
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
+    )
+)]
+pub async fn change_password_handler(
+    State(state): State<AppState>,
+    SignedIn(auth): SignedIn,
+    Json(req): Json<ChangePasswordRequest>,
+) -> Result<Json<ChangePasswordResponse>, ApiError> {
+    let new_password = req.new_password.trim();
+    crate::auth::validate_password_policy(new_password)?;
+    if req.current_password.len() > crate::auth::MAX_PASSWORD_BYTES {
+        return Err(ApiError::validation("password is too long"));
+    }
+    let account_id = auth.account_id;
+    let current_password = req.current_password.clone();
+    let new_hash = crate::auth::hash_password(new_password)?;
+
+    let mut conn = state.db.acquire().await?;
+    let token =
+        crate::auth::change_password_on_conn(&mut conn, &account_id, &current_password, &new_hash)
+            .await?;
+
+    Ok(Json(ChangePasswordResponse { token }))
+}
+
+/// Permanently delete the account and its data directory. The body carries
+/// the confirmation and the current password: a credential belongs in a
+/// body, not in a URL or a header of the vault's own invention, and a DELETE
+/// body has no defined meaning in RFC 9110 but is not forbidden.
+#[utoipa::path(
+    delete,
+    path = "/v1/account",
+    tag = "Account",
+    security(("bearer" = [])),
+    request_body = DeleteAccountRequest,
+    responses(
+        (status = 204, description = "Account deleted"),
+        (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
+    )
+)]
+pub async fn delete_account_handler(
+    State(state): State<AppState>,
+    FullAccess(auth): FullAccess,
+    Json(req): Json<DeleteAccountRequest>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    if !req.confirm {
+        return Err(ApiError::validation("confirmation flag must be true"));
+    }
+    let account_id = auth.account_id;
+    if account_profile::is_demo_account(&account_id) {
+        return Err(ApiError::DemoAccountProtected(
+            "the demo account cannot be deleted; use reset-demo to restore it".into(),
+        ));
+    }
+    let current_password = req.current_password.clone();
+    let account_root = state.cfg.paths.data_dir.join(&account_id);
+
+    let mut conn = state.db.acquire().await?;
+    let password_hash = account_profile::load_password_hash(&mut conn, &account_id).await?;
+    let has_local_password = matches!(password_hash.as_deref(), Some(hash) if !hash.is_empty());
+    if has_local_password {
+        let Some(pw) = current_password.as_deref() else {
+            return Err(ApiError::validation(
+                "current password is required to delete this account",
+            ));
+        };
+        if !crate::auth::passwords_match(password_hash.as_deref(), pw) {
+            return Err(ApiError::InvalidCredentials(
+                "current password is incorrect".into(),
+            ));
+        }
+    }
+    account_profile::delete_account(&mut conn, &account_id).await?;
+    if account_root.exists() {
+        let root = account_root.clone();
+        tokio::task::spawn_blocking(move || std::fs::remove_dir_all(&root))
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("remove account data dir task: {e}")))?
+            .with_context(|| format!("remove account data dir {}", account_root.display()))?;
+    }
+
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]
@@ -663,9 +793,9 @@ mod tests {
             .await
             .unwrap();
 
-        let status = post_status(
+        let status = crate::test_support::delete_status_with_body(
             &state,
-            "/v1/account/delete-messages",
+            "/v1/account/messages",
             &created.token,
             serde_json::json!({ "confirm": true }),
         )
@@ -690,18 +820,18 @@ mod tests {
         .unwrap()
         .token;
 
-        let deleted = post_status(
+        let deleted = crate::test_support::delete_status_with_body(
             &state,
-            "/v1/account/delete-messages",
+            "/v1/account/messages",
             &token,
             serde_json::json!({ "confirm": true }),
         )
         .await;
         assert_eq!(deleted, StatusCode::OK);
 
-        let closed = post_status(
+        let closed = crate::test_support::delete_status_with_body(
             &state,
-            "/v1/auth/delete-account",
+            "/v1/account",
             &token,
             serde_json::json!({ "confirm": true }),
         )

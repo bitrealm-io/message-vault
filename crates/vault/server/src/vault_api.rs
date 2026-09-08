@@ -167,9 +167,9 @@ pub struct PatchVaultSettingsRequest {
 /// Read the vault's settings.
 #[utoipa::path(
     get,
-    path = "/v1/owner/vault-settings",
-    tag = "Owner",
-    operation_id = "owner_vault_settings",
+    path = "/v1/vault/settings",
+    tag = "Vault",
+    operation_id = "vault_settings",
     security(("bearer" = [])),
     responses(
         (status = 200, body = VaultSettingsResponse),
@@ -191,9 +191,9 @@ pub async fn vault_settings_handler(
 /// Change the vault's settings.
 #[utoipa::path(
     patch,
-    path = "/v1/owner/vault-settings",
-    tag = "Owner",
-    operation_id = "owner_patch_vault_settings",
+    path = "/v1/vault/settings",
+    tag = "Vault",
+    operation_id = "patch_vault_settings",
     security(("bearer" = [])),
     request_body = PatchVaultSettingsRequest,
     responses(

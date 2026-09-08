@@ -31,6 +31,75 @@
         }
       }
     },
+    "/v1/account": {
+      "delete": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Permanently delete the account and its data directory. The body carries\nthe confirmation and the current password: a credential belongs in a\nbody, not in a URL or a header of the vault's own invention, and a DELETE\nbody has no defined meaning in RFC 9110 but is not forbidden.",
+        "operationId": "delete_account_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Account deleted"
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/v1/account/api-tokens": {
       "get": {
         "tags": [
@@ -304,8 +373,8 @@
         ]
       }
     },
-    "/v1/account/delete-messages": {
-      "post": {
+    "/v1/account/messages": {
+      "delete": {
         "tags": [
           "Account"
         ],
@@ -328,6 +397,82 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeleteMessagesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/account/password": {
+      "put": {
+        "tags": [
+          "Account"
+        ],
+        "summary": "Verify the current password, store the new one, revoke API tokens, and\nissue a fresh session token.",
+        "operationId": "change_password_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangePasswordResponse"
                 }
               }
             }
@@ -425,7 +570,7 @@
           }
         ]
       },
-      "post": {
+      "patch": {
         "tags": [
           "Account"
         ],
@@ -1288,82 +1433,6 @@
         ]
       }
     },
-    "/v1/auth/change-password": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "summary": "Verify the current password, store the new one, revoke API tokens, and\nissue a fresh session token.",
-        "operationId": "change_password_handler",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChangePasswordRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChangePasswordResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
     "/v1/auth/check": {
       "get": {
         "tags": [
@@ -1404,75 +1473,6 @@
             }
           },
           "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/auth/delete-account": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "summary": "Permanently delete the account and its data directory.",
-        "operationId": "delete_account_handler",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DeleteAccountRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "Account deleted"
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
             "description": "",
             "content": {
               "application/json": {
@@ -2205,25 +2205,20 @@
             "bearer": []
           }
         ]
-      }
-    },
-    "/v1/contacts/address-book": {
+      },
       "post": {
         "tags": [
           "Contacts"
         ],
-        "summary": "Load a VCF or vCard CSV address book into this account.",
-        "description": "This is a standalone act against the vault, never part of an import run:\ncontacts are vault state, and a person may load them before or after\nbringing messages in. Only the rows the address book owns are replaced, so\nContact Groups, names the person typed, and identities an import discovered\nall survive.",
-        "operationId": "address_book_load_handler",
+        "summary": "Load a VCF or vCard CSV address book into this account. The body is the\nfile itself, and `Content-Type` says which: `text/vcard` or `text/csv`.",
+        "description": "This is a standalone act against the vault, never part of an Import Run:\ncontacts are vault state, and a person may load them before or after\nbringing messages in. Only the rows the address book owns are replaced, so\nContact Groups, names the person typed, and identities an import discovered\nall survive. How the file is read is the open question in #270; this route\nis where that answer lands.",
+        "operationId": "contacts_create_handler",
         "requestBody": {
+          "description": "The address book file: a vCard file as text/vcard, or a vCard CSV export as text/csv.",
           "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddressBookBody"
-              }
-            }
-          },
-          "required": true
+            "text/csv": {},
+            "text/vcard": {}
+          }
         },
         "responses": {
           "200": {
@@ -2266,53 +2261,7 @@
               }
             }
           },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/contacts/match": {
-      "post": {
-        "tags": [
-          "Contacts"
-        ],
-        "summary": "Report which identifiers this account has no vault contact for.",
-        "operationId": "contact_match_handler",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ContactMatchBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ContactMatchResponse"
-                }
-              }
-            }
-          },
-          "400": {
+          "413": {
             "description": "",
             "content": {
               "application/json": {
@@ -2322,17 +2271,7 @@
               }
             }
           },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
+          "415": {
             "description": "",
             "content": {
               "application/json": {
@@ -2384,6 +2323,82 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ContactSummariesPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/contacts/unmatched-handles": {
+      "post": {
+        "tags": [
+          "Contacts"
+        ],
+        "summary": "Report which identifiers this account has no vault contact for.",
+        "operationId": "unmatched_handles_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnmatchedHandlesBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnmatchedHandlesResponse"
                 }
               }
             }
@@ -3541,13 +3556,250 @@
         ]
       }
     },
-    "/v1/import": {
+    "/v1/imports": {
+      "get": {
+        "tags": [
+          "Import"
+        ],
+        "summary": "The account's Import Runs, newest first, as a page. `status=running`\nfinds the one run the desktop app may resume.",
+        "operationId": "imports_list_handler",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "One of running, completed, completed_with_issues, failed, cancelled",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, at most 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, at most 50000",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ImportSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Import"
+        ],
+        "summary": "Start an import session and return its id. Finish the session at\nPOST /v1/imports/{id}/complete.",
+        "operationId": "imports_create_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateImportBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Path of the new import"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The account already has an active import session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/imports/{id}": {
+      "get": {
+        "tags": [
+          "Import"
+        ],
+        "summary": "Status, timings, and issues for one import session.",
+        "operationId": "imports_get_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Import session id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/v1/imports/{id}/batches": {
       "post": {
         "tags": [
           "Import"
         ],
         "summary": "Import one message-ir JSONL body into the vault.",
-        "operationId": "import_handler",
+        "operationId": "import_batch_handler",
         "parameters": [
           {
             "name": "source",
@@ -3651,7 +3903,7 @@
             }
           },
           "409": {
-            "description": "The account already has an active import session",
+            "description": "The run is not running",
             "content": {
               "application/json": {
                 "schema": {
@@ -3672,258 +3924,6 @@
           },
           "415": {
             "description": "The body is not JSON Lines (multipart/form-data is not accepted)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/imports": {
-      "get": {
-        "tags": [
-          "Import"
-        ],
-        "summary": "List past import sessions for the account with their stats.",
-        "operationId": "imports_list_handler",
-        "parameters": [
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportsListResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "post": {
-        "tags": [
-          "Import"
-        ],
-        "summary": "Start an import session and return its id. Finish the session at\nPOST /v1/imports/{id}/complete.",
-        "operationId": "imports_create_handler",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateImportBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "headers": {
-              "Location": {
-                "schema": {
-                  "type": "string"
-                },
-                "description": "Path of the new import"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreateImportResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The account already has an active import session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/imports/active": {
-      "get": {
-        "tags": [
-          "Import"
-        ],
-        "summary": "The account's active import session, if it has one.",
-        "operationId": "imports_active_handler",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ActiveImportResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/imports/{id}": {
-      "get": {
-        "tags": [
-          "Import"
-        ],
-        "summary": "Status, timings, and issues for one import session.",
-        "operationId": "imports_get_handler",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Import session id",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportDetailResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -5280,106 +5280,6 @@
         ]
       }
     },
-    "/v1/owner/vault-settings": {
-      "get": {
-        "tags": [
-          "Owner"
-        ],
-        "summary": "Read the vault's settings.",
-        "operationId": "owner_vault_settings",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VaultSettingsResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "patch": {
-        "tags": [
-          "Owner"
-        ],
-        "summary": "Change the vault's settings.",
-        "operationId": "owner_patch_vault_settings",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PatchVaultSettingsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VaultSettingsResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
     "/v1/saved-searches": {
       "get": {
         "tags": [
@@ -5676,7 +5576,7 @@
         ]
       }
     },
-    "/v1/search/fields": {
+    "/v1/search-fields": {
       "get": {
         "tags": [
           "Search"
@@ -5884,6 +5784,106 @@
           }
         }
       }
+    },
+    "/v1/vault/settings": {
+      "get": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Read the vault's settings.",
+        "operationId": "vault_settings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultSettingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Change the vault's settings.",
+        "operationId": "patch_vault_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchVaultSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultSettingsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -6025,103 +6025,6 @@
           "total_bytes": {
             "type": "integer",
             "format": "int64"
-          }
-        }
-      },
-      "ActiveImportResponse": {
-        "type": "object",
-        "description": "The account's live session, or null when there is none.",
-        "properties": {
-          "session": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/ActiveImportSession"
-              }
-            ]
-          }
-        }
-      },
-      "ActiveImportSession": {
-        "type": "object",
-        "description": "One live import session, as the desktop app needs to resume it.",
-        "required": [
-          "id",
-          "source",
-          "mode",
-          "status",
-          "started_at",
-          "form",
-          "source_fingerprint",
-          "source_identities",
-          "summary"
-        ],
-        "properties": {
-          "device_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "form": {
-            "description": "Import form snapshot, or null."
-          },
-          "id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "source": {
-            "type": "string"
-          },
-          "source_fingerprint": {
-            "description": "Source path, size, mtime, and message count, or null."
-          },
-          "source_identities": {
-            "description": "Addresses the backup's device sent from (JSON array), or null."
-          },
-          "stage": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "staging_dir": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "started_at": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "summary": {
-            "description": "What the user approved at the last gate they passed, or null.\n\nSame column `POST /v1/imports/{id}/stage` writes with its `summary`\nfield — read back here so a reload between an approval and\ncompletion doesn't lose the plan the eventual outcome is diffed\nagainst."
-          }
-        }
-      },
-      "AddressBookBody": {
-        "type": "object",
-        "description": "Body for `POST /v1/contacts/address-book`.",
-        "required": [
-          "filename",
-          "content"
-        ],
-        "properties": {
-          "content": {
-            "type": "string",
-            "description": "The file's text."
-          },
-          "filename": {
-            "type": "string",
-            "description": "File name, used only to tell VCF from vCard CSV."
           }
         }
       },
@@ -6738,38 +6641,6 @@
           }
         }
       },
-      "ContactMatchBody": {
-        "type": "object",
-        "description": "Body for `POST /v1/contacts/match`.",
-        "required": [
-          "identifiers"
-        ],
-        "properties": {
-          "identifiers": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Raw identifiers — phone numbers, emails — as they appear in an export."
-          }
-        }
-      },
-      "ContactMatchResponse": {
-        "type": "object",
-        "description": "Response for `POST /v1/contacts/match`.",
-        "required": [
-          "unknown"
-        ],
-        "properties": {
-          "unknown": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "The subset this account has no contact for: trimmed, in first-seen\norder, blanks dropped and duplicates (by normalized form) collapsed\nto their first spelling."
-          }
-        }
-      },
       "ContactMutationBody": {
         "type": "object",
         "description": "Body for `PATCH /v1/contacts/{id}`. Exactly one mutation field should be set.",
@@ -7228,16 +7099,14 @@
       },
       "CreateImportBody": {
         "type": "object",
-        "description": "Source, mode, tool, and optional account for a new import session.",
+        "description": "Source, mode, dedupe and tool for a new Import Run. The bearer token\nnames the account.",
         "required": [
           "source"
         ],
         "properties": {
-          "account": {
-            "type": [
-              "string",
-              "null"
-            ]
+          "dedupe": {
+            "type": "boolean",
+            "description": "Run cross-source soft-dedupe after each batch."
           },
           "device_id": {
             "type": [
@@ -7266,7 +7135,7 @@
               "string",
               "null"
             ],
-            "description": "Stage the session opens at. Defaults to `parse`."
+            "description": "Stage the run opens at. Defaults to `parse`."
           },
           "staging_dir": {
             "type": [
@@ -7285,7 +7154,7 @@
       },
       "CreateImportResponse": {
         "type": "object",
-        "description": "The new import session id.",
+        "description": "The new Import Run's id.",
         "required": [
           "id"
         ],
@@ -7816,27 +7685,43 @@
       },
       "ImportSummary": {
         "type": "object",
-        "description": "Serializable slice of a session used in list responses.",
+        "description": "One Import Run as `GET /v1/imports` lists it: the counts Settings shows,\nand everything the desktop app needs to resume a running one.",
         "required": [
           "id",
           "source",
           "mode",
+          "dedupe",
           "status",
           "started_at",
           "message_count",
           "attachment_count",
-          "bytes_uploaded"
+          "bytes_uploaded",
+          "form",
+          "source_fingerprint",
+          "source_identities",
+          "summary"
         ],
         "properties": {
           "attachment_count": {
             "type": "integer",
             "format": "int64",
-            "description": "Attachments counted for the session."
+            "description": "Attachments counted for the run."
           },
           "bytes_uploaded": {
             "type": "integer",
             "format": "int64",
             "description": "Bytes uploaded so far."
+          },
+          "dedupe": {
+            "type": "boolean",
+            "description": "Whether cross-source dedupe runs after each batch."
+          },
+          "device_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Which install created the run."
           },
           "duration_ms": {
             "type": [
@@ -7851,17 +7736,20 @@
               "string",
               "null"
             ],
-            "description": "UTC time the session finished, when it has."
+            "description": "UTC time the run finished, when it has."
+          },
+          "form": {
+            "description": "Import form snapshot, or null."
           },
           "id": {
             "type": "integer",
             "format": "int64",
-            "description": "Import session id."
+            "description": "Import Run id."
           },
           "message_count": {
             "type": "integer",
             "format": "int64",
-            "description": "Messages counted for the session."
+            "description": "Messages counted for the run."
           },
           "mode": {
             "type": "string",
@@ -7869,15 +7757,38 @@
           },
           "source": {
             "type": "string",
-            "description": "Source id the session imports."
+            "description": "Source id the run imports."
+          },
+          "source_fingerprint": {
+            "description": "Source path, size, mtime, and message count, or null."
+          },
+          "source_identities": {
+            "description": "Addresses the backup's device sent from (JSON array), or null."
+          },
+          "stage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where a running run is; null once it is over."
+          },
+          "staging_dir": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Absolute path to the staging folder on the client that owns the run."
           },
           "started_at": {
             "type": "string",
-            "description": "UTC time the session started."
+            "description": "UTC time the run started."
           },
           "status": {
             "type": "string",
-            "description": "Lifecycle status (`running`, `completed`, `completed_with_issues`, or `failed`)."
+            "description": "Lifecycle status (`running`, `completed`, `completed_with_issues`,\n`failed`, or `cancelled`)."
+          },
+          "summary": {
+            "description": "What the user approved at the last gate they passed, or null. The\ncolumn `POST /v1/imports/{id}/stage` writes with its `summary`."
           },
           "tool": {
             "type": [
@@ -7885,21 +7796,6 @@
               "null"
             ],
             "description": "Importing tool, e.g. `vault-push`."
-          }
-        }
-      },
-      "ImportsListResponse": {
-        "type": "object",
-        "description": "Past import sessions.",
-        "required": [
-          "items"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ImportSummary"
-            }
           }
         }
       },
@@ -8436,6 +8332,154 @@
                     "type": "string"
                   },
                   "description": "Message tags on this conversation."
+                }
+              }
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
+          }
+        }
+      },
+      "Page_ImportSummary": {
+        "type": "object",
+        "description": "One page of a list.",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One Import Run as `GET /v1/imports` lists it: the counts Settings shows,\nand everything the desktop app needs to resume a running one.",
+              "required": [
+                "id",
+                "source",
+                "mode",
+                "dedupe",
+                "status",
+                "started_at",
+                "message_count",
+                "attachment_count",
+                "bytes_uploaded",
+                "form",
+                "source_fingerprint",
+                "source_identities",
+                "summary"
+              ],
+              "properties": {
+                "attachment_count": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Attachments counted for the run."
+                },
+                "bytes_uploaded": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Bytes uploaded so far."
+                },
+                "dedupe": {
+                  "type": "boolean",
+                  "description": "Whether cross-source dedupe runs after each batch."
+                },
+                "device_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Which install created the run."
+                },
+                "duration_ms": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int64",
+                  "description": "Total wall-clock duration, when finished."
+                },
+                "finished_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "UTC time the run finished, when it has."
+                },
+                "form": {
+                  "description": "Import form snapshot, or null."
+                },
+                "id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Import Run id."
+                },
+                "message_count": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Messages counted for the run."
+                },
+                "mode": {
+                  "type": "string",
+                  "description": "Import mode (`replace` or `append`)."
+                },
+                "source": {
+                  "type": "string",
+                  "description": "Source id the run imports."
+                },
+                "source_fingerprint": {
+                  "description": "Source path, size, mtime, and message count, or null."
+                },
+                "source_identities": {
+                  "description": "Addresses the backup's device sent from (JSON array), or null."
+                },
+                "stage": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Where a running run is; null once it is over."
+                },
+                "staging_dir": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Absolute path to the staging folder on the client that owns the run."
+                },
+                "started_at": {
+                  "type": "string",
+                  "description": "UTC time the run started."
+                },
+                "status": {
+                  "type": "string",
+                  "description": "Lifecycle status (`running`, `completed`, `completed_with_issues`,\n`failed`, or `cancelled`)."
+                },
+                "summary": {
+                  "description": "What the user approved at the last gate they passed, or null. The\ncolumn `POST /v1/imports/{id}/stage` writes with its `summary`."
+                },
+                "tool": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Importing tool, e.g. `vault-push`."
                 }
               }
             },
@@ -9052,6 +9096,38 @@
             "type": "integer",
             "format": "int64",
             "description": "Attachment byte size."
+          }
+        }
+      },
+      "UnmatchedHandlesBody": {
+        "type": "object",
+        "description": "Body for `POST /v1/contacts/unmatched-handles`.",
+        "required": [
+          "identifiers"
+        ],
+        "properties": {
+          "identifiers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Raw identifiers — phone numbers, emails — as they appear in an export."
+          }
+        }
+      },
+      "UnmatchedHandlesResponse": {
+        "type": "object",
+        "description": "Response for `POST /v1/contacts/unmatched-handles`.",
+        "required": [
+          "unknown"
+        ],
+        "properties": {
+          "unknown": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The subset this account has no contact for: trimmed, in first-seen\norder, blanks dropped and duplicates (by normalized form) collapsed\nto their first spelling."
           }
         }
       },

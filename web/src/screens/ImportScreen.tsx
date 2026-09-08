@@ -38,7 +38,7 @@ import {
   useFetchAccountProfile,
   useUpdateAccountProfile,
 } from "../lib/useAccountProfile";
-import { matchContacts } from "../lib/vaultApi";
+import { unmatchedHandles } from "../lib/vaultApi";
 import {
   emptyWhatsappPathStats,
   isWhatsappMethod,
@@ -65,7 +65,7 @@ import { parseStoredStagingSummary, useImportJob } from "./import/useImportJob";
 
 const DEFAULT_SOURCE = IMESSAGE_DEFAULT_METHOD;
 const PATH_PROBE_DEBOUNCE_MS = 200;
-/** The server's own cap on one `/v1/contacts/match` request (`MAX_MATCH_IDENTIFIERS`,
+/** The server's own cap on one `/v1/contacts/unmatched-handles` request (`MAX_MATCH_IDENTIFIERS`,
  * `crates/vault/server/src/contacts_api.rs`) — the client batches to it rather than
  * discovering the limit from a 400. */
 const MAX_MATCH_IDENTIFIERS = 500;
@@ -276,7 +276,7 @@ export default function ImportScreen() {
       try {
         for (let i = 0; i < identifiers.length; i += MAX_MATCH_IDENTIFIERS) {
           const batch = identifiers.slice(i, i + MAX_MATCH_IDENTIFIERS);
-          const res = await matchContacts({ identifiers: batch });
+          const res = await unmatchedHandles({ identifiers: batch });
           total += res.unknown.length;
         }
         if (!cancelled) setUnknownContacts(total);

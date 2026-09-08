@@ -86,6 +86,18 @@ fn write_jsonl(dir: &Path, doc: &ConversationDocument) {
     }
 }
 
+/// The vault's answer to `POST /v1/imports`: an Import Run with `id`. Every
+/// push starts one, so every test mocks it; the batches then go to
+/// `/v1/imports/{id}/batches`.
+fn mock_import_run(server: &MockServer, id: i64) -> httpmock::Mock<'_> {
+    server.mock(|when, then| {
+        when.method(POST).path("/v1/imports");
+        then.status(201)
+            .header("Location", format!("/v1/imports/{id}"))
+            .json_body(json!({ "id": id }));
+    })
+}
+
 /// Push config that skips attachments, pointed at a mock vault URL.
 fn text_only_config(dir: &Path, base_url: String) -> VaultPushConfig {
     VaultPushConfig {
@@ -143,9 +155,7 @@ fn authenticate_and_push_text_only_conversation() {
         }));
     });
     let import = server.mock(|when, then| {
-        when.method(POST)
-            .path("/v1/import")
-            .query_param("import_id", "42");
+        when.method(POST).path("/v1/imports/42/batches");
         then.status(200).json_body(json!({
             "source": "sms-backup-restore",
             "account": "acct-1",
@@ -213,9 +223,7 @@ fn reuses_supplied_import_session_without_starting_or_completing_one() {
         }));
     });
     let import = server.mock(|when, then| {
-        when.method(POST)
-            .path("/v1/import")
-            .query_param("import_id", "99");
+        when.method(POST).path("/v1/imports/99/batches");
         then.status(200).json_body(json!({
             "source": "sms-backup-restore",
             "account": "acct-1",
@@ -259,9 +267,10 @@ fn aggregates_multiple_conversations_into_one_import_request() {
             "username": "alice",
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let import = server.mock(|when, then| {
         when.method(POST)
-            .path("/v1/import")
+            .path("/v1/imports/7/batches")
             .body_includes("+15555550101")
             .body_includes("+15555550102");
         then.status(200).json_body(json!({
@@ -298,7 +307,7 @@ fn aggregates_multiple_conversations_into_one_import_request() {
 }
 
 #[test]
-fn flushes_at_message_limit_and_replaces_only_first_request() {
+fn flushes_at_message_limit_across_two_batches_of_one_run() {
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
         when.method(GET).path("/v1/auth/check");
@@ -307,10 +316,10 @@ fn flushes_at_message_limit_and_replaces_only_first_request() {
             "username": "alice",
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let replace = server.mock(|when, then| {
         when.method(POST)
-            .path("/v1/import")
-            .query_param("mode", "replace")
+            .path("/v1/imports/7/batches")
             .body_includes("+15555550101")
             .body_includes("+15555550102");
         then.status(200).json_body(json!({
@@ -321,8 +330,7 @@ fn flushes_at_message_limit_and_replaces_only_first_request() {
     });
     let append = server.mock(|when, then| {
         when.method(POST)
-            .path("/v1/import")
-            .query_param("mode", "append")
+            .path("/v1/imports/7/batches")
             .body_includes("+15555550103");
         then.status(200).json_body(json!({
             "messages": 1,
@@ -357,9 +365,10 @@ fn failed_combined_request_only_fails_its_files() {
             "username": "alice",
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let failed = server.mock(|when, then| {
         when.method(POST)
-            .path("/v1/import")
+            .path("/v1/imports/7/batches")
             .body_includes("+15555550101")
             .body_includes("+15555550102");
         then.status(500).json_body(json!({
@@ -371,7 +380,7 @@ fn failed_combined_request_only_fails_its_files() {
     });
     let succeeded = server.mock(|when, then| {
         when.method(POST)
-            .path("/v1/import")
+            .path("/v1/imports/7/batches")
             .body_includes("+15555550103");
         then.status(200).json_body(json!({
             "messages": 1,
@@ -422,8 +431,9 @@ fn resumes_message_batches_from_compacted_journal() {
             "username": "alice",
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let import = server.mock(|when, then| {
-        when.method(POST).path("/v1/import");
+        when.method(POST).path("/v1/imports/7/batches");
         then.status(200).json_body(json!({
             "messages": 1,
             "messages_appended": 1,
@@ -467,6 +477,7 @@ fn profiles_attachment_upload_phases() {
             "sources": ["sms-backup-restore"]
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let digest = hex::encode(Sha256::digest(ASSET_BYTES));
     let head = server.mock(|when, then| {
         when.method("HEAD").path(format!("/v1/assets/{digest}"));
@@ -484,7 +495,7 @@ fn profiles_attachment_upload_phases() {
         }));
     });
     let import = server.mock(|when, then| {
-        when.method(POST).path("/v1/import");
+        when.method(POST).path("/v1/imports/7/batches");
         then.status(200).json_body(json!({
             "messages": 1,
             "messages_appended": 1
@@ -625,6 +636,7 @@ fn puts_two_new_assets_without_head() {
             "sources": ["sms-backup-restore"]
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let dir = tempdir().unwrap();
     let (digest_a, digest_b) = two_attachment_docs(dir.path(), "a.txt", A, "b.txt", B);
     let head_a = server.mock(|when, then| {
@@ -646,7 +658,7 @@ fn puts_two_new_assets_without_head() {
             .json_body(json!({ "already_present": false }));
     });
     let _import = server.mock(|when, then| {
-        when.method(POST).path("/v1/import");
+        when.method(POST).path("/v1/imports/7/batches");
         then.status(200).json_body(json!({
             "messages": 1,
             "messages_appended": 1
@@ -694,6 +706,7 @@ fn heads_later_assets_after_put_reports_already_present() {
             "sources": ["sms-backup-restore"]
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let dir = tempdir().unwrap();
     let (digest_a, digest_b) =
         two_attachment_docs(dir.path(), "first.txt", FIRST, "second.txt", SECOND);
@@ -730,7 +743,7 @@ fn heads_later_assets_after_put_reports_already_present() {
             .json_body(json!({ "already_present": false }));
     });
     let _import = server.mock(|when, then| {
-        when.method(POST).path("/v1/import");
+        when.method(POST).path("/v1/imports/7/batches");
         then.status(200).json_body(json!({
             "messages": 1,
             "messages_appended": 1
@@ -766,6 +779,7 @@ fn preflight_head_skips_puts_when_first_asset_already_present() {
             "sources": ["sms-backup-restore"]
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let dir = tempdir().unwrap();
     let (digest_a, digest_b) = two_attachment_docs(dir.path(), "a.txt", A, "b.txt", B);
     let head_a = server.mock(|when, then| {
@@ -791,7 +805,7 @@ fn preflight_head_skips_puts_when_first_asset_already_present() {
             .json_body(json!({ "already_present": false }));
     });
     let _import = server.mock(|when, then| {
-        when.method(POST).path("/v1/import");
+        when.method(POST).path("/v1/imports/7/batches");
         then.status(200).json_body(json!({
             "messages": 1,
             "messages_appended": 1
@@ -824,6 +838,7 @@ fn multipart_upload_when_over_proxy_threshold() {
             "sources": ["sms-backup-restore"]
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let digest = hex::encode(Sha256::digest(ASSET_BYTES));
     let head = server.mock(|when, then| {
         when.method("HEAD").path(format!("/v1/assets/{digest}"));
@@ -875,7 +890,7 @@ fn multipart_upload_when_over_proxy_threshold() {
         }));
     });
     let import = server.mock(|when, then| {
-        when.method(POST).path("/v1/import");
+        when.method(POST).path("/v1/imports/7/batches");
         then.status(200).json_body(json!({
             "messages": 1,
             "messages_appended": 1
@@ -937,6 +952,7 @@ fn multipart_aborts_on_hash_mismatch_complete() {
             "sources": ["sms-backup-restore"]
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let digest = hex::encode(Sha256::digest(ASSET_BYTES));
     let _head = server.mock(|when, then| {
         when.method("HEAD").path(format!("/v1/assets/{digest}"));
@@ -1060,6 +1076,7 @@ fn verify_digests_fails_on_mismatch() {
             "sources": ["sms-backup-restore"]
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let put = server.mock(|when, then| {
         when.method(PUT).path_includes("/v1/assets/");
         then.status(200)
@@ -1108,6 +1125,7 @@ fn shared_attachment_uploaded_once_across_conversations() {
             "sources": ["sms-backup-restore"]
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let head = server.mock(|when, then| {
         when.method("HEAD").path(format!("/v1/assets/{digest}"));
         then.status(404).json_body(json!({
@@ -1123,7 +1141,7 @@ fn shared_attachment_uploaded_once_across_conversations() {
             .json_body(json!({ "already_present": false }));
     });
     let import = server.mock(|when, then| {
-        when.method(POST).path("/v1/import");
+        when.method(POST).path("/v1/imports/7/batches");
         then.status(200).json_body(json!({
             "messages": 2,
             "messages_appended": 2
@@ -1191,6 +1209,7 @@ fn skips_oversized_attachment_keeps_conversation_ok() {
             "sources": ["sms-backup-restore"]
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let small_digest = hex::encode(Sha256::digest(SMALL));
     let big_digest = hex::encode(Sha256::digest(BIG));
     let _small_head = server.mock(|when, then| {
@@ -1212,7 +1231,7 @@ fn skips_oversized_attachment_keeps_conversation_ok() {
     });
     let import = server.mock(|when, then| {
         when.method(POST)
-            .path("/v1/import")
+            .path("/v1/imports/7/batches")
             .body_includes(r#""missing_reason":"too_large""#)
             .body_includes("big.bin")
             .body_includes(&small_digest);
@@ -1307,6 +1326,7 @@ fn skips_missing_attachment_file_keeps_conversation_ok() {
             "sources": ["sms-backup-restore"]
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let small_digest = hex::encode(Sha256::digest(SMALL));
     let _small_head = server.mock(|when, then| {
         when.method("HEAD")
@@ -1321,7 +1341,7 @@ fn skips_missing_attachment_file_keeps_conversation_ok() {
     });
     let import = server.mock(|when, then| {
         when.method(POST)
-            .path("/v1/import")
+            .path("/v1/imports/7/batches")
             .body_includes(r#""missing_reason":"file_missing""#)
             .body_includes("gone.bin")
             .body_includes(&small_digest);
@@ -1407,9 +1427,10 @@ fn keeps_conversation_ok_when_skipped_attachment_has_no_path() {
             "sources": ["sms-backup-restore"]
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let import = server.mock(|when, then| {
         when.method(POST)
-            .path("/v1/import")
+            .path("/v1/imports/7/batches")
             .body_includes(r#""missing_reason":"skipped""#)
             .body_includes("IMG_0421.HEIC")
             .body_includes("image/heic");
@@ -1476,9 +1497,10 @@ fn reports_pathless_attachment_without_reason_as_no_path() {
             "sources": ["sms-backup-restore"]
         }));
     });
+    let _run = mock_import_run(&server, 7);
     let import = server.mock(|when, then| {
         when.method(POST)
-            .path("/v1/import")
+            .path("/v1/imports/7/batches")
             .body_includes(r#""missing_reason":"no_path""#)
             .body_includes("mystery.bin");
         then.status(200).json_body(json!({

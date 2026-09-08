@@ -107,8 +107,8 @@ cancelled"; a path that skips the record contradicts the domain model.
 namespace.** It returns the account's one running Import Run. The path collides
 with `/v1/imports/{id}` and hides a filter in a path segment, and "active" is a
 word the row never stores: `vault_imports.status` holds `running`, `completed`,
-`failed` or `cancelled` (`schema/sql/accounts.sql:189`).
-Fix: `GET /v1/imports?status=running`, accepting the four stored values.
+`completed_with_issues`, `failed` or `cancelled` (`schema/sql/accounts.sql:189`).
+Fix: `GET /v1/imports?status=running`, accepting the five stored values.
 
 **B6. Three paths spell an HTTP method as a verb.**
 `POST /v1/auth/delete-account`, `POST /v1/account/delete-messages`,

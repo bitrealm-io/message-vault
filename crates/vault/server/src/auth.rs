@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use crate::extract::{Json, Query};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use axum::extract::State;
 use axum::http::HeaderMap;
@@ -15,10 +15,10 @@ use sqlx::{AnyConnection, AnyPool};
 
 use crate::db::{account_profile, api_tokens, schema, session_tokens};
 use crate::dedupe;
-use crate::server::{ApiError, AppState, AuthIdentity, FullAccess, SignedIn};
+use crate::server::{ApiError, AppState, AuthIdentity};
 
 /// Max password bytes accepted before hashing (registration / login / change).
-const MAX_PASSWORD_BYTES: usize = 1024;
+pub(crate) const MAX_PASSWORD_BYTES: usize = 1024;
 const MIN_PASSWORD_CHARS: usize = 8;
 /// Sliding window for unauthenticated auth endpoints.
 pub(crate) const AUTH_RATE_WINDOW: Duration = Duration::from_secs(60);
@@ -171,7 +171,7 @@ fn verify_password(hash: &str, password: &str) -> bool {
 ///
 /// A missing or empty hash means the account has no password, so only an empty
 /// password is accepted. Otherwise argon2 is used.
-fn passwords_match(password_hash: Option<&str>, password: &str) -> bool {
+pub(crate) fn passwords_match(password_hash: Option<&str>, password: &str) -> bool {
     match password_hash {
         None | Some("") => password.is_empty(),
         Some(hash) => verify_password(hash, password),
@@ -494,39 +494,9 @@ pub async fn login_handler(
     Ok(Json(response))
 }
 
-// ---------------------------------------------------------------------------
-// Change-password / delete-account request types
-// ---------------------------------------------------------------------------
-
-/// Current and new password.
-#[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct ChangePasswordRequest {
-    /// The account's current password.
-    pub current_password: String,
-    /// Replacement password.
-    pub new_password: String,
-}
-
-/// Fresh session token issued after the password change.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct ChangePasswordResponse {
-    /// Replacement session token after password change (previous sessions are revoked).
-    pub token: String,
-}
-
-/// Confirmation flag and the current password when one is set.
-#[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct DeleteAccountRequest {
-    /// Must be `true`; anything else is rejected.
-    pub confirm: bool,
-    /// Required when the account has a local password.
-    #[serde(default)]
-    pub current_password: Option<String>,
-}
-
 /// Why a password change was refused.
 #[derive(Debug, thiserror::Error)]
-enum ChangePasswordError {
+pub(crate) enum ChangePasswordError {
     /// The presented current password does not match the stored hash.
     #[error("current password is incorrect")]
     IncorrectPassword,
@@ -560,7 +530,7 @@ impl From<ChangePasswordError> for ApiError {
 ///
 /// [`ChangePasswordError::IncorrectPassword`] when the current password is
 /// wrong; [`ChangePasswordError::Db`] when a database read or write fails.
-async fn change_password_on_conn(
+pub(crate) async fn change_password_on_conn(
     conn: &mut AnyConnection,
     account_id: &str,
     current_password: &str,
@@ -611,102 +581,6 @@ pub async fn logout_handler(
     let mut conn = state.db.acquire().await?;
     schema::ensure_accounts_schema(&mut conn).await?;
     logout_on_conn(&mut conn, &token).await?;
-    Ok(axum::http::StatusCode::NO_CONTENT)
-}
-
-/// Verify the current password, store the new one, revoke API tokens, and
-/// issue a fresh session token.
-#[utoipa::path(
-    post,
-    path = "/v1/auth/change-password",
-    tag = "Auth",
-    security(("bearer" = [])),
-    request_body = ChangePasswordRequest,
-    responses(
-        (status = 200, body = ChangePasswordResponse),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
-    )
-)]
-pub async fn change_password_handler(
-    State(state): State<AppState>,
-    SignedIn(auth): SignedIn,
-    Json(req): Json<ChangePasswordRequest>,
-) -> Result<Json<ChangePasswordResponse>, ApiError> {
-    let new_password = req.new_password.trim();
-    validate_password_policy(new_password)?;
-    if req.current_password.len() > MAX_PASSWORD_BYTES {
-        return Err(ApiError::validation("password is too long"));
-    }
-    let account_id = auth.account_id;
-    let current_password = req.current_password.clone();
-    let new_hash = hash_password(new_password)?;
-
-    let mut conn = state.db.acquire().await?;
-    let token =
-        change_password_on_conn(&mut conn, &account_id, &current_password, &new_hash).await?;
-
-    Ok(Json(ChangePasswordResponse { token }))
-}
-
-/// Permanently delete the account and its data directory.
-#[utoipa::path(
-    post,
-    path = "/v1/auth/delete-account",
-    tag = "Auth",
-    security(("bearer" = [])),
-    request_body = DeleteAccountRequest,
-    responses(
-        (status = 204, description = "Account deleted"),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
-    )
-)]
-pub async fn delete_account_handler(
-    State(state): State<AppState>,
-    FullAccess(auth): FullAccess,
-    Json(req): Json<DeleteAccountRequest>,
-) -> Result<axum::http::StatusCode, ApiError> {
-    if !req.confirm {
-        return Err(ApiError::validation("confirmation flag must be true"));
-    }
-    let account_id = auth.account_id;
-    if account_profile::is_demo_account(&account_id) {
-        return Err(ApiError::DemoAccountProtected(
-            "the demo account cannot be deleted; use reset-demo to restore it".into(),
-        ));
-    }
-    let current_password = req.current_password.clone();
-    let account_root = state.cfg.paths.data_dir.join(&account_id);
-
-    let mut conn = state.db.acquire().await?;
-    let password_hash = account_profile::load_password_hash(&mut conn, &account_id).await?;
-    let has_local_password = matches!(password_hash.as_deref(), Some(hash) if !hash.is_empty());
-    if has_local_password {
-        let Some(pw) = current_password.as_deref() else {
-            return Err(ApiError::validation(
-                "current password is required to delete this account",
-            ));
-        };
-        if !passwords_match(password_hash.as_deref(), pw) {
-            return Err(ApiError::InvalidCredentials(
-                "current password is incorrect".into(),
-            ));
-        }
-    }
-    account_profile::delete_account(&mut conn, &account_id).await?;
-    if account_root.exists() {
-        let root = account_root.clone();
-        tokio::task::spawn_blocking(move || std::fs::remove_dir_all(&root))
-            .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("remove account data dir task: {e}")))?
-            .with_context(|| format!("remove account data dir {}", account_root.display()))?;
-    }
-
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 

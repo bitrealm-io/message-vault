@@ -40,7 +40,7 @@ If Import is in use, the `.vault-import-state.jsonl` journal in the work directo
 
 Some releases change the shape of the vault's own database rather than the JSONL it imports. When that happens, the server rebuilds its tables empty the first time it starts on the new version, on SQLite and Postgres alike, and the release notes say so. The vault comes back the way it looked the first time you ran it. You create your account again, then import your conversations again from the backups they came from. Anything that lived only in the vault starts fresh too: the contacts you renamed, your tags, whatever you had moved to the trash, and any API tokens you had issued.
 
-The release that introduces import sessions changes the schema. Upgrading to it starts your vault empty, and you import your conversations again afterward. Keep the backups you imported from where you can get to them: a `chat.db`, an XML export, whatever the source was.
+The release that introduces Import Runs changes the schema. Upgrading to it starts your vault empty, and you import your conversations again afterward. Keep the backups you imported from where you can get to them: a `chat.db`, an XML export, whatever the source was.
 
 ## Compatibility
 

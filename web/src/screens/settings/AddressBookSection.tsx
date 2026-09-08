@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import Button from "../../components/Button";
 import { useContactGroupActions } from "../../lib/contactGroups";
-import { loadAddressBook } from "../../lib/vaultApi";
+import { addressBookContentType, loadAddressBook } from "../../lib/vaultApi";
 import { sectionTitleClass } from "./profileStyles";
 
 /** Largest file the server accepts, mirrored here so the refusal is immediate. */
@@ -36,8 +36,14 @@ export function AddressBookSection() {
         setMessage("That file is larger than 8 MB.");
         return;
       }
+      const contentType = addressBookContentType(file.name);
+      if (!contentType) {
+        setFailed(true);
+        setMessage("Choose a .vcf or .csv file.");
+        return;
+      }
       const content = await file.text();
-      const res = await loadAddressBook({ filename: file.name, content });
+      const res = await loadAddressBook(content, contentType);
       const review =
         res.phones_needing_review > 0
           ? `, ${plural(res.phones_needing_review, "number needs", "numbers need")} a look`

@@ -324,6 +324,29 @@ pub struct ErrorBody {
     pub error: String,
 }
 
+/// The answer to a request that made one new resource: `201 Created`, a
+/// `Location` header naming it, and the JSON body the route documents.
+///
+/// A create that takes a batch is the exception ADR-0009 records: it makes no
+/// single resource, names no URL, and answers `200 OK` with a summary.
+#[derive(Debug)]
+pub struct Created<T> {
+    /// The new resource's path, `/v1/...`.
+    pub location: String,
+    pub body: T,
+}
+
+impl<T: Serialize> IntoResponse for Created<T> {
+    fn into_response(self) -> Response {
+        (
+            StatusCode::CREATED,
+            [(header::LOCATION, self.location)],
+            Json(self.body),
+        )
+            .into_response()
+    }
+}
+
 /// API error returned as a JSON envelope with a matching HTTP status.
 #[derive(Debug)]
 pub enum ApiError {

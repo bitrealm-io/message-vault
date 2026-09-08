@@ -17,12 +17,12 @@ use sha2::{Digest, Sha256};
 use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::{Request, State};
 use axum::http::{HeaderMap, StatusCode, header};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 
 use crate::asset_uploads;
 use crate::config::validate_source_id;
 use crate::server::{
-    ApiError, AppState, AuthIdentity, ExportAccess, ImportAccess, ImportOrExportAccess,
+    ApiError, AppState, AuthIdentity, Created, ExportAccess, ImportAccess, ImportOrExportAccess,
     discard_body, read_body_limited, resolve_import_account, stream_body_to_file,
     upload_content_type,
 };
@@ -942,7 +942,17 @@ pub(crate) struct AssetUploadPartResponse {
     ),
     request_body = AssetUploadStartBody,
     responses(
-        (status = 200, body = AssetUploadStartResponse),
+        (
+            status = 201,
+            body = AssetUploadStartResponse,
+            description = "A new upload was started",
+            headers(("Location" = String, description = "Path of the new upload"))
+        ),
+        (
+            status = 200,
+            body = AssetUploadStartResponse,
+            description = "The asset is already stored; nothing was created"
+        ),
         (status = 400, body = crate::server::ErrorBody),
         (status = 401, body = crate::server::ErrorBody),
         (status = 403, body = crate::server::ErrorBody)
@@ -954,7 +964,7 @@ pub(crate) async fn asset_upload_start_handler(
     AxumPath(sha256): AxumPath<String>,
     Query(query): Query<AssetPutQuery>,
     Json(body): Json<AssetUploadStartBody>,
-) -> Result<Json<AssetUploadStartResponse>, ApiError> {
+) -> Result<Response, ApiError> {
     let (account, source_id, _existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
     let assets_dir = state.cfg.paths.assets_dir_for_account(&account, &source_id);
@@ -969,6 +979,8 @@ pub(crate) async fn asset_upload_start_handler(
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload start task: {e}")))?
     .map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
+    // Only a fresh upload is a creation. An asset already in the store made
+    // nothing, so it answers 200 OK with where the bytes already are.
     match result {
         (Some(stored), None) => Ok(Json(AssetUploadStartResponse {
             upload_id: None,
@@ -976,14 +988,19 @@ pub(crate) async fn asset_upload_start_handler(
             sha256: Some(stored.sha256),
             assets_path: Some(stored.assets_path),
             already_present: true,
-        })),
-        (None, Some(start)) => Ok(Json(AssetUploadStartResponse {
-            upload_id: Some(start.upload_id),
-            part_size: Some(start.part_size),
-            sha256: None,
-            assets_path: None,
-            already_present: false,
-        })),
+        })
+        .into_response()),
+        (None, Some(start)) => Ok(Created {
+            location: format!("/v1/assets/{sha256}/uploads/{}", start.upload_id),
+            body: AssetUploadStartResponse {
+                upload_id: Some(start.upload_id),
+                part_size: Some(start.part_size),
+                sha256: None,
+                assets_path: None,
+                already_present: false,
+            },
+        }
+        .into_response()),
         _ => Err(ApiError::Internal(anyhow::anyhow!(
             "upload start returned inconsistent state"
         ))),

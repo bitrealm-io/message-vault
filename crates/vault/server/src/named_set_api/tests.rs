@@ -3,8 +3,8 @@ use serde_json::{Value, json};
 
 use crate::server::AppState;
 use crate::test_support::{
-    RegisteredAccount, delete_status, get_json, get_status, patch_json, patch_status, post_json,
-    post_status, register_via_api, test_vault,
+    RegisteredAccount, delete_status, get_json, get_status, patch_json, patch_status,
+    post_created_json, post_status, register_via_api, test_vault,
 };
 
 /// Which collection a case runs against. Every case runs for both.
@@ -69,8 +69,11 @@ async fn alice(state: &AppState) -> RegisteredAccount {
 }
 
 async fn create(state: &AppState, kind: Kind, token: &str, name: &str) -> i64 {
-    let set: Value = post_json(state, kind.base(), token, json!({ "name": name })).await;
-    set["id"].as_i64().unwrap()
+    let (location, set): (String, Value) =
+        post_created_json(state, kind.base(), token, json!({ "name": name })).await;
+    let id = set["id"].as_i64().unwrap();
+    assert_eq!(location, format!("{}/{id}", kind.base()));
+    id
 }
 
 async fn names(state: &AppState, kind: Kind, token: &str) -> Vec<String> {
@@ -100,7 +103,7 @@ async fn create_list_update_and_delete_a_set() {
         let state = &vault.state;
         let user = alice(state).await;
 
-        let created: Value = post_json(
+        let (_, created): (String, Value) = post_created_json(
             state,
             kind.base(),
             &user.token,

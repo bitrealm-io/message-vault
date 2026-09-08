@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{AnyConnection, Connection};
 
 use crate::db::account_profile;
-use crate::server::{ApiError, AppState, Owner};
+use crate::server::{ApiError, AppState, Created, Owner};
 
 /// One account as the vault owner sees it: who it is and what it holds, never
 /// what it says.
@@ -193,7 +193,11 @@ pub async fn list_accounts_handler(
     security(("bearer" = [])),
     request_body = CreateAccountRequest,
     responses(
-        (status = 200, body = ManagedAccount),
+        (
+            status = 201,
+            body = ManagedAccount,
+            headers(("Location" = String, description = "Path of the new account"))
+        ),
         (status = 400, body = crate::server::ErrorBody),
         (status = 401, body = crate::server::ErrorBody),
         (status = 403, body = crate::server::ErrorBody)
@@ -203,7 +207,7 @@ pub async fn create_account_handler(
     State(state): State<AppState>,
     Owner(_auth): Owner,
     Json(req): Json<CreateAccountRequest>,
-) -> Result<Json<ManagedAccount>, ApiError> {
+) -> Result<Created<ManagedAccount>, ApiError> {
     let username = crate::auth::normalize_username(&req.username);
     if !crate::auth::is_valid_username(&username) {
         return Err(ApiError::BadRequest(
@@ -236,7 +240,10 @@ pub async fn create_account_handler(
         .ok_or_else(|| {
             ApiError::Internal(anyhow::anyhow!("account vanished immediately after insert"))
         })?;
-    Ok(Json(account))
+    Ok(Created {
+        location: format!("/v1/owner/accounts/{account_id}"),
+        body: account,
+    })
 }
 
 /// Change an account's disabled flag or its import, export and delete

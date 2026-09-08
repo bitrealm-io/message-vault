@@ -11,7 +11,7 @@ use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use crate::db::saved_searches::{self, SavedSearch, SavedSearchKind};
-use crate::server::{ApiError, AppState, FullAccess};
+use crate::server::{ApiError, AppState, Created, FullAccess};
 
 /// A saved search's name and query.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
@@ -47,7 +47,8 @@ pub(crate) async fn saved_searches_list_handler(
     Ok(Json(SavedSearchesListResponse { items }))
 }
 
-/// Create a saved search and return it.
+/// Create a saved search: `201 Created`, `Location: /v1/saved-searches/{id}`,
+/// and the row.
 #[utoipa::path(
     post,
     path = "/v1/saved-searches",
@@ -55,7 +56,11 @@ pub(crate) async fn saved_searches_list_handler(
     security(("bearer" = [])),
     request_body = SavedSearchBody,
     responses(
-        (status = 200, body = SavedSearch),
+        (
+            status = 201,
+            body = SavedSearch,
+            headers(("Location" = String, description = "Path of the new saved search"))
+        ),
         (status = 400, body = crate::server::ErrorBody),
         (status = 401, body = crate::server::ErrorBody),
         (status = 403, body = crate::server::ErrorBody),
@@ -66,7 +71,7 @@ pub(crate) async fn saved_searches_create_handler(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     Json(body): Json<SavedSearchBody>,
-) -> Result<Json<SavedSearch>, ApiError> {
+) -> Result<Created<SavedSearch>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let row = saved_searches::create(
         &mut conn,
@@ -76,7 +81,10 @@ pub(crate) async fn saved_searches_create_handler(
         SavedSearchKind::Manual,
     )
     .await?;
-    Ok(Json(row))
+    Ok(Created {
+        location: format!("/v1/saved-searches/{}", row.id),
+        body: row,
+    })
 }
 
 /// Replace a saved search's name and query, and return it.
@@ -141,7 +149,7 @@ mod tests {
     use axum::http::StatusCode;
 
     use crate::test_support::{
-        delete_status, get_json, patch_json, post_json, register_via_api, test_vault,
+        delete_status, get_json, patch_json, post_created_json, register_via_api, test_vault,
     };
 
     #[tokio::test]
@@ -150,7 +158,7 @@ mod tests {
         let state = vault.state.clone();
         let user = register_via_api(&state, "alice", "hunter2hunter2").await;
 
-        let created: serde_json::Value = post_json(
+        let (location, created): (String, serde_json::Value) = post_created_json(
             &state,
             "/v1/saved-searches",
             &user.token,
@@ -161,6 +169,7 @@ mod tests {
         assert!(created["id"].is_i64());
         assert!(created.get("savedSearch").is_none() && created.get("savedSearches").is_none());
         let id = created["id"].as_i64().unwrap();
+        assert_eq!(location, format!("/v1/saved-searches/{id}"));
 
         let renamed: serde_json::Value = patch_json(
             &state,

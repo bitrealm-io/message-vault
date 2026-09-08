@@ -306,6 +306,48 @@ pub async fn post_json<T: DeserializeOwned>(
     expect_ok(&format!("POST {path}"), status, &text)
 }
 
+/// POST a JSON body to a route that creates one resource, asserting
+/// `201 Created` and a `Location` under the request path, and returning the
+/// body. The `Location` is handed back with it so a test can check it names
+/// the id the body carries.
+pub async fn post_created_json<T: DeserializeOwned>(
+    state: &AppState,
+    path: &str,
+    token: &str,
+    body: serde_json::Value,
+) -> (String, T) {
+    let server = serve(state).await;
+    let response = reqwest::Client::new()
+        .post(format!("{}{path}", server.base()))
+        .bearer_auth(token)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(serde_json::to_vec(&body).expect("test JSON always serializes"))
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let location = response
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+    let text = response.text().await.unwrap();
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "POST {path} must answer 201 Created, got: {text}"
+    );
+    let location =
+        location.unwrap_or_else(|| panic!("POST {path} answered 201 without a Location"));
+    assert!(
+        location.starts_with(&format!("{path}/")),
+        "POST {path} Location must name a member under it, got {location}"
+    );
+    let parsed = serde_json::from_str(&text)
+        .unwrap_or_else(|e| panic!("POST {path} returned non-JSON ({e}): {text}"));
+    (location, parsed)
+}
+
 /// POST a JSON body with a Bearer token, returning only the status.
 pub async fn post_status(
     state: &AppState,

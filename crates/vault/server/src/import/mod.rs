@@ -45,7 +45,7 @@ use staging::StagingInserts;
 use crate::dedupe;
 use crate::import::{self};
 use crate::server::{
-    ApiError, AppState, ImportAccess, content_type_base, is_jsonl_content_type,
+    ApiError, AppState, Created, ImportAccess, content_type_base, is_jsonl_content_type,
     resolve_import_account, stream_body_to_file,
 };
 
@@ -894,7 +894,11 @@ pub(crate) async fn imports_get_handler(
     security(("bearer" = [])),
     request_body = CreateImportBody,
     responses(
-        (status = 200, body = CreateImportResponse),
+        (
+            status = 201,
+            body = CreateImportResponse,
+            headers(("Location" = String, description = "Path of the new import"))
+        ),
         (status = 400, body = crate::server::ErrorBody),
         (status = 401, body = crate::server::ErrorBody),
         (status = 403, body = crate::server::ErrorBody),
@@ -909,7 +913,7 @@ pub(crate) async fn imports_create_handler(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     Json(body): Json<CreateImportBody>,
-) -> Result<Json<CreateImportResponse>, ApiError> {
+) -> Result<Created<CreateImportResponse>, ApiError> {
     if body.source.trim().is_empty() {
         return Err(ApiError::BadRequest("body field source is required".into()));
     }
@@ -947,7 +951,10 @@ pub(crate) async fn imports_create_handler(
     };
     let id = crate::db::vault_imports::start_import(&mut conn, &args).await?;
 
-    Ok(Json(CreateImportResponse { id }))
+    Ok(Created {
+        location: format!("/v1/imports/{id}"),
+        body: CreateImportResponse { id },
+    })
 }
 
 /// Record the outcome of an import session started with POST /v1/imports.

@@ -91,23 +91,29 @@ fn convert_smoke_writes_csv_not_json() {
     // The archive `.eml` is a different parser: one mail carrying a
     // transcript, with the sender named per line. Both of its messages, and
     // the direction each line's name decides, must come through.
+    //
+    // No timestamp is asserted for these two. The transcript writes
+    // `2020-01-01 12:00:00` with no offset, and the parser reads it in the
+    // machine's own timezone, so the epoch value differs between a developer's
+    // laptop and a UTC runner. The flat SMSSync messages above carry epoch
+    // milliseconds in their headers and are pinned exactly; the archive rows
+    // are pinned by their content and direction. Issue #523 tracks the
+    // timezone dependence itself.
     let csv = &csv_files(tmp.path())[0];
-    assert_csv_row(
-        csv,
-        &[
-            ("text", "Check this"),
-            ("direction", "outgoing"),
-            ("timestamp_unix_ms", "1577898000000"),
-        ],
-    );
-    assert_csv_row(
-        csv,
-        &[
-            ("text", "Thanks"),
-            ("direction", "incoming"),
-            ("timestamp_unix_ms", "1577898060000"),
-        ],
-    );
+    assert_csv_row(csv, &[("text", "Check this"), ("direction", "outgoing")]);
+    assert_csv_row(csv, &[("text", "Thanks"), ("direction", "incoming")]);
+    // The two are a minute apart whatever timezone read them, which is the
+    // part of the transcript's time that is the parser's to get right.
+    let rows = csv_rows(csv);
+    let at = |text: &str| -> i64 {
+        rows.iter()
+            .find(|r| r.get("text").is_some_and(|t| t == text))
+            .and_then(|r| r.get("timestamp_unix_ms"))
+            .expect("the message is in the export")
+            .parse()
+            .expect("the timestamp is a number")
+    };
+    assert_eq!(at("Thanks") - at("Check this"), 60_000);
     // Vendor fields (source_kind, smssync_id, eml_path) live inside source_fields_json.
     let contents = fs::read_to_string(&csv_files(tmp.path())[0]).unwrap();
     assert!(contents.contains("source_kind"));

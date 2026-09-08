@@ -1,5 +1,6 @@
 let baseUrl = "";
 let authToken: string | null = null;
+let accountId: number | null = null;
 
 /** Set the vault server URL. An empty string means "same host as this page". */
 export function setBaseUrl(url: string) {
@@ -14,6 +15,21 @@ export function setToken(token: string | null) {
 /** Current session token on the API client, or null when signed out. */
 export function getToken(): string | null {
   return authToken;
+}
+
+/**
+ * Remember which account the session token names. The vault addresses an
+ * account by id under `/v1/accounts/{id}`, and the credential's own id is
+ * what `POST /v1/session` answered, so it is kept beside the token it
+ * belongs to. Pass null to log out.
+ */
+export function setAccountId(id: number | null) {
+  accountId = id;
+}
+
+/** The signed-in account's id, or null when signed out. */
+export function getAccountId(): number | null {
+  return accountId;
 }
 
 export function getBaseUrl(): string {

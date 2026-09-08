@@ -23,6 +23,7 @@
 import {
   type ApiRequestOptions,
   apiClient,
+  getAccountId,
   getBaseUrl,
   getToken,
   problemFromBody,
@@ -57,6 +58,25 @@ function withQuery(path: string, qs: string): string {
   return qs ? `${path}?${qs}` : path;
 }
 
+/** `/v1/accounts/{id}` for one account. */
+function accountPath(accountId: number): string {
+  return `/v1/accounts/${accountId}`;
+}
+
+/**
+ * `/v1/accounts/{id}` for the signed-in account.
+ *
+ * The vault has no `/v1/account` singleton: an account reads and writes its
+ * own row in the same collection the owner manages, addressed by the id the
+ * session carries. Signed out, there is no such row, and asking for one is a
+ * bug in the caller rather than a request worth sending.
+ */
+function ownAccountPath(): string {
+  const id = getAccountId();
+  if (id === null) throw new Error("Not signed in");
+  return accountPath(id);
+}
+
 // ── Auth ────────────────────────────────────────────────────────────────────
 
 /** Sign in. The Session is a singleton, so the vault answers `201` with `Location: /v1/session`. */
@@ -64,10 +84,6 @@ export function login(
   body: Schema["CreateSessionRequest"],
 ): Promise<Schema["SessionTokenResponse"]> {
   return apiClient.post<Schema["SessionTokenResponse"]>("/v1/session", body);
-}
-
-export function register(body: Schema["RegisterRequest"]): Promise<Schema["SessionTokenResponse"]> {
-  return apiClient.post<Schema["SessionTokenResponse"]>("/v1/auth/register", body);
 }
 
 /** The Session the bearer token names: its account, username, and import sources. */
@@ -78,16 +94,6 @@ export function getSession(opts?: VaultRequestOptions): Promise<Schema["SessionR
 /** Sign out: end the Session. The vault answers `204`. */
 export function logout(opts?: VaultRequestOptions): Promise<void> {
   return apiClient.delete<void>("/v1/session", undefined, opts);
-}
-
-export function changePassword(
-  body: Schema["ChangePasswordRequest"],
-): Promise<Schema["ChangePasswordResponse"]> {
-  return apiClient.put<Schema["ChangePasswordResponse"]>("/v1/account/password", body);
-}
-
-export function deleteAccount(body: Schema["DeleteAccountRequest"]): Promise<void> {
-  return apiClient.delete<void>("/v1/account", body);
 }
 
 // ── The vault itself ────────────────────────────────────────────────────────
@@ -110,44 +116,56 @@ export function claimVault(
   return apiClient.post<Schema["SessionTokenResponse"]>("/v1/vault/claim", body);
 }
 
-// ── The vault owner's account management ────────────────────────────────────
+// ── The accounts collection ─────────────────────────────────────────────────
+//
+// One collection for the vault owner and for each account: the owner reaches
+// every row, an account reaches its own. The functions the owner's console
+// calls take the account id; the ones Settings calls address the signed-in
+// account through `ownAccountPath`.
 
-/** The accounts of this vault. The owner's own is not among them. */
+/** The accounts of this vault, for the owner. The owner's own is not among them. */
 export function listAccounts(opts?: VaultRequestOptions): Promise<Schema["ListAccountsResponse"]> {
-  return apiClient.get<Schema["ListAccountsResponse"]>("/v1/owner/accounts", opts);
+  return apiClient.get<Schema["ListAccountsResponse"]>("/v1/accounts", opts);
 }
 
-/** Create an account. Its holder must replace this password at first sign-in. */
+/**
+ * Create an account.
+ *
+ * Signed out, on an open vault, this is registration: the vault opens a
+ * Session on the new account and answers its `token`. Signed in as the owner,
+ * it creates an account whose holder must replace the password at first
+ * sign-in, and no session is opened.
+ */
 export function createAccount(
   body: Schema["CreateAccountRequest"],
-): Promise<Schema["ManagedAccount"]> {
-  return apiClient.post<Schema["ManagedAccount"]>("/v1/owner/accounts", body);
+): Promise<Schema["CreatedAccountResponse"]> {
+  return apiClient.post<Schema["CreatedAccountResponse"]>("/v1/accounts", body);
 }
 
-/** Change an account's disabled flag or its import, export and delete grants. */
+/** Change an account's disabled flag or its import, export and delete grants, as the owner. */
 export function updateAccount(
   accountId: number,
   body: Schema["PatchAccountRequest"],
-): Promise<Schema["ManagedAccount"]> {
-  return apiClient.patch<Schema["ManagedAccount"]>(`/v1/owner/accounts/${accountId}`, body);
+): Promise<Schema["AccountResponse"]> {
+  return apiClient.patch<Schema["AccountResponse"]>(accountPath(accountId), body);
 }
 
-/** Set an account's password, ending its sessions. */
+/** Set another account's password as the owner, ending its sessions. */
 export function setAccountPassword(
   accountId: number,
   body: Schema["SetPasswordRequest"],
 ): Promise<void> {
-  return apiClient.put<void>(`/v1/owner/accounts/${accountId}/password`, body);
+  return apiClient.put<void>(`${accountPath(accountId)}/password`, body);
 }
 
-/** Delete an account: its login, profile, contacts, and every message it owns. */
+/** Delete an account as the owner: its login, profile, contacts, and every message it owns. */
 export function deleteAccountById(accountId: number): Promise<void> {
-  return apiClient.delete<void>(`/v1/owner/accounts/${accountId}`);
+  return apiClient.delete<void>(accountPath(accountId));
 }
 
-/** Destroy one account's messages. The account, its contacts and login survive. */
+/** Destroy one account's messages as the owner. The account, its contacts and login survive. */
 export function deleteAccountMessages(accountId: number): Promise<unknown> {
-  return apiClient.delete<unknown>(`/v1/owner/accounts/${accountId}/messages`);
+  return apiClient.delete<unknown>(`${accountPath(accountId)}/messages`);
 }
 
 /** Settings that belong to the whole vault. */
@@ -164,55 +182,74 @@ export function updateVaultSettings(
   return apiClient.patch<Schema["VaultSettingsResponse"]>("/v1/vault/settings", body);
 }
 
-// ── Account ─────────────────────────────────────────────────────────────────
+// ── The signed-in account's own row ─────────────────────────────────────────
 
-export function getAccountProfile(
-  opts?: VaultRequestOptions,
-): Promise<Schema["AccountProfileResponse"]> {
-  return apiClient.get<Schema["AccountProfileResponse"]>("/v1/account/profile", opts);
+/** The signed-in account: profile, flags, and how much it holds. */
+export function getAccountProfile(opts?: VaultRequestOptions): Promise<Schema["AccountResponse"]> {
+  return apiClient.get<Schema["AccountResponse"]>(ownAccountPath(), opts);
 }
 
+/** Change the signed-in account's display name, time zone or handles. */
 export function updateAccountProfile(
-  body: Schema["AccountProfileUpdateRequest"],
-): Promise<Schema["AccountProfileResponse"]> {
-  return apiClient.patch<Schema["AccountProfileResponse"]>("/v1/account/profile", body);
+  body: Schema["PatchAccountRequest"],
+): Promise<Schema["AccountResponse"]> {
+  return apiClient.patch<Schema["AccountResponse"]>(ownAccountPath(), body);
+}
+
+/** Change the signed-in account's own password. The vault answers a rotated session token. */
+export function changePassword(
+  body: Schema["SetPasswordRequest"],
+): Promise<Schema["SetPasswordResponse"]> {
+  return apiClient.put<Schema["SetPasswordResponse"]>(`${ownAccountPath()}/password`, body);
+}
+
+/** Delete the signed-in account, confirming with its current password. */
+export function deleteAccount(body: Schema["DeleteAccountRequest"]): Promise<void> {
+  return apiClient.delete<void>(ownAccountPath(), body);
 }
 
 export function getAccountStorage(
   opts?: VaultRequestOptions,
 ): Promise<Schema["AccountStorageResponse"]> {
-  return apiClient.get<Schema["AccountStorageResponse"]>("/v1/account/storage", opts);
+  return apiClient.get<Schema["AccountStorageResponse"]>(`${ownAccountPath()}/storage`, opts);
 }
 
+/** Destroy the signed-in account's messages and attachments. Contacts and the login survive. */
 export function deleteAllMessages(
   body: Schema["DeleteMessagesRequest"],
 ): Promise<Schema["DeleteMessagesResponse"]> {
-  return apiClient.delete<Schema["DeleteMessagesResponse"]>("/v1/account/messages", body);
+  return apiClient.delete<Schema["DeleteMessagesResponse"]>(`${ownAccountPath()}/messages`, body);
 }
 
 // ── API tokens ──────────────────────────────────────────────────────────────
+//
+// An account's tokens live under its own row, and nobody else's session
+// reaches them.
 
 export function listApiTokens(
   opts?: VaultRequestOptions,
 ): Promise<Schema["ListApiTokensResponse"]> {
-  return apiClient.get<Schema["ListApiTokensResponse"]>("/v1/account/api-tokens", opts);
+  return apiClient.get<Schema["ListApiTokensResponse"]>(`${ownAccountPath()}/api-tokens`, opts);
 }
 
 export function createApiToken(
   body: Schema["CreateApiTokenRequest"],
 ): Promise<Schema["CreateApiTokenResponse"]> {
-  return apiClient.post<Schema["CreateApiTokenResponse"]>("/v1/account/api-tokens", body);
+  return apiClient.post<Schema["CreateApiTokenResponse"]>(`${ownAccountPath()}/api-tokens`, body);
 }
 
 export function renameApiToken(
   id: number,
   body: Schema["RenameApiTokenRequest"],
 ): Promise<Schema["RenameApiTokenResponse"]> {
-  return apiClient.patch<Schema["RenameApiTokenResponse"]>(`/v1/account/api-tokens/${id}`, body);
+  return apiClient.patch<Schema["RenameApiTokenResponse"]>(
+    `${ownAccountPath()}/api-tokens/${id}`,
+    body,
+  );
 }
 
 export function deleteApiToken(id: number): Promise<void> {
-  return apiClient.delete<void>(`/v1/account/api-tokens/${id}`);
+  return apiClient.delete<void>(`${ownAccountPath()}/api-tokens/${id}`);
 }
 
 // ── Assets ──────────────────────────────────────────────────────────────────

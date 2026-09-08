@@ -89,7 +89,7 @@ describe("apiClient errors", () => {
       }),
     );
 
-    await expect(apiClient.post("/v1/auth/register", {})).rejects.toMatchObject({
+    await expect(apiClient.post("/v1/accounts", {})).rejects.toMatchObject({
       name: "VaultApiError",
       status: 409,
       message: "username already taken: matt",

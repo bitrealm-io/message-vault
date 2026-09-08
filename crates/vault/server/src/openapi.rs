@@ -25,9 +25,8 @@ use crate::server::AppState;
     components(schemas(crate::search::ListKind)),
     tags(
         (name = "Health", description = "Process liveness"),
-        (name = "Auth", description = "Registration"),
         (name = "Session", description = "The signed-in credential: sign in, check it, sign out"),
-        (name = "Account", description = "Profile, storage, and API tokens"),
+        (name = "Accounts", description = "The vault's accounts: the owner manages them, and each account reads and writes its own, API tokens included"),
         (name = "Import", description = "JSONL import sessions and ingest"),
         (name = "Export", description = "Read-only messages and counts"),
         (name = "Assets", description = "Attachment bytes"),
@@ -36,7 +35,6 @@ use crate::server::AppState;
         (name = "Trash", description = "Empty the trash; the one door to permanent deletion, with DELETE on a trashed conversation or contact"),
         (name = "Message tags", description = "Tags on conversations"),
         (name = "Search", description = "The words the search language accepts"),
-        (name = "Owner", description = "Account management for the vault owner"),
         (name = "Vault", description = "The vault's own state: claiming it, and what a signed-out visitor may do")
     )
 )]
@@ -56,33 +54,41 @@ impl Modify for BearerAddon {
     }
 }
 
-/// Unauthenticated auth JSON (register and sign in).
-pub fn auth_public_openapi() -> OpenApiRouter<AppState> {
+/// The routes a stranger may call: creating an account, signing in, and
+/// reading or claiming the vault. Served behind a small body limit.
+pub fn public_openapi() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
-        .routes(routes!(crate::auth::register_handler))
-        .routes(routes!(crate::auth::create_session_handler))
+        .routes(routes!(crate::accounts_api::create_account_handler))
+        .routes(routes!(crate::session_api::create_session_handler))
         .routes(routes!(crate::vault_api::vault_state_handler))
         .routes(routes!(crate::vault_api::claim_vault_handler))
 }
 
-/// Health, the signed-in Session, account settings, and browse routes.
+/// Health, the signed-in Session, the accounts collection, and browse routes.
 pub fn api_openapi() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(crate::server::health))
         .routes(routes!(
-            crate::auth::get_session_handler,
-            crate::auth::delete_session_handler
+            crate::session_api::get_session_handler,
+            crate::session_api::delete_session_handler
         ))
-        .routes(routes!(crate::profile::change_password_handler))
-        .routes(routes!(crate::profile::delete_account_handler))
-        .routes(routes!(crate::profile::account_profile_handler))
-        .routes(routes!(crate::profile::account_profile_update_handler))
-        .routes(routes!(crate::profile::delete_messages_handler))
-        .routes(routes!(crate::profile::account_storage_handler))
-        .routes(routes!(crate::api_tokens_api::list_api_tokens_handler))
-        .routes(routes!(crate::api_tokens_api::create_api_token_handler))
-        .routes(routes!(crate::api_tokens_api::delete_api_token_handler))
-        .routes(routes!(crate::api_tokens_api::rename_api_token_handler))
+        .routes(routes!(crate::accounts_api::list_accounts_handler))
+        .routes(routes!(
+            crate::accounts_api::get_account_handler,
+            crate::accounts_api::patch_account_handler,
+            crate::accounts_api::delete_account_handler
+        ))
+        .routes(routes!(crate::accounts_api::set_password_handler))
+        .routes(routes!(crate::accounts_api::delete_messages_handler))
+        .routes(routes!(crate::accounts_api::account_storage_handler))
+        .routes(routes!(
+            crate::api_tokens_api::list_api_tokens_handler,
+            crate::api_tokens_api::create_api_token_handler
+        ))
+        .routes(routes!(
+            crate::api_tokens_api::rename_api_token_handler,
+            crate::api_tokens_api::delete_api_token_handler
+        ))
         .routes(routes!(crate::export_api::export_messages_handler))
         .routes(routes!(crate::export_api::export_messages_count_handler))
         .routes(routes!(crate::contacts_api::contacts_list_handler))
@@ -157,19 +163,13 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::assets::asset_upload_part_handler))
         .routes(routes!(crate::assets::asset_upload_complete_handler))
         .routes(routes!(crate::assets::asset_upload_abort_handler))
-        .routes(routes!(crate::owner_api::list_accounts_handler))
-        .routes(routes!(crate::owner_api::create_account_handler))
-        .routes(routes!(crate::owner_api::patch_account_handler))
-        .routes(routes!(crate::owner_api::set_account_password_handler))
-        .routes(routes!(crate::owner_api::delete_account_messages_handler))
-        .routes(routes!(crate::owner_api::delete_account_handler))
         .routes(routes!(crate::vault_api::vault_settings_handler))
         .routes(routes!(crate::vault_api::patch_vault_settings_handler))
 }
 
 /// Pretty OpenAPI JSON. Same string the CLI writes and the stale-spec test compares.
 pub fn dump_openapi_json() -> String {
-    let (_a, mut spec) = auth_public_openapi().split_for_parts();
+    let (_a, mut spec) = public_openapi().split_for_parts();
     let (_b, rest) = api_openapi().split_for_parts();
     spec.merge(rest);
     serde_json::to_string_pretty(&spec).expect("OpenAPI document serializes to JSON")
@@ -226,26 +226,44 @@ mod tests {
     }
 
     #[test]
-    fn dump_includes_auth_and_account_paths() {
+    fn dump_includes_session_and_account_paths() {
         let v: serde_json::Value = serde_json::from_str(&dump_openapi_json()).unwrap();
         let paths = v["paths"].as_object().unwrap();
         for p in [
-            "/v1/auth/register",
             "/v1/session",
-            "/v1/account/password",
-            "/v1/account",
-            "/v1/account/profile",
-            "/v1/account/messages",
-            "/v1/account/storage",
-            "/v1/account/api-tokens",
-            "/v1/account/api-tokens/{id}",
+            "/v1/accounts",
+            "/v1/accounts/{id}",
+            "/v1/accounts/{id}/password",
+            "/v1/accounts/{id}/messages",
+            "/v1/accounts/{id}/storage",
+            "/v1/accounts/{id}/api-tokens",
+            "/v1/accounts/{id}/api-tokens/{token_id}",
         ] {
             assert!(paths.contains_key(p), "missing {p}");
         }
+        for gone in ["/v1/auth/register", "/v1/account", "/v1/account/profile"] {
+            assert!(!paths.contains_key(gone), "{gone} must be gone");
+        }
         assert!(
-            !operation_has_bearer(&paths["/v1/auth/register"]["post"]),
-            "register is public"
+            !paths.keys().any(|p| p.starts_with("/v1/owner")),
+            "no route carries a role in its path"
         );
+        assert!(paths["/v1/accounts"]["get"].is_object());
+        assert!(paths["/v1/accounts"]["post"].is_object());
+        assert!(paths["/v1/accounts/{id}"]["get"].is_object());
+        assert!(paths["/v1/accounts/{id}"]["patch"].is_object());
+        assert!(paths["/v1/accounts/{id}"]["delete"].is_object());
+        assert!(paths["/v1/accounts/{id}/password"]["put"].is_object());
+        assert!(paths["/v1/accounts/{id}/messages"]["delete"].is_object());
+        // A stranger creates an account with no credential; the owner with one.
+        let create = &paths["/v1/accounts"]["post"];
+        assert!(
+            create["security"].as_array().is_some_and(|s| s
+                .iter()
+                .any(|entry| entry.as_object().is_some_and(|o| o.is_empty()))),
+            "POST /v1/accounts must admit a request with no credential: {create}"
+        );
+        assert!(operation_has_bearer(create), "and the owner's session");
         assert!(
             !operation_has_bearer(&paths["/v1/session"]["post"]),
             "signing in is public"
@@ -326,23 +344,9 @@ mod tests {
     }
 
     #[test]
-    fn dump_includes_owner_paths() {
+    fn dump_documents_import_and_asset_bodies() {
         let v: serde_json::Value = serde_json::from_str(&dump_openapi_json()).unwrap();
         let paths = v["paths"].as_object().unwrap();
-        for p in [
-            "/v1/owner/accounts",
-            "/v1/owner/accounts/{id}",
-            "/v1/owner/accounts/{id}/password",
-            "/v1/owner/accounts/{id}/messages",
-        ] {
-            assert!(paths.contains_key(p), "missing {p}");
-        }
-        assert!(paths["/v1/owner/accounts"]["get"].is_object());
-        assert!(paths["/v1/owner/accounts"]["post"].is_object());
-        assert!(paths["/v1/owner/accounts/{id}"]["patch"].is_object());
-        assert!(paths["/v1/owner/accounts/{id}"]["delete"].is_object());
-        assert!(paths["/v1/owner/accounts/{id}/password"]["put"].is_object());
-        assert!(paths["/v1/owner/accounts/{id}/messages"]["delete"].is_object());
         let import = &paths["/v1/imports/{id}/batches"]["post"]["requestBody"]["content"];
         for ct in ["application/x-ndjson", "application/jsonl"] {
             assert!(

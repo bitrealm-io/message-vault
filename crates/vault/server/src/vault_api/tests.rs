@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use super::*;
 use crate::test_support::{
     claim_vault_as_owner, get_json, get_status, patch_status, post_json, post_status,
-    register_via_api, test_vault,
+    post_status_signed_out, register_via_api, test_vault,
 };
 
 /// Turn public registration off, the way a real vault ships.
@@ -159,10 +159,9 @@ async fn registration_is_refused_while_the_vault_is_closed() {
     let state = vault.state.clone();
     close_registration(&state).await;
 
-    let status = post_status(
+    let status = post_status_signed_out(
         &state,
-        "/v1/auth/register",
-        "",
+        "/v1/accounts",
         serde_json::json!({ "username": "stranger", "password": "hunter2hunter2" }),
     )
     .await;
@@ -182,10 +181,9 @@ async fn the_owner_can_open_and_close_registration() {
     assert!(!settings.public_registration);
 
     assert_eq!(
-        post_status(
+        post_status_signed_out(
             &state,
-            "/v1/auth/register",
-            "",
+            "/v1/accounts",
             serde_json::json!({ "username": "stranger", "password": "hunter2hunter2" }),
         )
         .await,
@@ -229,4 +227,44 @@ async fn only_the_owner_reaches_the_vault_settings() {
         .await,
         StatusCode::FORBIDDEN
     );
+}
+
+/// Claiming the vault puts a row at the owner id and nowhere else.
+#[tokio::test]
+async fn claiming_the_vault_creates_exactly_one_owner() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+
+    let mut conn = state.db.acquire().await.unwrap();
+    assert!(!account_profile::vault_is_claimed(&mut conn).await.unwrap());
+    drop(conn);
+
+    let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+    assert_eq!(owner.account_id, account_profile::OWNER_ACCOUNT_ID);
+
+    let mut conn = state.db.acquire().await.unwrap();
+    assert!(account_profile::vault_is_claimed(&mut conn).await.unwrap());
+    let owners: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts WHERE id = $1")
+        .bind(account_profile::OWNER_ACCOUNT_ID)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(owners, 1);
+}
+
+/// The vault owner holds no messages, so profile setup would ask for a name
+/// shown against messages, a zone to read them in, and handles that mark one
+/// as theirs: three questions with no answer. The owner is never sent there.
+#[tokio::test]
+async fn the_vault_owner_owes_no_profile_setup() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let auth = account_profile::load_account_auth(&mut conn, owner.account_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!auth.must_set_up_profile);
 }

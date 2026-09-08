@@ -25,7 +25,22 @@ The full set of rules, with the reason behind each: [HTTP interface rules](https
 - `DELETE /v1/contacts/{id}` does what a phone's Delete Contact does: the name, the person's edits and their Contact Group memberships go, the contact becomes Unknown and leaves the trash, and every conversation stays as it is, showing the handle. A contact that is not in the trash answers 409.
 - `DELETE /v1/trash` does both for everything in the trash.
 
-All three answer `204`. The demo account may delete like any other account. The one deletion it is refused is its own: `DELETE /v1/account` answers `403 Forbidden` (`demo-account-protected`) for it, and `reset-demo` restores the vault instead. An Import Run's record on `/v1/imports` does not change when messages it brought in are later deleted.
+All three answer `204`. The demo account may delete like any other account. The one deletion it is refused is its own: `DELETE /v1/accounts/{id}` on its own row answers `403 Forbidden` (`demo-account-protected`) for it, and `reset-demo` restores the vault instead. An Import Run's record on `/v1/imports` does not change when messages it brought in are later deleted.
+
+## Accounts are one collection
+
+`/v1/accounts` is the one place accounts live, for the vault owner and for each account alike; there is no `/v1/account` singleton and no `/v1/owner/` prefix, because who may call a route is decided in the handler, never by the path. The credential names the caller, and `POST /v1/session` and `GET /v1/session` both answer its `account_id`, so a client always knows which row is its own.
+
+- `GET /v1/accounts` lists every account but the owner's, with its flags, message count and storage total. The owner only.
+- `POST /v1/accounts` creates an account. Signed in as the owner it takes a `username` and a first `password` the holder must replace at first sign-in. With no credential at all it is registration, allowed while the vault is open: the vault opens a Session on the new account and answers its `token`. Either way the answer is `201 Created` with `Location: /v1/accounts/{id}`.
+- `GET /v1/accounts/{id}` reads one account: profile fields, flags and counts in one document. `PATCH` changes it: the account itself sets `preferred_name`, `time_zone`, `handles` and `remove_handles`; the owner sets another account's `disabled`, `can_import`, `can_export` and `can_delete`. A field the caller may not set answers `403 Forbidden` and nothing in the body is applied.
+- `PUT /v1/accounts/{id}/password` is one route for two callers: an account changing its own supplies `current_password` and gets a rotated session `token` back (`200`); the owner sets another account's without it (`204`), ending that account's sessions.
+- `DELETE /v1/accounts/{id}` deletes an account. The owner sends no body; an account deleting itself sends `{confirm, current_password}`. Nobody deletes the owner.
+- `DELETE /v1/accounts/{id}/messages` destroys an account's messages and attachments and answers the counts. The owner sends no body; the account itself needs the `delete` scope and sends `{confirm}`.
+- `GET /v1/accounts/{id}/storage` is the attachment total and the largest files.
+- `/v1/accounts/{id}/api-tokens` and `/v1/accounts/{id}/api-tokens/{token_id}` are the account's own API tokens, session only: the owner has none and reaches nobody else's.
+
+An account addressing a row that is not its own answers `403` whether or not the row exists; only the owner learns that an id is absent (`404`).
 
 ## Tokens
 
@@ -82,7 +97,7 @@ A file the vault cannot read comes back as a 400 whose `error` names the line, o
 - `service:` — `imessage`, `sms`, `mms`, `rcs`, `whatsapp`.
 - `source:` — the backup family it was imported from: `imessage`, `whatsapp`, `sms`.
 - `import:` — the Import Run that brought it in; `#id` or `last`.
-- `date:`, `first-message:`, `last-message:` — a day, month, year, or relative span, with comparisons and ranges. A message's `timestamp` is a UTC instant; the span's edges are midnight in the account's `time_zone` (`GET /v1/account/profile`), turned into instants before the comparison, so the same rule serves SQLite and Postgres and the `year=` filter on a conversation's messages.
+- `date:`, `first-message:`, `last-message:` — a day, month, year, or relative span, with comparisons and ranges. A message's `timestamp` is a UTC instant; the span's edges are midnight in the account's `time_zone` (`GET /v1/accounts/{id}`), turned into instants before the comparison, so the same rule serves SQLite and Postgres and the `year=` filter on a conversation's messages.
 - `attachment:` — `image`, `video`, `audio`, `document`, `pdf`, `contact`, `other`, `any`, `none`.
 - `filename:` — an attachment's file name; text or a `pre*` prefix.
 - `size:` — an attachment's size, with comparisons and ranges.

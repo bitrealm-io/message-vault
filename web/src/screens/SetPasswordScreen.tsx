@@ -44,7 +44,7 @@ export default function SetPasswordScreen() {
 
       const res = await changePassword({
         current_password: currentPassword,
-        new_password: password,
+        password,
       });
       // Changing the password rotates the session, so the old token is dead
       // the moment this returns.

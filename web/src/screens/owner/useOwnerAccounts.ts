@@ -9,21 +9,12 @@ import {
   setAccountPassword as setVaultAccountPassword,
   updateAccount,
 } from "../../lib/vaultApi";
+import type { components } from "../../lib/vaultApi.types";
 import { keys } from "../../lib/vaultKeys";
 import { useVaultCache, useVaultQuery } from "../../lib/vaultQuery";
 
-/** One account as the vault owner sees it — mirrors `ManagedAccount` in `owner_api.rs`. */
-export type ManagedAccount = {
-  account_id: number;
-  username: string;
-  disabled: boolean;
-  must_change_password: boolean;
-  can_import: boolean;
-  can_export: boolean;
-  can_delete: boolean;
-  message_count: number;
-  storage_bytes: number;
-};
+/** One account as the vault owner sees it: the same row the account itself reads. */
+export type ManagedAccount = components["schemas"]["AccountResponse"];
 
 /** The flags the vault owner can change on one account. */
 export type ManagedAccountChanges = Partial<
@@ -31,7 +22,7 @@ export type ManagedAccountChanges = Partial<
 >;
 
 const fetchAccounts = (signal: AbortSignal) =>
-  listAccounts({ signal }).then((res) => (res.items ?? []) as ManagedAccount[]);
+  listAccounts({ signal }).then((res) => res.items ?? []);
 
 /** Every write but a password change shows on the account list. */
 function useOwnerWrite<V>(

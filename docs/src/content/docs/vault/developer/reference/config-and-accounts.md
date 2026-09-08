@@ -58,23 +58,20 @@ Created on first use if missing:
 
 ## Accounts
 
-Rows are scoped by `account_id` in a shared `vault.db`.
+Rows are scoped by `account_id` in a shared `vault.db`. The vault owner is
+always account `1` and the demo account `2`; every other account takes an id
+from `100` up.
 
 - Web login uses username + password (Argon2id hash in `accounts.password_hash`).
-  Accounts may opt into no password (`password_hash` NULL); empty password is
-  accepted only for those accounts — except the vault's first registered
-  account, which must set a password, because it becomes an administrator.
-- Login and registration are each rate-limited to 20 attempts per username per
-  60 seconds, tracked separately (a username's login attempts do not count
-  against its registration attempts, or the reverse).
+  An account may have no password (`password_hash` NULL); an empty password is
+  accepted only for those accounts.
+- Signing in, creating an account, and claiming the vault are each
+  rate-limited to 20 attempts per username per 60 seconds, tracked separately.
 - Each account can create named **API tokens** for programs that call the HTTP API
   (stored hashed; shown once when created). GUI sessions use a separate rotating
   token.
-- Five columns on `accounts` govern what a signed-in session may do, each
+- Four columns on `accounts` govern what a signed-in session may do, each
   enforced by a guard in `server.rs` rather than left as decoration:
-  - `is_admin` — may manage other accounts through `/v1/admin/*`. The vault's
-    first real account (the demo account does not count) is granted this
-    automatically at registration; every account after that starts ordinary.
   - `disabled` — may not sign in; an existing session or API token for a
     disabled account stops working immediately.
   - `can_import`, `can_export`, `can_delete` — may call the import endpoints,
@@ -82,11 +79,14 @@ Rows are scoped by `account_id` in a shared `vault.db`.
     respectively. New accounts default to all three; a named API token
     defaults to import and export but not delete, since destruction is
     asked for rather than inherited.
-  An administrator manages another account's flags from Settings → Users
-  (`PATCH /v1/admin/users/{id}`), and can also reset a password
-  (`PUT /v1/admin/users/{id}/password`) or delete an account
-  (`DELETE /v1/admin/users/{id}`) — refused when it would leave the vault with
-  no administrator.
+  The vault owner sets another account's flags from its console
+  (`PATCH /v1/accounts/{id}`), resets a password
+  (`PUT /v1/accounts/{id}/password`), deletes an account's messages
+  (`DELETE /v1/accounts/{id}/messages`) or the account
+  (`DELETE /v1/accounts/{id}`). The owner has no flags of its own: it holds
+  no messages, and nothing can disable or delete it. `create-owner` and
+  `reset-owner-password` on the server CLI are the only ways to make or
+  recover the owner's login.
 - Demo seed identity: username `demo` (`crates/vault/demo-seed/config/seed.toml`), always
   no-password. Sign-in stays username `demo` and an empty password.
 

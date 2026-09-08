@@ -24,11 +24,11 @@ use crate::open_vault::OpenVault;
 pub async fn create_owner(vault: &OpenVault, username: &str, password: &str) -> Result<String> {
     let mut conn = vault.conn().await?;
 
-    let username = crate::auth::normalize_username(username);
-    if !crate::auth::is_valid_username(&username) {
-        bail!("username must be 1–128 chars (alphanumeric, _, -, .)");
-    }
-    if let Err(e) = crate::auth::validate_password_policy(password) {
+    let username = match crate::credentials::require_valid_username(username) {
+        Ok(username) => username,
+        Err(e) => bail!("{e}"),
+    };
+    if let Err(e) = crate::credentials::validate_password_policy(password) {
         bail!("{e}");
     }
 
@@ -37,11 +37,11 @@ pub async fn create_owner(vault: &OpenVault, username: &str, password: &str) -> 
             "this vault already has an owner; use `reset-owner-password` to set a new password for it"
         );
     }
-    if let Err(e) = crate::auth::require_username_free(&mut conn, &username).await {
+    if let Err(e) = crate::credentials::require_username_free(&mut conn, &username).await {
         bail!("{e}");
     }
 
-    let hash = crate::auth::hash_password(password)?;
+    let hash = crate::credentials::hash_password(password)?;
     account_profile::insert_account_at(
         &mut conn,
         account_profile::OWNER_ACCOUNT_ID,
@@ -66,14 +66,14 @@ pub async fn create_owner(vault: &OpenVault, username: &str, password: &str) -> 
 pub async fn reset_owner_password(vault: &OpenVault, password: &str) -> Result<String> {
     let mut conn = vault.conn().await?;
 
-    if let Err(e) = crate::auth::validate_password_policy(password) {
+    if let Err(e) = crate::credentials::validate_password_policy(password) {
         bail!("{e}");
     }
     if !account_profile::vault_is_claimed(&mut conn).await? {
         bail!("this vault has no owner yet; use `create-owner` to claim it");
     }
 
-    let hash = crate::auth::hash_password(password)?;
+    let hash = crate::credentials::hash_password(password)?;
     account_profile::update_password_hash(&mut conn, account_profile::OWNER_ACCOUNT_ID, &hash)
         .await?;
     // The old password is gone, so every session it opened should be too.

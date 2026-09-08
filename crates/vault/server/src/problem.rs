@@ -186,8 +186,8 @@ impl ProblemType {
             Self::AuthenticationRequired => "The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. Sign in again, or issue a new API token, and send the new token.".to_string(),
             Self::RateLimited => format!(
                 "The vault refused an authentication attempt because the same username has tried too often: more than {} attempts to sign in, register or claim the vault inside {} seconds. Wait the number of seconds in the `Retry-After` header (repeated as `retry_after` in the body) and try again.",
-                crate::auth::AUTH_RATE_MAX,
-                crate::auth::AUTH_RATE_WINDOW.as_secs()
+                crate::credentials::AUTH_RATE_MAX,
+                crate::credentials::AUTH_RATE_WINDOW.as_secs()
             ),
             Self::UsernameTaken => "The username already belongs to an account on this vault. Usernames are compared ignoring case. Pick another.".to_string(),
             Self::NameTaken => "A Contact Group, Message Tag or Saved Search with this name already exists for the account. Names are compared ignoring case. Pick another, or rename the existing one.".to_string(),

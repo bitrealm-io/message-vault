@@ -40,10 +40,13 @@ Seven creating POSTs answer `200 OK`: `/v1/contact-groups`, `/v1/message-tags`,
 `LOCATION` header appear nowhere in `crates/vault/server/src`. A client that
 creates a resource cannot learn its URL from the response.
 
-**A2. Validation failures return `400 Bad Request` with one string, never
-`422 Unprocessable Entity` with a field breakdown.** `ApiError::BadRequest`
-carries a single message (`crates/vault/server/src/server.rs:381`), so a form
-with four bad fields reports one of them at a time.
+**A2. Two kinds of validation failure answer with two different statuses.**
+A JSON body that fails to deserialize passes Axum's `422 Unprocessable Entity`
+straight through, deliberately (`crates/vault/server/src/extract.rs:122`). The
+vault's own validation never uses it: all 78 `ApiError::BadRequest` sites
+answer `400 Bad Request` with a single message
+(`crates/vault/server/src/server.rs:381`), so a form with four bad fields
+reports one of them at a time.
 
 **A3. The `429 Too Many Requests` carries no `Retry-After`.**
 `ApiError::TooManyRequests` (`crates/vault/server/src/server.rs:386`) sends a
@@ -191,21 +194,56 @@ secret with `created_at` and `expires_at`.
   (`crates/vault/server/src/auth.rs:179`), `expires_at` on both session and
   API tokens, and internal error detail kept server-side.
 
+## Decided
+
+**The error body is RFC 7807 problem details.** Every failure answers with a
+Content-Type of `application/problem+json` carrying `type`, `title`, `status`
+and `detail`. A validation failure answers `422 Unprocessable Entity` with
+`errors`, a list of human-readable strings, in place of `detail`. This replaces
+ADR-0005's flat `{error}` shape, so ADR-0005 needs an amendment recorded
+against it.
+
+What the change touches:
+
+- 118 `ApiError` construction sites across `crates/vault/server/src`, each of
+  which carries a message today and needs a problem type.
+- 78 of those are `ApiError::BadRequest`. Classifying them is the whole cost of
+  the change; everything else is mechanical.
+- The web client reads `message` off a `VaultApiError` parsed once in
+  `web/src/lib/api.ts`; that parse moves to `title` and `detail`.
+- Finding A2 closes with it: the vault's own validation moves to
+  `422 Unprocessable Entity`, matching what Axum's deserializer already
+  returns.
+- The form model in `crates/core/message-vault-io-core` already reports
+  validation problems as a `Vec<String>` (`pipeline.rs:87`), which is the shape
+  `errors` wants.
+
+Three sub-questions follow from the shape and are not yet answered:
+
+1. **What the `type` URL points at.** RFC 7807 wants a URL a reader can open.
+   That means a page per problem type under
+   `bitrealm.io/vault/developer/errors/`, or the RFC-legal `about:blank` for
+   problems that carry no more meaning than their status.
+2. **How fine the taxonomy is.** One type per status code costs almost nothing
+   and adds nothing a client could not already read from the status. A type per
+   distinct problem is what makes the body machine-readable, and it means
+   classifying all 78 `BadRequest` sites.
+3. **Whether a request id travels in the body.** RFC 7807 allows extension
+   members, so `request_id` can sit beside `detail` and tie a client's failure
+   to the server log line that already records the full context chain
+   (`server.rs:390`). The referenced specification carries no such field.
+
 ## Open questions
 
-These three have to be answered before the rules can be written, because each
-one changes what the rule says.
+Two remain from the original three. Each changes what the written rule says.
 
-1. **The error body.** Adopt `{"error": {"type", "code", "message",
-   "request_id"}}` with `422 Unprocessable Entity` field breakdowns, which
-   amends ADR-0005's flat `{error}` shape? Or keep the flat shape and accept
-   that clients match on message text?
-2. **Filtering and sorting.** The search language (ADR-0004) already filters
+1. **Filtering and sorting.** The search language (ADR-0004) already filters
    inside `q`. Adopt a standard `sort=-field,field` convention across all five
    list routes while leaving filtering to the search language, and reject
    `fields=` selection as contrary to ADR-0005's "a thing is returned as
    itself"?
-3. **Content negotiation.** Is `406 Not Acceptable` worth implementing for an
-   interface that
-   speaks only `application/json`, given Export selects its format by query
-   parameter rather than by `Accept`?
+2. **Content negotiation.** Is `406 Not Acceptable` worth implementing for an
+   interface that speaks only `application/json`, given Export selects its
+   format by query parameter rather than by `Accept`? The answer now also has
+   to cover `application/problem+json`, which the decision above adds as a
+   second response type.

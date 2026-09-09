@@ -318,3 +318,88 @@ describe("ImportFormFields WhatsApp methods", () => {
     expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
   });
 });
+
+/**
+ * The button the whole form leads to.
+ *
+ * `onImport` was in the props of every test in this file and was asserted in
+ * none of them, over 320 lines. A form whose Import button was wired to
+ * nothing rendered identically and passed: every test read the fields and the
+ * gates, and none pressed the button.
+ */
+describe("ImportFormFields Import button", () => {
+  it("calls onImport when the form is ready", async () => {
+    const user = userEvent.setup();
+    const onImport = vi.fn();
+    renderForm({ onImport });
+
+    await user.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(onImport).toHaveBeenCalledTimes(1);
+  });
+
+  it("is refused while a run is already going, so a second click cannot start one", async () => {
+    const user = userEvent.setup();
+    const onImport = vi.fn();
+    renderForm({ onImport, running: true });
+
+    const button = screen.getByRole("button", { name: "Import" });
+    expect(button).toBeDisabled();
+    await user.click(button);
+
+    expect(onImport).not.toHaveBeenCalled();
+  });
+
+  it("is refused with no backup chosen, which is the one thing an import needs", async () => {
+    const user = userEvent.setup();
+    const onImport = vi.fn();
+    renderForm({ onImport, backupPath: "" });
+
+    await user.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(onImport).not.toHaveBeenCalled();
+  });
+
+  /**
+   * An Android SMS import needs the owner's own number: without it the
+   * exporter cannot tell which side of a conversation the person is, and every
+   * message comes out incoming. The form carries the numbers to `onImport`
+   * rather than leaving the caller to read them back out of state.
+   */
+  it("hands the owner's numbers to onImport for an Android SMS backup", async () => {
+    const user = userEvent.setup();
+    const onImport = vi.fn();
+    renderForm({
+      onImport,
+      source: "sms-backup-restore",
+      backupPath: "/backups/sms.xml",
+      ownerPhones: ["+15555550100"],
+      // The same number is on the account profile, so there is no mismatch to
+      // acknowledge and the form is ready.
+      profilePhones: ["+15555550100"],
+      ownerEmails: "me@example.com",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(onImport).toHaveBeenCalledTimes(1);
+    expect(onImport).toHaveBeenCalledWith(["+15555550100"]);
+  });
+
+  it("refuses an Android SMS backup with no owner number", async () => {
+    const user = userEvent.setup();
+    const onImport = vi.fn();
+    renderForm({
+      onImport,
+      source: "sms-backup-restore",
+      backupPath: "/backups/sms.xml",
+      ownerPhones: [],
+      profilePhones: ["+15555550100"],
+      ownerEmails: "me@example.com",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(onImport).not.toHaveBeenCalled();
+  });
+});

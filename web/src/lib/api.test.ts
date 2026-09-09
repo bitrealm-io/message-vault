@@ -1,10 +1,30 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiClient, problemFromBody, setBaseUrl, VaultApiError } from "./api";
+import { apiClient, getBaseUrl, problemFromBody, setBaseUrl, setToken, VaultApiError } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
   setBaseUrl("");
+  setToken(null);
 });
+
+/** Stub fetch with a 200 and an empty JSON body, returning the spy. */
+function stubOkFetch() {
+  const fetchSpy = vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({}),
+    text: async () => "{}",
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  return fetchSpy;
+}
+
+/** The `[url, init]` pair the client passed to fetch. */
+function lastCall(fetchSpy: ReturnType<typeof vi.fn>): [string, RequestInit] {
+  const call = fetchSpy.mock.calls.at(-1);
+  if (!call) throw new Error("fetch was never called");
+  return call as [string, RequestInit];
+}
 
 const PROBLEM = {
   type: "https://bitrealm.io/vault/developer/reference/errors/invalid-credentials",
@@ -121,5 +141,121 @@ describe("apiClient no-content", () => {
     );
     await expect(apiClient.delete("/v1/contact-groups/7")).resolves.toBeUndefined();
     expect(json).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The request the client actually sends.
+ *
+ * Everything here was untested: the file's tests stubbed fetch and read the
+ * response, so the URL, the Authorization header, the media type and the body
+ * were never looked at. A client that dropped the Bearer token, sent the body
+ * as `[object Object]`, or built the URL without the base would have passed
+ * every one of them, and every screen would have failed against a real vault.
+ */
+describe("apiClient request shape", () => {
+  it("puts the path after the base URL", async () => {
+    const fetchSpy = stubOkFetch();
+    setBaseUrl("https://vault.example.test");
+
+    await apiClient.get("/v1/conversations");
+
+    const [url] = lastCall(fetchSpy);
+    expect(url).toBe("https://vault.example.test/v1/conversations");
+  });
+
+  it("strips trailing slashes off the base URL so the path is not doubled", () => {
+    setBaseUrl("https://vault.example.test///");
+    expect(getBaseUrl()).toBe("https://vault.example.test");
+  });
+
+  it("sends no host of its own when the base URL is empty, so the page's host serves the API", async () => {
+    const fetchSpy = stubOkFetch();
+    setBaseUrl("");
+
+    await apiClient.get("/v1/conversations");
+
+    expect(lastCall(fetchSpy)[0]).toBe("/v1/conversations");
+  });
+
+  it("carries the session token as a Bearer header once one is set", async () => {
+    const fetchSpy = stubOkFetch();
+    setToken("mv-user-abc123");
+
+    await apiClient.get("/v1/session");
+
+    const headers = lastCall(fetchSpy)[1].headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer mv-user-abc123");
+  });
+
+  it("sends no Authorization header while signed out", async () => {
+    const fetchSpy = stubOkFetch();
+    setToken(null);
+
+    await apiClient.post("/v1/session", { username: "matt" });
+
+    const headers = lastCall(fetchSpy)[1].headers as Record<string, string>;
+    expect(headers.Authorization).toBeUndefined();
+  });
+
+  it("serializes the body as JSON under the JSON media type", async () => {
+    const fetchSpy = stubOkFetch();
+
+    await apiClient.post("/v1/contact-groups", { name: "Family", contact_ids: [1, 2] });
+
+    const [, init] = lastCall(fetchSpy);
+    expect(init.method).toBe("POST");
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(JSON.parse(init.body as string)).toEqual({
+      name: "Family",
+      contact_ids: [1, 2],
+    });
+  });
+
+  it('sends no body at all when there is none, rather than the string "undefined"', async () => {
+    const fetchSpy = stubOkFetch();
+
+    await apiClient.post("/v1/session/refresh");
+
+    expect(lastCall(fetchSpy)[1].body).toBeUndefined();
+  });
+
+  it("uses the method the verb names", async () => {
+    const fetchSpy = stubOkFetch();
+
+    await apiClient.get("/v1/a");
+    expect(lastCall(fetchSpy)[1].method).toBe("GET");
+    await apiClient.post("/v1/a");
+    expect(lastCall(fetchSpy)[1].method).toBe("POST");
+    await apiClient.put("/v1/a", {});
+    expect(lastCall(fetchSpy)[1].method).toBe("PUT");
+    await apiClient.patch("/v1/a", {});
+    expect(lastCall(fetchSpy)[1].method).toBe("PATCH");
+    await apiClient.delete("/v1/a");
+    expect(lastCall(fetchSpy)[1].method).toBe("DELETE");
+  });
+
+  it("passes the abort signal through, so a screen that unmounts cancels its request", async () => {
+    const fetchSpy = stubOkFetch();
+    const controller = new AbortController();
+
+    await apiClient.get("/v1/conversations", { signal: controller.signal });
+
+    expect(lastCall(fetchSpy)[1].signal).toBe(controller.signal);
+  });
+
+  it("posts a raw body under its own media type without re-encoding it", async () => {
+    const fetchSpy = stubOkFetch();
+    setToken("mv-user-abc123");
+    const jsonl = '{"schema_version":4}\n{"schema_version":4}\n';
+
+    await apiClient.postRaw("/v1/imports", jsonl, "application/x-ndjson");
+
+    const [, init] = lastCall(fetchSpy);
+    const headers = init.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBe("application/x-ndjson");
+    expect(headers.Authorization).toBe("Bearer mv-user-abc123");
+    expect(init.body).toBe(jsonl);
   });
 });

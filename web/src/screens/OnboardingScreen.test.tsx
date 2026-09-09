@@ -117,7 +117,14 @@ describe("OnboardingScreen", () => {
     // is left guessing why nothing happened.
     expect(screen.queryByRole("textbox", { name: "Account 2 value" })).not.toBeInTheDocument();
     expect(rowValue(1)).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByText("Enter a phone number like +1 555-123-4567.")).toBeInTheDocument();
+    // `findByText`, not `getByText`: when the same message is asked for a
+    // second time outside one gesture, the screen clears the line and brings
+    // it back after REPEATED_ERROR_BLINK_MS so the person can see the field
+    // was rechecked. Typing is slow enough on a loaded machine to cross that
+    // threshold, and a synchronous read lands in the blank window.
+    expect(
+      await screen.findByText("Enter a phone number like +1 555-123-4567."),
+    ).toBeInTheDocument();
   });
 
   it("adds the row once the value is corrected", async () => {
@@ -144,7 +151,14 @@ describe("OnboardingScreen", () => {
     await user.click(screen.getByRole("textbox", { name: "Display Name" }));
 
     expect(rowValue(1)).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByText("Enter a phone number like +1 555-123-4567.")).toBeInTheDocument();
+    // `findByText`, not `getByText`: when the same message is asked for a
+    // second time outside one gesture, the screen clears the line and brings
+    // it back after REPEATED_ERROR_BLINK_MS so the person can see the field
+    // was rechecked. Typing is slow enough on a loaded machine to cross that
+    // threshold, and a synchronous read lands in the blank window.
+    expect(
+      await screen.findByText("Enter a phone number like +1 555-123-4567."),
+    ).toBeInTheDocument();
   });
 
   it("keeps the mark on the row that earned it when another is removed", async () => {
@@ -274,13 +288,22 @@ describe("OnboardingScreen", () => {
 
     await user.type(rowValue(1), "notaphone");
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
-    expect(screen.getByText("Enter a phone number like +1 555-123-4567.")).toBeInTheDocument();
+    // `findByText`, not `getByText`: when the same message is asked for a
+    // second time outside one gesture, the screen clears the line and brings
+    // it back after REPEATED_ERROR_BLINK_MS so the person can see the field
+    // was rechecked. Typing is slow enough on a loaded machine to cross that
+    // threshold, and a synchronous read lands in the blank window.
+    expect(
+      await screen.findByText("Enter a phone number like +1 555-123-4567."),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Text message Account 1 type" }));
     await user.click(screen.getByRole("option", { name: "Email" }));
     await user.click(screen.getByRole("button", { name: "+ Add account" }));
 
-    expect(screen.getByText("Enter an email address like you@example.com.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Enter an email address like you@example.com."),
+    ).toBeInTheDocument();
   });
 
   it("goes back one screen, to login", async () => {

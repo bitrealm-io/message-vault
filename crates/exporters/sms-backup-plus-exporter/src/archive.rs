@@ -17,6 +17,8 @@ use crate::assets::extract_attachments;
 use crate::flat_eml::{MailHeaders, extract_body_text, is_archive_eml};
 use crate::types::{AttachmentBlob, ParsedMessage};
 use anyhow::{Context, Result};
+use chrono::{LocalResult, NaiveDateTime, Offset, TimeZone};
+use chrono_tz::Tz;
 use phone::sanitize_number;
 use regex::Regex;
 use sha2::{Digest, Sha256};
@@ -67,28 +69,98 @@ fn phone_from_from_header(from_hdr: &str) -> String {
     sanitize_number(from_hdr).unwrap_or_default()
 }
 
-/// Unix seconds from an archive line's timestamp, trying each date format the app has used.
-fn parse_archive_timestamp(date_str: &str) -> Option<f64> {
-    use chrono::{Local, LocalResult, TimeZone};
-    for fmt in [
-        "%Y-%m-%d %H:%M:%S",
-        "%Y/%m/%d %H:%M:%S",
-        "%m/%d/%Y %H:%M:%S",
-        "%Y-%m-%dT%H:%M:%S",
-    ] {
-        if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(date_str, fmt) {
-            // Archive body times are local wall-clock, not UTC. DST transitions
-            // make some wall-clock times ambiguous (fall-back) or nonexistent
-            // (spring-forward); keep the earliest interpretation instead of
-            // silently dropping the message.
-            return match Local.from_local_datetime(&naive) {
-                LocalResult::Single(dt) => Some(dt.timestamp() as f64),
-                LocalResult::Ambiguous(earliest, _) => Some(earliest.timestamp() as f64),
+/// The wall clock an archive line names.
+///
+/// Only one format reaches here: [`MESSAGE_HEADER_RE`] admits `YYYY-MM-DD
+/// HH:MM:SS` and nothing else, and it is the gate every line passes through.
+fn parse_archive_naive(date_str: &str) -> Option<NaiveDateTime> {
+    NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d %H:%M:%S").ok()
+}
+
+/// Resolve an archive wall clock in `zone`, and say whether it had to be moved.
+///
+/// A transcript writes a wall clock and no offset, so turning it into an
+/// instant needs a zone. It has to be a named zone rather than a fixed offset:
+/// an archive can run for years, and only the zone knows that the same clock
+/// reading meant one offset in July and another in December.
+///
+/// The two awkward hours of the year are handled rather than dropped. An
+/// ambiguous clock -- the hour repeated when the clocks go back -- resolves to
+/// the earlier of the two. A clock that never happened -- the hour skipped when
+/// they go forward -- is read an hour later and flagged, because losing a
+/// message to a calendar artefact is worse than moving it.
+fn resolve_in_zone(naive: NaiveDateTime, zone: Tz) -> Option<(f64, bool)> {
+    match zone.from_local_datetime(&naive) {
+        LocalResult::Single(dt) => Some((dt.timestamp() as f64, false)),
+        LocalResult::Ambiguous(earliest, _) => Some((earliest.timestamp() as f64, false)),
+        LocalResult::None => {
+            let shifted = naive.checked_add_signed(chrono::TimeDelta::hours(1))?;
+            match zone.from_local_datetime(&shifted) {
+                LocalResult::Single(dt) => Some((dt.timestamp() as f64, true)),
+                LocalResult::Ambiguous(earliest, _) => Some((earliest.timestamp() as f64, true)),
                 LocalResult::None => None,
-            };
+            }
         }
     }
-    None
+}
+
+/// What the mail's own `Date:` header says about the zone the transcript was
+/// written in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ZoneCheck {
+    /// The header agrees with the chosen zone, or there was nothing to compare.
+    Agreed,
+    /// The header pins an offset the chosen zone does not give.
+    Mismatch { derived_secs: i32, chosen_secs: i32 },
+    /// The mail carries no `Date:` header to check against.
+    NoDateHeader,
+    /// A `Date:` header is present but not readable as RFC 2822.
+    DateHeaderUnreadable,
+}
+
+/// Compare the zone the export is using against the one the mail implies.
+///
+/// The transcript names a wall clock with no offset, so the zone is an
+/// assumption. The mail's `Date:` header is the one independent witness: it
+/// records the same moment as the first transcript line, as an instant. The
+/// difference between that instant and the line's wall clock is the offset the
+/// phone was actually on, and comparing it to the chosen zone turns a silent
+/// guess into something the run can report.
+///
+/// The header's *stated* offset is never read, only the instant it encodes.
+/// Mail clients write the field wrong — a file dated in November carrying
+/// `-0400` is real — while the instant stays right.
+fn check_zone_against_header(
+    zone: Tz,
+    date_header: &str,
+    first: Option<NaiveDateTime>,
+) -> ZoneCheck {
+    let Some(first) = first else {
+        return ZoneCheck::Agreed;
+    };
+    if date_header.trim().is_empty() {
+        return ZoneCheck::NoDateHeader;
+    }
+    let Ok(header) = chrono::DateTime::parse_from_rfc2822(date_header) else {
+        return ZoneCheck::DateHeaderUnreadable;
+    };
+    // An offset is local minus UTC, so read the wall clock as if it were UTC
+    // and subtract the instant the header gives.
+    let derived_secs = (first.and_utc().timestamp() - header.timestamp()) as i32;
+    let chosen_secs = zone
+        .offset_from_utc_datetime(&header.naive_utc())
+        .fix()
+        .local_minus_utc();
+    // Both sides are whole seconds and a real disagreement is a whole hour, so
+    // a minute of slack costs nothing.
+    if (derived_secs - chosen_secs).abs() <= 60 {
+        ZoneCheck::Agreed
+    } else {
+        ZoneCheck::Mismatch {
+            derived_secs,
+            chosen_secs,
+        }
+    }
 }
 
 /// Guess which MIME attachments belong to which archive body lines.
@@ -144,17 +216,33 @@ fn assign_archive_attachments(messages: &mut [ParsedMessage], att_queue: Vec<Att
     }
 }
 
+/// What one archive `.eml` yielded.
+pub(crate) struct ArchiveParse {
+    pub messages: Vec<ParsedMessage>,
+    /// Dated blocks dropped because their timestamp could not be read.
+    pub skipped_invalid_date: u64,
+    /// Blocks whose wall clock does not exist in the zone and were moved an hour.
+    pub dst_gap_shifted: u64,
+    /// What the mail's `Date:` header says about the zone in use.
+    pub zone_check: ZoneCheck,
+}
+
 /// Parse a consolidated `SMS archive …` EML into multiple messages.
 ///
-/// Returns the messages and how many dated blocks were dropped for an
-/// unreadable timestamp.
+/// `zone` resolves the transcript's wall-clock times; see [`resolve_in_zone`].
 pub(crate) fn parse_archive_eml_mail(
     path: &Path,
     mail: &mailparse::ParsedMail<'_>,
     headers: &MailHeaders,
-) -> Result<(Vec<ParsedMessage>, u64)> {
+    zone: Tz,
+) -> Result<ArchiveParse> {
     if !is_archive_eml(headers) {
-        return Ok((Vec::new(), 0));
+        return Ok(ArchiveParse {
+            messages: Vec::new(),
+            skipped_invalid_date: 0,
+            dst_gap_shifted: 0,
+            zone_check: ZoneCheck::Agreed,
+        });
     }
     let caps = ARCHIVE_SUBJECT_RE
         .captures(headers.subject.trim())
@@ -164,18 +252,32 @@ pub(crate) fn parse_archive_eml_mail(
         phone_from_from_header(&headers.from),
     );
 
-    let file_key = hex::encode(Sha256::digest(path.to_string_lossy().as_bytes()));
-    let attachments = extract_attachments(mail, 0.0, Some(&file_key[..12.min(file_key.len())]));
-
-    let mut reader = ArchiveReader::new(peer);
+    let mut reader = ArchiveReader::new(peer, zone);
     for line in extract_body_text(mail).lines() {
         reader.feed(line);
     }
-    let (mut messages, skipped_invalid_date) = reader.finish();
+    let (mut messages, skipped_invalid_date, dst_gap_shifted, first_naive) = reader.finish();
+
+    // Attachments are named after the conversation's first message, so the
+    // prefix is a real time in the export's zone rather than the Unix epoch
+    // rendered wherever the exporting machine happens to sit.
+    let file_key = hex::encode(Sha256::digest(path.to_string_lossy().as_bytes()));
+    let first_ms = messages.first().map_or(0.0, |m| m.timestamp_secs * 1000.0);
+    let attachments = extract_attachments(
+        mail,
+        first_ms,
+        zone,
+        Some(&file_key[..12.min(file_key.len())]),
+    );
     assign_archive_attachments(&mut messages, attachments);
     // Drop messages that ended up with neither text nor attachments.
     messages.retain(|m| !m.text.trim().is_empty() || !m.attachments.is_empty());
-    Ok((messages, skipped_invalid_date))
+    Ok(ArchiveParse {
+        messages,
+        skipped_invalid_date,
+        dst_gap_shifted,
+        zone_check: check_zone_against_header(zone, &headers.date, first_naive),
+    })
 }
 
 /// The other party of an archive: the name from the subject and the number
@@ -238,19 +340,29 @@ struct OpenMessage {
 /// skipped.
 struct ArchiveReader {
     peer: ArchivePeer,
+    /// The zone every wall clock in this transcript is read in.
+    zone: Tz,
     messages: Vec<ParsedMessage>,
     skipped_invalid_date: u64,
+    /// Blocks whose wall clock does not exist in `zone` and were moved an hour.
+    dst_gap_shifted: u64,
+    /// The first wall clock that parsed, kept to check `zone` against the
+    /// mail's `Date:` header.
+    first_naive: Option<NaiveDateTime>,
     open: Option<OpenMessage>,
     /// Whether the preamble (the contact name, a bare date) has been passed.
     past_preamble: bool,
 }
 
 impl ArchiveReader {
-    fn new(peer: ArchivePeer) -> Self {
+    fn new(peer: ArchivePeer, zone: Tz) -> Self {
         Self {
             peer,
+            zone,
             messages: Vec::new(),
             skipped_invalid_date: 0,
+            dst_gap_shifted: 0,
+            first_naive: None,
             open: None,
             past_preamble: false,
         }
@@ -299,10 +411,20 @@ impl ArchiveReader {
         let Some(open) = self.open.take() else {
             return;
         };
-        let Some(timestamp_secs) = parse_archive_timestamp(&open.date) else {
+        let Some(naive) = parse_archive_naive(&open.date) else {
             self.skipped_invalid_date += 1;
             return;
         };
+        let Some((timestamp_secs, shifted)) = resolve_in_zone(naive, self.zone) else {
+            self.skipped_invalid_date += 1;
+            return;
+        };
+        if shifted {
+            self.dst_gap_shifted += 1;
+        }
+        if self.first_naive.is_none() {
+            self.first_naive = Some(naive);
+        }
         let text = open
             .lines
             .iter()
@@ -316,16 +438,25 @@ impl ArchiveReader {
             .push(self.peer.message(timestamp_secs, is_from_me, text));
     }
 
-    /// Close the last block and return the messages with the skipped count.
-    fn finish(mut self) -> (Vec<ParsedMessage>, u64) {
+    /// Close the last block and return the messages with the run's counts.
+    fn finish(mut self) -> (Vec<ParsedMessage>, u64, u64, Option<NaiveDateTime>) {
         self.flush();
-        (self.messages, self.skipped_invalid_date)
+        (
+            self.messages,
+            self.skipped_invalid_date,
+            self.dst_gap_shifted,
+            self.first_naive,
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The zone these tests read wall clocks in. Naming one is the point of
+    /// issue #523: the answer must not depend on the machine running them.
+    const ZONE: Tz = chrono_tz::America::New_York;
 
     #[test]
     fn parses_archive_thread() {
@@ -348,7 +479,9 @@ Thanks\r\n",
         let bytes = std::fs::read(&path).unwrap();
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
-        let (msgs, _) = parse_archive_eml_mail(&path, &mail, &headers).unwrap();
+        let msgs = parse_archive_eml_mail(&path, &mail, &headers, ZONE)
+            .unwrap()
+            .messages;
         assert_eq!(msgs.len(), 2);
         assert!(msgs[0].is_from_me);
         assert_eq!(msgs[0].text, "Check this");
@@ -392,7 +525,9 @@ Thanks\r\n",
         let bytes = std::fs::read(&path).unwrap();
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
-        let (msgs, _) = parse_archive_eml_mail(&path, &mail, &headers).unwrap();
+        let msgs = parse_archive_eml_mail(&path, &mail, &headers, ZONE)
+            .unwrap()
+            .messages;
         assert_eq!(msgs.len(), 2);
         // A text that is just a date is content, not a separator.
         assert_eq!(msgs[0].text, "2020-01-02");
@@ -418,7 +553,9 @@ Hi there\r\n",
         let bytes = std::fs::read(&path).unwrap();
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
-        let (msgs, _) = parse_archive_eml_mail(&path, &mail, &headers).unwrap();
+        let msgs = parse_archive_eml_mail(&path, &mail, &headers, ZONE)
+            .unwrap()
+            .messages;
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].chat_key, "");
         // The archive names the peer and records no address, so the chat is
@@ -448,7 +585,8 @@ Thanks\r\n",
         let bytes = std::fs::read(&path).unwrap();
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
-        let (msgs, skipped) = parse_archive_eml_mail(&path, &mail, &headers).unwrap();
+        let parsed = parse_archive_eml_mail(&path, &mail, &headers, ZONE).unwrap();
+        let (msgs, skipped) = (parsed.messages, parsed.skipped_invalid_date);
         assert_eq!(skipped, 1);
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].text, "Thanks");
@@ -493,7 +631,128 @@ Thanks\r\n",
         let bytes = std::fs::read(&path).unwrap();
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
-        parse_archive_eml_mail(&path, &mail, &headers).unwrap().0
+        parse_archive_eml_mail(&path, &mail, &headers, ZONE)
+            .unwrap()
+            .messages
+    }
+
+    /// Build an archive `.eml` with the given `Date:` header and body lines.
+    fn archive_eml(date_header: &str, body: &str) -> String {
+        let date_line = if date_header.is_empty() {
+            String::new()
+        } else {
+            format!("Date: {date_header}\r\n")
+        };
+        format!(
+            "From: <4075551234@sms-backup-plus.local>\r\n\
+             To: me@example.com\r\n\
+             Subject: SMS archive Alice\r\n\
+             {date_line}Content-Type: text/plain; charset=utf-8\r\n\
+             \r\n\
+             Alice\r\n{body}"
+        )
+    }
+
+    /// Parse an inline archive body in `ZONE`.
+    fn parse_inline(date_header: &str, body: &str) -> ArchiveParse {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("archive.eml");
+        std::fs::write(&path, archive_eml(date_header, body)).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        let mail = mailparse::parse_mail(&bytes).unwrap();
+        let headers = MailHeaders::from_mail(&mail);
+        parse_archive_eml_mail(&path, &mail, &headers, ZONE).unwrap()
+    }
+
+    #[test]
+    fn one_archive_can_span_a_daylight_saving_change() {
+        // The reason a zone is required and a fixed offset is not enough: the
+        // same wall clock is five hours behind UTC in January and four in July,
+        // and archives routinely run for years.
+        let parsed = parse_inline(
+            "",
+            "2018-01-15 12:00:00 - Me\r\nwinter\r\n2018-07-15 12:00:00 - Me\r\nsummer\r\n",
+        );
+        assert_eq!(parsed.messages.len(), 2);
+        assert_eq!(parsed.messages[0].timestamp_secs as i64, 1_516_035_600); // 17:00 UTC, EST
+        assert_eq!(parsed.messages[1].timestamp_secs as i64, 1_531_670_400); // 16:00 UTC, EDT
+    }
+
+    #[test]
+    fn the_repeated_hour_resolves_to_the_earlier_reading() {
+        // 01:30 happens twice on the day the clocks go back. Picking the first
+        // keeps the transcript in order.
+        let parsed = parse_inline("", "2018-11-04 01:30:00 - Me\r\nfall back\r\n");
+        assert_eq!(parsed.messages[0].timestamp_secs as i64, 1_541_309_400);
+        assert_eq!(parsed.dst_gap_shifted, 0);
+    }
+
+    #[test]
+    fn a_clock_that_never_happened_is_moved_rather_than_dropped() {
+        // 02:30 does not exist on the day the clocks go forward. Losing the
+        // message to a calendar artefact would be worse than moving it, so it
+        // is read an hour later and counted.
+        let parsed = parse_inline("", "2018-03-11 02:30:00 - Me\r\nspring forward\r\n");
+        assert_eq!(parsed.messages.len(), 1);
+        assert_eq!(parsed.messages[0].timestamp_secs as i64, 1_520_753_400);
+        assert_eq!(parsed.dst_gap_shifted, 1);
+        assert_eq!(parsed.skipped_invalid_date, 0);
+    }
+
+    #[test]
+    fn the_date_header_agreeing_with_the_zone_is_silent() {
+        // Noon in New York in July is 16:00 UTC, which is what the header says.
+        let parsed = parse_inline(
+            "Sun, 15 Jul 2018 16:00:00 +0000",
+            "2018-07-15 12:00:00 - Me\r\nhello\r\n",
+        );
+        assert_eq!(parsed.zone_check, ZoneCheck::Agreed);
+    }
+
+    #[test]
+    fn a_date_header_that_disagrees_with_the_zone_is_reported() {
+        // The header puts the same message an hour earlier than New York would,
+        // so the phone was somewhere else. This is the real case: four files
+        // measured were a phone sitting five hours behind UTC in May.
+        let parsed = parse_inline(
+            "Sun, 15 Jul 2018 17:00:00 +0000",
+            "2018-07-15 12:00:00 - Me\r\nhello\r\n",
+        );
+        assert_eq!(
+            parsed.zone_check,
+            ZoneCheck::Mismatch {
+                derived_secs: -18000,
+                chosen_secs: -14400,
+            }
+        );
+    }
+
+    #[test]
+    fn the_headers_stated_offset_is_never_read_only_its_instant() {
+        // Mail clients write the offset field wrong -- a November file claiming
+        // -0400 is real -- while the instant it encodes stays right. Both of
+        // these name the same moment and must both agree with the zone.
+        for header in [
+            "Thu, 15 Nov 2018 17:00:00 +0000",
+            "Thu, 15 Nov 2018 13:00:00 -0400",
+        ] {
+            let parsed = parse_inline(header, "2018-11-15 12:00:00 - Me\r\nhello\r\n");
+            assert_eq!(parsed.zone_check, ZoneCheck::Agreed, "{header}");
+        }
+    }
+
+    #[test]
+    fn an_archive_without_a_date_header_has_nothing_to_check_against() {
+        let parsed = parse_inline("", "2018-07-15 12:00:00 - Me\r\nhello\r\n");
+        assert_eq!(parsed.zone_check, ZoneCheck::NoDateHeader);
+    }
+
+    #[test]
+    fn an_unreadable_date_header_is_counted_separately_from_a_missing_one() {
+        // Worth telling apart: a header the parser cannot read would otherwise
+        // look like agreement and the check would quietly do nothing.
+        let parsed = parse_inline("not a date at all", "2018-07-15 12:00:00 - Me\r\nhi\r\n");
+        assert_eq!(parsed.zone_check, ZoneCheck::DateHeaderUnreadable);
     }
 
     #[test]

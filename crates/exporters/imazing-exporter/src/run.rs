@@ -20,7 +20,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
         convert_export(ConvertExportArgs {
             input,
             output: &config.output,
-            timezone: config.timezone.as_deref(),
+            time_zone: config.time_zone,
             transforms,
             output_format: config.output_format,
             cancel: config.cancel.as_ref(),

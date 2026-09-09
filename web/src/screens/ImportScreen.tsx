@@ -185,6 +185,10 @@ export default function ImportScreen() {
   const [ownerPhones, setOwnerPhones] = useState<string[]>([]);
   /** Owner email addresses as typed; split into a list when the import starts. */
   const [ownerEmails, setOwnerEmails] = useState("");
+  // Read straight from the account profile every time rather than seeded into
+  // an editable field: the zone is the account's, and the Import form is not
+  // where it is changed.
+  const [profileTimeZone, setProfileTimeZone] = useState("");
   const [formatOpen, setFormatOpen] = useState(true);
   const [processingOpen, setProcessingOpen] = useState(false);
   const [force, setForce] = useState(false);
@@ -447,6 +451,7 @@ export default function ImportScreen() {
         if (cancelled) return;
         if (!profile) throw new Error("profile unavailable");
         setProfilePhones([...profile.phones]);
+        setProfileTimeZone(profile.time_zone ?? "");
         setProfilePhonesError(false);
         setProfilePhonesReady(true);
         if (wantsEmails && profile.emails.length > 0 && !ownerEmailsSeededRef.current) {
@@ -465,6 +470,7 @@ export default function ImportScreen() {
       } catch {
         if (!cancelled) {
           setProfilePhones([]);
+          setProfileTimeZone("");
           setProfilePhonesError(true);
           setProfilePhonesReady(true);
         }
@@ -738,6 +744,7 @@ export default function ImportScreen() {
               minSizeMb,
               ownerPhones: flushedPhones ?? ownerPhones,
               ownerEmails: splitEmails(ownerEmails),
+              timeZone: profileTimeZone,
               force,
               obfuscate,
               isAndroidSms,

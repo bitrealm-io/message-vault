@@ -136,7 +136,7 @@ fn config(db_path: &Path, output: &Path, cancel: Option<Arc<AtomicBool>>) -> Exp
     ExporterConfig {
         inputs: vec![db_path.to_path_buf()],
         output: output.to_path_buf(),
-        timezone: None,
+        time_zone: None,
         obfuscate: Default::default(),
         media: MediaConfig::default(),
         cancel,

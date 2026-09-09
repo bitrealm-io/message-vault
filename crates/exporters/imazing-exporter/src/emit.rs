@@ -5,8 +5,7 @@ use crate::attachments::{AttachmentIndex, ResolveAttachmentArgs, resolve_attachm
 use crate::attachments_emit::{attachment_guid_materials, pending_attachment_to_ir};
 use crate::parse::{DiscoveredCsv, RawRow, SourceKind, discover_csv_files, parse_csv_file};
 use crate::parse_emit::{
-    PeerInfo, TzMode, collect_peer_info, is_notification, is_outgoing, parse_message_date,
-    resolve_sender, resolve_tz,
+    PeerInfo, collect_peer_info, is_notification, is_outgoing, parse_message_date, resolve_sender,
 };
 use anyhow::Result;
 use message_ir::{
@@ -45,7 +44,7 @@ impl TransportFamily {
 pub(crate) struct ConvertExportArgs<'a> {
     pub input: &'a Path,
     pub output: &'a Path,
-    pub timezone: Option<&'a str>,
+    pub time_zone: Option<chrono_tz::Tz>,
     pub transforms: ExportTransforms,
     pub output_format: OutputFormat,
     pub cancel: Option<&'a CancelFlag>,
@@ -56,7 +55,8 @@ pub(crate) struct ConvertExportArgs<'a> {
 
 /// Convert iMazing Messages / WhatsApp CSV(s) under `input`.
 ///
-/// `timezone`: fixed UTC offset (e.g. `UTC-05:00`). When `None`, use the host local zone.
+/// `time_zone`: the named zone wall-clock times are read in. When `None`, the
+/// host zone is used, which makes the result machine-dependent.
 /// When `transforms` copies attachments, media files are copied into `output/attachments/`.
 /// When `cancel` is set, cooperative cancellation is checked between CSV files.
 ///
@@ -70,20 +70,19 @@ pub(crate) fn convert_export(
     let ConvertExportArgs {
         input,
         output,
-        timezone,
+        time_zone,
         transforms,
         output_format,
         cancel,
         resume,
     } = args;
-    let tz = resolve_tz(timezone)?;
     let (inputs, output) = prepare_outputs(&[input.to_path_buf()], output)?;
     let input = &inputs[0];
     let writer = ExportWriter::open(&output, output_format, transforms, resume)?;
     let copy_attachments = writer.copies_attachments();
 
     let mut ingest = Ingest {
-        tz,
+        tz: time_zone,
         // Walk the input tree once; per-attachment lookups hit this index.
         attachment_index: copy_attachments.then(|| AttachmentIndex::build(input)),
         copy_attachments,
@@ -144,7 +143,7 @@ pub(crate) fn convert_export(
 
 /// Parse-time state shared across every CSV file in one export.
 struct Ingest {
-    tz: TzMode,
+    tz: Option<chrono_tz::Tz>,
     attachment_index: Option<AttachmentIndex>,
     copy_attachments: bool,
     /// Keyed by `<family>|<chat id>` so a Messages chat and a WhatsApp chat
@@ -238,7 +237,7 @@ impl Ingest {
         peer: &PeerInfo,
         convo_key: &str,
     ) -> Option<PendingMessage> {
-        let Some((secs, date_ms)) = parse_message_date(&row.message_date, &self.tz) else {
+        let Some((secs, date_ms)) = parse_message_date(&row.message_date, self.tz) else {
             self.report.skipped_invalid_date += 1;
             return None;
         };

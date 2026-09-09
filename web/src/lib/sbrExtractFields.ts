@@ -29,6 +29,7 @@ export function sbrExtractFields(args: {
   minSizeMb: string;
   ownerPhones: string[];
   ownerEmails?: string[];
+  timeZone?: string;
   obfuscate: boolean;
 }): Pick<
   ExtractConfig,
@@ -38,12 +39,14 @@ export function sbrExtractFields(args: {
   | "media_min_size"
   | "owner_phones"
   | "owner_emails"
+  | "time_zone"
   | "obfuscate"
 > {
   return {
     ...mediaExtractFields(args),
     owner_phones: args.ownerPhones,
     ...(args.ownerEmails && args.ownerEmails.length > 0 ? { owner_emails: args.ownerEmails } : {}),
+    ...(args.timeZone ? { time_zone: args.timeZone } : {}),
     obfuscate: args.obfuscate,
   };
 }

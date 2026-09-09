@@ -158,8 +158,11 @@ pub struct Form {
     pub owner_phones: String,
     /// Comma-separated owner email addresses (marks outgoing messages).
     pub owner_emails: String,
-    /// Optional fixed UTC offset (e.g. `UTC-05:00`) for naive timestamps.
-    pub timezone: String,
+    /// IANA time zone name (e.g. `America/New_York`) for naive timestamps.
+    ///
+    /// Text, because a form field is what someone typed; it is parsed once in
+    /// [`Form::to_config`] and a bad name joins the other validation errors.
+    pub time_zone: String,
     /// Whether to rewrite output with stable fake identities.
     pub obfuscate: bool,
     /// Optional hex seed for reproducible obfuscation.
@@ -211,7 +214,7 @@ impl Default for Form {
             output: String::new(),
             owner_phones: String::new(),
             owner_emails: String::new(),
-            timezone: String::new(),
+            time_zone: String::new(),
             obfuscate: false,
             obfuscate_seed: String::new(),
             advanced: false,
@@ -293,7 +296,7 @@ impl Form {
         ExporterConfig {
             inputs,
             output: PathBuf::from(self.output.trim()),
-            timezone: None,
+            time_zone: None,
             obfuscate,
             media,
             cancel: None,
@@ -338,7 +341,7 @@ impl Form {
         ExporterConfig {
             inputs,
             output: PathBuf::from(self.output.trim()),
-            timezone: None,
+            time_zone: None,
             obfuscate,
             media,
             cancel: None,
@@ -359,7 +362,7 @@ impl Form {
         }
     }
 
-    /// Build an iMazing config, pushing path and timezone problems onto `errors`.
+    /// Build an iMazing config, pushing path and time-zone problems onto `errors`.
     fn to_imazing_config(
         &self,
         obfuscate: ObfuscateConfig,
@@ -368,11 +371,11 @@ impl Form {
         let input = require_single_existing_path(&self.input, "Input", errors);
         required_text(&self.output, "Output", errors);
         let media = self.validate_media(errors);
-        let timezone = message_ir::nonempty(&self.timezone);
+        let time_zone = self.parse_time_zone(errors, false);
         ExporterConfig {
             inputs: input.into_iter().collect(),
             output: PathBuf::from(self.output.trim()),
-            timezone,
+            time_zone,
             obfuscate,
             media,
             cancel: None,
@@ -396,7 +399,7 @@ impl Form {
         ExporterConfig {
             inputs: input.into_iter().collect(),
             output: PathBuf::from(self.output.trim()),
-            timezone: None,
+            time_zone: None,
             obfuscate,
             media,
             cancel: None,
@@ -418,7 +421,7 @@ impl Form {
         ExporterConfig {
             inputs,
             output: PathBuf::from(self.output.trim()),
-            timezone: None,
+            time_zone: None,
             obfuscate,
             media,
             cancel: None,
@@ -440,7 +443,7 @@ impl Form {
         ExporterConfig {
             inputs,
             output: PathBuf::from(self.output.trim()),
-            timezone: None,
+            time_zone: None,
             obfuscate,
             media,
             cancel: None,
@@ -466,10 +469,13 @@ impl Form {
         if owner_emails.is_empty() {
             errors.push("At least one email address is required.".into());
         }
+        // Archive transcripts carry a wall clock and no offset, so this
+        // exporter cannot resolve a time without a zone and must not guess one.
+        let time_zone = self.parse_time_zone(errors, true);
         ExporterConfig {
             inputs,
             output: PathBuf::from(self.output.trim()),
-            timezone: None,
+            time_zone,
             obfuscate,
             media,
             cancel: None,
@@ -502,6 +508,30 @@ impl Form {
     }
 
     /// Media options for Android exporters (always validate compress settings).
+    /// The named time zone, pushing a problem onto `errors` when it cannot be
+    /// used.
+    ///
+    /// Parsed once here rather than inside each exporter, so a bad name is one
+    /// message beside the other form errors instead of a failure per file.
+    /// `required` says whether an empty field is itself an error: an exporter
+    /// reading wall-clock times has no sane default to fall back on.
+    fn parse_time_zone(&self, errors: &mut Vec<String>, required: bool) -> Option<chrono_tz::Tz> {
+        let name = self.time_zone.trim();
+        if name.is_empty() {
+            if required {
+                errors.push("A time zone is required.".into());
+            }
+            return None;
+        }
+        match name.parse::<chrono_tz::Tz>() {
+            Ok(zone) => Some(zone),
+            Err(_) => {
+                errors.push(format!("Unknown time zone: {name}."));
+                None
+            }
+        }
+    }
+
     fn validate_media(&self, errors: &mut Vec<String>) -> MediaConfig {
         let mode = self.attachment_media.media_mode();
         let obfuscate_active = self.obfuscate || !self.obfuscate_seed.trim().is_empty();
@@ -685,6 +715,7 @@ mod tests {
             output: "out".into(),
             owner_phones: "+15555550100\n+15555550101".into(),
             owner_emails: "me@example.com".into(),
+            time_zone: "America/New_York".into(),
             ..Form::default()
         };
         let config = form.to_config(Exporter::SmsBackupPlus).unwrap();
@@ -794,18 +825,76 @@ mod tests {
     }
 
     #[test]
-    fn imazing_passes_timezone_to_config() {
+    fn imazing_passes_a_named_zone_to_config() {
         let form = Form {
             input: std::env::current_dir().unwrap().display().to_string(),
             output: "out".into(),
-            timezone: "UTC-05:00".into(),
+            time_zone: "America/New_York".into(),
             ..Form::default()
         };
         let config = form.to_config(Exporter::Imazing).unwrap();
         let SourceConfig::Imazing(_) = &config.source else {
             panic!("expected Imazing");
         };
-        assert_eq!(config.timezone.as_deref(), Some("UTC-05:00"));
+        assert_eq!(config.time_zone, Some(chrono_tz::America::New_York));
+    }
+
+    /// The form takes an IANA zone name. A fixed offset cannot express a zone
+    /// that observes daylight saving, which is what a multi-year backup needs.
+    #[test]
+    fn a_fixed_utc_offset_is_not_a_time_zone() {
+        let form = Form {
+            input: std::env::current_dir().unwrap().display().to_string(),
+            output: "out".into(),
+            time_zone: "UTC-05:00".into(),
+            ..Form::default()
+        };
+        let errors = form.to_config(Exporter::Imazing).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e.contains("Unknown time zone")),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn sms_backup_plus_requires_a_time_zone() {
+        // Archive transcripts are wall-clock with no offset, so there is no
+        // sane default: the exporter must be told, not left to guess.
+        let form = sms_plus_form("");
+        let errors = form.to_config(Exporter::SmsBackupPlus).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e == "A time zone is required."),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn sms_backup_plus_rejects_an_unknown_time_zone() {
+        let form = sms_plus_form("Not/AZone");
+        let errors = form.to_config(Exporter::SmsBackupPlus).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e == "Unknown time zone: Not/AZone."),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn sms_backup_plus_passes_its_zone_through() {
+        let form = sms_plus_form("America/New_York");
+        let config = form.to_config(Exporter::SmsBackupPlus).unwrap();
+        assert_eq!(config.time_zone, Some(chrono_tz::America::New_York));
+    }
+
+    /// An otherwise valid SMS Backup+ form carrying `time_zone`.
+    fn sms_plus_form(time_zone: &str) -> Form {
+        Form {
+            input: std::env::current_dir().unwrap().display().to_string(),
+            output: "out".into(),
+            owner_phones: "+15555550100".into(),
+            owner_emails: "owner@example.com".into(),
+            time_zone: time_zone.into(),
+            ..Form::default()
+        }
     }
 
     #[test]

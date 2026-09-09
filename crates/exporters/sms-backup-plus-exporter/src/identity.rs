@@ -8,7 +8,7 @@
 //! Collapsing whitespace in the text avoids two identities for tiny export
 //! differences.
 
-use chrono::{DateTime, Local, TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 
 use crate::types::ParsedMessage;
 
@@ -51,17 +51,19 @@ pub(crate) fn timestamp_ms(timestamp_secs: f64) -> i64 {
     (timestamp_secs * 1000.0).round() as i64
 }
 
-/// Local wall-clock time for a Unix second, if representable.
+/// Wall-clock time in `zone` for a Unix second, if representable.
 ///
-/// Tries local interpretation, then UTC mapped to local. Returns `None` when
-/// the instant is out of range for chrono (callers that need a non-panicking
-/// filename prefix may fall back to the Unix epoch themselves).
-pub(crate) fn local_datetime_from_secs(secs: i64) -> Option<DateTime<Local>> {
-    Local.timestamp_opt(secs, 0).single().or_else(|| {
-        Utc.timestamp_opt(secs, 0)
-            .single()
-            .map(|utc| utc.with_timezone(&Local))
-    })
+/// The zone is passed in rather than read from the host, so an attachment
+/// filename does not change with the machine that wrote it. Returns `None`
+/// when the instant is out of range for chrono (callers that need a
+/// non-panicking filename prefix may fall back to the Unix epoch themselves).
+pub(crate) fn datetime_from_secs(
+    secs: i64,
+    zone: chrono_tz::Tz,
+) -> Option<DateTime<chrono_tz::Tz>> {
+    Utc.timestamp_opt(secs, 0)
+        .single()
+        .map(|utc| utc.with_timezone(&zone))
 }
 
 /// Clean the body text before fingerprinting.

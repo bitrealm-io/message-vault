@@ -9,6 +9,7 @@ autotests = false
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
+chrono-tz = { workspace = true }
 csv = { workspace = true }
 contacts = { path = "../../libs/contacts" }
 message-csv = { path = "../../libs/csv" }

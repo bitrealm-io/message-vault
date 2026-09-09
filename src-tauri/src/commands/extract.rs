@@ -152,6 +152,10 @@ pub struct ExtractArgs {
     /// Owner email addresses for SMS Backup+, whose archive is Gmail-backed
     /// and needs them to tell sent mail from received.
     pub owner_emails: Option<Vec<String>>,
+    /// The account's IANA time zone, e.g. `America/New_York`. SMS Backup+
+    /// archive transcripts carry a wall clock with no offset and are resolved
+    /// in it.
+    pub time_zone: Option<String>,
     /// Alternate folder for Attachments and StickerCache (Mac and jailbreak).
     pub attachment_root: Option<String>,
     /// Path to an Apple AddressBook file (Mac and jailbreak).
@@ -200,6 +204,7 @@ pub fn extract(
         // pass through unchanged.
         owner_phones: args.owner_phones.unwrap_or_default(),
         owner_emails: args.owner_emails.unwrap_or_default(),
+        time_zone: args.time_zone.unwrap_or_default(),
         attachment_root: args.attachment_root.unwrap_or_default(),
         apple_contacts: args.apple_contacts.unwrap_or_default(),
         whatsapp_key: args.whatsapp_key.unwrap_or_default(),
@@ -285,6 +290,7 @@ struct ExtractOptions {
     obfuscate: bool,
     owner_phones: Vec<String>,
     owner_emails: Vec<String>,
+    time_zone: String,
     attachment_root: String,
     apple_contacts: String,
     whatsapp_key: String,
@@ -457,6 +463,7 @@ fn build_exporter_config(
             form.input = path.to_string();
             form.owner_phones = options.owner_phones.join("\n");
             form.owner_emails = options.owner_emails.join("\n");
+            form.time_zone.clone_from(&options.time_zone);
             Exporter::SmsBackupPlus
         }
         "openextract" => {

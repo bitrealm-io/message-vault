@@ -10,7 +10,7 @@ fn convert(input: &Path, output: &Path) -> Result<(ExportReport, FormatSinkResul
     convert_export(ConvertExportArgs {
         input,
         output,
-        timezone: Some("UTC"),
+        time_zone: Some(chrono_tz::UTC),
         transforms: ExportTransforms::none(),
         output_format: OutputFormat::Csv,
         cancel: None,
@@ -159,7 +159,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
         convert_export(ConvertExportArgs {
             input: &messages,
             output: tmp.path(),
-            timezone: Some("UTC"),
+            time_zone: Some(chrono_tz::UTC),
             transforms: ExportTransforms::none(),
             output_format: OutputFormat::Jsonl,
             cancel: None,

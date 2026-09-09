@@ -233,6 +233,8 @@ export type ImportJobFormValues = {
   ownerPhones: string[];
   /** Owner email addresses; only SMS Backup+ reads them. */
   ownerEmails: string[];
+  /** The account's IANA time zone; SMS Backup+ reads archive wall clocks in it. */
+  timeZone: string;
   force: boolean;
   obfuscate: boolean;
   /** True for the Android SMS sources, whose extract carries owner phones. */
@@ -1009,6 +1011,7 @@ export function useImportJob() {
                   minSizeMb: form.minSizeMb,
                   ownerPhones: form.ownerPhones,
                   ownerEmails: form.ownerEmails,
+                  timeZone: form.timeZone,
                   obfuscate: form.obfuscate,
                 })
               : {}),

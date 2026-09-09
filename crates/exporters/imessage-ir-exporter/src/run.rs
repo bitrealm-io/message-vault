@@ -292,7 +292,7 @@ mod tests {
         ExporterConfig {
             inputs: vec![input.to_path_buf()],
             output: input.with_extension("export_out"),
-            timezone: None,
+            time_zone: None,
             obfuscate: Default::default(),
             media: MediaConfig::default(),
             cancel: None,

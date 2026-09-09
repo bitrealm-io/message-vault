@@ -286,6 +286,8 @@ pub(crate) struct ConvertExportArgs<'a, P: AsRef<Path>> {
     pub output_dir: &'a Path,
     pub owner_phones: &'a [String],
     pub owner_emails: &'a [String],
+    /// The zone archive wall-clock times are resolved in.
+    pub time_zone: chrono_tz::Tz,
     pub verbose: bool,
     pub transforms: ExportTransforms,
     pub output_format: OutputFormat,
@@ -316,6 +318,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
         output_dir,
         owner_phones,
         owner_emails,
+        time_zone,
         verbose,
         transforms,
         output_format,
@@ -357,6 +360,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
         input_roots: inputs,
         owner_digits,
         owner_emails_lc,
+        zone: time_zone,
     };
     let mut ingest = EmlIngest::new(writer.copies_attachments(), eml_paths.len());
     parse_all_emls(&eml_paths, &parse, cancel, verbose, &mut ingest)?;
@@ -417,12 +421,24 @@ struct ParseInputs {
     file_inputs: HashSet<PathBuf>,
     owner_digits: HashSet<String>,
     owner_emails_lc: Vec<String>,
+    /// The zone archive wall-clock times are resolved in.
+    zone: chrono_tz::Tz,
 }
 
 /// How many EMLs one parallel batch parses before its results are folded in.
 ///
 /// Chunking keeps attachment payloads from all being held in memory at once.
 const EML_PARSE_CHUNK: usize = 256;
+
+/// How many zone-mismatch lines one run writes before it only counts them.
+const MAX_ZONE_NOTES: usize = 20;
+
+/// A UTC offset in seconds as `UTC-05:00`, for a person reading the summary.
+fn offset_label(secs: i32) -> String {
+    let sign = if secs < 0 { '-' } else { '+' };
+    let secs = secs.abs();
+    format!("UTC{sign}{:02}:{:02}", secs / 3600, (secs % 3600) / 60)
+}
 
 /// Parse every EML in parallel chunks and fold the outcomes into `ingest`.
 ///
@@ -470,6 +486,7 @@ fn parse_eml_path(
         rel_path,
         &inputs.owner_digits,
         &inputs.owner_emails_lc,
+        inputs.zone,
     )
 }
 
@@ -484,6 +501,9 @@ struct EmlIngest {
     /// the shared `PendingConversation` carries document data only.
     by_identity: HashMap<String, HashMap<String, usize>>,
     report: ExportReport,
+    /// How many zone-mismatch lines have been written, so a corpus where every
+    /// file disagrees does not bury the rest of the summary.
+    zone_notes: usize,
 }
 
 impl EmlIngest {
@@ -495,6 +515,39 @@ impl EmlIngest {
             conversations: HashMap::with_capacity((eml_count / 4).min(50_000)),
             by_identity: HashMap::new(),
             report: ExportReport::default(),
+            zone_notes: 0,
+        }
+    }
+
+    /// Record what the mail's `Date:` header said about the zone in use.
+    ///
+    /// A mismatch means the phone was not in the chosen zone when the archive
+    /// was written, so its times are out by the difference. That is worth
+    /// saying out loud: the alternative is an export that looks right and is
+    /// an hour wrong.
+    fn note_zone_check(&mut self, check: crate::archive::ZoneCheck, path_display: &str) {
+        use crate::archive::ZoneCheck;
+        match check {
+            ZoneCheck::Agreed => {}
+            ZoneCheck::NoDateHeader => self.report.bump("archive_no_date_header", 1),
+            ZoneCheck::DateHeaderUnreadable => {
+                self.report.bump("archive_date_header_unreadable", 1);
+            }
+            ZoneCheck::Mismatch {
+                derived_secs,
+                chosen_secs,
+            } => {
+                self.report.bump("archive_zone_mismatch", 1);
+                if self.zone_notes < MAX_ZONE_NOTES {
+                    self.zone_notes += 1;
+                    self.report.errors.push(format!(
+                        "{path_display}: the mail's own date says this archive was written at {}, \
+                         but it was read as {}",
+                        offset_label(derived_secs),
+                        offset_label(chosen_secs),
+                    ));
+                }
+            }
         }
     }
 
@@ -509,10 +562,16 @@ impl EmlIngest {
             ParsedEmlKind::Archive {
                 msgs,
                 skipped_dates,
+                dst_gap_shifted,
+                zone_check,
                 path_display,
             } => {
                 self.report.bump("archive_eml", 1);
                 self.report.skipped_invalid_date += skipped_dates;
+                if dst_gap_shifted > 0 {
+                    self.report.bump("archive_dst_gap_shifted", dst_gap_shifted);
+                }
+                self.note_zone_check(zone_check, &path_display);
                 // An archive that yields nothing is a whole conversation lost.
                 // Say which file, because the export otherwise finishes looking
                 // healthy and the person has no way to notice.

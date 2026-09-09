@@ -49,7 +49,7 @@ pub fn format(
         let config = ExporterConfig {
             inputs: vec![PathBuf::from(&input_dir)],
             output: PathBuf::from(&output_dir),
-            timezone: None,
+            time_zone: None,
             obfuscate: Default::default(),
             media: MediaConfig::default(),
             cancel: Some(cancel),

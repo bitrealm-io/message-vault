@@ -53,6 +53,10 @@ export function restoreFormFromSnapshot(raw: unknown): ImportJobFormValues | nul
   if (!isStringArray(r.ownerPhones)) return null;
   // Snapshots written before SMS Backup+ had an email field carry none.
   const ownerEmails = isStringArray(r.ownerEmails) ? r.ownerEmails : [];
+  // Likewise the time zone. A stored snapshot is a live record in the vault, so
+  // an older one must still restore rather than make the session unreadable;
+  // the zone is re-read from the account profile anyway.
+  const timeZone = typeof r.timeZone === "string" ? r.timeZone : "";
   if (typeof r.force !== "boolean") return null;
   if (typeof r.obfuscate !== "boolean") return null;
   if (typeof r.isAndroidSms !== "boolean") return null;
@@ -73,6 +77,7 @@ export function restoreFormFromSnapshot(raw: unknown): ImportJobFormValues | nul
     minSizeMb: r.minSizeMb,
     ownerPhones: r.ownerPhones,
     ownerEmails,
+    timeZone,
     force: r.force,
     obfuscate: r.obfuscate,
     isAndroidSms: r.isAndroidSms,

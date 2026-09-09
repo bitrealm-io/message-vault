@@ -2,9 +2,8 @@
 
 use crate::emit::TransportFamily;
 use crate::parse::{RawRow, SourceKind};
-use anyhow::Result;
-use chrono::{FixedOffset, Local, LocalResult, NaiveDateTime, TimeZone};
-use message_csv::parse_utc_offset;
+use chrono::{Local, LocalResult, NaiveDateTime, TimeZone};
+use chrono_tz::Tz;
 use phone::sanitize_number;
 use std::collections::{HashMap, HashSet};
 
@@ -116,26 +115,14 @@ pub(super) fn collect_peer_info(kind: SourceKind, session: &str, rows: &[&RawRow
     }
 }
 
-#[derive(Debug)]
-pub(super) enum TzMode {
-    Local,
-    Fixed(FixedOffset),
-}
-
-/// Parse a timezone string into local time or a fixed UTC offset.
-pub(super) fn resolve_tz(timezone: Option<&str>) -> Result<TzMode> {
-    match timezone.and_then(message_ir::trimmed) {
-        None => Ok(TzMode::Local),
-        Some(name) => {
-            let offset = parse_utc_offset(name).map_err(anyhow::Error::msg)?;
-            Ok(TzMode::Fixed(offset))
-        }
-    }
-}
-
 /// Parse an iMazing date string into `(unix_secs, date_ms)`; DST-ambiguous
 /// times resolve to the earliest occurrence.
-pub(super) fn parse_message_date(raw: &str, tz: &TzMode) -> Option<(i64, String)> {
+///
+/// `zone` is the named zone the wall clock is read in. `None` falls back to the
+/// host zone, which makes the result depend on the machine — the same defect as
+/// issue #523, still open for this exporter because nothing sets a zone for it
+/// yet.
+pub(super) fn parse_message_date(raw: &str, zone: Option<Tz>) -> Option<(i64, String)> {
     let raw = raw.trim();
     if raw.is_empty() {
         return None;
@@ -143,15 +130,15 @@ pub(super) fn parse_message_date(raw: &str, tz: &TzMode) -> Option<(i64, String)
     let naive = NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S")
         .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M"))
         .ok()?;
-    let secs = match tz {
-        // Ambiguous (DST fall-back) hours resolve to the earliest instant
-        // instead of silently dropping the message.
-        TzMode::Local => match Local.from_local_datetime(&naive) {
+    // Ambiguous (DST fall-back) hours resolve to the earliest instant instead
+    // of silently dropping the message.
+    let secs = match zone {
+        None => match Local.from_local_datetime(&naive) {
             LocalResult::Single(dt) => dt.timestamp(),
             LocalResult::Ambiguous(earliest, _latest) => earliest.timestamp(),
             LocalResult::None => return None,
         },
-        TzMode::Fixed(offset) => match offset.from_local_datetime(&naive) {
+        Some(zone) => match zone.from_local_datetime(&naive) {
             LocalResult::Single(dt) => dt.timestamp(),
             LocalResult::Ambiguous(earliest, _latest) => earliest.timestamp(),
             LocalResult::None => return None,

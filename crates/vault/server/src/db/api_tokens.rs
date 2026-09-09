@@ -542,4 +542,167 @@ mod tests {
             other => panic!("expected InvalidLabel, got {other:?}"),
         }
     }
+
+    /// An expired token stops working, and a disabled one stops working at
+    /// once.
+    ///
+    /// Both guards sit at the top of `lookup_account_for_api_token` and
+    /// neither was tested: every test issued a token and used it immediately.
+    /// A token is a long-lived credential handed to a script, so the expiry is
+    /// the only thing that limits the damage of one leaking, and `disabled` is
+    /// how someone revokes one without deleting the record of it.
+    #[tokio::test]
+    async fn an_expired_token_is_refused_and_a_live_one_is_not() {
+        let vault = crate::test_support::test_vault().await;
+        let account_id = vault.account_with_id(101, "alice").await;
+        let mut conn = vault.conn().await;
+
+        let live = create_api_token(&mut conn, account_id, "live", Permissions::all(), None)
+            .await
+            .unwrap();
+        let expiring =
+            create_api_token(&mut conn, account_id, "expiring", Permissions::all(), None)
+                .await
+                .unwrap();
+
+        // The default expiry is a year out, so both work now.
+        for token in [&live.token, &expiring.token] {
+            assert!(
+                lookup_account_for_api_token(&mut conn, token)
+                    .await
+                    .unwrap()
+                    .is_some(),
+                "a fresh token must be accepted"
+            );
+        }
+
+        // Move one into the past. The stored value is Unix seconds as text.
+        sqlx::query("UPDATE account_api_tokens SET expires_at = '1' WHERE label = 'expiring'")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+
+        assert!(
+            lookup_account_for_api_token(&mut conn, &expiring.token)
+                .await
+                .unwrap()
+                .is_none(),
+            "an expired token must be refused"
+        );
+        assert!(
+            lookup_account_for_api_token(&mut conn, &live.token)
+                .await
+                .unwrap()
+                .is_some(),
+            "and the other token is untouched"
+        );
+    }
+
+    /// A token whose expiry cannot be read as a time is refused rather than
+    /// treated as never expiring. `expires_at.parse().unwrap_or(0)` and the
+    /// `exp_secs == 0` test are what make that so, and a change to either
+    /// turns an unreadable expiry into a credential that never dies.
+    #[tokio::test]
+    async fn a_token_with_an_unreadable_expiry_is_refused() {
+        let vault = crate::test_support::test_vault().await;
+        let account_id = vault.account_with_id(101, "alice").await;
+        let mut conn = vault.conn().await;
+
+        let created = create_api_token(&mut conn, account_id, "odd", Permissions::all(), None)
+            .await
+            .unwrap();
+
+        for stored in ["not-a-time", "0", ""] {
+            sqlx::query("UPDATE account_api_tokens SET expires_at = $1 WHERE label = 'odd'")
+                .bind(stored)
+                .execute(&mut *conn)
+                .await
+                .unwrap();
+            assert!(
+                lookup_account_for_api_token(&mut conn, &created.token)
+                    .await
+                    .unwrap()
+                    .is_none(),
+                "an expiry of {stored:?} must not be read as no expiry"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_disabled_token_is_refused_while_its_row_remains() {
+        let vault = crate::test_support::test_vault().await;
+        let account_id = vault.account_with_id(101, "alice").await;
+        let mut conn = vault.conn().await;
+
+        let created = create_api_token(&mut conn, account_id, "revoked", Permissions::all(), None)
+            .await
+            .unwrap();
+        assert!(
+            lookup_account_for_api_token(&mut conn, &created.token)
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        sqlx::query("UPDATE account_api_tokens SET disabled = 1 WHERE label = 'revoked'")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+
+        assert!(
+            lookup_account_for_api_token(&mut conn, &created.token)
+                .await
+                .unwrap()
+                .is_none(),
+            "a disabled token must be refused"
+        );
+        // The row survives, which is the difference between disabling and
+        // deleting: the account can still see that the token existed.
+        let listed = list_api_tokens(&mut conn, account_id).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].disabled, "and the listing says it is disabled");
+    }
+
+    /// `expires_in_days` decides the lifetime, and `Some(0)` means "no expiry"
+    /// while `None` means "the default year". Getting those two the wrong way
+    /// round either issues immortal tokens by default or expires every token
+    /// the moment it is made.
+    #[test]
+    fn the_expiry_follows_the_days_asked_for() {
+        // Created at Unix second 1_000_000.
+        let created = "1000000";
+
+        assert_eq!(
+            api_token_expiry(Some(30), created),
+            Some((1_000_000 + 30 * 86_400).to_string()),
+            "thirty days out"
+        );
+        assert_eq!(
+            api_token_expiry(Some(1), created),
+            Some((1_000_000 + 86_400).to_string()),
+            "one day out"
+        );
+        assert_eq!(
+            api_token_expiry(Some(0), created),
+            None,
+            "zero days is the caller asking for no expiry at all"
+        );
+        assert_eq!(
+            api_token_expiry(None, created),
+            Some((1_000_000 + DEFAULT_API_TOKEN_TTL_SECS).to_string()),
+            "no answer means the default, which is a year"
+        );
+
+        // A number of days large enough to overflow saturates rather than
+        // wrapping to a time in the past, which would expire the token at once.
+        let huge = api_token_expiry(Some(u64::MAX), created).expect("an expiry");
+        assert_eq!(huge, u64::MAX.to_string());
+
+        // A created-at that cannot be read is treated as the epoch rather than
+        // panicking.
+        assert_eq!(
+            api_token_expiry(Some(1), "not-a-time"),
+            Some(86_400.to_string())
+        );
+    }
 }

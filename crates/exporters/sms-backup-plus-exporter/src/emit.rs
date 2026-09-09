@@ -694,4 +694,119 @@ mod tests {
         assert_eq!(report.attachments_saved, 1);
         assert_eq!(std::fs::read_dir(&att_dir).unwrap().count(), 1);
     }
+
+    /// Which copy of a duplicated message is kept.
+    ///
+    /// When two `.eml` files describe the same message, `should_replace_kept`
+    /// decides whether the one arriving now replaces the one already held.
+    /// It has four rules and no test had exercised any of them: the whole
+    /// function could be replaced with `true` or `false` and the suite stayed
+    /// green, which means the export silently kept the worse copy — an archive
+    /// transcript line rather than the flat `.eml` that carries the headers.
+    ///
+    /// The rules, in the order the function applies them:
+    ///
+    /// 1. A flat message always beats an archive one, because a flat `.eml`
+    ///    carries `X-smssync-*` headers and an archive transcript line does
+    ///    not.
+    /// 2. An archive message never displaces a flat one.
+    /// 3. Between two flat messages, one with an `X-smssync-id` beats one
+    ///    without.
+    /// 4. Otherwise the earlier timestamp wins, so re-running an import does
+    ///    not shuffle the order.
+    #[test]
+    fn a_flat_message_beats_an_archive_one_whichever_arrives_first() {
+        let archive_kept = pending(1_000, "archive", "");
+        let flat_incoming = parsed(1_000.0, "flat", None);
+        assert!(
+            should_replace_kept(&archive_kept, &flat_incoming),
+            "a flat message replaces an archive one"
+        );
+
+        let flat_kept = pending(1_000, "flat", "");
+        let archive_incoming = parsed(1_000.0, "archive", None);
+        assert!(
+            !should_replace_kept(&flat_kept, &archive_incoming),
+            "an archive message does not displace a flat one"
+        );
+    }
+
+    #[test]
+    fn between_two_flat_messages_the_one_with_an_smssync_id_wins() {
+        let without_id = pending(1_000, "flat", "");
+        let with_id = parsed(1_000.0, "flat", Some("276"));
+        assert!(
+            should_replace_kept(&without_id, &with_id),
+            "an id is more than no id"
+        );
+
+        // And not the other way round: a message with an id is not replaced by
+        // one without, even at the same instant.
+        let kept_with_id = pending(1_000, "flat", "276");
+        let incoming_without = parsed(1_000.0, "flat", None);
+        assert!(!should_replace_kept(&kept_with_id, &incoming_without));
+
+        // A blank or whitespace id is no id at all.
+        for blank in ["", "   "] {
+            let incoming_blank = parsed(1_000.0, "flat", Some(blank));
+            assert!(
+                !should_replace_kept(&without_id, &incoming_blank),
+                "an id of {blank:?} is not an id"
+            );
+        }
+    }
+
+    #[test]
+    fn otherwise_the_earlier_message_is_the_one_kept() {
+        let kept = pending(1_000, "flat", "276");
+
+        let earlier = parsed(999.0, "flat", Some("276"));
+        assert!(
+            should_replace_kept(&kept, &earlier),
+            "an earlier copy replaces a later one, so a re-import is stable"
+        );
+
+        let later = parsed(1_001.0, "flat", Some("276"));
+        assert!(!should_replace_kept(&kept, &later));
+
+        // The same instant is not earlier, so the first one seen stays.
+        let same = parsed(1_000.0, "flat", Some("276"));
+        assert!(!should_replace_kept(&kept, &same));
+    }
+
+    /// A `PendingMessage` already held, with the two fields the decision reads.
+    fn pending(sort_key: i64, source_kind: &str, smssync_id: &str) -> PendingMessage {
+        let mut extra = std::collections::BTreeMap::new();
+        extra.insert("source_kind".to_string(), source_kind.to_string());
+        extra.insert("smssync_id".to_string(), smssync_id.to_string());
+        PendingMessage {
+            sort_key,
+            is_from_me: false,
+            sender_handle: "+15555550101".into(),
+            sender_display_name: None,
+            text: "hello".into(),
+            attachments: Vec::new(),
+            extra,
+        }
+    }
+
+    /// A `ParsedMessage` arriving now, with the three fields the decision reads.
+    fn parsed(timestamp_secs: f64, source_kind: &str, smssync_id: Option<&str>) -> ParsedMessage {
+        ParsedMessage {
+            chat_key: "+15555550101".into(),
+            conversation_type: "individual".into(),
+            group_title: None,
+            participant_digits: Vec::new(),
+            timestamp_secs,
+            is_from_me: false,
+            sender_digits: Some("15555550101".into()),
+            text: "hello".into(),
+            attachments: Vec::new(),
+            name_alias: None,
+            smssync_id: smssync_id.map(str::to_string),
+            source_kind: source_kind.into(),
+            android_type: "1".into(),
+            eml_path: "flat.eml".into(),
+        }
+    }
 }

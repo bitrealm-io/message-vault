@@ -9,6 +9,7 @@ use crate::db::contacts;
 use crate::db::handles::{
     HandleIdCache, infer_handle_type_from_shape as infer_handle_type, upsert_handle_row_cached,
 };
+use crate::db::trash;
 
 /// The contact that owns `handle_id`, creating one when nothing owns it yet.
 ///
@@ -19,6 +20,14 @@ use crate::db::handles::{
 /// number arrives spelled differently across backups and the first spelling is
 /// as good as the second. A contact the person made or an address book loaded
 /// is never renamed by an import.
+///
+/// A contact in the Trash is the one exception to reuse. ADR-0013: a backup
+/// that still holds someone the person set aside is the person saying they
+/// still talk to them, so the import discards the trashed contact together
+/// with every handle it had and makes a fresh one from the backup, as a first
+/// import would. The fresh contact carries this handle and its siblings (the
+/// same number on another service); any other handle the trashed contact had
+/// belongs to no contact until the backup, or the person, says otherwise.
 pub(super) async fn ensure_contact_for_handle(
     tx: &mut AnyConnection,
     account_id: i64,
@@ -27,13 +36,18 @@ pub(super) async fn ensure_contact_for_handle(
     stats: &mut ImportStats,
 ) -> Result<i64> {
     let name = backup_name.and_then(trimmed).unwrap_or("");
-    if let Some(existing) = ensure_sibling_contact_link(tx, account_id, handle_id).await? {
-        // An import names only a contact an earlier import left nameless;
-        // `contacts::propose_name` is where that rule and its two siblings
-        // live.
-        contacts::propose_name(tx, account_id, existing, name, contacts::Origin::Import).await?;
-        return Ok(existing);
-    }
+    let replaced_trashed = match ensure_sibling_contact_link(tx, account_id, handle_id).await? {
+        Some(existing) if !trash::discard_contact_if_trashed(tx, account_id, existing).await? => {
+            // An import names only a contact an earlier import left nameless;
+            // `contacts::propose_name` is where that rule and its two siblings
+            // live.
+            contacts::propose_name(tx, account_id, existing, name, contacts::Origin::Import)
+                .await?;
+            return Ok(existing);
+        }
+        Some(_) => true,
+        None => false,
+    };
     let contact_id =
         contacts::create_contact(tx, account_id, name, contacts::Origin::Import).await?;
     contacts::link_handle_to_contact(
@@ -44,6 +58,9 @@ pub(super) async fn ensure_contact_for_handle(
         contacts::Origin::Import,
     )
     .await?;
+    if replaced_trashed {
+        contacts::link_sibling_handles_to_contact(tx, account_id, handle_id, contact_id).await?;
+    }
     stats.contacts_created += 1;
     Ok(contact_id)
 }

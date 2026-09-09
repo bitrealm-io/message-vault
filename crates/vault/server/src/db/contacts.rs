@@ -170,6 +170,50 @@ pub async fn link_handle_to_contact(
     Ok(inserted > 0)
 }
 
+/// Link every sibling of `handle_id` that belongs to no contact — the same
+/// normalized value and handle type on another platform service — to
+/// `contact_id`. Returns how many links were made.
+///
+/// A handle is only ever unowned beside a linked sibling after an import
+/// discarded a trashed contact (ADR-0013). One number is one person on every
+/// service, the rule [`contact_id_of_sibling_handle`] applies in the other
+/// direction, so the fresh contact takes the number on every service the
+/// vault has met it on rather than leaving half of it Unknown.
+///
+/// # Errors
+///
+/// Returns an error when the insert fails.
+pub async fn link_sibling_handles_to_contact(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    handle_id: i64,
+    contact_id: i64,
+) -> Result<u64> {
+    let inserted = sqlx::query(
+        "INSERT INTO contact_handles (account_id, handle_id, contact_id, origin)
+         SELECT h2.account_id, h2.id, $3, $4
+         FROM handles h
+         JOIN handles h2
+           ON h2.account_id = h.account_id
+          AND h2.normalized = h.normalized
+          AND h2.handle_type = h.handle_type
+          AND h2.id != h.id
+         WHERE h.id = $2 AND h.account_id = $1
+           AND NOT EXISTS (
+               SELECT 1 FROM contact_handles ch
+               WHERE ch.account_id = h2.account_id AND ch.handle_id = h2.id
+           )",
+    )
+    .bind(account_id)
+    .bind(handle_id)
+    .bind(contact_id)
+    .bind(Origin::Import.as_str())
+    .execute(&mut *conn)
+    .await?
+    .rows_affected();
+    Ok(inserted)
+}
+
 /// The contact a sibling of `handle_id` is on, if any: the same normalized
 /// value and handle type on a different platform service, already linked.
 ///

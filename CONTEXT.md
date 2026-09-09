@@ -106,8 +106,8 @@ see. Membership is explicit, nothing in it is deleted, and a trashed
 conversation can still be opened and read. Lists leave the trash out unless
 asked to show it. A trashed contact stays set aside until an import meets
 one of its handles: the import then discards the trashed contact together
-with every handle it had and makes a new contact from the backup, as if the
-trash had been emptied first. The trash is the only door to permanent
+with every handle it had and makes a new contact from the backup, as a first
+import would. The trash is the only door to permanent
 deletion; something must be trashed before it can be deleted, one item at a
 time or all at once with Empty Trash.
 _Avoid_: Deleted, Archive, Hidden, Bin

@@ -405,6 +405,69 @@ fn hold_pg_test_process_lock(url: &str, pid: u32) {
 mod tests {
     use super::*;
 
+    /// Credential redaction has three call sites and fails silently: a
+    /// leaked password would appear in a status line or an error context and
+    /// nothing would go red. Each case names the shape it defends against.
+    #[test]
+    fn redact_db_url_strips_credentials_from_every_url_shape() {
+        for (raw, expected) in [
+            // The ordinary case: user and password before the host.
+            (
+                "postgres://vault:s3cret@db.example:5432/vault",
+                "postgres://db.example:5432/vault",
+            ),
+            // A user with no password still has to go.
+            (
+                "postgres://vault@db.example/vault",
+                "postgres://db.example/vault",
+            ),
+            // Query parameters carry secrets of their own (sslpassword,
+            // options), so the whole string after `?` is dropped.
+            (
+                "postgres://vault:s3cret@db.example/vault?sslmode=require&sslpassword=hunter2",
+                "postgres://db.example/vault",
+            ),
+            // An `@` inside the password must not end the authority early.
+            (
+                "postgres://vault:p@ss@db.example/vault",
+                "postgres://db.example/vault",
+            ),
+            // No credentials, nothing to strip.
+            ("sqlite://data/vault.db", "sqlite://data/vault.db"),
+            // No path component at all.
+            (
+                "postgres://vault:s3cret@db.example",
+                "postgres://db.example",
+            ),
+        ] {
+            let redacted = redact_db_url(raw);
+            assert_eq!(redacted, expected, "redacting {raw}");
+            assert!(
+                !redacted.contains("s3cret") && !redacted.contains("hunter2"),
+                "the password survived redaction of {raw}: {redacted}"
+            );
+        }
+    }
+
+    /// Anything that is not a `scheme://…` URL is replaced rather than
+    /// echoed, because the redaction below it cannot be trusted to have run.
+    #[test]
+    fn redact_db_url_refuses_to_echo_a_non_url() {
+        assert_eq!(redact_db_url("data/vault.db"), "<db url>");
+        assert_eq!(redact_db_url(""), "<db url>");
+        assert_eq!(redact_db_url("vault:s3cret@db.example"), "<db url>");
+    }
+
+    /// The redaction is reached through `Display`, which is what the status
+    /// and error paths actually call. A test of the function alone would not
+    /// notice the `Display` impl being changed to print the raw URL.
+    #[test]
+    fn displaying_a_url_source_redacts_it() {
+        let shown = DbTarget::Url("postgres://vault:s3cret@db.example/vault").to_string();
+        assert_eq!(shown, "postgres://db.example/vault");
+        assert!(!shown.contains("s3cret"));
+    }
+
     #[test]
     fn detects_engine_from_scheme() {
         assert_eq!(

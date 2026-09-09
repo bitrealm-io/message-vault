@@ -220,12 +220,39 @@ mod tests {
     use super::*;
     use crate::db::schema;
 
+    /// Known-answer vectors, not a round trip.
+    ///
+    /// Every session and API token in every existing vault is stored as this
+    /// hash and looked up by it, so changing the algorithm signs everyone out
+    /// and invalidates every issued API token at once. A test that only
+    /// checked the length and determinism would pass after such a change —
+    /// any 64-character hex hash is stable and 64 characters long. These
+    /// digests are SHA-256 of the exact bytes shown, reproducible with
+    /// `printf 'mv-user-abc' | sha256sum`.
     #[test]
-    fn hash_is_stable_hex() {
-        let h = hash_api_token("mv-user-abc");
-        assert_eq!(h.len(), 64);
-        assert_eq!(h, hash_api_token("mv-user-abc"));
-        assert_ne!(h, hash_api_token("mv-user-xyz"));
+    fn hash_is_sha256_of_the_token_bytes() {
+        for (token, expected) in [
+            (
+                "mv-user-abc",
+                "0df4b3a1f371a0685d2ab53463e293d0a3cf12b3ffa63ccbbf4bdfa9792e5d1e",
+            ),
+            (
+                "mv-tok-abc123",
+                "949cf0bf8e4e42a454c6a16d67f6a6c414ac39ea6bee6003298da8cc90b10273",
+            ),
+            (
+                "",
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            ),
+        ] {
+            assert_eq!(
+                hash_api_token(token),
+                expected,
+                "the stored hash of {token:?} changed; every session and API \
+                 token in every existing vault is looked up by this digest"
+            );
+        }
+        assert_ne!(hash_api_token("mv-user-abc"), hash_api_token("mv-user-xyz"));
     }
 
     #[test]

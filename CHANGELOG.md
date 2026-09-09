@@ -70,6 +70,14 @@ of, and a search that reads the same everywhere.
 
 ### Fixes
 
+- 2026-09-08: **SMS Backup+ archives saved as formatted mail now import.** Many
+  of these archives carry the conversation only as formatted text. Those
+  imported as empty, and any photos or videos in them were thrown away — with
+  nothing to tell you it had happened. They now import in full, and an archive
+  that still comes through empty is named in the import summary instead of
+  passing in silence. Where an archive carries both a formatted and a plain
+  copy, the formatted one is used, because the plain copy has been broken into
+  short lines by the mail program that saved it.
 - 2026-09-05: Long-running vaults no longer grow in memory for every file ever
   uploaded and every username ever tried.
 - 2026-09-05: A failure now says what actually went wrong — the step that

@@ -31,7 +31,7 @@ With `--format csv`: one file per conversation (header + one row per message aft
 | `direction` | `incoming` / `outgoing` from `X-smssync-type` or archive sender |
 | `service` | Always `SMS` |
 | `sender_handle` / `sender_display_name` | Outgoing uses export owner; incoming may use Subject / name hint |
-| `text` | First `text/plain` (flat) or archive body text |
+| `text` | The `text/html` part stripped to text when there is one, else `text/plain` |
 | `attachments_json` | Non-text MIME parts under `attachments/` |
 | `message_kind` | `sms` or `mms` |
 | `export_source` / `export_tool` / `export_tool_version` | `sms-backup-plus` / `SMS Backup+` / `1.5.11` |

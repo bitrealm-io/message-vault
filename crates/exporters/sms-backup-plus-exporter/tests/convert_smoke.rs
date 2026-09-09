@@ -10,6 +10,14 @@ fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 
+/// The exported CSV for one conversation, by file name.
+fn conversation_csv(root: &Path, name: &str) -> PathBuf {
+    csv_files(root)
+        .into_iter()
+        .find(|p| p.file_name().and_then(|n| n.to_str()) == Some(name))
+        .unwrap_or_else(|| panic!("no export named {name} under {}", root.display()))
+}
+
 fn convert(inputs: &[&Path], output_dir: &Path) -> Result<(ExportReport, FormatSinkResult)> {
     convert_export(ConvertExportArgs {
         inputs,
@@ -99,7 +107,10 @@ fn convert_smoke_writes_csv_not_json() {
     // milliseconds in their headers and are pinned exactly; the archive rows
     // are pinned by their content and direction. Issue #523 tracks the
     // timezone dependence itself.
-    let csv = &csv_files(tmp.path())[0];
+    // Name the conversation rather than taking the first file: the export
+    // holds one CSV per conversation and adding a fixture changes which one
+    // sorts first.
+    let csv = &conversation_csv(tmp.path(), "+14075551234.csv");
     assert_csv_row(csv, &[("text", "Check this"), ("direction", "outgoing")]);
     assert_csv_row(csv, &[("text", "Thanks"), ("direction", "incoming")]);
     // The two are a minute apart whatever timezone read them, which is the

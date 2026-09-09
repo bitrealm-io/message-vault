@@ -53,7 +53,7 @@ describe("SetPasswordScreen", () => {
     await waitFor(() => {
       expect(changePassword).toHaveBeenCalledWith({
         current_password: "ownerspick1",
-        new_password: "myownchoice",
+        password: "myownchoice",
       });
     });
     // Changing the password rotates the session, so the old token is dead.

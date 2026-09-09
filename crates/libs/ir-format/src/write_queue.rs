@@ -290,6 +290,7 @@ pub fn drain_units(
     let queue_report = drain_write_queue(output_dir, units, options, log, progress, cancel)?;
     report.conversations +=
         (queue_report.conversations_written + queue_report.conversations_skipped) as u64;
+    report.conversations_skipped += queue_report.conversations_skipped as u64;
     report.attachments_saved += queue_report.attachments_saved as u64;
     Ok(crate::FormatSinkResult {
         xml_path: None,

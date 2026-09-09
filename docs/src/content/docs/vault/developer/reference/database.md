@@ -156,6 +156,7 @@ deleting underlying rows.
 | Web login | `accounts` |
 | Soft-deleted items | `trashed_*` |
 | Import scratch space | `staging_*` |
+| One import attempt, or one export attempt | `vault_imports`, `vault_exports` |
 
 Baseline table definitions live in
 [`schema/sql/`](https://github.com/bitrealm-io/message-vault/blob/main/schema/sql/).

@@ -5,8 +5,9 @@
 //! Distinct from `server.rs`'s `test_state()`, which returns a four-tuple
 //! `(TempDir, AppState, String, i64)` for handler-level tests that call a
 //! handler function directly. This module drives the whole stack over real
-//! HTTP, for tests in `auth.rs`, `owner_api.rs`, `api_tokens_api.rs`, and
-//! any route whose contract is worth checking end to end.
+//! HTTP, for tests in `session_api.rs`, `accounts_api.rs`,
+//! `api_tokens_api.rs`, and any route whose contract is worth checking end
+//! to end.
 
 use axum::http::StatusCode;
 use serde::de::DeserializeOwned;
@@ -187,48 +188,69 @@ fn expect_ok<T: DeserializeOwned>(what: &str, status: StatusCode, text: &str) ->
     serde_json::from_str(text).unwrap_or_else(|e| panic!("{what} returned non-JSON ({e}): {text}"))
 }
 
-/// Register an account through the API and return it with a live token.
+/// Register an account as a stranger, `POST /v1/accounts` with no
+/// credential, and return it with the live session token the vault opens on
+/// it. Asserts the `201 Created` and the `Location` naming the new row.
 ///
-/// The auth rate limiter lives on `AppState` (`auth::AuthRateLimits`), so the
-/// hits counted here belong to this vault alone. That matters because the
-/// suite reuses a handful of literal usernames ("alice", "bob", ...) across
-/// many test functions in one test binary: with a shared limiter, enough tests
-/// registering the same name inside one 60-second window would trip
-/// `AUTH_RATE_MAX` and fail an unrelated test with a 429.
+/// The auth rate limiter lives on `AppState` (`credentials::AuthRateLimits`),
+/// so the hits counted here belong to this vault alone. That matters because
+/// the suite reuses a handful of literal usernames ("alice", "bob", ...)
+/// across many test functions in one test binary: with a shared limiter,
+/// enough tests registering the same name inside one 60-second window would
+/// trip `AUTH_RATE_MAX` and fail an unrelated test with a 429.
 pub async fn register_via_api(
     state: &AppState,
     username: &str,
     password: &str,
 ) -> RegisteredAccount {
-    let (status, text) = request(
-        state,
-        reqwest::Method::POST,
-        "/v1/auth/register",
-        None,
-        Some(json_body(
-            serde_json::json!({ "username": username, "password": password }),
-        )),
-    )
-    .await;
-    let body: serde_json::Value = expect_ok("register", status, &text);
+    let server = serve(state).await;
+    let response = reqwest::Client::new()
+        .post(format!("{}/v1/accounts", server.base()))
+        .json(&serde_json::json!({ "username": username, "password": password }))
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let location = response
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+    let text = response.text().await.unwrap();
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "registering {username} must answer 201 Created, got: {text}"
+    );
+    let body: serde_json::Value = serde_json::from_str(&text)
+        .unwrap_or_else(|e| panic!("POST /v1/accounts returned non-JSON ({e}): {text}"));
+    let account_id = body["account_id"].as_i64().unwrap();
+    assert_eq!(
+        location.as_deref(),
+        Some(format!("/v1/accounts/{account_id}").as_str()),
+        "registering must answer Location: /v1/accounts/{{id}}"
+    );
     RegisteredAccount {
-        account_id: body["account_id"].as_i64().unwrap(),
+        account_id,
         username: body["username"].as_str().unwrap().to_string(),
-        token: body["token"].as_str().unwrap().to_string(),
+        token: body["token"]
+            .as_str()
+            .unwrap_or_else(|| panic!("a stranger's registration must open a session: {text}"))
+            .to_string(),
     }
 }
 
 /// Claim the test vault: create its owner directly, then sign in as them.
 ///
-/// There is no HTTP route for this in PR 1 — claiming over HTTP arrives with
-/// `GET /v1/vault` — so the row goes in through `insert_account` at the
-/// well-known owner id, exactly as `create-owner` does it from a shell.
+/// The row goes in through `insert_account_at` at the well-known owner id,
+/// exactly as `create-owner` does it from a shell; `vault_api`'s own tests
+/// cover `POST /v1/vault/claim`.
 pub async fn claim_vault_as_owner(
     state: &AppState,
     username: &str,
     password: &str,
 ) -> RegisteredAccount {
-    let hash = crate::auth::hash_password(password).expect("hash the owner password");
+    let hash = crate::credentials::hash_password(password).expect("hash the owner password");
     let mut conn = state.db.acquire().await.expect("acquire for claim");
     crate::db::account_profile::insert_account_at(
         &mut conn,
@@ -409,6 +431,24 @@ pub async fn post_status(
     .0
 }
 
+/// POST a JSON body with no credential at all, returning only the status.
+/// For the routes a stranger calls: creating an account, claiming the vault.
+pub async fn post_status_signed_out(
+    state: &AppState,
+    path: &str,
+    body: serde_json::Value,
+) -> StatusCode {
+    request(
+        state,
+        reqwest::Method::POST,
+        path,
+        None,
+        Some(json_body(body)),
+    )
+    .await
+    .0
+}
+
 /// PUT a JSON body with a Bearer token, asserting 200 and parsing the body.
 pub async fn put_json<T: DeserializeOwned>(
     state: &AppState,
@@ -428,8 +468,8 @@ pub async fn put_json<T: DeserializeOwned>(
 }
 
 /// DELETE with a JSON body and a Bearer token, returning only the status.
-/// `DELETE /v1/account` and `DELETE /v1/account/messages` carry their
-/// confirmation in the body.
+/// An account deleting itself or its messages carries its confirmation in
+/// the body.
 pub async fn delete_status_with_body(
     state: &AppState,
     path: &str,
@@ -445,6 +485,25 @@ pub async fn delete_status_with_body(
     )
     .await
     .0
+}
+
+/// DELETE with a JSON body and a Bearer token, returning the status and the
+/// raw response text, for asserting on the problem document a refusal
+/// answers.
+pub async fn delete_raw_with_body(
+    state: &AppState,
+    path: &str,
+    token: &str,
+    body: serde_json::Value,
+) -> (StatusCode, String) {
+    request(
+        state,
+        reqwest::Method::DELETE,
+        path,
+        Some(token),
+        Some(json_body(body)),
+    )
+    .await
 }
 
 /// DELETE with a JSON body and a Bearer token, asserting 200 and parsing

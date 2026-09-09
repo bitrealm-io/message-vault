@@ -17,7 +17,9 @@ The JSONL schema version 4 is independent of the product version. Version 3 is r
 ## Before tagging
 
 1. Merge the work to `main`. Wait until CI on `main` is green (`fmt`, workspace tests, `web` tests). `./scripts/check-pr.sh` is optional locally.
-2. Move `[Unreleased]` entries in `CHANGELOG.md` under the new version heading ([Keep a Changelog](https://keepachangelog.com/en/1.1.0/)), keeping each bullet’s ISO date (`YYYY-MM-DD`) and dating the heading (`## [0.8.0] - 2026-08-24`).
+2. In `CHANGELOG.md`, change the in-development heading to the dated form (`## [0.9.0] - 2026-09-08`) and drop the per-bullet dates, which the heading now carries. Add the next in-development heading above it when work resumes.
+
+   The changelog is written for the people who use Message Vault. Every entry is a **Feature** (something a person can now do), a **Fix** (something that was wrong and now behaves correctly), or a **Design** change (how the product works, including internal rework, said in one sentence). Keep route paths, status codes, schema versions and type names out of it — those belong in the pull request and the ADRs. Anything a reader has to act on goes under an **Upgrading** heading in that release.
 3. Set these four files to the same number (for example `0.8.0`):
    - `src-tauri/Cargo.toml`
    - `src-tauri/tauri.conf.json`

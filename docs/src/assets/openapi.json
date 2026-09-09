@@ -31,22 +31,274 @@
         }
       }
     },
-    "/v1/account": {
-      "delete": {
+    "/v1/accounts": {
+      "get": {
         "tags": [
-          "Account"
+          "Accounts"
         ],
-        "summary": "Permanently delete the account and its data directory. The body carries\nthe confirmation and the current password: a credential belongs in a\nbody, not in a URL or a header of the vault's own invention, and a DELETE\nbody has no defined meaning in RFC 9110 but is not forbidden.",
-        "operationId": "delete_account_handler",
+        "summary": "List the accounts this vault holds, with their flags, message count, and\nstorage use. The owner's own account is not among them: the list holds\nthe users of this vault, and the owner is not one of them.",
+        "operationId": "list_accounts",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, max 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page offset",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_AccountResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "owner"
+            ]
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "Create an account.",
+        "description": "The vault owner may always: the owner picks the first password and the\naccount holder replaces it at first sign-in, so the owner's choice survives\none session and no longer. A stranger with no credential may while the\nvault is open, and is signed in on creation. Registering is the vault's\nonly self-service door, shut unless the owner has opened it; an unclaimed\nvault is shut too, because its first act is being claimed, not being\njoined.",
+        "operationId": "create_account",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DeleteAccountRequest"
+                "$ref": "#/components/schemas/CreateAccountRequest"
               }
             }
           },
           "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Path of the new account"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedAccountResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The vault is closed, or the credential is not the owner's",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Username taken",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "session": [
+              "owner"
+            ]
+          }
+        ]
+      }
+    },
+    "/v1/accounts/{id}": {
+      "get": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "Read one account: the owner reads any, an account reads its own.",
+        "operationId": "get_account",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Account id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "Permanently delete an account: login, profile, contacts, and every\nmessage it owns, with its data directory.",
+        "description": "The vault owner deletes any account outright, the demo account included,\nwhich is how a demo vault is cleared into a real one. An account deletes\nitself with a body carrying the confirmation and its current password: a\ncredential belongs in a body, not in a URL or a header of the vault's own\ninvention, and a DELETE body has no defined meaning in RFC 9110 but is not\nforbidden. The demo account refuses its own deletion, and nobody deletes\nthe owner.",
+        "operationId": "delete_account",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Account id to delete",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Sent by an account deleting itself; the owner sends no body",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DeleteAccountRequest"
+                  }
+                ]
+              }
+            }
+          }
         },
         "responses": {
           "204": {
@@ -82,6 +334,16 @@
               }
             }
           },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
             "description": "",
             "content": {
@@ -95,25 +357,153 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
-      }
-    },
-    "/v1/account/api-tokens": {
-      "get": {
+      },
+      "patch": {
         "tags": [
-          "Account"
+          "Accounts"
         ],
-        "summary": "List the account's named API tokens with their permissions and masked secrets.",
-        "operationId": "list_api_tokens_handler",
+        "summary": "Change an account. The account itself sets its display name, time zone\nand handles; the vault owner sets another account's disabled flag and\nits import, export and delete permissions. A field the caller may not\nset answers `403 Forbidden`, and the reloaded account is the answer.",
+        "operationId": "patch_account",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Account id to change",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ListApiTokensResponse"
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/accounts/{id}/api-tokens": {
+      "get": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "List the account's named API tokens with their permissions and masked secrets.",
+        "operationId": "list_api_tokens",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Account id; must be the caller's own",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, max 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page offset",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ApiTokenItem"
                 }
               }
             }
@@ -141,16 +531,28 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
       "post": {
         "tags": [
-          "Account"
+          "Accounts"
         ],
         "summary": "Create a named API token. Returns the plaintext secret once, at creation;\nit is never returned again.",
-        "operationId": "create_api_token_handler",
+        "operationId": "create_api_token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Account id; must be the caller's own",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -209,25 +611,45 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
     },
-    "/v1/account/api-tokens/{id}": {
+    "/v1/accounts/{id}/api-tokens/{token_id}": {
       "delete": {
         "tags": [
-          "Account"
+          "Accounts"
         ],
         "summary": "Delete one named API token. Requests using it start failing on the next call.",
-        "operationId": "delete_api_token_handler",
+        "operationId": "delete_api_token",
         "parameters": [
           {
             "name": "id",
+            "in": "path",
+            "description": "Account id; must be the caller's own",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "token_id",
             "in": "path",
             "description": "API token id",
             "required": true,
@@ -274,19 +696,29 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
       "patch": {
         "tags": [
-          "Account"
+          "Accounts"
         ],
         "summary": "Rename one named API token. The label is trimmed before storing.",
-        "operationId": "rename_api_token_handler",
+        "operationId": "rename_api_token",
         "parameters": [
           {
             "name": "id",
+            "in": "path",
+            "description": "Account id; must be the caller's own",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "token_id",
             "in": "path",
             "description": "API token id",
             "required": true,
@@ -370,27 +802,47 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
     },
-    "/v1/account/messages": {
+    "/v1/accounts/{id}/messages": {
       "delete": {
         "tags": [
-          "Account"
+          "Accounts"
         ],
-        "summary": "Delete every conversation, message, and attachment for the account.\nContacts and the account login survive.",
-        "operationId": "delete_messages_handler",
+        "summary": "Destroy one account's conversations, messages, and attachments. The\naccount itself, its contacts, and its login survive.",
+        "description": "The vault owner may, on any account. The account itself may with a\ncredential that carries the `delete` scope, session or API token, and\nconfirms in the body.",
+        "operationId": "delete_account_messages",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Account whose messages are destroyed",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
         "requestBody": {
+          "description": "Sent by an account deleting its own messages; the owner sends no body",
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DeleteMessagesRequest"
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DeleteMessagesRequest"
+                  }
+                ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -433,6 +885,16 @@
               }
             }
           },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
             "description": "",
             "content": {
@@ -446,23 +908,48 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "owner"
+            ]
+          },
+          {
+            "session": [
+              "delete"
+            ]
+          },
+          {
+            "api-token": [
+              "delete"
+            ]
           }
         ]
       }
     },
-    "/v1/account/password": {
+    "/v1/accounts/{id}/password": {
       "put": {
         "tags": [
-          "Account"
+          "Accounts"
         ],
-        "summary": "Verify the current password, store the new one, revoke API tokens, and\nissue a fresh session token.",
-        "operationId": "change_password_handler",
+        "summary": "Set an account's password.",
+        "description": "An account changing its own must supply the current one; the change\nrevokes its API tokens and answers `200` with a rotated session token.\nThe vault owner sets another account's without the current one and\nanswers `204`: that account's sessions end, and its holder signs in with\nthe new password and is made to replace it.",
+        "operationId": "set_account_password",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Account id whose password is set",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ChangePasswordRequest"
+                "$ref": "#/components/schemas/SetPasswordRequest"
               }
             }
           },
@@ -470,14 +957,17 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "Own password changed; the rotated session token",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ChangePasswordResponse"
+                  "$ref": "#/components/schemas/SetPasswordResponse"
                 }
               }
             }
+          },
+          "204": {
+            "description": "Password set by the vault owner; the account's sessions are ended"
           },
           "400": {
             "description": "",
@@ -509,117 +999,7 @@
               }
             }
           },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/account/profile": {
-      "get": {
-        "tags": [
-          "Account"
-        ],
-        "summary": "Load the signed-in account's profile: username, display name, linked\nhandles, and the demo flag.",
-        "operationId": "account_profile_handler",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AccountProfileResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "patch": {
-        "tags": [
-          "Account"
-        ],
-        "summary": "Update the account's display name and linked handles, then return the\nreloaded profile.",
-        "operationId": "account_profile_update_handler",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AccountProfileUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AccountProfileResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -642,18 +1022,30 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
     },
-    "/v1/account/storage": {
+    "/v1/accounts/{id}/storage": {
       "get": {
         "tags": [
-          "Account"
+          "Accounts"
         ],
-        "summary": "Attachment storage usage for the account: total bytes, count, and the 100\nlargest files.",
-        "operationId": "account_storage_handler",
+        "summary": "Attachment storage usage for an account: total bytes, count, and the 100\nlargest files. The owner reads any account's; an account reads its own.",
+        "operationId": "get_account_storage",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Account id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -684,11 +1076,21 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -715,14 +1117,6 @@
             "name": "source",
             "in": "query",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "string"
             }
@@ -788,7 +1182,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
           }
         ]
       },
@@ -812,14 +1213,6 @@
             "name": "source",
             "in": "query",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "string"
             }
@@ -895,7 +1288,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       },
@@ -920,14 +1320,6 @@
             "name": "source",
             "in": "query",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "string"
             }
@@ -997,7 +1389,24 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
           }
         ]
       }
@@ -1023,14 +1432,6 @@
             "name": "source",
             "in": "query",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "string"
             }
@@ -1108,7 +1509,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -1142,14 +1550,6 @@
             "name": "source",
             "in": "query",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "string"
             }
@@ -1202,7 +1602,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -1236,14 +1643,6 @@
             "name": "source",
             "in": "query",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "string"
             }
@@ -1303,7 +1702,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -1347,14 +1753,6 @@
             "name": "source",
             "in": "query",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "string"
             }
@@ -1430,70 +1828,16 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
-      }
-    },
-    "/v1/auth/register": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "summary": "Create a local vault account and return its session token.",
-        "operationId": "register_handler",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegisterRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Session issued",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionTokenResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid input",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Public registration is off",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limited",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/v1/contact-groups": {
@@ -1503,13 +1847,35 @@
         ],
         "summary": "The account's Contact Groups, A–Z.",
         "operationId": "contact_groups_list",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, max 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page offset",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NamedSetList"
+                  "$ref": "#/components/schemas/Page_NamedSet"
                 }
               }
             }
@@ -1537,7 +1903,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -1619,7 +1985,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -1680,7 +2046,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -1786,7 +2152,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -1808,6 +2174,26 @@
               "type": "integer",
               "format": "int64"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, max 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page offset",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         ],
         "responses": {
@@ -1816,7 +2202,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MemberIdList"
+                  "$ref": "#/components/schemas/Page_i64"
                 }
               }
             }
@@ -1854,7 +2240,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -1950,7 +2336,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2056,7 +2442,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -2148,7 +2534,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2176,7 +2562,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ContactSummariesPage"
+                  "$ref": "#/components/schemas/Page_ContactSelectionSummary"
                 }
               }
             }
@@ -2224,7 +2610,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2252,7 +2638,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UnmatchedHandlesResponse"
+                  "$ref": "#/components/schemas/Page_String"
                 }
               }
             }
@@ -2300,7 +2686,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2368,7 +2754,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -2437,7 +2823,9 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "delete"
+            ]
           }
         ]
       },
@@ -2533,7 +2921,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2594,7 +2982,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2655,7 +3043,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2761,7 +3149,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2829,7 +3217,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -2898,7 +3286,9 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "delete"
+            ]
           }
         ]
       }
@@ -3025,7 +3415,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -3086,7 +3476,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -3108,6 +3498,26 @@
               "type": "integer",
               "format": "int64"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, max 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page offset",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         ],
         "responses": {
@@ -3116,7 +3526,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationSourcesPage"
+                  "$ref": "#/components/schemas/Page_ConversationSourceInfo"
                 }
               }
             }
@@ -3154,7 +3564,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -3215,26 +3625,464 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
     },
-    "/v1/export/messages": {
+    "/v1/exports": {
       "get": {
         "tags": [
           "Export"
         ],
-        "summary": "Export messages matching a query in the search language, a page at a time.",
+        "summary": "The account's Export Runs as a page, newest first unless `sort` says\notherwise, narrowed to one `status` when given.",
+        "operationId": "exports_list_handler",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "One of running, completed, failed, cancelled",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, at most 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, at most 50000",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "`started_at` or `-started_at`. Default `-started_at`, newest first.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ExportRun"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Export"
+        ],
+        "summary": "Start an Export Run: compile the scope, count what it matches, and\nrecord the run as `running`. Read its messages at\n`GET /v1/exports/{id}/messages`, then close it with `complete` or `cancel`.",
+        "operationId": "exports_create_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExportBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Path of the new run"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
+          }
+        ]
+      }
+    },
+    "/v1/exports/{id}": {
+      "get": {
+        "tags": [
+          "Export"
+        ],
+        "summary": "One Export Run.",
+        "operationId": "exports_get_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Export Run id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRun"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
+          }
+        ]
+      }
+    },
+    "/v1/exports/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Export"
+        ],
+        "summary": "Record that the client gave the run up.",
+        "operationId": "exports_cancel_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Export Run id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRun"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The run is already finished",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
+          }
+        ]
+      }
+    },
+    "/v1/exports/{id}/complete": {
+      "post": {
+        "tags": [
+          "Export"
+        ],
+        "summary": "Record that the client finished reading the run.",
+        "operationId": "exports_complete_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Export Run id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRun"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The run is already finished",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
+          }
+        ]
+      }
+    },
+    "/v1/exports/{id}/messages": {
+      "get": {
+        "tags": [
+          "Export"
+        ],
+        "summary": "The messages a running Export Run's scope selects, a page at a time,\noldest first unless `sort` says otherwise. Each page read raises the\nrun's `messages_delivered` to the rows handed over so far.",
         "operationId": "export_messages_handler",
         "parameters": [
           {
-            "name": "q",
-            "in": "query",
-            "description": "Query in the search language; empty is every non-trashed message",
+            "name": "id",
+            "in": "path",
+            "description": "Export Run id",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "integer",
+              "format": "int64"
             }
           },
           {
@@ -3261,14 +4109,6 @@
             "name": "sort",
             "in": "query",
             "description": "`date` or `-date`. Default `date`, oldest first.",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
             "required": false,
             "schema": {
               "type": "string"
@@ -3316,62 +4156,7 @@
               }
             }
           },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/export/messages/count": {
-      "get": {
-        "tags": [
-          "Export"
-        ],
-        "summary": "Count messages, conversations, and attachment fingerprints matching a\nquery.",
-        "operationId": "export_messages_count_handler",
-        "parameters": [
-          {
-            "name": "q",
-            "in": "query",
-            "description": "Query in the search language; empty is every non-trashed message",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ExportCountResponse"
-                }
-              }
-            }
-          },
-          "400": {
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -3381,18 +4166,8 @@
               }
             }
           },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
+          "409": {
+            "description": "The run is no longer running",
             "content": {
               "application/json": {
                 "schema": {
@@ -3414,7 +4189,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
           }
         ]
       }
@@ -3454,6 +4236,15 @@
             "schema": {
               "type": "integer",
               "minimum": 0
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "`started_at` or `-started_at`. Default `-started_at`, newest first.",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -3501,7 +4292,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       },
@@ -3583,7 +4381,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -3651,7 +4456,118 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Import"
+        ],
+        "summary": "Move a live import session to another stage.",
+        "description": "The stage is a field of the run, so moving it is a `PATCH` of the run\nrather than a `POST` to a `stage` sub-resource: a path segment names a\nresource, and `stage` is not one (`docs/agents/http-api-rules.md`,\n\"Naming a route\"). The answer is the run itself, the same shape\n`GET /v1/imports/{id}` returns, so a caller reads one record wherever it\nasks.",
+        "operationId": "imports_patch_handler",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Import session id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetImportStageBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -3665,42 +4581,10 @@
         "operationId": "import_batch_handler",
         "parameters": [
           {
-            "name": "source",
-            "in": "query",
+            "name": "id",
+            "in": "path",
+            "description": "Import Run id",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "account",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "mode",
-            "in": "query",
-            "description": "Default append",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "dedupe",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "import_id",
-            "in": "query",
-            "required": false,
             "schema": {
               "type": "integer",
               "format": "int64"
@@ -3798,7 +4682,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -3896,7 +4787,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -3906,8 +4804,8 @@
         "tags": [
           "Import"
         ],
-        "summary": "List the contacts one import run created or changed.",
-        "description": "New and changed are told apart by comparing each contact's `created_at`\nagainst the moment the run started: a contact first recorded during the run\nis new, one merely touched is changed.",
+        "summary": "List the contacts one import run created or changed, newest first.",
+        "description": "New and changed are told apart by comparing each contact's `created_at`\nagainst the moment the run started: a contact first recorded during the run\nis new, one merely touched is changed. How many of each the run made is on\nthe run's own record, `GET /v1/imports/{id}`.",
         "operationId": "import_contacts_handler",
         "parameters": [
           {
@@ -3919,6 +4817,26 @@
               "type": "integer",
               "format": "int64"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, max 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page offset",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         ],
         "responses": {
@@ -3927,7 +4845,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ImportContactsResponse"
+                  "$ref": "#/components/schemas/Page_ImportContactRow"
                 }
               }
             }
@@ -3965,7 +4883,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -4053,105 +4978,14 @@
         },
         "security": [
           {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/imports/{id}/stage": {
-      "post": {
-        "tags": [
-          "Import"
-        ],
-        "summary": "Move a live import session to another stage.",
-        "operationId": "imports_stage_handler",
-        "parameters": [
+            "session": [
+              "import"
+            ]
+          },
           {
-            "name": "id",
-            "in": "path",
-            "description": "Import session id",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetImportStageBody"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SetImportStageResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -4163,13 +4997,35 @@
         ],
         "summary": "The account's Message Tags, A–Z.",
         "operationId": "message_tags_list",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, max 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page offset",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NamedSetList"
+                  "$ref": "#/components/schemas/Page_NamedSet"
                 }
               }
             }
@@ -4197,7 +5053,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -4279,7 +5135,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -4340,7 +5196,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -4446,7 +5302,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -4468,6 +5324,26 @@
               "type": "integer",
               "format": "int64"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, max 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page offset",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         ],
         "responses": {
@@ -4476,7 +5352,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MemberIdList"
+                  "$ref": "#/components/schemas/Page_i64"
                 }
               }
             }
@@ -4514,7 +5390,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -4610,7 +5486,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -4620,7 +5496,7 @@
         "tags": [
           "Messages"
         ],
-        "summary": "Messages matching `q`, oldest first unless `sort` says otherwise: the same\nrows `GET /v1/export/messages` would return, behind a signed-in session\nwith the list defaults and the list's offset ceiling.",
+        "summary": "Messages matching `q`, oldest first unless `sort` says otherwise: the same\nrows an Export Run with a `query` scope would hand over, behind a signed-in\nsession with the list defaults and the list's offset ceiling.",
         "operationId": "messages_list_handler",
         "parameters": [
           {
@@ -4716,299 +5592,24 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
     },
-    "/v1/owner/accounts": {
+    "/v1/messages/{id}": {
       "get": {
         "tags": [
-          "Owner"
+          "Messages"
         ],
-        "summary": "List the accounts this vault holds, with their flags, message count, and\nstorage use. The owner's own account is not among them.",
-        "operationId": "owner_list_accounts",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ListAccountsResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "post": {
-        "tags": [
-          "Owner"
-        ],
-        "summary": "Create an account. The owner picks the first password and the account\nholder replaces it at first sign-in, so the owner's choice survives one\nsession and no longer.",
-        "operationId": "owner_create_account",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateAccountRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "headers": {
-              "Location": {
-                "schema": {
-                  "type": "string"
-                },
-                "description": "Path of the new account"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ManagedAccount"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/owner/accounts/{id}": {
-      "delete": {
-        "tags": [
-          "Owner"
-        ],
-        "summary": "Permanently delete an account: login, profile, contacts, and every message\nit owns. The demo account is deleted like any other, which is how a demo\nvault is cleared into a real one.",
-        "operationId": "owner_delete_account",
+        "summary": "One message by id: the row the Messages list would show, looked up\ndirectly.",
+        "description": "Read-only. A message is never written through this route: an import\nwrites messages, and trashing is a conversation operation\n(`docs/agents/http-api-rules.md`, \"Methods\"). The lookup carries the\nlist's own defaults — the caller's account, no trashed conversation, no\nduplicate — so a row the list hides is `404` here too, and a link out of\na search result never reaches further than the search did.",
+        "operationId": "message_handler",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "Account id to delete",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Account deleted"
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "patch": {
-        "tags": [
-          "Owner"
-        ],
-        "summary": "Change an account's disabled flag or its import, export and delete\npermissions.",
-        "description": "Clearing `can_import` or `can_export` also narrows every API token that\naccount has already issued, because a token's permissions are intersected\nwith its account's on every request. The owner restrains the account and\nthe tokens follow, without ever seeing one.",
-        "operationId": "owner_patch_account",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Account id to modify",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PatchAccountRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ManagedAccount"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/owner/accounts/{id}/messages": {
-      "delete": {
-        "tags": [
-          "Owner"
-        ],
-        "summary": "Destroy one account's conversations, messages, and attachments. The\naccount itself, its contacts, and its login survive.",
-        "operationId": "owner_delete_account_messages",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Account whose messages are destroyed",
+            "description": "Message id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -5022,7 +5623,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeleteMessagesResponse"
+                  "$ref": "#/components/schemas/Message"
                 }
               }
             }
@@ -5060,98 +5661,7 @@
         },
         "security": [
           {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/v1/owner/accounts/{id}/password": {
-      "put": {
-        "tags": [
-          "Owner"
-        ],
-        "summary": "Set an account's password. Invalidates that account's existing session\n(unlike a self-service password change, which leaves other sessions alone)\n— after this call the account holder must sign in again with the new\npassword, and replace it once they do.",
-        "operationId": "owner_set_account_password",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "description": "Account id whose password is set",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SetPasswordRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "Password set"
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -5163,13 +5673,35 @@
         ],
         "summary": "List the account's saved searches, A–Z.",
         "operationId": "saved_searches_list_handler",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, max 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page offset",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SavedSearchesListResponse"
+                  "$ref": "#/components/schemas/Page_SavedSearch"
                 }
               }
             }
@@ -5197,7 +5729,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -5279,7 +5811,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -5341,7 +5873,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -5447,7 +5979,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -5468,6 +6000,32 @@
             "schema": {
               "$ref": "#/components/schemas/ListKind"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, max 500.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page offset.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
           }
         ],
         "responses": {
@@ -5476,7 +6034,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SearchFieldsResponse"
+                  "$ref": "#/components/schemas/Page_FieldDoc"
                 }
               }
             }
@@ -5524,7 +6082,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -5570,7 +6128,10 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
+          },
+          {
+            "api-token": []
           }
         ]
       },
@@ -5674,7 +6235,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -5713,7 +6274,9 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "delete"
+            ]
           }
         ]
       }
@@ -5852,7 +6415,9 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "owner"
+            ]
           }
         ]
       },
@@ -5906,7 +6471,9 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "owner"
+            ]
           }
         ]
       }
@@ -5914,9 +6481,9 @@
   },
   "components": {
     "schemas": {
-      "AccountProfileResponse": {
+      "AccountResponse": {
         "type": "object",
-        "description": "The signed-in account's profile.",
+        "description": "One account: who it is, what it may do, and how much it holds. The owner\nand the account itself both read the whole struct; nothing in it is a\nmessage.",
         "required": [
           "account_id",
           "username",
@@ -5925,17 +6492,20 @@
           "emails",
           "is_demo",
           "is_owner",
+          "disabled",
           "must_change_password",
           "must_set_up_profile",
           "can_import",
           "can_export",
-          "can_delete"
+          "can_delete",
+          "message_count",
+          "storage_bytes"
         ],
         "properties": {
           "account_id": {
             "type": "integer",
             "format": "int64",
-            "description": "The signed-in account id."
+            "description": "Account id."
           },
           "can_delete": {
             "type": "boolean",
@@ -5948,6 +6518,10 @@
           "can_import": {
             "type": "boolean",
             "description": "May call the import endpoints."
+          },
+          "disabled": {
+            "type": "boolean",
+            "description": "May not sign in."
           },
           "emails": {
             "type": "array",
@@ -5963,6 +6537,11 @@
           "is_owner": {
             "type": "boolean",
             "description": "True for the vault owner: manages accounts, holds no messages."
+          },
+          "message_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Messages this account owns."
           },
           "must_change_password": {
             "type": "boolean",
@@ -5986,47 +6565,18 @@
             ],
             "description": "Display name, when set."
           },
+          "storage_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Attachment bytes this account owns."
+          },
           "time_zone": {
             "type": "string",
             "description": "IANA time zone every message time, day and year is shown in, for\nexample `America/New_York`. Chosen at profile setup."
           },
           "username": {
             "type": "string",
-            "description": "Account username (falls back to the account id)."
-          }
-        }
-      },
-      "AccountProfileUpdateRequest": {
-        "type": "object",
-        "description": "Display name and handle changes.",
-        "properties": {
-          "handles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProfileHandleInput"
-            },
-            "description": "Handles to add/link onto the account profile."
-          },
-          "preferred_name": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Display name to set; `None` (or empty) leaves the current name unchanged."
-          },
-          "remove_handles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProfileHandleInput"
-            },
-            "description": "Handles to unlink from the account profile."
-          },
-          "time_zone": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "IANA time zone to set, for example `America/New_York`; `None` leaves\nthe current zone unchanged. An unknown name is a 400."
+            "description": "Login username."
           }
         }
       },
@@ -6290,37 +6840,6 @@
               "null"
             ],
             "description": "OCR/ASR transcription, when processed."
-          }
-        }
-      },
-      "ChangePasswordRequest": {
-        "type": "object",
-        "description": "Current and new password.",
-        "required": [
-          "current_password",
-          "new_password"
-        ],
-        "properties": {
-          "current_password": {
-            "type": "string",
-            "description": "The account's current password."
-          },
-          "new_password": {
-            "type": "string",
-            "description": "Replacement password."
-          }
-        }
-      },
-      "ChangePasswordResponse": {
-        "type": "object",
-        "description": "Fresh session token issued after the password change.",
-        "required": [
-          "token"
-        ],
-        "properties": {
-          "token": {
-            "type": "string",
-            "description": "Replacement session token after password change (previous sessions are revoked)."
           }
         }
       },
@@ -6760,22 +7279,6 @@
           }
         }
       },
-      "ContactSummariesPage": {
-        "type": "object",
-        "description": "Response for `POST /v1/contacts/summaries`.",
-        "required": [
-          "items"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ContactSelectionSummary"
-            },
-            "description": "One summary per requested contact."
-          }
-        }
-      },
       "ContactSummary": {
         "type": "object",
         "description": "Contact row for the list: name, handles, groups.",
@@ -6879,22 +7382,6 @@
           }
         }
       },
-      "ConversationSourcesPage": {
-        "type": "object",
-        "description": "Per-source counts for one conversation.",
-        "required": [
-          "items"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ConversationSourceInfo"
-            },
-            "description": "One entry per source that contributed messages."
-          }
-        }
-      },
       "ConversationSummary": {
         "type": "object",
         "description": "Conversation row for the list: participants, counts, tags.",
@@ -6970,15 +7457,31 @@
       },
       "CreateAccountRequest": {
         "type": "object",
-        "description": "Body for creating an account as the vault owner.",
+        "description": "Body for creating an account, by the vault owner or by a stranger.",
         "required": [
-          "username",
-          "password"
+          "username"
         ],
         "properties": {
           "password": {
-            "type": "string",
-            "description": "Initial password. Must satisfy the vault's password policy. The\naccount holder is made to replace it at first sign-in, so it survives\nexactly one session."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Local password. The owner must give one, and the account holder\nreplaces it at first sign-in. A stranger may leave it absent or empty\nto open an account with no password."
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Phone number linked to the account."
+          },
+          "preferred_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name shown in the vault."
           },
           "username": {
             "type": "string",
@@ -7076,6 +7579,26 @@
           }
         }
       },
+      "CreateExportBody": {
+        "type": "object",
+        "description": "Body of `POST /v1/exports`: the scope, and the tool that asked.",
+        "required": [
+          "scope"
+        ],
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/ExportScope",
+            "description": "What to export."
+          },
+          "tool": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Client/tool name recorded on the run, e.g. `vault-pull`."
+          }
+        }
+      },
       "CreateImportBody": {
         "type": "object",
         "description": "Source, mode, dedupe and tool for a new Import Run. The bearer token\nnames the account.",
@@ -7161,6 +7684,27 @@
           }
         }
       },
+      "CreatedAccountResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AccountResponse",
+            "description": "The new account."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Session token to send as `Authorization: Bearer …`. Present only when\na stranger registered, because they are signed in on creation."
+              }
+            }
+          }
+        ],
+        "description": "The account that was created, and the Session a stranger's registration\nopens on it. The owner's creation opens no session, so `token` is absent."
+      },
       "DedupeResponse": {
         "type": "object",
         "description": "Cross-source dedupe outcome.",
@@ -7195,7 +7739,7 @@
       },
       "DeleteAccountRequest": {
         "type": "object",
-        "description": "Confirmation flag and the current password when one is set.",
+        "description": "Confirmation flag and the current password when one is set: the body an\naccount sends to delete itself. The owner sends none.",
         "required": [
           "confirm"
         ],
@@ -7215,14 +7759,14 @@
       },
       "DeleteMessagesRequest": {
         "type": "object",
-        "description": "Confirmation flag for deleting all messages.",
+        "description": "Confirmation flag: the body an account sends to delete its own messages.\nThe owner sends none.",
         "required": [
           "confirm"
         ],
         "properties": {
           "confirm": {
             "type": "boolean",
-            "description": "Must be `true`; anything else is rejected with a 400."
+            "description": "Must be `true`; anything else is rejected."
           }
         }
       },
@@ -7265,41 +7809,149 @@
           }
         }
       },
-      "ExportCountResponse": {
+      "ExportRun": {
         "type": "object",
-        "description": "Match counts for an export query.",
+        "description": "One Export Run: what was asked for and how much matched, never what\nthe messages said. `POST /v1/exports` creates one, every route under\n`/v1/exports/{id}` answers it.",
         "required": [
-          "messages",
-          "conversations",
-          "attachments",
-          "total_bytes"
+          "id",
+          "scope",
+          "status",
+          "started_at",
+          "message_count",
+          "conversation_count",
+          "attachment_count",
+          "total_bytes",
+          "messages_delivered"
         ],
         "properties": {
-          "attachments": {
+          "attachment_count": {
             "type": "integer",
             "format": "int64",
-            "description": "Unique attachment fingerprints among matching messages.",
-            "minimum": 0
+            "description": "Distinct attachment fingerprints among the matching messages."
           },
-          "conversations": {
+          "conversation_count": {
             "type": "integer",
             "format": "int64",
-            "description": "Distinct conversations with at least one matching message.",
-            "minimum": 0
+            "description": "Distinct conversations with at least one matching message."
           },
-          "messages": {
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "UTC time the run finished, when it has."
+          },
+          "id": {
             "type": "integer",
             "format": "int64",
-            "description": "Matching messages.",
-            "minimum": 0
+            "description": "Export Run id."
+          },
+          "message_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Messages the scope matched when the run was created."
+          },
+          "messages_delivered": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows handed over so far through `GET /v1/exports/{id}/messages`,\nso an abandoned run shows how far it got."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ExportScope",
+            "description": "What the run asked for, as given."
+          },
+          "started_at": {
+            "type": "string",
+            "description": "UTC time the run started."
+          },
+          "status": {
+            "type": "string",
+            "description": "Lifecycle status: `running`, `completed`, `failed`, or `cancelled`."
+          },
+          "tool": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Exporting tool, e.g. `vault-pull`, when the client named one."
           },
           "total_bytes": {
             "type": "integer",
             "format": "int64",
-            "description": "Sum of known `size_bytes` for those unique fingerprints (unknown sizes omitted).",
-            "minimum": 0
+            "description": "Sum of the known sizes of those distinct attachments, in bytes."
           }
         }
+      },
+      "ExportScope": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Every non-trashed message the account holds.",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "everything"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The messages a query in the search language matches.",
+            "required": [
+              "q",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "query"
+                ]
+              },
+              "q": {
+                "type": "string",
+                "description": "The query, as typed. Never blank: an empty query is the\n`everything` form."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Conversations and messages picked by hand. A message is selected when\nits conversation is listed or it is listed itself; either list may be\nempty, but not both.",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "conversation_ids": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "description": "Conversation ids whose every message is exported."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "selection"
+                ]
+              },
+              "message_ids": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "description": "Message ids exported on their own."
+              }
+            }
+          }
+        ],
+        "description": "What an Export Run asked for, stored as given (`docs/agents/http-api-rules.md`,\n\"Runs\"). One of three forms: everything the account holds, a query in the\nsearch language, or conversations and messages picked by hand."
       },
       "FieldDoc": {
         "type": "object",
@@ -7361,36 +8013,6 @@
           }
         }
       },
-      "ImportContactsResponse": {
-        "type": "object",
-        "description": "Response for `GET /v1/imports/{id}/contacts`.",
-        "required": [
-          "contacts",
-          "new_count",
-          "changed_count"
-        ],
-        "properties": {
-          "changed_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "How many it only changed.",
-            "minimum": 0
-          },
-          "contacts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ImportContactRow"
-            },
-            "description": "Contacts the run created or changed, newest first."
-          },
-          "new_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "How many of them the run created.",
-            "minimum": 0
-          }
-        }
-      },
       "ImportDetailIssueResponse": {
         "type": "object",
         "description": "One stored import issue.",
@@ -7428,7 +8050,9 @@
           "attachment_count",
           "bytes_uploaded",
           "summary",
-          "issues"
+          "issues",
+          "contacts_new",
+          "contacts_changed"
         ],
         "properties": {
           "attachment_count": {
@@ -7445,6 +8069,18 @@
           "bytes_uploaded": {
             "type": "integer",
             "format": "int64"
+          },
+          "contacts_changed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contacts it only changed.",
+            "minimum": 0
+          },
+          "contacts_new": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contacts this run created.",
+            "minimum": 0
           },
           "duration_ms": {
             "type": [
@@ -7785,7 +8421,7 @@
             "description": "Lifecycle status (`running`, `completed`, `completed_with_issues`,\n`failed`, or `cancelled`)."
           },
           "summary": {
-            "description": "What the user approved at the last gate they passed, or null. The\ncolumn `POST /v1/imports/{id}/stage` writes with its `summary`."
+            "description": "What the user approved at the last gate they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
           },
           "tool": {
             "type": [
@@ -7793,38 +8429,6 @@
               "null"
             ],
             "description": "Importing tool, e.g. `vault-push`."
-          }
-        }
-      },
-      "ListAccountsResponse": {
-        "type": "object",
-        "description": "Every account in the vault except the owner's own.",
-        "required": [
-          "items"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ManagedAccount"
-            },
-            "description": "One row per account."
-          }
-        }
-      },
-      "ListApiTokensResponse": {
-        "type": "object",
-        "description": "The account's named API tokens.",
-        "required": [
-          "items"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ApiTokenItem"
-            },
-            "description": "The account's tokens."
           }
         }
       },
@@ -7836,78 +8440,6 @@
           "conversations",
           "messages"
         ]
-      },
-      "ManagedAccount": {
-        "type": "object",
-        "description": "One account as the vault owner sees it: who it is and what it holds, never\nwhat it says.",
-        "required": [
-          "account_id",
-          "username",
-          "disabled",
-          "must_change_password",
-          "can_import",
-          "can_export",
-          "can_delete",
-          "message_count",
-          "storage_bytes"
-        ],
-        "properties": {
-          "account_id": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Account id."
-          },
-          "can_delete": {
-            "type": "boolean",
-            "description": "May destroy message data."
-          },
-          "can_export": {
-            "type": "boolean",
-            "description": "May call the export endpoints."
-          },
-          "can_import": {
-            "type": "boolean",
-            "description": "May call the import endpoints."
-          },
-          "disabled": {
-            "type": "boolean",
-            "description": "May not sign in."
-          },
-          "message_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Messages this account owns."
-          },
-          "must_change_password": {
-            "type": "boolean",
-            "description": "Still carries the password the owner chose, and must replace it."
-          },
-          "storage_bytes": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Attachment bytes this account owns."
-          },
-          "username": {
-            "type": "string",
-            "description": "Login username."
-          }
-        }
-      },
-      "MemberIdList": {
-        "type": "object",
-        "description": "Member ids of one set, ascending.",
-        "required": [
-          "items"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        }
       },
       "MembersChanged": {
         "type": "object",
@@ -8139,18 +8671,322 @@
           }
         }
       },
-      "NamedSetList": {
+      "Page_AccountResponse": {
         "type": "object",
-        "description": "The account's sets of one kind, A–Z.",
+        "description": "One page of a list.",
         "required": [
-          "items"
+          "items",
+          "total",
+          "limit",
+          "offset"
         ],
         "properties": {
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/NamedSet"
-            }
+              "type": "object",
+              "description": "One account: who it is, what it may do, and how much it holds. The owner\nand the account itself both read the whole struct; nothing in it is a\nmessage.",
+              "required": [
+                "account_id",
+                "username",
+                "time_zone",
+                "phones",
+                "emails",
+                "is_demo",
+                "is_owner",
+                "disabled",
+                "must_change_password",
+                "must_set_up_profile",
+                "can_import",
+                "can_export",
+                "can_delete",
+                "message_count",
+                "storage_bytes"
+              ],
+              "properties": {
+                "account_id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Account id."
+                },
+                "can_delete": {
+                  "type": "boolean",
+                  "description": "May destroy message data."
+                },
+                "can_export": {
+                  "type": "boolean",
+                  "description": "May call the export endpoints."
+                },
+                "can_import": {
+                  "type": "boolean",
+                  "description": "May call the import endpoints."
+                },
+                "disabled": {
+                  "type": "boolean",
+                  "description": "May not sign in."
+                },
+                "emails": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Email addresses linked to the account."
+                },
+                "is_demo": {
+                  "type": "boolean",
+                  "description": "True for the seeded demo account (cannot be deleted)."
+                },
+                "is_owner": {
+                  "type": "boolean",
+                  "description": "True for the vault owner: manages accounts, holds no messages."
+                },
+                "message_count": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Messages this account owns."
+                },
+                "must_change_password": {
+                  "type": "boolean",
+                  "description": "The vault owner chose this password; it must be replaced before the\naccount can be used."
+                },
+                "must_set_up_profile": {
+                  "type": "boolean",
+                  "description": "The account holder has not set up their profile yet, so profile setup\nis owed before the account can be used. The vault decides this, not the\nclient: the same answer reaches every app, and it survives cleared site\ndata and a second browser."
+                },
+                "phones": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Phone handles linked to the account."
+                },
+                "preferred_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Display name, when set."
+                },
+                "storage_bytes": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Attachment bytes this account owns."
+                },
+                "time_zone": {
+                  "type": "string",
+                  "description": "IANA time zone every message time, day and year is shown in, for\nexample `America/New_York`. Chosen at profile setup."
+                },
+                "username": {
+                  "type": "string",
+                  "description": "Login username."
+                }
+              }
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
+          }
+        }
+      },
+      "Page_ApiTokenItem": {
+        "type": "object",
+        "description": "One page of a list.",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One named API token as shown in Settings: label, permissions, and masked secret.",
+              "required": [
+                "id",
+                "label",
+                "can_import",
+                "can_export",
+                "can_delete",
+                "token_hint",
+                "created_at",
+                "disabled"
+              ],
+              "properties": {
+                "can_delete": {
+                  "type": "boolean",
+                  "description": "May destroy message data."
+                },
+                "can_export": {
+                  "type": "boolean",
+                  "description": "May call the export endpoints."
+                },
+                "can_import": {
+                  "type": "boolean",
+                  "description": "May call the import endpoints."
+                },
+                "created_at": {
+                  "type": "string",
+                  "description": "Creation time as a Unix-seconds string."
+                },
+                "disabled": {
+                  "type": "boolean",
+                  "description": "True when the token is disabled and rejects requests."
+                },
+                "expires_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Unix-seconds expiry; absent means no expiry."
+                },
+                "id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Token id (the secret itself is stored hashed)."
+                },
+                "label": {
+                  "type": "string",
+                  "description": "User-chosen label shown in Settings."
+                },
+                "last_accessed_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Unix-seconds string of last use; absent when never used."
+                },
+                "token_hint": {
+                  "type": "string",
+                  "description": "Masked secret for Settings (e.g. `mv-api-Sd..mE`)."
+                }
+              }
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
+          }
+        }
+      },
+      "Page_ContactSelectionSummary": {
+        "type": "object",
+        "description": "One page of a list.",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "Contact-level first/last seen and message counts for the selection table.",
+              "required": [
+                "id",
+                "name",
+                "individual_conversations",
+                "group_conversations",
+                "individual_message_count",
+                "group_message_count"
+              ],
+              "properties": {
+                "end_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Date of the contact's last message."
+                },
+                "group_conversations": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Group conversations with the contact.",
+                  "minimum": 0
+                },
+                "group_message_count": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Messages in group conversations with the contact.",
+                  "minimum": 0
+                },
+                "id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Contact id."
+                },
+                "individual_conversations": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "1:1 conversations with the contact.",
+                  "minimum": 0
+                },
+                "individual_message_count": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Messages in 1:1 conversations with the contact.",
+                  "minimum": 0
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Contact display name."
+                },
+                "start_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Date of the contact's first message."
+                }
+              }
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
           }
         }
       },
@@ -8208,6 +9044,71 @@
                 "name": {
                   "type": "string",
                   "description": "Contact display name."
+                }
+              }
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
+          }
+        }
+      },
+      "Page_ConversationSourceInfo": {
+        "type": "object",
+        "description": "One page of a list.",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One backup source with message counts and share.",
+              "required": [
+                "backup_name",
+                "message_count",
+                "unique_count",
+                "percentage"
+              ],
+              "properties": {
+                "backup_name": {
+                  "type": "string",
+                  "description": "Backup source name."
+                },
+                "message_count": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Messages in this conversation from this source.",
+                  "minimum": 0
+                },
+                "percentage": {
+                  "type": "number",
+                  "format": "double",
+                  "description": "Share of the conversation's unique messages, 0–100."
+                },
+                "unique_count": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Messages only this source has (not hidden duplicates).",
+                  "minimum": 0
                 }
               }
             },
@@ -8313,6 +9214,235 @@
                     "type": "string"
                   },
                   "description": "Message tags on this conversation."
+                }
+              }
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
+          }
+        }
+      },
+      "Page_ExportRun": {
+        "type": "object",
+        "description": "One page of a list.",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One Export Run: what was asked for and how much matched, never what\nthe messages said. `POST /v1/exports` creates one, every route under\n`/v1/exports/{id}` answers it.",
+              "required": [
+                "id",
+                "scope",
+                "status",
+                "started_at",
+                "message_count",
+                "conversation_count",
+                "attachment_count",
+                "total_bytes",
+                "messages_delivered"
+              ],
+              "properties": {
+                "attachment_count": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Distinct attachment fingerprints among the matching messages."
+                },
+                "conversation_count": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Distinct conversations with at least one matching message."
+                },
+                "finished_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "UTC time the run finished, when it has."
+                },
+                "id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Export Run id."
+                },
+                "message_count": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Messages the scope matched when the run was created."
+                },
+                "messages_delivered": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Rows handed over so far through `GET /v1/exports/{id}/messages`,\nso an abandoned run shows how far it got."
+                },
+                "scope": {
+                  "$ref": "#/components/schemas/ExportScope",
+                  "description": "What the run asked for, as given."
+                },
+                "started_at": {
+                  "type": "string",
+                  "description": "UTC time the run started."
+                },
+                "status": {
+                  "type": "string",
+                  "description": "Lifecycle status: `running`, `completed`, `failed`, or `cancelled`."
+                },
+                "tool": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Exporting tool, e.g. `vault-pull`, when the client named one."
+                },
+                "total_bytes": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Sum of the known sizes of those distinct attachments, in bytes."
+                }
+              }
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
+          }
+        }
+      },
+      "Page_FieldDoc": {
+        "type": "object",
+        "description": "One page of a list.",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One word as the web and the docs see it.",
+              "required": [
+                "word",
+                "value_type",
+                "values",
+                "help",
+                "example"
+              ],
+              "properties": {
+                "example": {
+                  "type": "string",
+                  "description": "One example, ready to type."
+                },
+                "help": {
+                  "type": "string",
+                  "description": "One line of help."
+                },
+                "value_type": {
+                  "$ref": "#/components/schemas/ValueType",
+                  "description": "What shape of value it takes."
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Keyword or fixed values the word accepts."
+                },
+                "word": {
+                  "type": "string",
+                  "description": "The spelling, without the colon."
+                }
+              }
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
+          }
+        }
+      },
+      "Page_ImportContactRow": {
+        "type": "object",
+        "description": "One page of a list.",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One contact an import run touched, and whether the run created it.",
+              "required": [
+                "id",
+                "name",
+                "is_new"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Contact id."
+                },
+                "is_new": {
+                  "type": "boolean",
+                  "description": "True when this run created the contact, false when it only changed one\nthat already existed."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Preferred name; empty when the run learned an address and no name."
                 }
               }
             },
@@ -8453,7 +9583,7 @@
                   "description": "Lifecycle status (`running`, `completed`, `completed_with_issues`,\n`failed`, or `cancelled`)."
                 },
                 "summary": {
-                  "description": "What the user approved at the last gate they passed, or null. The\ncolumn `POST /v1/imports/{id}/stage` writes with its `summary`."
+                  "description": "What the user approved at the last gate they passed, or null. The\ncolumn `PATCH /v1/imports/{id}` writes with its `summary`."
                 },
                 "tool": {
                   "type": [
@@ -8638,6 +9768,187 @@
           }
         }
       },
+      "Page_NamedSet": {
+        "type": "object",
+        "description": "One page of a list.",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One Contact Group or Message Tag: its id and name.",
+              "required": [
+                "id",
+                "name"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "format": "int64"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
+          }
+        }
+      },
+      "Page_SavedSearch": {
+        "type": "object",
+        "description": "One page of a list.",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One row of `saved_searches`.",
+              "required": [
+                "id",
+                "name",
+                "query",
+                "kind"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Saved search id, unique across the vault."
+                },
+                "kind": {
+                  "type": "string",
+                  "description": "`manual` or `import`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Display name, unique per account."
+                },
+                "query": {
+                  "type": "string",
+                  "description": "Query string, run against the conversation list."
+                }
+              }
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
+          }
+        }
+      },
+      "Page_String": {
+        "type": "object",
+        "description": "One page of a list.",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
+          }
+        }
+      },
+      "Page_i64": {
+        "type": "object",
+        "description": "One page of a list.",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
+          }
+        }
+      },
       "Participant": {
         "type": "object",
         "description": "One participant of a conversation, carrying the name to show for them:\nthe Contact's name, else what that backup called them in that\nconversation, else the handle.",
@@ -8675,7 +9986,7 @@
       },
       "PatchAccountRequest": {
         "type": "object",
-        "description": "Body for changing an account's flags. Omitted fields are left alone.",
+        "description": "Body for changing an account. Omitted fields are left alone. The name,\nzone and handles are the account's own to set; the disabled flag and the\nthree permissions are the vault owner's.",
         "properties": {
           "can_delete": {
             "type": [
@@ -8704,6 +10015,34 @@
               "null"
             ],
             "description": "Disable or re-enable sign-in."
+          },
+          "handles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProfileHandleInput"
+            },
+            "description": "Handles to add/link onto the account profile."
+          },
+          "preferred_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name to set; `None` (or empty) leaves the current name unchanged."
+          },
+          "remove_handles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProfileHandleInput"
+            },
+            "description": "Handles to unlink from the account profile."
+          },
+          "time_zone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "IANA time zone to set, for example `America/New_York`; `None` leaves\nthe current zone unchanged. An unknown name is a 422."
           }
         }
       },
@@ -8810,40 +10149,6 @@
           }
         }
       },
-      "RegisterRequest": {
-        "type": "object",
-        "description": "Body for local account registration.",
-        "required": [
-          "username"
-        ],
-        "properties": {
-          "password": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Local password; absent or empty registers an account without one."
-          },
-          "phone": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Phone number linked to the account."
-          },
-          "preferred_name": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Display name shown in the vault."
-          },
-          "username": {
-            "type": "string",
-            "description": "Login username."
-          }
-        }
-      },
       "RenameApiTokenRequest": {
         "type": "object",
         "description": "Body for renaming a token.",
@@ -8921,36 +10226,6 @@
           }
         }
       },
-      "SavedSearchesListResponse": {
-        "type": "object",
-        "description": "The account's saved searches, A–Z.",
-        "required": [
-          "items"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SavedSearch"
-            }
-          }
-        }
-      },
-      "SearchFieldsResponse": {
-        "type": "object",
-        "description": "The words for one list, in the order the docs table shows them.",
-        "required": [
-          "items"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FieldDoc"
-            }
-          }
-        }
-      },
       "SessionResponse": {
         "type": "object",
         "description": "The signed-in credential's account, username, and import sources.",
@@ -9018,28 +10293,36 @@
           }
         }
       },
-      "SetImportStageResponse": {
-        "type": "object",
-        "description": "Confirmation that the stage moved.",
-        "required": [
-          "stage"
-        ],
-        "properties": {
-          "stage": {
-            "type": "string"
-          }
-        }
-      },
       "SetPasswordRequest": {
         "type": "object",
-        "description": "Body for the vault owner setting someone's password.",
+        "description": "The new password, and the current one when an account changes its own.",
         "required": [
           "password"
         ],
         "properties": {
+          "current_password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The account's current password. Required when an account changes its\nown; ignored when the vault owner sets another account's."
+          },
           "password": {
             "type": "string",
             "description": "The new password. Must satisfy the vault's password policy."
+          }
+        }
+      },
+      "SetPasswordResponse": {
+        "type": "object",
+        "description": "Fresh session token issued after an account changed its own password.",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Replacement session token (the previous one is revoked)."
           }
         }
       },
@@ -9149,22 +10432,6 @@
           }
         }
       },
-      "UnmatchedHandlesResponse": {
-        "type": "object",
-        "description": "Response for `POST /v1/contacts/unmatched-handles`.",
-        "required": [
-          "unknown"
-        ],
-        "properties": {
-          "unknown": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "The subset this account has no contact for: trimmed, in first-seen\norder, blanks dropped and duplicates (by normalized form) collapsed\nto their first spelling."
-          }
-        }
-      },
       "ValueType": {
         "type": "string",
         "description": "What shape of value a word takes.",
@@ -9216,9 +10483,15 @@
       }
     },
     "securitySchemes": {
-      "bearer": {
+      "api-token": {
         "type": "http",
-        "scheme": "bearer"
+        "scheme": "bearer",
+        "description": "A named API token: the `mv-api-` secret `POST /v1/accounts/{id}/api-tokens` returns once, carrying the import, export and delete scopes it was created with. Only the routes listing it accept one; every other route answers 403."
+      },
+      "session": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "A signed-in Session: the `mv-user-` token `POST /v1/session` returns. A route naming a scope needs that permission on the account."
       }
     }
   },
@@ -9228,16 +10501,12 @@
       "description": "Process liveness"
     },
     {
-      "name": "Auth",
-      "description": "Registration"
-    },
-    {
       "name": "Session",
       "description": "The signed-in credential: sign in, check it, sign out"
     },
     {
-      "name": "Account",
-      "description": "Profile, storage, and API tokens"
+      "name": "Accounts",
+      "description": "The vault's accounts: the owner manages them, and each account reads and writes its own, API tokens included"
     },
     {
       "name": "Import",
@@ -9245,7 +10514,7 @@
     },
     {
       "name": "Export",
-      "description": "Read-only messages and counts"
+      "description": "Export Runs: create one, page its messages, close it"
     },
     {
       "name": "Assets",
@@ -9270,10 +10539,6 @@
     {
       "name": "Search",
       "description": "The words the search language accepts"
-    },
-    {
-      "name": "Owner",
-      "description": "Account management for the vault owner"
     },
     {
       "name": "Vault",

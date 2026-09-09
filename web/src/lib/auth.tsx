@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { getToken, setBaseUrl, setToken } from "./api";
+import { getToken, setAccountId, setBaseUrl, setToken } from "./api";
 import { parsePersistedAuth } from "./authGuards";
 import { isTauri } from "./tauri-check";
 import { fetchAccountProfileFor } from "./useAccountProfile";
@@ -109,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // a token, fails, and the sidebar stays on "No group" only.
       setBaseUrl(persisted.serverUrl);
       setToken(persisted.token);
+      setAccountId(persisted.accountId);
       return {
         serverUrl: persisted.serverUrl,
         token: persisted.token,
@@ -127,7 +128,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setBaseUrl(state.serverUrl);
     setToken(state.token);
-  }, [state.serverUrl, state.token]);
+    setAccountId(state.accountId);
+  }, [state.serverUrl, state.token, state.accountId]);
 
   // Check that the restored token still works.
   useEffect(() => {
@@ -138,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         setBaseUrl(state.serverUrl);
         setToken(state.token);
+        setAccountId(state.accountId);
         await getSession();
         if (cancelled) return;
 
@@ -157,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           authEpoch.current++;
           setToken(null);
+          setAccountId(null);
           clearPersisted();
           setState((s) => ({
             ...s,
@@ -187,6 +191,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetVaultCache();
       setBaseUrl(serverUrl);
       setToken(token);
+      // The profile is the account's own row, addressed by this id, so the
+      // client must know it before the fetch below.
+      setAccountId(accountId);
 
       // Fetch the profile before the app renders: it carries whether this
       // account still owes profile setup or a password change, and the guards
@@ -235,6 +242,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     setToken(null);
+    setAccountId(null);
     resetVaultCache();
     clearPersisted();
     setState((s) => ({

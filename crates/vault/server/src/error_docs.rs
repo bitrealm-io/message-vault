@@ -139,11 +139,11 @@ mod tests {
         let page = type_page(ProblemType::RateLimited);
         assert!(page.contains(&format!(
             "more than {} attempts",
-            crate::auth::AUTH_RATE_MAX
+            crate::credentials::AUTH_RATE_MAX
         )));
         assert!(page.contains(&format!(
             "inside {} seconds",
-            crate::auth::AUTH_RATE_WINDOW.as_secs()
+            crate::credentials::AUTH_RATE_WINDOW.as_secs()
         )));
     }
 

@@ -1,6 +1,7 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
 use message_ir_format::{ExportTransforms, FormatSinkResult};
+use message_vault_io_core::testutil::{assert_csv_row, csv_rows};
 use message_vault_io_core::{ExportReport, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -34,13 +35,40 @@ fn convert_messages_keys_the_chat_by_its_number() {
 
     let out = tmp.path().join("+13212462167.csv");
     let body = fs::read_to_string(&out).expect("read csv");
-    assert!(body.contains("chat_identifier"));
     assert!(body.contains("imazing"));
     assert!(body.contains("iMazing"));
     assert!(body.contains("3.5.5"));
-    assert!(body.contains("Bob McRoy"));
-    assert!(body.contains("image000000.jpg"));
-    assert!(body.contains("imazing_type"));
+
+    // The three messages, read back by column. The substring assertions above
+    // are satisfied by the header line and the export metadata, so they hold
+    // even if every row was dropped — `chat_identifier` and `imazing_type` are
+    // column names, not values.
+    assert_csv_row(
+        &out,
+        &[
+            ("text", "Hello from Bob"),
+            ("direction", "incoming"),
+            ("service", "sms"),
+            ("sender_display_name", "Bob McRoy"),
+        ],
+    );
+    assert_csv_row(&out, &[("text", "Hi Bob"), ("direction", "outgoing")]);
+    // The third row is an iMessage carrying an attachment, so it proves both
+    // that the service column follows the source and that the attachment file
+    // name reached the row rather than only the folder.
+    let rows = csv_rows(&out);
+    let photo = rows
+        .iter()
+        .find(|r| r.get("text").is_some_and(|t| t == "Photo"))
+        .expect("the attachment message must be in the export");
+    assert_eq!(photo.get("service").map(String::as_str), Some("imessage"));
+    assert!(
+        photo
+            .get("attachments_json")
+            .is_some_and(|a| a.contains("image000000.jpg")),
+        "the attachment must be recorded on its own message, not merely \
+         somewhere in the file: {photo:#?}"
+    );
 }
 
 #[test]
@@ -56,9 +84,37 @@ fn convert_whatsapp_csv_direct() {
     let out = tmp.path().join("+13212462167__whatsapp.csv");
     let body = fs::read_to_string(&out).expect("read csv");
     assert!(body.contains("WhatsApp"));
-    assert!(body.contains("forwarded"));
-    assert!(body.contains("Yes"));
-    assert!(body.contains("12.34 KB"));
+
+    // `contains("forwarded")` matched the `forwarded` key that every row's
+    // `source_fields_json` carries whatever its value, so it passed even when
+    // no message was actually marked forwarded. The flag is read off the row
+    // that should carry it instead, together with the other two messages, so a
+    // parse that lost the column or put the flag on the wrong message fails.
+    assert_csv_row(
+        &out,
+        &[("text", "Hello on WhatsApp"), ("direction", "incoming")],
+    );
+    assert_csv_row(
+        &out,
+        &[("text", "Reply on WhatsApp"), ("direction", "outgoing")],
+    );
+    let rows = csv_rows(&out);
+    let forwarded = rows
+        .iter()
+        .find(|r| r.get("text").is_some_and(|t| t == "Forwarded photo"))
+        .expect("the forwarded message must be in the export");
+    let source: serde_json::Value =
+        serde_json::from_str(forwarded.get("source_fields_json").expect("source fields"))
+            .expect("source_fields_json is JSON");
+    assert_eq!(
+        source.get("forwarded").and_then(|v| v.as_str()),
+        Some("Yes"),
+        "the forwarded flag belongs to this message: {forwarded:#?}"
+    );
+    assert_eq!(
+        source.get("attachment_info").and_then(|v| v.as_str()),
+        Some("12.34 KB")
+    );
 }
 
 #[test]
@@ -128,8 +184,16 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
     assert_eq!(first.len(), 1, "the queue wrote a file per conversation");
     let before = fs::read_to_string(tmp.path().join(&first[0])).expect("read jsonl");
 
+    // The file bytes alone prove nothing here: the writer is deterministic, so
+    // a resumed run that quietly rewrote every conversation would produce the
+    // same bytes and this test would still pass. `conversations_skipped` is
+    // the only observable difference between resuming and starting over.
     let (resumed, _) = convert_jsonl(true).expect("resume convert");
     assert_eq!(resumed.conversations, 1, "resume still accounts for it");
+    assert_eq!(
+        resumed.conversations_skipped, 1,
+        "the one conversation was already written, so the resume skipped it"
+    );
     assert_eq!(jsonl_files(tmp.path()), first, "same file set");
     assert_eq!(
         fs::read_to_string(tmp.path().join(&first[0])).expect("reread"),

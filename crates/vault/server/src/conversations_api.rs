@@ -20,7 +20,7 @@ use crate::db::sql::{
 };
 use crate::db::trash::{DeleteOutcome, Trashable, delete_trashed, move_to_trash, restore};
 use crate::paging::{
-    DEFAULT_LIST_LIMIT, Direction, MAX_LIST_OFFSET, Page, PageQuery, SortKey, page_params,
+    DEFAULT_LIST_LIMIT, Direction, MAX_LIST_OFFSET, Page, PageQuery, SortKey, page_of, page_params,
     parse_sort,
 };
 use crate::server::{ApiError, AppState, FullAccess, FullDeleteAccess};
@@ -368,13 +368,6 @@ pub struct ConversationSourceInfo {
     pub percentage: f64,
 }
 
-/// Per-source counts for one conversation.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct ConversationSourcesPage {
-    /// One entry per source that contributed messages.
-    pub items: Vec<ConversationSourceInfo>,
-}
-
 /// Per-source message counts for the Sources panel.
 ///
 /// # Errors
@@ -384,7 +377,7 @@ pub async fn list_conversation_source_stats(
     conn: &mut AnyConnection,
     account_id: i64,
     conversation_id: i64,
-) -> Result<Option<ConversationSourcesPage>, ApiError> {
+) -> Result<Option<Vec<ConversationSourceInfo>>, ApiError> {
     if !owns_conversation(conn, account_id, conversation_id).await? {
         return Ok(None);
     }
@@ -419,7 +412,7 @@ pub async fn list_conversation_source_stats(
             }
         })
         .collect();
-    Ok(Some(ConversationSourcesPage { items: sources }))
+    Ok(Some(sources))
 }
 
 /// The `WHERE` a conversation's message page and its `total` share: the
@@ -522,7 +515,7 @@ pub async fn get_conversation_messages(
     get,
     path = "/v1/conversations",
     tag = "Conversations",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(
         ("q" = Option<String>, Query, description = "Conversation search; empty lists all non-trashed"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
@@ -578,7 +571,7 @@ pub(crate) async fn conversations_list_handler(
     get,
     path = "/v1/conversations/{id}",
     tag = "Conversations",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 200, body = crate::conversations_api::ConversationSummary),
@@ -605,10 +598,14 @@ pub(crate) async fn conversation_detail_handler(
     get,
     path = "/v1/conversations/{id}/sources",
     tag = "Conversations",
-    security(("bearer" = [])),
-    params(("id" = i64, Path, description = "Conversation id")),
+    security(("session" = [])),
+    params(
+        ("id" = i64, Path, description = "Conversation id"),
+        ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
+        ("offset" = Option<usize>, Query, description = "Page offset")
+    ),
     responses(
-        (status = 200, body = crate::conversations_api::ConversationSourcesPage),
+        (status = 200, body = crate::paging::Page<ConversationSourceInfo>),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (status = 404, body = crate::problem::Problem)
@@ -618,10 +615,12 @@ pub(crate) async fn conversation_sources_handler(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     AxumPath(conversation_id): AxumPath<i64>,
-) -> Result<Json<ConversationSourcesPage>, ApiError> {
+    Query(query): Query<PageQuery>,
+) -> Result<Json<Page<ConversationSourceInfo>>, ApiError> {
+    let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
-    let page = list_conversation_source_stats(&mut conn, auth.account_id, conversation_id).await?;
-    page.map(Json)
+    let rows = list_conversation_source_stats(&mut conn, auth.account_id, conversation_id).await?;
+    rows.map(|rows| Json(page_of(rows, params)))
         .ok_or_else(|| ApiError::NotFound("conversation not found".into()))
 }
 
@@ -647,7 +646,7 @@ pub(crate) struct ConversationMessagesQuery {
     get,
     path = "/v1/conversations/{id}/messages",
     tag = "Conversations",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Conversation id"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
@@ -703,7 +702,7 @@ pub(crate) async fn conversation_messages_handler(
     post,
     path = "/v1/conversations/{id}/trash",
     tag = "Conversations",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 204, description = "Trashed"),
@@ -737,7 +736,7 @@ pub(crate) async fn conversation_trash_handler(
     post,
     path = "/v1/conversations/{id}/restore",
     tag = "Conversations",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 204, description = "Restored"),
@@ -773,7 +772,7 @@ pub(crate) async fn conversation_restore_handler(
     delete,
     path = "/v1/conversations/{id}",
     tag = "Conversations",
-    security(("bearer" = [])),
+    security(("session" = ["delete"])),
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 204, description = "Deleted"),

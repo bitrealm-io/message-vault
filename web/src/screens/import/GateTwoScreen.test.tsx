@@ -184,3 +184,35 @@ describe("GateTwoScreen", () => {
     expect(screen.getByText("1 file will not be uploaded.")).toBeInTheDocument();
   });
 });
+
+/**
+ * The ordinary click, which nothing tested.
+ *
+ * Both buttons were only ever pressed with `busy: true`, asserting that
+ * nothing happened. That is half a test: a screen whose buttons were wired to
+ * nothing satisfied it exactly as well as one that works, and the gate is the
+ * step where a person says "yes, upload my messages".
+ */
+describe("GateTwoScreen acting on an ordinary click", () => {
+  it("approves the upload when the button is pressed", () => {
+    const onApprove = vi.fn();
+    const onDecline = vi.fn();
+    render(<GateTwoScreen {...props({ onApprove, onDecline })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Upload to vault" }));
+
+    expect(onApprove).toHaveBeenCalledTimes(1);
+    expect(onDecline).not.toHaveBeenCalled();
+  });
+
+  it("declines when Cancel is pressed, and does not approve", () => {
+    const onApprove = vi.fn();
+    const onDecline = vi.fn();
+    render(<GateTwoScreen {...props({ onApprove, onDecline })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel this import" }));
+
+    expect(onDecline).toHaveBeenCalledTimes(1);
+    expect(onApprove).not.toHaveBeenCalled();
+  });
+});

@@ -1,13 +1,30 @@
-//! CRUD for named CLI API tokens.
+//! An account's named API tokens: `/v1/accounts/{id}/api-tokens`.
+//!
+//! The account itself, and nobody else. The vault owner has no tokens and
+//! does not manage other people's: a token is a program's credential into
+//! one account's messages, and the owner never reaches those. A signed-in
+//! session is required; a token cannot mint, rename or revoke tokens.
 
-use crate::extract::{Json, Path as AxumPath};
+use crate::extract::{Json, Path, Query};
+use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
 
 use crate::db::api_tokens;
 use crate::db::permissions::Permissions;
 use crate::db::schema;
-use crate::server::{ApiError, AppState, Created, FullAccess};
+use crate::server::{ApiError, AppState, AuthIdentity, Created, FullAccess};
+
+/// Admit only the account whose tokens the path names. The refusal reads the
+/// same whether or not the other account exists.
+fn require_own_tokens(auth: &AuthIdentity, target: i64) -> Result<(), ApiError> {
+    if auth.account_id == target {
+        return Ok(());
+    }
+    Err(ApiError::InsufficientScope(
+        "API tokens are managed by the account that holds them".into(),
+    ))
+}
 
 /// One named API token as shown in Settings: label, permissions, and masked secret.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -60,13 +77,6 @@ fn map_label_error(e: crate::db::api_tokens::ApiTokenMutationError) -> ApiError 
         ApiTokenMutationError::InvalidLabel(err) => ApiError::validation(err.to_string()),
         ApiTokenMutationError::Other(err) => ApiError::Internal(err),
     }
-}
-
-/// The account's named API tokens.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct ListApiTokensResponse {
-    /// The account's tokens.
-    pub items: Vec<ApiTokenItem>,
 }
 
 /// Body for creating a token: label, permissions, optional expiry.
@@ -135,36 +145,47 @@ pub struct RenameApiTokenResponse {
 /// List the account's named API tokens with their permissions and masked secrets.
 #[utoipa::path(
     get,
-    path = "/v1/account/api-tokens",
-    tag = "Account",
-    security(("bearer" = [])),
+    path = "/v1/accounts/{id}/api-tokens",
+    tag = "Accounts",
+    operation_id = "list_api_tokens",
+    security(("session" = [])),
+    params(
+        ("id" = i64, Path, description = "Account id; must be the caller's own"),
+        ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
+        ("offset" = Option<usize>, Query, description = "Page offset")
+    ),
     responses(
-        (status = 200, body = ListApiTokensResponse),
+        (status = 200, body = crate::paging::Page<ApiTokenItem>),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn list_api_tokens_handler(
     State(state): State<AppState>,
+    Path(account_id): Path<i64>,
     FullAccess(auth): FullAccess,
-) -> Result<Json<ListApiTokensResponse>, ApiError> {
-    let account_id = auth.account_id;
+    Query(query): Query<PageQuery>,
+) -> Result<Json<Page<ApiTokenItem>>, ApiError> {
+    require_own_tokens(&auth, account_id)?;
+    let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
 
     let mut conn = state.db.acquire().await?;
     schema::ensure_accounts_schema(&mut conn).await?;
     let rows = api_tokens::list_api_tokens(&mut conn, account_id).await?;
-    let items = rows.into_iter().map(ApiTokenItem::from).collect();
+    let items: Vec<ApiTokenItem> = rows.into_iter().map(ApiTokenItem::from).collect();
 
-    Ok(Json(ListApiTokensResponse { items }))
+    Ok(Json(page_of(items, params)))
 }
 
 /// Create a named API token. Returns the plaintext secret once, at creation;
 /// it is never returned again.
 #[utoipa::path(
     post,
-    path = "/v1/account/api-tokens",
-    tag = "Account",
-    security(("bearer" = [])),
+    path = "/v1/accounts/{id}/api-tokens",
+    tag = "Accounts",
+    operation_id = "create_api_token",
+    security(("session" = [])),
+    params(("id" = i64, Path, description = "Account id; must be the caller's own")),
     request_body = CreateApiTokenRequest,
     responses(
         (
@@ -173,16 +194,18 @@ pub async fn list_api_tokens_handler(
             headers(("Location" = String, description = "Path of the new token"))
         ),
         (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn create_api_token_handler(
     State(state): State<AppState>,
+    Path(account_id): Path<i64>,
     FullAccess(auth): FullAccess,
     Json(req): Json<CreateApiTokenRequest>,
 ) -> Result<Created<CreateApiTokenResponse>, ApiError> {
-    let account_id = auth.account_id;
+    require_own_tokens(&auth, account_id)?;
     let label = req.label;
     let permissions = Permissions {
         import: req.can_import,
@@ -199,7 +222,7 @@ pub async fn create_api_token_handler(
             .map_err(map_label_error)?;
 
     Ok(Created {
-        location: format!("/v1/account/api-tokens/{}", created.id),
+        location: format!("/v1/accounts/{account_id}/api-tokens/{}", created.id),
         body: CreateApiTokenResponse {
             id: created.id,
             label: created.label,
@@ -217,10 +240,14 @@ pub async fn create_api_token_handler(
 /// Delete one named API token. Requests using it start failing on the next call.
 #[utoipa::path(
     delete,
-    path = "/v1/account/api-tokens/{id}",
-    tag = "Account",
-    security(("bearer" = [])),
-    params(("id" = i64, Path, description = "API token id")),
+    path = "/v1/accounts/{id}/api-tokens/{token_id}",
+    tag = "Accounts",
+    operation_id = "delete_api_token",
+    security(("session" = [])),
+    params(
+        ("id" = i64, Path, description = "Account id; must be the caller's own"),
+        ("token_id" = i64, Path, description = "API token id")
+    ),
     responses(
         (status = 204, description = "Token deleted"),
         (status = 401, body = crate::problem::Problem),
@@ -230,10 +257,10 @@ pub async fn create_api_token_handler(
 )]
 pub async fn delete_api_token_handler(
     State(state): State<AppState>,
+    Path((account_id, id)): Path<(i64, i64)>,
     FullAccess(auth): FullAccess,
-    AxumPath(id): AxumPath<i64>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    let account_id = auth.account_id;
+    require_own_tokens(&auth, account_id)?;
 
     let mut conn = state.db.acquire().await?;
     schema::ensure_accounts_schema(&mut conn).await?;
@@ -248,10 +275,14 @@ pub async fn delete_api_token_handler(
 /// Rename one named API token. The label is trimmed before storing.
 #[utoipa::path(
     patch,
-    path = "/v1/account/api-tokens/{id}",
-    tag = "Account",
-    security(("bearer" = [])),
-    params(("id" = i64, Path, description = "API token id")),
+    path = "/v1/accounts/{id}/api-tokens/{token_id}",
+    tag = "Accounts",
+    operation_id = "rename_api_token",
+    security(("session" = [])),
+    params(
+        ("id" = i64, Path, description = "Account id; must be the caller's own"),
+        ("token_id" = i64, Path, description = "API token id")
+    ),
     request_body = RenameApiTokenRequest,
     responses(
         (status = 200, body = RenameApiTokenResponse),
@@ -264,11 +295,11 @@ pub async fn delete_api_token_handler(
 )]
 pub async fn rename_api_token_handler(
     State(state): State<AppState>,
+    Path((account_id, id)): Path<(i64, i64)>,
     FullAccess(auth): FullAccess,
-    AxumPath(id): AxumPath<i64>,
     Json(req): Json<RenameApiTokenRequest>,
 ) -> Result<Json<RenameApiTokenResponse>, ApiError> {
-    let account_id = auth.account_id;
+    require_own_tokens(&auth, account_id)?;
     let label = req.label;
 
     let mut conn = state.db.acquire().await?;
@@ -331,16 +362,17 @@ mod tests {
         let account =
             crate::test_support::register_via_api(&state, "token-owner", "hunter2hunter2").await;
 
+        let collection = format!("/v1/accounts/{}/api-tokens", account.account_id);
         let (location, body): (String, serde_json::Value) = crate::test_support::post_created_json(
             &state,
-            "/v1/account/api-tokens",
+            &collection,
             &account.token,
             serde_json::json!({ "label": "cli token" }),
         )
         .await;
         assert_eq!(
             location,
-            format!("/v1/account/api-tokens/{}", body["id"].as_i64().unwrap())
+            format!("{collection}/{}", body["id"].as_i64().unwrap())
         );
 
         assert_eq!(
@@ -362,6 +394,68 @@ mod tests {
         assert_eq!(
             can_delete, 0,
             "stored token row must not have can_delete set"
+        );
+    }
+
+    /// Tokens belong to the account that holds them: another account is
+    /// refused on every token route, and so is the owner, who has none.
+    #[tokio::test]
+    async fn only_the_account_itself_reaches_its_tokens() {
+        use crate::test_support::{
+            claim_vault_as_owner, delete_status, get_status, patch_status, post_status,
+            register_via_api, test_vault,
+        };
+        use axum::http::StatusCode;
+
+        let vault = test_vault().await;
+        let state = vault.state.clone();
+        let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+        let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
+        let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
+        let alices = format!("/v1/accounts/{}/api-tokens", alice.account_id);
+
+        assert_eq!(
+            get_status(&state, &alices, &alice.token).await,
+            StatusCode::OK
+        );
+        for (who, token) in [("bob", &bob.token), ("the owner", &owner.token)] {
+            assert_eq!(
+                get_status(&state, &alices, token).await,
+                StatusCode::FORBIDDEN,
+                "{who} must not list alice's tokens"
+            );
+            assert_eq!(
+                post_status(&state, &alices, token, serde_json::json!({ "label": "x" })).await,
+                StatusCode::FORBIDDEN,
+                "{who} must not mint a token for alice"
+            );
+            assert_eq!(
+                patch_status(
+                    &state,
+                    &format!("{alices}/1"),
+                    token,
+                    serde_json::json!({ "label": "y" })
+                )
+                .await,
+                StatusCode::FORBIDDEN,
+                "{who} must not rename alice's token"
+            );
+            assert_eq!(
+                delete_status(&state, &format!("{alices}/1"), token).await,
+                StatusCode::FORBIDDEN,
+                "{who} must not revoke alice's token"
+            );
+        }
+        // The owner's own row has no tokens either: the route takes an
+        // ordinary session, and the owner's is not one.
+        assert_eq!(
+            get_status(
+                &state,
+                &format!("/v1/accounts/{}/api-tokens", owner.account_id),
+                &owner.token
+            )
+            .await,
+            StatusCode::FORBIDDEN
         );
     }
 }

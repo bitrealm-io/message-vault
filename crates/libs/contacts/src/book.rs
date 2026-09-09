@@ -397,4 +397,85 @@ NoPhone,,Person,,,,\n",
         );
         assert!(book.lookup_handle_by_name("NoPhone Person").is_none());
     }
+
+    /// Phone scraping, which is how a number reaches a contact when it is not
+    /// in a phone column at all.
+    ///
+    /// The loop that scrapes bare `+digits` runs out of free text carried nine
+    /// surviving mutants — the index arithmetic, the `i > start + 1` guard that
+    /// rejects a lone `+`, and the duplicate check. Nothing exercised it: every
+    /// test used a well-formed phone column.
+    #[test]
+    fn phones_are_scraped_from_separators_and_from_free_text() {
+        let mut out = Vec::new();
+        push_phones_from_raw("+15551234567; +15557654321, +15550000000", &mut out);
+        assert_eq!(
+            out,
+            // A leading US country digit is dropped by `sanitize_number`,
+            // so the stored form is the ten-digit number.
+            ["5551234567", "5557654321", "5550000000"],
+            "each separator splits a field"
+        );
+
+        // The same number twice in one field must be stored once.
+        let mut out = Vec::new();
+        push_phones_from_raw("+15551234567; +15551234567", &mut out);
+        assert_eq!(out, ["5551234567"], "a repeat must not be stored twice");
+
+        // Two numbers in one field with no separator between them are run
+        // together into one nonsense handle, because the separator pass keeps
+        // every digit in the part it is given. Pinned as it is rather than as
+        // it should be; issue #526 is the defect.
+        let mut out = Vec::new();
+        push_phones_from_raw("+15551234567 (see also +15557654321)", &mut out);
+        assert_eq!(
+            out[0], "1555123456715557654321",
+            "today the digits run together"
+        );
+
+        // A bare run inside prose, with no separator around it.
+        let mut out = Vec::new();
+        push_phones_from_raw("ring me on +442071838750 after six", &mut out);
+        assert_eq!(out, ["442071838750"]);
+
+        // A lone `+` is not a number, and neither is `+` followed by one digit:
+        // the guard is `i > start + 1`, and dropping it produces junk handles.
+        let mut out = Vec::new();
+        push_phones_from_raw("a + b +1 c", &mut out);
+        assert!(out.is_empty(), "got {out:?}");
+
+        // Same cause, plainer: a note with a year and a house number becomes a
+        // "phone number", because every digit in the field is collected into
+        // one string and six digits is enough to pass. Pinned as it is; issue
+        // #526 is the defect.
+        let mut out = Vec::new();
+        push_phones_from_raw("met in 2019 at 42 Acacia Avenue", &mut out);
+        assert_eq!(out, ["201942"], "today a note becomes a handle");
+    }
+
+    /// `len` and `is_empty` are what a caller checks before deciding a
+    /// contacts file was worth loading, and both could be replaced with a
+    /// constant without failing a test.
+    #[test]
+    fn the_book_reports_how_much_it_holds() {
+        let empty = ContactsBook::empty();
+        assert_eq!(empty.len(), 0);
+        assert!(empty.is_empty());
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_file(
+            &dir,
+            "contacts.csv",
+            "First Name,Last Name,Mobile Phone,Home Phone\n\
+             Ada,Lovelace,+15551234567,+15557654321\n\
+             Alan,Turing,+15550000000,\n",
+        );
+        let book = ContactsBook::load_vcard_csv(&path).unwrap();
+
+        // Three numbers across two people: the count is of handles, not of
+        // people, which is what the doc comment says and what callers use it
+        // for.
+        assert_eq!(book.len(), 3, "one entry per handle");
+        assert!(!book.is_empty());
+    }
 }

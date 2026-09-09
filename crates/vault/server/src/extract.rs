@@ -8,7 +8,7 @@
 //! place of Axum's.
 
 use axum::extract::rejection::JsonRejection;
-use axum::extract::{FromRequest, FromRequestParts, Request};
+use axum::extract::{FromRequest, FromRequestParts, OptionalFromRequest, Request};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
@@ -61,6 +61,21 @@ where
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Json<T>(pub T);
 
+/// Axum's rejection as the problem on the right side of the line: well-formed
+/// JSON that does not fit the target type parsed and then broke a rule;
+/// everything else could not be read.
+fn json_rejection(rejection: JsonRejection) -> ApiError {
+    match rejection {
+        JsonRejection::JsonDataError(e) => ApiError::validation(e.body_text()),
+        JsonRejection::JsonSyntaxError(e) => ApiError::MalformedBody(e.body_text()),
+        JsonRejection::MissingJsonContentType(e) => ApiError::UnsupportedMediaType(e.body_text()),
+        rejection if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+            ApiError::PayloadTooLarge(rejection.body_text())
+        }
+        rejection => ApiError::MalformedBody(rejection.body_text()),
+    }
+}
+
 impl<T, S> FromRequest<S> for Json<T>
 where
     T: DeserializeOwned,
@@ -69,19 +84,29 @@ where
     type Rejection = ApiError;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        match axum::Json::<T>::from_request(req, state).await {
+        match <axum::Json<T> as FromRequest<S>>::from_request(req, state).await {
             Ok(axum::Json(value)) => Ok(Json(value)),
-            // Well-formed JSON that does not fit the target type parsed and
-            // then broke a rule; everything else could not be read.
-            Err(JsonRejection::JsonDataError(e)) => Err(ApiError::validation(e.body_text())),
-            Err(JsonRejection::JsonSyntaxError(e)) => Err(ApiError::MalformedBody(e.body_text())),
-            Err(JsonRejection::MissingJsonContentType(e)) => {
-                Err(ApiError::UnsupportedMediaType(e.body_text()))
-            }
-            Err(rejection) if rejection.status() == StatusCode::PAYLOAD_TOO_LARGE => {
-                Err(ApiError::PayloadTooLarge(rejection.body_text()))
-            }
-            Err(rejection) => Err(ApiError::MalformedBody(rejection.body_text())),
+            Err(rejection) => Err(json_rejection(rejection)),
+        }
+    }
+}
+
+/// `body: Option<Json<T>>`, for a route one caller sends a body to and
+/// another does not: `None` when the request carries no `Content-Type`, the
+/// parsed body when it does, and the same rejections as the required form
+/// when what it carries is not JSON.
+impl<T, S> OptionalFromRequest<S> for Json<T>
+where
+    T: DeserializeOwned,
+    S: Send + Sync,
+{
+    type Rejection = ApiError;
+
+    async fn from_request(req: Request, state: &S) -> Result<Option<Self>, Self::Rejection> {
+        match <axum::Json<T> as OptionalFromRequest<S>>::from_request(req, state).await {
+            Ok(Some(axum::Json(value))) => Ok(Some(Json(value))),
+            Ok(None) => Ok(None),
+            Err(rejection) => Err(json_rejection(rejection)),
         }
     }
 }

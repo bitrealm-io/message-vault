@@ -10,7 +10,7 @@ use crate::server::ApiError;
 
 /// Default page size for the Contacts and Conversations lists.
 pub const DEFAULT_LIST_LIMIT: usize = 40;
-/// Default page size for `GET /v1/export/messages`.
+/// Default page size for `GET /v1/exports/{id}/messages`.
 pub const DEFAULT_EXPORT_LIMIT: usize = 100;
 /// The largest page any list route returns. One number, one meaning.
 pub const MAX_LIST_LIMIT: usize = 500;
@@ -22,7 +22,7 @@ pub const MAX_LIST_OFFSET: usize = 50_000;
 pub const MAX_CONTACT_SUMMARY_IDS: usize = 500;
 
 /// One page of a list.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct Page<T> {
     /// The rows on this page.
     pub items: Vec<T>,
@@ -32,6 +32,44 @@ pub struct Page<T> {
     pub limit: usize,
     /// Page offset used.
     pub offset: usize,
+}
+
+/// Cut a page out of rows already in memory.
+///
+/// A list whose whole set is small and already loaded — the account's API
+/// tokens, its Contact Groups, the search fields — pages here rather than in
+/// SQL: the total is the row count, and the page is `offset..offset + limit`.
+/// An offset past the end is an empty page, not a failure, because a caller
+/// walking a list that shrank under it has asked a legal question.
+pub fn page_of<T>(rows: Vec<T>, params: PageParams) -> Page<T> {
+    let total = rows.len() as u64;
+    let items = rows
+        .into_iter()
+        .skip(params.offset)
+        .take(params.limit)
+        .collect();
+    Page {
+        items,
+        total,
+        limit: params.limit,
+        offset: params.offset,
+    }
+}
+
+/// The whole of a body-bounded read as one page.
+///
+/// A `POST` that reads the rows its body names — contact summaries, unmatched
+/// handles — answers a page like every other list, but takes no `offset` or
+/// `limit`: the body already says which rows to read, and it may name at most
+/// `limit` of them. So `total` is the row count, `limit` is that cap, and
+/// `offset` is 0.
+pub fn whole_page<T>(items: Vec<T>, limit: usize) -> Page<T> {
+    Page {
+        total: items.len() as u64,
+        items,
+        limit,
+        offset: 0,
+    }
 }
 
 /// The `q`/`limit`/`offset` query string of a plain list route; lists with

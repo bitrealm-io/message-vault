@@ -1,24 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiErrorMessage } from "../../../lib/apiErrorMessage";
-import { getAccountStorage, getImport, listImports } from "../../../lib/vaultApi";
+import { getAccountStorage, getImport, listExports, listImports } from "../../../lib/vaultApi";
 import { keys } from "../../../lib/vaultKeys";
 import { useVaultQuery } from "../../../lib/vaultQuery";
-import type { ImportRow, TopAttachment } from "./storageUtils";
+import type { ExportRow, ImportRow, TopAttachment } from "./storageUtils";
 
 type StorageOverview = {
   imports: ImportRow[];
+  exports: ExportRow[];
   totalBytes: number;
   attachmentCount: number;
   topAttachments: TopAttachment[];
 };
 
 async function fetchOverview(signal: AbortSignal): Promise<StorageOverview> {
-  const [importsRes, usageRes] = await Promise.all([
+  const [importsRes, exportsRes, usageRes] = await Promise.all([
     listImports({}, { signal }),
+    listExports({}, { signal }),
     getAccountStorage({ signal }),
   ]);
   return {
     imports: importsRes.items,
+    exports: exportsRes.items,
     totalBytes: usageRes.total_bytes ?? 0,
     attachmentCount: usageRes.attachment_count ?? 0,
     topAttachments: usageRes.top_attachments ?? [],
@@ -69,6 +72,7 @@ export function useStorageData() {
 
   return {
     imports: overview?.imports ?? [],
+    exports: overview?.exports ?? [],
     totalBytes: overview?.totalBytes ?? 0,
     attachmentCount: overview?.attachmentCount ?? 0,
     topAttachments: overview?.topAttachments ?? [],

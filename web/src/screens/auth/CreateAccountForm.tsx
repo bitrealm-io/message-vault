@@ -7,7 +7,7 @@ import TextField from "../../components/TextField";
 import { setBaseUrl } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { useAsyncAction } from "../../lib/useAsyncAction";
-import { register as registerAccount } from "../../lib/vaultApi";
+import { createAccount } from "../../lib/vaultApi";
 
 /**
  * New vault account: username plus the password twice.
@@ -51,12 +51,18 @@ export default function CreateAccountForm({
 
       const url = serverUrl.trim();
       setBaseUrl(url);
-      const res = await registerAccount({
+      const res = await createAccount({
         username: username.trim(),
         password,
         preferred_name: null,
         phone: null,
       });
+      // A stranger's registration opens a Session on the new account; the
+      // token is absent only when the owner created it, which this form never
+      // does.
+      if (!res.token) {
+        throw new Error("The vault created the account but opened no session.");
+      }
       // Awaited so the empty-profile check inside `login` runs before this form
       // drops its busy state, sending the new account on to profile setup.
       await login(url, res.token, res.account_id);

@@ -239,7 +239,7 @@ describe("ImportScreen entering Import", () => {
     invokePathStatMock.mockReset();
     invokePathStatMock.mockResolvedValue({ exists: true, isFile: false, isDirectory: true });
     apiPostMock.mockReset();
-    apiPostMock.mockResolvedValue({ unknown: [] });
+    apiPostMock.mockResolvedValue({ items: [], total: 0, limit: 500, offset: 0 });
     apiGetMock.mockReset();
     apiGetMock.mockResolvedValue({
       account_id: 7,
@@ -800,7 +800,7 @@ describe("ImportScreen gates", () => {
     discardImportSessionMock.mockReset();
     invokePathStatMock.mockReset();
     apiPostMock.mockReset();
-    apiPostMock.mockResolvedValue({ unknown: [] });
+    apiPostMock.mockResolvedValue({ items: [], total: 0, limit: 500, offset: 0 });
     apiGetMock.mockReset();
     apiGetMock.mockResolvedValue({
       account_id: 7,
@@ -850,7 +850,7 @@ describe("ImportScreen gates", () => {
   it("looks up which of Gate 1's contacts are unknown, in one batch under the server cap", async () => {
     hookState.phase = "gate_1";
     hookState.gateSummary = stagingSummary({ contactIdentifiers: ["a", "b", "c"] });
-    apiPostMock.mockResolvedValue({ unknown: ["a", "c"] });
+    apiPostMock.mockResolvedValue({ items: ["a", "c"], total: 2, limit: 500, offset: 0 });
     renderWithVault(<ImportScreen />);
 
     await screen.findByTestId("gate-one");
@@ -867,8 +867,18 @@ describe("ImportScreen gates", () => {
     hookState.phase = "gate_1";
     const identifiers = Array.from({ length: 620 }, (_, i) => `+1555000${i}`);
     hookState.gateSummary = stagingSummary({ contactIdentifiers: identifiers });
-    apiPostMock.mockResolvedValueOnce({ unknown: Array(400).fill("x") });
-    apiPostMock.mockResolvedValueOnce({ unknown: Array(30).fill("y") });
+    apiPostMock.mockResolvedValueOnce({
+      items: Array(400).fill("x"),
+      total: 400,
+      limit: 500,
+      offset: 0,
+    });
+    apiPostMock.mockResolvedValueOnce({
+      items: Array(30).fill("y"),
+      total: 30,
+      limit: 500,
+      offset: 0,
+    });
     renderWithVault(<ImportScreen />);
 
     await screen.findByTestId("gate-one");

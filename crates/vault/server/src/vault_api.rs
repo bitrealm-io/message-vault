@@ -7,10 +7,10 @@
 //! server. A browser and a desktop app that each derived the entry screen from
 //! raw fields would be two copies of one rule, free to drift apart.
 //!
-//! These are the vault's only unauthenticated routes besides login and
-//! register, and the first read routes that do not require a session. ADR 0005
-//! says new read routes need one; the entry screen cannot have one yet, which
-//! is the whole of the exception. See
+//! These are the vault's only unauthenticated routes besides signing in and
+//! a stranger's `POST /v1/accounts`, and the first read routes that do not
+//! require a session: the entry screen cannot have one yet, which is the
+//! whole of the exception. See
 //! `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
 
 use axum::extract::State;
@@ -94,7 +94,7 @@ pub async fn vault_state_handler(
     operation_id = "claim_vault",
     request_body = ClaimVaultRequest,
     responses(
-        (status = 200, description = "Vault claimed; session issued", body = crate::auth::SessionTokenResponse),
+        (status = 200, description = "Vault claimed; session issued", body = crate::session_api::SessionTokenResponse),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 409, description = "Already claimed", body = crate::problem::Problem),
@@ -104,16 +104,11 @@ pub async fn vault_state_handler(
 pub async fn claim_vault_handler(
     State(state): State<AppState>,
     Json(req): Json<ClaimVaultRequest>,
-) -> Result<Json<crate::auth::SessionTokenResponse>, ApiError> {
-    let username = crate::auth::normalize_username(&req.username);
-    if !crate::auth::is_valid_username(&username) {
-        return Err(ApiError::validation(
-            "username must be 1–128 chars (alphanumeric, _, -, .)",
-        ));
-    }
-    crate::auth::check_auth_rate_limit(&state.auth_rate_limits, "claim")?;
-    crate::auth::validate_password_policy(&req.password)?;
-    let password_hash = crate::auth::hash_password(&req.password)?;
+) -> Result<Json<crate::session_api::SessionTokenResponse>, ApiError> {
+    let username = crate::credentials::require_valid_username(&req.username)?;
+    crate::credentials::check_auth_rate_limit(&state.auth_rate_limits, "claim")?;
+    crate::credentials::validate_password_policy(&req.password)?;
+    let password_hash = crate::credentials::hash_password(&req.password)?;
 
     let mut conn = state.db.acquire().await?;
     // The claim check and the insert share a transaction: two requests racing
@@ -124,7 +119,7 @@ pub async fn claim_vault_handler(
             "this vault already has an owner".into(),
         ));
     }
-    crate::auth::require_username_free(&mut tx, &username).await?;
+    crate::credentials::require_username_free(&mut tx, &username).await?;
     account_profile::insert_account_at(
         &mut tx,
         account_profile::OWNER_ACCOUNT_ID,
@@ -142,7 +137,7 @@ pub async fn claim_vault_handler(
     .map_err(ApiError::Internal)?;
     tx.commit().await?;
 
-    Ok(Json(crate::auth::SessionTokenResponse {
+    Ok(Json(crate::session_api::SessionTokenResponse {
         token,
         account_id: account_profile::OWNER_ACCOUNT_ID,
         username,
@@ -170,7 +165,7 @@ pub struct PatchVaultSettingsRequest {
     path = "/v1/vault/settings",
     tag = "Vault",
     operation_id = "vault_settings",
-    security(("bearer" = [])),
+    security(("session" = ["owner"])),
     responses(
         (status = 200, body = VaultSettingsResponse),
         (status = 401, body = crate::problem::Problem),
@@ -194,7 +189,7 @@ pub async fn vault_settings_handler(
     path = "/v1/vault/settings",
     tag = "Vault",
     operation_id = "patch_vault_settings",
-    security(("bearer" = [])),
+    security(("session" = ["owner"])),
     request_body = PatchVaultSettingsRequest,
     responses(
         (status = 200, body = VaultSettingsResponse),

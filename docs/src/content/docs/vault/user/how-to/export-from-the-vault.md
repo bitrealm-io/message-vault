@@ -7,6 +7,8 @@ description: Save the messages in your vault to a folder on your computer, in th
 
 Export always writes the whole vault. There is no way yet to export only what you are browsing or only the conversations you have selected.
 
+Every export is recorded as an Export Run: when it started, what it asked for, how many messages and attachments matched, and how it ended. [Settings → Storage](/vault/user/how-to/settings/) lists them under Export history.
+
 ## Before you start
 
 - A vault that is running, and an account with messages already imported

@@ -41,12 +41,15 @@ const PROFILE = {
   phones: ["+15550100"],
   emails: [],
   is_owner: false,
+  disabled: false,
   must_change_password: false,
   must_set_up_profile: false,
   is_demo: false,
   can_import: true,
   can_export: true,
   can_delete: true,
+  message_count: 0,
+  storage_bytes: 0,
 };
 
 /** A group chat: the owner, two people with contacts, one nobody has a contact for. */
@@ -116,7 +119,7 @@ describe("ConversationHeader", () => {
     createContactGroupMock.mockReset();
     updateContactGroupMembersMock.mockReset();
     getAccountProfileMock.mockResolvedValue(PROFILE);
-    listContactGroupsMock.mockResolvedValue({ items: [] });
+    listContactGroupsMock.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
   });
 
   afterEach(() => {
@@ -137,7 +140,12 @@ describe("ConversationHeader", () => {
       // The vault, modelled: once created, the group is in the list the
       // members call looks the id up in.
       let groups: { id: number; name: string }[] = [];
-      listContactGroupsMock.mockImplementation(async () => ({ items: groups }));
+      listContactGroupsMock.mockImplementation(async () => ({
+        items: groups,
+        total: groups.length,
+        limit: 40,
+        offset: 0,
+      }));
       createContactGroupMock.mockImplementation(async ({ name }) => {
         const set = { id: 9, name };
         groups = [set];
@@ -167,7 +175,12 @@ describe("ConversationHeader", () => {
     });
 
     it("adds to an existing group of that name instead of creating a second one", async () => {
-      listContactGroupsMock.mockResolvedValue({ items: [{ id: 4, name: "Readers" }] });
+      listContactGroupsMock.mockResolvedValue({
+        items: [{ id: 4, name: "Readers" }],
+        total: 1,
+        limit: 40,
+        offset: 0,
+      });
       updateContactGroupMembersMock.mockResolvedValue({ added: 2, removed: 0 });
       const user = userEvent.setup();
       renderHeader(groupChat());

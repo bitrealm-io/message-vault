@@ -4,7 +4,7 @@ use crate::import::ImportMode;
 use crate::import::{
     CompleteImportBody, CompleteImportIssueBody, CreateImportBody, SetImportStageBody,
     imports_complete_handler, imports_create_handler, imports_discard_handler, imports_get_handler,
-    imports_list_handler, imports_stage_handler,
+    imports_list_handler, imports_patch_handler,
 };
 use axum::extract::State;
 use tempfile::TempDir;
@@ -192,6 +192,7 @@ async fn running_import(
         State(state.clone()),
         import_access(state, token).await,
         crate::extract::Query(crate::import::ListImportsQuery {
+            sort: None,
             status: Some("running".into()),
             limit: None,
             offset: None,
@@ -366,7 +367,7 @@ async fn try_demo_route_is_gone() {
 
 #[tokio::test]
 async fn local_auth_routes_exist() {
-    for path in ["/v1/auth/register", "/v1/session"] {
+    for path in ["/v1/accounts", "/v1/session"] {
         assert_ne!(auth_route_status(path).await, StatusCode::NOT_FOUND);
     }
 }
@@ -755,7 +756,7 @@ async fn a_second_session_is_refused_with_conflict() {
 async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
     let (_dir, state, token, import_id) = test_state().await;
 
-    let _ = imports_stage_handler(
+    let _ = imports_patch_handler(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
@@ -775,7 +776,7 @@ async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
         Some("pushing")
     );
 
-    let err = imports_stage_handler(
+    let err = imports_patch_handler(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
@@ -857,7 +858,7 @@ async fn import_endpoint_honors_can_import_flag() {
     assert_eq!(
         crate::test_support::patch_status(
             &state,
-            &format!("/v1/owner/accounts/{}", user.account_id),
+            &format!("/v1/accounts/{}", user.account_id),
             &owner.token,
             serde_json::json!({ "can_import": false }),
         )
@@ -873,7 +874,7 @@ async fn import_endpoint_honors_can_import_flag() {
     assert_eq!(
         crate::test_support::patch_status(
             &state,
-            &format!("/v1/owner/accounts/{}", user.account_id),
+            &format!("/v1/accounts/{}", user.account_id),
             &owner.token,
             serde_json::json!({ "can_import": true }),
         )
@@ -887,9 +888,8 @@ async fn import_endpoint_honors_can_import_flag() {
     );
 }
 
-/// The `ExportAccess` extractor guards `GET /v1/export/messages/count`:
-/// with `can_export` off, the endpoint refuses; turned back on, it
-/// succeeds.
+/// The `ExportAccess` extractor guards `GET /v1/exports`: with `can_export`
+/// off, the endpoint refuses; turned back on, it succeeds.
 #[tokio::test]
 async fn export_endpoint_honors_can_export_flag() {
     let vault = crate::test_support::test_vault().await;
@@ -903,7 +903,7 @@ async fn export_endpoint_honors_can_export_flag() {
     assert_eq!(
         crate::test_support::patch_status(
             &state,
-            &format!("/v1/owner/accounts/{}", user.account_id),
+            &format!("/v1/accounts/{}", user.account_id),
             &owner.token,
             serde_json::json!({ "can_export": false }),
         )
@@ -911,15 +911,15 @@ async fn export_endpoint_honors_can_export_flag() {
         StatusCode::OK
     );
     assert_eq!(
-        crate::test_support::get_status(&state, "/v1/export/messages/count", &user.token).await,
+        crate::test_support::get_status(&state, "/v1/exports", &user.token).await,
         StatusCode::FORBIDDEN,
-        "can_export=false must refuse GET /v1/export/messages/count"
+        "can_export=false must refuse GET /v1/exports"
     );
 
     assert_eq!(
         crate::test_support::patch_status(
             &state,
-            &format!("/v1/owner/accounts/{}", user.account_id),
+            &format!("/v1/accounts/{}", user.account_id),
             &owner.token,
             serde_json::json!({ "can_export": true }),
         )
@@ -927,9 +927,9 @@ async fn export_endpoint_honors_can_export_flag() {
         StatusCode::OK
     );
     assert_eq!(
-        crate::test_support::get_status(&state, "/v1/export/messages/count", &user.token).await,
+        crate::test_support::get_status(&state, "/v1/exports", &user.token).await,
         StatusCode::OK,
-        "can_export=true must allow GET /v1/export/messages/count"
+        "can_export=true must allow GET /v1/exports"
     );
 }
 
@@ -1062,7 +1062,7 @@ async fn a_wrong_password_is_401_and_the_limit_answers_429_with_retry_after() {
         Some("invalid username or password")
     );
 
-    for _ in 1..crate::auth::AUTH_RATE_MAX {
+    for _ in 1..crate::credentials::AUTH_RATE_MAX {
         assert_eq!(login().await.unwrap().status(), StatusCode::UNAUTHORIZED);
     }
     let limited = login().await.unwrap();
@@ -1079,7 +1079,7 @@ async fn a_wrong_password_is_401_and_the_limit_answers_429_with_retry_after() {
         crate::problem::ProblemType::RateLimited,
     );
     assert_eq!(problem.retry_after, Some(retry_after));
-    assert!((1..=crate::auth::AUTH_RATE_WINDOW.as_secs()).contains(&retry_after));
+    assert!((1..=crate::credentials::AUTH_RATE_WINDOW.as_secs()).contains(&retry_after));
 }
 
 /// `Accept` is checked on the `/v1` routes that produce JSON and nowhere

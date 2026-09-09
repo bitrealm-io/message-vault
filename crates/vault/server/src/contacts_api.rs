@@ -20,7 +20,7 @@ use crate::db::sql::{SqlParam, bind_args, in_placeholders, renumber_placeholders
 use crate::db::trash::{DeleteOutcome, Trashable, delete_trashed, move_to_trash, restore};
 use crate::paging::{
     DEFAULT_LIST_LIMIT, Direction, MAX_CONTACT_SUMMARY_IDS, MAX_LIST_OFFSET, Page, PageQuery,
-    SortKey, page_params, parse_sort,
+    SortKey, page_params, parse_sort, whole_page,
 };
 use crate::search::emit::{NOT_TRASHED_CONTACT, NOT_TRASHED_CONVERSATION};
 use crate::server::{ApiError, AppState, FullAccess, FullDeleteAccess, content_type_base};
@@ -168,13 +168,6 @@ pub struct ContactSelectionSummary {
     pub individual_message_count: u64,
     /// Messages in group conversations with the contact.
     pub group_message_count: u64,
-}
-
-/// Response for `POST /v1/contacts/summaries`.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct ContactSummariesPage {
-    /// One summary per requested contact.
-    pub items: Vec<ContactSelectionSummary>,
 }
 
 /// A contact is linked to a conversation when one of its handles is either
@@ -661,15 +654,6 @@ pub(crate) struct UnmatchedHandlesBody {
     identifiers: Vec<String>,
 }
 
-/// Response for `POST /v1/contacts/unmatched-handles`.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct UnmatchedHandlesResponse {
-    /// The subset this account has no contact for: trimmed, in first-seen
-    /// order, blanks dropped and duplicates (by normalized form) collapsed
-    /// to their first spelling.
-    unknown: Vec<String>,
-}
-
 /// Which of `identifiers` this account has no contact for.
 ///
 /// A trashed contact still counts as known: trash sets a person aside, it
@@ -770,7 +754,7 @@ pub(crate) struct AddressBookLoadResponse {
     post,
     path = "/v1/contacts",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     request_body(
         content(
             ("text/vcard"),
@@ -844,10 +828,10 @@ fn address_book_file_name(content_type: Option<&str>) -> Option<&'static str> {
     post,
     path = "/v1/contacts/unmatched-handles",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     request_body = UnmatchedHandlesBody,
     responses(
-        (status = 200, body = UnmatchedHandlesResponse),
+        (status = 200, body = crate::paging::Page<String>),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
@@ -858,7 +842,7 @@ pub(crate) async fn unmatched_handles_handler(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     Json(body): Json<UnmatchedHandlesBody>,
-) -> Result<Json<UnmatchedHandlesResponse>, ApiError> {
+) -> Result<Json<Page<String>>, ApiError> {
     if body.identifiers.len() > MAX_MATCH_IDENTIFIERS {
         return Err(ApiError::validation(format!(
             "at most {MAX_MATCH_IDENTIFIERS} identifiers"
@@ -867,7 +851,7 @@ pub(crate) async fn unmatched_handles_handler(
     let mut conn = state.db.acquire().await?;
     let unknown =
         unknown_contact_identifiers(&mut conn, auth.account_id, &body.identifiers).await?;
-    Ok(Json(UnmatchedHandlesResponse { unknown }))
+    Ok(Json(whole_page(unknown, MAX_MATCH_IDENTIFIERS)))
 }
 
 /// Handle type from the service the caller named, falling back to the handle's shape.
@@ -1235,7 +1219,7 @@ impl ContactEditor<'_> {
     get,
     path = "/v1/contacts",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(
         ("q" = Option<String>, Query, description = "Contact search; empty lists all"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
@@ -1287,10 +1271,10 @@ pub(crate) async fn contacts_list_handler(
     post,
     path = "/v1/contacts/summaries",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     request_body = ContactSummariesBody,
     responses(
-        (status = 200, body = ContactSummariesPage),
+        (status = 200, body = crate::paging::Page<ContactSelectionSummary>),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
@@ -1301,17 +1285,15 @@ pub(crate) async fn contact_summaries_handler(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     Json(body): Json<ContactSummariesBody>,
-) -> Result<Json<ContactSummariesPage>, ApiError> {
+) -> Result<Json<Page<ContactSelectionSummary>>, ApiError> {
     if body.ids.len() > MAX_CONTACT_SUMMARY_IDS {
         return Err(ApiError::validation(format!(
             "at most {MAX_CONTACT_SUMMARY_IDS} contact ids"
         )));
     }
     let mut conn = state.db.acquire().await?;
-    let page = get_contact_summaries(&mut conn, auth.account_id, &body.ids)
-        .await
-        .map(|items| ContactSummariesPage { items })?;
-    Ok(Json(page))
+    let items = get_contact_summaries(&mut conn, auth.account_id, &body.ids).await?;
+    Ok(Json(whole_page(items, MAX_CONTACT_SUMMARY_IDS)))
 }
 
 /// Full contact view: per-handle services, message stats, and group
@@ -1320,7 +1302,7 @@ pub(crate) async fn contact_summaries_handler(
     get,
     path = "/v1/contacts/{id}",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 200, body = ContactDetail),
@@ -1346,7 +1328,7 @@ pub(crate) async fn contact_detail_handler(
     patch,
     path = "/v1/contacts/{id}",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Contact id")),
     request_body = ContactMutationBody,
     responses(
@@ -1381,7 +1363,7 @@ pub(crate) async fn contact_mutate_handler(
     post,
     path = "/v1/contacts/{id}/trash",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 204, description = "Trashed"),
@@ -1409,7 +1391,7 @@ pub(crate) async fn contact_trash_handler(
     post,
     path = "/v1/contacts/{id}/restore",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 204, description = "Restored"),
@@ -1440,7 +1422,7 @@ pub(crate) async fn contact_restore_handler(
     delete,
     path = "/v1/contacts/{id}",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = ["delete"])),
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 204, description = "Deleted: the contact is Unknown again"),

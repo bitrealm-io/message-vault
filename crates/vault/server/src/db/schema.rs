@@ -44,7 +44,7 @@ const DROP_MESSAGES_FTS_TRIGGERS_PG_SQL: &str =
 /// `PRAGMA user_version`. Bump this whenever any `schema/sql/*.sql` file
 /// changes; a database at any other version is rebuilt empty (see
 /// [`migrate_vault_schema`]).
-pub const SCHEMA_VERSION: i64 = 14;
+pub const SCHEMA_VERSION: i64 = 15;
 
 /// Bring the database to [`SCHEMA_VERSION`].
 ///

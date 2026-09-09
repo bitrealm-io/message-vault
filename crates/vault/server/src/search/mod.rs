@@ -103,6 +103,20 @@ impl Filter {
     pub fn params(&self) -> &[SqlParam] {
         &self.params
     }
+
+    /// This filter narrowed by one more fragment, `AND`-ed inside the
+    /// parentheses. `fragment` is written against the list's base alias with
+    /// `?` placeholders, and `params` are its values in textual order. An
+    /// Export Run's `selection` scope is built this way: the empty query's
+    /// defaults (the account, no trashed conversation, no duplicate) plus
+    /// the picked ids, so a hand-picked export hides the same rows a browse
+    /// would.
+    #[must_use]
+    pub fn and_where(mut self, fragment: &str, params: impl IntoIterator<Item = SqlParam>) -> Self {
+        self.where_sql = format!("({} AND {fragment})", self.where_sql);
+        self.params.extend(params);
+        self
+    }
 }
 
 /// Parse `query` and compile it for `list`. Pure: no database, no clock.

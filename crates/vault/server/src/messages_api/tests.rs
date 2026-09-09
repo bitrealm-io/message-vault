@@ -183,3 +183,32 @@ async fn the_route_refuses_an_offset_past_the_ceiling_and_requires_a_session() {
         StatusCode::UNAUTHORIZED
     );
 }
+
+#[tokio::test]
+async fn one_message_is_read_by_id_and_only_by_the_account_that_owns_it() {
+    let (vault, alice, _direct, _group) = seeded().await;
+    let bob = register_via_api(&vault.state, "carol", "hunter2hunter2").await;
+    let page: serde_json::Value =
+        get_json(&vault.state, "/v1/messages?q=dentist", &alice.token).await;
+    let id = page["items"][0]["id"].as_i64().unwrap();
+    let text = page["items"][0]["text"].as_str().unwrap().to_string();
+
+    let message: serde_json::Value =
+        get_json(&vault.state, &format!("/v1/messages/{id}"), &alice.token).await;
+    assert_eq!(message["id"], serde_json::json!(id));
+    assert_eq!(message["text"], serde_json::json!(text));
+
+    assert_eq!(
+        get_status(&vault.state, &format!("/v1/messages/{id}"), &bob.token).await,
+        StatusCode::NOT_FOUND,
+        "another account's message is absent, not forbidden"
+    );
+    assert_eq!(
+        get_status(&vault.state, "/v1/messages/999999", &alice.token).await,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        get_status(&vault.state, &format!("/v1/messages/{id}"), "not-a-token").await,
+        StatusCode::UNAUTHORIZED
+    );
+}

@@ -9,7 +9,7 @@ Route schemas, status codes, and JSON fields live in the generated [HTTP API ref
 
 ## One shape for every route
 
-- A list takes `?offset=&limit=` and answers `{items, total, limit, offset}`. `limit` is at most 500 and at least 1; `offset` is at most 50 000 on the Contacts and Conversations lists and unlimited on Export.
+- Every list takes `?offset=&limit=` and answers `{items, total, limit, offset}`, with no exceptions: the browse lists, the ones a person curates (Contact Groups, Message Tags, saved searches, API tokens, the accounts a vault holds), and the fixed reference list at `/v1/search-fields` alike. `limit` is at most 500 and at least 1, default 40; `offset` is at most 50 000 on the Contacts and Conversations lists and unlimited elsewhere. The one variation is a `POST` that reads the rows its body names — `/v1/contacts/summaries` and `/v1/contacts/unmatched-handles` — which answers the whole of that body as one page and takes no `offset` or `limit`, because the body already says which rows to read and may name at most 500.
 - A list takes `?sort=` in one spelling: comma-separated keys, a leading `-` for descending, as in `sort=-messages,date`. Each list names the keys it accepts in the OpenAPI document (Conversations: `date`, `messages`; Contacts: `name`; the three message lists: `date`), and an unlisted key is a `validation-failed` answer naming the accepted set. Filtering is the search language in `q`, never a query parameter.
 - A failure answers an [RFC 7807 problem document](./errors/) as `application/problem+json`: `type` names the page describing the kind of failure, `title` and `status` repeat it, `detail` is one sentence about this occurrence (a validation failure lists every broken rule in `errors` instead), and `request_id` repeats the response's `x-request-id` header. That includes a malformed query parameter, path, or JSON body, an unknown `/v1` path (404), and a wrong method (405). There is no `ok` field on any response.
 - A route with nothing to say on success answers `204 No Content`.
@@ -25,7 +25,22 @@ The full set of rules, with the reason behind each: [HTTP interface rules](https
 - `DELETE /v1/contacts/{id}` does what a phone's Delete Contact does: the name, the person's edits and their Contact Group memberships go, the contact becomes Unknown and leaves the trash, and every conversation stays as it is, showing the handle. A contact that is not in the trash answers 409.
 - `DELETE /v1/trash` does both for everything in the trash.
 
-All three answer `204`. The demo account may delete like any other account. The one deletion it is refused is its own: `DELETE /v1/account` answers `403 Forbidden` (`demo-account-protected`) for it, and `reset-demo` restores the vault instead. An Import Run's record on `/v1/imports` does not change when messages it brought in are later deleted.
+All three answer `204`. The demo account may delete like any other account. The one deletion it is refused is its own: `DELETE /v1/accounts/{id}` on its own row answers `403 Forbidden` (`demo-account-protected`) for it, and `reset-demo` restores the vault instead. An Import Run's record on `/v1/imports` does not change when messages it brought in are later deleted.
+
+## Accounts are one collection
+
+`/v1/accounts` is the one place accounts live, for the vault owner and for each account alike; there is no `/v1/account` singleton and no `/v1/owner/` prefix, because who may call a route is decided in the handler, never by the path. The credential names the caller, and `POST /v1/session` and `GET /v1/session` both answer its `account_id`, so a client always knows which row is its own.
+
+- `GET /v1/accounts` lists every account but the owner's, with its flags, message count and storage total. The owner only.
+- `POST /v1/accounts` creates an account. Signed in as the owner it takes a `username` and a first `password` the holder must replace at first sign-in. With no credential at all it is registration, allowed while the vault is open: the vault opens a Session on the new account and answers its `token`. Either way the answer is `201 Created` with `Location: /v1/accounts/{id}`.
+- `GET /v1/accounts/{id}` reads one account: profile fields, flags and counts in one document. `PATCH` changes it: the account itself sets `preferred_name`, `time_zone`, `handles` and `remove_handles`; the owner sets another account's `disabled`, `can_import`, `can_export` and `can_delete`. A field the caller may not set answers `403 Forbidden` and nothing in the body is applied.
+- `PUT /v1/accounts/{id}/password` is one route for two callers: an account changing its own supplies `current_password` and gets a rotated session `token` back (`200`); the owner sets another account's without it (`204`), ending that account's sessions.
+- `DELETE /v1/accounts/{id}` deletes an account. The owner sends no body; an account deleting itself sends `{confirm, current_password}`. Nobody deletes the owner.
+- `DELETE /v1/accounts/{id}/messages` destroys an account's messages and attachments and answers the counts. The owner sends no body; the account itself needs the `delete` scope and sends `{confirm}`.
+- `GET /v1/accounts/{id}/storage` is the attachment total and the largest files.
+- `/v1/accounts/{id}/api-tokens` and `/v1/accounts/{id}/api-tokens/{token_id}` are the account's own API tokens, session only: the owner has none and reaches nobody else's.
+
+An account addressing a row that is not its own answers `403` whether or not the row exists; only the owner learns that an id is absent (`404`).
 
 ## Tokens
 
@@ -39,7 +54,9 @@ Send either token as:
 Authorization: Bearer <token>
 ```
 
-An API token may import (write) and export messages and assets (read). It may not change profile, settings, or browse-only website routes. Export routes never delete vault data.
+An API token may import (write) and, through an Export Run it starts, read messages and assets. It may not change profile, settings, or browse-only website routes: outside a run, reading messages needs a session. Export routes never delete vault data.
+
+The OpenAPI document names the two credentials separately — `session` and `api-token` — and every route lists the ones it accepts and the scope it wants, so a generated client can tell before it calls. A route that lists only `session` refuses an API token outright with `403`. The scope names are `owner` for the vault owner's session, and `import`, `export` and `delete` for the three permissions a session or a token carries.
 
 Turn on a local explorer with `[server] openapi_ui = true`, then open `/docs` on that vault. The explorer is off by default. “Try it” still sends this header.
 
@@ -47,7 +64,9 @@ Turn on a local explorer with `[server] openapi_ui = true`, then open `/docs` on
 
 An import is an Import Run. `POST /v1/imports` creates one, naming the `source`, the `mode` (`replace` or `append`, default `append`) and whether to `dedupe` across sources afterwards (default false), and answers `201 Created` with its id. Each `POST /v1/imports/{id}/batches` adds one JSONL body to the run; the run's row says how the batch is imported, so the request carries nothing but the body. `POST /v1/imports/{id}/complete` records how the run ended, so Settings → Storage can list history. Messages promoted in the run store `messages.import_id`.
 
-There is no import without a run. A `replace` run wipes the source once, on its first batch, and appends every batch after that. An account has at most one running Import Run; `GET /v1/imports?status=running` finds it, and `GET /v1/imports` is a page of every run, newest first, narrowed by `status` to one of `running`, `completed`, `completed_with_issues`, `failed`, `cancelled`.
+There is no import without a run. A `replace` run wipes the source once, on its first batch, and appends every batch after that. An account has at most one running Import Run; `GET /v1/imports?status=running` finds it, and `GET /v1/imports` is a page of every run, newest first (`sort=started_at` for oldest first), narrowed by `status` to one of `running`, `completed`, `completed_with_issues`, `failed`, `cancelled`.
+
+`PATCH /v1/imports/{id}` moves a live run to another stage, carrying the plan approved at the gate it just passed in `summary` when there is one, and answers the run — the same record `GET /v1/imports/{id}` returns. The stage is a field of the run, so it is written with a `PATCH` rather than posted to a `stage` sub-resource.
 
 A batch opens its own SQLite connection so it does not hold the serve process’s short session mutex across JSONL and asset work. Same-account imports stay serialized. Export and auth open their own connections and can proceed under WAL while an import runs.
 
@@ -61,13 +80,33 @@ Request body limit matches `[server] asset_max_bytes` (default 512 MiB).
 
 A file the vault cannot read comes back as a 400 whose `error` names the line, or the schema version the file has and the version the vault reads.
 
+## Export Run
+
+An export is an Export Run. `POST /v1/exports` creates one and answers `201 Created` with the run: what was asked for, and the four counts the vault computed for it at creation — messages, conversations, distinct attachments, and their bytes. The body names a `scope` in one of three forms, stored as given, and an optional `tool`:
+
+```json title="POST /v1/exports"
+{ "scope": { "kind": "everything" }, "tool": "vault-pull" }
+{ "scope": { "kind": "query", "q": "from:me date:>2024" } }
+{ "scope": { "kind": "selection", "conversation_ids": [12, 40], "message_ids": [913] } }
+```
+
+`everything` is every non-trashed message the account holds. `query` is the search language against the Messages list; a blank `q` is refused, because that is the `everything` form. `selection` is conversations and messages picked by hand: a message is selected when its conversation is listed or it is listed itself, either list may be empty but not both, each list holds at most 500 ids, and an id the account does not hold is refused naming it. A selection hides trashed conversations and duplicates the way a browse does.
+
+`GET /v1/exports/{id}/messages` pages the rows the scope selects, oldest first, with a default page of 100 and no offset cap. Each page read raises the run's `messages_delivered` to the rows handed over so far, so an abandoned run shows how far it got. A run that is no longer `running` answers `409`.
+
+The client closes the run: `POST /v1/exports/{id}/complete` or `POST /v1/exports/{id}/cancel` sets the status and `finished_at` and answers the run; a second close is `409`. There is no unrecorded export. `GET /v1/exports` is a page of every run, newest first (`sort=started_at` for oldest first), narrowed by `status` to one of `running`, `completed`, `failed`, `cancelled`; `GET /v1/exports/{id}` is one run. The record holds what was asked for and how much matched, never what the messages said.
+
+Every export route takes the `export` scope on a session or an API token. A program holding an export token reads messages only through a run it started; `GET /v1/messages` and the other browse routes refuse it.
+
 ## Messages across conversations
 
-`GET /v1/messages?q=` answers one row per message matching `q`, paged like every other list, behind a signed-in session. It is a read route: opening a conversation is `GET /v1/conversations/{id}/messages`, downloading is `GET /v1/export/messages`, and searching across messages is this. The thread's find box uses it with `in:#id` so a find reaches every message in the conversation, not the page the browser holds.
+`GET /v1/messages?q=` answers one row per message matching `q`, paged like every other list, behind a signed-in session. It is a read route: opening a conversation is `GET /v1/conversations/{id}/messages`, downloading is an Export Run (`POST /v1/exports`), and searching across messages is this. The thread's find box uses it with `in:#id` so a find reaches every message in the conversation, not the page the browser holds.
+
+`GET /v1/messages/{id}` is the same row looked up by id, so a search result links to a message rather than to an offset. It is read-only: an import writes messages and trashing is a conversation operation. The lookup carries the list's own defaults — the caller's account, no trashed conversation, no duplicate — so a row the list hides answers `404` here too, and another account's message is absent rather than forbidden.
 
 ## Search operators (`q`)
 
-`q` is the same search language the website uses — see [Search](/vault/user/how-to/search/) for the full grammar: quoting, `none`/`any`, date and size ranges, `-` to exclude, `or` and parentheses, `avoc*` prefixes. Export compiles `q` against the Messages list, with the same compiler Contacts and Conversations search use elsewhere in the vault, full-text index included for free text. These are the words the Messages list has:
+`q` is the same search language the website uses — see [Search](/vault/user/how-to/search/) for the full grammar: quoting, `none`/`any`, date and size ranges, `-` to exclude, `or` and parentheses, `avoc*` prefixes. An Export Run's `query` scope compiles `q` against the Messages list, with the same compiler Contacts and Conversations search use elsewhere in the vault, full-text index included for free text. These are the words the Messages list has:
 
 - Free text and `"quoted phrases"` match the message body, the subject, and any attachment file name.
 - `body:`, `subject:` — text, `none`, `any`, restricted to that one field.
@@ -82,7 +121,7 @@ A file the vault cannot read comes back as a 400 whose `error` names the line, o
 - `service:` — `imessage`, `sms`, `mms`, `rcs`, `whatsapp`.
 - `source:` — the backup family it was imported from: `imessage`, `whatsapp`, `sms`.
 - `import:` — the Import Run that brought it in; `#id` or `last`.
-- `date:`, `first-message:`, `last-message:` — a day, month, year, or relative span, with comparisons and ranges. A message's `timestamp` is a UTC instant; the span's edges are midnight in the account's `time_zone` (`GET /v1/account/profile`), turned into instants before the comparison, so the same rule serves SQLite and Postgres and the `year=` filter on a conversation's messages.
+- `date:`, `first-message:`, `last-message:` — a day, month, year, or relative span, with comparisons and ranges. A message's `timestamp` is a UTC instant; the span's edges are midnight in the account's `time_zone` (`GET /v1/accounts/{id}`), turned into instants before the comparison, so the same rule serves SQLite and Postgres and the `year=` filter on a conversation's messages.
 - `attachment:` — `image`, `video`, `audio`, `document`, `pdf`, `contact`, `other`, `any`, `none`.
 - `filename:` — an attachment's file name; text or a `pre*` prefix.
 - `size:` — an attachment's size, with comparisons and ranges.

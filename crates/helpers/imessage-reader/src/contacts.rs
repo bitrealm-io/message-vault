@@ -405,3 +405,117 @@ fn macos_sources_dir() -> PathBuf {
         .join("AddressBook")
         .join("Sources")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A handle is looked up by these keys, so a key the builder does not
+    /// produce is a contact the reader never matches — the message arrives
+    /// with a bare number instead of a name.
+    ///
+    /// None of these functions had a test. Each was reported as reachable but
+    /// unguarded: `phone_keys` could return an empty vector, `to_phone_digits`
+    /// an empty string, `normalize_email` `None`, and every message in an
+    /// iMessage import would come through unnamed with the suite green.
+    #[test]
+    fn a_phone_number_yields_the_keys_a_lookup_might_use() {
+        // A US number is stored both ways, because Apple records it either
+        // way depending on how the message was addressed.
+        let us = phone_keys("+1 (555) 123-4567");
+        assert!(us.contains(&"15551234567".to_string()), "{us:?}");
+        assert!(us.contains(&"+15551234567".to_string()), "{us:?}");
+        assert!(us.contains(&"5551234567".to_string()), "{us:?}");
+        assert!(us.contains(&"+5551234567".to_string()), "{us:?}");
+
+        // A non-US number keeps its country code and gains no ten-digit form,
+        // because the last ten digits of a UK number are not the number.
+        let uk = phone_keys("+44 20 7183 8750");
+        assert!(uk.contains(&"442071838750".to_string()), "{uk:?}");
+        assert!(uk.contains(&"+442071838750".to_string()), "{uk:?}");
+        assert_eq!(uk.len(), 2, "no ten-digit variant for a UK number: {uk:?}");
+    }
+
+    #[test]
+    fn a_handle_that_is_not_a_phone_number_yields_no_keys() {
+        // An iMessage business account is not a person.
+        assert!(phone_keys("urn:biz:apple").is_empty());
+        // Too few digits to be a number: a country code on its own must not
+        // become a key that matches every number in that country.
+        assert!(phone_keys("+1").is_empty());
+        assert!(phone_keys("123").is_empty());
+        assert!(phone_keys("").is_empty());
+    }
+
+    #[test]
+    fn phone_digits_are_the_digits_and_nothing_else() {
+        assert_eq!(to_phone_digits("+1 (555) 123-4567"), "15551234567");
+        assert_eq!(to_phone_digits("555.123.4567"), "5551234567");
+        assert_eq!(to_phone_digits("no digits here"), "");
+        assert_eq!(to_phone_digits(""), "");
+    }
+
+    #[test]
+    fn an_email_is_lower_cased_and_stripped_of_its_brackets() {
+        assert_eq!(
+            normalize_email("  <Alice@Example.COM>  "),
+            Some("alice@example.com".to_string())
+        );
+        assert_eq!(
+            normalize_email("alice@example.com"),
+            Some("alice@example.com".to_string())
+        );
+        // Nothing but whitespace or brackets is not an address.
+        assert_eq!(normalize_email("   "), None);
+        assert_eq!(normalize_email("<>"), None);
+        assert_eq!(normalize_email(""), None);
+    }
+
+    #[test]
+    fn an_email_list_splits_on_spaces_and_a_single_address_does_not() {
+        assert_eq!(
+            parse_email_list("Alice@Example.com  bob@example.com"),
+            vec![
+                "alice@example.com".to_string(),
+                "bob@example.com".to_string()
+            ]
+        );
+        assert_eq!(
+            parse_email_list("alice@example.com"),
+            vec!["alice@example.com".to_string()]
+        );
+        assert!(parse_email_list("   ").is_empty());
+    }
+
+    #[test]
+    fn an_identifier_is_an_email_when_it_has_an_at_sign() {
+        assert!(looks_like_email("alice@example.com"));
+        assert!(!looks_like_email("+15551234567"));
+        assert!(!looks_like_email(""));
+    }
+
+    /// When two address-book rows name the same handle, the fuller name wins.
+    /// `upsert_best` is what decides, and replacing it with "keep the first"
+    /// or "keep the last" means a contact is named "Sam" or "" when the book
+    /// has "Sam Example".
+    #[test]
+    fn the_fuller_name_wins_when_two_rows_name_one_handle() {
+        let first_only = Name::from_opt(Some("Sam".into()), None).expect("a first name");
+        let full = Name::from_opt(Some("Sam".into()), Some("Example".into())).expect("a full name");
+
+        // Fuller arriving second replaces the sparser one.
+        let mut map = HashMap::new();
+        upsert_best(&mut map, "key".into(), &first_only);
+        upsert_best(&mut map, "key".into(), &full);
+        assert_eq!(map["key"].last, "Example");
+
+        // Fuller arriving first is not replaced by the sparser one.
+        let mut map = HashMap::new();
+        upsert_best(&mut map, "key".into(), &full);
+        upsert_best(&mut map, "key".into(), &first_only);
+        assert_eq!(
+            map["key"].last, "Example",
+            "a sparser row must not overwrite a fuller one"
+        );
+    }
+}

@@ -197,6 +197,50 @@ CREATE INDEX IF NOT EXISTS ix_vault_imports_account_started
 CREATE UNIQUE INDEX IF NOT EXISTS ux_vault_imports_active_account
     ON vault_imports(account_id) WHERE status = 'running';
 
+-- One row per Export Run: what was asked for and how much matched, never
+-- message content. Recorded permanently whether the run completed, failed
+-- or was cancelled, so every read of message data by a program leaves a
+-- record.
+CREATE TABLE IF NOT EXISTS vault_exports (
+    -- Surrogate primary key for this export run.
+    id INTEGER PRIMARY KEY,
+    -- Owning vault account (`accounts.id`).
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    -- Which of the three scope forms the run asked for: everything, query,
+    -- or selection.
+    scope_kind TEXT NOT NULL,
+    -- The search-language query, when `scope_kind` is query; NULL otherwise.
+    scope_query TEXT,
+    -- JSON array of the conversation ids picked by hand, when `scope_kind`
+    -- is selection; NULL otherwise.
+    scope_conversation_ids TEXT,
+    -- JSON array of the message ids picked by hand, when `scope_kind` is
+    -- selection; NULL otherwise.
+    scope_message_ids TEXT,
+    -- Client/tool name that ran the export (optional).
+    tool TEXT,
+    -- Run status: running, completed, failed, or cancelled.
+    status TEXT NOT NULL,
+    -- When the export started.
+    started_at TEXT NOT NULL,
+    -- When the export finished; NULL while still running.
+    finished_at TEXT,
+    -- Messages the scope matched when the run was created.
+    message_count INTEGER NOT NULL,
+    -- Distinct conversations with at least one matching message, at creation.
+    conversation_count INTEGER NOT NULL,
+    -- Distinct attachment fingerprints among the matching messages, at creation.
+    attachment_count INTEGER NOT NULL,
+    -- Sum of the known sizes of those distinct attachments, at creation.
+    total_bytes INTEGER NOT NULL,
+    -- Rows handed over so far through the run's message pages, so an
+    -- abandoned run shows how far it got.
+    messages_delivered INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS ix_vault_exports_account_started
+    ON vault_exports(account_id, started_at DESC);
+
 -- Per-item warning or error recorded during an import run.
 CREATE TABLE IF NOT EXISTS vault_import_issues (
     -- Surrogate primary key for this issue row.

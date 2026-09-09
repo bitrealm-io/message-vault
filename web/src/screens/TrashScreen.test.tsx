@@ -58,16 +58,14 @@ const FIELD_WORDS = {
 } as const;
 
 function fieldsFor(list: keyof typeof FIELD_WORDS) {
-  return {
-    list,
-    items: FIELD_WORDS[list].map((word) => ({
-      word,
-      value_type: "text" as const,
-      values: [],
-      help: "",
-      example: `${word}:x`,
-    })),
-  };
+  const items = FIELD_WORDS[list].map((word) => ({
+    word,
+    value_type: "text" as const,
+    values: [],
+    help: "",
+    example: `${word}:x`,
+  }));
+  return { items, total: items.length, limit: 40, offset: 0 };
 }
 const getConversationMock = vi.mocked(getConversation);
 const restoreConversationMock = vi.mocked(restoreConversation);

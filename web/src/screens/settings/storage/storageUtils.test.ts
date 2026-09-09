@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeExportScope,
   formatBytes,
   formatImportDate,
   type ImportDetailResponse,
@@ -17,6 +18,8 @@ function detail(partial: Partial<ImportDetailResponse> = {}): ImportDetailRespon
     started_at: "2026-08-11T12:00:00Z",
     finished_at: "2026-08-11T12:01:00Z",
     message_count: 10,
+    contacts_new: 0,
+    contacts_changed: 0,
     attachment_count: 0,
     bytes_uploaded: 0,
     duration_ms: 1000,
@@ -113,5 +116,20 @@ describe("toImportSummaryView", () => {
     expect(view.durationMs).toBe(65);
     expect(view.attachmentsMs).toBe(20);
     expect(view.prepareMs).toBe(5);
+  });
+});
+
+describe("describeExportScope", () => {
+  it("names each scope form in one line", () => {
+    expect(describeExportScope({ kind: "everything" })).toBe("Everything");
+    expect(describeExportScope({ kind: "query", q: "from:me pizza" })).toBe(
+      "Search: from:me pizza",
+    );
+    expect(
+      describeExportScope({ kind: "selection", conversation_ids: [1, 2], message_ids: [9] }),
+    ).toBe("Picked: 2 conversations, 1 message");
+    expect(describeExportScope({ kind: "selection", conversation_ids: [4] })).toBe(
+      "Picked: 1 conversation",
+    );
   });
 });

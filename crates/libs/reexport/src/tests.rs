@@ -495,3 +495,150 @@ fn apply_reexport_convert_restages_attachments_and_marks_missing_files() {
         Some("file_missing")
     );
 }
+
+/// The sniffers are what stop the converter reading somebody else's file.
+///
+/// `detect_ir_export` matches on the extension and then asks a sniffer whether
+/// the contents are really an IR export. Every one of those guards could be
+/// replaced with `true` and nothing failed: the tests all pointed at real
+/// exports, so the guards were never the thing that decided. A `.json` of
+/// anything at all — a `package.json`, a browser bookmark dump — would have
+/// been picked up as a conversation and read as empty.
+#[test]
+fn a_json_that_is_not_an_ir_export_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    for (name, body) in [
+        // Valid JSON, wrong shape.
+        ("package.json", r#"{"name":"thing","version":"1.0.0"}"#),
+        // The right keys but the wrong schema version.
+        (
+            "old.json",
+            r#"{"schema_version":3,"export":{},"conversation":{},"messages":[]}"#,
+        ),
+        // The right version but missing a required section.
+        (
+            "partial.json",
+            r#"{"schema_version":4,"export":{},"messages":[]}"#,
+        ),
+        // Not JSON at all.
+        ("broken.json", "{not json"),
+    ] {
+        std::fs::write(dir.path().join(name), body).unwrap();
+    }
+
+    let err = detect_ir_export(dir.path()).unwrap_err();
+    assert!(
+        err.to_string().contains("no Message Vault IR export found"),
+        "unexpected error: {err}"
+    );
+}
+
+/// The JSON Lines sniffer reads only the first line, so a file whose first
+/// line is not a conversation must be refused whatever follows it.
+#[test]
+fn a_jsonl_whose_first_line_is_not_a_conversation_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("log.jsonl"),
+        "{\"level\":\"info\",\"msg\":\"started\"}\n         {\"schema_version\":4,\"export\":{},\"conversation\":{},\"messages\":[]}\n",
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("empty.ndjson"), "").unwrap();
+
+    let err = detect_ir_export(dir.path()).unwrap_err();
+    assert!(
+        err.to_string().contains("no Message Vault IR export found"),
+        "unexpected error: {err}"
+    );
+}
+
+/// The CSV sniffer needs every column the IR writer emits. A spreadsheet that
+/// happens to have a `text` column is not a conversation.
+#[test]
+fn a_csv_without_every_ir_column_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("budget.csv"),
+        "date,text,amount\n2020-01-01,rent,1200\n",
+    )
+    .unwrap();
+    // Every column but one: the check is `all`, not `any`.
+    let mut headers: Vec<&str> = CSV_HEADERS.to_vec();
+    headers.pop();
+    std::fs::write(
+        dir.path().join("almost.csv"),
+        format!("{}\n", headers.join(",")),
+    )
+    .unwrap();
+
+    let err = detect_ir_export(dir.path()).unwrap_err();
+    assert!(
+        err.to_string().contains("no Message Vault IR export found"),
+        "unexpected error: {err}"
+    );
+
+    // And with every column it is accepted, so the refusal above was about the
+    // missing one rather than about the file being unreadable.
+    std::fs::remove_file(dir.path().join("almost.csv")).unwrap();
+    std::fs::write(
+        dir.path().join("real.csv"),
+        format!("{}\n", CSV_HEADERS.join(",")),
+    )
+    .unwrap();
+    assert_eq!(
+        detect_ir_export(dir.path()).unwrap().format,
+        OutputFormat::Csv
+    );
+}
+
+/// An `.xml` is an SMS Backup & Restore export only when it is named
+/// `smses.xml` or its first line says `<smses`. Any other XML in the folder —
+/// an Android manifest, a settings dump — must be left alone.
+#[test]
+fn an_xml_that_is_not_an_smses_export_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("settings.xml"),
+        "<?xml version=\"1.0\"?>\n<map><boolean name=\"x\" value=\"true\" /></map>\n",
+    )
+    .unwrap();
+
+    let err = detect_ir_export(dir.path()).unwrap_err();
+    assert!(
+        err.to_string().contains("no Message Vault IR export found"),
+        "unexpected error: {err}"
+    );
+
+    // Named `smses.xml`, it is taken whatever the first line says.
+    std::fs::write(dir.path().join("smses.xml"), "<?xml version=\"1.0\"?>\n").unwrap();
+    assert_eq!(
+        detect_ir_export(dir.path()).unwrap().format,
+        OutputFormat::Xml
+    );
+}
+
+/// Sidecars are skipped by name, and each clause of that list was droppable
+/// without failing a test. A `.tmp` counted as an export would make a
+/// half-written file the thing the converter reads.
+#[test]
+fn every_kind_of_sidecar_is_skipped() {
+    let dir = tempfile::tempdir().unwrap();
+    let ir_json = r#"{"schema_version":4,"export":{},"conversation":{},"messages":[]}"#;
+    for name in [
+        "conversation.meta.json",
+        "conversation.json.tmp",
+        ".hidden.json",
+        "smses.xml.tmp",
+        "smses.xml.sbrbody",
+    ] {
+        std::fs::write(dir.path().join(name), ir_json).unwrap();
+    }
+    std::fs::create_dir_all(dir.path().join("attachments")).unwrap();
+    std::fs::write(dir.path().join("attachments/a.eml"), "From: x\n").unwrap();
+
+    let err = detect_ir_export(dir.path()).unwrap_err();
+    assert!(
+        err.to_string().contains("no Message Vault IR export found"),
+        "sidecars must not count as an export: {err}"
+    );
+}

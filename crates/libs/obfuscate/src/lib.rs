@@ -830,6 +830,259 @@ mod tests {
         [n; 32]
     }
 
+    /// Known-answer vectors for a fixed key.
+    ///
+    /// Every other test here checks a shape — the right number of digits, the
+    /// country code kept, the original absent — and a shape survives almost any
+    /// change to the arithmetic underneath. Mutation testing found that:
+    /// swapping `%` for `/` and `+=` for `*=` inside `shape_preserving_filler`
+    /// and `obfuscate_phone` changed every value produced and failed nothing,
+    /// because the results were still digits of the right length.
+    ///
+    /// These pin what the key actually produces. The obfuscated export is
+    /// meant to be reproducible — the same seed on the same backup gives the
+    /// same fake vault, which is what makes it shareable and comparable — so
+    /// the mapping is a contract, not an implementation detail. Regenerate
+    /// deliberately if it ever has to change, and say why in the commit.
+    #[test]
+    fn known_answers_for_a_fixed_key() {
+        const KEY: u8 = 7;
+
+        let mut phones = Obfuscator::new(key(KEY));
+        for (raw, expected) in [
+            ("+15555550100", "+10490970433"),
+            ("+44 20 7183 8750", "+44 39 2603 3624"),
+            ("7535", "7032"),
+            ("(555) 123-4567", "(972) 642-7627"),
+        ] {
+            assert_eq!(phones.obfuscate_phone(raw), expected, "phone {raw:?}");
+        }
+
+        let mut names = Obfuscator::new(key(KEY));
+        for (raw, expected) in [
+            ("Sam Example", "Joel Snow"),
+            ("alice", "Ula Nelson"),
+            ("Dr. Jane Q. Public", "Ida Vogel"),
+        ] {
+            assert_eq!(names.obfuscate_display_name(raw), expected, "name {raw:?}");
+        }
+
+        let mut emails = Obfuscator::new(key(KEY));
+        for (raw, expected) in [
+            ("alice@example.com", "hugo.white@example.invalid"),
+            (
+                "sam.doe+tag@mail.example.co.uk",
+                "rory.thorne@example.invalid",
+            ),
+        ] {
+            assert_eq!(emails.obfuscate_email(raw), expected, "email {raw:?}");
+        }
+
+        let mut urls = Obfuscator::new(key(KEY));
+        for (raw, expected) in [
+            (
+                "https://example.com/a/b?c=1",
+                "https://3121646218.example.invalid/",
+            ),
+            ("http://x.test", "https://2992837897.example.invalid/"),
+        ] {
+            assert_eq!(urls.obfuscate_url(raw), expected, "url {raw:?}");
+        }
+
+        // A handle takes the shape of whatever it is: a number stays a number,
+        // an address stays an address, and anything else becomes a name.
+        let mut handles = Obfuscator::new(key(KEY));
+        for (raw, expected) in [
+            ("+15555550100", "+10490970433"),
+            ("alice@example.com", "hugo.white@example.invalid"),
+            ("chat123", "Uma Thorne"),
+        ] {
+            assert_eq!(handles.obfuscate_handle(raw), expected, "handle {raw:?}");
+        }
+
+        // Message text keeps its structured spans recognisable — the phone is
+        // still a phone, the address still an address — and scrambles the
+        // prose around them.
+        let mut text = Obfuscator::new(key(KEY));
+        assert_eq!(
+            text.obfuscate_text("Call me at +1 555 123 4567 or alice@example.com"),
+            "Vmrq sm hl +1 839 910 9347 pt hugo.white@example.invalid"
+        );
+
+        // A handle with no name of its own still gets a stable one, and a real
+        // name maps to the same fake name it would anywhere else.
+        let mut display = Obfuscator::new(key(KEY));
+        assert_eq!(
+            display.display_name_for_handle("+15555550100"),
+            "Hannah Carter"
+        );
+        assert_eq!(display.display_name_for_handle("Sam Example"), "Joel Snow");
+    }
+
+    /// The span finder must not obfuscate a piece of text twice.
+    ///
+    /// Spans are found by three regexes over the same string, so an address
+    /// inside a URL, or a number inside an address, matches more than one.
+    /// `span_overlaps` and `mark_covered` are what stop the second match from
+    /// rewriting bytes the first already replaced, and mutation testing found
+    /// both could be neutered — `span_overlaps` always false, `mark_covered`
+    /// doing nothing — with every test still green.
+    #[test]
+    fn overlapping_structured_spans_are_each_rewritten_once() {
+        // The address sits inside the URL, and the digits sit inside the
+        // address: three regexes, one region of text.
+        let raw = "see https://mail.example.com/u/alice@example.com?id=5551234567 now";
+        let spans = find_structured_spans(raw);
+
+        let mut sorted: Vec<(usize, usize)> = spans.iter().map(|(s, e, _)| (*s, *e)).collect();
+        sorted.sort_unstable();
+        for pair in sorted.windows(2) {
+            assert!(
+                pair[0].1 <= pair[1].0,
+                "spans {:?} and {:?} overlap in {raw:?}",
+                pair[0],
+                pair[1]
+            );
+        }
+
+        // And the rewrite leaves nothing of the original behind.
+        let mut anon = Obfuscator::new(key(11));
+        let out = anon.obfuscate_text(raw);
+        assert!(!out.contains("alice@example.com"), "{out}");
+        assert!(!out.contains("mail.example.com"), "{out}");
+        assert!(!out.contains("5551234567"), "{out}");
+    }
+
+    /// A run of prose longer than the digest is the case that exercises the
+    /// filler's wrap-around, which is where the modulo lives. A shorter string
+    /// never reaches the end of the digest, so an arithmetic change there is
+    /// invisible.
+    #[test]
+    fn a_long_run_of_prose_is_filled_to_its_own_length() {
+        let raw = "The quick brown fox jumps over the lazy dog again and again and again,                    and keeps on jumping well past the length of any digest we might use here.";
+        let mut anon = Obfuscator::new(key(13));
+        let out = anon.obfuscate_text(raw);
+
+        assert_eq!(
+            out.chars().count(),
+            raw.chars().count(),
+            "length is the shape"
+        );
+        for (a, b) in raw.chars().zip(out.chars()) {
+            if a.is_ascii_alphabetic() {
+                assert!(b.is_ascii_alphabetic(), "{a:?} became {b:?}");
+                assert_eq!(a.is_uppercase(), b.is_uppercase(), "case of {a:?}");
+            } else {
+                assert_eq!(a, b, "punctuation and spacing are kept");
+            }
+        }
+        assert_ne!(out, raw, "the prose must actually change");
+        // Deterministic: the same key and input give the same filler, which is
+        // what makes an obfuscated export reproducible.
+        let mut again = Obfuscator::new(key(13));
+        assert_eq!(again.obfuscate_text(raw), out);
+    }
+
+    /// `looks_like_email` decides whether a bare handle is rewritten as an
+    /// address or as a name, and it needs both an `@` and a dot. Mutation
+    /// testing found the `&&` could become `||` with nothing failing, which
+    /// would turn every handle containing a dot — every version string, every
+    /// file name — into a fake email address.
+    #[test]
+    fn a_handle_is_an_address_only_with_both_an_at_and_a_dot() {
+        assert!(looks_like_email("alice@example.com"));
+        assert!(looks_like_email("a@b.c"));
+
+        assert!(!looks_like_email("alice@example"), "no dot");
+        assert!(!looks_like_email("example.com"), "no at");
+        assert!(!looks_like_email("chat123"), "neither");
+        assert!(!looks_like_email(""), "empty");
+    }
+
+    /// The placeholder pass replaces real media with three stand-in files and
+    /// deletes everything else, which is the whole point: an obfuscated export
+    /// must not ship the photographs. Mutation testing found the two `&&`
+    /// guards on the keep-list could each become `||`, which deletes the
+    /// placeholders it has just written and keeps nothing.
+    #[test]
+    fn materializing_placeholders_removes_the_real_media_and_keeps_the_three() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let attachments = dir.path().join("attachments");
+        fs::create_dir_all(&attachments).expect("attachments dir");
+        fs::write(attachments.join("IMG_0001.jpg"), b"real photo bytes").expect("write");
+        fs::write(attachments.join("clip.mp4"), b"real video bytes").expect("write");
+        fs::write(attachments.join("notes.bin"), b"real other bytes").expect("write");
+
+        materialize_placeholders(dir.path()).expect("materialize");
+
+        let mut names: Vec<String> = fs::read_dir(&attachments)
+            .expect("read")
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        names.sort();
+        assert_eq!(
+            names,
+            ["placeholder.bin", "placeholder.jpg", "placeholder.mp4"],
+            "the real media must be gone and the three placeholders present"
+        );
+        assert_eq!(
+            fs::read(attachments.join("placeholder.jpg")).expect("read jpg"),
+            PLACEHOLDER_JPG,
+            "the placeholder must be the committed bytes, not a leftover file"
+        );
+    }
+
+    /// Running it twice must be a no-op, not a pass that deletes what the
+    /// first one wrote.
+    #[test]
+    fn materializing_placeholders_twice_keeps_them() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        materialize_placeholders(dir.path()).expect("first");
+        materialize_placeholders(dir.path()).expect("second");
+
+        let attachments = dir.path().join("attachments");
+        assert!(attachments.join("placeholder.jpg").is_file());
+        assert!(attachments.join("placeholder.mp4").is_file());
+        assert!(attachments.join("placeholder.bin").is_file());
+    }
+
+    /// The filler's own arithmetic, pinned.
+    ///
+    /// `a_long_run_of_prose_is_filled_to_its_own_length` above checks the
+    /// shape, and a shape survives any change to the digest arithmetic: swap
+    /// `%` for `/` inside `shape_preserving_filler` and every letter changes
+    /// while the length, the case and the punctuation all still line up. This
+    /// pins what the filler produces for a run longer than the digest, which
+    /// is the only input that reaches the wrap-around.
+    #[test]
+    fn a_long_run_of_prose_has_a_pinned_filler() {
+        let raw = "The quick brown fox jumps over the lazy dog again and again and again, \
+                   and keeps on jumping well past the length of any digest we might use here.";
+        let mut anon = Obfuscator::new(key(13));
+        assert_eq!(
+            anon.obfuscate_text(raw),
+            "Mkv iuujb zampc rum gqbfm wrgu kpf ujhf mkv iuujb zam pcrum gqb fmwrg, \
+             ukp fujhf mk viuujbz ampc rumg qbf mwrguk pf ujh fmkviu uj bzamp cru mgqb."
+        );
+    }
+
+    /// Five digits is where a run of numbers starts being treated as a phone
+    /// number rather than as ordinary text, and the two paths produce
+    /// different results. Nothing tested the boundary, so `< 5` could become
+    /// `<= 5` or `== 5` and every test still passed.
+    #[test]
+    fn a_number_becomes_a_phone_at_five_digits() {
+        for (raw, expected) in [
+            ("call 1234 now", "shhw 8610 bsg"),
+            ("call 12345 now", "fscs 25657 uto"),
+            ("call 5551234567 now", "nbxh 3189880900 uvx"),
+        ] {
+            let mut anon = Obfuscator::new(key(13));
+            assert_eq!(anon.obfuscate_text(raw), expected, "for {raw:?}");
+        }
+    }
+
     #[test]
     fn phone_stable_same_key() {
         let mut a = Obfuscator::new(key(1));

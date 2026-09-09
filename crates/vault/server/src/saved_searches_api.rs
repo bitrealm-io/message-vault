@@ -26,7 +26,7 @@ pub(crate) struct SavedSearchBody {
     get,
     path = "/v1/saved-searches",
     tag = "Saved searches",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
         ("offset" = Option<usize>, Query, description = "Page offset")
@@ -54,7 +54,7 @@ pub(crate) async fn saved_searches_list_handler(
     post,
     path = "/v1/saved-searches",
     tag = "Saved searches",
-    security(("bearer" = [])),
+    security(("session" = [])),
     request_body = SavedSearchBody,
     responses(
         (
@@ -93,7 +93,7 @@ pub(crate) async fn saved_searches_create_handler(
     patch,
     path = "/v1/saved-searches/{id}",
     tag = "Saved searches",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Saved search id")),
     request_body = SavedSearchBody,
     responses(
@@ -127,7 +127,7 @@ pub(crate) async fn saved_searches_update_handler(
     delete,
     path = "/v1/saved-searches/{id}",
     tag = "Saved searches",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Saved search id")),
     responses(
         (status = 204, description = "Saved search deleted"),

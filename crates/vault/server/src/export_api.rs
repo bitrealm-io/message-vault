@@ -361,7 +361,7 @@ async fn close_export(
     post,
     path = "/v1/exports",
     tag = "Export",
-    security(("bearer" = [])),
+    security(("session" = ["export"]), ("api-token" = ["export"])),
     request_body = CreateExportBody,
     responses(
         (
@@ -409,7 +409,7 @@ pub(crate) async fn exports_create_handler(
     get,
     path = "/v1/exports",
     tag = "Export",
-    security(("bearer" = [])),
+    security(("session" = ["export"]), ("api-token" = ["export"])),
     params(
         ("status" = Option<String>, Query, description = "One of running, completed, failed, cancelled"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, at most 500"),
@@ -476,7 +476,7 @@ pub(crate) async fn exports_list_handler(
     get,
     path = "/v1/exports/{id}",
     tag = "Export",
-    security(("bearer" = [])),
+    security(("session" = ["export"]), ("api-token" = ["export"])),
     params(("id" = i64, Path, description = "Export Run id")),
     responses(
         (status = 200, body = ExportRun),
@@ -503,7 +503,7 @@ pub(crate) async fn exports_get_handler(
     get,
     path = "/v1/exports/{id}/messages",
     tag = "Export",
-    security(("bearer" = [])),
+    security(("session" = ["export"]), ("api-token" = ["export"])),
     params(
         ("id" = i64, Path, description = "Export Run id"),
         ("limit" = Option<usize>, Query, description = "Page size, default 100, max 500"),
@@ -562,7 +562,7 @@ pub(crate) async fn export_messages_handler(
     post,
     path = "/v1/exports/{id}/complete",
     tag = "Export",
-    security(("bearer" = [])),
+    security(("session" = ["export"]), ("api-token" = ["export"])),
     params(("id" = i64, Path, description = "Export Run id")),
     responses(
         (status = 200, body = ExportRun),
@@ -585,7 +585,7 @@ pub(crate) async fn exports_complete_handler(
     post,
     path = "/v1/exports/{id}/cancel",
     tag = "Export",
-    security(("bearer" = [])),
+    security(("session" = ["export"]), ("api-token" = ["export"])),
     params(("id" = i64, Path, description = "Export Run id")),
     responses(
         (status = 200, body = ExportRun),

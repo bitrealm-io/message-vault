@@ -188,7 +188,7 @@ async fn require_owner_or_self(
     path = "/v1/accounts",
     tag = "Accounts",
     operation_id = "list_accounts",
-    security(("bearer" = [])),
+    security(("session" = ["owner"])),
     params(
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
         ("offset" = Option<usize>, Query, description = "Page offset")
@@ -278,7 +278,7 @@ pub struct CreatedAccountResponse {
     path = "/v1/accounts",
     tag = "Accounts",
     operation_id = "create_account",
-    security((), ("bearer" = [])),
+    security((), ("session" = ["owner"])),
     request_body = CreateAccountRequest,
     responses(
         (
@@ -387,7 +387,7 @@ pub async fn create_account_handler(
     path = "/v1/accounts/{id}",
     tag = "Accounts",
     operation_id = "get_account",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Account id")),
     responses(
         (status = 200, body = AccountResponse),
@@ -660,7 +660,7 @@ async fn apply_flags(
     path = "/v1/accounts/{id}",
     tag = "Accounts",
     operation_id = "patch_account",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Account id to change")),
     request_body = PatchAccountRequest,
     responses(
@@ -733,7 +733,7 @@ pub struct DeleteAccountRequest {
     path = "/v1/accounts/{id}",
     tag = "Accounts",
     operation_id = "delete_account",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Account id to delete")),
     request_body(content = Option<DeleteAccountRequest>, description = "Sent by an account deleting itself; the owner sends no body"),
     responses(
@@ -832,7 +832,7 @@ pub struct SetPasswordResponse {
     path = "/v1/accounts/{id}/password",
     tag = "Accounts",
     operation_id = "set_account_password",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Account id whose password is set")),
     request_body = SetPasswordRequest,
     responses(
@@ -939,7 +939,11 @@ fn remove_account_asset_trees(
     path = "/v1/accounts/{id}/messages",
     tag = "Accounts",
     operation_id = "delete_account_messages",
-    security(("bearer" = [])),
+    security(
+        ("session" = ["owner"]),
+        ("session" = ["delete"]),
+        ("api-token" = ["delete"])
+    ),
     params(("id" = i64, Path, description = "Account whose messages are destroyed")),
     request_body(content = Option<DeleteMessagesRequest>, description = "Sent by an account deleting its own messages; the owner sends no body"),
     responses(
@@ -994,7 +998,7 @@ pub(crate) struct AccountStorageResponse {
     path = "/v1/accounts/{id}/storage",
     tag = "Accounts",
     operation_id = "get_account_storage",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Account id")),
     responses(
         (status = 200, body = AccountStorageResponse),

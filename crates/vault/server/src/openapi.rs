@@ -44,12 +44,44 @@ pub struct ApiDoc;
 struct BearerAddon;
 
 impl Modify for BearerAddon {
-    /// Register the `bearer` security scheme on the generated document.
+    /// Register the two credentials a route may name, `session` and
+    /// `api-token`, and say which is which.
+    ///
+    /// Both are `Authorization: Bearer`, and the vault tells them apart by
+    /// the token's own prefix, so one scheme could have described the header.
+    /// Two describe the interface: most routes take a signed-in session and
+    /// refuse a token outright, and the ones that take a token say which
+    /// scope it needs. The scope names on a requirement are the role names
+    /// OpenAPI allows on a non-OAuth scheme: `owner` for the vault owner's
+    /// session, and `import`, `export` and `delete` for the three
+    /// permissions a session or a token carries.
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         let components = openapi.components.get_or_insert_default();
         components.add_security_scheme(
-            "bearer",
-            SecurityScheme::Http(HttpBuilder::new().scheme(HttpAuthScheme::Bearer).build()),
+            "session",
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .description(Some(
+                        "A signed-in Session: the `mv-user-` token `POST /v1/session` returns. \
+                         A route naming a scope needs that permission on the account.",
+                    ))
+                    .build(),
+            ),
+        );
+        components.add_security_scheme(
+            "api-token",
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .description(Some(
+                        "A named API token: the `mv-api-` secret \
+                         `POST /v1/accounts/{id}/api-tokens` returns once, carrying the import, \
+                         export and delete scopes it was created with. Only the routes listing \
+                         it accept one; every other route answers 403.",
+                    ))
+                    .build(),
+            ),
         );
     }
 }
@@ -272,25 +304,99 @@ mod tests {
                 .any(|entry| entry.as_object().is_some_and(|o| o.is_empty()))),
             "POST /v1/accounts must admit a request with no credential: {create}"
         );
-        assert!(operation_has_bearer(create), "and the owner's session");
         assert!(
-            !operation_has_bearer(&paths["/v1/session"]["post"]),
+            operation_needs("session", create),
+            "and the owner's session"
+        );
+        assert!(
+            paths["/v1/session"]["post"]["security"].is_null(),
             "signing in is public"
         );
         assert!(
-            operation_has_bearer(&paths["/v1/session"]["get"]),
-            "GET /v1/session must require bearer"
+            operation_needs("session", &paths["/v1/session"]["get"]),
+            "GET /v1/session must name the session scheme"
         );
         assert!(
-            operation_has_bearer(&paths["/v1/session"]["delete"]),
-            "DELETE /v1/session must require bearer"
+            operation_needs("session", &paths["/v1/session"]["delete"]),
+            "DELETE /v1/session must name the session scheme"
         );
     }
 
-    fn operation_has_bearer(op: &serde_json::Value) -> bool {
+    /// Whether any of the operation's security requirements names `scheme`.
+    fn operation_needs(scheme: &str, op: &serde_json::Value) -> bool {
         op["security"]
             .as_array()
-            .is_some_and(|schemes| schemes.iter().any(|s| s.get("bearer").is_some()))
+            .is_some_and(|schemes| schemes.iter().any(|s| s.get(scheme).is_some()))
+    }
+
+    /// The scopes `scheme` is asked for on one operation, flattened.
+    fn scopes_of(scheme: &str, op: &serde_json::Value) -> Vec<String> {
+        op["security"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.get(scheme))
+            .filter_map(|v| v.as_array())
+            .flatten()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect()
+    }
+
+    #[test]
+    fn every_route_names_the_credential_it_takes_and_the_scope_it_needs() {
+        // The document is what a client generator reads, so a route that
+        // refuses API tokens must not offer one, and a route that accepts one
+        // must say which scope it wants.
+        let v: serde_json::Value = serde_json::from_str(&dump_openapi_json()).unwrap();
+        let schemes = &v["components"]["securitySchemes"];
+        assert!(schemes["session"].is_object() && schemes["api-token"].is_object());
+        assert!(schemes["bearer"].is_null(), "one scheme per credential");
+        let paths = v["paths"].as_object().unwrap();
+
+        for (path, methods) in paths {
+            for (method, op) in methods.as_object().unwrap() {
+                let Some(requirements) = op["security"].as_array() else {
+                    continue;
+                };
+                for entry in requirements {
+                    for (scheme, scopes) in entry.as_object().unwrap() {
+                        assert!(
+                            scheme == "session" || scheme == "api-token",
+                            "{method} {path} names an unknown credential {scheme}"
+                        );
+                        for scope in scopes.as_array().unwrap() {
+                            let scope = scope.as_str().unwrap();
+                            assert!(
+                                ["owner", "import", "export", "delete"].contains(&scope),
+                                "{method} {path} asks for an unknown scope {scope}"
+                            );
+                            assert!(
+                                !(scheme == "api-token" && scope == "owner"),
+                                "{method} {path} offers an API token the owner's role"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Browse takes a session and nothing else; import and export routes
+        // take either credential, and name the permission.
+        let browse = &paths["/v1/messages"]["get"];
+        assert!(operation_needs("session", browse));
+        assert!(
+            !operation_needs("api-token", browse),
+            "an API token cannot browse"
+        );
+        let batches = &paths["/v1/imports/{id}/batches"]["post"];
+        assert_eq!(scopes_of("api-token", batches), ["import"]);
+        assert_eq!(scopes_of("session", batches), ["import"]);
+        let exports = &paths["/v1/exports"]["post"];
+        assert_eq!(scopes_of("api-token", exports), ["export"]);
+        assert_eq!(
+            scopes_of("session", &paths["/v1/accounts"]["get"]),
+            ["owner"]
+        );
     }
 
     #[test]

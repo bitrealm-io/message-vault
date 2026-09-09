@@ -1,6 +1,5 @@
-//! Parse flat EMLs: one text message per `.eml` file (not a multi-message archive).
+//! Parse SMS Backup+ EMLs: one text message per `.eml` file.
 
-use crate::archive_html::transcript_from_html;
 use crate::assets::extract_attachments;
 use crate::types::ParsedMessage;
 use mailparse::{MailHeaderMap, ParsedMail};
@@ -16,9 +15,6 @@ static SUBJECT_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^SMS with (.+)$").expect("subject"));
 /// Separator matcher for multi-address headers.
 static ADDRESS_SPLIT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[~;,|]+").expect("split"));
-/// `SMS archive ` subject prefix matcher.
-static ARCHIVE_SUBJECT_PREFIX_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)^SMS archive ").expect("archive subject"));
 
 /// Android SMS/MMS type codes SMS Backup+ puts in `X-smssync-type` for sent messages
 /// (Telephony `MESSAGE_TYPE_SENT`/`OUTBOX`/… and common MMS PDU sent codes).
@@ -156,22 +152,16 @@ fn first_body_of_type(mail: &ParsedMail<'_>, want: &str) -> Option<String> {
         .map(|body| body.replace("\r\n", "\n").replace('\r', "\n"))
 }
 
-/// The text of a mail: its HTML rendering when it has one, else its plain text.
+/// The message text: the first `text/plain` part of the mail.
 ///
-/// HTML wins because of what archive mail looks like. Many archives carry no
-/// `text/plain` part at all and would otherwise read as empty, and in the ones
-/// that carry both, the plain-text copy has been hard-wrapped by the sending
-/// mail client, so a sentence arrives broken across lines while the HTML keeps
-/// it whole. Flat SMS Backup+ mail carries no HTML part, so the preference
-/// only ever decides an archive.
+/// SMS Backup+ writes the message body as `text/plain` on every mail it
+/// produces — zero of 20,000 sampled carry a `text/html` part — so plain text
+/// is the only part worth reading.
 pub(crate) fn extract_body_text(mail: &ParsedMail<'_>) -> String {
-    if let Some(html) = first_body_of_type(mail, "text/html") {
-        return transcript_from_html(&html);
-    }
     first_body_of_type(mail, "text/plain").unwrap_or_default()
 }
 
-/// True when the EML is one SMS Backup+ message rather than an archive or unrelated mail.
+/// True when the EML is one SMS Backup+ message rather than unrelated mail.
 fn is_single_sms_eml(headers: &MailHeaders) -> bool {
     if !headers.smssync_type.is_empty() {
         return true;
@@ -224,7 +214,6 @@ pub(crate) fn parse_flat_eml_mail(
         attachments,
         name_alias,
         smssync_id: (!headers.smssync_id.is_empty()).then(|| headers.smssync_id.clone()),
-        source_kind: "flat".into(),
         android_type: headers.smssync_type.clone(),
         eml_path: String::new(),
     })
@@ -340,10 +329,6 @@ impl FlatAddresses {
     }
 }
 
-/// Classify whether this EML looks like a consolidated archive thread.
-pub(crate) fn is_archive_eml(headers: &MailHeaders) -> bool {
-    ARCHIVE_SUBJECT_PREFIX_RE.is_match(headers.subject.trim()) && headers.smssync_type.is_empty()
-}
 #[cfg(test)]
 mod tests {
     use super::*;

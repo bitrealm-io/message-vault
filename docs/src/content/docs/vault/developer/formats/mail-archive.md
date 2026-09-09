@@ -54,7 +54,7 @@ Each file is one RFC 5322 message. Prefer writing via a MIME builder (e.g. `mail
 
 ### Explicit anti-pattern: SMS Backup+ archive EML
 
-Do **not** pack many SMS into one MIME body with order-based attachment assignment (SMS Backup+ `Subject: SMS archive …`). Perfect pairing is impossible; see [Plus FORMAT.md](/vault/developer/formats/sms-backup-plus/format/) and `archive.rs` heuristics.
+Do **not** pack many SMS into one MIME body and then hand the attachments out in order. Nothing in the mail says which picture belongs to which message, so the pairing can only ever be a guess. One message per file keeps the association exact.
 
 ## Lessons from SMS Backup+ (do not repeat)
 

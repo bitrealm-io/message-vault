@@ -10,14 +10,6 @@ fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 
-/// The exported CSV for one conversation, by file name.
-fn conversation_csv(root: &Path, name: &str) -> PathBuf {
-    csv_files(root)
-        .into_iter()
-        .find(|p| p.file_name().and_then(|n| n.to_str()) == Some(name))
-        .unwrap_or_else(|| panic!("no export named {name} under {}", root.display()))
-}
-
 fn convert(inputs: &[&Path], output_dir: &Path) -> Result<(ExportReport, FormatSinkResult)> {
     convert_export(ConvertExportArgs {
         inputs,
@@ -63,9 +55,7 @@ fn convert_smoke_writes_csv_not_json() {
     let (report, _) = convert(&[input.as_path()], tmp.path()).unwrap();
 
     assert!(report.conversations >= 1);
-    let flat = report.extra("flat_eml");
-    let archive = report.extra("archive_eml");
-    assert!(flat >= 1 || archive >= 1);
+    assert!(report.extra("flat_eml") >= 1);
 
     assert_csv_export(
         tmp.path(),
@@ -96,38 +86,17 @@ fn convert_smoke_writes_csv_not_json() {
         ],
     );
 
-    // The archive `.eml` is a different parser: one mail carrying a
-    // transcript, with the sender named per line. Both of its messages, and
-    // the direction each line's name decides, must come through.
-    //
-    // No timestamp is asserted for these two. The transcript writes
-    // `2020-01-01 12:00:00` with no offset, and the parser reads it in the
-    // machine's own timezone, so the epoch value differs between a developer's
-    // laptop and a UTC runner. The flat SMSSync messages above carry epoch
-    // milliseconds in their headers and are pinned exactly; the archive rows
-    // are pinned by their content and direction. Issue #523 tracks the
-    // timezone dependence itself.
-    // Name the conversation rather than taking the first file: the export
-    // holds one CSV per conversation and adding a fixture changes which one
-    // sorts first.
-    let csv = &conversation_csv(tmp.path(), "+14075551234.csv");
-    assert_csv_row(csv, &[("text", "Check this"), ("direction", "outgoing")]);
-    assert_csv_row(csv, &[("text", "Thanks"), ("direction", "incoming")]);
-    // The two are a minute apart whatever timezone read them, which is the
-    // part of the transcript's time that is the parser's to get right.
-    let rows = csv_rows(csv);
-    let at = |text: &str| -> i64 {
-        rows.iter()
-            .find(|r| r.get("text").is_some_and(|t| t == text))
-            .and_then(|r| r.get("timestamp_unix_ms"))
-            .expect("the message is in the export")
-            .parse()
-            .expect("the timestamp is a number")
-    };
-    assert_eq!(at("Thanks") - at("Check this"), 60_000);
-    // Vendor fields (source_kind, smssync_id, eml_path) live inside source_fields_json.
-    let contents = fs::read_to_string(&csv_files(tmp.path())[0]).unwrap();
-    assert!(contents.contains("source_kind"));
+    // Vendor fields (smssync_id, eml_path) live inside source_fields_json.
+    // Search every conversation rather than the alphabetically first one:
+    // which file sorts first is not part of the claim, and only the fixtures
+    // that carry an `X-smssync-id` write the field at all.
+    let any_vendor_fields = csv_files(tmp.path())
+        .iter()
+        .any(|f| fs::read_to_string(f).unwrap().contains("smssync_id"));
+    assert!(
+        any_vendor_fields,
+        "some conversation carries the vendor fields in source_fields_json"
+    );
 }
 
 #[test]
@@ -151,64 +120,58 @@ fn end_dedupe_collapses_duplicate_flats() {
     assert_eq!(report.conversations, 1);
 }
 
+/// Two exports of one message, disagreeing below the second, still collapse.
+///
+/// `cover_identity` floors the timestamp to the whole second, so a mailbox
+/// backed up twice by routes that rounded `X-smssync-date` differently yields
+/// one message rather than two. The copy carrying `X-smssync-id` is the one
+/// kept, because only some export routes preserve it.
 #[test]
-fn dedupe_collapses_archive_and_flat_despite_ms_mismatch() {
-    use chrono::{Local, NaiveDateTime, TimeZone};
-
+fn dedupe_collapses_two_exports_that_disagree_below_the_second() {
     let tmp = tempfile::tempdir().unwrap();
     let input_dir = tmp.path().join("in");
     fs::create_dir_all(&input_dir).unwrap();
 
-    let naive = NaiveDateTime::parse_from_str("2020-01-01 12:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
-    let local_ts = Local
-        .from_local_datetime(&naive)
-        .single()
-        .unwrap()
-        .timestamp();
-    let ms = local_ts * 1000 + 488;
+    let base_ms: i64 = 1_577_880_000_000;
 
-    fs::write(
-        input_dir.join("archive.eml"),
-        b"From: <4075551234@sms-backup-plus.local>\r\n\
-To: me@example.com\r\n\
-Subject: SMS archive Alice\r\n\
-Content-Type: text/plain; charset=utf-8\r\n\
-\r\n\
-Alice\r\n\
-2020-01-01 12:00:00 - Me\r\n\
-Will do\r\n",
-    )
-    .unwrap();
-
-    fs::write(
-        input_dir.join("flat.eml"),
-        format!(
-            "From: me@example.com\r\n\
+    let write = |name: &str, ms: i64, id: Option<&str>| {
+        let id_line = id.map_or(String::new(), |v| format!("X-smssync-id: {v}\r\n"));
+        fs::write(
+            input_dir.join(name),
+            format!(
+                "From: me@example.com\r\n\
 To: 4075551234@sms-backup-plus.local\r\n\
 Subject: SMS with Alice\r\n\
 X-smssync-type: 2\r\n\
 X-smssync-address: 4075551234\r\n\
 X-smssync-date: {ms}\r\n\
-X-smssync-id: 999\r\n\
+{id_line}\
 Content-Type: text/plain; charset=utf-8\r\n\
 \r\n\
 Will do\r\n"
-        ),
-    )
-    .unwrap();
+            ),
+        )
+        .unwrap();
+    };
+
+    // The same message, 488 ms apart, and only one copy kept the Android id.
+    write("without_id.eml", base_ms, None);
+    write("with_id.eml", base_ms + 488, Some("999"));
 
     let out = tmp.path().join("out");
     let (report, _) = convert(&[input_dir.as_path()], &out).unwrap();
 
     assert_eq!(report.extra("messages_before_dedupe"), 2);
-    assert_eq!(report.messages, 1);
+    assert_eq!(report.messages, 1, "the two copies are one message");
     assert_eq!(report.duplicates_dropped, 1);
 
     let csv = fs::read_to_string(out.join("+14075551234.csv")).unwrap();
     assert!(csv.contains("Will do"));
-    // source_kind/smssync_id now live inside the source_fields_json cell.
-    assert!(csv.contains("flat"));
-    assert!(csv.contains("999"));
+    // The surviving copy is the one that carried the id.
+    assert!(
+        csv.contains("999"),
+        "the copy with X-smssync-id is the one kept"
+    );
 }
 
 #[test]

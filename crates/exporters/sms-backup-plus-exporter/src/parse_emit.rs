@@ -1,9 +1,8 @@
 //! Parse pipeline: discover `.eml` inputs and turn each file into
-//! [`ParsedMessage`]s (archive or flat format) in parallel chunks.
+//! [`ParsedMessage`]s in parallel chunks.
 
-use crate::archive::parse_archive_eml_mail;
 use crate::emit::is_eml_file;
-use crate::flat_eml::{MailHeaders, is_archive_eml, is_flat_sms_eml, parse_flat_eml_mail};
+use crate::flat_eml::{MailHeaders, is_flat_sms_eml, parse_flat_eml_mail};
 use crate::types::ParsedMessage;
 use anyhow::{Result, bail};
 use message_vault_io_core::CancelFlag;
@@ -75,11 +74,6 @@ fn in_skipped_dir(path: &Path) -> bool {
 
 /// Per-file parse result produced in parallel; merged serially into conversations.
 pub(super) enum ParsedEmlKind {
-    Archive {
-        msgs: Vec<ParsedMessage>,
-        skipped_dates: u64,
-        path_display: String,
-    },
     Flat {
         msg: Box<ParsedMessage>,
     },
@@ -91,7 +85,7 @@ pub(super) enum ParsedEmlKind {
     Cancelled,
 }
 
-/// Read and classify one EML: an archive of many messages, a single message, or something to skip.
+/// Read one EML: a single SMS Backup+ message, or something to skip.
 pub(super) fn parse_one_eml(
     eml_path: &Path,
     rel_path: String,
@@ -111,23 +105,8 @@ pub(super) fn parse_one_eml(
         }
     };
     let headers = MailHeaders::from_mail(&mail);
-    let path_display = eml_path.display().to_string();
 
-    if is_archive_eml(&headers) {
-        match parse_archive_eml_mail(eml_path, &mail, &headers) {
-            Ok((mut msgs, skipped_dates)) => {
-                for msg in &mut msgs {
-                    msg.eml_path.clone_from(&rel_path);
-                }
-                ParsedEmlKind::Archive {
-                    msgs,
-                    skipped_dates,
-                    path_display,
-                }
-            }
-            Err(err) => ParsedEmlKind::ParseError(format!("{path_display}: {err:#}")),
-        }
-    } else if is_flat_sms_eml(&headers) {
+    if is_flat_sms_eml(&headers) {
         match parse_flat_eml_mail(eml_path, &mail, &headers, owner_digits, owner_emails_lc) {
             Some(mut msg) => {
                 msg.eml_path = rel_path;

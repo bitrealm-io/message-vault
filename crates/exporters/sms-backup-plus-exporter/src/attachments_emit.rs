@@ -39,7 +39,7 @@ pub(super) fn queue_attachments(
         .collect()
 }
 
-/// Union attachment lists by content digest so flat↔archive dedupe does not drop media.
+/// Union attachment lists by content digest so dedupe does not drop media.
 pub(super) fn merge_attachments(into: &mut Vec<PendingAttachment>, from: Vec<PendingAttachment>) {
     let mut seen: HashSet<String> = into
         .iter()

@@ -22,10 +22,8 @@ pub(crate) struct ParsedMessage {
     pub text: String,
     pub attachments: Vec<AttachmentBlob>,
     pub name_alias: Option<String>,
-    /// `X-smssync-id` when present (flat EMLs only).
+    /// `X-smssync-id` when present.
     pub smssync_id: Option<String>,
-    /// `flat` or `archive`.
-    pub source_kind: String,
     /// Raw `X-smssync-type` when present.
     pub android_type: String,
     /// Source `.eml` path (relative when under an input root).

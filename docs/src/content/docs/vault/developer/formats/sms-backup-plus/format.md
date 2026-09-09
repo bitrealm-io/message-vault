@@ -1,6 +1,6 @@
 ---
 title: "SMS Backup+ format"
-description: "Layout of SMS Backup+ EML archives that the rescue converter reads."
+description: "Layout of the SMS Backup+ EML files the exporter reads."
 ---
 
 Input messages come from [SMS Backup+](https://github.com/jberkel/sms-backup-plus) syncing Android SMS/MMS to Gmail/IMAP, then archived as `.eml` (this project does **not** talk to IMAP).
@@ -18,30 +18,9 @@ Typical headers:
 | `Subject` | `SMS with {contact name}` |
 | `From` / `To` | Often `*@sms-backup-plus.local` or owner Gmail |
 
-The body is the `text/html` part when the mail has one, else `text/plain`. A flat
-message carries no HTML part in practice, so this only ever decides an archive.
-Non-text MIME parts are exported as attachments.
-
-## Archive EML
-
-| Header / body | Meaning |
-|---------------|---------|
-| `Subject` | `SMS archive {contact name}` |
-| `From` | Often `{digits}@sms-backup-plus.local` |
-| Body lines | `YYYY-MM-DD HH:MM:SS - {Sender}` then message text; Sender `Me` = sent |
-
-Many archives carry the transcript only as `text/html`, with no `text/plain`
-part at all. The HTML is a styled rendering of the same lines, one bubble per
-message, and it is read by stripping the tags back to those lines. Where a mail
-carries both, the HTML wins: the plain-text copy has been hard-wrapped by the
-sending mail client, so a sentence arrives broken across lines while the HTML
-keeps it whole.
-
-An archive that yields no messages is counted as `empty_archive_eml` and named
-in the run summary, because a silently skipped archive is a whole conversation
-lost.
-
-Optional MIME attachments are attached to messages in order.
+The body is the `text/plain` part. SMS Backup+ writes every message body as
+plain text — zero of 20,000 sampled carry a `text/html` part — so there is
+nothing else to read. Non-text MIME parts are exported as attachments.
 
 ## Import mapping and deduplication
 

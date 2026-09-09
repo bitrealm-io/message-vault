@@ -1,7 +1,7 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
 use message_ir_format::{ExportTransforms, FormatSinkResult};
-use message_vault_io_core::testutil::{assert_csv_header, assert_csv_row, csv_files};
+use message_vault_io_core::testutil::{assert_csv_export, assert_csv_row, csv_files};
 use message_vault_io_core::{ExportReport, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -43,7 +43,7 @@ fn convert_export_smoke_on_sample_fixture() {
         report.conversations
     );
 
-    assert_csv_header(
+    assert_csv_export(
         tmp.path(),
         &[
             "chat_identifier",

@@ -94,7 +94,9 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "owner"
+            ]
           }
         ]
       },
@@ -188,7 +190,9 @@
         "security": [
           {},
           {
-            "bearer": []
+            "session": [
+              "owner"
+            ]
           }
         ]
       }
@@ -256,7 +260,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -353,7 +357,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -449,7 +453,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -527,7 +531,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -621,7 +625,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -692,7 +696,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -798,7 +802,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -904,7 +908,19 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "owner"
+            ]
+          },
+          {
+            "session": [
+              "delete"
+            ]
+          },
+          {
+            "api-token": [
+              "delete"
+            ]
           }
         ]
       }
@@ -1006,7 +1022,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -1074,7 +1090,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -1166,7 +1182,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
           }
         ]
       },
@@ -1265,7 +1288,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       },
@@ -1359,7 +1389,24 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
           }
         ]
       }
@@ -1462,7 +1509,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -1548,7 +1602,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -1641,7 +1702,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -1760,7 +1828,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -1828,7 +1903,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -1910,7 +1985,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -1971,7 +2046,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -2077,7 +2152,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2165,7 +2240,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -2261,7 +2336,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2367,7 +2442,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -2459,7 +2534,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2535,7 +2610,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2611,7 +2686,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2679,7 +2754,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -2748,7 +2823,9 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "delete"
+            ]
           }
         ]
       },
@@ -2844,7 +2921,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2905,7 +2982,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -2966,7 +3043,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -3072,7 +3149,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -3140,7 +3217,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -3209,7 +3286,9 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "delete"
+            ]
           }
         ]
       }
@@ -3336,7 +3415,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -3397,7 +3476,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -3485,7 +3564,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -3546,7 +3625,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -3642,7 +3721,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
           }
         ]
       },
@@ -3724,7 +3810,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
           }
         ]
       }
@@ -3792,7 +3885,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
           }
         ]
       }
@@ -3870,7 +3970,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
           }
         ]
       }
@@ -3948,7 +4055,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
           }
         ]
       }
@@ -4075,7 +4189,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "export"
+            ]
+          },
+          {
+            "api-token": [
+              "export"
+            ]
           }
         ]
       }
@@ -4171,7 +4292,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       },
@@ -4253,7 +4381,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -4321,7 +4456,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       },
@@ -4418,7 +4560,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -4533,7 +4682,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -4631,7 +4787,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -4720,7 +4883,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -4808,7 +4978,14 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "import"
+            ]
+          },
+          {
+            "api-token": [
+              "import"
+            ]
           }
         ]
       }
@@ -4876,7 +5053,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -4958,7 +5135,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -5019,7 +5196,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -5125,7 +5302,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -5213,7 +5390,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -5309,7 +5486,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -5415,7 +5592,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -5484,7 +5661,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -5552,7 +5729,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -5634,7 +5811,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -5696,7 +5873,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       },
@@ -5802,7 +5979,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -5905,7 +6082,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -5951,7 +6128,10 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
+          },
+          {
+            "api-token": []
           }
         ]
       },
@@ -6055,7 +6235,7 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": []
           }
         ]
       }
@@ -6094,7 +6274,9 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "delete"
+            ]
           }
         ]
       }
@@ -6233,7 +6415,9 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "owner"
+            ]
           }
         ]
       },
@@ -6287,7 +6471,9 @@
         },
         "security": [
           {
-            "bearer": []
+            "session": [
+              "owner"
+            ]
           }
         ]
       }
@@ -10297,9 +10483,15 @@
       }
     },
     "securitySchemes": {
-      "bearer": {
+      "api-token": {
         "type": "http",
-        "scheme": "bearer"
+        "scheme": "bearer",
+        "description": "A named API token: the `mv-api-` secret `POST /v1/accounts/{id}/api-tokens` returns once, carrying the import, export and delete scopes it was created with. Only the routes listing it accept one; every other route answers 403."
+      },
+      "session": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "A signed-in Session: the `mv-user-` token `POST /v1/session` returns. A route naming a scope needs that permission on the account."
       }
     }
   },

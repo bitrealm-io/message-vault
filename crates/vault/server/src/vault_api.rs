@@ -165,7 +165,7 @@ pub struct PatchVaultSettingsRequest {
     path = "/v1/vault/settings",
     tag = "Vault",
     operation_id = "vault_settings",
-    security(("bearer" = [])),
+    security(("session" = ["owner"])),
     responses(
         (status = 200, body = VaultSettingsResponse),
         (status = 401, body = crate::problem::Problem),
@@ -189,7 +189,7 @@ pub async fn vault_settings_handler(
     path = "/v1/vault/settings",
     tag = "Vault",
     operation_id = "patch_vault_settings",
-    security(("bearer" = [])),
+    security(("session" = ["owner"])),
     request_body = PatchVaultSettingsRequest,
     responses(
         (status = 200, body = VaultSettingsResponse),

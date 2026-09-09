@@ -754,7 +754,7 @@ pub(crate) struct AddressBookLoadResponse {
     post,
     path = "/v1/contacts",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     request_body(
         content(
             ("text/vcard"),
@@ -828,7 +828,7 @@ fn address_book_file_name(content_type: Option<&str>) -> Option<&'static str> {
     post,
     path = "/v1/contacts/unmatched-handles",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     request_body = UnmatchedHandlesBody,
     responses(
         (status = 200, body = crate::paging::Page<String>),
@@ -1219,7 +1219,7 @@ impl ContactEditor<'_> {
     get,
     path = "/v1/contacts",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(
         ("q" = Option<String>, Query, description = "Contact search; empty lists all"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
@@ -1271,7 +1271,7 @@ pub(crate) async fn contacts_list_handler(
     post,
     path = "/v1/contacts/summaries",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     request_body = ContactSummariesBody,
     responses(
         (status = 200, body = crate::paging::Page<ContactSelectionSummary>),
@@ -1302,7 +1302,7 @@ pub(crate) async fn contact_summaries_handler(
     get,
     path = "/v1/contacts/{id}",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 200, body = ContactDetail),
@@ -1328,7 +1328,7 @@ pub(crate) async fn contact_detail_handler(
     patch,
     path = "/v1/contacts/{id}",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Contact id")),
     request_body = ContactMutationBody,
     responses(
@@ -1363,7 +1363,7 @@ pub(crate) async fn contact_mutate_handler(
     post,
     path = "/v1/contacts/{id}/trash",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 204, description = "Trashed"),
@@ -1391,7 +1391,7 @@ pub(crate) async fn contact_trash_handler(
     post,
     path = "/v1/contacts/{id}/restore",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 204, description = "Restored"),
@@ -1422,7 +1422,7 @@ pub(crate) async fn contact_restore_handler(
     delete,
     path = "/v1/contacts/{id}",
     tag = "Contacts",
-    security(("bearer" = [])),
+    security(("session" = ["delete"])),
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 204, description = "Deleted: the contact is Unknown again"),

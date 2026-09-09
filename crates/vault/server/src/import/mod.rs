@@ -861,7 +861,7 @@ pub(crate) struct ImportDetailResponse {
     get,
     path = "/v1/imports",
     tag = "Import",
-    security(("bearer" = [])),
+    security(("session" = ["import"]), ("api-token" = ["import"])),
     params(
         ("status" = Option<String>, Query, description = "One of running, completed, completed_with_issues, failed, cancelled"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, at most 500"),
@@ -929,7 +929,7 @@ pub(crate) async fn imports_list_handler(
     get,
     path = "/v1/imports/{id}",
     tag = "Import",
-    security(("bearer" = [])),
+    security(("session" = ["import"]), ("api-token" = ["import"])),
     params(("id" = i64, Path, description = "Import session id")),
     responses(
         (status = 200, body = ImportDetailResponse),
@@ -958,7 +958,7 @@ pub(crate) async fn imports_get_handler(
     post,
     path = "/v1/imports",
     tag = "Import",
-    security(("bearer" = [])),
+    security(("session" = ["import"]), ("api-token" = ["import"])),
     request_body = CreateImportBody,
     responses(
         (
@@ -1032,7 +1032,7 @@ pub(crate) async fn imports_create_handler(
     post,
     path = "/v1/imports/{id}/complete",
     tag = "Import",
-    security(("bearer" = [])),
+    security(("session" = ["import"]), ("api-token" = ["import"])),
     params(("id" = i64, Path, description = "Import session id")),
     request_body = CompleteImportBody,
     responses(
@@ -1201,7 +1201,7 @@ async fn contact_counts(
     get,
     path = "/v1/imports/{id}/contacts",
     tag = "Import",
-    security(("bearer" = [])),
+    security(("session" = ["import"]), ("api-token" = ["import"])),
     params(
         ("id" = i64, Path, description = "Import session id"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
@@ -1416,7 +1416,7 @@ pub(crate) struct SetImportStageBody {
     patch,
     path = "/v1/imports/{id}",
     tag = "Import",
-    security(("bearer" = [])),
+    security(("session" = ["import"]), ("api-token" = ["import"])),
     params(("id" = i64, Path, description = "Import session id")),
     request_body = SetImportStageBody,
     responses(
@@ -1470,7 +1470,7 @@ pub(crate) struct DiscardImportResponse {
     post,
     path = "/v1/imports/{id}/discard",
     tag = "Import",
-    security(("bearer" = [])),
+    security(("session" = ["import"]), ("api-token" = ["import"])),
     params(("id" = i64, Path, description = "Import session id")),
     responses(
         (status = 200, body = DiscardImportResponse),
@@ -1501,7 +1501,7 @@ pub(crate) async fn imports_discard_handler(
     path = "/v1/imports/{id}/batches",
     params(("id" = i64, Path, description = "Import Run id")),
     tag = "Import",
-    security(("bearer" = [])),
+    security(("session" = ["import"]), ("api-token" = ["import"])),
     request_body(
         content(
             ("application/x-ndjson"),

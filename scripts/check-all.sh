@@ -7,8 +7,9 @@
 # lint), then builds and tests the workspace and src-tauri, and runs the
 # license, Docker-context, version-lockstep and generated-API-type checks, cargo-deny
 # (advisories, licences and bans on the workspace, licences and bans on src-tauri), and
-# the web and docs test/build/audit steps. Export MV_TEST_POSTGRES_URL to
-# include the Postgres-gated server suites. CI runs the same set in
+# the web and docs test/build/audit steps. The workspace always tests on
+# SQLite; export MV_TEST_POSTGRES_URL and the server crate runs a second
+# time on Postgres, the way CI does. CI runs the same set in
 # parallel; this exists so nobody types nine commands by hand. Why the
 # split from check-pr.sh: docs/adr/0007-ci-is-the-only-gate.md.
 # Runs npm ci in web/ and docs/ only when that tree has no node_modules yet.
@@ -40,8 +41,13 @@ fi
 echo "==> cargo build --workspace"
 cargo build --workspace
 
-echo "==> cargo test --workspace"
-cargo test --workspace
+echo "==> cargo test --workspace (SQLite)"
+env -u MV_TEST_POSTGRES_URL cargo test --workspace
+
+if [[ -n "${MV_TEST_POSTGRES_URL:-}" ]]; then
+  echo "==> cargo test -p message-vault-server (Postgres)"
+  cargo test -p message-vault-server
+fi
 
 echo "==> cargo test src-tauri"
 cargo test --manifest-path src-tauri/Cargo.toml

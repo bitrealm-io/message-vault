@@ -12,7 +12,7 @@ chrono = { workspace = true }
 csv = { workspace = true }
 contacts = { path = "../../libs/contacts" }
 message-csv = { path = "../../libs/csv" }
-message-vault-io-core = { path = "../../core/message-vault-io-core" }
+message-vault-io-core = { path = "../../core/message-vault-io-core", features = ["testutil"] }
 message-ir = { path = "../../libs/ir" }
 message-ir-format = { path = "../../libs/ir-format" }
 media = { path = "../../libs/media" }

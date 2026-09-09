@@ -24,6 +24,15 @@ of, and a search that reads the same everywhere.
 
 ### Features
 
+- 2026-09-09: **Import is one screen that fills in as the run goes.** The
+  form collapses into "what you asked for" once the run starts, each of the
+  three stages (Staging, Media, Upload) adds its result underneath, and the
+  finished run leads with where to go next: the conversations it added, the
+  contacts it touched, or another import. Both approvals are the same
+  screen; it opens on its own when a stage finishes and has a link back to
+  the run. A run keeps working, and keeps waiting at an approval, while you
+  are on another screen, and the Import entry in the sidebar carries a badge
+  while a run needs you. The two approval screens no longer say "gate".
 - 2026-09-05: **A vault has an owner.** A fresh vault now asks you to create
   its owner before anything else, and that owner is the one account that
   manages the vault: create accounts, disable them, reset a password, delete

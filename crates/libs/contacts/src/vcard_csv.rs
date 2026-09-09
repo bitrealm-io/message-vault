@@ -149,7 +149,7 @@ pub fn read_vcard_csv_rows(path: &Path) -> Result<Vec<ContactCsvRow>> {
         };
         let mut phones = Vec::new();
         for &i in &cols.phones {
-            push_phones_from_raw(rec.get(i).unwrap_or(""), &mut phones);
+            push_phone_cell_values(rec.get(i).unwrap_or(""), &mut phones);
         }
         let notes = cols.notes.and_then(|i| {
             let n = rec.get(i).unwrap_or("").trim();
@@ -174,8 +174,12 @@ pub fn read_vcard_csv_rows(path: &Path) -> Result<Vec<ContactCsvRow>> {
     Ok(rows)
 }
 
-/// Split a phone cell on `;` and add each non-empty number.
-fn push_phones_from_raw(raw: &str, out: &mut Vec<String>) {
+/// Split a phone cell on `;` and add each non-empty value, unparsed.
+///
+/// Named apart from `book::push_phones_from_field` on purpose: this one only
+/// separates a cell into values and keeps them as written. Turning a value into
+/// a handle is the book's job, and it applies rules this one does not.
+fn push_phone_cell_values(raw: &str, out: &mut Vec<String>) {
     let raw = raw.trim();
     if raw.is_empty() {
         return;

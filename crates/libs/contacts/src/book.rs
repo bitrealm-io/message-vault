@@ -98,10 +98,10 @@ impl ContactsBook {
 
             let mut phones = Vec::new();
             for p in &row.phones {
-                push_phones_from_raw(p, &mut phones);
+                push_phones_from_field(p, &mut phones);
             }
             if let Some(notes) = &row.notes {
-                push_phones_from_raw(notes, &mut phones);
+                push_plus_runs(notes, &mut phones);
             }
             if phones.is_empty() {
                 continue;
@@ -224,16 +224,32 @@ pub fn resolve_contacts_cli(
     }
 }
 
-/// Collect sanitized digit strings from semicolon-separated fields and `+E.164` tokens in free text.
-fn push_phones_from_raw(raw: &str, out: &mut Vec<String>) {
-    for part in raw.split([';', ',', '|']) {
-        if let Some(digits) = sanitize_number(part.trim())
+/// Collect handles from a field that is known to hold phone numbers.
+///
+/// One field may hold several, separated by `;`, `,`, `|` or `/`. Each part has to
+/// be written as a number: [`phone::sanitize_phone_shaped`] rejects a part
+/// carrying prose, so `+15551234567 (see also +15557654321)` no longer collapses
+/// into one 22-digit handle. The `+E.164` scrape that follows recovers both
+/// numbers from it instead.
+fn push_phones_from_field(raw: &str, out: &mut Vec<String>) {
+    for part in raw.split([';', ',', '|', '/']) {
+        if let Some(digits) = phone::sanitize_phone_shaped(part)
             && !out.contains(&digits)
         {
             out.push(digits);
         }
     }
-    // Scrape bare +digits runs (PROP-ID notes, trailing phones in Notes blobs).
+    push_plus_runs(raw, out);
+}
+
+/// Scrape bare `+digits` runs: `PROP-ID` notes, and trailing phones in Notes.
+///
+/// This is the whole of what free text yields. Notes routinely hold addresses,
+/// dates and account numbers, and splitting free text on separators and keeping
+/// any part with four digits in it turns every one of them into a handle — and
+/// a handle is what an imported message is matched against. The `+` prefix is
+/// what marks a number as a number in prose, so it is what is required.
+fn push_plus_runs(raw: &str, out: &mut Vec<String>) {
     let bytes = raw.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
@@ -398,17 +414,12 @@ NoPhone,,Person,,,,\n",
         assert!(book.lookup_handle_by_name("NoPhone Person").is_none());
     }
 
-    /// Phone scraping, which is how a number reaches a contact when it is not
-    /// in a phone column at all.
-    ///
-    /// The loop that scrapes bare `+digits` runs out of free text carried nine
-    /// surviving mutants — the index arithmetic, the `i > start + 1` guard that
-    /// rejects a lone `+`, and the duplicate check. Nothing exercised it: every
-    /// test used a well-formed phone column.
+    /// A phone field: separated values, each of which has to be written as a
+    /// number.
     #[test]
-    fn phones_are_scraped_from_separators_and_from_free_text() {
+    fn a_phone_field_splits_on_separators_and_rejects_prose() {
         let mut out = Vec::new();
-        push_phones_from_raw("+15551234567; +15557654321, +15550000000", &mut out);
+        push_phones_from_field("+15551234567; +15557654321, +15550000000", &mut out);
         assert_eq!(
             out,
             // A leading US country digit is dropped by `sanitize_number`,
@@ -419,38 +430,76 @@ NoPhone,,Person,,,,\n",
 
         // The same number twice in one field must be stored once.
         let mut out = Vec::new();
-        push_phones_from_raw("+15551234567; +15551234567", &mut out);
+        push_phones_from_field("+15551234567; +15551234567", &mut out);
         assert_eq!(out, ["5551234567"], "a repeat must not be stored twice");
 
-        // Two numbers in one field with no separator between them are run
-        // together into one nonsense handle, because the separator pass keeps
-        // every digit in the part it is given. Pinned as it is rather than as
-        // it should be; issue #526 is the defect.
+        // Written formatting is not prose, and `/` separates two numbers.
         let mut out = Vec::new();
-        push_phones_from_raw("+15551234567 (see also +15557654321)", &mut out);
+        push_phones_from_field("(555) 123-4567 / 555.765.4321", &mut out);
         assert_eq!(
-            out[0], "1555123456715557654321",
-            "today the digits run together"
+            out,
+            ["5551234567", "5557654321"],
+            "punctuation is part of how a number is written; `/` is not"
         );
 
+        // Issue #526: two numbers in one field with no separator between them.
+        // The part carries prose, so it is dropped whole rather than run
+        // together into `1555123456715557654321`; the `+` scrape then recovers
+        // both numbers from it.
+        let mut out = Vec::new();
+        push_phones_from_field("+15551234567 (see also +15557654321)", &mut out);
+        assert_eq!(out, ["5551234567", "5557654321"]);
+
+        // Same defect without any prose to catch it: the digits are inside
+        // permitted punctuation, so the E.164 ceiling is what rejects them.
+        let mut out = Vec::new();
+        push_phones_from_field("+15551234567 +15557654321", &mut out);
+        assert_eq!(
+            out,
+            ["5551234567", "5557654321"],
+            "20 digits is not a phone number"
+        );
+
+        // A field that holds no number at all yields nothing.
+        let mut out = Vec::new();
+        push_phones_from_field("met in 2019 at 42 Acacia Avenue", &mut out);
+        assert!(out.is_empty(), "got {out:?}");
+    }
+
+    /// Free text, which yields `+E.164` tokens and nothing else.
+    ///
+    /// The loop that scrapes bare `+digits` runs carried nine surviving
+    /// mutants — the index arithmetic, the `i > start + 1` guard that rejects a
+    /// lone `+`, and the duplicate check. Nothing exercised it: every test used
+    /// a well-formed phone column.
+    #[test]
+    fn free_text_yields_only_plus_prefixed_numbers() {
         // A bare run inside prose, with no separator around it.
         let mut out = Vec::new();
-        push_phones_from_raw("ring me on +442071838750 after six", &mut out);
+        push_plus_runs("ring me on +442071838750 after six", &mut out);
         assert_eq!(out, ["442071838750"]);
+
+        // Two runs in one blob, and a repeat stored once.
+        let mut out = Vec::new();
+        push_plus_runs(
+            "PROP-ID: +15551234567 / alt +15557654321 (+15551234567)",
+            &mut out,
+        );
+        assert_eq!(out, ["5551234567", "5557654321"]);
 
         // A lone `+` is not a number, and neither is `+` followed by one digit:
         // the guard is `i > start + 1`, and dropping it produces junk handles.
         let mut out = Vec::new();
-        push_phones_from_raw("a + b +1 c", &mut out);
+        push_plus_runs("a + b +1 c", &mut out);
         assert!(out.is_empty(), "got {out:?}");
 
-        // Same cause, plainer: a note with a year and a house number becomes a
-        // "phone number", because every digit in the field is collected into
-        // one string and six digits is enough to pass. Pinned as it is; issue
-        // #526 is the defect.
+        // Issue #526: a note with a year and a house number yielded `201942`,
+        // a plausible short code, because every digit in the field was
+        // collected into one string and six digits was enough to pass. Notes
+        // are free text, so nothing without a `+` is taken from them.
         let mut out = Vec::new();
-        push_phones_from_raw("met in 2019 at 42 Acacia Avenue", &mut out);
-        assert_eq!(out, ["201942"], "today a note becomes a handle");
+        push_plus_runs("met in 2019 at 42 Acacia Avenue", &mut out);
+        assert!(out.is_empty(), "a note is not a phone number, got {out:?}");
     }
 
     /// `len` and `is_empty` are what a caller checks before deciding a

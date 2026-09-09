@@ -61,6 +61,50 @@ pub fn sanitize_number(num: &str) -> Option<String> {
     }
 }
 
+/// Punctuation a written phone number may carry between or around its digits.
+///
+/// `/` is deliberately absent: it separates two numbers ("home / cell") far
+/// more often than it appears inside one.
+const PHONE_PUNCTUATION: [char; 7] = ['+', '-', '(', ')', '.', ' ', '\t'];
+
+/// The most digits a phone number can have, from ITU-T E.164.
+const MAX_PHONE_DIGITS: usize = 15;
+
+/// Digits of a value that is *written as* a phone number, rather than a value
+/// that merely contains enough digits.
+///
+/// [`sanitize_number`] keeps every ASCII digit it finds and then asks only how
+/// many there are, so `met in 2019 at 42 Acacia Avenue` sanitizes to `201942`.
+/// That is the right rule for a field known to hold a number and allowed to
+/// carry stray formatting; it is the wrong rule for a field that may hold
+/// anything, or that may hold two numbers with nothing between them.
+///
+/// Two conditions are added. The value must be nothing but digits and phone
+/// punctuation, so prose is rejected before any digits are collected. And the
+/// digits that remain must number no more than [`MAX_PHONE_DIGITS`], so two
+/// numbers run together are rejected rather than concatenated into a handle
+/// that matches nothing.
+///
+/// An extension suffix (`555-1234 x99`) is prose by the first rule and is
+/// rejected whole, which is deliberate: gluing an extension onto a number
+/// produces a handle that matches nothing either.
+///
+/// Returns `None` when the value carries any other character, when the digits
+/// are too many, or when [`sanitize_number`] rejects what remains.
+#[must_use]
+pub fn sanitize_phone_shaped(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty()
+        || !value
+            .chars()
+            .all(|c| c.is_ascii_digit() || PHONE_PUNCTUATION.contains(&c))
+    {
+        return None;
+    }
+    let digits = sanitize_number(value)?;
+    (digits.len() <= MAX_PHONE_DIGITS).then_some(digits)
+}
+
 /// E.164 when the parse is unambiguous for `region`, else the human-readable
 /// reason it is not.
 ///
@@ -374,6 +418,69 @@ mod tests {
         assert_eq!(sanitize_number(""), None);
         assert_eq!(sanitize_number("4"), None);
         assert_eq!(sanitize_number("06"), None);
+    }
+
+    /// The strict form, which is what a field of unknown content is measured
+    /// against. See [`sanitize_phone_shaped`] for why the two differ.
+    #[test]
+    fn phone_shaped_rejects_prose_and_run_together_numbers() {
+        // Written as a number, in every punctuation style a person uses.
+        for written in [
+            "+1 (555) 123-4567",
+            "555.123.4567",
+            "(555) 123-4567",
+            "  5551234567  ",
+        ] {
+            assert_eq!(
+                sanitize_phone_shaped(written).as_deref(),
+                Some("5551234567"),
+                "{written} is written as a number"
+            );
+        }
+
+        // Short codes still pass, as they do for `sanitize_number`.
+        assert_eq!(sanitize_phone_shaped("7535").as_deref(), Some("7535"));
+
+        // Prose is rejected before any digits are collected, which is the
+        // whole point: `sanitize_number` answers `201942` here.
+        assert_eq!(
+            sanitize_number("met in 2019 at 42 Acacia Avenue").as_deref(),
+            Some("201942")
+        );
+        assert_eq!(
+            sanitize_phone_shaped("met in 2019 at 42 Acacia Avenue"),
+            None
+        );
+        assert_eq!(
+            sanitize_phone_shaped("+15551234567 (see also +15557654321)"),
+            None
+        );
+        assert_eq!(
+            sanitize_phone_shaped("555-1234 x99"),
+            None,
+            "an extension is prose"
+        );
+        assert_eq!(sanitize_phone_shaped("home/cell"), None);
+
+        // Two numbers with nothing but permitted punctuation between them are
+        // caught by the digit ceiling instead.
+        assert_eq!(sanitize_phone_shaped("+15551234567 +15557654321"), None);
+        assert_eq!(
+            sanitize_phone_shaped("123456789012345").as_deref(),
+            Some("123456789012345"),
+            "fifteen digits is the E.164 maximum, and is allowed"
+        );
+        assert_eq!(
+            sanitize_phone_shaped("1234567890123456"),
+            None,
+            "sixteen is not"
+        );
+
+        // Too few digits, and nothing at all.
+        assert_eq!(sanitize_phone_shaped("123"), None);
+        assert_eq!(sanitize_phone_shaped(""), None);
+        assert_eq!(sanitize_phone_shaped("   "), None);
+        assert_eq!(sanitize_phone_shaped("()-."), None);
     }
 
     #[test]

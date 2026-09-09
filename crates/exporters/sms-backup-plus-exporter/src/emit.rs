@@ -75,22 +75,18 @@ fn ensure_convo<'a>(
     convo
 }
 
-/// Prefer flat over archive (richer metadata); otherwise keep the earlier timestamp.
+/// Prefer the copy that names its Android message id; otherwise keep the
+/// earlier timestamp.
+///
+/// The same message can be exported more than once — a mailbox backed up to
+/// Gmail and again to a local folder yields two `.eml` files — and only some
+/// export routes preserve `X-smssync-id`. The copy that still carries it is the
+/// more complete record.
 fn should_replace_kept(existing: &PendingMessage, incoming: &ParsedMessage) -> bool {
-    let existing_flat = existing.extra_str("source_kind") == "flat";
-    let incoming_flat = incoming.source_kind == "flat";
-    if incoming_flat && !existing_flat {
-        return true;
-    }
-    if !incoming_flat && existing_flat {
-        return false;
-    }
-    if incoming_flat
-        && existing_flat
-        && incoming
-            .smssync_id
-            .as_ref()
-            .is_some_and(|s| !s.trim().is_empty())
+    if incoming
+        .smssync_id
+        .as_ref()
+        .is_some_and(|s| !s.trim().is_empty())
         && existing.extra_str("smssync_id").trim().is_empty()
     {
         return true;
@@ -111,7 +107,6 @@ fn pending_from_parsed(msg: ParsedMessage, pending_atts: Vec<PendingAttachment>)
         attachments: pending_atts,
         extra: {
             let mut e = BTreeMap::new();
-            e.insert("source_kind".into(), msg.source_kind);
             e.insert("smssync_id".into(), msg.smssync_id.unwrap_or_default());
             e.insert("date_ms".into(), date_ms);
             e.insert("contact_name".into(), name);
@@ -215,7 +210,7 @@ impl ProjectionHooks for SbpProjection<'_> {
 
     fn source(&self, convo: &PendingConversation, msg: &PendingMessage) -> IrSource {
         let mut fields = serde_json::Map::new();
-        for key in ["source_kind", "smssync_id", "eml_path"] {
+        for key in ["smssync_id", "eml_path"] {
             let value = msg.extra_str(key);
             if !value.is_empty() {
                 fields.insert(key.into(), serde_json::Value::String(value.to_string()));
@@ -300,7 +295,7 @@ pub(crate) struct ConvertExportArgs<'a, P: AsRef<Path>> {
 /// write the chosen output format.
 ///
 /// Deduplication runs while scanning, using [`cover_identity`] (second-floored
-/// chat + direction + text) so archive and flat copies of the same SMS collapse.
+/// chat + direction + text) so two exports of the same SMS collapse to one.
 /// When `cancel` is set, cooperative cancellation is checked during the EML walk
 /// and while merging parse results.
 ///
@@ -506,26 +501,6 @@ impl EmlIngest {
     fn absorb(&mut self, outcome: ParsedEmlKind) -> Result<()> {
         match outcome {
             ParsedEmlKind::Cancelled => bail!("cancelled"),
-            ParsedEmlKind::Archive {
-                msgs,
-                skipped_dates,
-                path_display,
-            } => {
-                self.report.bump("archive_eml", 1);
-                self.report.skipped_invalid_date += skipped_dates;
-                // An archive that yields nothing is a whole conversation lost.
-                // Say which file, because the export otherwise finishes looking
-                // healthy and the person has no way to notice.
-                if msgs.is_empty() {
-                    self.report.bump("empty_archive_eml", 1);
-                    self.report
-                        .errors
-                        .push(format!("{path_display}: archive held no messages"));
-                }
-                for msg in msgs {
-                    self.add_parsed(msg);
-                }
-            }
             ParsedEmlKind::Flat { msg } => {
                 self.report.bump("flat_eml", 1);
                 self.add_parsed(*msg);
@@ -563,14 +538,12 @@ impl EmlIngest {
     /// One line of parse counters for the verbose log.
     fn parse_summary(&self) -> String {
         format!(
-            "parsed: flat_eml={} archive_eml={} messages={} unknown_chat={} skipped_not_sms_backup_plus={} skipped_parse_error={} skipped_bad_date={}",
+            "parsed: flat_eml={} messages={} unknown_chat={} skipped_not_sms_backup_plus={} skipped_parse_error={}",
             self.report.extra("flat_eml"),
-            self.report.extra("archive_eml"),
             self.report.extra("messages_before_dedupe"),
             self.report.extra("unknown_chat_messages"),
             self.report.extra("skipped_not_sms_backup_plus"),
             self.report.extra("skipped_parse_error"),
-            self.report.skipped_invalid_date
         )
     }
 }
@@ -704,43 +677,22 @@ mod tests {
     /// Which copy of a duplicated message is kept.
     ///
     /// When two `.eml` files describe the same message, `should_replace_kept`
-    /// decides whether the one arriving now replaces the one already held.
-    /// It has four rules and no test had exercised any of them: the whole
+    /// decides whether the one arriving now replaces the one already held. Both
+    /// rules are pinned here, because neither was exercised before: the whole
     /// function could be replaced with `true` or `false` and the suite stayed
-    /// green, which means the export silently kept the worse copy — an archive
-    /// transcript line rather than the flat `.eml` that carries the headers.
+    /// green, which means the export could silently keep the worse copy.
     ///
     /// The rules, in the order the function applies them:
     ///
-    /// 1. A flat message always beats an archive one, because a flat `.eml`
-    ///    carries `X-smssync-*` headers and an archive transcript line does
-    ///    not.
-    /// 2. An archive message never displaces a flat one.
-    /// 3. Between two flat messages, one with an `X-smssync-id` beats one
-    ///    without.
-    /// 4. Otherwise the earlier timestamp wins, so re-running an import does
+    /// 1. A message carrying an `X-smssync-id` beats one without, because only
+    ///    some export routes preserve it and the copy that kept it is the more
+    ///    complete record.
+    /// 2. Otherwise the earlier timestamp wins, so re-running an import does
     ///    not shuffle the order.
     #[test]
-    fn a_flat_message_beats_an_archive_one_whichever_arrives_first() {
-        let archive_kept = pending(1_000, "archive", "");
-        let flat_incoming = parsed(1_000.0, "flat", None);
-        assert!(
-            should_replace_kept(&archive_kept, &flat_incoming),
-            "a flat message replaces an archive one"
-        );
-
-        let flat_kept = pending(1_000, "flat", "");
-        let archive_incoming = parsed(1_000.0, "archive", None);
-        assert!(
-            !should_replace_kept(&flat_kept, &archive_incoming),
-            "an archive message does not displace a flat one"
-        );
-    }
-
-    #[test]
     fn between_two_flat_messages_the_one_with_an_smssync_id_wins() {
-        let without_id = pending(1_000, "flat", "");
-        let with_id = parsed(1_000.0, "flat", Some("276"));
+        let without_id = pending(1_000, "");
+        let with_id = parsed(1_000.0, Some("276"));
         assert!(
             should_replace_kept(&without_id, &with_id),
             "an id is more than no id"
@@ -748,13 +700,13 @@ mod tests {
 
         // And not the other way round: a message with an id is not replaced by
         // one without, even at the same instant.
-        let kept_with_id = pending(1_000, "flat", "276");
-        let incoming_without = parsed(1_000.0, "flat", None);
+        let kept_with_id = pending(1_000, "276");
+        let incoming_without = parsed(1_000.0, None);
         assert!(!should_replace_kept(&kept_with_id, &incoming_without));
 
         // A blank or whitespace id is no id at all.
         for blank in ["", "   "] {
-            let incoming_blank = parsed(1_000.0, "flat", Some(blank));
+            let incoming_blank = parsed(1_000.0, Some(blank));
             assert!(
                 !should_replace_kept(&without_id, &incoming_blank),
                 "an id of {blank:?} is not an id"
@@ -764,26 +716,25 @@ mod tests {
 
     #[test]
     fn otherwise_the_earlier_message_is_the_one_kept() {
-        let kept = pending(1_000, "flat", "276");
+        let kept = pending(1_000, "276");
 
-        let earlier = parsed(999.0, "flat", Some("276"));
+        let earlier = parsed(999.0, Some("276"));
         assert!(
             should_replace_kept(&kept, &earlier),
             "an earlier copy replaces a later one, so a re-import is stable"
         );
 
-        let later = parsed(1_001.0, "flat", Some("276"));
+        let later = parsed(1_001.0, Some("276"));
         assert!(!should_replace_kept(&kept, &later));
 
         // The same instant is not earlier, so the first one seen stays.
-        let same = parsed(1_000.0, "flat", Some("276"));
+        let same = parsed(1_000.0, Some("276"));
         assert!(!should_replace_kept(&kept, &same));
     }
 
     /// A `PendingMessage` already held, with the two fields the decision reads.
-    fn pending(sort_key: i64, source_kind: &str, smssync_id: &str) -> PendingMessage {
+    fn pending(sort_key: i64, smssync_id: &str) -> PendingMessage {
         let mut extra = std::collections::BTreeMap::new();
-        extra.insert("source_kind".to_string(), source_kind.to_string());
         extra.insert("smssync_id".to_string(), smssync_id.to_string());
         PendingMessage {
             sort_key,
@@ -797,7 +748,7 @@ mod tests {
     }
 
     /// A `ParsedMessage` arriving now, with the three fields the decision reads.
-    fn parsed(timestamp_secs: f64, source_kind: &str, smssync_id: Option<&str>) -> ParsedMessage {
+    fn parsed(timestamp_secs: f64, smssync_id: Option<&str>) -> ParsedMessage {
         ParsedMessage {
             chat_key: "+15555550101".into(),
             conversation_type: "individual".into(),
@@ -810,7 +761,6 @@ mod tests {
             attachments: Vec::new(),
             name_alias: None,
             smssync_id: smssync_id.map(str::to_string),
-            source_kind: source_kind.into(),
             android_type: "1".into(),
             eml_path: "flat.eml".into(),
         }

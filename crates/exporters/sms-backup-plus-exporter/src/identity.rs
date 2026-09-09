@@ -1,9 +1,9 @@
 //! Build fingerprint strings so duplicate EML messages collapse to one row.
 //!
 //! Convert dedupe uses [`cover_identity`]: chat + whole-second time + direction +
-//! collapsed text. That matches archive body times (`HH:MM:SS`) to flat
-//! `X-smssync-date` values that include milliseconds, and ignores `X-smssync-id`
-//! so archive and flat copies of the same SMS collapse.
+//! collapsed text. It ignores `X-smssync-id`, because the same message exported
+//! twice can carry the id in one copy and not the other, and it floors the time
+//! to the whole second so two exports that disagree below a second still meet.
 //!
 //! Collapsing whitespace in the text avoids two identities for tiny export
 //! differences.
@@ -14,10 +14,10 @@ use crate::types::ParsedMessage;
 
 /// Who this chat is with, as a stable string (E.164 phone or `chat-…` for groups).
 ///
-/// When the archive gives a name and no address, the chat is keyed by a stem
-/// of that name so each person gets their own conversation. Collapsing them
-/// all into one `unknown` chat would merge unrelated people; the vault
-/// resolves the name against contacts on import.
+/// When the mail names the other party but records no address, the chat is
+/// keyed by a stem of that name so each person gets their own conversation.
+/// Collapsing them all into one `unknown` chat would merge unrelated people;
+/// the vault resolves the name against contacts on import.
 pub(crate) fn chat_id_for(msg: &ParsedMessage) -> String {
     if msg.conversation_type == "group" {
         format!("chat-{}", msg.chat_key)
@@ -33,7 +33,7 @@ pub(crate) fn chat_id_for(msg: &ParsedMessage) -> String {
     }
 }
 
-/// A stem of the peer's name, when the archive named them and recorded no
+/// A stem of the peer's name, when the mail named them and recorded no
 /// address. `None` when there is no usable name either.
 pub(crate) fn name_only_key(msg: &ParsedMessage) -> Option<String> {
     if msg.conversation_type == "group" || !msg.chat_key.is_empty() {
@@ -82,8 +82,8 @@ pub(crate) fn floor_ms_to_sec(ms: i64) -> i64 {
 ///
 /// When the message has attachment digests, those digests are appended so two
 /// same-second empty-caption MMS with different media stay distinct. Text-only
-/// messages keep the previous key so archive↔flat copies of the same SMS still
-/// collapse. Sub-second time and `X-smssync-id` stay ignored.
+/// messages keep the plain key, so two exports of the same SMS still collapse.
+/// Sub-second time and `X-smssync-id` stay ignored.
 pub(crate) fn cover_identity(msg: &ParsedMessage) -> String {
     let mut key = cover_identity_from_parts(
         &chat_id_for(msg),
@@ -147,7 +147,6 @@ mod tests {
             attachments: vec![],
             name_alias: None,
             smssync_id: None,
-            source_kind: "flat".into(),
             android_type: String::new(),
             eml_path: String::new(),
         }

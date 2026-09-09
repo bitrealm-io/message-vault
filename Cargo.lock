@@ -2996,7 +2996,6 @@ dependencies = [
  "contacts",
  "csv",
  "hex",
- "html-escape",
  "mailparse",
  "media",
  "message-ir",

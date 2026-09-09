@@ -45,16 +45,15 @@ Apple-only columns stay empty.
 
 | Bag key | Meaning |
 |---------|---------|
-| `source_kind` | `flat` or `archive` |
 | `smssync_id` | `X-smssync-id` when present |
 | `eml_path` | Relative path to the source `.eml` |
 
 ## Deduplication
 
-Duplicates are collapsed **while scanning** with a cover key (archive↔flat `cover_identity`):
+Duplicates are collapsed **while scanning** with a cover key (`cover_identity`):
 
 `{chat_id}|{timestamp_ms_floored_to_second}|{0|1}|{normalized_text}`
 
-That ignores sub-second time and `X-smssync-id`, so an archive line at `12:00:00` matches a flat with `X-smssync-date` ms inside that second. When two copies collide, **flat wins over archive** for metadata (`smssync_id`, etc.); attachments are merged by content digest so MMS media is not dropped. Otherwise the earlier timestamp wins. Rows are sorted by time before writing.
+That ignores sub-second time and `X-smssync-id`, so two exports of one message meet even where their timestamps disagree below the second and only one kept the id. When two copies collide, the one carrying `X-smssync-id` wins, because only some export routes preserve it; attachments are merged by content digest so MMS media is not dropped. Otherwise the earlier timestamp wins. Rows are sorted by time before writing.
 
 Text normalization collapses whitespace.

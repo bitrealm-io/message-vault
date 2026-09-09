@@ -70,14 +70,6 @@ of, and a search that reads the same everywhere.
 
 ### Fixes
 
-- 2026-09-08: **SMS Backup+ archives saved as formatted mail now import.** Many
-  of these archives carry the conversation only as formatted text. Those
-  imported as empty, and any photos or videos in them were thrown away — with
-  nothing to tell you it had happened. They now import in full, and an archive
-  that still comes through empty is named in the import summary instead of
-  passing in silence. Where an archive carries both a formatted and a plain
-  copy, the formatted one is used, because the plain copy has been broken into
-  short lines by the mail program that saved it.
 - 2026-09-05: Long-running vaults no longer grow in memory for every file ever
   uploaded and every username ever tried.
 - 2026-09-05: A failure now says what actually went wrong — the step that
@@ -111,6 +103,13 @@ of, and a search that reads the same everywhere.
 
 ### Design
 
+- 2026-09-09: **Importing SMS Backup+ mail reads one message per file, and
+  nothing else.** Message Vault briefly also read a second kind of `.eml` — a
+  whole conversation written out as a dated transcript in one mail. That shape
+  is not something SMS Backup+ produces, and every message in the only known
+  collection of them was already present as ordinary SMS Backup+ mail, so
+  reading it added a second copy of messages the vault already had. Support for
+  it is gone. Importing a folder of SMS Backup+ mail is unchanged.
 - 2026-09-08: **The HTTP interface was rebuilt on one set of conventions.**
   Every list pages and sorts the same way — the browse lists and the ones you
   curate alike, with no list left answering a bare array — every failure comes

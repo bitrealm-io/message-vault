@@ -37,6 +37,22 @@ carries both, the HTML wins: the plain-text copy has been hard-wrapped by the
 sending mail client, so a sentence arrives broken across lines while the HTML
 keeps it whole.
 
+A transcript line carries a wall clock and no offset, so turning it into an
+instant needs a time zone. The export uses the signed-in account's, set under
+Settings → Profile, and refuses to run without one rather than falling back to
+the exporting machine's — the same backup must not produce different times on
+different computers. A named zone is required rather than a fixed offset
+because an archive can span years and the offset changes with daylight saving
+within one file.
+
+The mail's own `Date:` header is the check on that assumption. It records the
+same moment as the first transcript line, as an instant, so the difference
+between the two is the offset the phone was really on. When that disagrees with
+the account's zone, the run reports it as `archive_zone_mismatch` and names the
+file. Only the instant the header encodes is used, never its stated offset,
+which mail clients write wrongly. A wall clock that daylight saving skipped is
+read an hour later and counted as `archive_dst_gap_shifted` rather than dropped.
+
 An archive that yields no messages is counted as `empty_archive_eml` and named
 in the run summary, because a silently skipped archive is a whole conversation
 lost.

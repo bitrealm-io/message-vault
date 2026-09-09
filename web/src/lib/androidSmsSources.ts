@@ -19,6 +19,16 @@ export function isAndroidSmsSource(source: string): boolean {
   return ANDROID_SMS_SOURCES.has(source);
 }
 
+/**
+ * True for the one Android source whose times need the account's zone.
+ *
+ * An SMS Backup+ archive writes a wall clock and no offset, so the instant
+ * cannot be recovered without knowing where the phone was.
+ */
+export function needsAccountTimeZone(source: string): boolean {
+  return source === SMS_BACKUP_PLUS_SOURCE;
+}
+
 /** True for the one Android source that also needs the owner's email addresses. */
 export function needsOwnerEmails(source: string): boolean {
   return source === SMS_BACKUP_PLUS_SOURCE;

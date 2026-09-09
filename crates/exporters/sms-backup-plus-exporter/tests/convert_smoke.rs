@@ -6,6 +6,13 @@ use message_vault_io_core::{ExportReport, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// The zone these tests read archive wall clocks in.
+///
+/// Naming one is the whole point of issue #523: before, the expected epoch was
+/// computed with the same host-zone call the parser used, so the test agreed
+/// with the code on any machine instead of pinning an answer.
+const ZONE: chrono_tz::Tz = chrono_tz::America::New_York;
+
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
@@ -24,6 +31,7 @@ fn convert(inputs: &[&Path], output_dir: &Path) -> Result<(ExportReport, FormatS
         output_dir,
         owner_phones: &["+15555550100".into()],
         owner_emails: &["owner@example.com".into()],
+        time_zone: ZONE,
         verbose: false,
         transforms: ExportTransforms::none(),
         output_format: OutputFormat::Csv,
@@ -100,13 +108,11 @@ fn convert_smoke_writes_csv_not_json() {
     // transcript, with the sender named per line. Both of its messages, and
     // the direction each line's name decides, must come through.
     //
-    // No timestamp is asserted for these two. The transcript writes
-    // `2020-01-01 12:00:00` with no offset, and the parser reads it in the
-    // machine's own timezone, so the epoch value differs between a developer's
-    // laptop and a UTC runner. The flat SMSSync messages above carry epoch
-    // milliseconds in their headers and are pinned exactly; the archive rows
-    // are pinned by their content and direction. Issue #523 tracks the
-    // timezone dependence itself.
+    // The timestamps are pinned exactly. The transcript writes
+    // `2020-01-01 12:00:00` with no offset, and the parser now reads it in the
+    // zone it was given rather than the machine's, so the epoch is the same
+    // answer everywhere: noon in New York on that date is 17:00 UTC.
+    //
     // Name the conversation rather than taking the first file: the export
     // holds one CSV per conversation and adding a fixture changes which one
     // sorts first.
@@ -124,6 +130,7 @@ fn convert_smoke_writes_csv_not_json() {
             .parse()
             .expect("the timestamp is a number")
     };
+    assert_eq!(at("Check this"), 1_577_898_000_000);
     assert_eq!(at("Thanks") - at("Check this"), 60_000);
     // Vendor fields (source_kind, smssync_id, eml_path) live inside source_fields_json.
     let contents = fs::read_to_string(&csv_files(tmp.path())[0]).unwrap();
@@ -153,19 +160,15 @@ fn end_dedupe_collapses_duplicate_flats() {
 
 #[test]
 fn dedupe_collapses_archive_and_flat_despite_ms_mismatch() {
-    use chrono::{Local, NaiveDateTime, TimeZone};
-
     let tmp = tempfile::tempdir().unwrap();
     let input_dir = tmp.path().join("in");
     fs::create_dir_all(&input_dir).unwrap();
 
-    let naive = NaiveDateTime::parse_from_str("2020-01-01 12:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
-    let local_ts = Local
-        .from_local_datetime(&naive)
-        .single()
-        .unwrap()
-        .timestamp();
-    let ms = local_ts * 1000 + 488;
+    // A literal, not a value recomputed with the same call the parser makes.
+    // `2020-01-01 12:00:00` in New York is EST, five hours behind UTC. The 488
+    // milliseconds are the point of the test: the flat copy carries sub-second
+    // precision the archive transcript does not, and the two must still collapse.
+    let ms = 1_577_898_000_i64 * 1000 + 488;
 
     fs::write(
         input_dir.join("archive.eml"),
@@ -224,6 +227,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
             output_dir: &out,
             owner_phones: &["+15555550100".into()],
             owner_emails: &["owner@example.com".into()],
+            time_zone: ZONE,
             verbose: false,
             transforms: ExportTransforms::none(),
             output_format: OutputFormat::Jsonl,

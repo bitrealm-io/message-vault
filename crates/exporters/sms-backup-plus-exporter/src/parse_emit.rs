@@ -78,6 +78,10 @@ pub(super) enum ParsedEmlKind {
     Archive {
         msgs: Vec<ParsedMessage>,
         skipped_dates: u64,
+        /// Blocks whose wall clock does not exist in the zone and were moved an hour.
+        dst_gap_shifted: u64,
+        /// What the mail's `Date:` header says about the zone in use.
+        zone_check: crate::archive::ZoneCheck,
         path_display: String,
     },
     Flat {
@@ -97,6 +101,7 @@ pub(super) fn parse_one_eml(
     rel_path: String,
     owner_digits: &HashSet<String>,
     owner_emails_lc: &[String],
+    zone: chrono_tz::Tz,
 ) -> ParsedEmlKind {
     let bytes = match std::fs::read(eml_path) {
         Ok(b) => b,
@@ -114,21 +119,30 @@ pub(super) fn parse_one_eml(
     let path_display = eml_path.display().to_string();
 
     if is_archive_eml(&headers) {
-        match parse_archive_eml_mail(eml_path, &mail, &headers) {
-            Ok((mut msgs, skipped_dates)) => {
-                for msg in &mut msgs {
+        match parse_archive_eml_mail(eml_path, &mail, &headers, zone) {
+            Ok(mut parsed) => {
+                for msg in &mut parsed.messages {
                     msg.eml_path.clone_from(&rel_path);
                 }
                 ParsedEmlKind::Archive {
-                    msgs,
-                    skipped_dates,
+                    msgs: parsed.messages,
+                    skipped_dates: parsed.skipped_invalid_date,
+                    dst_gap_shifted: parsed.dst_gap_shifted,
+                    zone_check: parsed.zone_check,
                     path_display,
                 }
             }
             Err(err) => ParsedEmlKind::ParseError(format!("{path_display}: {err:#}")),
         }
     } else if is_flat_sms_eml(&headers) {
-        match parse_flat_eml_mail(eml_path, &mail, &headers, owner_digits, owner_emails_lc) {
+        match parse_flat_eml_mail(
+            eml_path,
+            &mail,
+            &headers,
+            owner_digits,
+            owner_emails_lc,
+            zone,
+        ) {
             Some(mut msg) => {
                 msg.eml_path = rel_path;
                 ParsedEmlKind::Flat { msg: Box::new(msg) }

@@ -1,9 +1,7 @@
 //! Inclusive start / exclusive end day filters (`YYYY-MM-DD`).
 
 use anyhow::{Result, bail};
-use chrono::{FixedOffset, Local, NaiveDate, TimeZone};
-
-use crate::parse_utc_offset;
+use chrono::{Local, NaiveDate, TimeZone};
 
 /// Message timestamp window: `[start, end)` in Unix seconds.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -32,20 +30,19 @@ impl DateRange {
         )
     }
 
-    /// Parse optional `YYYY-MM-DD` bounds in a fixed UTC offset.
-    pub fn parse_in_offset(
+    /// Parse optional `YYYY-MM-DD` bounds in a named zone.
+    pub fn parse_in_zone(
         start: Option<&str>,
         end: Option<&str>,
-        offset: FixedOffset,
+        zone: chrono_tz::Tz,
     ) -> Result<Self> {
         Self::parse_with(
             |date| {
-                offset
-                    .from_local_datetime(&date.and_hms_opt(0, 0, 0).expect("midnight"))
+                zone.from_local_datetime(&date.and_hms_opt(0, 0, 0).expect("midnight"))
                     .single()
                     .map(|dt| dt.timestamp())
                     .ok_or_else(|| {
-                        anyhow::anyhow!("ambiguous or invalid midnight for {date} in {offset}")
+                        anyhow::anyhow!("ambiguous or invalid midnight for {date} in {zone}")
                     })
             },
             start,
@@ -53,20 +50,15 @@ impl DateRange {
         )
     }
 
-    /// Parse bounds in a UTC offset string when provided; otherwise host local.
-    ///
-    /// `tz_name` accepts fixed offsets like `UTC-05:00` (see [`parse_utc_offset`]).
+    /// Parse bounds in `zone` when one is given; otherwise in the host zone.
     pub fn parse_optional_tz(
         start: Option<&str>,
         end: Option<&str>,
-        tz_name: Option<&str>,
+        zone: Option<chrono_tz::Tz>,
     ) -> Result<Self> {
-        match tz_name.and_then(message_ir::trimmed) {
+        match zone {
             None => Self::parse(start, end),
-            Some(name) => {
-                let offset = parse_utc_offset(name)?;
-                Self::parse_in_offset(start, end, offset)
-            }
+            Some(zone) => Self::parse_in_zone(start, end, zone),
         }
     }
 
@@ -134,11 +126,6 @@ fn parse_ymd(value: &str) -> Result<NaiveDate> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::FixedOffset;
-
-    fn utc() -> FixedOffset {
-        FixedOffset::east_opt(0).unwrap()
-    }
 
     #[test]
     fn blank_is_unbounded() {
@@ -151,7 +138,8 @@ mod tests {
     #[test]
     fn inclusive_start_exclusive_end_utc() {
         let range =
-            DateRange::parse_in_offset(Some("2020-01-01"), Some("2020-01-03"), utc()).unwrap();
+            DateRange::parse_in_zone(Some("2020-01-01"), Some("2020-01-03"), chrono_tz::UTC)
+                .unwrap();
         // 2020-01-01 00:00:00 UTC
         assert!(range.contains_secs(1_577_836_800));
         // 2020-01-02 12:00:00 UTC
@@ -164,38 +152,50 @@ mod tests {
 
     #[test]
     fn start_must_precede_end() {
-        let err =
-            DateRange::parse_in_offset(Some("2020-01-02"), Some("2020-01-02"), utc()).unwrap_err();
+        let err = DateRange::parse_in_zone(Some("2020-01-02"), Some("2020-01-02"), chrono_tz::UTC)
+            .unwrap_err();
         assert!(err.to_string().contains("before end-date"));
     }
 
     #[test]
     fn rejects_bad_date() {
         assert!(DateRange::parse(Some("2020/01/01"), None).is_err());
-        assert!(DateRange::parse_optional_tz(None, Some("nope"), Some("UTC")).is_err());
+        assert!(DateRange::parse_optional_tz(None, Some("nope"), Some(chrono_tz::UTC)).is_err());
     }
 
     #[test]
-    fn unknown_offset() {
+    fn a_named_zone_is_accepted() {
+        // The old helper rejected IANA names and took only `UTC-05:00`. A zone
+        // is what a multi-year backup needs, so the name is now the input.
         assert!(
-            DateRange::parse_optional_tz(Some("2020-01-01"), None, Some("America/New_York"))
-                .is_err()
+            DateRange::parse_optional_tz(
+                Some("2020-01-01"),
+                None,
+                Some(chrono_tz::America::New_York)
+            )
+            .is_ok()
         );
     }
 
     #[test]
     fn f64_floors_toward_contains() {
         let range =
-            DateRange::parse_in_offset(Some("2020-01-01"), Some("2020-01-02"), utc()).unwrap();
+            DateRange::parse_in_zone(Some("2020-01-01"), Some("2020-01-02"), chrono_tz::UTC)
+                .unwrap();
         assert!(range.contains_secs_f64(1_577_836_800.9));
         assert!(!range.contains_secs_f64(1_577_923_200.0)); // 2020-01-02 00:00 UTC
     }
 
     #[test]
-    fn optional_tz_accepts_utc_offset() {
-        let range =
-            DateRange::parse_optional_tz(Some("2020-01-01"), Some("2020-01-02"), Some("UTC-05:00"))
-                .unwrap();
+    fn a_zone_midnight_is_not_a_utc_midnight() {
+        // The point of naming a zone: the day starts when it starts there.
+        let range = DateRange::parse_optional_tz(
+            Some("2020-01-01"),
+            Some("2020-01-02"),
+            Some(chrono_tz::America::New_York),
+        )
+        .unwrap();
+        assert_eq!(range.start_secs, Some(1_577_854_800)); // 2020-01-01 00:00 EST
         assert!(!range.is_unbounded());
     }
 }

@@ -236,6 +236,7 @@ const baseForm = {
   minSizeMb: "",
   ownerPhones: [],
   ownerEmails: [],
+  timeZone: "America/New_York",
   force: false,
   obfuscate: false,
   isAndroidSms: false,
@@ -1161,7 +1162,18 @@ describe("restoreFormFromSnapshot", () => {
       ...validSnapshot,
       backupPassword: "",
       whatsappKey: "",
+      // Snapshots predate the time zone field; it is re-read from the account
+      // profile, so an older one restores rather than becoming unreadable.
+      timeZone: "",
     });
+  });
+
+  it("keeps a time zone the snapshot carries", () => {
+    const restored = restoreFormFromSnapshot({
+      ...validSnapshot,
+      timeZone: "America/New_York",
+    });
+    expect(restored?.timeZone).toBe("America/New_York");
   });
 
   it.each([

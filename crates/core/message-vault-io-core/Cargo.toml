@@ -8,6 +8,7 @@ description = "Shared export pipeline, jobs, and form model for the Message Vaul
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
+chrono-tz = { workspace = true }
 message-csv = { path = "../../libs/csv" }
 message-ir = { path = "../../libs/ir" }
 media = { path = "../../libs/media" }

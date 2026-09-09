@@ -220,9 +220,9 @@ pub fn parse_date_range(
 pub fn parse_date_range_tz(
     start_date: Option<&str>,
     end_date: Option<&str>,
-    timezone: Option<&str>,
+    time_zone: Option<chrono_tz::Tz>,
 ) -> Result<DateRange, String> {
-    DateRange::parse_optional_tz(start_date, end_date, timezone)
+    DateRange::parse_optional_tz(start_date, end_date, time_zone)
         .map_err(|e| format!("invalid date range: {e}"))
 }
 

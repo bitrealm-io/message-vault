@@ -31,6 +31,12 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     if config.inputs.is_empty() {
         bail!("no input given: pass --input PATH");
     }
+    // An archive transcript is a wall clock with no offset, so there is no
+    // instant to recover without a zone -- and nothing sane to fall back on.
+    // The host's zone is the bug this refuses to reintroduce.
+    let Some(time_zone) = config.time_zone else {
+        bail!("time zone required: archive times are wall-clock and need the account's zone");
+    };
 
     let transforms = ExportTransforms::from_config(config);
     let (report, sink) = convert_export(ConvertExportArgs {
@@ -38,6 +44,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
         output_dir: &config.output,
         owner_phones: &source.owner_phones,
         owner_emails: &source.owner_emails,
+        time_zone,
         verbose: source.verbose,
         transforms,
         output_format: config.output_format,

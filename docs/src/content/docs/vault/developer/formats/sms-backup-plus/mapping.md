@@ -27,7 +27,7 @@ With `--format csv`: one file per conversation (header + one row per message aft
 | `group_title` | Derived for groups (empty for 1:1) |
 | `participants_json` | Peer handles for the conversation |
 | `guid` | Deterministic SHA-256 fingerprint |
-| `timestamp` / `timestamp_utc` / `timestamp_display` / `timestamp_unix_ms` | Flat: `X-smssync-date` / `Date`; archive: body timestamp |
+| `timestamp` / `timestamp_utc` / `timestamp_display` / `timestamp_unix_ms` | Flat: `X-smssync-date` / `Date`; archive: the body's wall clock read in the account's time zone |
 | `direction` | `incoming` / `outgoing` from `X-smssync-type` or archive sender |
 | `service` | Always `SMS` |
 | `sender_handle` / `sender_display_name` | Outgoing uses export owner; incoming may use Subject / name hint |

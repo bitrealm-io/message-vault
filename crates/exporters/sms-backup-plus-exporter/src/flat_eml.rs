@@ -193,6 +193,7 @@ pub(crate) fn parse_flat_eml_mail(
     headers: &MailHeaders,
     owner_digits: &HashSet<String>,
     owner_emails: &[String],
+    zone: chrono_tz::Tz,
 ) -> Option<ParsedMessage> {
     if !is_single_sms_eml(headers) {
         return None;
@@ -210,6 +211,7 @@ pub(crate) fn parse_flat_eml_mail(
     let attachments = extract_attachments(
         mail,
         timestamp_secs * 1000.0,
+        zone,
         Some(&file_key[..12.min(file_key.len())]),
     );
     Some(ParsedMessage {
@@ -369,7 +371,8 @@ Hello from Alice\r\n",
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
         let owners = HashSet::from(["5555550100".to_string()]);
-        let msg = parse_flat_eml_mail(&path, &mail, &headers, &owners, &[]).unwrap();
+        let msg =
+            parse_flat_eml_mail(&path, &mail, &headers, &owners, &[], chrono_tz::UTC).unwrap();
         assert!(!msg.is_from_me);
         assert_eq!(msg.text.trim(), "Hello from Alice");
         assert_eq!(msg.chat_key, "4075551234");
@@ -397,8 +400,15 @@ Hello\r\n",
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
         let owners = HashSet::from(["5555550100".to_string()]);
-        let msg = parse_flat_eml_mail(&path, &mail, &headers, &owners, &["me@example.com".into()])
-            .unwrap();
+        let msg = parse_flat_eml_mail(
+            &path,
+            &mail,
+            &headers,
+            &owners,
+            &["me@example.com".into()],
+            chrono_tz::UTC,
+        )
+        .unwrap();
         assert_eq!(msg.chat_key, "4075551234");
         assert!(msg.is_from_me);
     }
@@ -429,7 +439,8 @@ old message\r\n"
         let mail = mailparse::parse_mail(&bytes).unwrap();
         let headers = MailHeaders::from_mail(&mail);
         let owners = HashSet::from(["5555550100".to_string()]);
-        let msg = parse_flat_eml_mail(&path, &mail, &headers, &owners, &[]).unwrap();
+        let msg =
+            parse_flat_eml_mail(&path, &mail, &headers, &owners, &[], chrono_tz::UTC).unwrap();
         assert!((msg.timestamp_secs - 978_307_200.0).abs() < 0.001);
     }
 

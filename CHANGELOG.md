@@ -70,6 +70,15 @@ of, and a search that reads the same everywhere.
 
 ### Fixes
 
+- 2026-09-08: **SMS Backup+ archive times are read in your time zone.** They
+  used to be read in the time zone of the computer running the import, so the
+  same backup gave different times on different machines and re-running an
+  import after travelling moved every message. The zone now comes from your
+  profile, set under Settings → Profile, and because it is a real zone rather
+  than a fixed offset, a conversation spanning years gets summer and winter
+  right. Where an archive's own mail date disagrees with your zone — the phone
+  was somewhere else when it was saved — the import summary says so and names
+  the file instead of quietly guessing.
 - 2026-09-08: **SMS Backup+ archives saved as formatted mail now import.** Many
   of these archives carry the conversation only as formatted text. Those
   imported as empty, and any photos or videos in them were thrown away — with

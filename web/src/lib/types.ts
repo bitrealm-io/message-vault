@@ -47,6 +47,11 @@ export interface ExtractConfig {
   owner_phones?: string[];
   /** Owner email addresses for SMS Backup+ (repeatable). */
   owner_emails?: string[];
+  /**
+   * The account's IANA time zone, e.g. `America/New_York`. SMS Backup+ archive
+   * transcripts carry a wall clock with no offset and are read in it.
+   */
+  time_zone?: string;
   /** Alternate folder for Attachments and StickerCache (Mac and jailbreak). */
   attachment_root?: string;
   /** Path to an Apple AddressBook file (Mac and jailbreak). */

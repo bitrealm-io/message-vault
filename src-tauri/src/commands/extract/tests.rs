@@ -13,6 +13,7 @@ fn test_options(owner_phones: Vec<String>) -> ExtractOptions {
         obfuscate: false,
         owner_phones,
         owner_emails: Vec::new(),
+        time_zone: "America/New_York".into(),
         attachment_root: String::new(),
         apple_contacts: String::new(),
         whatsapp_key: String::new(),
@@ -278,6 +279,12 @@ fn sms_backup_plus_passes_owner_phones_and_emails() {
         &options,
     )
     .unwrap();
+    // The account's zone has to reach the exporter: an archive transcript is a
+    // wall clock with no offset, and the run refuses rather than guess.
+    assert_eq!(
+        config.time_zone.map(|zone| zone.to_string()).as_deref(),
+        Some("America/New_York")
+    );
     match config.source {
         SourceConfig::SmsBackupPlus(s) => {
             assert_eq!(s.owner_phones, vec!["+15551111"]);
@@ -285,6 +292,22 @@ fn sms_backup_plus_passes_owner_phones_and_emails() {
         }
         other => panic!("expected SmsBackupPlus, got {other:?}"),
     }
+}
+
+#[test]
+fn sms_backup_plus_without_a_time_zone_is_refused() {
+    let backup = tempfile::tempdir().unwrap();
+    let mut options = test_options(vec!["+15551111".into()]);
+    options.owner_emails = vec!["me@example.com".into()];
+    options.time_zone = String::new();
+    let err = build_exporter_config(
+        "sms-backup-plus",
+        backup.path().to_str().unwrap(),
+        "/tmp/out",
+        &options,
+    )
+    .unwrap_err();
+    assert!(err.contains("time zone"), "got {err}");
 }
 
 #[test]

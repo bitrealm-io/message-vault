@@ -93,9 +93,14 @@ pub struct ExporterConfig {
     pub inputs: Vec<PathBuf>,
     /// Output directory the export is written to (packaging plus `attachments/`).
     pub output: PathBuf,
-    /// Optional fixed UTC offset for naive timestamps, e.g. `UTC-05:00`.
-    /// When `None`, dates are interpreted in host-local time.
-    pub timezone: Option<String>,
+    /// The IANA zone a naive wall-clock timestamp is resolved in, e.g.
+    /// `America/New_York`, taken from the signed-in account's profile.
+    ///
+    /// A zone, not a fixed offset: a backup can span years, and only a zone
+    /// knows that the same wall clock meant one offset in July and another in
+    /// December. `None` means no zone was chosen, which each exporter is free
+    /// to refuse.
+    pub time_zone: Option<chrono_tz::Tz>,
     /// Fake-name rewrite settings; `None`-equivalent when disabled.
     pub obfuscate: ObfuscateConfig,
     /// Attachment handling for `FormatSink` (none / copy / convert / compress).
@@ -254,7 +259,7 @@ pub struct SmsBackupPlusConfig {
 pub struct OpenExtractConfig {}
 
 #[derive(Debug, Clone, Default)]
-/// iMazing has no extra fields beyond the shared [`ExporterConfig`] (timezone lives there).
+/// iMazing has no extra fields beyond the shared [`ExporterConfig`] (the time zone lives there).
 pub struct ImazingConfig {}
 
 #[derive(Debug, Clone)]
@@ -317,7 +322,7 @@ mod tests {
         ExporterConfig {
             inputs,
             output: PathBuf::from("out"),
-            timezone: None,
+            time_zone: None,
             obfuscate: ObfuscateConfig::default(),
             media: MediaConfig::default(),
             cancel: None,

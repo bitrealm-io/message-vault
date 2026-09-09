@@ -24,6 +24,7 @@ export async function invokeExtract(config: ExtractConfig): Promise<void> {
       obfuscate: config.obfuscate ?? null,
       ownerPhones: config.owner_phones ?? null,
       ownerEmails: config.owner_emails ?? null,
+      timeZone: config.time_zone ?? null,
       attachmentRoot: config.attachment_root ?? null,
       appleContacts: config.apple_contacts ?? null,
       whatsappKey: config.whatsapp_key ?? null,

@@ -21,4 +21,32 @@ describe("sbrExtractFields", () => {
       obfuscate: true,
     });
   });
+
+  it("carries the account time zone when there is one", () => {
+    // SMS Backup+ archive transcripts are wall-clock with no offset, so the
+    // exporter refuses to run without this.
+    const fields = sbrExtractFields({
+      attachmentMedia: "copy",
+      maxResolution: "720p",
+      maxFps: "30",
+      minSizeMb: "20",
+      ownerPhones: ["+15551111"],
+      timeZone: "America/New_York",
+      obfuscate: false,
+    });
+    expect(fields.time_zone).toBe("America/New_York");
+  });
+
+  it("omits the time zone rather than sending an empty one", () => {
+    const fields = sbrExtractFields({
+      attachmentMedia: "copy",
+      maxResolution: "720p",
+      maxFps: "30",
+      minSizeMb: "20",
+      ownerPhones: ["+15551111"],
+      timeZone: "",
+      obfuscate: false,
+    });
+    expect(fields).not.toHaveProperty("time_zone");
+  });
 });

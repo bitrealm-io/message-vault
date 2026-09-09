@@ -20,7 +20,7 @@ fn convert(
     convert_export(ConvertExportArgs {
         input,
         output,
-        timezone: Some("UTC"),
+        time_zone: Some(chrono_tz::UTC),
         transforms: ExportTransforms::none(),
         output_format: OutputFormat::Csv,
         cancel: None,
@@ -207,9 +207,16 @@ Bob,2020-01-01 12:05:00,,Incoming,+15555550100,Bob,Read,,,WA hi,,,,\n",
 }
 
 #[test]
-fn rejects_unknown_timezone() {
-    let err = resolve_tz(Some("America/New_York")).unwrap_err();
-    assert!(err.to_string().contains("UTC"));
+fn a_named_zone_resolves_a_wall_clock() {
+    // The zone used to be rejected in favour of a fixed `UTC-05:00` offset.
+    // A fixed offset cannot express daylight saving, so the name is now the
+    // input and these two readings sit five and four hours off UTC.
+    let (winter, _) = parse_message_date("2018-01-15 12:00:00", Some(chrono_tz::America::New_York))
+        .expect("winter");
+    let (summer, _) = parse_message_date("2018-07-15 12:00:00", Some(chrono_tz::America::New_York))
+        .expect("summer");
+    assert_eq!(winter, 1_516_035_600); // 17:00 UTC, EST
+    assert_eq!(summer, 1_531_670_400); // 16:00 UTC, EDT
 }
 
 #[test]

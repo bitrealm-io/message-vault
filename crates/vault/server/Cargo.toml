@@ -9,7 +9,7 @@ anyhow = { workspace = true }
 argon2 = "0.6.0"
 axum = "0.8.9"
 chrono = { workspace = true }
-chrono-tz = "0.10"
+chrono-tz = { workspace = true }
 clap = { workspace = true }
 clap-markdown = "0.1.5"
 contacts = { workspace = true }

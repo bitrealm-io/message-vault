@@ -1524,6 +1524,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "chrono-tz",
  "contacts",
  "csv",
  "media",
@@ -1827,6 +1828,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "chrono-tz",
  "csv",
  "message-ir",
  "serde",
@@ -1886,6 +1888,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "chrono-tz",
  "media",
  "message-csv",
  "message-ir",
@@ -2993,6 +2996,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "chrono-tz",
  "contacts",
  "csv",
  "hex",

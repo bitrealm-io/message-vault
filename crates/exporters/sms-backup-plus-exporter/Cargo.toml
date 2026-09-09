@@ -8,6 +8,7 @@ autotests = false
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
+chrono-tz = { workspace = true }
 csv = { workspace = true }
 hex = { workspace = true }
 html-escape = "0.2.14"

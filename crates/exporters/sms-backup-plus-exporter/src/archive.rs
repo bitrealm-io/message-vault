@@ -14,7 +14,7 @@
 //! guesswork — see [`assign_archive_attachments`].
 
 use crate::assets::extract_attachments;
-use crate::flat_eml::{MailHeaders, extract_plain_text_body, is_archive_eml};
+use crate::flat_eml::{MailHeaders, extract_body_text, is_archive_eml};
 use crate::types::{AttachmentBlob, ParsedMessage};
 use anyhow::{Context, Result};
 use phone::sanitize_number;
@@ -168,7 +168,7 @@ pub(crate) fn parse_archive_eml_mail(
     let attachments = extract_attachments(mail, 0.0, Some(&file_key[..12.min(file_key.len())]));
 
     let mut reader = ArchiveReader::new(peer);
-    for line in extract_plain_text_body(mail).lines() {
+    for line in extract_body_text(mail).lines() {
         reader.feed(line);
     }
     let (mut messages, skipped_invalid_date) = reader.finish();
@@ -483,5 +483,44 @@ Thanks\r\n",
         assign_archive_attachments(&mut messages, vec![att]);
         assert!(messages[0].attachments.is_empty());
         assert_eq!(messages[1].attachments.len(), 1);
+    }
+
+    /// Parse one committed fixture and hand back its messages.
+    fn parse_fixture(name: &str) -> Vec<ParsedMessage> {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures")
+            .join(name);
+        let bytes = std::fs::read(&path).unwrap();
+        let mail = mailparse::parse_mail(&bytes).unwrap();
+        let headers = MailHeaders::from_mail(&mail);
+        parse_archive_eml_mail(&path, &mail, &headers).unwrap().0
+    }
+
+    #[test]
+    fn an_archive_with_only_an_html_part_is_read() {
+        // Before the HTML part was read, this whole conversation was dropped
+        // and nothing said so.
+        let msgs = parse_fixture("archive_html_only.eml");
+        assert_eq!(msgs.len(), 2);
+        assert!(msgs[0].is_from_me);
+        // A stray `<` is message text, not the start of a tag.
+        assert_eq!(msgs[0].text, "i love it <3 and it was under <$120 too");
+        assert!(!msgs[1].is_from_me);
+        assert_eq!(msgs[1].text, "Tom & Jerry were \"on\"");
+        assert_eq!(msgs[0].name_alias.as_deref(), Some("Bea"));
+    }
+
+    #[test]
+    fn the_html_part_wins_over_a_hard_wrapped_plain_text_part() {
+        // Both parts carry the same message. The plain-text copy has been
+        // wrapped by the sending mail client mid-sentence; the HTML has not,
+        // and it is the one worth keeping.
+        let msgs = parse_fixture("archive_both_parts.eml");
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(
+            msgs[0].text,
+            "Not bad, kinda drained. I'll be more worried when he gets out. \
+             Feel kinda guilty it got to this, but there's only so much a friend can do"
+        );
     }
 }

@@ -43,9 +43,9 @@ pub fn csv_rows(path: &Path) -> Vec<BTreeMap<String, String>> {
         .collect()
 }
 
-/// Assert that the first CSV under `root` has every `contains` header column,
-/// none of the `not_contains` columns, and at least one data row whose named
-/// columns all hold the given values; also assert no stray `.json` files
+/// Assert that the CSVs under `root` carry every `contains` header column and
+/// none of the `not_contains` ones, that one of them holds a data row whose
+/// named columns all hold the given values, and that no stray `.json` files
 /// remain.
 ///
 /// `row` is what makes this a test of the export rather than of the header:
@@ -91,7 +91,41 @@ pub fn assert_csv_header(
     for col in not_contains {
         assert!(!header.contains(col), "header unexpectedly has {col:?}");
     }
-    assert_csv_row(&files[0], row);
+    assert_csv_row_in_any(&files, row);
+}
+
+/// Assert that one of `paths` holds a data row whose named columns all hold the
+/// given values.
+///
+/// The row names its own `chat_identifier`, so which file it landed in is not
+/// part of the claim. Searching every file keeps the assertion about the export
+/// rather than about the alphabetical order of its conversations, which a new
+/// fixture can change.
+///
+/// # Panics
+///
+/// Panics when no file holds a matching row, naming what was found instead.
+pub fn assert_csv_row_in_any(paths: &[PathBuf], expected: &[(&str, &str)]) {
+    let mut seen = Vec::new();
+    for path in paths {
+        let rows = csv_rows(path);
+        if rows.iter().any(|row| row_matches(row, expected)) {
+            return;
+        }
+        seen.push((path.display().to_string(), rows));
+    }
+    panic!(
+        "no row in any of {} export file(s) has {expected:?}; found {seen:#?}",
+        paths.len()
+    );
+}
+
+/// True when every named column of `row` holds the wanted value.
+fn row_matches(row: &BTreeMap<String, String>, expected: &[(&str, &str)]) -> bool {
+    expected.iter().all(|(col, want)| {
+        row.get(&col.to_ascii_lowercase())
+            .is_some_and(|v| v == want)
+    })
 }
 
 /// Assert that `path` holds at least one data row whose named columns all hold
@@ -107,12 +141,7 @@ pub fn assert_csv_row(path: &Path, expected: &[(&str, &str)]) {
         "{} has a header but no messages",
         path.display()
     );
-    let matched = rows.iter().any(|row| {
-        expected.iter().all(|(col, want)| {
-            row.get(&col.to_ascii_lowercase())
-                .is_some_and(|v| v == want)
-        })
-    });
+    let matched = rows.iter().any(|row| row_matches(row, expected));
     assert!(
         matched,
         "no row in {} has {:?}; rows were {:#?}",

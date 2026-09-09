@@ -1,5 +1,6 @@
 //! Parse flat EMLs: one text message per `.eml` file (not a multi-message archive).
 
+use crate::archive_html::transcript_from_html;
 use crate::assets::extract_attachments;
 use crate::types::ParsedMessage;
 use mailparse::{MailHeaderMap, ParsedMail};
@@ -144,24 +145,30 @@ fn is_sent(headers: &MailHeaders, owner_emails: &[String]) -> bool {
         .any(|e| !e.is_empty() && from_addr == e.as_str())
 }
 
-/// First `text/plain` body in the MIME tree, with newlines normalized to `\n`.
-pub(crate) fn extract_plain_text_body(mail: &ParsedMail<'_>) -> String {
-    /// The first `text/plain` body in the MIME tree, with line endings normalized.
-    fn walk(m: &ParsedMail<'_>) -> Option<String> {
-        let ctype = m.ctype.mimetype.to_ascii_lowercase();
-        if ctype == "text/plain"
-            && let Ok(body) = m.get_body()
-        {
-            return Some(body.replace("\r\n", "\n").replace('\r', "\n"));
-        }
-        for part in &m.subparts {
-            if let Some(b) = walk(part) {
-                return Some(b);
-            }
-        }
-        None
+/// The first body of one MIME type in the tree, newlines normalized to `\n`.
+///
+/// `mail.parts()` is a depth-first walk that starts with the mail itself, so a
+/// single-part message is covered without a special case.
+fn first_body_of_type(mail: &ParsedMail<'_>, want: &str) -> Option<String> {
+    mail.parts()
+        .filter(|part| part.ctype.mimetype.eq_ignore_ascii_case(want))
+        .find_map(|part| part.get_body().ok())
+        .map(|body| body.replace("\r\n", "\n").replace('\r', "\n"))
+}
+
+/// The text of a mail: its HTML rendering when it has one, else its plain text.
+///
+/// HTML wins because of what archive mail looks like. Many archives carry no
+/// `text/plain` part at all and would otherwise read as empty, and in the ones
+/// that carry both, the plain-text copy has been hard-wrapped by the sending
+/// mail client, so a sentence arrives broken across lines while the HTML keeps
+/// it whole. Flat SMS Backup+ mail carries no HTML part, so the preference
+/// only ever decides an archive.
+pub(crate) fn extract_body_text(mail: &ParsedMail<'_>) -> String {
+    if let Some(html) = first_body_of_type(mail, "text/html") {
+        return transcript_from_html(&html);
     }
-    walk(mail).unwrap_or_default()
+    first_body_of_type(mail, "text/plain").unwrap_or_default()
 }
 
 /// True when the EML is one SMS Backup+ message rather than an archive or unrelated mail.
@@ -213,7 +220,7 @@ pub(crate) fn parse_flat_eml_mail(
         timestamp_secs,
         is_from_me: sent,
         sender_digits: conversation.sender_digits,
-        text: extract_plain_text_body(mail),
+        text: extract_body_text(mail),
         attachments,
         name_alias,
         smssync_id: (!headers.smssync_id.is_empty()).then(|| headers.smssync_id.clone()),

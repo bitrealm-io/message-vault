@@ -509,18 +509,24 @@ impl EmlIngest {
             ParsedEmlKind::Archive {
                 msgs,
                 skipped_dates,
-                _path_display: _,
+                path_display,
             } => {
                 self.report.bump("archive_eml", 1);
                 self.report.skipped_invalid_date += skipped_dates;
+                // An archive that yields nothing is a whole conversation lost.
+                // Say which file, because the export otherwise finishes looking
+                // healthy and the person has no way to notice.
+                if msgs.is_empty() {
+                    self.report.bump("empty_archive_eml", 1);
+                    self.report
+                        .errors
+                        .push(format!("{path_display}: archive held no messages"));
+                }
                 for msg in msgs {
                     self.add_parsed(msg);
                 }
             }
-            ParsedEmlKind::Flat {
-                msg,
-                _path_display: _,
-            } => {
+            ParsedEmlKind::Flat { msg } => {
                 self.report.bump("flat_eml", 1);
                 self.add_parsed(*msg);
             }

@@ -10,6 +10,7 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 csv = { workspace = true }
 hex = { workspace = true }
+html-escape = "0.2.14"
 mailparse = "0.16.1"
 contacts = { path = "../../libs/contacts" }
 message-vault-io-core = { path = "../../core/message-vault-io-core" }

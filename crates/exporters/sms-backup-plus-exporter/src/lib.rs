@@ -5,6 +5,7 @@
 //! The `sms-backup-plus-exporter` binary is a thin CLI over [`run`].
 
 mod archive;
+mod archive_html;
 mod assets;
 mod attachments_emit;
 mod emit;

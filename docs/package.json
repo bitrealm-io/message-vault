@@ -20,5 +20,9 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
     "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "js-yaml": "4.3.2",
+    "svgo": "4.1.0"
   }
 }

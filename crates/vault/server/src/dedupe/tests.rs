@@ -499,3 +499,132 @@ async fn integration_priority_prefers_first_imported_source() {
     assert_eq!(dup_first, None);
     assert_eq!(dup_second, Some(first_imported));
 }
+
+/// The near-time window, exactly at its edge and one second past it.
+///
+/// The two integration tests around this use two seconds apart with a window
+/// of two, and sixty apart with a window of two — comfortably inside and
+/// comfortably outside. The comparison itself is `row.secs - first.secs <=
+/// window_secs`, and nothing tested the `<=`: turning it into `<` narrows the
+/// window by a second for every import, and turning it into `>=` collapses
+/// unrelated messages into one.
+///
+/// Which second is the boundary matters in practice. Two exporters reading the
+/// same SMS routinely disagree by exactly the window, because one records when
+/// the message arrived and the other when it was written to the phone's
+/// database.
+#[tokio::test]
+async fn a_twin_exactly_at_the_window_edge_is_flagged_and_one_past_it_is_not() {
+    for (gap_secs, second_timestamp, expect_flagged) in [
+        (2, "2015-03-12T18:04:24Z", true),
+        (3, "2015-03-12T18:04:25Z", false),
+    ] {
+        let (pool, _dir) = engine::test_pool().await;
+        let mut conn = pool.acquire().await.unwrap();
+        setup_db(&mut conn).await;
+
+        let first = insert_msg(
+            &mut conn,
+            InsertMsgArgs {
+                source: "go-sms-pro",
+                guid: "g1",
+                timestamp: "2015-03-12T18:04:22Z",
+                from_me: 0,
+                body: "On my way",
+                sort_order: 0,
+            },
+        )
+        .await;
+        let second = insert_msg(
+            &mut conn,
+            InsertMsgArgs {
+                source: "sms-backup-plus",
+                guid: "g2",
+                timestamp: second_timestamp,
+                from_me: 0,
+                body: "On my way",
+                sort_order: 1,
+            },
+        )
+        .await;
+
+        // The window is two seconds in every case; only the gap moves.
+        let priority = ["go-sms-pro".into(), "sms-backup-plus".into()];
+        let stats = dedupe_cross_source(&mut conn, TEST_ACCOUNT_ID, Some(&priority), 2)
+            .await
+            .unwrap();
+
+        let flagged: Option<i64> =
+            sqlx::query_scalar("SELECT duplicate_of FROM messages WHERE id = $1")
+                .bind(second)
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+
+        if expect_flagged {
+            assert_eq!(
+                stats.near_flagged, 1,
+                "a gap of {gap_secs}s equals the window, so it is a duplicate"
+            );
+            assert_eq!(flagged, Some(first));
+        } else {
+            assert_eq!(
+                stats.near_flagged, 0,
+                "a gap of {gap_secs}s is past the window, so it is not"
+            );
+            assert_eq!(flagged, None, "and the message is left alone");
+        }
+    }
+}
+
+/// Two messages a second apart from the *same* source are not duplicates,
+/// however alike they are. Someone sending "ok" twice is sending two messages,
+/// and collapsing them loses one of them for good.
+#[tokio::test]
+async fn two_near_messages_from_one_source_are_both_kept() {
+    let (pool, _dir) = engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    setup_db(&mut conn).await;
+
+    insert_msg(
+        &mut conn,
+        InsertMsgArgs {
+            source: "go-sms-pro",
+            guid: "g1",
+            timestamp: "2015-03-12T18:04:22Z",
+            from_me: 1,
+            body: "ok",
+            sort_order: 0,
+        },
+    )
+    .await;
+    let second = insert_msg(
+        &mut conn,
+        InsertMsgArgs {
+            source: "go-sms-pro",
+            guid: "g2",
+            timestamp: "2015-03-12T18:04:23Z",
+            from_me: 1,
+            body: "ok",
+            sort_order: 1,
+        },
+    )
+    .await;
+
+    let priority = ["go-sms-pro".into(), "sms-backup-plus".into()];
+    let stats = dedupe_cross_source(&mut conn, TEST_ACCOUNT_ID, Some(&priority), 2)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        stats.near_flagged, 0,
+        "a cluster needs two sources; one person sending the same word twice is two messages"
+    );
+    let flagged: Option<i64> =
+        sqlx::query_scalar("SELECT duplicate_of FROM messages WHERE id = $1")
+            .bind(second)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(flagged, None);
+}

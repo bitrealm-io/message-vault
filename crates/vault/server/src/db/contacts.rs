@@ -284,32 +284,6 @@ pub async fn contact_id_by_preferred_name(
     }
 }
 
-/// Contacts this account created or changed at or after `since`.
-///
-/// `since` is a `YYYY-MM-DD HH:MM:SS` UTC stamp, the form `created_at` and
-/// `last_modified` are stored in. Used to name the contacts one import run
-/// touched, which is what its Contact Group collects.
-///
-/// # Errors
-///
-/// Returns an error when the query fails.
-pub async fn contacts_touched_since(
-    conn: &mut AnyConnection,
-    account_id: i64,
-    since: &str,
-) -> Result<Vec<i64>> {
-    let ids: Vec<i64> = sqlx::query_scalar(
-        "SELECT id FROM contacts
-         WHERE account_id = $1 AND (created_at >= $2 OR last_modified >= $2)
-         ORDER BY id",
-    )
-    .bind(account_id)
-    .bind(since)
-    .fetch_all(&mut *conn)
-    .await?;
-    Ok(ids)
-}
-
 /// Record how a Contact Group was born.
 ///
 /// # Errors

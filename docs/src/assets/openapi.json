@@ -4804,8 +4804,8 @@
         "tags": [
           "Import"
         ],
-        "summary": "List the contacts one import run created or changed, newest first.",
-        "description": "New and changed are told apart by comparing each contact's `created_at`\nagainst the moment the run started: a contact first recorded during the run\nis new, one merely touched is changed. How many of each the run made is on\nthe run's own record, `GET /v1/imports/{id}`.",
+        "summary": "List the contacts one import run created or changed, with the reason for\neach, most consequential first.",
+        "description": "The run recorded each reason as it staged (`db::import_contacts`), so the\nlist is what the import decided, not what timestamps suggest. How many of\neach the run made is on the run's own record, `GET /v1/imports/{id}`: a\npage can only count its own rows, and the panel states the whole run's\ntally.",
         "operationId": "import_contacts_handler",
         "parameters": [
           {
@@ -7184,6 +7184,16 @@
           }
         }
       },
+      "ContactReason": {
+        "type": "string",
+        "description": "Why a contact is on an import run's record.\n\nOrdered from most to least consequential. When one run does more than\none of these to a contact, the record keeps the earlier variant: a\ncontact the run created was also named and given a handle by it, and\n\"created\" is the fact the person needs.",
+        "enum": [
+          "replaced_trashed",
+          "created",
+          "named",
+          "handle_added"
+        ]
+      },
       "ContactRemoveHandlePayload": {
         "type": "object",
         "description": "The handle to unlink.",
@@ -7991,11 +8001,11 @@
       },
       "ImportContactRow": {
         "type": "object",
-        "description": "One contact an import run touched, and whether the run created it.",
+        "description": "One contact an import run touched, and what the run did to it.",
         "required": [
           "id",
           "name",
-          "is_new"
+          "reason"
         ],
         "properties": {
           "id": {
@@ -8003,13 +8013,13 @@
             "format": "int64",
             "description": "Contact id."
           },
-          "is_new": {
-            "type": "boolean",
-            "description": "True when this run created the contact, false when it only changed one\nthat already existed."
-          },
           "name": {
             "type": "string",
             "description": "Preferred name; empty when the run learned an address and no name."
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ContactReason",
+            "description": "Why the contact is on this run's record: the run created it, created\nit in place of one the person had trashed, named it, or added a\nhandle to it."
           }
         }
       },
@@ -9424,11 +9434,11 @@
             "type": "array",
             "items": {
               "type": "object",
-              "description": "One contact an import run touched, and whether the run created it.",
+              "description": "One contact an import run touched, and what the run did to it.",
               "required": [
                 "id",
                 "name",
-                "is_new"
+                "reason"
               ],
               "properties": {
                 "id": {
@@ -9436,13 +9446,13 @@
                   "format": "int64",
                   "description": "Contact id."
                 },
-                "is_new": {
-                  "type": "boolean",
-                  "description": "True when this run created the contact, false when it only changed one\nthat already existed."
-                },
                 "name": {
                   "type": "string",
                   "description": "Preferred name; empty when the run learned an address and no name."
+                },
+                "reason": {
+                  "$ref": "#/components/schemas/ContactReason",
+                  "description": "Why the contact is on this run's record: the run created it, created\nit in place of one the person had trashed, named it, or added a\nhandle to it."
                 }
               }
             },

@@ -103,6 +103,21 @@ of, and a search that reads the same everywhere.
 
 ### Design
 
+- 2026-09-09: **An import brings back a contact you had trashed.** Until now
+  an import that met the handle of a trashed contact attached to it and left
+  it in Trash, so someone you set aside once never appeared in Contacts again
+  however many newer backups you imported. A backup that still holds the
+  person means you still talk to them: the import now discards the trashed
+  contact, name, group memberships and handles included, and makes a new
+  contact from the backup, the way a first import would. The forecast of new
+  contacts shown before an import counts them. To keep someone out for good,
+  delete them from Trash. Why: `docs/adr/0013-an-import-replaces-a-trashed-contact.md`.
+- 2026-09-09: **An Import Run says what it did to each contact.** The run
+  records, as it goes, whether it created a contact, created one in place of
+  a trashed contact, named one that had no name, or added a handle to one,
+  and the run's record under Settings → Storage lists the contacts with that
+  reason. The new and changed counts come from the same record instead of
+  being guessed from timestamps afterwards.
 - 2026-09-09: **Importing SMS Backup+ mail reads one message per file, and
   nothing else.** Message Vault briefly also read a second kind of `.eml` — a
   whole conversation written out as a dated transcript in one mail. That shape

@@ -875,13 +875,16 @@ fn split_ddl_skips_comments_and_blanks() {
 fn split_ddl_keeps_do_blocks_intact() {
     let fks = &pg_vault_table_ddl().deferred_fks;
     let stmts = split_ddl(fks);
-    assert_eq!(stmts.len(), 1, "the deferred FKs must be one DO block");
-    assert!(
-        stmts[0].starts_with("DO $$"),
-        "unexpected split: {}",
-        stmts[0]
+    assert_eq!(
+        stmts.len(),
+        fks.matches("DO $$").count(),
+        "one statement per deferred FK, never a split inside a block"
     );
-    assert!(stmts[0].ends_with("$$;"), "DO block must end in $$;");
+    assert!(!stmts.is_empty(), "the schema has at least one deferred FK");
+    for stmt in &stmts {
+        assert!(stmt.starts_with("DO $$"), "unexpected split: {stmt}");
+        assert!(stmt.ends_with("$$;"), "DO block must end in $$;: {stmt}");
+    }
 }
 
 #[test]

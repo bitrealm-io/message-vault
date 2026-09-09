@@ -21,10 +21,16 @@ async fn an_import_creates_the_contact_with_the_backup_name() {
     .unwrap();
 
     let mut stats = ImportStats::default();
-    let contact_id =
-        ensure_contact_for_handle(&mut conn, TEST_ACCOUNT, handle_id, Some("Ada"), &mut stats)
-            .await
-            .unwrap();
+    let contact_id = ensure_contact_for_handle(
+        &mut conn,
+        TEST_ACCOUNT,
+        None,
+        handle_id,
+        Some("Ada"),
+        &mut stats,
+    )
+    .await
+    .unwrap();
 
     let (name, origin): (String, String) =
         sqlx::query_as("SELECT preferred_name, origin FROM contacts WHERE id = $1")
@@ -54,13 +60,20 @@ async fn a_later_backup_names_a_contact_an_earlier_one_left_nameless() {
     .unwrap();
 
     let mut stats = ImportStats::default();
-    let first = ensure_contact_for_handle(&mut conn, TEST_ACCOUNT, handle_id, None, &mut stats)
-        .await
-        .unwrap();
-    let second =
-        ensure_contact_for_handle(&mut conn, TEST_ACCOUNT, handle_id, Some("Ada"), &mut stats)
+    let first =
+        ensure_contact_for_handle(&mut conn, TEST_ACCOUNT, None, handle_id, None, &mut stats)
             .await
             .unwrap();
+    let second = ensure_contact_for_handle(
+        &mut conn,
+        TEST_ACCOUNT,
+        None,
+        handle_id,
+        Some("Ada"),
+        &mut stats,
+    )
+    .await
+    .unwrap();
     assert_eq!(first, second, "the same handle keeps the same contact");
 
     let name: String = sqlx::query_scalar("SELECT preferred_name FROM contacts WHERE id = $1")
@@ -88,9 +101,10 @@ async fn an_import_replaces_a_trashed_contact_with_a_fresh_one() {
     let met = insert_handle(&mut conn, "+15555550950", "imessage").await;
     let unmentioned = insert_handle(&mut conn, "+15555550951", "imessage").await;
     let mut stats = ImportStats::default();
-    let old = ensure_contact_for_handle(&mut conn, TEST_ACCOUNT, met, Some("Ada"), &mut stats)
-        .await
-        .unwrap();
+    let old =
+        ensure_contact_for_handle(&mut conn, TEST_ACCOUNT, None, met, Some("Ada"), &mut stats)
+            .await
+            .unwrap();
     // The person then curated the contact: a second handle, a name of their
     // own, a group. None of it survives the trash.
     crate::db::contacts::link_handle_to_contact(
@@ -130,6 +144,7 @@ async fn an_import_replaces_a_trashed_contact_with_a_fresh_one() {
     let fresh = ensure_contact_for_handle(
         &mut conn,
         TEST_ACCOUNT,
+        None,
         met,
         Some("Ada Lovelace"),
         &mut stats,
@@ -203,6 +218,7 @@ async fn a_fresh_contact_takes_the_number_on_every_service() {
     let old = ensure_contact_for_handle(
         &mut conn,
         TEST_ACCOUNT,
+        None,
         on_whatsapp,
         Some("Ada"),
         &mut stats,
@@ -216,10 +232,16 @@ async fn a_fresh_contact_takes_the_number_on_every_service() {
         .await
         .unwrap();
 
-    let fresh =
-        ensure_contact_for_handle(&mut conn, TEST_ACCOUNT, on_phone, Some("Ada"), &mut stats)
-            .await
-            .unwrap();
+    let fresh = ensure_contact_for_handle(
+        &mut conn,
+        TEST_ACCOUNT,
+        None,
+        on_phone,
+        Some("Ada"),
+        &mut stats,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(stats.contacts_created, 2, "a fresh contact was created");
     for handle in [on_whatsapp, on_phone] {
@@ -285,6 +307,7 @@ async fn a_second_spelling_does_not_rename_anyone() {
     let contact_id = ensure_contact_for_handle(
         &mut conn,
         TEST_ACCOUNT,
+        None,
         handle_id,
         Some("Ada Lovelace"),
         &mut stats,
@@ -294,6 +317,7 @@ async fn a_second_spelling_does_not_rename_anyone() {
     ensure_contact_for_handle(
         &mut conn,
         TEST_ACCOUNT,
+        None,
         handle_id,
         Some("ada l"),
         &mut stats,
@@ -346,9 +370,16 @@ async fn an_import_does_not_overwrite_a_name_the_person_typed() {
     .unwrap();
 
     let mut stats = ImportStats::default();
-    ensure_contact_for_handle(&mut conn, TEST_ACCOUNT, handle_id, Some("Ada"), &mut stats)
-        .await
-        .unwrap();
+    ensure_contact_for_handle(
+        &mut conn,
+        TEST_ACCOUNT,
+        None,
+        handle_id,
+        Some("Ada"),
+        &mut stats,
+    )
+    .await
+    .unwrap();
 
     let name: String = sqlx::query_scalar("SELECT preferred_name FROM contacts WHERE id = $1")
         .bind(contact_id)
@@ -410,7 +441,7 @@ async fn sibling_contact_link_bumps_last_modified_only_on_insert() {
         .await
         .unwrap();
 
-    let linked = ensure_sibling_contact_link(&mut conn, TEST_ACCOUNT, wa_id)
+    let linked = ensure_sibling_contact_link(&mut conn, TEST_ACCOUNT, None, wa_id)
         .await
         .unwrap()
         .expect("sibling link");
@@ -429,7 +460,7 @@ async fn sibling_contact_link_bumps_last_modified_only_on_insert() {
         .execute(&mut *conn)
         .await
         .unwrap();
-    let again = ensure_sibling_contact_link(&mut conn, TEST_ACCOUNT, wa_id)
+    let again = ensure_sibling_contact_link(&mut conn, TEST_ACCOUNT, None, wa_id)
         .await
         .unwrap()
         .expect("already linked");

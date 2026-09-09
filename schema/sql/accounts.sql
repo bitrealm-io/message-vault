@@ -261,3 +261,22 @@ CREATE TABLE IF NOT EXISTS vault_import_issues (
 
 CREATE INDEX IF NOT EXISTS ix_vault_import_issues_import
     ON vault_import_issues(import_id);
+
+-- What one import run did to one contact. Written while the run stages, so
+-- the record says what the import decided rather than what timestamps
+-- suggest afterwards. The run's Contact Group and its new/changed counts
+-- read this table.
+CREATE TABLE IF NOT EXISTS vault_import_contacts (
+    -- Import run (`vault_imports.id`).
+    import_id INTEGER NOT NULL REFERENCES vault_imports(id) ON DELETE CASCADE,
+    -- Contact the run touched (`contacts.id`); the row goes with the contact.
+    contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    -- One of replaced_trashed, created, named, handle_added. When a run does
+    -- more than one of these to a contact, the earlier one in that list is
+    -- kept.
+    reason TEXT NOT NULL,
+    PRIMARY KEY (import_id, contact_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_vault_import_contacts_contact
+    ON vault_import_contacts(contact_id);

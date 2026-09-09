@@ -947,7 +947,9 @@ pub(crate) async fn imports_get_handler(
     let detail = crate::db::vault_imports::get_import_detail(&mut conn, auth.account_id, import_id)
         .await
         .map_err(ApiError::from)?;
-    let contacts = contact_counts(&mut conn, auth.account_id, &detail.row.started_at).await?;
+    let contacts = crate::db::import_contacts::counts(&mut conn, import_id)
+        .await
+        .map_err(ApiError::Internal)?;
 
     Ok(Json(import_detail_response(detail, contacts)))
 }
@@ -1141,62 +1143,27 @@ async fn create_import_saved_search(
     }
 }
 
-/// One contact an import run touched, and whether the run created it.
+/// One contact an import run touched, and what the run did to it.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct ImportContactRow {
     /// Contact id.
     pub id: i64,
     /// Preferred name; empty when the run learned an address and no name.
     pub name: String,
-    /// True when this run created the contact, false when it only changed one
-    /// that already existed.
-    pub is_new: bool,
+    /// Why the contact is on this run's record: the run created it, created
+    /// it in place of one the person had trashed, named it, or added a
+    /// handle to it.
+    pub reason: crate::db::import_contacts::ContactReason,
 }
 
-/// How many contacts one run created and how many it only changed.
+/// List the contacts one import run created or changed, with the reason for
+/// each, most consequential first.
 ///
-/// The two numbers belong to the run, not to a page of its contacts: a page
-/// can only count its own rows, and the panel states the whole run's tally.
-/// So they are read with the record at `GET /v1/imports/{id}` and the
-/// contacts themselves are a page like every other list
-/// (`docs/agents/http-api-rules.md`, "Lists").
-pub(crate) struct ContactCounts {
-    pub(crate) new_count: u64,
-    pub(crate) changed_count: u64,
-}
-
-/// Count the contacts a run created and changed, telling them apart by
-/// comparing each contact's `created_at` against the moment the run started:
-/// a contact first recorded during the run is new, one merely touched is
-/// changed.
-async fn contact_counts(
-    conn: &mut sqlx::AnyConnection,
-    account_id: i64,
-    started_at: &str,
-) -> Result<ContactCounts, ApiError> {
-    let (new_count, changed_count): (i64, i64) = sqlx::query_as(
-        "SELECT COALESCE(SUM(CASE WHEN created_at >= $2 THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN created_at < $2 THEN 1 ELSE 0 END), 0)
-         FROM contacts
-         WHERE account_id = $1 AND (created_at >= $2 OR last_modified >= $2)",
-    )
-    .bind(account_id)
-    .bind(started_at)
-    .fetch_one(&mut *conn)
-    .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("count import contacts: {e}")))?;
-    Ok(ContactCounts {
-        new_count: new_count.max(0) as u64,
-        changed_count: changed_count.max(0) as u64,
-    })
-}
-
-/// List the contacts one import run created or changed, newest first.
-///
-/// New and changed are told apart by comparing each contact's `created_at`
-/// against the moment the run started: a contact first recorded during the run
-/// is new, one merely touched is changed. How many of each the run made is on
-/// the run's own record, `GET /v1/imports/{id}`.
+/// The run recorded each reason as it staged (`db::import_contacts`), so the
+/// list is what the import decided, not what timestamps suggest. How many of
+/// each the run made is on the run's own record, `GET /v1/imports/{id}`: a
+/// page can only count its own rows, and the panel states the whole run's
+/// tally.
 #[utoipa::path(
     get,
     path = "/v1/imports/{id}/contacts",
@@ -1222,47 +1189,25 @@ pub(crate) async fn import_contacts_handler(
 ) -> Result<Json<Page<ImportContactRow>>, ApiError> {
     let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
-    let detail = crate::db::vault_imports::get_import_detail(&mut conn, auth.account_id, import_id)
+    crate::db::vault_imports::get_import_detail(&mut conn, auth.account_id, import_id)
         .await
         .map_err(ApiError::from)?;
-    let started_at = detail.row.started_at.clone();
-
-    let total: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM contacts
-         WHERE account_id = $1 AND (created_at >= $2 OR last_modified >= $2)",
-    )
-    .bind(auth.account_id)
-    .bind(&started_at)
-    .fetch_one(&mut *conn)
-    .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("count import contacts: {e}")))?;
-
-    let rows: Vec<(i64, String, String)> = sqlx::query_as(
-        "SELECT id, preferred_name, created_at FROM contacts
-         WHERE account_id = $1 AND (created_at >= $2 OR last_modified >= $2)
-         ORDER BY created_at DESC, id DESC
-         LIMIT $3 OFFSET $4",
-    )
-    .bind(auth.account_id)
-    .bind(&started_at)
-    .bind(params.limit as i64)
-    .bind(params.offset as i64)
-    .fetch_all(&mut *conn)
-    .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("list import contacts: {e}")))?;
-
+    let (rows, total) =
+        crate::db::import_contacts::page(&mut conn, import_id, params.limit, params.offset)
+            .await
+            .map_err(ApiError::Internal)?;
     let items = rows
         .into_iter()
-        .map(|(id, name, created_at)| ImportContactRow {
-            id,
-            name,
-            is_new: created_at >= started_at,
+        .map(|c| ImportContactRow {
+            id: c.id,
+            name: c.name,
+            reason: c.reason,
         })
         .collect();
 
     Ok(Json(Page {
         items,
-        total: total.max(0) as u64,
+        total,
         limit: params.limit,
         offset: params.offset,
     }))
@@ -1283,23 +1228,18 @@ async fn create_import_contact_group(
     account_id: i64,
     row: &crate::db::vault_imports::VaultImportRow,
 ) {
-    let started_at = row.started_at.as_str();
-    if started_at.is_empty() {
-        return;
-    }
-    let touched =
-        match crate::db::contacts::contacts_touched_since(conn, account_id, started_at).await {
-            Ok(ids) if ids.is_empty() => return,
-            Ok(ids) => ids,
-            Err(e) => {
-                tracing::warn!(
-                    import_id = row.id,
-                    error = %crate::server::error_chain(&e),
-                    "the import could not list the contacts it touched"
-                );
-                return;
-            }
-        };
+    let touched = match crate::db::import_contacts::contact_ids(conn, row.id).await {
+        Ok(ids) if ids.is_empty() => return,
+        Ok(ids) => ids,
+        Err(e) => {
+            tracing::warn!(
+                import_id = row.id,
+                error = %crate::server::error_chain(&e),
+                "the import could not list the contacts it touched"
+            );
+            return;
+        }
+    };
     let name = import_contact_group_name(row);
     if let Err(e) = crate::named_membership::set_membership(
         crate::named_membership::group_spec(),
@@ -1351,7 +1291,7 @@ fn import_date_ymd(row: &crate::db::vault_imports::VaultImportRow) -> String {
 
 fn import_detail_response(
     detail: crate::db::vault_imports::ImportDetail,
-    contacts: ContactCounts,
+    contacts: crate::db::import_contacts::ContactCounts,
 ) -> ImportDetailResponse {
     let row = detail.row;
     let issues = detail
@@ -1454,7 +1394,9 @@ pub(crate) async fn imports_patch_handler(
     let detail = crate::db::vault_imports::get_import_detail(&mut conn, account, import_id)
         .await
         .map_err(ApiError::from)?;
-    let contacts = contact_counts(&mut conn, account, &detail.row.started_at).await?;
+    let contacts = crate::db::import_contacts::counts(&mut conn, import_id)
+        .await
+        .map_err(ApiError::Internal)?;
     Ok(Json(import_detail_response(detail, contacts)))
 }
 

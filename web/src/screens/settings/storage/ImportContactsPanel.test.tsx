@@ -30,24 +30,30 @@ describe("ImportContactsPanel", () => {
   it("states the run's tally and lists its contacts", async () => {
     get.mockResolvedValue({
       items: [
-        { id: 1, name: "Ada Lovelace", is_new: true },
-        { id: 2, name: "Grace Hopper", is_new: false },
+        { id: 1, name: "Ada Lovelace", reason: "replaced_trashed" },
+        { id: 2, name: "Grace Hopper", reason: "created" },
+        { id: 3, name: "Mary Jackson", reason: "named" },
+        { id: 4, name: "Katherine Johnson", reason: "handle_added" },
       ],
-      total: 2,
+      total: 4,
       limit: 40,
       offset: 0,
     });
-    render(<ImportContactsPanel importId={7} newCount={1} changedCount={1} />);
-    expect(await screen.findByText("1 new, 1 changed")).toBeInTheDocument();
+    render(<ImportContactsPanel importId={7} newCount={2} changedCount={2} />);
+    expect(await screen.findByText("2 new, 2 changed")).toBeInTheDocument();
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText("New, replaces a trashed contact")).toBeInTheDocument();
     expect(screen.getByText("Grace Hopper")).toBeInTheDocument();
     expect(screen.getByText("New")).toBeInTheDocument();
-    expect(screen.getByText("Changed")).toBeInTheDocument();
+    expect(screen.getByText("Mary Jackson")).toBeInTheDocument();
+    expect(screen.getByText("Named")).toBeInTheDocument();
+    expect(screen.getByText("Katherine Johnson")).toBeInTheDocument();
+    expect(screen.getByText("Handle added")).toBeInTheDocument();
   });
 
   it("shows a contact the run found an address for but no name", async () => {
     get.mockResolvedValue({
-      items: [{ id: 3, name: "", is_new: true }],
+      items: [{ id: 3, name: "", reason: "created" }],
       total: 1,
       limit: 40,
       offset: 0,

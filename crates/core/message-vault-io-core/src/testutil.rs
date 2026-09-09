@@ -43,21 +43,27 @@ pub fn csv_rows(path: &Path) -> Vec<BTreeMap<String, String>> {
         .collect()
 }
 
-/// Assert that the CSVs under `root` carry every `contains` header column and
-/// none of the `not_contains` ones, that one of them holds a data row whose
-/// named columns all hold the given values, and that no stray `.json` files
-/// remain.
+/// Assert that a CSV export under `root` is complete: every file carries the
+/// `contains` header columns and none of the `not_contains` ones, one of them
+/// holds a data row whose named columns all hold the given values, and no
+/// stray `.json` files remain.
 ///
-/// `row` is what makes this a test of the export rather than of the header:
-/// pass the message body, direction and timestamp the fixture is known to
-/// carry, so an exporter that wrote a correct header and no messages — or the
-/// wrong body against the right column — fails here.
+/// `row` is the part that can fail on an empty export. Header columns are
+/// written before the first message is, so a column assertion alone passes an
+/// exporter that parsed nothing; pass the message body, direction and
+/// timestamp the fixture is known to carry, and an exporter that wrote a
+/// correct header and no messages — or the wrong body against the right
+/// column — fails here.
+///
+/// Every file is checked rather than the alphabetically first, because one
+/// export writes one unified header across its conversations and which
+/// conversation sorts first is not part of the claim.
 ///
 /// # Panics
 ///
 /// Panics when there is no CSV, when a column is missing or unexpectedly
 /// present, when a `.json` file was left behind, or when no row matches.
-pub fn assert_csv_header(
+pub fn assert_csv_export(
     root: &Path,
     contains: &[&str],
     not_contains: &[&str],
@@ -65,7 +71,7 @@ pub fn assert_csv_header(
 ) {
     assert!(
         !row.is_empty(),
-        "assert_csv_header needs at least one column and value to check; \
+        "assert_csv_export needs at least one column and value to check; \
          a header-only assertion cannot fail on an export with no messages"
     );
     let files = csv_files(root);
@@ -83,13 +89,23 @@ pub fn assert_csv_header(
         })
         .count();
     assert_eq!(json_count, 0);
-    let contents = fs::read_to_string(&files[0]).expect("read the export");
-    let header = contents.lines().next().expect("a header line");
-    for col in contains {
-        assert!(header.contains(col), "header missing {col:?}");
-    }
-    for col in not_contains {
-        assert!(!header.contains(col), "header unexpectedly has {col:?}");
+    for path in &files {
+        let contents = fs::read_to_string(path).expect("read the export");
+        let header = contents.lines().next().expect("a header line");
+        for col in contains {
+            assert!(
+                header.contains(col),
+                "header of {} missing {col:?}",
+                path.display()
+            );
+        }
+        for col in not_contains {
+            assert!(
+                !header.contains(col),
+                "header of {} unexpectedly has {col:?}",
+                path.display()
+            );
+        }
     }
     assert_csv_row_in_any(&files, row);
 }

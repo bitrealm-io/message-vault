@@ -1,7 +1,7 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
 use message_ir_format::{ExportTransforms, FormatSinkResult};
-use message_vault_io_core::testutil::{assert_csv_header, assert_csv_row, csv_files, csv_rows};
+use message_vault_io_core::testutil::{assert_csv_export, assert_csv_row, csv_files, csv_rows};
 use message_vault_io_core::{ExportReport, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -67,7 +67,7 @@ fn convert_smoke_writes_csv_not_json() {
     let archive = report.extra("archive_eml");
     assert!(flat >= 1 || archive >= 1);
 
-    assert_csv_header(
+    assert_csv_export(
         tmp.path(),
         &[
             "chat_identifier",

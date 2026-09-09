@@ -56,6 +56,8 @@ Authorization: Bearer <token>
 
 An API token may import (write) and, through an Export Run it starts, read messages and assets. It may not change profile, settings, or browse-only website routes: outside a run, reading messages needs a session. Export routes never delete vault data.
 
+The OpenAPI document names the two credentials separately — `session` and `api-token` — and every route lists the ones it accepts and the scope it wants, so a generated client can tell before it calls. A route that lists only `session` refuses an API token outright with `403`. The scope names are `owner` for the vault owner's session, and `import`, `export` and `delete` for the three permissions a session or a token carries.
+
 Turn on a local explorer with `[server] openapi_ui = true`, then open `/docs` on that vault. The explorer is off by default. “Try it” still sends this header.
 
 ## Import Run

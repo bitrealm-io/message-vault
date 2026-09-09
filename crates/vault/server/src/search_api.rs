@@ -26,7 +26,7 @@ pub(crate) struct SearchFieldsQuery {
     get,
     path = "/v1/search-fields",
     tag = "Search",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(SearchFieldsQuery),
     responses(
         (status = 200, body = crate::paging::Page<FieldDoc>),

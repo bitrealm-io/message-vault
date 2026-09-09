@@ -69,6 +69,10 @@ pub struct RunResult {
 pub struct ExportReport {
     /// Conversations exported.
     pub conversations: u64,
+    /// Conversations a resumed run found already written and did not write
+    /// again. Counted in `conversations` as well, because they are part of
+    /// the export; this says how much of it this run did not have to do.
+    pub conversations_skipped: u64,
     /// Messages exported.
     pub messages: u64,
     /// Outgoing messages exported.
@@ -97,6 +101,12 @@ impl ExportReport {
             crate::name_stem(output.to_string_lossy().as_ref()),
             output.display()
         ));
+        if self.conversations_skipped > 0 {
+            out.push(format!(
+                "  resumed: {} conversation(s) were already written",
+                self.conversations_skipped
+            ));
+        }
         if self.skipped_invalid_date > 0 {
             out.push(format!(
                 "  skipped {} invalid-date rows",

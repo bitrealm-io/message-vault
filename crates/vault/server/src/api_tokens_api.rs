@@ -148,7 +148,7 @@ pub struct RenameApiTokenResponse {
     path = "/v1/accounts/{id}/api-tokens",
     tag = "Accounts",
     operation_id = "list_api_tokens",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Account id; must be the caller's own"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
@@ -184,7 +184,7 @@ pub async fn list_api_tokens_handler(
     path = "/v1/accounts/{id}/api-tokens",
     tag = "Accounts",
     operation_id = "create_api_token",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Account id; must be the caller's own")),
     request_body = CreateApiTokenRequest,
     responses(
@@ -243,7 +243,7 @@ pub async fn create_api_token_handler(
     path = "/v1/accounts/{id}/api-tokens/{token_id}",
     tag = "Accounts",
     operation_id = "delete_api_token",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Account id; must be the caller's own"),
         ("token_id" = i64, Path, description = "API token id")
@@ -278,7 +278,7 @@ pub async fn delete_api_token_handler(
     path = "/v1/accounts/{id}/api-tokens/{token_id}",
     tag = "Accounts",
     operation_id = "rename_api_token",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Account id; must be the caller's own"),
         ("token_id" = i64, Path, description = "API token id")

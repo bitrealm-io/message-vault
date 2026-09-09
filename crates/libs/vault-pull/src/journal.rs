@@ -199,4 +199,82 @@ mod tests {
         assert!(reloaded.assets.contains("ccc"));
         assert!(reloaded.backup_complete);
     }
+
+    /// `append` is what a pull actually calls, once per asset, and nothing
+    /// called it: every test here wrote the file by hand or went through
+    /// `compact`. Replacing it with a no-op made a pull that resumed from
+    /// nothing and downloaded every asset again, with the suite green.
+    #[test]
+    fn appended_events_are_on_disk_and_load_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(PULL_JOURNAL_NAME);
+
+        append(
+            &path,
+            &PullJournalEvent::AssetOk {
+                url: "http://vault".into(),
+                username: "alice".into(),
+                sha256: "aaa".into(),
+            },
+        )
+        .unwrap();
+
+        // Loading between the two appends is the resume case: a pull that was
+        // interrupted after one asset must find that one asset.
+        let after_first = load(&path, "http://vault", "alice").unwrap();
+        assert!(after_first.assets.contains("aaa"));
+        assert!(!after_first.backup_complete);
+
+        append(
+            &path,
+            &PullJournalEvent::AssetOk {
+                url: "http://vault".into(),
+                username: "alice".into(),
+                sha256: "bbb".into(),
+            },
+        )
+        .unwrap();
+
+        let after_second = load(&path, "http://vault", "alice").unwrap();
+        assert!(
+            after_second.assets.contains("aaa"),
+            "the second append must not have replaced the first"
+        );
+        assert!(after_second.assets.contains("bbb"));
+
+        // One JSON Lines row per append, not one document overwritten.
+        let text = fs::read_to_string(&path).unwrap();
+        assert_eq!(
+            text.lines().count(),
+            2,
+            "each event is its own line: {text:?}"
+        );
+    }
+
+    /// The parent folder is created on the way. A pull writing its first
+    /// journal into a fresh output directory would otherwise fail on the very
+    /// first asset.
+    #[test]
+    fn appending_creates_the_folder_it_needs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("not-yet").join(PULL_JOURNAL_NAME);
+
+        append(
+            &path,
+            &PullJournalEvent::AssetOk {
+                url: "http://vault".into(),
+                username: "alice".into(),
+                sha256: "aaa".into(),
+            },
+        )
+        .unwrap();
+
+        assert!(path.is_file());
+        assert!(
+            load(&path, "http://vault", "alice")
+                .unwrap()
+                .assets
+                .contains("aaa")
+        );
+    }
 }

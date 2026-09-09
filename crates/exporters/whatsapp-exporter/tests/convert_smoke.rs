@@ -163,6 +163,14 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
     .expect("resume convert");
 
     assert_eq!(resumed.conversations, 2, "resume still accounts for both");
+    // The file bytes alone prove nothing here: the writer is deterministic, so
+    // a resumed run that quietly rewrote both conversations would produce the
+    // same bytes and this test would still pass. `conversations_skipped` is
+    // the only observable difference between resuming and starting over.
+    assert_eq!(
+        resumed.conversations_skipped, 2,
+        "both conversations were already written, so the resume skipped both"
+    );
     assert_eq!(jsonl_files(tmp.path()), first, "same file set");
     for (name, before) in first.iter().zip(bodies) {
         assert_eq!(

@@ -200,4 +200,51 @@ mod tests {
         assert_eq!(infer_handle_type("alice"), HandleType::Other);
         assert_eq!(infer_handle_type(""), HandleType::Other);
     }
+
+    /// The path check is a security boundary: a crafted `path` in a CSV or
+    /// JSON export is the input, and reading `/etc/passwd` into an EML
+    /// attachment is the outcome it prevents. Every rejected shape is named
+    /// here, because a check that quietly starts accepting one of them
+    /// breaks nothing else in the suite.
+    #[test]
+    fn safe_attachment_path_refuses_every_escape() {
+        let base = Path::new("/vault/staging");
+        for rel in [
+            "/etc/passwd",
+            "../secrets.txt",
+            "sub/../../secrets.txt",
+            "..",
+            "media/../../..//etc/passwd",
+        ] {
+            let err = safe_attachment_path(base, rel)
+                .expect_err("must refuse the escaping path {rel}")
+                .to_string();
+            assert!(
+                err.starts_with(UNSAFE_ATTACHMENT_PATH_PREFIX),
+                "{rel} was refused with an unexpected message: {err}"
+            );
+            assert!(err.contains(rel), "the message must name the path: {err}");
+        }
+    }
+
+    /// The other half of the boundary: an ordinary relative path must still
+    /// resolve, and resolve under the base directory rather than beside it.
+    #[test]
+    fn safe_attachment_path_joins_an_ordinary_relative_path() {
+        let base = Path::new("/vault/staging");
+        assert_eq!(
+            safe_attachment_path(base, "media/IMG_0001.jpg").unwrap(),
+            Path::new("/vault/staging/media/IMG_0001.jpg")
+        );
+        assert_eq!(
+            safe_attachment_path(base, "./media/a.png").unwrap(),
+            Path::new("/vault/staging/./media/a.png")
+        );
+        // A leading `..` in the *file name* is not a parent-directory
+        // component and must not be mistaken for one.
+        assert_eq!(
+            safe_attachment_path(base, "..hidden.jpg").unwrap(),
+            Path::new("/vault/staging/..hidden.jpg")
+        );
+    }
 }

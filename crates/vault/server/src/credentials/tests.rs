@@ -357,3 +357,73 @@ fn a_username_is_one_to_128_characters_of_a_known_set() {
     assert!(is_valid_username("  matt  "));
     assert_eq!(normalize_username("  matt\n"), "matt");
 }
+
+/// The Postgres half of `change_password_transaction_rolls_back_every_credential`.
+///
+/// The SQLite test injects its failure with `RAISE(FAIL, …)`, which Postgres
+/// does not have, so the twin injects one with a `CHECK (false) NOT VALID`
+/// constraint instead: `NOT VALID` leaves the rows the setup already wrote
+/// alone and rejects the rotation's upsert. Without this twin nothing proves
+/// the transaction rolls back on the engine the vault runs on when it is not
+/// running on SQLite, and the two engines treat a failed statement inside a
+/// transaction differently — which is the thing at issue.
+#[tokio::test]
+async fn change_password_transaction_rolls_back_every_credential_pg() {
+    if !crate::test_support::on_postgres() {
+        return; // Postgres-only: the SQLite twin above injects the same failure with a trigger
+    }
+    let (_dir, mut conn, old_session, api_tokens, other_account_token) =
+        password_change_setup().await;
+    sqlx::query(
+        "ALTER TABLE account_session_tokens
+         ADD CONSTRAINT fail_session_rotation CHECK (false) NOT VALID",
+    )
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    let new_hash = hash_password("new-password").unwrap();
+
+    assert!(
+        change_password_on_conn(&mut conn, TEST_ACCOUNT, "old-password", &new_hash)
+            .await
+            .is_err()
+    );
+
+    sqlx::query("ALTER TABLE account_session_tokens DROP CONSTRAINT fail_session_rotation")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+    let stored_hash = account_profile::load_password_hash(&mut conn, TEST_ACCOUNT)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        passwords_match(Some(&stored_hash), "old-password"),
+        "the old password must still be the stored one"
+    );
+    assert_eq!(
+        session_tokens::lookup_account_for_token(&mut conn, &old_session)
+            .await
+            .unwrap(),
+        Some(TEST_ACCOUNT),
+        "the old session must survive the failed change"
+    );
+    for api_token in api_tokens {
+        assert!(
+            crate::db::api_tokens::lookup_account_for_api_token(&mut conn, &api_token)
+                .await
+                .unwrap()
+                .is_some(),
+            "the account's API tokens must survive the failed change"
+        );
+    }
+    assert_eq!(
+        crate::db::api_tokens::lookup_account_for_api_token(&mut conn, &other_account_token)
+            .await
+            .unwrap()
+            .unwrap()
+            .account_id,
+        OTHER_ACCOUNT
+    );
+}

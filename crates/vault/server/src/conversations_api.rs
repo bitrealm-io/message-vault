@@ -515,7 +515,7 @@ pub async fn get_conversation_messages(
     get,
     path = "/v1/conversations",
     tag = "Conversations",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(
         ("q" = Option<String>, Query, description = "Conversation search; empty lists all non-trashed"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
@@ -571,7 +571,7 @@ pub(crate) async fn conversations_list_handler(
     get,
     path = "/v1/conversations/{id}",
     tag = "Conversations",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 200, body = crate::conversations_api::ConversationSummary),
@@ -598,7 +598,7 @@ pub(crate) async fn conversation_detail_handler(
     get,
     path = "/v1/conversations/{id}/sources",
     tag = "Conversations",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Conversation id"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
@@ -646,7 +646,7 @@ pub(crate) struct ConversationMessagesQuery {
     get,
     path = "/v1/conversations/{id}/messages",
     tag = "Conversations",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Conversation id"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
@@ -702,7 +702,7 @@ pub(crate) async fn conversation_messages_handler(
     post,
     path = "/v1/conversations/{id}/trash",
     tag = "Conversations",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 204, description = "Trashed"),
@@ -736,7 +736,7 @@ pub(crate) async fn conversation_trash_handler(
     post,
     path = "/v1/conversations/{id}/restore",
     tag = "Conversations",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 204, description = "Restored"),
@@ -772,7 +772,7 @@ pub(crate) async fn conversation_restore_handler(
     delete,
     path = "/v1/conversations/{id}",
     tag = "Conversations",
-    security(("bearer" = [])),
+    security(("session" = ["delete"])),
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 204, description = "Deleted"),

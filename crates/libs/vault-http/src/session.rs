@@ -136,9 +136,20 @@ struct SessionResponse {
 }
 
 /// True when the body looks like an HTML error page instead of JSON.
+///
+/// The comparison is case-insensitive because HTML tag and doctype names are.
+/// `<!doctype html>` is what the HTML5 specification writes and what nginx,
+/// Cloudflare and most proxies actually emit on an error page, so matching
+/// only the uppercase spelling missed the common case: the reader saw a
+/// JSON parse failure instead of "you have pointed this at the wrong host".
 pub fn looks_like_html(body: &str) -> bool {
     let t = body.trim_start();
-    t.starts_with("<!DOCTYPE") || t.starts_with("<html") || t.starts_with("<HTML")
+    let head: String = t
+        .chars()
+        .take("<!doctype".len())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    head.starts_with("<!doctype") || head.starts_with("<html")
 }
 
 /// Map HTTP 401. When `http://` was redirected to `https://`, the API key was
@@ -198,6 +209,42 @@ pub fn auth_check(base_url: &str, key: &str) -> std::result::Result<AuthInfo, Au
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The doctype and tag names of HTML are case-insensitive, and the
+    /// lowercase spelling is the one the HTML5 specification uses and the one
+    /// nginx and Cloudflare emit. Matching only `<!DOCTYPE` meant the most
+    /// common error page in front of a vault was reported as a JSON parse
+    /// failure rather than as the wrong host.
+    #[test]
+    fn an_html_error_page_is_recognised_whatever_its_case() {
+        for body in [
+            "<!doctype html><html><body>502 Bad Gateway</body></html>",
+            "<!DOCTYPE html>",
+            "<!DocType html>",
+            "<html><head><title>404</title></head></html>",
+            "<HTML>",
+            "<Html lang=\"en\">",
+            "\n\n   <!doctype html>",
+        ] {
+            assert!(looks_like_html(body), "must be seen as HTML: {body:?}");
+        }
+    }
+
+    /// The other direction matters as much: a JSON body wrongly called HTML
+    /// would turn every ordinary API error into "wrong host".
+    #[test]
+    fn a_json_body_is_not_html() {
+        for body in [
+            "{\"account_id\": 1}",
+            "  {\"detail\": \"<html> in a string\"}",
+            "",
+            "<",
+            "<!doc",
+            "not html at all",
+        ] {
+            assert!(!looks_like_html(body), "must not be seen as HTML: {body:?}");
+        }
+    }
 
     #[test]
     fn unauthorized_http_to_https_redirect_asks_for_https() {

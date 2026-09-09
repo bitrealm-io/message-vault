@@ -87,7 +87,25 @@ fn parallel_content_keys_match_serial() {
         .iter()
         .map(|row| content_key_for_row(row, &groups, &shas))
         .collect();
+    // Both sides call `content_key_for_row`, so this alone only shows that the
+    // parallel pass keeps its input order — worth having, and not enough. The
+    // keys themselves are pinned below, so a change to how a key is built
+    // fails here rather than passing because both sides changed together.
     assert_eq!(parallel, serial);
+    assert_eq!(
+        parallel,
+        vec![
+            (
+                1,
+                "dbe62b7f59674ef9f38f923fb3c387ec66c00d8a813c0d0d7edb0ceb70217bd0".to_string()
+            ),
+            (
+                2,
+                "8e9ab8eb840faf0f50a805e3a68c430ab4234ff3b8b87792fdcd70f7078cae03".to_string()
+            ),
+        ],
+        "the content key decides which messages are duplicates; changing it          re-partitions every vault, so it is pinned deliberately"
+    );
 }
 
 #[test]

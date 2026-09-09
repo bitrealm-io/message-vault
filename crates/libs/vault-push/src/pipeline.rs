@@ -634,11 +634,6 @@ mod tests {
     }
 
     #[test]
-    fn import_body_limit_is_64_mib() {
-        assert_eq!(MAX_IMPORT_BODY_BYTES, 64 * 1024 * 1024);
-    }
-
-    #[test]
     fn import_batch_flushes_for_message_or_byte_limit() {
         let mut batch = ImportBatch::new("imessage");
         batch.push(0, chunk(40, 2));

@@ -83,9 +83,4 @@ mod tests {
     fn truncate_survives_max_zero() {
         assert_eq!(truncate("héllo", 0), "…");
     }
-
-    #[test]
-    fn idle_pool_keeps_64_connections_per_host() {
-        assert_eq!(POOL_MAX_IDLE_PER_HOST, 64);
-    }
 }

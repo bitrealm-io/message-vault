@@ -183,7 +183,7 @@ macro_rules! named_set_routes {
             get,
             path = $root_path,
             tag = $tag,
-            security(("bearer" = [])),
+            security(("session" = [])),
             params(
                 ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
                 ("offset" = Option<usize>, Query, description = "Page offset")
@@ -207,7 +207,7 @@ macro_rules! named_set_routes {
             post,
             path = $root_path,
             tag = $tag,
-            security(("bearer" = [])),
+            security(("session" = [])),
             request_body = NamedSetBody,
             responses(
                 (
@@ -234,7 +234,7 @@ macro_rules! named_set_routes {
             patch,
             path = $id_path,
             tag = $tag,
-            security(("bearer" = [])),
+            security(("session" = [])),
             params(("id" = i64, Path, description = $id_description)),
             request_body = NamedSetBody,
             responses(
@@ -261,7 +261,7 @@ macro_rules! named_set_routes {
             delete,
             path = $id_path,
             tag = $tag,
-            security(("bearer" = [])),
+            security(("session" = [])),
             params(("id" = i64, Path, description = $id_description)),
             responses(
                 (status = 204),
@@ -283,7 +283,7 @@ macro_rules! named_set_routes {
             get,
             path = $members_path,
             tag = $tag,
-            security(("bearer" = [])),
+            security(("session" = [])),
             params(
                 ("id" = i64, Path, description = $id_description),
                 ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
@@ -310,7 +310,7 @@ macro_rules! named_set_routes {
             patch,
             path = $members_path,
             tag = $tag,
-            security(("bearer" = [])),
+            security(("session" = [])),
             params(("id" = i64, Path, description = $id_description)),
             request_body = MembersPatch,
             responses(

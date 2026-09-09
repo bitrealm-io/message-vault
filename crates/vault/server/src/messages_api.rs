@@ -72,7 +72,7 @@ pub(crate) async fn count_matching_messages(
     get,
     path = "/v1/messages",
     tag = "Messages",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(
         ("q" = Option<String>, Query, description = "Search query in the Messages list's words; empty matches every message"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
@@ -142,7 +142,7 @@ pub(crate) async fn messages_list_handler(
     get,
     path = "/v1/messages/{id}",
     tag = "Messages",
-    security(("bearer" = [])),
+    security(("session" = [])),
     params(("id" = i64, Path, description = "Message id")),
     responses(
         (status = 200, body = Message),

@@ -75,7 +75,7 @@ pub(crate) struct SessionResponse {
     get,
     path = "/v1/session",
     tag = "Session",
-    security(("bearer" = [])),
+    security(("session" = []), ("api-token" = [])),
     responses(
         (status = 200, body = SessionResponse),
         (status = 401, body = crate::problem::Problem),
@@ -187,7 +187,7 @@ async fn logout_on_conn(conn: &mut AnyConnection, token: &str) -> anyhow::Result
     delete,
     path = "/v1/session",
     tag = "Session",
-    security(("bearer" = [])),
+    security(("session" = [])),
     responses(
         (status = 204, description = "Signed out"),
         (status = 401, body = crate::problem::Problem)

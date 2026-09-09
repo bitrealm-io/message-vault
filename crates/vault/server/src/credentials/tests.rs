@@ -287,6 +287,77 @@ async fn change_password_transaction_rolls_back_every_credential() {
     );
 }
 
+/// The password length rule, at both its edges.
+///
+/// `validate_password_policy` had no test of its own. It is the only thing
+/// standing between an account and a one-character password, and the only
+/// thing stopping a megabyte of text reaching Argon2, which would hash it and
+/// make every sign-in slow for everybody.
+#[test]
+fn a_password_must_be_long_enough_and_not_absurd() {
+    // Seven characters is refused, eight is accepted: the boundary itself,
+    // which an off-by-one would move without failing anything else.
+    assert!(validate_password_policy("hunter7").is_err(), "seven");
+    validate_password_policy("hunter78").expect("eight is the minimum");
+
+    assert!(validate_password_policy("").is_err(), "empty");
+
+    // The maximum is in bytes, not characters, because that is what Argon2
+    // costs. Exactly the limit is accepted; one byte more is not.
+    let at_limit = "a".repeat(MAX_PASSWORD_BYTES);
+    validate_password_policy(&at_limit).expect("exactly the limit is allowed");
+    let over = "a".repeat(MAX_PASSWORD_BYTES + 1);
+    assert!(validate_password_policy(&over).is_err(), "one byte over");
+
+    // A short password of multi-byte characters is measured the same way, so
+    // an emoji passphrase is not accidentally rejected for being long.
+    validate_password_policy("pässwörd").expect("eight characters, more bytes");
+}
+
+/// The username rule, at both its edges and over its character set.
+///
+/// `is_valid_username` had no test either. A username is the name an account
+/// is looked up by at sign-in, so accepting a blank one, or one with a slash
+/// or a space in it, makes an account that is awkward or impossible to reach.
+#[test]
+fn a_username_is_one_to_128_characters_of_a_known_set() {
+    for good in [
+        "matt",
+        "Matt",
+        "matt.beisser",
+        "matt-beisser",
+        "matt_beisser",
+        "m",
+        "user123",
+        // Letters outside ASCII are alphanumeric and allowed.
+        "mätt",
+        "матт",
+    ] {
+        assert!(is_valid_username(good), "{good:?} must be accepted");
+    }
+
+    for bad in [
+        "",
+        "   ",
+        "matt beisser",
+        "matt/beisser",
+        "matt@example.com",
+        "matt:beisser",
+        "matt\nbeisser",
+    ] {
+        assert!(!is_valid_username(bad), "{bad:?} must be refused");
+    }
+
+    // The length boundary, in both directions.
+    assert!(is_valid_username(&"a".repeat(128)), "128 is allowed");
+    assert!(!is_valid_username(&"a".repeat(129)), "129 is not");
+
+    // Surrounding whitespace is trimmed before the rule is applied, so a
+    // pasted name with a trailing newline is accepted and stored trimmed.
+    assert!(is_valid_username("  matt  "));
+    assert_eq!(normalize_username("  matt\n"), "matt");
+}
+
 /// The Postgres half of `change_password_transaction_rolls_back_every_credential`.
 ///
 /// The SQLite test injects its failure with `RAISE(FAIL, …)`, which Postgres

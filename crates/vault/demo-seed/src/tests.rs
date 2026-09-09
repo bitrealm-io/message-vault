@@ -88,15 +88,66 @@ overlap_android_extra_max = 6
 whatsapp_contact_fraction = 0.5
 "#;
 
-/// The counts seed 7 produces from [`SMALL_SEED_TOML`].
-fn expected_small_stats() -> GenStats {
-    GenStats {
-        contacts: 12,
-        conversation_files: 31,
-        messages: 2663,
-        attachment_refs: 126,
-        groups: 5,
-    }
+/// Assert the stats against what the seed file asks for, rather than against
+/// numbers copied out of a previous run.
+///
+/// `messages: 2663` and `attachment_refs: 126` were four literals nobody could
+/// check: every change to the generator moves them, updating them is
+/// mechanical, and they say nothing about whether the bundle is right. What
+/// the seed file *does* state is the contact count, the group range and the
+/// per-conversation message range, and those are the numbers a generator that
+/// went wrong would violate. Determinism — the same seed twice — is pinned on
+/// its own by `the_same_seed_writes_the_same_bundle_twice`.
+fn assert_stats_match_the_seed(stats: &GenStats, cfg: &SeedConfig) {
+    assert_eq!(
+        stats.contacts, cfg.contacts.count,
+        "the seed file asks for {} contacts",
+        cfg.contacts.count
+    );
+
+    // Each contact may be in up to `per_contact_max` groups and a group needs
+    // at least `participants_min` of them, so the seed's own numbers bound the
+    // group count.
+    assert!(stats.groups > 0, "the seed asks for groups");
+    let max_groups = (cfg.contacts.count * cfg.groups.per_contact_max as usize)
+        / cfg.groups.participants_min as usize;
+    assert!(
+        stats.groups <= max_groups,
+        "{} groups is more than the seed allows ({max_groups})",
+        stats.groups
+    );
+
+    // One file per one-to-one conversation plus one per group, and no contact
+    // has more than one one-to-one conversation.
+    assert!(
+        stats.conversation_files >= stats.groups,
+        "every group has a file"
+    );
+    assert!(
+        stats.conversation_files <= cfg.contacts.count + max_groups,
+        "{} files is more than one per contact plus one per group",
+        stats.conversation_files
+    );
+
+    // Every conversation carries at least the minimum the seed sets, so a
+    // generator that quietly wrote empty conversations fails here. The two
+    // deliberate empties from `[edge_cases]` are the exception.
+    let non_empty = stats.conversation_files.saturating_sub(2);
+    let least = non_empty * cfg.one_to_one.min_per_year as usize;
+    assert!(
+        stats.messages >= least,
+        "{} messages is fewer than {non_empty} conversations x {} a year",
+        stats.messages,
+        cfg.one_to_one.min_per_year
+    );
+
+    // Attachments are placed on a stride, so their count follows the message
+    // count rather than floating free.
+    assert!(stats.attachment_refs > 0, "the bundle has attachments");
+    assert!(
+        stats.attachment_refs < stats.messages,
+        "attachments are strided, so there are fewer than there are messages"
+    );
 }
 
 /// Write [`SMALL_SEED_TOML`] into `dir` and return its path.
@@ -181,7 +232,7 @@ fn generate_writes_three_backups_the_config_files_and_a_readme() {
 
     let stats = generate(&cfg).expect("generate the small bundle");
 
-    assert_eq!(stats, expected_small_stats());
+    assert_stats_match_the_seed(&stats, &cfg);
     for relative in [
         "staging/imessage/attachments",
         "staging/sms-backup-restore/attachments",
@@ -320,7 +371,7 @@ fn generate_replaces_an_earlier_bundle_and_removes_its_backup() {
 
     let stats = generate(&cfg).expect("generate over the earlier bundle");
 
-    assert_eq!(stats, expected_small_stats());
+    assert_stats_match_the_seed(&stats, &cfg);
     assert!(
         !stale.exists(),
         "the earlier staging folder is replaced whole"
@@ -341,7 +392,7 @@ fn generate_to_loads_the_seed_file_and_writes_the_bundle_at_out() {
 
     let stats = generate_to(&seed_file, &out).expect("generate from the seed file");
 
-    assert_eq!(stats, expected_small_stats());
+    assert_stats_match_the_seed(&stats, &small_config(temp.path()));
     assert!(out.join("README.md").is_file());
     assert_eq!(read_bundle(&out).len(), stats.conversation_files);
 }
@@ -546,4 +597,140 @@ fn assert_bundle_paths(root: &Path, marker: &[u8]) {
         marker
     );
     assert_eq!(fs::read(root.join("README.md")).expect("README"), marker);
+}
+
+/// The validator is what stops a broken bundle reaching a demo vault, and
+/// mutation testing found it could be replaced with `Ok(())` in its entirety —
+/// both `validate_generated_bundle` and the `validate_tree_files` walk beneath
+/// it — with every test still green. Nothing here fed it a bundle that ought
+/// to be refused.
+///
+/// Each case removes or corrupts one thing a generated bundle must have, and
+/// the error has to name the file, because the person reading it is looking at
+/// a folder of a few hundred files.
+#[test]
+fn the_validator_refuses_a_bundle_with_a_staging_folder_missing() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let cfg = small_config(temp.path());
+    let out = PathBuf::from(&cfg.out);
+    generate(&cfg).expect("generate the small bundle");
+
+    let whatsapp = out.join("staging").join(WHATSAPP_SOURCE);
+    fs::remove_dir_all(&whatsapp).expect("remove the whatsapp staging folder");
+
+    let err = validate_generated_bundle(&out).expect_err("a missing source must be refused");
+    let text = format!("{err:#}");
+    assert!(text.contains("missing"), "{text}");
+    assert!(text.contains(WHATSAPP_SOURCE), "{text}");
+}
+
+#[test]
+fn the_validator_refuses_a_bundle_with_a_config_file_missing() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let cfg = small_config(temp.path());
+    let out = PathBuf::from(&cfg.out);
+    generate(&cfg).expect("generate the small bundle");
+
+    for relative in [
+        "config/config.toml",
+        "config/seed.toml",
+        "config/contacts.vcf",
+        "README.md",
+    ] {
+        let path = out.join(relative);
+        let kept = fs::read(&path).expect("read before removing");
+        fs::remove_file(&path).expect("remove the file");
+
+        let err = validate_generated_bundle(&out)
+            .expect_err("a bundle missing a required file must be refused");
+        let text = format!("{err:#}");
+        assert!(text.contains("missing"), "{relative}: {text}");
+        assert!(
+            text.contains(relative.rsplit('/').next().expect("a file name")),
+            "the error must name the file: {relative}: {text}"
+        );
+
+        fs::write(&path, kept).expect("put it back");
+        validate_generated_bundle(&out).expect("valid again once the file is back");
+    }
+}
+
+/// A JSON Lines file that is not JSON is the failure that matters most: the
+/// bundle looks complete, every folder and file is where it should be, and the
+/// vault fails on import instead. `validate_tree_files` is the walk that
+/// catches it, and it could be replaced with `Ok(())`.
+#[test]
+fn the_validator_refuses_a_conversation_file_that_is_not_json() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let cfg = small_config(temp.path());
+    let out = PathBuf::from(&cfg.out);
+    generate(&cfg).expect("generate the small bundle");
+
+    // Any conversation file will do; walk to the first one rather than
+    // guessing which source it landed under.
+    // `tree_contents` yields paths relative to the bundle root.
+    let relative_path = tree_contents(&out)
+        .into_iter()
+        .map(|(path, _)| path)
+        .find(|path| path.extension().is_some_and(|ext| ext == "jsonl"))
+        .expect("the bundle has a conversation file");
+    let relative = relative_path
+        .file_name()
+        .expect("a file name")
+        .to_string_lossy()
+        .into_owned();
+    let path = out.join(&relative_path);
+
+    let kept = fs::read(&path).expect("read the conversation file");
+    let mut broken = kept.clone();
+    broken.extend_from_slice(b"{ this line is not JSON\n");
+    fs::write(&path, &broken).expect("append a broken line");
+
+    let err = validate_generated_bundle(&out).expect_err("a broken JSONL line must be refused");
+    let text = format!("{err:#}");
+    assert!(
+        text.contains(&relative) || text.contains("parse"),
+        "the error must point at the file and the line: {text}"
+    );
+
+    fs::write(&path, kept).expect("put it back");
+    validate_generated_bundle(&out).expect("the restored bundle is valid again");
+}
+
+/// Only `.jsonl` files are parsed. A README or a `.vcf` full of text that is
+/// not JSON must not be refused, or no bundle would ever validate.
+#[test]
+fn the_validator_reads_only_json_lines_files() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let cfg = small_config(temp.path());
+    let out = PathBuf::from(&cfg.out);
+    generate(&cfg).expect("generate the small bundle");
+
+    // The bundle already contains a README and a VCF, neither of which is
+    // JSON, and it validates.
+    validate_generated_bundle(&out).expect("a generated bundle is valid");
+
+    // A stray text file with a name that is not `.jsonl` is left alone.
+    fs::write(out.join("notes.txt"), b"not json, not checked\n").expect("write notes");
+    validate_generated_bundle(&out).expect("a non-JSONL file is not parsed");
+}
+
+/// `output_parent_dir` decides where the temp directory for a generation goes.
+/// Getting it wrong puts the prepared bundle on a different filesystem from
+/// the output, which is the cross-device rename the move path has to handle —
+/// or, for a bare relative name like `demo`, tries to use an empty path.
+#[test]
+fn the_output_parent_is_the_folder_the_bundle_lands_beside() {
+    assert_eq!(
+        output_parent_dir(Path::new("/srv/vault/demo")),
+        Path::new("/srv/vault")
+    );
+    assert_eq!(
+        output_parent_dir(Path::new("relative/demo")),
+        Path::new("relative")
+    );
+    // A bare name has a parent, and it is the empty path, which is not a
+    // directory anything can be created in.
+    assert_eq!(output_parent_dir(Path::new("demo")), Path::new("."));
+    assert_eq!(output_parent_dir(Path::new("")), Path::new("."));
 }

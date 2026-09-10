@@ -11,6 +11,8 @@ Open a conversation and click **Move to trash** in its header. The conversation 
 
 For a contact, open the contact and click **Move to trash** in the drawer. The contact leaves the Contacts list. Their conversations stay where they are — trashing a person is not the same as trashing what you talked about.
 
+A trashed contact stays set aside until an import meets one of their handles. A backup that still holds the person means you still talk to them, so the import discards the trashed contact — the name, the Contact Group memberships and every handle it had — and makes a new contact from the backup, the way a first import would. The new contact carries only the handles the backup mentions (the same number on another service counts as mentioned); a handle the trashed contact had that the backup does not mention belongs to nobody afterwards, and its conversations show under Unknown until you add it to a contact. To keep a person out of Contacts for good, delete them from Trash instead.
+
 ## Take it back
 
 Click **Trash** in the sidebar. Trashed conversations are listed in the left column; click one and the pane shows it with a **Restore** button, next to a link to read the conversation before you decide. Trashed contacts are listed under **Contacts** in the pane itself, each row with its own **Restore**.

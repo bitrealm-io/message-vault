@@ -656,9 +656,10 @@ pub(crate) struct UnmatchedHandlesBody {
 
 /// Which of `identifiers` this account has no contact for.
 ///
-/// A trashed contact still counts as known: trash sets a person aside, it
-/// does not make them absent, and an import that meets their handle reuses
-/// that contact rather than creating a second one for the same person.
+/// A trashed contact does not count as known: an import that meets one of
+/// its handles discards it and makes a fresh contact from the backup
+/// (ADR-0013), so the person will see a new contact appear, which is what
+/// this count promises.
 ///
 /// Matches on the same normalized form the import pipeline stores in
 /// `handles.normalized` ([`normalize_handle`]), so an export spelling like
@@ -708,7 +709,8 @@ async fn unknown_contact_identifiers(
          JOIN contact_handles ch ON ch.account_id = h.account_id AND ch.handle_id = h.id
          JOIN contacts ct ON ct.account_id = ch.account_id AND ct.id = ch.contact_id
          WHERE h.account_id = $1
-           AND h.normalized IN ({placeholders})",
+           AND h.normalized IN ({placeholders})
+           AND {NOT_TRASHED_CONTACT}",
     );
     let mut q = sqlx::query_scalar::<_, String>(&sql).bind(account_id);
     for (_, normalized) in &unique {

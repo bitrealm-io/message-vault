@@ -787,11 +787,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List the contacts one import run created or changed, newest first.
-         * @description New and changed are told apart by comparing each contact's `created_at`
-         *     against the moment the run started: a contact first recorded during the run
-         *     is new, one merely touched is changed. How many of each the run made is on
-         *     the run's own record, `GET /v1/imports/{id}`.
+         * List the contacts one import run created or changed, with the reason for
+         *     each, most consequential first.
+         * @description The run recorded each reason as it staged (`db::import_contacts`), so the
+         *     list is what the import decided, not what timestamps suggest. How many of
+         *     each the run made is on the run's own record, `GET /v1/imports/{id}`: a
+         *     page can only count its own rows, and the panel states the whole run's
+         *     tally.
          */
         get: operations["import_contacts_handler"];
         put?: never;
@@ -1379,6 +1381,16 @@ export interface components {
             remove_handle?: null | components["schemas"]["ContactRemoveHandlePayload"];
             update_handle?: null | components["schemas"]["ContactUpdateHandlePayload"];
         };
+        /**
+         * @description Why a contact is on an import run's record.
+         *
+         *     Ordered from most to least consequential. When one run does more than
+         *     one of these to a contact, the record keeps the earlier variant: a
+         *     contact the run created was also named and given a handle by it, and
+         *     "created" is the fact the person needs.
+         * @enum {string}
+         */
+        ContactReason: "replaced_trashed" | "created" | "named" | "handle_added";
         /** @description The handle to unlink. */
         ContactRemoveHandlePayload: {
             /** @description Handle value to unlink. */
@@ -1750,20 +1762,21 @@ export interface components {
             /** @description The spelling, without the colon. */
             word: string;
         };
-        /** @description One contact an import run touched, and whether the run created it. */
+        /** @description One contact an import run touched, and what the run did to it. */
         ImportContactRow: {
             /**
              * Format: int64
              * @description Contact id.
              */
             id: number;
-            /**
-             * @description True when this run created the contact, false when it only changed one
-             *     that already existed.
-             */
-            is_new: boolean;
             /** @description Preferred name; empty when the run learned an address and no name. */
             name: string;
+            /**
+             * @description Why the contact is on this run's record: the run created it, created
+             *     it in place of one the person had trashed, named it, or added a
+             *     handle to it.
+             */
+            reason: components["schemas"]["ContactReason"];
         };
         /** @description One stored import issue. */
         ImportDetailIssueResponse: {
@@ -2421,13 +2434,14 @@ export interface components {
                  * @description Contact id.
                  */
                 id: number;
-                /**
-                 * @description True when this run created the contact, false when it only changed one
-                 *     that already existed.
-                 */
-                is_new: boolean;
                 /** @description Preferred name; empty when the run learned an address and no name. */
                 name: string;
+                /**
+                 * @description Why the contact is on this run's record: the run created it, created
+                 *     it in place of one the person had trashed, named it, or added a
+                 *     handle to it.
+                 */
+                reason: components["schemas"]["ContactReason"];
             }[];
             /** @description Page size used. */
             limit: number;

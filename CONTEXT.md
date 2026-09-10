@@ -56,11 +56,13 @@ _Avoid_: Attachment file, Blob, Media, Upload
 
 **Import Run**:
 One attempt to bring messages from a backup into the vault, recorded
-permanently whether it succeeded, failed, or was cancelled. The record
-belongs to the account and cannot be deleted by the person; anything in
-the interface that merely points at a run is a shortcut and can be. The HTTP
-interface creates one with `POST /v1/imports`; it is not a session, which is
-the signed-in account's token.
+permanently whether it succeeded, failed, or was cancelled. An account has at
+most one running at a time. A run moves through its Stages and stops at each
+Approval until the person approves or cancels it. The record belongs to the
+account and cannot be deleted by the person; anything in the interface that
+merely points at a run is a shortcut and can be. The HTTP interface creates
+one with `POST /v1/imports`; it is not a session, which is the signed-in
+account's token.
 _Avoid_: Import Job, Import Session, Push
 
 **Vault**:
@@ -102,10 +104,12 @@ _Avoid_: Unnamed, Unresolved, Uncategorised
 Where a person sets aside conversations and contacts they do not want to
 see. Membership is explicit, nothing in it is deleted, and a trashed
 conversation can still be opened and read. Lists leave the trash out unless
-asked to show it. A trashed contact is set aside, not gone: an import that
-meets one of its handles attaches to it and leaves it in the trash. The trash
-is the only door to permanent deletion; something must be trashed before it
-can be deleted, one item at a time or all at once with Empty Trash.
+asked to show it. A trashed contact stays set aside until an import meets
+one of its handles: the import then discards the trashed contact together
+with every handle it had and makes a new contact from the backup, as a first
+import would. The trash is the only door to permanent
+deletion; something must be trashed before it can be deleted, one item at a
+time or all at once with Empty Trash.
 _Avoid_: Deleted, Archive, Hidden, Bin
 
 ### Signing in
@@ -186,6 +190,24 @@ format other than JSON Lines. As an operation a person starts on a folder of
 their own it is an advanced tool most people never need, so it lives under
 Settings rather than beside Import and Export.
 _Avoid_: Reexport, Transcode, Reformat
+
+**Stage**:
+One of the three parts of an Import Run, in order: **Staging** reads the
+backup and copies its messages and original attachments into the Staging
+Directory; **Media** converts or compresses the staged attachments, and
+exists only when the person asked for it; **Upload** writes the staged
+messages and attachments into the vault. A run shows its stages as one list
+that fills in as it goes.
+_Avoid_: Step, Phase, Pass, Gate
+
+**Approval**:
+A stop inside an Import Run where the run shows what it has staged and waits
+for the person to approve or cancel it before spending more time or touching
+the vault. There are at most two: the Staging Approval after Staging, and
+the Media Approval after Media. Approving continues the run; cancelling ends
+it and deletes what was staged. A run left at an approval keeps waiting, on
+another screen or after the app is closed, until the person decides.
+_Avoid_: Gate, Review, Checkpoint, Confirmation, Deny
 
 **Staging Directory**:
 The folder where Message Vault writes intermediate files that neither the

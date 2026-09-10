@@ -50,10 +50,10 @@ import {
 import BackupIdentityList from "./import/BackupIdentityList";
 import BackupIdentityStopScreen from "./import/BackupIdentityStopScreen";
 import { restoreFormFromSnapshot } from "./import/formSnapshot";
-import GateOneScreen from "./import/GateOneScreen";
-import GateTwoScreen from "./import/GateTwoScreen";
+import ImportApprovalScreen from "./import/ImportApprovalScreen";
 import ImportFormFields from "./import/ImportFormFields";
-import ImportProgressView from "./import/ImportProgressView";
+import ImportRunView from "./import/ImportRunView";
+import { isApprovalPhase } from "./import/importRunStore";
 import ResumeImportPanel from "./import/ResumeImportPanel";
 import {
   checkSourceFingerprint,
@@ -112,26 +112,37 @@ export default function ImportScreen() {
     phase,
     steps,
     running,
+    form,
     summaryView,
     stagingDir,
-    gateSummary,
-    gateDelta,
-    gateAttachmentMedia,
+    importSessionId,
+    stagingSummary,
+    mediaDelta,
+    attachmentMedia: runAttachmentMedia,
     mediaToolsMissing,
     mediaPartiallyRan,
     resumeError,
     sourceIdentities,
     computingSummary,
     completionText,
+    approvalDismissed,
     startImport,
-    approveGate,
-    declineGate,
+    approve,
+    cancelRun,
+    dismissApproval,
+    reviewApproval,
     resumeAtGate,
     cancel,
     returnToForm,
     continueAfterIdentityStop,
     cancelIdentityStop,
   } = useImportJob();
+  /** Which approval the run is waiting at, or null while it is not waiting. */
+  const approvalWaiting = isApprovalPhase(phase)
+    ? phase === "staging_approval"
+      ? "staging"
+      : "media"
+    : null;
 
   /** Null while the lookup hasn't finished (or failed) for the summary currently shown. */
   const [unknownContacts, setUnknownContacts] = useState<number | null>(null);
@@ -260,18 +271,18 @@ export default function ImportScreen() {
   }, [phase]);
 
   /**
-   * Ask the vault which of Gate 1's contact identifiers this account already
-   * has, once per summary shown at Gate 1 — batched at the server's own cap
-   * so a large import doesn't send an oversized request. A failed batch
-   * leaves the count unknown rather than blocking the gate (decision: the
-   * "new to your vault" clause is a nicety, not a requirement).
+   * Ask the vault which of the staged contact identifiers this account
+   * already has, once per summary shown at an approval, batched at the
+   * server's own cap so a large import doesn't send an oversized request. A
+   * failed batch leaves the count unknown rather than blocking the approval:
+   * the "new to your vault" clause is a nicety, not a requirement.
    */
   useEffect(() => {
-    if (phase !== "gate_1" || !gateSummary) return;
+    if (!isApprovalPhase(phase) || !stagingSummary) return;
     let cancelled = false;
     setUnknownContacts(null);
     void (async () => {
-      const identifiers = gateSummary.contactIdentifiers;
+      const identifiers = stagingSummary.contactIdentifiers;
       let total = 0;
       try {
         for (let i = 0; i < identifiers.length; i += MAX_MATCH_IDENTIFIERS) {
@@ -287,7 +298,7 @@ export default function ImportScreen() {
     return () => {
       cancelled = true;
     };
-  }, [phase, gateSummary]);
+  }, [phase, stagingSummary]);
 
   /** Populate the visible form from a resumed or restarted session's settings. */
   function applyRestoredFormState(restored: ReturnType<typeof restoreFormFromSnapshot>): void {
@@ -762,16 +773,22 @@ export default function ImportScreen() {
         />
       )}
 
-      {(phase === "progress" || phase === "done") && (
-        <ImportProgressView
+      {(phase === "running" || phase === "done" || (approvalWaiting && approvalDismissed)) && (
+        <ImportRunView
           phase={phase}
           steps={steps}
           running={running}
+          form={form}
+          stagingSummary={stagingSummary}
+          mediaDelta={mediaDelta}
           summaryView={summaryView}
           stagingDir={stagingDir}
+          importSessionId={importSessionId}
           completionText={completionText}
+          approvalWaiting={approvalWaiting}
           onCancel={() => void cancel()}
-          onBack={returnToForm}
+          onReview={reviewApproval}
+          onImportAnother={returnToForm}
           cancelDisabled={computingSummary}
         />
       )}
@@ -788,18 +805,22 @@ export default function ImportScreen() {
         />
       )}
 
-      {phase === "gate_1" && gateSummary && (
-        <GateOneScreen
-          summary={gateSummary}
+      {approvalWaiting && !approvalDismissed && stagingSummary && (
+        <ImportApprovalScreen
+          kind={approvalWaiting}
+          steps={steps}
+          summary={stagingSummary}
+          delta={approvalWaiting === "media" ? mediaDelta : null}
           unknownContacts={unknownContacts}
-          mode={gateAttachmentMedia}
-          onApprove={() => void approveGate()}
-          onDecline={() => void declineGate()}
+          mode={runAttachmentMedia}
+          onApprove={() => void approve()}
+          onCancel={() => void cancelRun()}
+          onBack={dismissApproval}
           busy={running}
           mediaToolsMissing={mediaToolsMissing}
           mediaPartiallyRan={mediaPartiallyRan}
           identityPanel={
-            sourceIdentities != null ? (
+            approvalWaiting === "staging" && sourceIdentities != null ? (
               <BackupIdentityList
                 identities={sourceIdentities}
                 profile={identityProfile}
@@ -809,17 +830,6 @@ export default function ImportScreen() {
               />
             ) : undefined
           }
-        />
-      )}
-
-      {phase === "gate_2" && gateSummary && gateDelta && (
-        <GateTwoScreen
-          delta={gateDelta}
-          actual={gateSummary}
-          mode={gateAttachmentMedia}
-          onApprove={() => void approveGate()}
-          onDecline={() => void declineGate()}
-          busy={running}
         />
       )}
     </div>

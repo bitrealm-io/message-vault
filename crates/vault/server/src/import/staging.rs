@@ -461,6 +461,7 @@ impl FileStaging<'_> {
             let _ = ensure_contact_for_handle(
                 self.tx,
                 self.stmts.account_id,
+                self.stmts.import_id,
                 chat_handle_id,
                 None,
                 &mut stats,
@@ -573,8 +574,13 @@ async fn insert_participant(
         // The source named this person and recorded no address for them.
         // Nothing but a contact can hold a name with no identity, so the
         // participant is bound to one and carries no handle.
-        let (contact_id, name_alias) =
-            resolve_name_only_participant(tx, stmts.account_id, name_alias.as_deref()).await?;
+        let (contact_id, name_alias) = resolve_name_only_participant(
+            tx,
+            stmts.account_id,
+            stmts.import_id,
+            name_alias.as_deref(),
+        )
+        .await?;
         // `resolve_name_only_participant` returns `(None, None)` when
         // there is nothing to create and nothing to show; honor that here
         // instead of inserting a row that names no one.
@@ -609,6 +615,7 @@ async fn insert_participant(
     let contact_id = ensure_contact_for_handle(
         tx,
         stmts.account_id,
+        stmts.import_id,
         handle_id,
         backup_name.as_deref(),
         stats,
@@ -656,6 +663,7 @@ async fn resolve_message_rows(
             tx,
             &mut stmts.handles,
             stmts.account_id,
+            stmts.import_id,
             IncomingSender {
                 is_from_me: msg.is_from_me,
                 address: msg.sender.as_deref(),
@@ -842,6 +850,7 @@ async fn tapback_row(
         tx,
         &mut stmts.handles,
         stmts.account_id,
+        stmts.import_id,
         IncomingSender {
             is_from_me: tap.is_from_me,
             address: tap.sender.as_deref(),

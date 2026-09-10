@@ -69,6 +69,20 @@ After you pick **WhatsApp**, **Platform** chooses Android or iPhone. Default Pla
 
 **Attachments** and **Contacts** apply to both platforms. Attachments is Copy / Convert / Compress / Skip. Contacts fills names from vault contacts after import; that is separate from the WhatsApp contacts database above.
 
+## Stages and approvals
+
+An import is one **Import Run**, and your account has at most one running at a time. It moves through three stages, and it stops to ask you before spending more time or touching the vault:
+
+1. **Staging** reads the backup and copies its messages and original attachments into a staging folder on this computer. Nothing reaches the vault yet.
+2. **Staging Approval.** The run shows what it staged, read from the files rather than estimated: conversations, messages, contacts (and how many are new to your vault), attachments and their size, and the addresses the backup sent from. **Approve** to continue, or **Cancel this import** to end the run and delete what was staged.
+3. **Media** converts or compresses the staged attachments. This stage exists only when you chose **Convert** or **Compress & Convert**; under **Copy** and **Skip** the run goes straight from the Staging Approval to Upload.
+4. **Media Approval.** The run shows how the converted files came out against what you approved: files that will not be uploaded after all, files that came in under the limit, and what is still flagged. Approve to upload, or cancel.
+5. **Upload** writes the staged messages and attachments into the vault, then shows a summary: messages added, messages already in the vault, attachments uploaded, and every contact the run created, named, or gave a handle to, with the reason beside each. From there, open the conversations the run added or the contacts it touched, or start another import.
+
+The Import screen collects each stage's result under **What you asked for** as the run goes, so the whole run is on one page. When a stage finishes and you are on Import, the approval opens on its own; it has a **Back to the run** link if you want to look at the run first, and **Review and approve** brings it back.
+
+You do not have to sit and wait. A run keeps working while you read messages or edit contacts, and it keeps waiting at an approval while you are elsewhere or after you close the app. The **Import** entry in the sidebar carries a badge while a run is waiting for you or has failed. **Cancel** on the Import screen stops the stage that is running; the run stays where it got to, and the next visit to Import offers to resume or discard it.
+
 ## Resume and force reprocessing
 
 Import writes a journal file (`.vault-import-state.jsonl`) next to the work it does. On a later run with the same vault and folder, the journal skips work that already finished.
@@ -79,6 +93,6 @@ Turn force reprocessing on when a previous run left messages without attachments
 
 ## After the run
 
-Use the on-screen log for successes, failures, and the end summary. Then open **Conversations** — [Browse your messages](/vault/user/browse-your-messages/).
+The finished run leads with where to go next: **Conversations this import added** opens the conversation list narrowed to the run (`import:#` followed by the run's number), and **Contacts it touched** opens the Contact Group the vault made for the run. The run's record, with the same contact list, stays under **Settings → Storage → Import history**. See [Browse your messages](/vault/user/browse-your-messages/).
 
 API tokens under **Settings → Account** are for programs that call the vault's [HTTP API](/vault/developer/reference/api/), not for this screen. Desktop Import uses the signed-in session.

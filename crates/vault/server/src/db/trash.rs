@@ -36,6 +36,13 @@
 //! conversation it was in is untouched and now shows the handle. The two are
 //! still one operation to the caller ("Delete" on a trash row), so they share
 //! [`delete_trashed`].
+//!
+//! An import is the other way out of the trash. When it meets a handle that
+//! belongs to a trashed contact, [`discard_contact_if_trashed`] deletes that
+//! contact outright — row, handle links, Contact Group memberships and
+//! marker — and the import makes a fresh contact from the backup, as a first
+//! import would (ADR-0013). A backup that still holds the person is the
+//! person saying they still talk to them.
 
 use sqlx::{AnyConnection, Connection};
 
@@ -146,6 +153,43 @@ pub async fn restore(
     .bind(target.id())
     .execute(&mut *conn)
     .await?;
+    Ok(true)
+}
+
+/// Delete `contact_id` for good when it is `account_id`'s trashed contact,
+/// and do nothing when it is not trashed. Returns true when the contact was
+/// trashed and is now gone.
+///
+/// Unlike [`delete_trashed`], which forgets a contact and keeps its row, this
+/// deletes the row: the schema's cascades take its handle links and Contact
+/// Group memberships with it, so every handle it had belongs to no contact
+/// afterwards, and a participant the source named without an address loses
+/// its contact. The marker goes with the row. This is what an import does
+/// when the backup still holds someone the person set aside (ADR-0013); the
+/// import then makes a fresh contact, which is why nothing here creates one.
+///
+/// # Errors
+///
+/// Returns a database error when a statement fails.
+pub async fn discard_contact_if_trashed(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    contact_id: i64,
+) -> Result<bool, sqlx::Error> {
+    let target = Trashable::Contact(contact_id);
+    if !target.is_trashed(conn, account_id).await? {
+        return Ok(false);
+    }
+    sqlx::query("DELETE FROM contacts WHERE account_id = $1 AND id = $2")
+        .bind(account_id)
+        .bind(contact_id)
+        .execute(&mut *conn)
+        .await?;
+    sqlx::query("DELETE FROM trashed_contacts WHERE account_id = $1 AND contact_id = $2")
+        .bind(account_id)
+        .bind(contact_id)
+        .execute(&mut *conn)
+        .await?;
     Ok(true)
 }
 

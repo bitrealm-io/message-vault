@@ -8,6 +8,7 @@ import { useAccountProfile } from "../lib/useAccountProfile";
 import { useContactGroups } from "../lib/useContactGroups";
 import { useMessageTags } from "../lib/useMessageTags";
 import { Z_ROW_MENU } from "../lib/zLayers";
+import { useImportAttention } from "../screens/import/useImportAttention";
 import ColumnResizeHandle from "./ColumnResizeHandle";
 import { useReportColumnResizing } from "./columnResizeState";
 import GroupsNav from "./GroupsNav";
@@ -106,6 +107,8 @@ export default function LeftPanel({ onSearchChange }: { onSearchChange: (v: stri
   const location = useLocation();
   const navigate = useNavigate();
   const { profile } = useAccountProfile();
+  const canImport = canUseImportExportWithProfile(isTauri(), profile);
+  const importAttention = useImportAttention(canImport);
   const onDraggingChange = useReportColumnResizing();
   const { width, dragging, handleHover, handleProps } = useColumnResize({
     storageKey: LEFT_PANEL_STORAGE_KEY,
@@ -189,7 +192,7 @@ export default function LeftPanel({ onSearchChange }: { onSearchChange: (v: stri
         </div>
 
         {/* Import/Export — desktop app only */}
-        {canUseImportExportWithProfile(isTauri(), profile) && (
+        {canImport && (
           <NavCollapsibleSection
             id="messages-import-export"
             title="Messages"
@@ -205,6 +208,22 @@ export default function LeftPanel({ onSearchChange }: { onSearchChange: (v: stri
                   <ImportIcon />
                 </span>
                 <span className="truncate">Import</span>
+                {importAttention ? (
+                  <span
+                    className={`ml-auto shrink-0 rounded-full px-1.5 text-[0.688rem] font-semibold leading-4 ${
+                      importAttention === "failed"
+                        ? "bg-danger text-sent-text"
+                        : "bg-accent text-sent-text"
+                    }`}
+                    title={
+                      importAttention === "failed"
+                        ? "The last import failed"
+                        : "An import is waiting for your approval"
+                    }
+                  >
+                    {importAttention === "failed" ? "Failed" : "Waiting"}
+                  </span>
+                ) : null}
               </span>
             </button>
             <button

@@ -24,6 +24,15 @@ of, and a search that reads the same everywhere.
 
 ### Features
 
+- 2026-09-09: **Import is one screen that fills in as the run goes.** The
+  form collapses into "what you asked for" once the run starts, each of the
+  three stages (Staging, Media, Upload) adds its result underneath, and the
+  finished run leads with where to go next: the conversations it added, the
+  contacts it touched, or another import. Both approvals are the same
+  screen; it opens on its own when a stage finishes and has a link back to
+  the run. A run keeps working, and keeps waiting at an approval, while you
+  are on another screen, and the Import entry in the sidebar carries a badge
+  while a run needs you. The two approval screens no longer say "gate".
 - 2026-09-05: **A vault has an owner.** A fresh vault now asks you to create
   its owner before anything else, and that owner is the one account that
   manages the vault: create accounts, disable them, reset a password, delete
@@ -103,6 +112,21 @@ of, and a search that reads the same everywhere.
 
 ### Design
 
+- 2026-09-09: **An import brings back a contact you had trashed.** Until now
+  an import that met the handle of a trashed contact attached to it and left
+  it in Trash, so someone you set aside once never appeared in Contacts again
+  however many newer backups you imported. A backup that still holds the
+  person means you still talk to them: the import now discards the trashed
+  contact, name, group memberships and handles included, and makes a new
+  contact from the backup, the way a first import would. The forecast of new
+  contacts shown before an import counts them. To keep someone out for good,
+  delete them from Trash. Why: `docs/adr/0013-an-import-replaces-a-trashed-contact.md`.
+- 2026-09-09: **An Import Run says what it did to each contact.** The run
+  records, as it goes, whether it created a contact, created one in place of
+  a trashed contact, named one that had no name, or added a handle to one,
+  and the run's record under Settings → Storage lists the contacts with that
+  reason. The new and changed counts come from the same record instead of
+  being guessed from timestamps afterwards.
 - 2026-09-09: **Importing SMS Backup+ mail reads one message per file, and
   nothing else.** Message Vault briefly also read a second kind of `.eml` — a
   whole conversation written out as a dated transcript in one mail. That shape

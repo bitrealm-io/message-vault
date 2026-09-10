@@ -15,18 +15,27 @@ import type { GateDelta } from "./import/gateDelta";
 import type { ResumeDecision } from "./import/resumeDecision";
 
 const hookState = vi.hoisted(() => ({
-  phase: "form" as "form" | "progress" | "gate_1" | "gate_2" | "done" | "identity_stop",
-  gateSummary: null as StagingSummary | null,
-  gateDelta: null as GateDelta | null,
+  phase: "form" as
+    | "form"
+    | "running"
+    | "staging_approval"
+    | "media_approval"
+    | "done"
+    | "identity_stop",
+  stagingSummary: null as StagingSummary | null,
+  mediaDelta: null as GateDelta | null,
   mediaToolsMissing: false,
   mediaPartiallyRan: false,
   resumeError: null as string | null,
   sourceIdentities: null as string[] | null,
+  approvalDismissed: false,
 }));
 const startImportMock = vi.hoisted(() => vi.fn());
 const resumeAtGateMock = vi.hoisted(() => vi.fn());
-const approveGateMock = vi.hoisted(() => vi.fn());
-const declineGateMock = vi.hoisted(() => vi.fn());
+const approveMock = vi.hoisted(() => vi.fn());
+const cancelRunMock = vi.hoisted(() => vi.fn());
+const dismissApprovalMock = vi.hoisted(() => vi.fn());
+const reviewApprovalMock = vi.hoisted(() => vi.fn());
 const cancelMock = vi.hoisted(() => vi.fn());
 const returnToFormMock = vi.hoisted(() => vi.fn());
 const continueAfterIdentityStopMock = vi.hoisted(() => vi.fn());
@@ -50,20 +59,26 @@ vi.mock("./import/useImportJob", async (importOriginal) => {
       phase: hookState.phase,
       steps: [],
       running: false,
+      form: null,
       summaryView: null,
       stagingDir: null,
-      gateSummary: hookState.gateSummary,
-      gateDelta: hookState.gateDelta,
+      importSessionId: null,
+      stagingSummary: hookState.stagingSummary,
+      mediaDelta: hookState.mediaDelta,
+      attachmentMedia: "copy",
       mediaToolsMissing: hookState.mediaToolsMissing,
       mediaPartiallyRan: hookState.mediaPartiallyRan,
       resumeError: hookState.resumeError,
       sourceIdentities: hookState.sourceIdentities,
       computingSummary: false,
       completionText: undefined,
+      approvalDismissed: hookState.approvalDismissed,
       startImport: startImportMock,
       resumeAtGate: resumeAtGateMock,
-      approveGate: approveGateMock,
-      declineGate: declineGateMock,
+      approve: approveMock,
+      cancelRun: cancelRunMock,
+      dismissApproval: dismissApprovalMock,
+      reviewApproval: reviewApprovalMock,
       cancel: cancelMock,
       returnToForm: returnToFormMock,
       continueAfterIdentityStop: continueAfterIdentityStopMock,
@@ -107,8 +122,15 @@ vi.mock("./import/ImportFormFields", () => ({
   default: () => <div data-testid="import-form" />,
 }));
 
-vi.mock("./import/ImportProgressView", () => ({
-  default: () => <div data-testid="import-progress" />,
+vi.mock("./import/ImportRunView", () => ({
+  default: (props: { approvalWaiting: string | null; onReview: () => void }) => (
+    <div data-testid="import-run">
+      <span data-testid="run-approval-waiting">{String(props.approvalWaiting)}</span>
+      <button type="button" onClick={props.onReview}>
+        run-review
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("./import/ResumeImportPanel", () => ({
@@ -131,33 +153,26 @@ vi.mock("./import/ResumeImportPanel", () => ({
   ),
 }));
 
-vi.mock("./import/GateOneScreen", () => ({
+vi.mock("./import/ImportApprovalScreen", () => ({
   default: (props: {
+    kind: "staging" | "media";
     summary: StagingSummary;
     unknownContacts: number | null;
     onApprove: () => void;
-    onDecline: () => void;
+    onCancel: () => void;
+    onBack: () => void;
   }) => (
-    <div data-testid="gate-one">
-      <span data-testid="gate-one-unknown-contacts">{String(props.unknownContacts)}</span>
+    <div data-testid="approval">
+      <span data-testid="approval-kind">{props.kind}</span>
+      <span data-testid="approval-unknown-contacts">{String(props.unknownContacts)}</span>
       <button type="button" onClick={props.onApprove}>
-        gate-one-approve
+        approval-approve
       </button>
-      <button type="button" onClick={props.onDecline}>
-        gate-one-decline
+      <button type="button" onClick={props.onCancel}>
+        approval-cancel
       </button>
-    </div>
-  ),
-}));
-
-vi.mock("./import/GateTwoScreen", () => ({
-  default: (props: { onApprove: () => void; onDecline: () => void }) => (
-    <div data-testid="gate-two">
-      <button type="button" onClick={props.onApprove}>
-        gate-two-approve
-      </button>
-      <button type="button" onClick={props.onDecline}>
-        gate-two-decline
+      <button type="button" onClick={props.onBack}>
+        approval-back
       </button>
     </div>
   ),
@@ -216,8 +231,9 @@ function deferred<T>() {
 describe("ImportScreen entering Import", () => {
   beforeEach(() => {
     hookState.phase = "form";
-    hookState.gateSummary = null;
-    hookState.gateDelta = null;
+    hookState.stagingSummary = null;
+    hookState.mediaDelta = null;
+    hookState.approvalDismissed = false;
     hookState.mediaToolsMissing = false;
     hookState.mediaPartiallyRan = false;
     hookState.resumeError = null;
@@ -225,8 +241,8 @@ describe("ImportScreen entering Import", () => {
     startImportMock.mockReset();
     resumeAtGateMock.mockReset();
     resumeAtGateMock.mockResolvedValue(undefined);
-    approveGateMock.mockReset();
-    declineGateMock.mockReset();
+    approveMock.mockReset();
+    cancelRunMock.mockReset();
     cancelMock.mockReset();
     returnToFormMock.mockReset();
     continueAfterIdentityStopMock.mockReset();
@@ -477,9 +493,9 @@ describe("ImportScreen entering Import", () => {
     expect(getActiveImportSessionMock).toHaveBeenCalledTimes(1);
 
     // Simulate resumeAtGate's failure path from inside the (mocked) hook:
-    // phase moves to "progress" while it recomputes, then back to "form"
+    // phase moves to "running" while it recomputes, then back to "form"
     // with the failure left on `resumeError`.
-    hookState.phase = "progress";
+    hookState.phase = "running";
     await act(async () => {
       rerender(<ImportScreen />);
     });
@@ -638,7 +654,7 @@ describe("ImportScreen entering Import", () => {
     expect(await screen.findByTestId("import-form")).toBeInTheDocument();
     expect(getActiveImportSessionMock).toHaveBeenCalledTimes(1);
 
-    hookState.phase = "progress";
+    hookState.phase = "running";
     await act(async () => {
       rerender(<ImportScreen />);
     });
@@ -780,8 +796,9 @@ describe("ImportScreen entering Import", () => {
 describe("ImportScreen gates", () => {
   beforeEach(() => {
     hookState.phase = "form";
-    hookState.gateSummary = null;
-    hookState.gateDelta = null;
+    hookState.stagingSummary = null;
+    hookState.mediaDelta = null;
+    hookState.approvalDismissed = false;
     hookState.mediaToolsMissing = false;
     hookState.mediaPartiallyRan = false;
     hookState.resumeError = null;
@@ -789,8 +806,8 @@ describe("ImportScreen gates", () => {
     startImportMock.mockReset();
     resumeAtGateMock.mockReset();
     resumeAtGateMock.mockResolvedValue(undefined);
-    approveGateMock.mockReset();
-    declineGateMock.mockReset();
+    approveMock.mockReset();
+    cancelRunMock.mockReset();
     cancelMock.mockReset();
     returnToFormMock.mockReset();
     continueAfterIdentityStopMock.mockReset();
@@ -815,58 +832,88 @@ describe("ImportScreen gates", () => {
     cleanup();
   });
 
-  it("renders Gate 1 with the summary and wires approve/decline through to the hook", async () => {
-    hookState.phase = "gate_1";
-    hookState.gateSummary = stagingSummary({ contactIdentifiers: ["+15551234567"] });
+  it("renders the Staging Approval with the summary and wires approve and cancel through to the hook", async () => {
+    hookState.phase = "staging_approval";
+    hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["+15551234567"] });
     const user = userEvent.setup();
     renderWithVault(<ImportScreen />);
 
-    expect(await screen.findByTestId("gate-one")).toBeInTheDocument();
+    expect(await screen.findByTestId("approval")).toBeInTheDocument();
     expect(screen.queryByTestId("import-form")).not.toBeInTheDocument();
 
-    await user.click(screen.getByText("gate-one-approve"));
-    expect(approveGateMock).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByText("approval-approve"));
+    expect(approveMock).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByText("gate-one-decline"));
-    expect(declineGateMock).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByText("approval-cancel"));
+    expect(cancelRunMock).toHaveBeenCalledTimes(1);
   });
 
-  it("renders Gate 2 with the delta and wires approve/decline through to the hook", async () => {
-    hookState.phase = "gate_2";
-    hookState.gateSummary = stagingSummary();
-    hookState.gateDelta = { lostCount: 0, stillFlagged: [], cameOutFine: 0, hasChanges: false };
+  it("shows the run with the approval waiting once the person steps back from it", async () => {
+    hookState.phase = "staging_approval";
+    hookState.stagingSummary = stagingSummary();
+    hookState.approvalDismissed = true;
     const user = userEvent.setup();
     renderWithVault(<ImportScreen />);
 
-    expect(await screen.findByTestId("gate-two")).toBeInTheDocument();
+    expect(await screen.findByTestId("import-run")).toBeInTheDocument();
+    expect(screen.queryByTestId("approval")).not.toBeInTheDocument();
+    expect(screen.getByTestId("run-approval-waiting")).toHaveTextContent("staging");
 
-    await user.click(screen.getByText("gate-two-approve"));
-    expect(approveGateMock).toHaveBeenCalledTimes(1);
-
-    await user.click(screen.getByText("gate-two-decline"));
-    expect(declineGateMock).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByText("run-review"));
+    expect(reviewApprovalMock).toHaveBeenCalledTimes(1);
   });
 
-  it("looks up which of Gate 1's contacts are unknown, in one batch under the server cap", async () => {
-    hookState.phase = "gate_1";
-    hookState.gateSummary = stagingSummary({ contactIdentifiers: ["a", "b", "c"] });
+  it("lets the person step back from the approval without deciding", async () => {
+    hookState.phase = "media_approval";
+    hookState.stagingSummary = stagingSummary();
+    hookState.mediaDelta = { lostCount: 0, stillFlagged: [], cameOutFine: 0, hasChanges: false };
+    const user = userEvent.setup();
+    renderWithVault(<ImportScreen />);
+
+    expect(await screen.findByTestId("approval")).toBeInTheDocument();
+    expect(screen.getByTestId("approval-kind")).toHaveTextContent("media");
+    await user.click(screen.getByText("approval-back"));
+    expect(dismissApprovalMock).toHaveBeenCalledTimes(1);
+    expect(approveMock).not.toHaveBeenCalled();
+    expect(cancelRunMock).not.toHaveBeenCalled();
+  });
+
+  it("renders the Media Approval with the delta and wires approve and cancel through to the hook", async () => {
+    hookState.phase = "media_approval";
+    hookState.stagingSummary = stagingSummary();
+    hookState.mediaDelta = { lostCount: 0, stillFlagged: [], cameOutFine: 0, hasChanges: false };
+    const user = userEvent.setup();
+    renderWithVault(<ImportScreen />);
+
+    expect(await screen.findByTestId("approval")).toBeInTheDocument();
+
+    await user.click(screen.getByText("approval-approve"));
+    expect(approveMock).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByText("approval-cancel"));
+    expect(cancelRunMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("looks up which of the staged contacts are unknown, in one batch under the server cap", async () => {
+    hookState.phase = "staging_approval";
+    hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["a", "b", "c"] });
     apiPostMock.mockResolvedValue({ items: ["a", "c"], total: 2, limit: 500, offset: 0 });
     renderWithVault(<ImportScreen />);
 
-    await screen.findByTestId("gate-one");
+    await screen.findByTestId("approval");
     await act(async () => {
       await Promise.resolve();
     });
 
     expect(apiPostMock).toHaveBeenCalledTimes(1);
     expect(apiPostMock).toHaveBeenCalledWith({ identifiers: ["a", "b", "c"] });
-    expect(screen.getByTestId("gate-one-unknown-contacts")).toHaveTextContent("2");
+    expect(screen.getByTestId("approval-unknown-contacts")).toHaveTextContent("2");
   });
 
   it("batches the contact-match lookup at 500 identifiers per request and sums unknown across batches", async () => {
-    hookState.phase = "gate_1";
+    hookState.phase = "staging_approval";
     const identifiers = Array.from({ length: 620 }, (_, i) => `+1555000${i}`);
-    hookState.gateSummary = stagingSummary({ contactIdentifiers: identifiers });
+    hookState.stagingSummary = stagingSummary({ contactIdentifiers: identifiers });
     apiPostMock.mockResolvedValueOnce({
       items: Array(400).fill("x"),
       total: 400,
@@ -881,7 +928,7 @@ describe("ImportScreen gates", () => {
     });
     renderWithVault(<ImportScreen />);
 
-    await screen.findByTestId("gate-one");
+    await screen.findByTestId("approval");
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -891,21 +938,21 @@ describe("ImportScreen gates", () => {
     const bodies = apiPostMock.mock.calls.map(([body]) => body as { identifiers: string[] });
     expect(bodies[0]?.identifiers).toHaveLength(500);
     expect(bodies[1]?.identifiers).toHaveLength(120);
-    expect(screen.getByTestId("gate-one-unknown-contacts")).toHaveTextContent("430");
+    expect(screen.getByTestId("approval-unknown-contacts")).toHaveTextContent("430");
   });
 
-  it("renders Gate 1 without the unknown-contact count when the lookup fails", async () => {
-    hookState.phase = "gate_1";
-    hookState.gateSummary = stagingSummary({ contactIdentifiers: ["a"] });
+  it("renders the approval without the unknown-contact count when the lookup fails", async () => {
+    hookState.phase = "staging_approval";
+    hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["a"] });
     apiPostMock.mockRejectedValue(new Error("network down"));
     renderWithVault(<ImportScreen />);
 
-    await screen.findByTestId("gate-one");
+    await screen.findByTestId("approval");
     await act(async () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByTestId("gate-one-unknown-contacts")).toHaveTextContent("null");
+    expect(screen.getByTestId("approval-unknown-contacts")).toHaveTextContent("null");
   });
 
   it("shows the identity stop screen for the identity_stop phase", async () => {

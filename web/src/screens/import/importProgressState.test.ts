@@ -3,7 +3,6 @@ import type { ImportProgressEvent } from "../../lib/types";
 import {
   attachmentDoneDetail,
   isProgressStepComplete,
-  progressHeading,
   setupDetail,
   stepIndexFor,
   stepsFor,
@@ -15,17 +14,19 @@ describe("isProgressStepComplete", () => {
     expect(isProgressStepComplete("attachments", 0, 0)).toBe(false);
   });
 
-  it("completes parse, prepare, and upload when done reaches total", () => {
-    expect(isProgressStepComplete("parse", 10, 10)).toBe(true);
+  it("completes prepare and upload when done reaches total", () => {
     expect(isProgressStepComplete("prepare", 1, 1)).toBe(true);
     expect(isProgressStepComplete("upload", 2, 2)).toBe(true);
-    expect(isProgressStepComplete("parse", 3, 10)).toBe(false);
+    expect(isProgressStepComplete("upload", 1, 2)).toBe(false);
   });
 
-  it("never completes the read row on a setup step, even the last one", () => {
+  it("never completes Staging on a setup or parse step, even the last one", () => {
     // "5/5" here means the fifth decrypt step, not the last message; the
-    // messages have not been read yet when it arrives.
+    // messages have not been read yet when it arrives. And the last message
+    // read still leaves the attachments and the conversation files to
+    // stage on the same row.
     expect(isProgressStepComplete("setup", 5, 5)).toBe(false);
+    expect(isProgressStepComplete("parse", 10, 10)).toBe(false);
   });
 });
 
@@ -55,63 +56,49 @@ describe("attachmentDoneDetail", () => {
 });
 
 describe("stepsFor", () => {
-  it("shows a media step under convert and compress", () => {
-    expect(stepsFor("convert").map((s) => s.label)).toEqual([
-      "Read backup",
-      "Copy to staging",
-      "Convert media",
-      "Upload to vault",
-    ]);
-    expect(stepsFor("compress")[2].label).toBe("Compress media");
+  it("shows the three stages under convert and compress", () => {
+    expect(stepsFor("convert").map((s) => s.label)).toEqual(["Staging", "Media", "Upload"]);
+    expect(stepsFor("compress").map((s) => s.label)).toEqual(["Staging", "Media", "Upload"]);
   });
 
-  it("has no media step under copy or skip", () => {
-    // There is no media step in these modes, so a greyed-out row would be
+  it("has no Media stage under copy or skip", () => {
+    // There is no Media stage in these modes, so a greyed-out row would be
     // promising work that will never run.
-    expect(stepsFor("copy").map((s) => s.label)).toEqual([
-      "Read backup",
-      "Copy to staging",
-      "Upload to vault",
-    ]);
-    expect(stepsFor("skip").map((s) => s.label)).toEqual([
-      "Read backup",
-      "Copy to staging",
-      "Upload to vault",
-    ]);
+    expect(stepsFor("copy").map((s) => s.label)).toEqual(["Staging", "Upload"]);
+    expect(stepsFor("skip").map((s) => s.label)).toEqual(["Staging", "Upload"]);
   });
 
-  it("never says transcode", () => {
+  it("never says transcode, gate, or step", () => {
     for (const mode of ["copy", "convert", "compress", "skip"] as const) {
       for (const step of stepsFor(mode)) {
-        expect(step.label.toLowerCase()).not.toContain("transcode");
+        for (const avoided of ["transcode", "gate", "step"]) {
+          expect(step.label.toLowerCase()).not.toContain(avoided);
+        }
       }
     }
   });
 });
 
 describe("stepIndexFor", () => {
-  it("puts setup steps on the read row, since they are part of reading the backup", () => {
-    expect(stepIndexFor("setup", "convert")).toBe(0);
-    expect(stepIndexFor("setup", "copy")).toBe(0);
+  it("puts reading, copying and writing all on the Staging row", () => {
+    // Decrypting, parsing, copying attachments and writing the conversation
+    // files ("prepare") are all Staging from the person's side.
+    for (const step of ["setup", "parse", "attachments", "prepare"] as const) {
+      expect(stepIndexFor(step, "convert")).toBe(0);
+      expect(stepIndexFor(step, "copy")).toBe(0);
+    }
   });
 
-  it("puts writing conversation files on the staging step", () => {
-    // "prepare" is the pipeline's name for writing conversation files. From
-    // the user's side that is part of staging, not a step of its own.
-    expect(stepIndexFor("attachments", "convert")).toBe(1);
-    expect(stepIndexFor("prepare", "convert")).toBe(1);
+  it("maps Media to its own row, and Upload after it", () => {
+    expect(stepIndexFor("media", "convert")).toBe(1);
+    expect(stepIndexFor("upload", "convert")).toBe(2);
   });
 
-  it("maps the media step to its own row, and upload after it", () => {
-    expect(stepIndexFor("media", "convert")).toBe(2);
-    expect(stepIndexFor("upload", "convert")).toBe(3);
+  it("shifts Upload up when there is no Media stage", () => {
+    expect(stepIndexFor("upload", "copy")).toBe(1);
   });
 
-  it("shifts upload down when there is no media step", () => {
-    expect(stepIndexFor("upload", "copy")).toBe(2);
-  });
-
-  it("never lands an unmapped step on upload by accident", () => {
+  it("never lands an unmapped step on Upload by accident", () => {
     // The old mapping ended in `return 3`, so a step nobody had wired drew
     // its progress on the upload bar.
     expect(stepIndexFor("media", "copy")).toBe(-1);
@@ -119,54 +106,10 @@ describe("stepIndexFor", () => {
 
   it("returns -1, not undefined, for a step string this build doesn't recognise", () => {
     // The event comes off the wire unvalidated. A lookup miss must resolve
-    // to "no row" — `undefined` would make every `index < stepIndex` and
+    // to "no row"; `undefined` would make every `index < stepIndex` and
     // `index > stepIndex` comparison false at once, marking every row
-    // active/done simultaneously, worse than the old single-wrong-row bug.
+    // active/done simultaneously.
     const unknownStep = "unknown-step" as unknown as ImportProgressEvent["step"];
     expect(stepIndexFor(unknownStep, "convert")).toBe(-1);
-  });
-});
-
-describe("progressHeading", () => {
-  it("names the stage the import is actually on", () => {
-    const steps = stepsFor("convert");
-    steps[0].status = "done";
-    steps[1].status = "active";
-    expect(progressHeading(steps, "progress")).toBe("Copying to staging");
-    steps[1].status = "done";
-    steps[2].status = "active";
-    expect(progressHeading(steps, "progress")).toBe("Converting media");
-  });
-
-  it("says compressing when that is the job", () => {
-    const steps = stepsFor("compress");
-    steps[2].status = "active";
-    expect(progressHeading(steps, "progress")).toBe("Compressing media");
-  });
-
-  it("never says transcode", () => {
-    // Decision 18: it is a stage name, and the user never sees it.
-    const steps = stepsFor("convert");
-    for (let i = 0; i < steps.length; i += 1) {
-      const marked = steps.map(
-        (s, j) => ({ ...s, status: j === i ? "active" : "pending" }) as const,
-      );
-      expect(progressHeading(marked, "progress").toLowerCase()).not.toContain("transcode");
-    }
-  });
-
-  it("titles the finished screen by its outcome, not by a step", () => {
-    expect(progressHeading(stepsFor("convert"), "done")).toBe("Import finished");
-  });
-
-  it("falls back to the first step rather than an empty heading", () => {
-    // Nothing active yet, one render frame before the first event arrives.
-    expect(progressHeading(stepsFor("convert"), "progress")).toBe("Reading your backup");
-  });
-
-  it("returns nothing for an empty step list rather than claiming completion", () => {
-    // Unreachable in practice (stepsFor never returns an empty list), but an
-    // empty list must never read as "Import finished".
-    expect(progressHeading([], "progress")).toBe("");
   });
 });

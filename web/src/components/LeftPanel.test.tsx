@@ -33,6 +33,14 @@ vi.mock("../lib/tauri-check", () => ({
   isTauri: () => tauriState.isTauri,
 }));
 
+const importAttentionState = vi.hoisted(() => ({
+  attention: null as "waiting" | "failed" | null,
+}));
+
+vi.mock("../screens/import/useImportAttention", () => ({
+  useImportAttention: () => importAttentionState.attention,
+}));
+
 vi.mock("../lib/savedSearches", () => ({
   useSavedSearches: () => ({ savedSearches: savedSearchState.savedSearches, loading: false }),
   useSavedSearchActions: () => ({
@@ -51,6 +59,7 @@ beforeEach(() => {
   profileState.profile = null;
   tauriState.isTauri = false;
   savedSearchState.savedSearches = [];
+  importAttentionState.attention = null;
 });
 
 function renderPanel(initialEntries?: string[]) {
@@ -133,6 +142,25 @@ describe("LeftPanel", () => {
         expect(nested?.className).toContain("self-stretch");
         expect(nested?.querySelector('[class*="size-[15px]"]')).not.toBeNull();
       }
+    });
+
+    it("marks Import when a run is waiting for the person, and when the last one failed", () => {
+      importAttentionState.attention = "waiting";
+      const { unmount } = renderPanel();
+      expect(screen.getByRole("button", { name: /Import/ })).toHaveTextContent("Waiting");
+      expect(screen.getByTitle("An import is waiting for your approval")).toBeTruthy();
+      unmount();
+
+      importAttentionState.attention = "failed";
+      renderPanel();
+      expect(screen.getByRole("button", { name: /Import/ })).toHaveTextContent("Failed");
+    });
+
+    it("carries no badge while nothing needs the person", () => {
+      renderPanel();
+      expect(screen.getByRole("button", { name: "Import" })).toBeTruthy();
+      expect(screen.queryByText("Waiting")).toBeNull();
+      expect(screen.queryByText("Failed")).toBeNull();
     });
 
     it("hides Import and Export when the Messages heading collapses", async () => {

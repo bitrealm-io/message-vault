@@ -23,7 +23,7 @@ Administrators also see a **Users** tab, and the desktop app adds **System** and
 
 - **Usage** — attachment storage for this account
 - **Largest attachments** — top attachments by file size
-- **Import history** and **Export history** — every Import Run and Export Run recorded for this account: when it started, what it asked for, how much it moved, and how it ended
+- **Import history** and **Export history** — every Import Run and Export Run recorded for this account: when it started, what it asked for, how much it moved, and how it ended. An Import Run also lists every contact it touched and says what it did to each: created it, created it in place of one you had trashed, named it, or added a handle to it.
 
 ## System
 

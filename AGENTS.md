@@ -17,9 +17,6 @@ this project before.
   expand it.
 - Write as the tool — "the parser reads…", not "we read…".
 
-`.cursor/skills/communication-style/SKILL.md` holds the same rules at length,
-with worked examples, when that tooling is present.
-
 ## Git Workflow
 
 Work on a branch or a worktree; never commit to `main`. Give the branch a
@@ -33,10 +30,29 @@ turn, because CI finishes and reviewers land between turns. Open work with
 Run `./scripts/check-pr.sh` before pushing; it is the same set of gates CI
 runs, and it stops on the first failure.
 
-## Tools to Use
+## GitHub
 
-- Use the **GitHub MCP** (`plugin-github-github`) for issues, PR read/search, reviews, and GitHub code search when the server is authenticated; call `mcp_auth` if discovery fails, otherwise fall back to `gh`. See [`.cursor/rules/github-mcp.mdc`](.cursor/rules/github-mcp.mdc).
-- Use the **Playwright MCP** (`plugin-playwright-playwright`) to verify browser UI after `web/` changes: navigate to the Vite app (prefer `http://127.0.0.1:5173` with the vault on `:8080`), take a snapshot, then click/type as needed. See [`.cursor/rules/playwright-mcp.mdc`](.cursor/rules/playwright-mcp.mdc). Desktop-only screens gated by `isTauri()` still need the Tauri window or unit tests — Playwright against Vite alone cannot exercise them.
+Read and write GitHub through whatever browsing tool is connected, or `gh`.
+The repository is `bitrealm-io/message-vault`; `gh` infers it from the remote.
+Two limits hold whichever tool is in use: do not merge a pull request unless
+asked, and do not create or push a `v*` tag unless asked, because pushing one
+ships a release.
+
+## Verifying UI changes
+
+Changes to `web/` screens, components, or user-visible copy are verified in a
+real browser before they are called done, using whatever browser-automation
+tool is connected.
+
+- The vault must already be running (`./scripts/run-vault-dev.sh` on `:8080`).
+  Point the browser at Vite on **http://127.0.0.1:5173** — not `localhost`,
+  which can resolve to IPv6, which the vault does not listen on.
+- Screens gated by `isTauri()` — Import, System settings, path openers — are
+  not reachable this way. Against Vite alone they render the "available in the
+  desktop app" stub. Cover those in the Tauri window by hand, or in unit tests
+  of the path helpers, and say which was done.
+- Do not start a second Vite server while `cargo tauri dev` is running; they
+  share the port.
 
 ## Message Vault Repository
 

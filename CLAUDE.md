@@ -63,7 +63,7 @@ cd docs && npm run check && npm run build     # docs tree only
 ./scripts/check-pr.sh                         # all of the above in one pass; stops on first failure
 ```
 
-After `web/` UI changes, verify in the browser with the Playwright MCP (`plugin-playwright-playwright`) against Vite on `http://127.0.0.1:5173` (vault on `:8080`). Details and Tauri-only limits: [`.cursor/rules/playwright-mcp.mdc`](.cursor/rules/playwright-mcp.mdc).
+After `web/` UI changes, verify in a browser against Vite on `http://127.0.0.1:5173` (vault on `:8080`). Screens behind `isTauri()` are not reachable that way and need the Tauri window or unit tests. See AGENTS.md, “Verifying UI changes”.
 
 ## Rules that are easy to get wrong
 

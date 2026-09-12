@@ -9,7 +9,7 @@ What each converter writes (and where it falls short). Marks: **yes** / **partia
 
 ## Shared model
 
-All converters build a **common message** per conversation (`ConversationDocument`, schema v3 in [`message-ir`](../../crates/libs/ir/)), then project the user-picked format via `FormatSink` in [`message-ir-format`](../../crates/libs/ir-format/) (default **JSON**). When packaging is CSV, columns follow [`CSV_HEADERS`](../../crates/libs/ir-format/src/write.rs). Across the board:
+All converters build a **common message** per conversation (`ConversationDocument`, schema v4 in [`message-ir`](../../crates/libs/ir/)), then project the user-picked format via `FormatSink` in [`message-ir-format`](../../crates/libs/ir-format/) (default **JSON**). When packaging is CSV, columns follow [`CSV_HEADERS`](../../crates/libs/ir-format/src/write.rs). Across the board:
 
 - The peer is `chat_identifier` — there is **no** dedicated receiver-phone column
 - Every participant is a **typed handle**: `handle_type` (`phone` / `email` / `username` / `other`) on each JSON/JSONL participant and inside `participants_json`; the CSV `handle_type` column carries the sender's type, inferred from the handle when the source doesn't supply it

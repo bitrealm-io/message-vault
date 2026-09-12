@@ -25,7 +25,7 @@ vendor backup (chat.db, SMS XML, WhatsApp crypt15, …)
 - **`crates/libs/ir`** (`message-ir`) is the shared conversation model every exporter writes: `ConversationDocument` holds export metadata, participants, and messages. `schema_version` is `4` and independent of the product version. A version-3 file is refused by name, never upgraded.
 - **`crates/libs/ir-format`** reads/writes on-disk formats (JSON, CSV, EML, SBR XML) to/from IR; **`crates/libs/reexport`** converts between existing export formats, which is how Export writes anything other than JSONL.
 - **No command line except the vault server.** Every exporter, `message-reexport`, `vault-push`, and `vault-pull` are library crates with no binary; the desktop app calls them in process. Only `message-vault-server` and `demo-seed` build binaries. Why: `docs/adr/0001-no-command-line-except-the-vault-server.md`.
-- **One way to fetch data in `web/`** — TanStack Query over route functions in `web/src/lib/vaultApi.ts`, with response types generated from `docs/src/assets/openapi.json`. Do not write a new cache, change-notification event, or fetching hook for a screen. This is **built** (PRs #290–#293): `useResource`, `usePagedList`, and `contactDetailCache` are gone, the `mv-*-changed` browser events with them; `nameCollection`, `savedSearches`, and `useAccountProfile` remain only as thin wrappers over TanStack Query, not as mechanisms of their own. Every cache entry is named with the signed-in account, so nothing has to be cleared when the account changes. Why, and what replaces what: `docs/adr/0002-one-way-to-fetch-data-in-the-web-app.md`.
+- **One way to fetch data in `web/`** — TanStack Query over route functions in `web/src/lib/vaultApi.ts`, with response types generated from `docs/src/assets/openapi.json`. Do not write a new cache, change-notification event, or fetching hook for a screen. `nameCollection`, `savedSearches`, and `useAccountProfile` are thin wrappers over TanStack Query, not mechanisms of their own. Every cache entry is named with the signed-in account, so nothing has to be cleared when the account changes. Why: `docs/adr/0002-one-way-to-fetch-data-in-the-web-app.md`.
 - **`crates/core/message-vault-io-core`** — shared export pipeline, jobs, form model. Avoids `anyhow` so the desktop app stays lightweight; callers map `String` errors at the edge.
 - **`crates/vault/server`** — each `*_api.rs` file is one Axum route group; `db/` modules mirror the table sources in `schema/sql/*.sql`, which the server embeds at compile time (`db/schema.rs`) — change tables there, not in a live db file. Import path: `jsonl.rs` → `import.rs` → `dedupe.rs`; demo mode runs through a guest pool (`guest_pool.rs`).
 - **`src-tauri/`** is **not a workspace member** (own `Cargo.toml`, listed in the root workspace `exclude`). Its `commands/` wrap the exporter crates and push/pull for the desktop app. Format/build it with `--manifest-path`.
@@ -67,10 +67,10 @@ After `web/` UI changes, verify in the browser with the Playwright MCP (`plugin-
 
 ## Rules that are easy to get wrong
 
-- **Version lockstep** (current `0.8.3`): `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `web/package.json`, `crates/vault/server/Cargo.toml` all carry the product version. Leave other crates at `0.1.0`; never bump `web-next` (`0.3.0`).
+- **Version lockstep** (read the current number from `src-tauri/Cargo.toml`): `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `web/package.json`, `crates/vault/server/Cargo.toml` all carry the product version. Leave other crates at `0.1.0`; never bump `web-next` (`0.3.0`).
 - **Pushing a `v*` tag ships a release** — CI builds the Docker image and desktop installers and creates a GitHub Release. Never create or push tags unless asked.
 - **CI gates**: rustfmt, workspace build + test, Biome `ci` (lint and format drift), Vitest. Clippy is not gated — run `./scripts/lint-all.sh` locally.
-- **Git workflow**: never commit to `main`; use a branch or worktree. Verify PR state with `gh pr view` / `gh pr list` / `gh pr checks` before pushing — don't assume. Don't merge PRs unless explicitly asked.
+- **Git workflow and PR rules** live in AGENTS.md; that is the canonical copy.
 - **Biome**: prefer a real fix over `biome-ignore`; prefix unused bindings with `_`.
 - **Tests** use committed fixtures in `tests/fixtures/`; never commit personal backups or real message data.
 
@@ -86,7 +86,7 @@ Issues live in this repo's GitHub Issues (`gh` CLI). See `docs/agents/issue-trac
 
 ### Triage labels
 
-The five canonical triage labels, unchanged: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+The five triage labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 

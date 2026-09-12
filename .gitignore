@@ -65,7 +65,9 @@ config/contacts.vcf
 /web-next/node_modules/
 /web-next/.next/
 /web-next/out/
+# Local agent tooling (not version controlled)
 .claude/
+.cursor/
 .worktrees/
 .superpowers/
 

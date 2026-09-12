@@ -1,57 +1,42 @@
-# Cursor Rules for This Project
+# Operations Guide for This Project
 
 ## Communication Style
 
-- Write instructions in plain, direct English at high school reading level.
-- Avoid jargon, obtuse language, and clever diction.
-- Explain what you're doing and why in simple terms.
-- If something is complex, break it into clear steps.
-- Use concrete examples instead of abstract descriptions.
+Prose in this repo — explanations, design documents, reviews, issues, commit
+messages — is written for an experienced software engineer who has never seen
+this project before.
+
+- Every recommendation says what changes, why it changes, and what problem
+  that solves. Never stop after naming an idea.
+- Describe the actual work rather than compressing it into an engineering
+  noun. "Parity", "hardening", "normalization" and their kind are labels, not
+  explanations; write the sentence they stand in for.
+- Prefer verbs over nouns, one idea per sentence, and plain English over
+  jargon. Define a technical term the first time it appears.
+- Clarity beats brevity. If expanding a sentence makes the intent clearer,
+  expand it.
+- Write as the tool — "the parser reads…", not "we read…".
+
+`.cursor/skills/communication-style/SKILL.md` holds the same rules at length,
+with worked examples, when that tooling is present.
 
 ## Git Workflow
 
-### Always Before Pushing
+Work on a branch or a worktree; never commit to `main`. Give the branch a
+descriptive name (`feature/add-auth`, `fix/parsing-bug`).
 
-1. Run `git fetch` to sync with origin
-2. Run `git branch -a` to see all local and remote branches
-3. Run `gh pr list` to check the status of open PRs
-4. Run `gh pr view <number>` to check a specific PR's status before pushing
-5. Do not assume the state of any PR - verify it with `gh` commands
+Read PR state from `gh` before acting on it — `gh pr list`, `gh pr view
+<number>`, `gh pr checks <number>` — rather than from memory of an earlier
+turn, because CI finishes and reviewers land between turns. Open work with
+`gh pr create`. Do not merge a PR unless asked.
 
-### Making Changes
-
-- Create a new branch or worktree for all code changes
-- Never commit directly to main/master
-- Branch names should be descriptive (e.g., `feature/add-auth`, `fix/parsing-bug`)
-
-### Submitting Work
-
-- Use `gh pr create` to open a pull request
-- Do not merge PRs yourself unless explicitly instructed
-- Use `gh pr view <number>` to check PR status before any operations
-- Include a clear description of what the PR does and why
-
-## Code Changes
-
-- Test code locally before pushing
-- Keep commits focused and logical
-- Write clear commit messages that explain the change
+Run `./scripts/check-pr.sh` before pushing; it is the same set of gates CI
+runs, and it stops on the first failure.
 
 ## Tools to Use
 
-- Use `gh` CLI commands to check branches and PR status (not guesswork)
-- Use `gh pr list` to see all open PRs
-- Use `gh pr view <PR_NUMBER>` to see specific PR details
-- Use `gh pr create` to open new PRs
-- Use `gh pr checks <PR_NUMBER>` to see test results
 - Use the **GitHub MCP** (`plugin-github-github`) for issues, PR read/search, reviews, and GitHub code search when the server is authenticated; call `mcp_auth` if discovery fails, otherwise fall back to `gh`. See [`.cursor/rules/github-mcp.mdc`](.cursor/rules/github-mcp.mdc).
 - Use the **Playwright MCP** (`plugin-playwright-playwright`) to verify browser UI after `web/` changes: navigate to the Vite app (prefer `http://127.0.0.1:5173` with the vault on `:8080`), take a snapshot, then click/type as needed. See [`.cursor/rules/playwright-mcp.mdc`](.cursor/rules/playwright-mcp.mdc). Desktop-only screens gated by `isTauri()` still need the Tauri window or unit tests — Playwright against Vite alone cannot exercise them.
-
-## When Uncertain
-
-- Ask for clarification rather than guessing
-- Use `gh` commands to check current state
-- Check existing conventions in the codebase before inventing new ones
 
 ## Message Vault Repository
 
@@ -69,7 +54,7 @@ The product has two pieces:
 | Language (Rust crates) | Rust 1.85+ (edition 2024). CI uses latest stable.                                                                                 |
 | Vault server           | Tokio + Axum 0.8 HTTP API. sqlx Any: SQLite (bundled) by default, Postgres via `[database] url`. TOML config. Argon2 passwords, JWT sessions. |
 | Database               | SQLite file at `data/vault.db`. Table SQL lives in `schema/sql/`. Schema changes bump `SCHEMA_VERSION` in `db/schema.rs`; old vaults are rebuilt empty and need a fresh import. |
-| Desktop app            | Tauri 2 native window. Vite 6 + React 19 + TypeScript SPA in `web/`. React Router 7, React Aria, Tailwind CSS 4. Vitest + ESLint. |
+| Desktop app            | Tauri 2 native window. Vite 6 + React 19 + TypeScript SPA in `web/`. React Router 7, React Aria, Tailwind CSS 4. Vitest + Biome. |
 | Website                | Same `web/` SPA. Dev server on port 5173. Production copy in `static/`, served by the vault on port 8080.                         |
 | Node                   | Node.js 22+ for `web/`, `docs/`, and Docker frontend builds.                                                                      |
 | Docs site              | Astro 7 + Starlight, published to GitHub Pages at bitrealm.io.                                                                    |
@@ -111,10 +96,11 @@ message-vault
     └── src/                # App Router pages that read vault.db via better-sqlite3
 ```
 
-```text
-# ❌ BAD — web-next with v2 schema IS NOT the product!
-# ✅ GOOD — product UI is web/ + src-tauri/; vault API is crates/vault/server/; schema v3 only
-```
+The product path is `web/` + `src-tauri/`, with the vault API in
+`crates/vault/server/`. `web-next/` is a restored historical browse UI and is
+not the product. Two schema numbers are in play and neither is 3: the JSONL
+chat format is `schema_version: 4` (`crates/libs/ir/src/lib.rs`) and the vault
+database is `SCHEMA_VERSION = 7` (`crates/vault/server/src/db/schema.rs`).
 
 ### First time setup
 
@@ -214,7 +200,7 @@ cargo tauri dev              # desktop window; starts Vite itself
 Or, browser only (no Tauri):
 
 ```bash
-cd web && npm run dev        # http://localhost:5173, proxies /v1 to :8080
+cd web && npm run dev        # http://127.0.0.1:5173, proxies /v1 to :8080
 ```
 
 Do not run `npm run dev` and `cargo tauri dev` at the same time. Point the app at **http://127.0.0.1:8080** (not `localhost` — that can resolve to IPv6, which the vault does not listen on). `web/` and `src-tauri/` usually reload; restart `cargo tauri dev` if they do not.
@@ -227,7 +213,7 @@ Optional: `./scripts/build-static.sh` copies `web/dist` to `static/` so the vaul
 
 Run these from the repository root unless a `cd` is shown.
 
-Rust formatter is `rustfmt`. CI does not run Clippy. `src-tauri/` is not a workspace member, so format it with `--manifest-path`.
+Rust formatter is `rustfmt`. `src-tauri/` is not a workspace member, so format it with `--manifest-path`.
 
 ```bash
 # Check format (what CI runs)
@@ -237,8 +223,7 @@ cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 # Rewrite Rust (workspace + src-tauri) and web/ (Biome)
 ./scripts/format-all.sh
 
-# Clippy (workspace + src-tauri) and web lint (Biome).
-# Warnings do not fail.
+# Clippy (workspace + src-tauri) and web lint (Biome). Warnings do not fail.
 ./scripts/lint-all.sh
 
 cargo build --workspace
@@ -264,10 +249,10 @@ npm run format:check      # format + import order, no write
 npm test                  # vitest run (src/**/*.{test,spec}.{ts,tsx})
 npm run test:watch
 npm run build             # tsc && vite build
-npm run dev               # Vite on http://localhost:5173 (proxies /v1 to :8080)
+npm run dev               # Vite on http://127.0.0.1:5173 (proxies /v1 to :8080)
 ```
 
-From the repository root, `./scripts/format-all.sh` runs rustfmt then the web formatter. `./scripts/lint-all.sh` runs Clippy (workspace plus `src-tauri`) then the web linter. `./scripts/check-pr.sh` calls `format-all.sh`, then build/test/lint. CI does not run Clippy.
+From the repository root, `./scripts/format-all.sh` runs rustfmt then the web formatter. `./scripts/lint-all.sh` runs Clippy (workspace plus `src-tauri`) then the web linter. `./scripts/check-pr.sh` calls `format-all.sh`, then build/test/lint.
 
 Do not start a separate `npm run dev` while `cargo tauri dev` is running. Tauri starts Vite itself.
 
@@ -281,9 +266,10 @@ cd docs && npm ci && npm run check && npm run build
 
 #### Not gated by CI
 
-Not gated by CI `web-next/` (`npm run lint` / `npm test` there if that tree is edited).
-
-Clippy is not a CI job. Run it locally with `./scripts/lint-all.sh` (`rust-analyzer.check.command` is `clippy` in `.vscode/settings.json`).
+Clippy is not a CI job — run it locally with `./scripts/lint-all.sh`
+(`rust-analyzer.check.command` is `clippy` in `.vscode/settings.json`).
+`web-next/` is not gated either; run `npm run lint` / `npm test` there if that
+tree is edited.
 
 ### Releases and versions
 
@@ -293,11 +279,11 @@ Three version numbers are easy to mix up:
 
 | What            | Example             | Meaning                                                                                |
 |-----------------|---------------------|----------------------------------------------------------------------------------------|
-| Product version | `0.8.3`             | Desktop app + vault image. Git tag is `v0.8.3`.                                        |
-| Docker Hub tag  | `0.8.3` (no `v`)    | `bitrealm/message-vault:0.8.3`. Also `0.8`, `latest`, and `sha-…`.                     |
+| Product version | `<X.Y.Z>`           | Desktop app + vault image. Git tag is `v<X.Y.Z>`. Read the current value from `src-tauri/Cargo.toml`. |
+| Docker Hub tag  | `<X.Y.Z>` (no `v`)  | `bitrealm/message-vault:<X.Y.Z>`. Also `<X.Y>`, `latest`, and `sha-…`.                 |
 | JSONL schema    | `schema_version: 4` | Shared chat file format. Independent of the product version. Version 3 is refused, never upgraded. |
 
-**Product version files** (keep these in lockstep; current value is `0.8.3`):
+**Product version files** (keep these in lockstep; `src-tauri/Cargo.toml` is the value to read):
 
 - `src-tauri/Cargo.toml` — bump this before tagging (this is the one CI docs call out)
 - `src-tauri/tauri.conf.json` — installer version

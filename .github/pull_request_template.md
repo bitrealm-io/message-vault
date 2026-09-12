@@ -32,8 +32,12 @@
 
 ## Checklist
 
-- [ ] My code adheres to the coding and style guidelines of the project.
-- [ ] I have performed a self-review of my own code.
-- [ ] I have commented my code, particularly in hard-to-understand areas.
-- [ ] I have made corresponding changes to the documentation.
-- [ ] My changes generate no new warnings.
+- [ ] `./scripts/check-pr.sh` passes (rustfmt, workspace build and test,
+      `src-tauri` build, Biome, Vitest). Clippy is not in CI — run
+      `./scripts/lint-all.sh` too.
+- [ ] User-visible changes have a `CHANGELOG.md` bullet under `[Unreleased]`,
+      starting with an ISO date.
+- [ ] New names match `CONTEXT.md`; nothing uses a word the glossary avoids.
+- [ ] Docs under `docs/` updated if behaviour a person can see changed.
+- [ ] No personal backups or real message data added to `tests/fixtures/`.
+- [ ] No product-version bump and no `v*` tag unless the release was asked for.

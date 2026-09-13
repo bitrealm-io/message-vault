@@ -2026,7 +2026,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "mail-builder",
- "mailparse",
+ "mailparse 0.16.1",
  "message-ir",
  "serde",
  "serde_json",
@@ -2046,6 +2046,17 @@ name = "mailparse"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60819a97ddcb831a5614eb3b0174f3620e793e97e09195a395bfa948fd68ed2f"
+dependencies = [
+ "charset",
+ "data-encoding",
+ "quoted_printable",
+]
+
+[[package]]
+name = "mailparse"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8469955699e572455f8e1a40689e07ab309911d659632f65062598192254c091"
 dependencies = [
  "charset",
  "data-encoding",
@@ -3609,7 +3620,7 @@ dependencies = [
  "contacts",
  "csv",
  "hex",
- "mailparse",
+ "mailparse 0.17.0",
  "media",
  "message-ir",
  "message-ir-format",

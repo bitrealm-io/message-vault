@@ -1,4 +1,6 @@
-# Cursor Rules for This Project
+# AGENTS.md
+
+The operations guide for any agent working in this repository: git and pull request workflow, first-time setup, running the vault, the checks, and the release process. Architecture and the rules that are easy to get wrong are in `CLAUDE.md`.
 
 ## Communication Style
 
@@ -80,10 +82,10 @@ The product has two pieces:
 
 | Piece                  | Stack                                                                                                                             |
 |------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| Language (Rust crates) | Rust 1.85+ (edition 2024). CI uses latest stable.                                                                                 |
+| Language (Rust crates) | Rust, edition 2024. `rust-toolchain.toml` pins the version (`1.98.1`) for every checkout, CI, and the release image.              |
 | Vault server           | Tokio + Axum 0.8 HTTP API. sqlx Any: SQLite (bundled) by default, Postgres via `[database] url`. TOML config. Argon2 passwords, opaque hashed session tokens. |
 | Database               | SQLite file at `data/vault.db`. Table SQL lives in `schema/sql/`. Schema changes bump `SCHEMA_VERSION` in `db/schema.rs`; old vaults are rebuilt empty and need a fresh import. |
-| Desktop app            | Tauri 2 native window. Vite 6 + React 19 + TypeScript SPA in `web/`. React Router 7, React Aria, Tailwind CSS 4. Vitest + ESLint. |
+| Desktop app            | Tauri 2 native window. Vite 8 + React 19 + TypeScript SPA in `web/`. React Router 7, React Aria, Tailwind CSS 4. Vitest + Biome.  |
 | Website                | Same `web/` SPA. Dev server on port 5173. Production copy in `static/`, served by the vault on port 8080.                         |
 | Node                   | Node.js 22+ for `web/`, `docs/`, and Docker frontend builds.                                                                      |
 | Docs site              | Astro 7 + Starlight, published to GitHub Pages at bitrealm.io on each `v*` release tag.                                            |
@@ -112,14 +114,15 @@ message-vault
 ├── schema/                 # SQLite schema for the vault
 │   └── sql/                # CREATE TABLE sources embedded by the server
 ├── scripts/                # host helpers (run-vault-dev, build-static, schema sync)
-│   ├── deprecated/         # retired helper scripts
-│   └── test/               # scripted test helpers
+│   └── deprecated/         # retired helper scripts
 ├── src-tauri/              # Tauri v2 native shell (not a workspace member)
 │   ├── capabilities/       # Tauri permission manifests
 │   ├── icons/              # desktop app icons
 │   └── src/                # Tauri commands wrapping exporters / push / pull
-├── tests/                  # workspace-level tests
-│   └── fixtures/           # committed schema/API fixtures (no personal backups)
+├── staging/                # empty; the release Compose file mounts it for JSONL imports
+├── tests/
+│   └── fixtures/           # committed schema and search fixtures (no personal backups)
+├── vendor/                 # sqlx-sqlite with libsqlite3-sys bumped (why: VENDORING.md)
 ├── web/                    # Vite + React SPA: website and desktop UI
 │   └── src/                # screens, components, vault API client, Tauri wrappers
 └── web-next/               # restored historical Next.js browse UI (not the product GUI)
@@ -157,7 +160,7 @@ sudo apt install -y \
 sudo apt install -y ffmpeg
 ```
 
-**2. Rust 1.85+** (edition 2024). Do not use the distro `apt` package.
+**2. Rust through rustup.** Do not use the distro `apt` package: rustup reads `rust-toolchain.toml` and installs the pinned version on the first `cargo` command.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -201,14 +204,15 @@ Work from the repository root. The vault process must be running before the webs
 ```bash
 ./scripts/run-vault-dev.sh                 # keep data/ if present; empty vault if none
 ./scripts/run-vault-dev.sh --reset-demo    # wipe data/, seed the sample inbox (needs ffmpeg)
-./scripts/run-vault-dev.sh --reset         # wipe data/, start empty
+./scripts/run-vault-dev.sh --reset         # wipe data/, start empty and unclaimed (UI opens on Create Vault Owner)
+./scripts/run-vault-dev.sh --reset --owner # wipe data/, claim the vault as admin / admin
 ./scripts/run-vault-dev.sh --sqlweb        # also SQLite browser at http://127.0.0.1:8081
 ./scripts/run-vault-dev.sh --release       # optimized build; combines with any flag above
 ```
 
-`--reset` and `--reset-demo` cannot be combined. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
+`--reset` and `--reset-demo` cannot be combined, and `--owner` is rejected with `--reset-demo`, which claims the vault itself. `--help` on either dev script lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
 
-API: **http://127.0.0.1:8080**. After `--reset-demo`, sign in as username `demo` with an empty password. Otherwise create an account in the UI.
+API: **http://127.0.0.1:8080**. After `--reset-demo`, sign in as username `demo` with an empty password. After `--owner`, sign in as `admin` / `admin`. Otherwise create the vault owner in the UI.
 
 Restart terminal 1 after edits under `crates/vault/server/` (debug `cargo run`; no hot reload).
 

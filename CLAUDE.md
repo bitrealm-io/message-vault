@@ -10,7 +10,7 @@ Message Vault pulls conversations out of chat apps (iMessage, WhatsApp, SMS back
 - **Desktop app** (`src-tauri/` + `web/`) — Tauri v2 shell around a Vite + React 19 + TypeScript SPA. It reads phone backups, writes JSONL, and imports into a running vault. Browse/search work in the browser too; importing needs the desktop app.
 - **Website** — the same `web/` SPA served from the vault's `static/`.
 
-**AGENTS.md is the canonical operations guide** (first-time setup, dev run instructions, release process, PR workflow) and is read by Claude Code automatically. This file covers the architecture and the rules that are easy to get wrong; see AGENTS.md for anything operational not covered here. Published docs live at bitrealm.io (Astro Starlight in `docs/`).
+**AGENTS.md is the canonical operations guide** (first-time setup, dev run instructions, release process, PR workflow) and the only place commands are written down. Claude Code loads this file on its own and AGENTS.md only when it is read, so the Commands section below says when to read it. This file covers the architecture and the rules that are easy to get wrong; see AGENTS.md for anything operational not covered here. Published docs live at bitrealm.io (Astro Starlight in `docs/`).
 
 ## Data flow (the big picture)
 
@@ -28,42 +28,19 @@ vendor backup (chat.db, SMS XML, WhatsApp crypt15, …)
 - **GPL only behind a process boundary.** `imessage-database` and `crabapple` are GPL-3.0-or-later and the repository is under the Fair Core License, so `crates/helpers/imessage-reader` (GPL) is the only crate that links them. `imessage-ir-exporter` starts it as a process and talks JSON lines over stdin/stdout through `crates/helpers/imessage-reader-protocol` (MIT OR Apache-2.0, so both sides can link it). `src-tauri/build.rs` builds the helper and Tauri ships it beside the app as an `externalBin`; `cargo tree --manifest-path src-tauri/Cargo.toml -i imessage-database` must match nothing. `cargo deny check licenses bans` in `audit.yml` enforces the rule. Policy: `docs/agents/licences.md`.
 - **One way to fetch data in `web/`** — TanStack Query over route functions in `web/src/lib/vaultApi.ts`, with response types generated from `docs/src/assets/openapi.json`. Do not write a new cache, change-notification event, or fetching hook for a screen. This is **built** (PRs #290–#293): `useResource`, `usePagedList`, and `contactDetailCache` are gone, the `mv-*-changed` browser events with them; `nameCollection`, `savedSearches`, and `useAccountProfile` remain only as thin wrappers over TanStack Query, not as mechanisms of their own. Every cache entry is named with the signed-in account, so nothing has to be cleared when the account changes. Why, and what replaces what: `docs/adr/0002-one-way-to-fetch-data-in-the-web-app.md`.
 - **`crates/core/message-vault-io-core`** — shared export pipeline, jobs, form model. The form's validation reports problems as a `Vec<String>` so the desktop app can show them as they are; the pipeline itself returns `anyhow` errors like every other crate.
-- **`crates/vault/server`** — each `*_api.rs` file is one Axum route group; `db/` modules mirror the table sources in `schema/sql/*.sql`, which the server embeds at compile time (`db/schema.rs`) — change tables there, not in a live db file. Import path: `jsonl.rs` → `import.rs` → `dedupe.rs`; demo mode is a seed action, not a runtime mode — `reset-demo` (`reset_demo.rs`) writes one account row at the fixed `DEMO_ACCOUNT_ID` with a NULL password hash, which is why `demo` signs in with an empty password, and nothing at request time knows a vault is a demo. A test module over a few hundred lines lives beside its source as `<module>/tests.rs` (declared `mod tests;`), so the source file stays readable; small ones stay inline.
+- **`crates/vault/server`** — each `*_api.rs` file is one Axum route group; `db/` modules mirror the table sources in `schema/sql/*.sql`, which the server embeds at compile time (`db/schema.rs`) — change tables there, not in a live db file. Import path: `jsonl.rs` reads the records, then `import/` runs `staging` → `promote` → `contact_name`, calling `dedupe.rs`; demo mode is a seed action, not a runtime mode — `reset-demo` (`reset_demo.rs`) writes one account row at the fixed `DEMO_ACCOUNT_ID` with a NULL password hash, which is why `demo` signs in with an empty password, and nothing at request time knows a vault is a demo. A test module over a few hundred lines lives beside its source as `<module>/tests.rs` (declared `mod tests;`), so the source file stays readable; small ones stay inline.
 - **`src-tauri/`** is **not a workspace member** (own `Cargo.toml`, listed in the root workspace `exclude`). Its `commands/` wrap the exporter crates and push/pull for the desktop app. Format/build it with `--manifest-path`.
-- **`web/src/lib/api.ts`** is the vault API client; `web/src/lib/tauri.ts` wraps desktop-only commands; `desktopFeatures.ts` gates them. Tests sit next to sources as `*.test.ts(x)` (Vitest + Testing Library).
+- **`web/src/lib/api.ts`** holds the vault URL, the session token, and the `apiClient` fetch wrapper with its `VaultApiError`; the route functions built on it are in `vaultApi.ts`; `web/src/lib/tauri.ts` wraps desktop-only commands; `desktopFeatures.ts` gates them. Tests sit next to sources as `*.test.ts(x)` (Vitest + Testing Library).
 - **Not the product path**: `web-next/` (legacy Next.js browse UI). New features go in `web/` + `src-tauri/` + `crates/vault/server/`. **It is kept on purpose — do not propose deleting it.** It stays until the functionality worth keeping has been ported into `web/`, and that porting work is not yet defined or scoped: nobody has named which screens or behaviours would come across. Being outside CI, unserved, and excluded from dependabot are all true and none of them are an argument for removing it. Its screens and a feature-by-feature comparison with `web/` are recorded in `docs/superpowers/reference/web-next.md`. The old Slint GUI is gone; its screens are recorded in `docs/superpowers/reference/legacy-slint-gui.md`.
 
 ## Commands
 
-Run from the repo root unless noted. Full setup instructions: AGENTS.md.
+Every command is in AGENTS.md, and nothing is repeated here. Claude Code does not load AGENTS.md on its own, so read the section first:
 
-### Dev loop
-
-```bash
-./scripts/run-vault-dev.sh                # vault API on http://127.0.0.1:8080 (keeps data/)
-./scripts/run-vault-dev.sh --reset-demo   # wipe data/, seed sample inbox (sign in: user `demo`, empty password)
-cd web && npm run dev                     # browser UI on :5173, proxies /v1 — OR:
-cargo tauri dev                           # desktop app (starts Vite itself; never run both at once)
-```
-
-Use **127.0.0.1**, not `localhost` (the latter can resolve to IPv6, which the vault does not listen on). Restart the vault script after edits under `crates/vault/server/` (debug `cargo run`; no hot reload).
-
-### Verify
-
-```bash
-cargo fmt --all -- --check
-cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo build --workspace && cargo test --workspace
-cargo test -p sms-backup-restore-exporter     # one crate
-cargo build --manifest-path src-tauri/Cargo.toml
-cd web && npm run lint && npm test            # Biome + Vitest (CI runs `biome ci`)
-cd docs && npm run check && npm run build     # docs tree only
-./scripts/format-all.sh                       # rewrite: rustfmt (workspace + src-tauri) + Biome
-./scripts/check-pr.sh                         # fast pre-flight: fmt --check, Clippy -D warnings, Biome ci, tsc
-./scripts/check-all.sh                        # everything CI runs, serially; stops on first failure
-```
-
-After `web/` UI changes, verify in the browser with the Playwright MCP (`plugin-playwright-playwright`) against Vite on `http://127.0.0.1:5173` (vault on `:8080`). Details and Tauri-only limits: [`.cursor/rules/playwright-mcp.mdc`](.cursor/rules/playwright-mcp.mdc).
+- **Starting the vault, the browser UI, or the desktop app** — "Run the vault (development)": dev script flags, the demo sign-in, the Postgres variant, and what must not run at the same time.
+- **Checking work before a push** — "Build, format, and test". `./scripts/check-pr.sh` is the fast pre-flight and `./scripts/check-all.sh` is everything CI runs; the section has the single-crate, Postgres, coverage, `web/` and `docs/` commands.
+- **After a `web/` UI change** — "Tools": verify in the browser with the Playwright MCP.
+- **A new machine** — "First time setup". **A version bump, changelog entry, or release** — "Releases and versions".
 
 ## Rules that are easy to get wrong
 

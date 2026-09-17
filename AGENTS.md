@@ -1,71 +1,44 @@
-# Cursor Rules for This Project
+# AGENTS.md
 
-## Communication Style
+The operations guide for any agent working in this repository: git and pull request workflow, first-time setup, running the vault, the checks, and the release process. Architecture and the rules that are easy to get wrong are in `CLAUDE.md`.
 
-Write in plain, direct English. Explain what changed and why, break a complex
-change into steps, and prefer a concrete example over an abstract description.
+## Writing
 
-`docs/agents/writing-style.md` is the full guide. It governs documents, product
-copy, commit messages, and pull request descriptions, and it holds the fixed
-product vocabulary.
+`docs/agents/writing-style.md` governs documents, product copy, commit
+messages, and pull request descriptions, and holds the fixed product
+vocabulary. Read it before writing any of those.
 
 ## Git Workflow
 
-### Always Before Pushing
-
-1. Run `git fetch` to sync with origin
-2. Run `git branch -a` to see all local and remote branches
-3. Run `gh pr list` to check the status of open PRs
-4. Run `gh pr view <number>` to check a specific PR's status before pushing
-5. Do not assume the state of any PR - verify it with `gh` commands
-
-### Making Changes
-
-- Create a new branch or worktree for all code changes
-- Never commit directly to main/master
-- Branch names should be descriptive (e.g., `feature/add-auth`, `fix/parsing-bug`)
+- Every change goes on a branch or worktree. `main` takes pull requests only:
+  its ruleset requires one, plus the ten `ci.yml` checks.
+- Before pushing, run `git fetch`, then read the pull request's real state
+  with `gh pr list`, `gh pr view <number>`, and `gh pr checks <number>`.
+- Merge a pull request only when asked to.
 
 ### Submitting Work
 
-- Use `gh pr create` to open a pull request
-- Do not merge PRs yourself unless explicitly instructed
-- Use `gh pr view <number>` to check PR status before any operations
-- **Write the description to one of the templates in `.github/PULL_REQUEST_TEMPLATE/`.**
-  They exist for whoever opens the pull request to fill in — an agent included —
-  not as options offered to a reviewer:
-  - `feature.md` for new behaviour: what it does and for whom, the key files
-    changed, HTTP API and schema changes, how to test it.
-  - `bugfix.md` for a fix: expected against actual, the root cause stated
-    separately from the fix, steps to reproduce before and verify after,
-    impact, and regression risk.
-  - `.github/pull_request_template.md` is the generic default applied
-    automatically. Use it for changes that are neither, such as documentation.
+Open the pull request with `gh pr create`.
+**Write the description to one of the templates in `.github/PULL_REQUEST_TEMPLATE/`.**
+They exist for whoever opens the pull request to fill in — an agent included —
+not as options offered to a reviewer:
 
-  Fill the sections in rather than deleting them. Root Cause and Regression
-  Risk on a fix are the two that make it reviewable, so answer them plainly
-  instead of dropping them.
+- `feature.md` for new behaviour: what it does and for whom, the key files
+  changed, HTTP API and schema changes, how to test it.
+- `bugfix.md` for a fix: expected against actual, the root cause stated
+  separately from the fix, steps to reproduce before and verify after,
+  impact, and regression risk.
+- `.github/pull_request_template.md` is the generic default applied
+  automatically. Use it for changes that are neither, such as documentation.
 
-## Code Changes
+Fill the sections in rather than deleting them. Root Cause and Regression
+Risk on a fix are the two that make it reviewable, so answer them plainly
+instead of dropping them.
 
-- Test code locally before pushing
-- Keep commits focused and logical
-- Write clear commit messages that explain the change
+## Tools
 
-## Tools to Use
-
-- Use `gh` CLI commands to check branches and PR status (not guesswork)
-- Use `gh pr list` to see all open PRs
-- Use `gh pr view <PR_NUMBER>` to see specific PR details
-- Use `gh pr create` to open new PRs
-- Use `gh pr checks <PR_NUMBER>` to see test results
-- Use the **GitHub MCP** (`plugin-github-github`) for issues, PR read/search, reviews, and GitHub code search when the server is authenticated; call `mcp_auth` if discovery fails, otherwise fall back to `gh`. See [`.cursor/rules/github-mcp.mdc`](.cursor/rules/github-mcp.mdc).
-- Use the **Playwright MCP** (`plugin-playwright-playwright`) to verify browser UI after `web/` changes: navigate to the Vite app (prefer `http://127.0.0.1:5173` with the vault on `:8080`), take a snapshot, then click/type as needed. See [`.cursor/rules/playwright-mcp.mdc`](.cursor/rules/playwright-mcp.mdc). Desktop-only screens gated by `isTauri()` still need the Tauri window or unit tests — Playwright against Vite alone cannot exercise them.
-
-## When Uncertain
-
-- Ask for clarification rather than guessing
-- Use `gh` commands to check current state
-- Check existing conventions in the codebase before inventing new ones
+- **GitHub MCP** (`plugin-github-github`) for issues, PR read/search, reviews, and GitHub code search when the server is authenticated; fall back to `gh` when it is not. See [`.cursor/rules/github-mcp.mdc`](.cursor/rules/github-mcp.mdc).
+- **Playwright MCP** (`plugin-playwright-playwright`) to verify browser UI after `web/` changes: navigate to the Vite app (`http://127.0.0.1:5173` with the vault on `:8080`), take a snapshot, then click/type as needed. See [`.cursor/rules/playwright-mcp.mdc`](.cursor/rules/playwright-mcp.mdc). Desktop-only screens gated by `isTauri()` still need the Tauri window or unit tests — Playwright against Vite alone cannot exercise them.
 
 ## Message Vault Repository
 
@@ -80,10 +53,10 @@ The product has two pieces:
 
 | Piece                  | Stack                                                                                                                             |
 |------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| Language (Rust crates) | Rust 1.85+ (edition 2024). CI uses latest stable.                                                                                 |
+| Language (Rust crates) | Rust, edition 2024. `rust-toolchain.toml` pins the version (`1.98.1`) for every checkout, CI, and the release image.              |
 | Vault server           | Tokio + Axum 0.8 HTTP API. sqlx Any: SQLite (bundled) by default, Postgres via `[database] url`. TOML config. Argon2 passwords, opaque hashed session tokens. |
 | Database               | SQLite file at `data/vault.db`. Table SQL lives in `schema/sql/`. Schema changes bump `SCHEMA_VERSION` in `db/schema.rs`; old vaults are rebuilt empty and need a fresh import. |
-| Desktop app            | Tauri 2 native window. Vite 6 + React 19 + TypeScript SPA in `web/`. React Router 7, React Aria, Tailwind CSS 4. Vitest + ESLint. |
+| Desktop app            | Tauri 2 native window. Vite 8 + React 19 + TypeScript SPA in `web/`. React Router 7, React Aria, Tailwind CSS 4. Vitest + Biome.  |
 | Website                | Same `web/` SPA. Dev server on port 5173. Production copy in `static/`, served by the vault on port 8080.                         |
 | Node                   | Node.js 22+ for `web/`, `docs/`, and Docker frontend builds.                                                                      |
 | Docs site              | Astro 7 + Starlight, published to GitHub Pages at bitrealm.io on each `v*` release tag.                                            |
@@ -112,14 +85,15 @@ message-vault
 ├── schema/                 # SQLite schema for the vault
 │   └── sql/                # CREATE TABLE sources embedded by the server
 ├── scripts/                # host helpers (run-vault-dev, build-static, schema sync)
-│   ├── deprecated/         # retired helper scripts
-│   └── test/               # scripted test helpers
+│   └── deprecated/         # retired helper scripts
 ├── src-tauri/              # Tauri v2 native shell (not a workspace member)
 │   ├── capabilities/       # Tauri permission manifests
 │   ├── icons/              # desktop app icons
 │   └── src/                # Tauri commands wrapping exporters / push / pull
-├── tests/                  # workspace-level tests
-│   └── fixtures/           # committed schema/API fixtures (no personal backups)
+├── staging/                # empty; the release Compose file mounts it for JSONL imports
+├── tests/
+│   └── fixtures/           # committed schema and search fixtures (no personal backups)
+├── vendor/                 # sqlx-sqlite with libsqlite3-sys bumped (why: VENDORING.md)
 ├── web/                    # Vite + React SPA: website and desktop UI
 │   └── src/                # screens, components, vault API client, Tauri wrappers
 └── web-next/               # restored historical Next.js browse UI (not the product GUI)
@@ -157,7 +131,7 @@ sudo apt install -y \
 sudo apt install -y ffmpeg
 ```
 
-**2. Rust 1.85+** (edition 2024). Do not use the distro `apt` package.
+**2. Rust through rustup.** Do not use the distro `apt` package: rustup reads `rust-toolchain.toml` and installs the pinned version on the first `cargo` command.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -201,14 +175,15 @@ Work from the repository root. The vault process must be running before the webs
 ```bash
 ./scripts/run-vault-dev.sh                 # keep data/ if present; empty vault if none
 ./scripts/run-vault-dev.sh --reset-demo    # wipe data/, seed the sample inbox (needs ffmpeg)
-./scripts/run-vault-dev.sh --reset         # wipe data/, start empty
+./scripts/run-vault-dev.sh --reset         # wipe data/, start empty and unclaimed (UI opens on Create Vault Owner)
+./scripts/run-vault-dev.sh --reset --owner # wipe data/, claim the vault as admin / admin
 ./scripts/run-vault-dev.sh --sqlweb        # also SQLite browser at http://127.0.0.1:8081
 ./scripts/run-vault-dev.sh --release       # optimized build; combines with any flag above
 ```
 
-`--reset` and `--reset-demo` cannot be combined. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
+`--reset` and `--reset-demo` cannot be combined, and `--owner` is rejected with `--reset-demo`, which claims the vault itself. `--help` on either dev script lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
 
-API: **http://127.0.0.1:8080**. After `--reset-demo`, sign in as username `demo` with an empty password. Otherwise create an account in the UI.
+API: **http://127.0.0.1:8080**. After `--reset-demo`, sign in as username `demo` with an empty password. After `--owner`, sign in as `admin` / `admin`. Otherwise create the vault owner in the UI.
 
 Restart terminal 1 after edits under `crates/vault/server/` (debug `cargo run`; no hot reload).
 

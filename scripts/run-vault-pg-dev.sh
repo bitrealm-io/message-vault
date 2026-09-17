@@ -3,6 +3,7 @@
 #
 #   ./scripts/run-vault-pg-dev.sh                 # start Postgres if needed; keep data
 #   ./scripts/run-vault-pg-dev.sh --reset         # wipe volume + data/, empty vault
+#   ./scripts/run-vault-pg-dev.sh --reset --owner # wipe, claim the vault as admin/admin
 #   ./scripts/run-vault-pg-dev.sh --reset-demo    # wipe, seed sample inbox (demo / empty password)
 #   ./scripts/run-vault-pg-dev.sh --release       # optimized binary (also with --reset / --reset-demo)
 #
@@ -37,6 +38,21 @@ Usage: $(basename "$0") [--reset | --reset-demo] [--owner] [--release]
                 which claims the vault itself)
   --release     Build and run the optimized binary (seed and serve)
   -h, --help
+
+Examples:
+  ./scripts/$(basename "$0")
+      Start Postgres if needed, keep its data, and serve
+  ./scripts/$(basename "$0") --reset
+      Empty, unclaimed vault: the web UI opens on Create Vault Owner
+  ./scripts/$(basename "$0") --reset --owner
+      Empty vault, sign in as admin / admin
+  ./scripts/$(basename "$0") --owner
+      Claim the existing vault as admin / admin (warns and carries on if it
+      is already claimed)
+  ./scripts/$(basename "$0") --reset-demo
+      Sample inbox, sign in as demo with an empty password
+  ./scripts/$(basename "$0") --reset-demo --release
+      Sample inbox on the optimized binary
 EOF
 }
 
@@ -46,10 +62,6 @@ while [[ $# -gt 0 ]]; do
     --reset-demo) DEMO=1 ;;
     --owner) OWNER=1 ;;
     --release) RELEASE=1 ;;
-    --demo)
-      echo "error: --demo was renamed to --reset-demo (always wipes data/ and reseeds)" >&2
-      exit 1
-      ;;
     --sqlweb)
       echo "error: --sqlweb is only for ./scripts/run-vault-dev.sh (SQLite)" >&2
       exit 1

@@ -3,6 +3,7 @@
 #
 #   ./scripts/run-vault-dev.sh                 # keep existing data/; empty vault if none
 #   ./scripts/run-vault-dev.sh --reset         # wipe data/, start empty
+#   ./scripts/run-vault-dev.sh --reset --owner # wipe data/, claim the vault as admin/admin
 #   ./scripts/run-vault-dev.sh --reset-demo    # wipe data/, seed sample inbox
 #   ./scripts/run-vault-dev.sh --sqlweb        # SQLite browser on http://127.0.0.1:8081
 #   ./scripts/run-vault-dev.sh --release       # optimized binary (combine with any flag above)
@@ -45,6 +46,22 @@ Usage: $(basename "$0") [--reset | --reset-demo] [--owner] [--sqlweb] [--release
   --sqlweb      Start sqlite-web on http://127.0.0.1:8081 (needs sqlite_web on PATH)
   --release     Build and run the optimized binary (seed and serve)
   -h, --help
+
+Examples:
+  ./scripts/$(basename "$0")
+      Keep data/ as it is and serve
+  ./scripts/$(basename "$0") --reset
+      Empty, unclaimed vault: the web UI opens on Create Vault Owner
+  ./scripts/$(basename "$0") --reset --owner
+      Empty vault, sign in as admin / admin
+  ./scripts/$(basename "$0") --owner
+      Claim the existing vault as admin / admin (warns and carries on if it
+      is already claimed)
+  ./scripts/$(basename "$0") --reset-demo
+      Sample inbox, sign in as demo with an empty password
+  ./scripts/$(basename "$0") --reset-demo --release --sqlweb
+      Sample inbox on the optimized binary, with the SQLite browser on
+      http://127.0.0.1:8081
 EOF
 }
 
@@ -54,10 +71,6 @@ while [[ $# -gt 0 ]]; do
     --reset-demo) DEMO=1 ;;
     --owner) OWNER=1 ;;
     --release) RELEASE=1 ;;
-    --demo)
-      echo "error: --demo was renamed to --reset-demo (always wipes data/ and reseeds)" >&2
-      exit 1
-      ;;
     --sqlweb) SQLWEB=1 ;;
     -h | --help)
       usage

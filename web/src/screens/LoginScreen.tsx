@@ -1,17 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import Button from "../components/Button";
 import { setBaseUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { initialLoginServerUrl } from "../lib/authGuards";
 import { isTauri } from "../lib/tauri-check";
-import {
-  accentLink,
-  authCard,
-  authCardBody,
-  authScreenTitle,
-  mutedText,
-  pageCenter,
-} from "../lib/uiStyles";
+import { accentLink, authCard, authCardBody, authScreenTitle, pageCenter } from "../lib/uiStyles";
 import { useVaultHealth } from "../lib/useVaultHealth";
 import { useVaultState } from "../lib/useVaultState";
 import { checkVaultHealth, type VaultHealthStatus } from "../lib/vaultHealth";
@@ -28,27 +20,6 @@ function FormSkeleton() {
       <div className="mt-2 h-10 rounded bg-elevated" />
       <div className="mt-5 h-3.5 w-1/4 rounded bg-elevated" />
       <div className="mt-2 h-10 rounded bg-elevated" />
-    </div>
-  );
-}
-
-/**
- * What the card shows when no vault answered and it has no form to fall back
- * on. A placeholder form here would read as "still loading" for as long as the
- * vault stays down, so the card says what it found instead. The background
- * probe backs off to one try in 30 seconds, which is a long wait for someone
- * who has just started the vault, hence the button.
- */
-function NoVaultAnswer({ address, onRetry }: { address: string; onRetry: () => void }) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-center">
-      <p className="m-0 text-[0.875rem] text-text">
-        {address ? `No vault is answering at ${address}.` : "No vault is answering here."}
-      </p>
-      <p className={`m-0 mt-2 ${mutedText}`}>This screen connects by itself once one does.</p>
-      <Button variant="primary" onPress={onRetry} className="mt-5">
-        Try again
-      </Button>
     </div>
   );
 }
@@ -231,7 +202,12 @@ export default function LoginScreen() {
                   disabled={state !== "connected"}
                 />
               ) : state === "disconnected" ? (
-                <NoVaultAnswer address={address} onRetry={() => void connect(address)} />
+                // No vault answered, so none has said which forms it offers.
+                // Login is the one every claimed vault has, and it is shown
+                // disabled: a placeholder here would read as "still loading"
+                // for as long as the vault stays down. The way on is Change
+                // vault settings, below.
+                <LocalAuthTabs serverUrl={address} vaultState="closed" disabled />
               ) : (
                 <FormSkeleton />
               )}

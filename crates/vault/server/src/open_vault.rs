@@ -28,15 +28,13 @@ impl OpenVault {
     /// Open the database `cfg` names and make sure the vault schema exists.
     ///
     /// A SQLite file that does not exist yet is created, folder and all,
-    /// which is how a new vault begins. The sqlx Any drivers are installed
-    /// here, once, so no entry point has to remember to.
+    /// which is how a new vault begins.
     ///
     /// # Errors
     ///
     /// Returns an error when the URL scheme is unknown, the connection fails,
     /// or the schema cannot be applied.
     pub async fn open(cfg: Config) -> Result<Self> {
-        sqlx::any::install_default_drivers();
         if let DbTarget::Path(path) = cfg.db_target()
             && let Some(parent) = path.parent()
             && !parent.as_os_str().is_empty()

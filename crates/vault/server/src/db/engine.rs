@@ -79,7 +79,11 @@ async fn try_enable_wal(pool: &AnyPool) {
 }
 
 /// Open the configured pool for a SQLite file.
+///
+/// The sqlx Any drivers are installed here and in [`open_pool_from_url`],
+/// the two places a pool is opened, so no entry point has to remember to.
 pub async fn open_pool_for_path(path: &Path) -> Result<AnyPool> {
+    sqlx::any::install_default_drivers();
     let pool = sqlite_pool_options()
         .connect_with(AnyConnectOptions::from_str(&sqlite_url_from_path(path))?)
         .await?;
@@ -95,6 +99,7 @@ pub async fn open_pool_for_path(path: &Path) -> Result<AnyPool> {
 /// overridden on purpose — the vault always reads and writes its database.
 /// Postgres has no equivalent.
 pub async fn open_pool_from_url(url: &str) -> Result<AnyPool> {
+    sqlx::any::install_default_drivers();
     let engine = detect_engine(url)?;
     if engine == DbEngine::Sqlite {
         let options: SqliteConnectOptions =

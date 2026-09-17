@@ -171,7 +171,6 @@ async fn test_db_conn(db: &Path) -> sqlx::pool::PoolConnection<sqlx::Any> {
 /// connection so the caller can close the pool deterministically before
 /// copying or replacing the database file.
 async fn test_db(db: &Path) -> (sqlx::AnyPool, sqlx::pool::PoolConnection<sqlx::Any>) {
-    sqlx::any::install_default_drivers();
     let pool = engine::open_pool_for_path(db)
         .await
         .expect("open test database");
@@ -794,7 +793,6 @@ fn the_reset_work_directory_is_created_inside_the_data_directory() {
 
 /// The SQLite tables in `db`, by name, without touching the schema.
 async fn sqlite_table_names(db: &Path) -> Vec<String> {
-    sqlx::any::install_default_drivers();
     let pool = engine::open_pool_for_path(db).await.expect("open database");
     let mut conn = pool.acquire().await.expect("acquire");
     let names: Vec<String> =

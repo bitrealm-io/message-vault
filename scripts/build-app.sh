@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the desktop installers and give them lowercase file names.
 #
-#   ./scripts/build-desktop.sh [cargo tauri build arguments]
+#   ./scripts/build-app.sh [cargo tauri build arguments]
 #
 # Tauri names each installer after productName, so a plain build writes
 # "Message Vault_0.9.0_amd64.AppImage". productName is also the name the app

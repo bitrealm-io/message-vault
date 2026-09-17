@@ -153,10 +153,10 @@ When the window opens, point it at **http://127.0.0.1:8080**. The first compile 
 For a release-shaped desktop binary (faster on real backups, or when packaging installers):
 
 ```bash title="Build a release-shaped desktop app"
-cargo tauri build
+./scripts/build-desktop.sh
 ```
 
-`cargo tauri build` is not for day-to-day UI work — it doesn't reload. Use `cargo tauri dev` for that.
+The script runs `cargo tauri build` and then renames the installers under `src-tauri/target/release/bundle/` from `Message Vault_…` to `message_vault_<version>_<arch>`, the same names a release carries. It is not for day-to-day UI work — it doesn't reload. Use `cargo tauri dev` for that.
 
 ### Serve the website from the vault (optional)
 

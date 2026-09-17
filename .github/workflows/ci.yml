@@ -506,7 +506,8 @@ jobs:
           ${{ matrix.os == 'macos-latest' && '--pkg-fmt zip' || '' }}
 
       - name: Build Tauri app
-        run: cargo tauri build
+        shell: bash
+        run: ./scripts/build-desktop.sh
 
       - name: Collect artifacts
         shell: bash
@@ -526,15 +527,15 @@ jobs:
                 ls -R "$BUNDLE_DIR" || true
                 exit 1
               fi
-              cp "${debs[0]}" "dist/message-vault-io_${VERSION}_amd64.deb"
-              cp "${appimages[0]}" "dist/message-vault-io_${VERSION}_amd64.AppImage"
+              cp "${debs[0]}" "dist/message_vault_${VERSION}_amd64.deb"
+              cp "${appimages[0]}" "dist/message_vault_${VERSION}_amd64.AppImage"
               ;;
             windows-latest)
-              cp "$BUNDLE_DIR"/msi/*.msi "dist/message-vault-io_${VERSION}_x64.msi" 2>/dev/null || \
+              cp "$BUNDLE_DIR"/msi/*.msi "dist/message_vault_${VERSION}_x64.msi" 2>/dev/null || \
               { echo "No Windows MSI found"; ls -R "$BUNDLE_DIR" || true; exit 1; }
               ;;
             macos-latest)
-              cp "$BUNDLE_DIR"/dmg/*.dmg "dist/message-vault-io_${VERSION}_aarch64.dmg" 2>/dev/null || \
+              cp "$BUNDLE_DIR"/dmg/*.dmg "dist/message_vault_${VERSION}_aarch64.dmg" 2>/dev/null || \
               { echo "No macOS DMG found"; ls -R "$BUNDLE_DIR" || true; exit 1; }
               ;;
           esac
@@ -593,10 +594,10 @@ jobs:
 
           ## Installers
 
-          - \`message-vault-io_*.deb\` — Debian/Ubuntu
-          - \`message-vault-io_*.AppImage\` — Linux (portable)
-          - \`message-vault-io_*.msi\` — Windows
-          - \`message-vault-io_*.dmg\` — macOS (Apple Silicon)
+          - \`message_vault_*.deb\` — Debian/Ubuntu
+          - \`message_vault_*.AppImage\` — Linux (portable)
+          - \`message_vault_*.msi\` — Windows
+          - \`message_vault_*.dmg\` — macOS (Apple Silicon)
 
           ## Docker
 

@@ -32,6 +32,17 @@ describe("VaultSettingsScreen", () => {
     expect(screen.getByText("Connection Status")).toBeInTheDocument();
   });
 
+  it("suggests the local vault's address in an empty field", () => {
+    // A vault on this machine is where nearly everyone starts, so the example
+    // is the address that works there rather than a made-up hostname.
+    renderScreen({ draft: "" });
+
+    expect(screen.getByRole("textbox", { name: "Address" })).toHaveAttribute(
+      "placeholder",
+      "http://127.0.0.1:8080",
+    );
+  });
+
   it("reports the status it is handed", () => {
     renderScreen({ status: "disconnected" });
     expect(screen.getByText("Disconnected")).toBeInTheDocument();

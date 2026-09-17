@@ -1,5 +1,6 @@
 import Button from "../../components/Button";
 import TextField from "../../components/TextField";
+import { DEFAULT_TAURI_VAULT_URL } from "../../lib/authGuards";
 import { authLabel, authScreenTitle } from "../../lib/uiStyles";
 import VaultStatus, { type VaultConnection } from "./VaultStatus";
 
@@ -52,7 +53,7 @@ export default function VaultSettingsScreen({
           value={draft}
           onChange={onDraftChange}
           onKeyDown={(e) => e.key === "Enter" && onTest()}
-          placeholder="https://vault.example.com"
+          placeholder={DEFAULT_TAURI_VAULT_URL}
           className="min-w-0 flex-1"
           spellCheck="false"
         />

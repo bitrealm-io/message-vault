@@ -169,6 +169,42 @@ describe("LoginScreen", () => {
     expect(screen.queryByRole("textbox", { name: "Address" })).not.toBeInTheDocument();
   });
 
+  it("settles on a finished state, not a placeholder form, when nothing answers", async () => {
+    // A skeleton reads as "still loading". A card that has its answer — no
+    // vault — has to look finished, or the screen seems to hang.
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    renderScreen();
+
+    expect(await screen.findByText("No vault is answering here.")).toBeInTheDocument();
+    expect(screen.queryByTestId("auth-form-skeleton")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+  });
+
+  it("shows the placeholder form only while it is still connecting", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {})),
+    );
+    renderScreen();
+
+    await screen.findByText("Connecting");
+    expect(screen.getByTestId("auth-form-skeleton")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
+
+  it("connects from Try again once the vault is up", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    const user = setupUser();
+    renderScreen();
+
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    stubVault();
+    await user.click(retry);
+
+    expect(await screen.findByText("Connected")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Log in" })).toBeEnabled();
+  });
+
   it("lets the vault be changed while the card is still connecting", async () => {
     // A vault that never answers holds the card in "connecting": a wrong
     // address is exactly when you need the settings screen most, so the way

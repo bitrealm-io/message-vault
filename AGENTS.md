@@ -352,7 +352,7 @@ Leave most other `Cargo.toml` files at `0.1.0`. Do not bump `web-next/` (`0.3.0`
 **Build a release-shaped binary locally (does not publish)**
 
 ```bash
-cargo tauri build                          # desktop installers under src-tauri/target/release/bundle/
+./scripts/build-app.sh                 # desktop installers, renamed to message_vault_<version>_<arch>, under src-tauri/target/release/bundle/
 docker compose -f docker/compose.release.yml up --build   # vault image from this checkout
 cargo build --workspace --release          # workspace crates only; not the Tauri installer
 ```

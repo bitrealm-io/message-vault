@@ -10,7 +10,7 @@ Message Vault pulls conversations out of chat apps (iMessage, WhatsApp, SMS back
 - **Desktop app** (`src-tauri/` + `web/`) — Tauri v2 shell around a Vite + React 19 + TypeScript SPA. It reads phone backups, writes JSONL, and imports into a running vault. Browse/search work in the browser too; importing needs the desktop app.
 - **Website** — the same `web/` SPA served from the vault's `static/`.
 
-**AGENTS.md is the canonical operations guide** (first-time setup, dev run instructions, release process, PR workflow) and is read by Claude Code automatically. This file covers the architecture and the rules that are easy to get wrong; see AGENTS.md for anything operational not covered here. Published docs live at bitrealm.io (Astro Starlight in `docs/`).
+**AGENTS.md is the canonical operations guide** (first-time setup, dev run instructions, release process, PR workflow) and the only place commands are written down. Claude Code loads this file on its own and AGENTS.md only when it is read, so the Commands section below says when to read it. This file covers the architecture and the rules that are easy to get wrong; see AGENTS.md for anything operational not covered here. Published docs live at bitrealm.io (Astro Starlight in `docs/`).
 
 ## Data flow (the big picture)
 
@@ -35,36 +35,12 @@ vendor backup (chat.db, SMS XML, WhatsApp crypt15, …)
 
 ## Commands
 
-Run from the repo root unless noted. Full setup instructions: AGENTS.md.
+Every command is in AGENTS.md, and nothing is repeated here. Claude Code does not load AGENTS.md on its own, so read the section first:
 
-### Dev loop
-
-```bash
-./scripts/run-vault-dev.sh                # vault API on http://127.0.0.1:8080 (keeps data/)
-./scripts/run-vault-dev.sh --reset-demo   # wipe data/, seed sample inbox (sign in: user `demo`, empty password)
-./scripts/run-vault-dev.sh --reset --owner # wipe data/, empty vault claimed as admin / admin (--help lists the rest)
-cd web && npm run dev                     # browser UI on :5173, proxies /v1 — OR:
-cargo tauri dev                           # desktop app (starts Vite itself; never run both at once)
-```
-
-Use **127.0.0.1**, not `localhost` (the latter can resolve to IPv6, which the vault does not listen on). Restart the vault script after edits under `crates/vault/server/` (debug `cargo run`; no hot reload).
-
-### Verify
-
-```bash
-cargo fmt --all -- --check
-cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
-cargo build --workspace && cargo test --workspace
-cargo test -p sms-backup-restore-exporter     # one crate
-cargo build --manifest-path src-tauri/Cargo.toml
-cd web && npm run lint && npm test            # Biome + Vitest (CI runs `biome ci`)
-cd docs && npm run check && npm run build     # docs tree only
-./scripts/format-all.sh                       # rewrite: rustfmt (workspace + src-tauri) + Biome
-./scripts/check-pr.sh                         # fast pre-flight: fmt --check, Clippy -D warnings, Biome ci, tsc
-./scripts/check-all.sh                        # everything CI runs, serially; stops on first failure
-```
-
-After `web/` UI changes, verify in the browser with the Playwright MCP (`plugin-playwright-playwright`) against Vite on `http://127.0.0.1:5173` (vault on `:8080`). Details and Tauri-only limits: [`.cursor/rules/playwright-mcp.mdc`](.cursor/rules/playwright-mcp.mdc).
+- **Starting the vault, the browser UI, or the desktop app** — "Run the vault (development)": dev script flags, the demo sign-in, the Postgres variant, and what must not run at the same time.
+- **Checking work before a push** — "Build, format, and test". `./scripts/check-pr.sh` is the fast pre-flight and `./scripts/check-all.sh` is everything CI runs; the section has the single-crate, Postgres, coverage, `web/` and `docs/` commands.
+- **After a `web/` UI change** — "Tools": verify in the browser with the Playwright MCP.
+- **A new machine** — "First time setup". **A version bump, changelog entry, or release** — "Releases and versions".
 
 ## Rules that are easy to get wrong
 

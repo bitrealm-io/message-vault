@@ -169,6 +169,32 @@ describe("LoginScreen", () => {
     expect(screen.queryByRole("textbox", { name: "Address" })).not.toBeInTheDocument();
   });
 
+  it("shows the login form, disabled, when nothing answers", async () => {
+    // A skeleton reads as "still loading". A card that has its answer — no
+    // vault — has to look finished, or the screen seems to hang.
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    renderScreen();
+
+    await screen.findByText("Disconnected");
+    expect(screen.queryByTestId("auth-form-skeleton")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Log in" })).toBeDisabled();
+    // No vault has said it takes new accounts, so the card does not offer one.
+    expect(screen.queryByRole("tab", { name: "Create Account" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change vault settings" })).toBeEnabled();
+  });
+
+  it("shows the placeholder form only while it is still connecting", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {})),
+    );
+    renderScreen();
+
+    await screen.findByText("Connecting");
+    expect(screen.getByTestId("auth-form-skeleton")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Log in" })).not.toBeInTheDocument();
+  });
+
   it("lets the vault be changed while the card is still connecting", async () => {
     // A vault that never answers holds the card in "connecting": a wrong
     // address is exactly when you need the settings screen most, so the way

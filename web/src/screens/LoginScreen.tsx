@@ -12,9 +12,9 @@ import VaultSettingsScreen from "./auth/VaultSettingsScreen";
 import VaultStatus, { type VaultConnection } from "./auth/VaultStatus";
 
 /** Placeholder shaped like the form, so the card does not flicker into shape. */
-function FormSkeleton({ dimmed }: { dimmed: boolean }) {
+function FormSkeleton() {
   return (
-    <div className={`min-h-0 flex-1 ${dimmed ? "opacity-40" : ""}`} aria-hidden="true">
+    <div className="min-h-0 flex-1" aria-hidden="true" data-testid="auth-form-skeleton">
       <div className="mb-6 h-9 rounded bg-elevated" />
       <div className="h-3.5 w-1/3 rounded bg-elevated" />
       <div className="mt-2 h-10 rounded bg-elevated" />
@@ -201,8 +201,15 @@ export default function LoginScreen() {
                   vaultState={vaultState}
                   disabled={state !== "connected"}
                 />
+              ) : state === "disconnected" ? (
+                // No vault answered, so none has said which forms it offers.
+                // Login is the one every claimed vault has, and it is shown
+                // disabled: a placeholder here would read as "still loading"
+                // for as long as the vault stays down. The way on is Change
+                // vault settings, below.
+                <LocalAuthTabs serverUrl={address} vaultState="closed" disabled />
               ) : (
-                <FormSkeleton dimmed={state === "disconnected"} />
+                <FormSkeleton />
               )}
 
               <OrRule />

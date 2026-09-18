@@ -112,6 +112,16 @@ of, and a search that reads the same everywhere.
 
 ### Design
 
+- 2026-09-17: **The vault owner's screen is Owner Home, with a side panel.**
+  The owner lands on it at sign-in. Its side panel lists User Accounts first,
+  then Vault, Password and Appearance, in place of the tabs across the top.
+  In User Accounts, an account's status is a dropdown (Active or Disabled)
+  instead of an Enable/Disable button, and both Add account and Reset
+  password ask for the password twice and save only when the two match.
+  Resetting a password now does just that: the person's current session
+  carries on, and they keep the new password until they change it themselves.
+  The vault no longer makes anyone replace a password the owner chose at
+  their next sign-in.
 - 2026-09-09: **An import brings back a contact you had trashed.** Until now
   an import that met the handle of a trashed contact attached to it and left
   it in Trash, so someone you set aside once never appeared in Contacts again

@@ -1,5 +1,5 @@
-import { SelectionIndicator, Tab, TabList, TabPanel, Tabs } from "react-aria-components";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { NAV_LEADING_ROW_CLASS } from "../components/navSectionLayout";
 import { useAuth } from "../lib/auth";
 import { parseSelectKey } from "../lib/selectKey";
 import { OwnerAccountsPanel } from "./owner/OwnerAccountsPanel";
@@ -7,100 +7,96 @@ import { VaultSettingsPanel } from "./owner/VaultSettingsPanel";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { ChangePasswordSection } from "./settings/ChangePasswordSection";
 
-const ALL_TABS = ["accounts", "vault", "password", "appearance"] as const;
-type ConsoleTab = (typeof ALL_TABS)[number];
+const SECTIONS = ["accounts", "vault", "password", "appearance"] as const;
+type Section = (typeof SECTIONS)[number];
 
-const TAB_LABELS: Record<ConsoleTab, string> = {
+const SECTION_LABELS: Record<Section, string> = {
   accounts: "User Accounts",
   vault: "Vault",
   password: "Password",
   appearance: "Appearance",
 };
 
-function tabFromSearchParam(raw: string | null): ConsoleTab {
-  return parseSelectKey(raw, ALL_TABS) ?? "accounts";
-}
-
-function tabClassName({ isSelected }: { isSelected: boolean }) {
-  return `relative -mb-px cursor-pointer border-none bg-transparent px-3 py-2 text-[0.813rem] font-medium outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent ${
-    isSelected ? "text-text" : "text-muted hover:text-text"
+function sectionLinkClass(active: boolean): string {
+  return `${NAV_LEADING_ROW_CLASS} box-border w-full cursor-pointer rounded border-none px-2 py-1.5 text-left text-[0.875rem] text-text hover:bg-hover ${
+    active ? "bg-hover font-semibold" : "bg-transparent font-normal"
   }`;
 }
 
 /**
- * Where the vault owner works.
+ * Owner Home: where the vault owner lands at sign-in and works from, the way
+ * any other account lands in Messages.
  *
  * The owner has no conversations, no contacts, no import, no export and no
- * trash, so the message-browsing shell means nothing to them: there is no
- * sidebar here and no route into one. Managing accounts is not something the
- * owner adjusts on the side, which is why this is a console of its own rather
- * than a tab inside Settings.
+ * trash, so the message-browsing shell means nothing to them. This screen has
+ * a side panel of its own instead, with User Accounts first because managing
+ * accounts is what the owner is for.
  *
- * The tab named **Password** rather than Account is the whole of what the
+ * The entry named **Password** rather than Account is the whole of what the
  * owner has of their own — no profile, no time zone, no vault. See
  * `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
  */
-export default function OwnerConsole() {
-  const [searchParams, setSearchParams] = useSearchParams();
+export default function OwnerHome() {
+  const { section: raw } = useParams();
+  const navigate = useNavigate();
   const { logout } = useAuth();
-  const tab = tabFromSearchParam(searchParams.get("tab"));
+  const section = parseSelectKey(raw ?? null, SECTIONS);
+
+  // `/owner` and any unknown section land on User Accounts, and the address
+  // bar says so, so a reload comes back to the same place.
+  if (!section) {
+    return <Navigate to="/owner/accounts" replace />;
+  }
 
   return (
-    <div className="min-h-screen bg-bg">
-      <div className="mx-auto max-w-[900px] p-6 text-text">
-        <header className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="m-0 text-[1.375rem] font-semibold tracking-[-0.015em] text-text">
-              Message Vault
-            </h1>
-            <p className="mt-[0.35rem] text-[0.875rem] text-muted">
+    <div className="flex min-h-screen bg-bg text-text">
+      <nav
+        aria-label="Owner Home sections"
+        className="flex w-[220px] shrink-0 flex-col border-r border-border bg-panel"
+      >
+        <div className="border-b border-border px-4 py-3">
+          <h1 className="m-0 text-[1.125rem] font-semibold tracking-[-0.015em] text-text">
+            Message Vault
+          </h1>
+          <p className="mt-1 text-[0.75rem] text-muted">Vault owner</p>
+        </div>
+        <div className="flex flex-col gap-0.5 px-2 py-2">
+          {SECTIONS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              aria-current={id === section ? "page" : undefined}
+              className={sectionLinkClass(id === section)}
+              onClick={() => navigate(`/owner/${id}`)}
+            >
+              {SECTION_LABELS[id]}
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      <div className="min-w-0 flex-1 overflow-auto">
+        <div className="mx-auto max-w-[900px] p-6">
+          <header className="flex flex-wrap items-start justify-between gap-3">
+            <p className="m-0 text-[0.875rem] text-muted">
               You are the owner of this vault. You manage who may use it, and you read no messages.
             </p>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="cursor-pointer rounded border border-border bg-transparent px-3 py-1.5 text-[0.813rem] text-muted transition-colors hover:text-text"
+            >
+              Sign out
+            </button>
+          </header>
+
+          <div className="mt-6">
+            {section === "accounts" && <OwnerAccountsPanel />}
+            {section === "vault" && <VaultSettingsPanel />}
+            {section === "password" && <ChangePasswordSection />}
+            {section === "appearance" && <AppearanceSection />}
           </div>
-          <button
-            type="button"
-            onClick={() => void logout()}
-            className="cursor-pointer rounded border border-border bg-transparent px-3 py-1.5 text-[0.813rem] text-muted transition-colors hover:text-text"
-          >
-            Sign out
-          </button>
-        </header>
-
-        <Tabs
-          selectedKey={tab}
-          onSelectionChange={(key) => {
-            const next = parseSelectKey(key, ALL_TABS);
-            if (!next) return;
-            const params = new URLSearchParams(searchParams);
-            params.set("tab", next);
-            setSearchParams(params, { replace: true });
-          }}
-        >
-          <TabList
-            aria-label="Vault owner sections"
-            className="relative mt-5 flex gap-1 border-b border-border"
-          >
-            {ALL_TABS.map((id) => (
-              <Tab key={id} id={id} className={tabClassName}>
-                {TAB_LABELS[id]}
-                <SelectionIndicator className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full bg-accent transition-[translate,width] duration-200 motion-reduce:transition-none" />
-              </Tab>
-            ))}
-          </TabList>
-
-          <TabPanel id="accounts" className="mt-6">
-            <OwnerAccountsPanel />
-          </TabPanel>
-          <TabPanel id="vault" className="mt-6">
-            <VaultSettingsPanel />
-          </TabPanel>
-          <TabPanel id="password" className="mt-6">
-            <ChangePasswordSection />
-          </TabPanel>
-          <TabPanel id="appearance" className="mt-6">
-            <AppearanceSection />
-          </TabPanel>
-        </Tabs>
+        </div>
       </div>
     </div>
   );

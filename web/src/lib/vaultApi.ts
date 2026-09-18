@@ -119,8 +119,8 @@ export function claimVault(
 // ── The accounts collection ─────────────────────────────────────────────────
 //
 // One collection for the vault owner and for each account: the owner reaches
-// every row, an account reaches its own. The functions the owner's console
-// calls take the account id; the ones Settings calls address the signed-in
+// every row, an account reaches its own. The functions Owner Home calls take
+// the account id; the ones Settings calls address the signed-in
 // account through `ownAccountPath`.
 
 /** The accounts of this vault, for the owner. The owner's own is not among them. */

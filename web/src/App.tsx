@@ -11,12 +11,10 @@ import { TimeZoneProvider } from "./lib/TimeZoneProvider";
 import { isTauri } from "./lib/tauri-check";
 import { useAccountProfile } from "./lib/useAccountProfile";
 import { useIsVaultOwner } from "./lib/useIsVaultOwner";
-import { useMustChangePassword } from "./lib/useMustChangePassword";
 import { useNeedsProfileSetup } from "./lib/useNeedsProfileSetup";
 import LoginScreen from "./screens/LoginScreen";
 import OnboardingScreen from "./screens/OnboardingScreen";
-import OwnerConsole from "./screens/OwnerConsole";
-import SetPasswordScreen from "./screens/SetPasswordScreen";
+import OwnerHome from "./screens/OwnerHome";
 
 /**
  * Import and export only ever run in the desktop app, so their code — the
@@ -49,26 +47,14 @@ function ImportExportRoute({ children }: { children: ReactNode }) {
 
 function AppRoutes() {
   const { isAuthenticated } = useAuth();
-  const { mustChange: mustChangePassword } = useMustChangePassword();
   const { isOwner } = useIsVaultOwner();
   const { needsSetup: needsOnboarding } = useNeedsProfileSetup();
   useMouseHistoryNavigation();
 
   // Where a signed-in visitor to the login screen should go next. Same order
-  // of urgency the AuthGuard uses: the password before the profile.
+  // the AuthGuard uses.
   const signedInDestination = (
-    <Navigate
-      to={
-        mustChangePassword
-          ? "/set-password"
-          : isOwner
-            ? "/admin"
-            : needsOnboarding
-              ? "/onboarding"
-              : "/"
-      }
-      replace
-    />
+    <Navigate to={isOwner ? "/owner" : needsOnboarding ? "/onboarding" : "/"} replace />
   );
 
   return (
@@ -77,33 +63,16 @@ function AppRoutes() {
       <Route path="/login" element={isAuthenticated ? signedInDestination : <LoginScreen />} />
       {/* Registration is now the second tab of the login card, not its own screen. */}
       <Route path="/register" element={<Navigate to="/login" replace />} />
-      {/* The vault owner's console, outside the AuthGuard's message shell:
-          the owner holds no messages, so none of what that shell frames
-          exists for them. */}
+      {/* Owner Home, outside the AuthGuard's message shell: the owner holds
+          no messages, so none of what that shell frames exists for them. */}
       <Route
-        path="/admin"
-        element={isAuthenticated && isOwner ? <OwnerConsole /> : <Navigate to="/" replace />}
-      />
-      <Route
-        path="/set-password"
-        element={
-          isAuthenticated && mustChangePassword ? (
-            <SetPasswordScreen />
-          ) : (
-            <Navigate to="/" replace />
-          )
-        }
+        path="/owner/:section?"
+        element={isAuthenticated && isOwner ? <OwnerHome /> : <Navigate to="/" replace />}
       />
       <Route
         path="/onboarding"
         element={
-          isAuthenticated && mustChangePassword ? (
-            <Navigate to="/set-password" replace />
-          ) : isAuthenticated && needsOnboarding ? (
-            <OnboardingScreen />
-          ) : (
-            <Navigate to="/" replace />
-          )
+          isAuthenticated && needsOnboarding ? <OnboardingScreen /> : <Navigate to="/" replace />
         }
       />
 

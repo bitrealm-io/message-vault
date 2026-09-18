@@ -7,8 +7,8 @@ import { inputClassName, sectionTitleClass } from "./profileStyles";
 /**
  * Change the signed-in account's own password.
  *
- * Shared by Settings → Account and by the vault owner's console, which has no
- * Settings to reach. Two copies of a password form would be two places for
+ * Shared by Settings → Account and by Owner Home, which has no Settings to
+ * reach. Two copies of a password form would be two places for
  * the confirmation rule and the token rotation to drift apart.
  */
 export function ChangePasswordSection({ disabled = false }: { disabled?: boolean }) {

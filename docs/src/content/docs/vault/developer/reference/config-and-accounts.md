@@ -79,7 +79,7 @@ from `100` up.
     respectively. New accounts default to all three; a named API token
     defaults to import and export but not delete, since destruction is
     asked for rather than inherited.
-  The vault owner sets another account's flags from its console
+  The vault owner sets another account's flags from Owner Home
   (`PATCH /v1/accounts/{id}`), resets a password
   (`PUT /v1/accounts/{id}/password`), deletes an account's messages
   (`DELETE /v1/accounts/{id}/messages`) or the account

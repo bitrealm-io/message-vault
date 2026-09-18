@@ -134,12 +134,15 @@ none, in exchange for closing a window whose width the operator sets.
 ## Considered and rejected: invite links
 
 Letting the owner issue a code the new person redeems, choosing their own
-password, means the owner never learns anyone's password. The same property
-comes from `accounts.must_change_password`, set when the owner creates an
-account and cleared when the password changes: the owner's chosen password
-survives exactly one sign-in. Invites need a table, an unauthenticated redeem
-route, and a code handed over out of band anyway. They are deferred, not
-rejected, and become the better answer once the vault can send mail.
+password, means the owner never learns anyone's password. Invites need a
+table, an unauthenticated redeem route, and a code handed over out of band
+anyway. They are deferred, not rejected, and become the better answer once
+the vault can send mail. Until then the owner chooses the password, hands it
+over, and the person keeps it until they change it under Settings; the vault
+does not force that change. (An earlier version marked the account with
+`must_change_password` and made the holder replace the owner's password at
+first sign-in; that mark was removed as more ceremony than a self-hosted
+vault needs.)
 
 ## Consequences
 
@@ -168,7 +171,7 @@ rejected, and become the better answer once the vault can send mail.
   `Owner` OpenAPI tag, `owner_api.rs`, and the `Owner` guard. The interface
   says accounts because it returns account records; the screen says User
   Accounts because it lists the people who use the vault.
-- The owner signs in to a console of their own, not to the message-browsing
-  shell. The account-management screen leaves Settings, and an ordinary
+- The owner signs in to Owner Home, a screen of their own, not to the
+  message-browsing shell. The account-management screen leaves Settings, and an ordinary
   account loses it entirely, because an ordinary account can no longer be an
   administrator.

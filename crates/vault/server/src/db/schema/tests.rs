@@ -147,7 +147,10 @@ async fn fresh_vault_has_complete_current_schema() {
         .fetch_one(&mut *conn)
         .await
         .unwrap();
-    assert_eq!(version, SCHEMA_VERSION, "a fresh vault is stamped at once");
+    assert_eq!(
+        version, SCHEMA_FINGERPRINT,
+        "a fresh vault is stamped at once"
+    );
     // Ensuring again on a current vault is a no-op.
     ensure_vault_schema(&mut conn).await.unwrap();
     assert_current_schema_contract(&mut conn).await;
@@ -410,7 +413,10 @@ async fn old_vault_rebuilds_empty_at_current_version() {
         .fetch_one(&mut *conn)
         .await
         .unwrap();
-    assert_eq!(version, SCHEMA_VERSION, "old vault must be stamped current");
+    assert_eq!(
+        version, SCHEMA_FINGERPRINT,
+        "old vault must be stamped current"
+    );
     assert!(!table_exists(&mut conn, "contact_labels").await.unwrap());
     assert!(
         !table_exists(&mut conn, "contact_label_members")
@@ -445,14 +451,16 @@ async fn current_version_vault_keeps_data_across_reensure() {
     );
 }
 
+/// A vault stamped by a server built from different SQL — newer or older,
+/// the fingerprint does not say which — is rebuilt empty at this one.
 #[tokio::test]
-async fn newer_version_vault_rebuilds_to_current() {
+async fn other_fingerprint_rebuilds_to_current() {
     if crate::test_support::on_postgres() {
         return; // SQLite-only: reads PRAGMA user_version; stale_postgres_marker_rebuilds_vault_schema_empty is the twin
     }
     let (pool, _vault) = seeded_schema_vault().await;
     let mut conn = pool.acquire().await.unwrap();
-    stamp_user_version(&mut conn, SCHEMA_VERSION + 1)
+    stamp_user_version(&mut conn, SCHEMA_FINGERPRINT ^ 1)
         .await
         .unwrap();
     ensure_vault_schema(&mut conn).await.unwrap();
@@ -460,12 +468,15 @@ async fn newer_version_vault_rebuilds_to_current() {
         .fetch_one(&mut *conn)
         .await
         .unwrap();
-    assert_eq!(version, SCHEMA_VERSION, "downgrade rebuilds at current");
+    assert_eq!(
+        version, SCHEMA_FINGERPRINT,
+        "rebuilt at this server's fingerprint"
+    );
     let accounts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
         .fetch_one(&mut *conn)
         .await
         .unwrap();
-    assert_eq!(accounts, 0, "downgrade rebuild drops data");
+    assert_eq!(accounts, 0, "the rebuild drops data");
 }
 
 #[tokio::test]
@@ -684,10 +695,10 @@ async fn messages_fts_stays_in_sync_pg() {
     assert_eq!(pg_fts_hits(&mut conn, "goodbye").await, 0);
 }
 
-/// The `old_vault_rebuilds_empty_at_current_version` twin for Postgres: a
-/// vault stamped with a stale [`VAULT_SCHEMA_META_KEY`] is rebuilt empty
-/// by [`drop_pg_user_tables`] rather than patched in place, so the new
-/// session columns land on an already-installed vault too. Skips unless
+/// The `other_fingerprint_rebuilds_to_current` twin for Postgres: a vault
+/// whose [`VAULT_SCHEMA_META_KEY`] row holds another fingerprint is rebuilt
+/// empty by [`drop_pg_user_tables`] rather than patched in place, so new
+/// columns land on an already-installed vault too. Skips unless
 /// `MV_TEST_POSTGRES_URL` is set.
 #[tokio::test]
 async fn stale_postgres_marker_rebuilds_vault_schema_empty() {
@@ -703,21 +714,14 @@ async fn stale_postgres_marker_rebuilds_vault_schema_empty() {
         .await
         .unwrap();
 
-    // Roll the marker back to what a vault installed before this schema
-    // change would carry, simulating the upgrade scenario the rebuild
-    // path exists for.
-    sqlx::query("DELETE FROM schema_meta WHERE key = $1")
+    // Stamp the fingerprint a server built from different SQL would have
+    // left, simulating the upgrade scenario the rebuild path exists for.
+    sqlx::query("UPDATE schema_meta SET value = $1 WHERE key = $2")
+        .bind((SCHEMA_FINGERPRINT ^ 1).to_string())
         .bind(VAULT_SCHEMA_META_KEY)
         .execute(&mut *conn)
         .await
         .unwrap();
-    sqlx::query(
-        "INSERT INTO schema_meta (key, value) VALUES ('vault_schema_v1', '1')
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    )
-    .execute(&mut *conn)
-    .await
-    .unwrap();
 
     ensure_vault_schema(&mut conn).await.unwrap();
 
@@ -725,14 +729,18 @@ async fn stale_postgres_marker_rebuilds_vault_schema_empty() {
         .fetch_one(&mut *conn)
         .await
         .unwrap();
-    assert_eq!(accounts, 0, "a stale marker rebuilds the vault empty");
+    assert_eq!(accounts, 0, "another fingerprint rebuilds the vault empty");
 
-    let ready: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM schema_meta WHERE key = $1")
+    let stamped: String = sqlx::query_scalar("SELECT value FROM schema_meta WHERE key = $1")
         .bind(VAULT_SCHEMA_META_KEY)
         .fetch_one(&mut *conn)
         .await
         .unwrap();
-    assert_eq!(ready, 1, "the rebuild stamps the current marker");
+    assert_eq!(
+        stamped,
+        SCHEMA_FINGERPRINT.to_string(),
+        "the rebuild stamps this server's fingerprint"
+    );
 
     sqlx::query(
         "SELECT stage, staging_dir, device_id, form_json, source_fingerprint

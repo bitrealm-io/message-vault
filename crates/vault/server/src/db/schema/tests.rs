@@ -201,7 +201,6 @@ async fn assert_current_schema_contract(conn: &mut AnyConnection) {
             "preferred_name",
             "time_zone",
             "disabled",
-            "must_change_password",
             "must_set_up_profile",
             "can_import",
             "can_export",
@@ -529,14 +528,13 @@ async fn fresh_accounts_default_to_full_permissions() {
         .execute(&mut *conn)
         .await
         .unwrap();
-    let row: (i64, i64, i64, i64) = sqlx::query_as(
-        "SELECT must_change_password, can_import, can_export, can_delete FROM accounts WHERE id = $1",
-    )
-    .bind(A1)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    assert_eq!(row, (0, 1, 1, 1));
+    let row: (i64, i64, i64) =
+        sqlx::query_as("SELECT can_import, can_export, can_delete FROM accounts WHERE id = $1")
+            .bind(A1)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(row, (1, 1, 1));
 }
 
 #[tokio::test]

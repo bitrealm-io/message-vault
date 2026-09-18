@@ -3,12 +3,31 @@ import Button from "../../components/Button";
 import Checkbox from "../../components/Checkbox";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import ModalShell, { DialogError, DialogFooter } from "../../components/ModalShell";
+import Select, { ListBoxItem, selectItemClassName } from "../../components/Select";
 import TextField from "../../components/TextField";
+import { parseSelectKey } from "../../lib/selectKey";
 import { tdClass, tdMuted, thClass } from "../settings/apiTokensUtils";
 import { formatBytes } from "../settings/storage/storageUtils";
 import { type ManagedAccount, useOwnerAccounts } from "./useOwnerAccounts";
 
 type ConfirmTarget = { account: ManagedAccount; kind: "messages" | "account" };
+
+const STATUSES = ["active", "disabled"] as const;
+
+/** Shown under the second password field once both are filled and differ. */
+function MismatchNote({ first, second }: { first: string; second: string }) {
+  if (!first || !second || first === second) return null;
+  return (
+    <p className="mt-1 text-[0.75rem] text-danger" role="alert">
+      Passwords do not match.
+    </p>
+  );
+}
+
+/** A password may be saved once it is typed twice the same way. */
+function passwordsAgree(first: string, second: string): boolean {
+  return first !== "" && first === second;
+}
 
 function confirmBody(target: ConfirmTarget): string {
   const { account, kind } = target;
@@ -43,11 +62,15 @@ export function OwnerAccountsPanel() {
     setNewUsername,
     newPassword,
     setNewPassword,
+    newPasswordConfirm,
+    setNewPasswordConfirm,
     cancelCompose,
     createAccount,
     passwordTarget,
     resetPassword,
     setResetPassword,
+    resetPasswordConfirm,
+    setResetPasswordConfirm,
     openPasswordReset,
     closePasswordReset,
     setAccountPassword,
@@ -103,7 +126,7 @@ export function OwnerAccountsPanel() {
 
       {composing && (
         <div className="mt-3 flex flex-col gap-3 rounded-xl border border-border bg-elevated p-3">
-          <div className="flex flex-wrap items-end gap-2">
+          <div className="flex flex-wrap items-start gap-2">
             <TextField
               value={newUsername}
               onChange={setNewUsername}
@@ -116,14 +139,27 @@ export function OwnerAccountsPanel() {
               value={newPassword}
               onChange={setNewPassword}
               type="password"
-              placeholder="First password"
+              placeholder="Password"
               isDisabled={busy}
-              aria-label="New account's first password"
+              aria-label="New account's password"
               className="min-w-[10rem] flex-1"
             />
+            <div className="min-w-[10rem] flex-1">
+              <TextField
+                value={newPasswordConfirm}
+                onChange={setNewPasswordConfirm}
+                type="password"
+                placeholder="Confirm password"
+                isDisabled={busy}
+                aria-label="Confirm the new account's password"
+              />
+              <MismatchNote first={newPassword} second={newPasswordConfirm} />
+            </div>
             <Button
               variant="secondary"
-              disabled={busy || !newUsername.trim() || !newPassword}
+              disabled={
+                busy || !newUsername.trim() || !passwordsAgree(newPassword, newPasswordConfirm)
+              }
               onClick={() => void createAccount()}
               className="!px-3 !py-1.5 !text-[0.75rem]"
             >
@@ -139,8 +175,8 @@ export function OwnerAccountsPanel() {
             </Button>
           </div>
           <p className="text-[0.75rem] text-muted">
-            Hand this password over yourself. Whoever signs in with it is made to replace it before
-            they can go anywhere, so you will not know theirs.
+            Hand this password over yourself. The person keeps it until they change it under their
+            own Settings.
           </p>
         </div>
       )}
@@ -162,13 +198,27 @@ export function OwnerAccountsPanel() {
           <tbody>
             {accounts.map((account) => (
               <tr key={account.account_id} className="border-t border-border">
+                <td className={tdClass}>{account.username}</td>
                 <td className={tdClass}>
-                  {account.username}
-                  {account.must_change_password ? (
-                    <span className="ml-2 text-muted">(has not set a password)</span>
-                  ) : null}
+                  <Select
+                    size="sm"
+                    selectedKey={account.disabled ? "disabled" : "active"}
+                    isDisabled={busy}
+                    aria-label={`Status of ${account.username}`}
+                    className="w-[7rem]"
+                    onSelectionChange={(key) => {
+                      const next = parseSelectKey(key, STATUSES);
+                      if (next) patch(account.account_id, { disabled: next === "disabled" });
+                    }}
+                  >
+                    <ListBoxItem id="active" className={(s) => selectItemClassName(s, "sm")}>
+                      Active
+                    </ListBoxItem>
+                    <ListBoxItem id="disabled" className={(s) => selectItemClassName(s, "sm")}>
+                      Disabled
+                    </ListBoxItem>
+                  </Select>
                 </td>
-                <td className={tdMuted}>{account.disabled ? "Disabled" : "Active"}</td>
                 <td className={tdMuted}>{account.message_count.toLocaleString()}</td>
                 <td className={tdMuted}>{formatBytes(account.storage_bytes)}</td>
                 <td className={tdClass}>
@@ -197,14 +247,6 @@ export function OwnerAccountsPanel() {
                 </td>
                 <td className={tdClass}>
                   <div className="flex flex-wrap items-center gap-1">
-                    <Button
-                      variant="secondary"
-                      size="xs"
-                      disabled={busy}
-                      onClick={() => patch(account.account_id, { disabled: !account.disabled })}
-                    >
-                      {account.disabled ? "Enable" : "Disable"}
-                    </Button>
                     <Button
                       variant="secondary"
                       size="xs"
@@ -275,8 +317,8 @@ export function OwnerAccountsPanel() {
         maxWidth="24rem"
       >
         <p className="mb-3 text-[0.813rem] text-muted">
-          Set a new password for {passwordTarget?.username}. This ends their current session, and
-          they are made to replace this password once they sign in with it.
+          Set a new password for {passwordTarget?.username}. They keep it until they change it
+          themselves.
         </p>
         <TextField
           label="New password"
@@ -285,6 +327,14 @@ export function OwnerAccountsPanel() {
           type="password"
           isDisabled={busy}
           autoFocus
+          className="mb-3"
+        />
+        <TextField
+          label="Confirm password"
+          value={resetPasswordConfirm}
+          onChange={setResetPasswordConfirm}
+          type="password"
+          isDisabled={busy}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -292,6 +342,7 @@ export function OwnerAccountsPanel() {
             }
           }}
         />
+        <MismatchNote first={resetPassword} second={resetPasswordConfirm} />
         <DialogError message={actionError} />
         <DialogFooter>
           <Button onPress={closePasswordReset} isDisabled={busy}>
@@ -300,7 +351,7 @@ export function OwnerAccountsPanel() {
           <Button
             variant="primary"
             onPress={() => void setAccountPassword()}
-            isDisabled={busy || !resetPassword}
+            isDisabled={busy || !passwordsAgree(resetPassword, resetPasswordConfirm)}
           >
             {busy ? "Saving…" : "Save"}
           </Button>

@@ -161,8 +161,8 @@ export interface paths {
          * @description An account changing its own must supply the current one; the change
          *     revokes its API tokens and answers `200` with a rotated session token.
          *     The vault owner sets another account's without the current one and
-         *     answers `204`: that account's sessions end, and its holder signs in with
-         *     the new password and is made to replace it.
+         *     answers `204`. That is the whole of it: the account's sessions carry on,
+         *     and its holder keeps the new password until they change it themselves.
          */
         put: operations["set_account_password"];
         post?: never;
@@ -1126,11 +1126,6 @@ export interface components {
              * @description Messages this account owns.
              */
             message_count: number;
-            /**
-             * @description The vault owner chose this password; it must be replaced before the
-             *     account can be used.
-             */
-            must_change_password: boolean;
             /**
              * @description The account holder has not set up their profile yet, so profile setup
              *     is owed before the account can be used. The vault decides this, not the
@@ -2115,11 +2110,6 @@ export interface components {
                  * @description Messages this account owns.
                  */
                 message_count: number;
-                /**
-                 * @description The vault owner chose this password; it must be replaced before the
-                 *     account can be used.
-                 */
-                must_change_password: boolean;
                 /**
                  * @description The account holder has not set up their profile yet, so profile setup
                  *     is owed before the account can be used. The vault decides this, not the
@@ -3571,7 +3561,7 @@ export interface operations {
                     "application/json": components["schemas"]["SetPasswordResponse"];
                 };
             };
-            /** @description Password set by the vault owner; the account's sessions are ended */
+            /** @description Password set by the vault owner */
             204: {
                 headers: {
                     [name: string]: unknown;

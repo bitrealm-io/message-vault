@@ -253,10 +253,6 @@ pub(crate) async fn change_password_on_conn(
         return Err(ChangePasswordError::IncorrectPassword);
     }
     account_profile::update_password_hash(&mut tx, account_id, new_hash).await?;
-    // Whatever brought the account here, it now carries a password its holder
-    // chose, so the mark the vault owner set comes off in the same
-    // transaction as the hash it refers to.
-    account_profile::set_must_change_password(&mut tx, account_id, false).await?;
     api_tokens::delete_all_api_tokens(&mut tx, account_id).await?;
     let token = session_tokens::rotate_account_session_token(&mut tx, account_id).await?;
     tx.commit().await?;

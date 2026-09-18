@@ -60,16 +60,13 @@ export function useDeleteAccountMessages(): UseMutationResult<unknown, Error, nu
   return useOwnerWrite((id: number) => deleteAccountMessages(id));
 }
 
-/**
- * Setting a password does show on the list — it sets `must_change_password` —
- * so unlike its predecessor this one refreshes too.
- */
+/** Setting a password changes nothing the list shows, so it does not refresh it. */
 export function useSetAccountPassword(): UseMutationResult<
   unknown,
   Error,
   { id: number; password: string }
 > {
-  return useOwnerWrite(({ id, password }) => setVaultAccountPassword(id, { password }));
+  return useOwnerWrite(({ id, password }) => setVaultAccountPassword(id, { password }), false);
 }
 
 /** The vault owner's view of every account, plus the actions on one. */
@@ -122,38 +119,45 @@ export function useOwnerAccounts() {
   const [composing, setComposing] = useState(false);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
 
   const [passwordTarget, setPasswordTarget] = useState<ManagedAccount | null>(null);
   const [resetPasswordValue, setResetPasswordValue] = useState("");
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState("");
 
   const cancelCompose = useCallback(() => {
     setComposing(false);
     setNewUsername("");
     setNewPassword("");
+    setNewPasswordConfirm("");
     clearError();
   }, [clearError]);
 
+  // Both forms take the password twice and save only when the two agree; the
+  // panel disables Save until then, and this is the same rule on the way out.
   const createOne = useCallback(() => {
     const username = newUsername.trim();
     const password = newPassword;
-    if (!username || !password) return;
+    if (!username || !password || password !== newPasswordConfirm) return;
     createAccount.mutate(
       { username, password },
       {
         onSuccess: () => {
           setNewUsername("");
           setNewPassword("");
+          setNewPasswordConfirm("");
           setComposing(false);
         },
       },
     );
-  }, [newUsername, newPassword, createAccount.mutate]);
+  }, [newUsername, newPassword, newPasswordConfirm, createAccount.mutate]);
 
   const openPasswordReset = useCallback(
     (account: ManagedAccount) => {
       clearError();
       setPasswordTarget(account);
       setResetPasswordValue("");
+      setResetPasswordConfirm("");
     },
     [clearError],
   );
@@ -162,20 +166,24 @@ export function useOwnerAccounts() {
     if (busy) return;
     setPasswordTarget(null);
     setResetPasswordValue("");
+    setResetPasswordConfirm("");
   }, [busy]);
 
   const setAccountPassword = useCallback(() => {
-    if (!passwordTarget || !resetPasswordValue) return;
+    if (!passwordTarget || !resetPasswordValue || resetPasswordValue !== resetPasswordConfirm) {
+      return;
+    }
     changePassword.mutate(
       { id: passwordTarget.account_id, password: resetPasswordValue },
       {
         onSuccess: () => {
           setPasswordTarget(null);
           setResetPasswordValue("");
+          setResetPasswordConfirm("");
         },
       },
     );
-  }, [passwordTarget, resetPasswordValue, changePassword.mutate]);
+  }, [passwordTarget, resetPasswordValue, resetPasswordConfirm, changePassword.mutate]);
 
   const patch = useCallback(
     (id: number, changes: ManagedAccountChanges) =>
@@ -222,11 +230,15 @@ export function useOwnerAccounts() {
     setNewUsername,
     newPassword,
     setNewPassword,
+    newPasswordConfirm,
+    setNewPasswordConfirm,
     cancelCompose,
     createAccount: createOne,
     passwordTarget,
     resetPassword: resetPasswordValue,
     setResetPassword: setResetPasswordValue,
+    resetPasswordConfirm,
+    setResetPasswordConfirm,
     openPasswordReset,
     closePasswordReset,
     setAccountPassword,

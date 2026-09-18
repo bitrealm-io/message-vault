@@ -931,7 +931,7 @@
           "Accounts"
         ],
         "summary": "Set an account's password.",
-        "description": "An account changing its own must supply the current one; the change\nrevokes its API tokens and answers `200` with a rotated session token.\nThe vault owner sets another account's without the current one and\nanswers `204`: that account's sessions end, and its holder signs in with\nthe new password and is made to replace it.",
+        "description": "An account changing its own must supply the current one; the change\nrevokes its API tokens and answers `200` with a rotated session token.\nThe vault owner sets another account's without the current one and\nanswers `204`. That is the whole of it: the account's sessions carry on,\nand its holder keeps the new password until they change it themselves.",
         "operationId": "set_account_password",
         "parameters": [
           {
@@ -967,7 +967,7 @@
             }
           },
           "204": {
-            "description": "Password set by the vault owner; the account's sessions are ended"
+            "description": "Password set by the vault owner"
           },
           "400": {
             "description": "",
@@ -6493,7 +6493,6 @@
           "is_demo",
           "is_owner",
           "disabled",
-          "must_change_password",
           "must_set_up_profile",
           "can_import",
           "can_export",
@@ -6542,10 +6541,6 @@
             "type": "integer",
             "format": "int64",
             "description": "Messages this account owns."
-          },
-          "must_change_password": {
-            "type": "boolean",
-            "description": "The vault owner chose this password; it must be replaced before the\naccount can be used."
           },
           "must_set_up_profile": {
             "type": "boolean",
@@ -8705,7 +8700,6 @@
                 "is_demo",
                 "is_owner",
                 "disabled",
-                "must_change_password",
                 "must_set_up_profile",
                 "can_import",
                 "can_export",
@@ -8754,10 +8748,6 @@
                   "type": "integer",
                   "format": "int64",
                   "description": "Messages this account owns."
-                },
-                "must_change_password": {
-                  "type": "boolean",
-                  "description": "The vault owner chose this password; it must be replaced before the\naccount can be used."
                 },
                 "must_set_up_profile": {
                   "type": "boolean",

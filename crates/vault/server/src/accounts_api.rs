@@ -63,6 +63,10 @@ pub struct AccountResponse {
     /// client: the same answer reaches every app, and it survives cleared site
     /// data and a second browser.
     pub must_set_up_profile: bool,
+    /// When the account last signed in (RFC 3339, UTC), or `null` if it never
+    /// has. Signing in, claiming the vault and registering all count; a
+    /// password change does not.
+    pub last_sign_in_at: Option<String>,
     /// May call the import endpoints.
     pub can_import: bool,
     /// May call the export endpoints.
@@ -104,6 +108,7 @@ async fn load_account(
     let profile = account_profile::load_account_profile(conn, account_id).await?;
     let message_count = account_message_count(conn, account_id).await?;
     let storage_bytes = vault_imports::account_attachment_bytes(conn, account_id).await?;
+    let last_sign_in_at = account_profile::load_last_sign_in(conn, account_id).await?;
     Ok(Some(AccountResponse {
         account_id,
         username,
@@ -115,6 +120,7 @@ async fn load_account(
         is_owner: account_profile::is_vault_owner(account_id),
         disabled: auth.disabled,
         must_set_up_profile: auth.must_set_up_profile,
+        last_sign_in_at,
         can_import: auth.permissions.import,
         can_export: auth.permissions.export,
         can_delete: auth.permissions.delete,
@@ -353,11 +359,12 @@ pub async fn create_account_handler(
     let token = if by_owner {
         None
     } else {
-        Some(
-            session_tokens::insert_account_session_token(&mut tx, account_id)
-                .await
-                .map_err(ApiError::Internal)?,
-        )
+        // Registering opens a Session, so it is the account's first sign-in.
+        let token = session_tokens::insert_account_session_token(&mut tx, account_id)
+            .await
+            .map_err(ApiError::Internal)?;
+        account_profile::record_sign_in(&mut tx, account_id).await?;
+        Some(token)
     };
     tx.commit().await?;
 

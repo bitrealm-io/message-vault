@@ -24,6 +24,10 @@ of, and a search that reads the same everywhere.
 
 ### Features
 
+- 2026-09-17: **User Accounts shows when each account last signed in.** A
+  Last sign-in column next to Status, in your own time zone, or "Never" for
+  an account nobody has signed in to yet. Signing in, claiming the vault and
+  registering all count; a password change does not.
 - 2026-09-09: **Import is one screen that fills in as the run goes.** The
   form collapses into "what you asked for" once the run starts, each of the
   three stages (Staging, Media, Upload) adds its result underneath, and the

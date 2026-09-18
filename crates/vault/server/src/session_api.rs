@@ -47,6 +47,7 @@ impl SessionTokenResponse {
         account_id: i64,
     ) -> anyhow::Result<SessionTokenResponse> {
         let token = session_tokens::get_or_create_session_token(conn, account_id).await?;
+        account_profile::record_sign_in(conn, account_id).await?;
         let username = account_profile::username_for_account(conn, account_id)
             .await?
             .unwrap_or_else(|| account_id.to_string());

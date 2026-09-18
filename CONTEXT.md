@@ -127,8 +127,8 @@ The one account that manages a vault's other accounts and settings, and the
 only account that has no vault of its own. The vault owner creates, disables
 and deletes accounts, resets their passwords, deletes their message data, and
 decides whether strangers may sign up. The owner never reads a message: the
-account list shows a name, a message count and a storage total, and nothing
-of what those messages say. There is exactly one, it cannot be deleted, and
+account list shows a name, a status, when the account last signed in, a
+message count and a storage total, and nothing of what those messages say. There is exactly one, it cannot be deleted, and
 no other account can be given its powers.
 _Avoid_: Admin, Administrator, Superuser, Root
 

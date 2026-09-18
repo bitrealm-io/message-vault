@@ -7,12 +7,13 @@
 //! evolve it. SQLite and Postgres each have their own DDL variants
 //! (`schema/sql/*.sql` and `schema/sql/pg_*.sql`).
 //!
-//! Schema changes are versioned with `PRAGMA user_version` on SQLite (see
-//! [`SCHEMA_VERSION`]). The rule is: any schema change requires a fresh
-//! reload of data, so an out-of-date database is rebuilt empty from the
-//! embedded DDL instead of being patched in place. Postgres has no
-//! `user_version` pragma; its idempotent DDL (`IF NOT EXISTS`) runs once
-//! behind a `schema_meta` marker gate (see [`VAULT_SCHEMA_META_KEY`]).
+//! The embedded SQL is fingerprinted at compile time ([`SCHEMA_FINGERPRINT`])
+//! and the fingerprint is stamped into the database: `PRAGMA user_version`
+//! on SQLite, a `schema_meta` row (see [`VAULT_SCHEMA_META_KEY`]) on
+//! Postgres. The rule is: any schema change requires a fresh reload of data,
+//! so a database stamped with a different fingerprint is rebuilt empty from
+//! the embedded DDL instead of being patched in place. Nothing is bumped by
+//! hand; changing a `schema/sql/*.sql` file is the whole of a schema change.
 
 use anyhow::Result;
 use sqlx::AnyConnection;
@@ -40,39 +41,74 @@ const FTS_POSTGRES_DDL: &str = include_str!("../../../../../schema/sql/fts_postg
 const DROP_MESSAGES_FTS_TRIGGERS_PG_SQL: &str =
     include_str!("../../../../../schema/sql/fts_postgres_drop.sql");
 
-/// Current vault schema version, stamped into each SQLite database with
-/// `PRAGMA user_version`. Bump this whenever any `schema/sql/*.sql` file
-/// changes; a database at any other version is rebuilt empty (see
-/// [`migrate_vault_schema`]).
-pub const SCHEMA_VERSION: i64 = 18;
-
-/// Bring the database to [`SCHEMA_VERSION`].
+/// Fingerprint of the embedded schema: a 31-bit FNV-1a hash over every
+/// `schema/sql/*.sql` file, computed at compile time. It is stamped into each
+/// SQLite database as `PRAGMA user_version` and into each Postgres database
+/// under [`VAULT_SCHEMA_META_KEY`]; a database carrying any other value is
+/// rebuilt empty (see [`migrate_vault_schema`]).
 ///
-/// A database already at the current version is left untouched. Anything else
-/// — a fresh file, a pre-versioning vault, or one stamped by a different
-/// server — is rebuilt empty and stamped; the user re-imports afterwards.
+/// A hash rather than a hand-kept number so that a schema change is only a
+/// change to the SQL: nothing to bump, nothing to forget. 31 bits because
+/// `user_version` is a signed 32-bit integer.
+pub const SCHEMA_FINGERPRINT: i64 = schema_fingerprint();
+
+// Fits `user_version`, and is not one of the small hand-kept numbers the old
+// scheme stamped, so a vault from that scheme is rebuilt rather than mistaken
+// for current.
+const _: () = assert!(SCHEMA_FINGERPRINT > 1000 && SCHEMA_FINGERPRINT <= i32::MAX as i64);
+
+const fn schema_fingerprint() -> i64 {
+    const FILES: [&str; 10] = [
+        ACCOUNTS_DDL,
+        MESSAGE_TABLES_DDL,
+        STAGING_TABLES_DDL,
+        CONTACTS_TABLES_DDL,
+        SAVED_SEARCHES_DDL,
+        FTS_VIRTUAL_DDL,
+        DROP_MESSAGES_FTS_TRIGGERS_SQL,
+        CREATE_MESSAGES_FTS_TRIGGERS_SQL,
+        FTS_POSTGRES_DDL,
+        DROP_MESSAGES_FTS_TRIGGERS_PG_SQL,
+    ];
+    // FNV-1a, 32-bit. Each file is followed by a zero byte so that moving
+    // text across a file boundary changes the hash.
+    let mut hash: u32 = 0x811c_9dc5;
+    let mut f = 0;
+    while f < FILES.len() {
+        let bytes = FILES[f].as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            hash ^= bytes[i] as u32;
+            hash = hash.wrapping_mul(0x0100_0193);
+            i += 1;
+        }
+        hash = hash.wrapping_mul(0x0100_0193);
+        f += 1;
+    }
+    (hash & 0x7fff_ffff) as i64
+}
+
+/// Bring the database to [`SCHEMA_FINGERPRINT`].
+///
+/// A database already stamped with the current fingerprint is left
+/// untouched. Anything else — a fresh file, a pre-fingerprint vault, or one
+/// stamped by a server with different SQL — is rebuilt empty and stamped;
+/// the user re-imports afterwards.
 ///
 /// The only kind of migration is a full rebuild: schema changes require a
 /// fresh reload of data, never in-place column patches.
 async fn migrate_vault_schema(conn: &mut AnyConnection) -> Result<()> {
-    let version = user_version(conn).await?;
-    if version == SCHEMA_VERSION {
+    let stamped = user_version(conn).await?;
+    if stamped == SCHEMA_FINGERPRINT {
         return Ok(());
     }
-    if version > SCHEMA_VERSION {
+    if has_user_tables(conn).await? {
         eprintln!(
-            "warning: vault schema is version {version}, newer than this server's {SCHEMA_VERSION}; rebuilding empty (re-import your data)"
+            "warning: vault schema {stamped} differs from this server's {SCHEMA_FINGERPRINT}; rebuilding empty (re-import your data)"
         );
-        rebuild_vault_schema(conn).await?;
-    } else {
-        if has_user_tables(conn).await? {
-            eprintln!(
-                "warning: vault schema is version {version}; rebuilding empty at version {SCHEMA_VERSION} (re-import your data)"
-            );
-        }
-        rebuild_vault_schema(conn).await?;
     }
-    stamp_user_version(conn, SCHEMA_VERSION).await?;
+    rebuild_vault_schema(conn).await?;
+    stamp_user_version(conn, SCHEMA_FINGERPRINT).await?;
     Ok(())
 }
 
@@ -83,7 +119,7 @@ async fn user_version(conn: &mut AnyConnection) -> Result<i64> {
         .await?)
 }
 
-/// Record the schema version in SQLite's `user_version` pragma.
+/// Record the schema fingerprint in SQLite's `user_version` pragma.
 async fn stamp_user_version(conn: &mut AnyConnection, version: i64) -> Result<()> {
     sqlx::query(&format!("PRAGMA user_version = {version}"))
         .execute(&mut *conn)
@@ -236,12 +272,12 @@ async fn apply_postgres_vault_ddl(conn: &mut AnyConnection) -> Result<()> {
         .execute(&mut *tx)
         .await?;
     if !pg_vault_schema_ready(&mut tx).await? {
-        // A vault carrying an older marker (or none, with tables present)
-        // is rebuilt empty — the same contract SQLite's user_version
-        // gives. Re-importing is the migration.
+        // A vault stamped with another fingerprint (or none, with tables
+        // present) is rebuilt empty — the same contract SQLite's
+        // user_version gives. Re-importing is the migration.
         if table_exists(&mut tx, "vault_imports").await? {
             eprintln!(
-                "warning: vault schema predates {VAULT_SCHEMA_META_KEY}; rebuilding empty (re-import your data)"
+                "warning: vault schema differs from this server's {SCHEMA_FINGERPRINT}; rebuilding empty (re-import your data)"
             );
             drop_pg_user_tables(&mut tx).await?;
         }
@@ -256,10 +292,11 @@ async fn apply_postgres_vault_ddl(conn: &mut AnyConnection) -> Result<()> {
         // index, and sync triggers all target tables created above.
         ensure_messages_fts(&mut tx).await?;
         sqlx::query(
-            "INSERT INTO schema_meta (key, value) VALUES ($1, '1')
+            "INSERT INTO schema_meta (key, value) VALUES ($1, $2)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         )
         .bind(VAULT_SCHEMA_META_KEY)
+        .bind(SCHEMA_FINGERPRINT.to_string())
         .execute(&mut *tx)
         .await?;
     }
@@ -267,25 +304,27 @@ async fn apply_postgres_vault_ddl(conn: &mut AnyConnection) -> Result<()> {
     Ok(())
 }
 
-/// True when the one-time Postgres DDL marker is present. Also false when
-/// `schema_meta` itself does not exist yet (pre-install).
+/// True when the Postgres install marker carries the current
+/// [`SCHEMA_FINGERPRINT`]. Also false when `schema_meta` itself does not
+/// exist yet (pre-install).
 async fn pg_vault_schema_ready(conn: &mut AnyConnection) -> Result<bool> {
     if !table_exists(&mut *conn, "schema_meta").await? {
         return Ok(false);
     }
-    let ready: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM schema_meta WHERE key = $1")
-        .bind(VAULT_SCHEMA_META_KEY)
-        .fetch_one(&mut *conn)
-        .await?;
-    Ok(ready > 0)
+    let stamped: Option<String> =
+        sqlx::query_scalar("SELECT value FROM schema_meta WHERE key = $1")
+            .bind(VAULT_SCHEMA_META_KEY)
+            .fetch_optional(&mut *conn)
+            .await?;
+    Ok(stamped == Some(SCHEMA_FINGERPRINT.to_string()))
 }
 
 /// Create every table and index required by a current vault.
 ///
-/// SQLite is versioned with `PRAGMA user_version` and rebuilt when the stamp
-/// does not match; Postgres gates its one-time idempotent install behind a
-/// `schema_meta` marker (see [`VAULT_SCHEMA_META_KEY`]) so repeated ensures
-/// cost one marker lookup instead of re-running the DDL.
+/// SQLite carries the fingerprint in `PRAGMA user_version` and is rebuilt
+/// when it does not match; Postgres carries it in a `schema_meta` row (see
+/// [`VAULT_SCHEMA_META_KEY`]) so repeated ensures cost one lookup instead of
+/// re-running the DDL.
 ///
 /// # Errors
 ///
@@ -300,10 +339,11 @@ pub async fn ensure_vault_schema(conn: &mut AnyConnection) -> Result<()> {
 /// Marker that current full-text search (FTS) sync trigger definitions are installed.
 pub const MESSAGES_FTS_TRIGGERS_META_KEY: &str = "messages_fts_triggers_v1";
 
-/// Marker that the one-time Postgres vault DDL install has completed.
-/// Bumped with the schema: a vault holding an older marker is rebuilt
-/// empty, matching SQLite's `user_version` behaviour.
-pub const VAULT_SCHEMA_META_KEY: &str = "vault_schema_v4";
+/// The `schema_meta` row holding the installed [`SCHEMA_FINGERPRINT`] on
+/// Postgres. A vault whose row holds another value, or an older
+/// `vault_schema_vN` marker and no such row, is rebuilt empty, matching
+/// SQLite's `user_version` behaviour.
+pub const VAULT_SCHEMA_META_KEY: &str = "vault_schema";
 
 /// Advisory lock id serializing the one-time Postgres DDL install so two
 /// concurrent first-touches cannot interleave the trigger drop/create pair
@@ -659,7 +699,7 @@ pub async fn ensure_accounts_schema(conn: &mut AnyConnection) -> Result<()> {
     if dialect::engine_of(conn) == DbEngine::Postgres {
         return ensure_vault_schema(conn).await;
     }
-    if user_version(conn).await? != SCHEMA_VERSION {
+    if user_version(conn).await? != SCHEMA_FINGERPRINT {
         ensure_vault_schema(conn).await?;
     }
     Ok(())

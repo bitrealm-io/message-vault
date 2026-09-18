@@ -58,9 +58,6 @@ pub struct AccountResponse {
     pub is_owner: bool,
     /// May not sign in.
     pub disabled: bool,
-    /// The vault owner chose this password; it must be replaced before the
-    /// account can be used.
-    pub must_change_password: bool,
     /// The account holder has not set up their profile yet, so profile setup
     /// is owed before the account can be used. The vault decides this, not the
     /// client: the same answer reaches every app, and it survives cleared site
@@ -117,7 +114,6 @@ async fn load_account(
         is_demo: account_profile::is_demo_account(account_id),
         is_owner: account_profile::is_vault_owner(account_id),
         disabled: auth.disabled,
-        must_change_password: auth.must_change_password,
         must_set_up_profile: auth.must_set_up_profile,
         can_import: auth.permissions.import,
         can_export: auth.permissions.export,
@@ -353,9 +349,6 @@ pub async fn create_account_handler(
     // each client that reads it.
     if preferred_name.is_none() && phone.is_none() {
         account_profile::set_must_set_up_profile(&mut tx, account_id, true).await?;
-    }
-    if by_owner {
-        account_profile::set_must_change_password(&mut tx, account_id, true).await?;
     }
     let token = if by_owner {
         None
@@ -613,9 +606,8 @@ async fn update_profile_on_conn(
     )
     .await?;
     // Saving a profile is what profile setup is, so the account no longer owes
-    // one. Cleared in the same transaction as the change it describes, the way
-    // changing a password clears `must_change_password`, so the flag cannot
-    // outlive the fact it stands for.
+    // one. Cleared in the same transaction as the change it describes, so the
+    // flag cannot outlive the fact it stands for.
     account_profile::set_must_set_up_profile(&mut tx, account_id, false).await?;
     tx.commit().await?;
     Ok(())
@@ -825,8 +817,8 @@ pub struct SetPasswordResponse {
 /// An account changing its own must supply the current one; the change
 /// revokes its API tokens and answers `200` with a rotated session token.
 /// The vault owner sets another account's without the current one and
-/// answers `204`: that account's sessions end, and its holder signs in with
-/// the new password and is made to replace it.
+/// answers `204`. That is the whole of it: the account's sessions carry on,
+/// and its holder keeps the new password until they change it themselves.
 #[utoipa::path(
     put,
     path = "/v1/accounts/{id}/password",
@@ -837,7 +829,7 @@ pub struct SetPasswordResponse {
     request_body = SetPasswordRequest,
     responses(
         (status = 200, description = "Own password changed; the rotated session token", body = SetPasswordResponse),
-        (status = 204, description = "Password set by the vault owner; the account's sessions are ended"),
+        (status = 204, description = "Password set by the vault owner"),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
@@ -870,8 +862,6 @@ pub async fn set_password_handler(
         }
         Reach::Owner => {
             account_profile::update_password_hash(&mut conn, target, &new_hash).await?;
-            account_profile::set_must_change_password(&mut conn, target, true).await?;
-            session_tokens::revoke_account_sessions(&mut conn, target).await?;
             Ok(StatusCode::NO_CONTENT.into_response())
         }
     }

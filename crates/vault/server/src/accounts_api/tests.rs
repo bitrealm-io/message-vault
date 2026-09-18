@@ -233,7 +233,7 @@ fn sorted_keys(v: &serde_json::Value) -> Vec<&str> {
 }
 
 /// Every field an account row carries, on the list and on the member alike.
-const ACCOUNT_FIELDS: [&str; 16] = [
+const ACCOUNT_FIELDS: [&str; 15] = [
     "account_id",
     "can_delete",
     "can_export",
@@ -243,7 +243,6 @@ const ACCOUNT_FIELDS: [&str; 16] = [
     "is_demo",
     "is_owner",
     "message_count",
-    "must_change_password",
     "must_set_up_profile",
     "phones",
     "preferred_name",
@@ -303,12 +302,8 @@ async fn a_created_account_must_replace_the_password_the_owner_chose() {
     );
     assert_eq!(created["username"], "carol");
     assert_eq!(
-        created["must_change_password"], true,
-        "an owner-created account arrives owing a password change"
-    );
-    assert_eq!(
         created["must_set_up_profile"], true,
-        "and owes profile setup, since the owner named nothing but a username"
+        "an owner-created account owes profile setup, since the owner named nothing but a username"
     );
     assert_eq!(created["can_import"], true, "otherwise an ordinary account");
     assert_eq!(
@@ -354,10 +349,6 @@ async fn a_stranger_is_signed_in_on_creation_and_never_becomes_the_owner() {
     assert_eq!(
         own.username, "alice",
         "the token from creation reads the row"
-    );
-    assert!(
-        !own.must_change_password,
-        "an account that chose its own password owes no change"
     );
     assert!(
         own.must_set_up_profile,
@@ -740,11 +731,11 @@ async fn owner_routes_on_a_missing_account_are_404() {
 // Passwords
 // ---------------------------------------------------------------------------
 
-/// One route, two callers. The owner sets a temporary password without the
-/// current one and answers `204`; the account's sessions end, and the new
-/// password is one its holder must replace.
+/// One route, two callers. The owner sets a password without the current one
+/// and answers `204`; the account's session carries on and the new password
+/// is simply the account's password from then on.
 #[tokio::test]
-async fn the_owner_sets_a_password_that_ends_sessions_and_owes_a_change() {
+async fn the_owner_sets_a_password_and_nothing_else_changes() {
     let vault = test_vault().await;
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
@@ -768,8 +759,8 @@ async fn the_owner_sets_a_password_that_ends_sessions_and_owes_a_change() {
 
     assert_eq!(
         get_status(&state, &path, &bob.token).await,
-        StatusCode::UNAUTHORIZED,
-        "bob's old session is gone"
+        StatusCode::OK,
+        "bob's session carries on: the owner's reset changes the password and nothing else"
     );
     assert_eq!(
         login_status(&state, "bob", "resetbytheowner").await,
@@ -780,18 +771,12 @@ async fn the_owner_sets_a_password_that_ends_sessions_and_owes_a_change() {
         StatusCode::UNAUTHORIZED,
         "the old password is gone"
     );
-    let row: AccountResponse = get_json(&state, &path, &owner.token).await;
-    assert!(
-        row.must_change_password,
-        "a password the owner set is one the holder must replace"
-    );
 }
 
 /// The account itself must supply the current password and gets the rotated
-/// session token back; the mark the owner set comes off with the password it
-/// referred to.
+/// session token back.
 #[tokio::test]
-async fn an_account_changes_its_own_password_and_clears_the_forced_change() {
+async fn an_account_changes_its_own_password() {
     let vault = test_vault().await;
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
@@ -846,11 +831,6 @@ async fn an_account_changes_its_own_password_and_clears_the_forced_change() {
         StatusCode::OK
     );
 
-    let row: AccountResponse = get_json(&state, &member(id), &owner.token).await;
-    assert!(
-        !row.must_change_password,
-        "the mark comes off with the password it referred to"
-    );
     assert_eq!(
         login_status(&state, "carol", "chosen4herself").await,
         StatusCode::CREATED

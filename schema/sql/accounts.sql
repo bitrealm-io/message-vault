@@ -15,9 +15,6 @@ CREATE TABLE IF NOT EXISTS accounts (
     time_zone TEXT NOT NULL DEFAULT 'UTC',
     -- 1 = may not sign in and existing sessions are refused; 0 = active.
     disabled INTEGER NOT NULL DEFAULT 0,
-    -- 1 = the vault owner chose this password, so the account holder must
-    -- replace it before the session goes anywhere; cleared on the change.
-    must_change_password INTEGER NOT NULL DEFAULT 0,
     -- 1 = the account holder has not set up their profile yet, so the session
     -- owes profile setup before it goes anywhere; cleared on the first save.
     must_set_up_profile INTEGER NOT NULL DEFAULT 0,

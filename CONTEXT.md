@@ -132,6 +132,16 @@ of what those messages say. There is exactly one, it cannot be deleted, and
 no other account can be given its powers.
 _Avoid_: Admin, Administrator, Superuser, Root
 
+**Owner Home**:
+The screen the vault owner lands on at sign-in and works from, the way any
+other account lands in Messages. Its side panel lists User Accounts first,
+then Vault, Password and Appearance. User Accounts is where the owner adds
+accounts, sets each one's status to active or disabled, sets what it may do,
+resets its password, and deletes its messages or the account. An owner's
+password reset sets the password and nothing more: it does not end the
+person's session and does not make them choose a new one.
+_Avoid_: Console, Dashboard, Admin, Admin panel
+
 **Claiming**:
 Making a vault's owner. A vault with no owner is unclaimed and offers only
 the Create Vault Owner screen; claiming it is what that screen does. A

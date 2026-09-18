@@ -1122,6 +1122,12 @@ export interface components {
             /** @description True for the vault owner: manages accounts, holds no messages. */
             is_owner: boolean;
             /**
+             * @description When the account last signed in (RFC 3339, UTC), or `null` if it never
+             *     has. Signing in, claiming the vault and registering all count; a
+             *     password change does not.
+             */
+            last_sign_in_at?: string | null;
+            /**
              * Format: int64
              * @description Messages this account owns.
              */
@@ -2105,6 +2111,12 @@ export interface components {
                 is_demo: boolean;
                 /** @description True for the vault owner: manages accounts, holds no messages. */
                 is_owner: boolean;
+                /**
+                 * @description When the account last signed in (RFC 3339, UTC), or `null` if it never
+                 *     has. Signing in, claiming the vault and registering all count; a
+                 *     password change does not.
+                 */
+                last_sign_in_at?: string | null;
                 /**
                  * Format: int64
                  * @description Messages this account owns.

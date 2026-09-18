@@ -23,7 +23,10 @@ CREATE TABLE IF NOT EXISTS accounts (
     -- 1 = may call the export endpoints.
     can_export INTEGER NOT NULL DEFAULT 1,
     -- 1 = may destroy message data (trash, purge, delete-messages, attachments).
-    can_delete INTEGER NOT NULL DEFAULT 1
+    can_delete INTEGER NOT NULL DEFAULT 1,
+    -- RFC 3339 UTC instant of the last successful sign-in (login, claiming
+    -- the vault, or registering); NULL until the account has signed in once.
+    last_sign_in_at TEXT
 );
 
 -- Email addresses attached to an account (not used for login).

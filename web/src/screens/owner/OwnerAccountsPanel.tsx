@@ -5,6 +5,7 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import ModalShell, { DialogError, DialogFooter } from "../../components/ModalShell";
 import Select, { ListBoxItem, selectItemClassName } from "../../components/Select";
 import TextField from "../../components/TextField";
+import { formatDateTime } from "../../lib/formatDate";
 import { parseSelectKey } from "../../lib/selectKey";
 import { tdClass, tdMuted, thClass } from "../settings/apiTokensUtils";
 import { formatBytes } from "../settings/storage/storageUtils";
@@ -187,6 +188,7 @@ export function OwnerAccountsPanel() {
             <tr>
               <th className={thClass}>Account</th>
               <th className={thClass}>Status</th>
+              <th className={thClass}>Last sign-in</th>
               <th className={thClass}>Messages</th>
               <th className={thClass}>Storage</th>
               <th className={thClass}>Import</th>
@@ -218,6 +220,9 @@ export function OwnerAccountsPanel() {
                       Disabled
                     </ListBoxItem>
                   </Select>
+                </td>
+                <td className={tdMuted}>
+                  {account.last_sign_in_at ? formatDateTime(account.last_sign_in_at) : "Never"}
                 </td>
                 <td className={tdMuted}>{account.message_count.toLocaleString()}</td>
                 <td className={tdMuted}>{formatBytes(account.storage_bytes)}</td>

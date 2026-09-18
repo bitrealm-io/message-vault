@@ -233,7 +233,7 @@ fn sorted_keys(v: &serde_json::Value) -> Vec<&str> {
 }
 
 /// Every field an account row carries, on the list and on the member alike.
-const ACCOUNT_FIELDS: [&str; 15] = [
+const ACCOUNT_FIELDS: [&str; 16] = [
     "account_id",
     "can_delete",
     "can_export",
@@ -242,6 +242,7 @@ const ACCOUNT_FIELDS: [&str; 15] = [
     "emails",
     "is_demo",
     "is_owner",
+    "last_sign_in_at",
     "message_count",
     "must_set_up_profile",
     "phones",
@@ -724,6 +725,64 @@ async fn owner_routes_on_a_missing_account_are_404() {
     assert_eq!(
         get_status(&state, &format!("{missing}/storage"), &owner.token).await,
         StatusCode::NOT_FOUND
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Last sign-in
+// ---------------------------------------------------------------------------
+
+/// Registering and signing in both stamp the account; an account the owner
+/// made and nobody has used yet carries no stamp; and the owner setting a
+/// password does not count as that account signing in.
+#[tokio::test]
+async fn last_sign_in_follows_sessions_being_opened() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+
+    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
+    let row: AccountResponse = get_json(&state, &member(alice.account_id), &owner.token).await;
+    let registered_at = row
+        .last_sign_in_at
+        .expect("registering opens a session, so it is a sign-in");
+    assert!(
+        chrono::DateTime::parse_from_rfc3339(&registered_at).is_ok(),
+        "RFC 3339: {registered_at}"
+    );
+
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &state,
+        "/v1/accounts",
+        &owner.token,
+        serde_json::json!({ "username": "carol", "password": "hunter2hunter2" }),
+    )
+    .await;
+    let carol = created["account_id"].as_i64().unwrap();
+    assert!(
+        created["last_sign_in_at"].is_null(),
+        "an account the owner made has not signed in: {created}"
+    );
+
+    let status = put_status(
+        &state,
+        &format!("{}/password", member(carol)),
+        &owner.token,
+        serde_json::json!({ "password": "resetbytheowner" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let row: AccountResponse = get_json(&state, &member(carol), &owner.token).await;
+    assert!(
+        row.last_sign_in_at.is_none(),
+        "the owner setting a password is not carol signing in"
+    );
+
+    sign_in(&state, "carol", "resetbytheowner").await;
+    let row: AccountResponse = get_json(&state, &member(carol), &owner.token).await;
+    assert!(
+        row.last_sign_in_at.is_some(),
+        "signing in stamps the account"
     );
 }
 

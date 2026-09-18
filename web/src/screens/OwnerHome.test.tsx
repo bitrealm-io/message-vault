@@ -37,6 +37,7 @@ const anAccount = {
   can_delete: false,
   message_count: 1234,
   storage_bytes: 2048,
+  last_sign_in_at: null,
 };
 
 beforeEach(() => {
@@ -117,6 +118,7 @@ describe("OwnerHome", () => {
     expect(headers).toEqual([
       "Account",
       "Status",
+      "Last sign-in",
       "Messages",
       "Storage",
       "Import",
@@ -132,6 +134,26 @@ describe("OwnerHome", () => {
     await screen.findByText("bob");
     const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
     expect(headers).not.toContain("Admin");
+  });
+
+  it("shows when each account last signed in, or Never", async () => {
+    listAccounts.mockResolvedValue({
+      items: [
+        anAccount,
+        {
+          ...anAccount,
+          account_id: 102,
+          username: "carol",
+          last_sign_in_at: "2026-09-17T14:05:00Z",
+        },
+      ],
+    });
+    renderHome();
+
+    expect(await screen.findByText("Never")).toBeInTheDocument();
+    // Rendered in the browser's own zone and locale, so match the parts
+    // that survive either way.
+    expect(screen.getByText(/2026/)).toBeInTheDocument();
   });
 
   it("sets an account's status from the dropdown, with no separate button", async () => {

@@ -135,6 +135,7 @@ pub async fn claim_vault_handler(
     )
     .await
     .map_err(ApiError::Internal)?;
+    account_profile::record_sign_in(&mut tx, account_profile::OWNER_ACCOUNT_ID).await?;
     tx.commit().await?;
 
     Ok(Json(crate::session_api::SessionTokenResponse {

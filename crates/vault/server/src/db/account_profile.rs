@@ -211,6 +211,33 @@ pub async fn update_password_hash(
     Ok(())
 }
 
+/// Record that the account signed in just now. Called by every route that
+/// opens a Session for a person: sign-in, claiming the vault, and
+/// registering. Rotating a token on a password change is not a sign-in.
+pub async fn record_sign_in(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    sqlx::query("UPDATE accounts SET last_sign_in_at = $1 WHERE id = $2")
+        .bind(now)
+        .bind(account_id)
+        .execute(&mut *conn)
+        .await
+        .with_context(|| format!("record sign-in for {account_id}"))?;
+    Ok(())
+}
+
+/// When the account last signed in, as stored, or `None` if it never has.
+pub async fn load_last_sign_in(
+    conn: &mut AnyConnection,
+    account_id: i64,
+) -> Result<Option<String>> {
+    let at: Option<Option<String>> =
+        sqlx::query_scalar("SELECT last_sign_in_at FROM accounts WHERE id = $1")
+            .bind(account_id)
+            .fetch_optional(&mut *conn)
+            .await?;
+    Ok(at.flatten())
+}
+
 /// Permanently delete an account. All dependent rows are removed by
 /// ON DELETE CASCADE (messages, conversations, contacts, `vault_imports`,
 /// `account_handles/emails/api_tokens`).

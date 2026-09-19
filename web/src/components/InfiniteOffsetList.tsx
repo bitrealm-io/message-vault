@@ -75,9 +75,16 @@ function rowClass(selected: boolean, hovered = false): string {
 /**
  * The select-row button when a lead cell sits beside it. The row container owns
  * the fill, dividers and padding, so the button carries no chrome of its own.
+ *
+ * The button is only as tall as the name inside it, so its `::after` is
+ * stretched over the whole row. Without that the row's padding and the gap
+ * beside the lead cell show the hover fill and the pointer, then ignore the click.
  */
 const ROW_BODY =
-  "flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 border-none bg-transparent p-0 text-left text-text outline-none";
+  "flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 border-none bg-transparent p-0 text-left text-text outline-none after:absolute after:inset-0 after:content-['']";
+
+/** Lifts the lead cell above the select button's stretched target, so it still takes its own clicks. */
+const ROW_LEAD = "relative z-[1] flex shrink-0 self-center";
 
 /** A row is either one button, or a container holding the lead cell plus that button. */
 function Row({
@@ -103,8 +110,8 @@ function Row({
     );
   }
   return (
-    <div className={className} style={style} {...rest}>
-      {lead}
+    <div className={`relative ${className}`} style={style} {...rest}>
+      <div className={ROW_LEAD}>{lead}</div>
       <button type="button" onClick={onSelect} className={ROW_BODY}>
         {children}
       </button>

@@ -24,6 +24,7 @@ function renderList(
     requestMore?: () => void;
     onSelect?: (item: Item) => void;
     sectioned?: boolean;
+    lead?: boolean;
   },
 ) {
   return render(
@@ -42,6 +43,9 @@ function renderList(
         onSelectAllChange={() => {}}
         selectAllLabel="Select all contacts"
         renderRow={(c) => <span>{c.name}</span>}
+        renderRowLead={
+          extra?.lead ? (c) => <input type="checkbox" aria-label={`Select ${c.name}`} /> : undefined
+        }
         ariaLabel="Contacts"
         getSectionLetter={
           extra?.sectioned === false ? undefined : (c) => c.name.charAt(0).toUpperCase()
@@ -200,5 +204,36 @@ describe("InfiniteOffsetList choosing a row", () => {
 
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith({ id: "2", name: "Bob" });
+  });
+
+  // jsdom lays nothing out, so this guards the structure and the browser check
+  // guards the pixels: the button that selects has to cover the whole row, or
+  // the padding around the name highlights on hover and then ignores the click.
+  it("stretches the select button over the whole row when a lead cell sits beside it", () => {
+    renderList([{ id: "1", name: "Alice" }], { lead: true });
+
+    const button = screen.getByRole("button", { name: "Alice" });
+    const row = button.parentElement as HTMLElement;
+    expect(row.className).toContain("relative");
+    expect(button.className).toContain("after:absolute");
+    expect(button.className).toContain("after:inset-0");
+
+    // The lead cell has to sit above that stretched target to stay clickable.
+    const lead = screen.getByRole("checkbox", { name: "Select Alice" })
+      .parentElement as HTMLElement;
+    expect(lead.className).toContain("relative");
+    expect(lead.className).toContain("z-[1]");
+  });
+
+  it("selects from the row and not from the lead cell", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    renderList([{ id: "1", name: "Alice" }], { onSelect, lead: true });
+
+    await user.click(screen.getByRole("button", { name: "Alice" }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("checkbox", { name: "Select Alice" }));
+    expect(onSelect).toHaveBeenCalledTimes(1);
   });
 });

@@ -8,7 +8,6 @@ import { AccountSettingsPanel } from "./settings/AccountSettingsPanel";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { ConvertSection } from "./settings/ConvertSection";
 import { ManagedProfilePanel } from "./settings/ManagedProfilePanel";
-import { ManagedStoragePanel } from "./settings/ManagedStoragePanel";
 import { ProfileSettingsPanel } from "./settings/ProfileSettingsPanel";
 import { StorageSection } from "./settings/StorageSection";
 import { SystemSection } from "./settings/SystemSection";
@@ -135,7 +134,7 @@ export default function SettingsScreen({ managedAccountId }: { managedAccountId?
         </TabPanel>
         {tabs.includes("storage") ? (
           <TabPanel id="storage" className="mt-6">
-            {managed ? <ManagedStoragePanel accountId={managedAccountId} /> : <StorageSection />}
+            <StorageSection managedAccountId={managedAccountId} />
           </TabPanel>
         ) : null}
         {tabs.includes("system") ? (

@@ -20,6 +20,10 @@ const createAccount = vi.hoisted(() => vi.fn());
 const getAccountProfile = vi.hoisted(() => vi.fn());
 const getAccount = vi.hoisted(() => vi.fn());
 const getAccountStorage = vi.hoisted(() => vi.fn());
+const listAccountImports = vi.hoisted(() => vi.fn());
+const getAccountImport = vi.hoisted(() => vi.fn());
+const listAccountExports = vi.hoisted(() => vi.fn());
+const getImportContacts = vi.hoisted(() => vi.fn());
 const deleteAccountById = vi.hoisted(() => vi.fn());
 const deleteAccountMessages = vi.hoisted(() => vi.fn());
 
@@ -39,6 +43,10 @@ vi.mock("../lib/vaultApi", async (importOriginal) => ({
   getAccountProfile: (...a: unknown[]) => getAccountProfile(...a),
   getAccount: (...a: unknown[]) => getAccount(...a),
   getAccountStorage: (...a: unknown[]) => getAccountStorage(...a),
+  listAccountImports: (...a: unknown[]) => listAccountImports(...a),
+  getAccountImport: (...a: unknown[]) => getAccountImport(...a),
+  listAccountExports: (...a: unknown[]) => listAccountExports(...a),
+  getImportContacts: (...a: unknown[]) => getImportContacts(...a),
   deleteAccountById: (...a: unknown[]) => deleteAccountById(...a),
   deleteAccountMessages: (...a: unknown[]) => deleteAccountMessages(...a),
 }));
@@ -92,11 +100,22 @@ beforeEach(() => {
   getAccountProfile.mockReset();
   getAccount.mockReset();
   getAccountStorage.mockReset();
+  listAccountImports.mockReset();
+  getAccountImport.mockReset();
+  listAccountExports.mockReset();
+  getImportContacts.mockReset();
   deleteAccountById.mockReset();
   deleteAccountMessages.mockReset();
   getAccountProfile.mockResolvedValue(theOwner);
   getAccount.mockResolvedValue(anAccount);
-  getAccountStorage.mockResolvedValue({ total_bytes: 2048, attachment_count: 7 });
+  getAccountStorage.mockResolvedValue({
+    total_bytes: 2048,
+    attachment_count: 7,
+    top_attachments: [],
+  });
+  listAccountImports.mockResolvedValue({ items: [anImport], total: 1, limit: 40, offset: 0 });
+  getAccountImport.mockResolvedValue(anImportDetail);
+  listAccountExports.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
   deleteAccountById.mockResolvedValue(undefined);
   deleteAccountMessages.mockResolvedValue(undefined);
   listAccounts.mockResolvedValue({ items: [theOwner, anAccount] });
@@ -139,11 +158,60 @@ function selectedSection(): string | undefined {
   return sectionLinks().find((b) => b.getAttribute("aria-current") === "page")?.textContent ?? "";
 }
 
+/** One Import Run of bob's, as the list answers it. */
+const anImport = {
+  id: 9,
+  source: "imessage",
+  status: "completed",
+  started_at: "2026-09-01T10:00:00Z",
+  finished_at: "2026-09-01T10:05:00Z",
+  message_count: 1234,
+  attachment_count: 7,
+  bytes_uploaded: 2048,
+};
+
+/** The same run in full, which is what opening its row reads. */
+const anImportDetail = {
+  ...anImport,
+  tool: "desktop",
+  mode: "full",
+  stage: "done",
+  duration_ms: 300000,
+  parse_ms: null,
+  attachments_ms: null,
+  prepare_ms: null,
+  upload_ms: null,
+  summary: {},
+  issues: [],
+  contacts_new: 12,
+  contacts_changed: 3,
+};
+
 describe("OwnerHome", () => {
-  it("lists Vault Settings, then User Accounts, and nothing else in the side panel", () => {
+  it("lists Dashboard, Settings, User Accounts, Activity and Logs in the side panel", () => {
     renderHome();
 
-    expect(sectionLinks().map((b) => b.textContent)).toEqual(["Vault Settings", "User Accounts"]);
+    expect(sectionLinks().map((b) => b.textContent)).toEqual([
+      "Dashboard",
+      "Settings",
+      "User Accounts",
+      "Activity",
+      "Logs",
+    ]);
+  });
+
+  it.each([
+    ["dashboard", "Dashboard"],
+    ["activity", "Activity"],
+    ["logs", "Logs"],
+  ])("opens /owner/%s on its name and loads nothing", (id, label) => {
+    renderHome([`/owner/${id}`]);
+
+    expect(selectedSection()).toBe(label);
+    expect(screen.getByRole("heading", { name: label })).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(listAccounts).not.toHaveBeenCalled();
+    expect(getVaultSettings).not.toHaveBeenCalled();
   });
 
   it("has the header every account sees: the product name, a search bar, the account button", () => {
@@ -183,7 +251,7 @@ describe("OwnerHome", () => {
 
   it("searches accounts from another section by going to User Accounts", async () => {
     const user = userEvent.setup({ delay: null });
-    renderHome(["/owner/vault"]);
+    renderHome(["/owner/settings"]);
 
     await user.type(screen.getByRole("combobox", { name: "Search accounts" }), "b");
 
@@ -260,15 +328,87 @@ describe("OwnerHome", () => {
     expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
   });
 
-  it("shows how much an account holds, and nothing of what", async () => {
+  it("shows an account's last login and its app on Profile, marking another release", async () => {
+    getVaultState.mockResolvedValue({
+      state: "closed",
+      version: "0.10.0+343fe0d8",
+      schema_fingerprint: 1234567890,
+    });
+    getAccount.mockResolvedValue({
+      ...anAccount,
+      last_sign_in_at: "2026-09-01T10:00:00Z",
+      app: "desktop",
+      app_version: "0.9.0+aaaa1111",
+    });
+    const user = userEvent.setup({ delay: null });
+    renderHome(["/owner/accounts/101"]);
+
+    await user.click(await screen.findByRole("tab", { name: "Profile" }));
+
+    const lastLogin = await screen.findByRole("heading", { name: "Last Login" });
+    expect(lastLogin.nextElementSibling).toHaveTextContent("2026");
+    const app = screen.getByRole("heading", { name: "App" }).nextElementSibling as HTMLElement;
+    expect(app).toHaveTextContent("Desktop app 0.9.0+aaaa1111");
+    await waitFor(() => expect(app).toHaveTextContent("This vault is 0.10.0"));
+  });
+
+  it("says Never and not connected on Profile for an account that has done neither", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderHome(["/owner/accounts/101"]);
+
+    await user.click(await screen.findByRole("tab", { name: "Profile" }));
+
+    const lastLogin = await screen.findByRole("heading", { name: "Last Login" });
+    expect(lastLogin.nextElementSibling).toHaveTextContent("Never");
+    expect(screen.getByText("Has not connected yet.")).toBeInTheDocument();
+  });
+
+  it("shows the owner an account's Storage as the account sees it", async () => {
     const user = userEvent.setup({ delay: null });
     renderHome(["/owner/accounts/101"]);
 
     await user.click(await screen.findByRole("tab", { name: "Storage" }));
 
     await waitFor(() => expect(getAccountStorage).toHaveBeenCalledWith(expect.anything(), 101));
-    expect(screen.queryByText(/import history/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/largest/i)).not.toBeInTheDocument();
+    expect(listAccountImports).toHaveBeenCalledWith(expect.anything(), 101);
+    expect(listAccountExports).toHaveBeenCalledWith(expect.anything(), 101);
+    // What the accounts table used to carry: the message count and the storage total.
+    expect(await screen.findByText(/1,234 messages/)).toBeInTheDocument();
+    expect(screen.getByText(/7 attachments/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Import history" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /export history/i })).toBeInTheDocument();
+  });
+
+  it("lists an account's largest attachments for the owner by name and size, with no conversation", async () => {
+    getAccountStorage.mockResolvedValue({
+      total_bytes: 3000,
+      attachment_count: 1,
+      // What the vault answers the owner: the file, and not where it sits.
+      top_attachments: [
+        { id: 5, original_name: "big.mov", mime_type: "video/quicktime", size_bytes: 3000 },
+      ],
+    });
+    const user = userEvent.setup({ delay: null });
+    renderHome(["/owner/accounts/101"]);
+
+    await user.click(await screen.findByRole("tab", { name: "Storage" }));
+
+    expect(await screen.findByText("big.mov")).toBeInTheDocument();
+    const table = screen.getByText("big.mov").closest("table") as HTMLElement;
+    const headers = Array.from(table.querySelectorAll("th")).map((h) => h.textContent);
+    expect(headers).toEqual(["Name", "Size"]);
+  });
+
+  it("counts the contacts an import made for the owner, and does not name them", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderHome(["/owner/accounts/101"]);
+
+    await user.click(await screen.findByRole("tab", { name: "Storage" }));
+    await user.click(await screen.findByText("imessage"));
+
+    await waitFor(() => expect(getAccountImport).toHaveBeenCalledWith(9, expect.anything(), 101));
+    expect(await screen.findByText("12 new, 3 changed")).toBeInTheDocument();
+    expect(getImportContacts).not.toHaveBeenCalled();
   });
 
   it("deletes an account from its Settings and returns to User Accounts", async () => {
@@ -298,14 +438,15 @@ describe("OwnerHome", () => {
     await waitFor(() => expect(deleteAccountMessages).toHaveBeenCalledWith(101));
   });
 
-  it("lists the accounts with counts and no message content", async () => {
+  it("lists each user with a status and a last login, and nothing else", async () => {
     renderHome();
 
     expect(await screen.findByText("bob")).toBeInTheDocument();
-    expect(screen.getByText("1,234")).toBeInTheDocument();
-    // Column headers are metadata only.
     const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
-    expect(headers).toEqual(["Account", "Status", "Last sign-in", "App", "Messages", "Storage"]);
+    expect(headers).toEqual(["User", "Status", "Last login"]);
+    // What an account holds is under its Storage tab, and its app under Profile.
+    expect(screen.queryByText("1,234")).not.toBeInTheDocument();
+    expect(screen.queryByText(/The accounts on this vault/)).not.toBeInTheDocument();
     // The table sets nothing: status reads as text, and the permissions, like
     // what was the Actions column, are in the account's Settings, behind its name.
     expect(screen.getByText("Active")).toBeInTheDocument();
@@ -322,7 +463,7 @@ describe("OwnerHome", () => {
     expect(headers).not.toContain("Admin");
   });
 
-  it("shows when each account last signed in, or Never", async () => {
+  it("shows when each account last logged in, or Never", async () => {
     listAccounts.mockResolvedValue({
       items: [
         anAccount,
@@ -342,37 +483,8 @@ describe("OwnerHome", () => {
     expect(screen.getByText(/2026/)).toBeInTheDocument();
   });
 
-  it("shows the app each account connects with, and marks one from another release", async () => {
-    getVaultState.mockResolvedValue({
-      state: "closed",
-      version: "0.10.0+343fe0d8",
-      schema_fingerprint: 1234567890,
-    });
-    listAccounts.mockResolvedValue({
-      items: [
-        { ...anAccount, app: "desktop", app_version: "0.9.0+aaaa1111" },
-        // A dev build of the vault's own release, from another commit: not marked.
-        {
-          ...anAccount,
-          account_id: 102,
-          username: "carol",
-          app: "website",
-          app_version: "0.10.0+bbbb2222",
-        },
-      ],
-    });
-    renderHome();
-
-    const bob = (await screen.findByText("bob")).closest("tr") as HTMLElement;
-    expect(bob).toHaveTextContent("Desktop app 0.9.0+aaaa1111");
-    await waitFor(() => expect(bob).toHaveTextContent("This vault is 0.10.0"));
-    const carol = screen.getByText("carol").closest("tr") as HTMLElement;
-    expect(carol).toHaveTextContent("Website 0.10.0+bbbb2222");
-    expect(carol).not.toHaveTextContent("This vault is");
-  });
-
-  it("states the vault's version and schema fingerprint in Vault Settings", async () => {
-    renderHome(["/owner/vault"]);
+  it("states the vault's version and schema fingerprint in Settings", async () => {
+    renderHome(["/owner/settings"]);
 
     const version = await screen.findByText("Version");
     expect(version.nextElementSibling).toHaveTextContent(APP_BUILD);
@@ -489,9 +601,9 @@ describe("OwnerHome", () => {
   });
 
   it("opens the section named in the address", async () => {
-    renderHome(["/owner/vault"]);
+    renderHome(["/owner/settings"]);
 
-    expect(selectedSection()).toBe("Vault Settings");
+    expect(selectedSection()).toBe("Settings");
     expect(
       await screen.findByText(/Let anyone reaching this vault create their own account/),
     ).toBeInTheDocument();
@@ -511,16 +623,16 @@ describe("OwnerHome", () => {
     const user = userEvent.setup({ delay: null });
     renderHome();
 
-    await user.click(screen.getByRole("button", { name: "Vault Settings" }));
-    expect(selectedSection()).toBe("Vault Settings");
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    expect(selectedSection()).toBe("Settings");
     expect(
       await screen.findByText(/Let anyone reaching this vault create their own account/),
     ).toBeInTheDocument();
   });
 
-  it("turns public registration on from Vault Settings", async () => {
+  it("turns public registration on from Settings", async () => {
     const user = userEvent.setup({ delay: null });
-    renderHome(["/owner/vault"]);
+    renderHome(["/owner/settings"]);
 
     const box = await screen.findByRole("checkbox", {
       name: /Let anyone reaching this vault create their own account/,

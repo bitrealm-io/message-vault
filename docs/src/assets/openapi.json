@@ -807,6 +807,316 @@
         ]
       }
     },
+    "/v1/accounts/{id}/exports": {
+      "get": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "An account's Export Runs as a page, newest first unless `sort` says\notherwise. The owner reads any account's; an account reads its own.",
+        "operationId": "list_account_exports",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Account id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "One of running, completed, failed, cancelled",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, at most 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, at most 50000",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "`started_at` or `-started_at`. Default `-started_at`, newest first.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ExportRun"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/accounts/{id}/imports": {
+      "get": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "An account's Import Runs as a page, newest first unless `sort` says\notherwise. The owner reads any account's; an account reads its own.",
+        "operationId": "list_account_imports",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Account id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "One of running, completed, completed_with_issues, failed, cancelled",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, at most 500",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Rows to skip, at most 50000",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "`started_at` or `-started_at`. Default `-started_at`, newest first.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ImportSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/accounts/{id}/imports/{import_id}": {
+      "get": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "One of an account's Import Runs: status, timings, counts and issues. A run\nthat is another account's is a 404.",
+        "operationId": "get_account_import",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Account id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "import_id",
+            "in": "path",
+            "description": "Import Run id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/accounts/{id}/messages": {
       "delete": {
         "tags": [
@@ -1032,7 +1342,7 @@
         "tags": [
           "Accounts"
         ],
-        "summary": "Attachment storage usage for an account: total bytes, count, and the 100\nlargest files. The owner reads any account's; an account reads its own.",
+        "summary": "Attachment storage usage for an account: total bytes, count, and the 100\nlargest files. The owner reads any account's; an account reads its own.\nThe owner is told each file's name, type and size and not the conversation\nit is in, which says who the account talks to\n(`docs/adr/0008-the-vault-owner-holds-no-messages.md`).",
         "operationId": "get_account_storage",
         "parameters": [
           {
@@ -10442,19 +10752,23 @@
         "description": "One of an account's largest attachments by byte size.",
         "required": [
           "id",
-          "size_bytes",
-          "conversation_id",
-          "chat_identifier"
+          "size_bytes"
         ],
         "properties": {
           "chat_identifier": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Raw text of the conversation's chat handle (via `handles`)."
           },
           "conversation_id": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
-            "description": "Conversation that holds the attachment."
+            "description": "Conversation that holds the attachment. Like the two fields after it,\nabsent when the vault owner reads another account's storage: which\nconversation a file is in, and who it is with, is the holder's."
           },
           "conversation_title": {
             "type": [

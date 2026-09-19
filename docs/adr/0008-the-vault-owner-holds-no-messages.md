@@ -114,11 +114,16 @@ an account's message data without being able to look at it first, and so
 deletes on the strength of the counts, the import history and the account
 holder's word, not on inspection.
 
-Not all of this is built. The account list reports a message count and a
-storage total, and an account's Storage tab shows the owner its usage total.
-Import and export history, attachment file names and sizes, contact and
-conversation counts, and vault-wide totals are deferred, not rejected: the
-routes that serve them to the account holder refuse the owner today.
+Not all of this is built. An account's Storage tab shows the owner what it
+shows the account holder: the message count and the storage total, each import
+and export the account has run, and its largest attachments by name and size.
+The owner reads them at `/v1/accounts/{id}/storage`, `/imports` and `/exports`;
+`/v1/imports` and `/v1/exports` stay the pipelines' own and still refuse the
+owner. Two things on that screen say who the account talks to, and the owner
+gets neither: an import's detail gives the owner how many contacts it created
+and changed and not who they are, and a large attachment comes to the owner
+as a name, a type and a size, without the conversation it is in. Contact and conversation counts and vault-wide
+totals are deferred, not rejected.
 
 ## The three states of a vault
 
@@ -212,10 +217,11 @@ vault needs.)
   messages or the account. The list itself sets nothing. The account holder
   sees the same Status and Permissions sections with nothing to change, so
   what an account may do is stated to the person it binds. The owner reads
-  the account's name, time zone and handles and changes none. Storage shows
-  the owner how much the account stores; its import and export history and
-  its attachments' names and sizes belong there too under "What the owner may
-  see", and are not built yet. The owner sees no API tokens, which are the
+  the account's name, time zone and handles and changes none, and reads
+  there when the account last logged in and which app it connects with.
+  Storage shows the owner what it shows the holder: how much the account
+  stores, its import and export history, and its largest attachments' names
+  and sizes. The owner sees no API tokens, which are the
   holder's credentials, and no address book, which is content. The tabs that belong to a device rather than an
   account (System, Convert, Appearance) are not shown for a managed account.
 - The owner's own Settings are Account, Profile and Appearance. Storage,

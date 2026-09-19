@@ -428,6 +428,17 @@ pub(crate) async fn exports_list_handler(
     ExportAccess(auth): ExportAccess,
     Query(query): Query<ListExportsQuery>,
 ) -> Result<Json<Page<ExportRun>>, ApiError> {
+    exports_page(&state, auth.account_id, query).await
+}
+
+/// One account's Export Runs as a page. `GET /v1/exports` answers it for the
+/// credential's account and `GET /v1/accounts/{id}/exports` for the account
+/// named, so the two lists cannot drift.
+pub(crate) async fn exports_page(
+    state: &AppState,
+    account: i64,
+    query: ListExportsQuery,
+) -> Result<Json<Page<ExportRun>>, ApiError> {
     let page = page_params(
         query.limit,
         query.offset,
@@ -456,7 +467,7 @@ pub(crate) async fn exports_list_handler(
     let mut conn = state.db.acquire().await?;
     let (items, total) = vault_exports::list_exports_page(
         &mut conn,
-        auth.account_id,
+        account,
         status,
         &order,
         page.limit as i64,

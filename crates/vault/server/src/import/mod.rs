@@ -880,7 +880,17 @@ pub(crate) async fn imports_list_handler(
     ImportAccess(auth): ImportAccess,
     Query(query): Query<ListImportsQuery>,
 ) -> Result<Json<Page<crate::db::vault_imports::ImportSummary>>, ApiError> {
-    let account = resolve_import_account(&auth);
+    imports_page(&state, resolve_import_account(&auth), query).await
+}
+
+/// One account's Import Runs as a page. `GET /v1/imports` answers it for the
+/// credential's account and `GET /v1/accounts/{id}/imports` for the account
+/// named, so the two lists cannot drift.
+pub(crate) async fn imports_page(
+    state: &AppState,
+    account: i64,
+    query: ListImportsQuery,
+) -> Result<Json<Page<crate::db::vault_imports::ImportSummary>>, ApiError> {
     let page = page_params(
         query.limit,
         query.offset,
@@ -943,8 +953,17 @@ pub(crate) async fn imports_get_handler(
     ImportAccess(auth): ImportAccess,
     AxumPath(import_id): AxumPath<i64>,
 ) -> Result<Json<ImportDetailResponse>, ApiError> {
+    import_detail(&state, auth.account_id, import_id).await
+}
+
+/// One of an account's Import Runs. A run that is another account's is a 404.
+pub(crate) async fn import_detail(
+    state: &AppState,
+    account: i64,
+    import_id: i64,
+) -> Result<Json<ImportDetailResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let detail = crate::db::vault_imports::get_import_detail(&mut conn, auth.account_id, import_id)
+    let detail = crate::db::vault_imports::get_import_detail(&mut conn, account, import_id)
         .await
         .map_err(ApiError::from)?;
     let contacts = crate::db::import_contacts::counts(&mut conn, import_id)

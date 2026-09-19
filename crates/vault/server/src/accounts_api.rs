@@ -1008,6 +1008,9 @@ pub(crate) struct AccountStorageResponse {
 
 /// Attachment storage usage for an account: total bytes, count, and the 100
 /// largest files. The owner reads any account's; an account reads its own.
+/// The owner is told each file's name, type and size and not the conversation
+/// it is in, which says who the account talks to
+/// (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
 #[utoipa::path(
     get,
     path = "/v1/accounts/{id}/storage",
@@ -1028,15 +1031,139 @@ pub(crate) async fn account_storage_handler(
     SignedIn(auth): SignedIn,
 ) -> Result<Json<AccountStorageResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_owner_or_self(&mut conn, &auth, target).await?;
+    let reach = require_owner_or_self(&mut conn, &auth, target).await?;
     let total_bytes = vault_imports::account_attachment_bytes(&mut conn, target).await?;
     let attachment_count = vault_imports::account_attachment_count(&mut conn, target).await?;
-    let top_attachments = vault_imports::top_attachments_by_size(&mut conn, target, 100).await?;
+    let mut top_attachments =
+        vault_imports::top_attachments_by_size(&mut conn, target, 100).await?;
+    if matches!(reach, Reach::Owner) {
+        top_attachments = top_attachments
+            .into_iter()
+            .map(vault_imports::TopAttachment::without_conversation)
+            .collect();
+    }
     Ok(Json(AccountStorageResponse {
         total_bytes,
         attachment_count,
         top_attachments,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// Import and export history
+// ---------------------------------------------------------------------------
+//
+// An account's history is metadata about it, so the owner reads it as well as
+// the account (`docs/adr/0008-the-vault-owner-holds-no-messages.md`, "What the
+// owner may see"). `/v1/imports` and `/v1/exports` are the import and export
+// pipelines' own routes and ask for a permission the owner's session never
+// carries; these ask only who is calling. Which contacts a run created is the
+// holder's address book, so `/v1/imports/{id}/contacts` has no twin here: the
+// run's detail carries the counts.
+
+/// An account's Import Runs as a page, newest first unless `sort` says
+/// otherwise. The owner reads any account's; an account reads its own.
+#[utoipa::path(
+    get,
+    path = "/v1/accounts/{id}/imports",
+    tag = "Accounts",
+    operation_id = "list_account_imports",
+    security(("session" = [])),
+    params(
+        ("id" = i64, Path, description = "Account id"),
+        ("status" = Option<String>, Query, description = "One of running, completed, completed_with_issues, failed, cancelled"),
+        ("limit" = Option<usize>, Query, description = "Page size, default 40, at most 500"),
+        ("offset" = Option<usize>, Query, description = "Rows to skip, at most 50000"),
+        ("sort" = Option<String>, Query, description = "`started_at` or `-started_at`. Default `-started_at`, newest first.")
+    ),
+    responses(
+        (status = 200, body = Page<vault_imports::ImportSummary>),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem)
+    )
+)]
+pub(crate) async fn account_imports_handler(
+    State(state): State<AppState>,
+    Path(target): Path<i64>,
+    SignedIn(auth): SignedIn,
+    Query(query): Query<crate::import::ListImportsQuery>,
+) -> Result<Json<Page<vault_imports::ImportSummary>>, ApiError> {
+    require_reach(&state, &auth, target).await?;
+    crate::import::imports_page(&state, target, query).await
+}
+
+/// One of an account's Import Runs: status, timings, counts and issues. A run
+/// that is another account's is a 404.
+#[utoipa::path(
+    get,
+    path = "/v1/accounts/{id}/imports/{import_id}",
+    tag = "Accounts",
+    operation_id = "get_account_import",
+    security(("session" = [])),
+    params(
+        ("id" = i64, Path, description = "Account id"),
+        ("import_id" = i64, Path, description = "Import Run id")
+    ),
+    responses(
+        (status = 200, body = crate::import::ImportDetailResponse),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem)
+    )
+)]
+pub(crate) async fn account_import_handler(
+    State(state): State<AppState>,
+    Path((target, import_id)): Path<(i64, i64)>,
+    SignedIn(auth): SignedIn,
+) -> Result<Json<crate::import::ImportDetailResponse>, ApiError> {
+    require_reach(&state, &auth, target).await?;
+    crate::import::import_detail(&state, target, import_id).await
+}
+
+/// An account's Export Runs as a page, newest first unless `sort` says
+/// otherwise. The owner reads any account's; an account reads its own.
+#[utoipa::path(
+    get,
+    path = "/v1/accounts/{id}/exports",
+    tag = "Accounts",
+    operation_id = "list_account_exports",
+    security(("session" = [])),
+    params(
+        ("id" = i64, Path, description = "Account id"),
+        ("status" = Option<String>, Query, description = "One of running, completed, failed, cancelled"),
+        ("limit" = Option<usize>, Query, description = "Page size, default 40, at most 500"),
+        ("offset" = Option<usize>, Query, description = "Rows to skip, at most 50000"),
+        ("sort" = Option<String>, Query, description = "`started_at` or `-started_at`. Default `-started_at`, newest first.")
+    ),
+    responses(
+        (status = 200, body = Page<vault_api_types::ExportRun>),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem)
+    )
+)]
+pub(crate) async fn account_exports_handler(
+    State(state): State<AppState>,
+    Path(target): Path<i64>,
+    SignedIn(auth): SignedIn,
+    Query(query): Query<crate::export_api::ListExportsQuery>,
+) -> Result<Json<Page<vault_api_types::ExportRun>>, ApiError> {
+    require_reach(&state, &auth, target).await?;
+    crate::export_api::exports_page(&state, target, query).await
+}
+
+/// `require_owner_or_self` on a connection of its own, for a handler whose
+/// work then runs on another.
+async fn require_reach(
+    state: &AppState,
+    auth: &AuthIdentity,
+    target: i64,
+) -> Result<Reach, ApiError> {
+    let mut conn = state.db.acquire().await?;
+    require_owner_or_self(&mut conn, auth, target).await
 }
 
 #[cfg(test)]

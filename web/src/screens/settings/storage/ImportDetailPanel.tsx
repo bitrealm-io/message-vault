@@ -17,9 +17,12 @@ export default function ImportDetailPanel({
   selectedImportSummary,
   selectedImportLoading,
   selectedImportError,
+  listContacts,
   onClose,
 }: {
   detailId: string;
+  /** False for the vault owner: who an account's contacts are is the account's own. */
+  listContacts: boolean;
   selectedImport: ImportDetailResponse | null;
   selectedImportSummary: ImportSummaryView | null;
   selectedImportLoading: boolean;
@@ -97,11 +100,18 @@ export default function ImportDetailPanel({
           <ImportSummaryPanel summary={selectedImportSummary} />
           <div className="mt-4">
             <h4 className="mb-1 font-medium text-[0.813rem]">Contacts</h4>
-            <ImportContactsPanel
-              importId={selectedImport.id}
-              newCount={selectedImport.contacts_new}
-              changedCount={selectedImport.contacts_changed}
-            />
+            {listContacts ? (
+              <ImportContactsPanel
+                importId={selectedImport.id}
+                newCount={selectedImport.contacts_new}
+                changedCount={selectedImport.contacts_changed}
+              />
+            ) : (
+              <p className="text-[0.813rem] text-text">
+                {selectedImport.contacts_new.toLocaleString()} new,{" "}
+                {selectedImport.contacts_changed.toLocaleString()} changed
+              </p>
+            )}
           </div>
         </>
       ) : null}

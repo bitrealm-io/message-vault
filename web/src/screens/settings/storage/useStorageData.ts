@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiErrorMessage } from "../../../lib/apiErrorMessage";
-import { getAccountStorage, getImport, listExports, listImports } from "../../../lib/vaultApi";
+import {
+  getAccountImport,
+  getAccountStorage,
+  listAccountExports,
+  listAccountImports,
+} from "../../../lib/vaultApi";
 import { keys } from "../../../lib/vaultKeys";
 import { useVaultQuery } from "../../../lib/vaultQuery";
 import type { ExportRow, ImportRow, TopAttachment } from "./storageUtils";
@@ -13,11 +18,11 @@ type StorageOverview = {
   topAttachments: TopAttachment[];
 };
 
-async function fetchOverview(signal: AbortSignal): Promise<StorageOverview> {
+async function fetchOverview(signal: AbortSignal, accountId?: number): Promise<StorageOverview> {
   const [importsRes, exportsRes, usageRes] = await Promise.all([
-    listImports({}, { signal }),
-    listExports({}, { signal }),
-    getAccountStorage({ signal }),
+    listAccountImports({ signal }, accountId),
+    listAccountExports({ signal }, accountId),
+    getAccountStorage({ signal }, accountId),
   ]);
   return {
     imports: importsRes.items,
@@ -33,7 +38,7 @@ async function fetchOverview(signal: AbortSignal): Promise<StorageOverview> {
  * abort-on-unmount and aborted-guard handling these effects were repeating —
  * and the overview request, written by hand, had no AbortController at all.
  */
-export function useStorageData() {
+export function useStorageData(managedAccountId?: number) {
   const [page, setPage] = useState(0);
   const [selectedImportId, setSelectedImportId] = useState<number | null>(null);
 
@@ -41,7 +46,12 @@ export function useStorageData() {
     data: overview,
     isPending: loading,
     error,
-  } = useVaultQuery(keys.storage.overview, fetchOverview);
+  } = useVaultQuery(
+    managedAccountId === undefined
+      ? keys.storage.overview
+      : keys.ownerAccounts.storage(managedAccountId),
+    (signal) => fetchOverview(signal, managedAccountId),
+  );
 
   // A fresh overview invalidates whatever page the user was on.
   useEffect(() => {
@@ -50,17 +60,25 @@ export function useStorageData() {
 
   const fetchDetail = useCallback(
     (signal: AbortSignal) =>
-      selectedImportId === null ? Promise.resolve(null) : getImport(selectedImportId, { signal }),
-    [selectedImportId],
+      selectedImportId === null
+        ? Promise.resolve(null)
+        : getAccountImport(selectedImportId, { signal }, managedAccountId),
+    [selectedImportId, managedAccountId],
   );
 
   const {
     data: selectedImport,
     isPending: selectedImportLoading,
     error: selectedImportError,
-  } = useVaultQuery(keys.storage.importDetail(selectedImportId), fetchDetail, {
-    enabled: selectedImportId !== null,
-  });
+  } = useVaultQuery(
+    managedAccountId === undefined
+      ? keys.storage.importDetail(selectedImportId)
+      : keys.ownerAccounts.importDetail(managedAccountId, selectedImportId),
+    fetchDetail,
+    {
+      enabled: selectedImportId !== null,
+    },
+  );
 
   const closeImportDetail = useCallback(() => {
     setSelectedImportId(null);

@@ -79,6 +79,10 @@ The five canonical triage labels, unchanged: `needs-triage`, `needs-info`, `read
 
 Single-context: one `CONTEXT.md` at the repo root plus `docs/adr/`. See `docs/agents/domain.md`.
 
+### Architecture
+
+`docs/architecture/` holds the model of the system itself, for people and AI alike: what the entities are, how they relate, and the rules between them, each with its reason. Read `docs/architecture/contacts-identities-and-messages.md` before touching contacts, handles, participants, or what an import creates. A change to a rule lands there in the same PR as the code.
+
 ### HTTP interface rules
 
 Every rule for `/v1` routes is in `docs/agents/http-api-rules.md`, with its reason. The HTTP interface has no ADRs (`docs/adr/0011`); a change to a rule lands in that file in the same PR as the code.

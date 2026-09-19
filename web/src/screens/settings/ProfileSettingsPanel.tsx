@@ -12,9 +12,10 @@ import { phonesMatch } from "../../lib/phoneTokens";
 import { parseSelectKey } from "../../lib/selectKey";
 import { timeZoneOptions } from "../../lib/timeZone";
 import { useAccountProfile, useUpdateAccountProfile } from "../../lib/useAccountProfile";
+import { AddressBookSection } from "./AddressBookSection";
 import { inputClassName, sectionTitleClass } from "./profileStyles";
 
-/** Profile settings: display name, time zone, and phone/email/WhatsApp handles. */
+/** Profile settings: display name, time zone, phone/email/WhatsApp handles, address book. */
 export function ProfileSettingsPanel() {
   const { profile, loading, error: loadError } = useAccountProfile();
   const updateProfile = useUpdateAccountProfile();
@@ -217,6 +218,9 @@ export function ProfileSettingsPanel() {
         </Button>
       </div>
       {handleError && <div className="mb-6 text-[0.813rem] text-danger">{handleError}</div>}
+      {!handleError && <div className="mb-6" />}
+
+      <AddressBookSection />
     </div>
   );
 }

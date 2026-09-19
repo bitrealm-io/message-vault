@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
-import { formatBuild } from "./src/lib/buildFormat";
+import { formatBuild } from "./src/lib/buildFormat.ts";
 
 /** git's trimmed answer, or null when git is missing, fails, or this is no checkout. */
 function git(...args: string[]): string | null {

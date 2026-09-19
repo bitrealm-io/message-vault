@@ -207,13 +207,13 @@ describe("OwnerHome", () => {
     await waitFor(() => expect(setAccountPassword).toHaveBeenCalledWith(101, { password: "" }));
   });
 
-  it("offers the owner no way to clear their own password", async () => {
+  it("offers the owner no way to reset their own password to none", async () => {
     const user = userEvent.setup();
     renderHome();
     await user.click(screen.getByRole("button", { name: "Password" }));
 
     expect(screen.getByRole("button", { name: "Change password" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Clear password" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reset password" })).not.toBeInTheDocument();
   });
 
   it("adds an account only once its password is typed twice the same way", async () => {

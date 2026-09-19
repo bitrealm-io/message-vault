@@ -26,50 +26,55 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ChangePasswordSection", () => {
+  it("asks for the new password twice and never the current one", () => {
+    render(<ChangePasswordSection />);
+
+    expect(screen.getByLabelText("New password")).toBeInTheDocument();
+    expect(screen.getByLabelText("Confirm new password")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Current password")).not.toBeInTheDocument();
+  });
+
   it("accepts a one-character password", async () => {
     const user = userEvent.setup();
     render(<ChangePasswordSection />);
 
-    await user.type(screen.getByLabelText("Current password"), "old");
     await user.type(screen.getByLabelText("New password"), "a");
     await user.type(screen.getByLabelText("Confirm new password"), "a");
     await user.click(screen.getByRole("button", { name: "Change password" }));
 
-    await waitFor(() =>
-      expect(changePassword).toHaveBeenCalledWith({ current_password: "old", password: "a" }),
-    );
+    await waitFor(() => expect(changePassword).toHaveBeenCalledWith({ password: "a" }));
     expect(updateToken).toHaveBeenCalledWith("mv-user-rotated");
   });
 
-  it("lets an account with no password set one", async () => {
+  it("refuses a confirmation that differs", async () => {
     const user = userEvent.setup();
     render(<ChangePasswordSection />);
 
     await user.type(screen.getByLabelText("New password"), "first");
-    await user.type(screen.getByLabelText("Confirm new password"), "first");
+    await user.type(screen.getByLabelText("Confirm new password"), "second");
     await user.click(screen.getByRole("button", { name: "Change password" }));
 
-    await waitFor(() =>
-      expect(changePassword).toHaveBeenCalledWith({ current_password: "", password: "first" }),
-    );
+    expect(
+      await screen.findByText("New password and confirmation do not match."),
+    ).toBeInTheDocument();
+    expect(changePassword).not.toHaveBeenCalled();
   });
 
-  it("clears the password with the current one", async () => {
+  it("resets the password to none", async () => {
     const user = userEvent.setup();
     render(<ChangePasswordSection />);
 
-    await user.type(screen.getByLabelText("Current password"), "old");
-    await user.click(screen.getByRole("button", { name: "Clear password" }));
+    await user.click(screen.getByRole("button", { name: "Reset password" }));
 
-    await waitFor(() =>
-      expect(changePassword).toHaveBeenCalledWith({ current_password: "old", password: "" }),
-    );
-    expect(await screen.findByText("Password cleared.")).toBeInTheDocument();
+    await waitFor(() => expect(changePassword).toHaveBeenCalledWith({ password: "" }));
+    expect(
+      await screen.findByText("Password reset. This account now has no password."),
+    ).toBeInTheDocument();
   });
 
-  it("offers no Clear password when the account must keep one", () => {
-    render(<ChangePasswordSection canClear={false} />);
+  it("offers no Reset password when the account must keep one", () => {
+    render(<ChangePasswordSection canReset={false} />);
 
-    expect(screen.queryByRole("button", { name: "Clear password" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reset password" })).not.toBeInTheDocument();
   });
 });

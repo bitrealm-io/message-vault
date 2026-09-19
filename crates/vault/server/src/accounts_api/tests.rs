@@ -94,7 +94,7 @@ async fn every_member_route_refuses_another_accounts_session() {
             &state,
             &format!("{}/password", member(target)),
             &alice.token,
-            serde_json::json!({ "password": "irrelevant123", "current_password": "hunter2hunter2" }),
+            serde_json::json!({ "password": "irrelevant123" }),
         )
         .await,
         StatusCode::FORBIDDEN,
@@ -834,7 +834,7 @@ async fn the_owner_sets_a_password_and_nothing_else_changes() {
     );
 }
 
-/// The account itself must supply the current password and gets the rotated
+/// The account changes its own with its session alone and gets the rotated
 /// session token back.
 #[tokio::test]
 async fn an_account_changes_its_own_password() {
@@ -854,36 +854,11 @@ async fn an_account_changes_its_own_password() {
     let token = login["token"].as_str().unwrap();
     let path = format!("{}/password", member(id));
 
-    assert_eq!(
-        put_status(
-            &state,
-            &path,
-            token,
-            serde_json::json!({ "password": "chosen4herself" })
-        )
-        .await,
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "an account must give its current password"
-    );
-    assert_eq!(
-        put_status(
-            &state,
-            &path,
-            token,
-            serde_json::json!({ "password": "chosen4herself", "current_password": "wrong-one" })
-        )
-        .await,
-        StatusCode::UNAUTHORIZED
-    );
-
     let changed: SetPasswordResponse = put_json(
         &state,
         &path,
         token,
-        serde_json::json!({
-            "current_password": "hunter2hunter2",
-            "password": "chosen4herself",
-        }),
+        serde_json::json!({ "password": "chosen4herself" }),
     )
     .await;
     assert_ne!(changed.token, token, "the session token rotates");
@@ -898,8 +873,8 @@ async fn an_account_changes_its_own_password() {
     );
 }
 
-/// The owner changes its own password the way every account does: with the
-/// current one, on its own row.
+/// The owner changes its own password the way every account does: with its
+/// session, on its own row.
 #[tokio::test]
 async fn the_owner_can_change_their_own_password() {
     let vault = test_vault().await;
@@ -910,10 +885,7 @@ async fn the_owner_can_change_their_own_password() {
         &state,
         &format!("{}/password", member(owner.account_id)),
         &owner.token,
-        serde_json::json!({
-            "current_password": "hunter2hunter2",
-            "password": "keeperschoice",
-        }),
+        serde_json::json!({ "password": "keeperschoice" }),
     )
     .await;
 
@@ -941,18 +913,20 @@ async fn the_owner_cannot_clear_their_own_password() {
             &state,
             &path,
             &owner.token,
-            serde_json::json!({ "current_password": "hunter2hunter2", "password": "" })
+            serde_json::json!({ "password": "" })
         )
         .await,
         StatusCode::UNPROCESSABLE_ENTITY
     );
 
-    // The old password is still the current one, so the refusal stored nothing.
+    // The refusal stored nothing: the old password still signs in. That opens
+    // a new session, so the next change uses its token.
+    let login = sign_in(&state, "keeper", "hunter2hunter2").await;
     let _changed: SetPasswordResponse = put_json(
         &state,
         &path,
-        &owner.token,
-        serde_json::json!({ "current_password": "hunter2hunter2", "password": "k" }),
+        login["token"].as_str().unwrap(),
+        serde_json::json!({ "password": "k" }),
     )
     .await;
     assert_eq!(
@@ -976,7 +950,7 @@ async fn a_user_password_can_be_cleared_by_the_account_or_the_owner() {
         &state,
         &path,
         &bob.token,
-        serde_json::json!({ "current_password": "hunter2hunter2", "password": "" }),
+        serde_json::json!({ "password": "" }),
     )
     .await;
     assert_eq!(
@@ -991,7 +965,7 @@ async fn a_user_password_can_be_cleared_by_the_account_or_the_owner() {
         &state,
         &path,
         login["token"].as_str().unwrap(),
-        serde_json::json!({ "current_password": "", "password": "b" }),
+        serde_json::json!({ "password": "b" }),
     )
     .await;
     assert_eq!(login_status(&state, "bob", "b").await, StatusCode::CREATED);

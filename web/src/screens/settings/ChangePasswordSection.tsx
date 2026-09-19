@@ -11,18 +11,17 @@ import { inputClassName, sectionTitleClass } from "./profileStyles";
  * reach. Two copies of a password form would be two places for
  * the confirmation rule and the token rotation to drift apart.
  *
- * A user account may have no password, so Settings offers Clear password.
- * The vault owner must keep one, so Owner Home passes `canClear={false}`.
+ * A user account may have no password, so Settings offers Reset password, which clears it.
+ * The vault owner must keep one, so Owner Home passes `canReset={false}`.
  */
 export function ChangePasswordSection({
   disabled = false,
-  canClear = true,
+  canReset = true,
 }: {
   disabled?: boolean;
-  canClear?: boolean;
+  canReset?: boolean;
 }) {
   const { updateToken } = useAuth();
-  const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [pwMsg, setPwMsg] = useState("");
@@ -34,14 +33,14 @@ export function ChangePasswordSection({
     setPwOk(false);
     try {
       const res = await changePassword({
-        current_password: currentPw,
         password,
       });
       // Changing the password rotates the session, so the old token is dead.
       if (res.token) updateToken(res.token);
       setPwOk(true);
-      setPwMsg(password ? "Password changed." : "Password cleared.");
-      setCurrentPw("");
+      setPwMsg(
+        password ? "Password changed." : "Password reset. This account now has no password.",
+      );
       setNewPw("");
       setConfirmPw("");
     } catch (e) {
@@ -62,17 +61,6 @@ export function ChangePasswordSection({
     <>
       <h3 className={sectionTitleClass}>Change Password</h3>
       <div className="mb-6 max-w-[360px]">
-        <label className="mb-2 block">
-          <span className="mb-1 block text-[0.813rem] font-medium">Current password</span>
-          <input
-            type="password"
-            value={currentPw}
-            onChange={(e) => setCurrentPw(e.target.value)}
-            autoComplete="current-password"
-            disabled={disabled}
-            className={inputClassName}
-          />
-        </label>
         <label className="mb-2 block">
           <span className="mb-1 block text-[0.813rem] font-medium">New password</span>
           <input
@@ -96,7 +84,6 @@ export function ChangePasswordSection({
           />
         </label>
         <div className="flex flex-wrap gap-2">
-          {/* The current password may be empty: the account may have none. */}
           <Button
             variant="primary"
             onClick={handleChangePassword}
@@ -105,14 +92,14 @@ export function ChangePasswordSection({
           >
             Change password
           </Button>
-          {canClear && (
+          {canReset && (
             <Button
               variant="secondary"
               onClick={() => void savePassword("")}
               disabled={disabled}
               size="sm"
             >
-              Clear password
+              Reset password
             </Button>
           )}
         </div>

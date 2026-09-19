@@ -101,11 +101,7 @@ const EXERCISED: Record<string, () => unknown> = {
   deleteAccountMessages: () => vaultApi.deleteAccountMessages(9),
   getAccountProfile: () => vaultApi.getAccountProfile(),
   updateAccountProfile: () => vaultApi.updateAccountProfile({ preferred_name: "Matt" }),
-  changePassword: () =>
-    vaultApi.changePassword({
-      current_password: "hunter2hunter2",
-      password: "hunter3hunter3",
-    }),
+  changePassword: () => vaultApi.changePassword({ password: "hunter3hunter3" }),
   deleteAccount: () =>
     vaultApi.deleteAccount({ confirm: true, current_password: "hunter2hunter2" }),
   getAccountStorage: () => vaultApi.getAccountStorage(),

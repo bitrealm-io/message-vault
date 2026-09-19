@@ -931,7 +931,7 @@
           "Accounts"
         ],
         "summary": "Set an account's password.",
-        "description": "An account changing its own must supply the current one; the change\nrevokes its API tokens and answers `200` with a rotated session token.\nThe vault owner sets another account's without the current one and\nanswers `204`. That is the whole of it: the account's sessions carry on,\nand its holder keeps the new password until they change it themselves.",
+        "description": "The session is the credential, so the current password is never asked\nfor. An account changing its own has its API tokens revoked and gets\n`200` with a rotated session token. The vault owner setting another\naccount's answers `204`. That is the whole of it: the account's sessions carry on,\nand its holder keeps the new password until they change it themselves.",
         "operationId": "set_account_password",
         "parameters": [
           {
@@ -10309,21 +10309,14 @@
       },
       "SetPasswordRequest": {
         "type": "object",
-        "description": "The new password, and the current one when an account changes its own.",
+        "description": "The new password.",
         "required": [
           "password"
         ],
         "properties": {
-          "current_password": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "The account's current password. Required when an account changes its\nown; ignored when the vault owner sets another account's."
-          },
           "password": {
             "type": "string",
-            "description": "The new password. Must satisfy the vault's password policy."
+            "description": "The new password. Empty clears a user account's password; the vault\nowner's must be one character or more."
           }
         }
       },

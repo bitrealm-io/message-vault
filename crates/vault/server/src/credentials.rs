@@ -219,53 +219,20 @@ pub(crate) async fn require_username_free(
 // Changing one's own password
 // ---------------------------------------------------------------------------
 
-/// Why a password change was refused.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum ChangePasswordError {
-    /// The presented current password does not match the stored hash.
-    #[error("current password is incorrect")]
-    IncorrectPassword,
-    /// Database failure.
-    #[error(transparent)]
-    Db(#[from] anyhow::Error),
-}
-
-impl From<sqlx::Error> for ChangePasswordError {
-    fn from(value: sqlx::Error) -> Self {
-        Self::Db(value.into())
-    }
-}
-
-impl From<ChangePasswordError> for ApiError {
-    fn from(e: ChangePasswordError) -> Self {
-        match e {
-            err @ ChangePasswordError::IncorrectPassword => {
-                Self::InvalidCredentials(err.to_string())
-            }
-            ChangePasswordError::Db(err) => Self::Internal(err),
-        }
-    }
-}
-
-/// Check the current password, store `new_hash`, drop named API tokens, and
-/// issue a fresh session token. All of that happens in one database transaction
-/// so a failure leaves the old credentials in place.
+/// Store `new_hash`, drop named API tokens, and issue a fresh session token.
+/// All of that happens in one database transaction so a failure leaves the
+/// old credentials in place. The signed-in session is the credential: the
+/// current password is not asked for.
 ///
 /// # Errors
 ///
-/// [`ChangePasswordError::IncorrectPassword`] when the current password is
-/// wrong; [`ChangePasswordError::Db`] when a database read or write fails.
+/// Fails when a database read or write fails.
 pub(crate) async fn change_password_on_conn(
     conn: &mut AnyConnection,
     account_id: i64,
-    current_password: &str,
     new_hash: Option<&str>,
-) -> std::result::Result<String, ChangePasswordError> {
+) -> Result<String> {
     let mut tx = conn.begin().await?;
-    let current_hash = account_profile::load_password_hash(&mut tx, account_id).await?;
-    if !passwords_match(current_hash.as_deref(), current_password) {
-        return Err(ChangePasswordError::IncorrectPassword);
-    }
     account_profile::update_password_hash(&mut tx, account_id, new_hash).await?;
     api_tokens::delete_all_api_tokens(&mut tx, account_id).await?;
     let token = session_tokens::rotate_account_session_token(&mut tx, account_id).await?;

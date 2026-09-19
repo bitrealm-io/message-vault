@@ -22,8 +22,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::{AnyConnection, Connection};
 
 use crate::credentials::{
-    MAX_PASSWORD_BYTES, change_password_on_conn, check_auth_rate_limit, hash_owner_password,
-    hash_user_password, passwords_match, require_username_free, require_valid_username,
+    change_password_on_conn, check_auth_rate_limit, hash_owner_password, hash_user_password,
+    passwords_match, require_username_free, require_valid_username,
 };
 use crate::db::{account_profile, session_tokens, vault_imports, vault_settings};
 use crate::extract::{Json, Path, Query};
@@ -794,15 +794,12 @@ pub async fn delete_account_handler(
 // Password
 // ---------------------------------------------------------------------------
 
-/// The new password, and the current one when an account changes its own.
+/// The new password.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct SetPasswordRequest {
-    /// The new password. Must satisfy the vault's password policy.
+    /// The new password. Empty clears a user account's password; the vault
+    /// owner's must be one character or more.
     pub password: String,
-    /// The account's current password. Required when an account changes its
-    /// own; ignored when the vault owner sets another account's.
-    #[serde(default)]
-    pub current_password: Option<String>,
 }
 
 /// Fresh session token issued after an account changed its own password.
@@ -814,10 +811,10 @@ pub struct SetPasswordResponse {
 
 /// Set an account's password.
 ///
-/// An account changing its own must supply the current one; the change
-/// revokes its API tokens and answers `200` with a rotated session token.
-/// The vault owner sets another account's without the current one and
-/// answers `204`. That is the whole of it: the account's sessions carry on,
+/// The session is the credential, so the current password is never asked
+/// for. An account changing its own has its API tokens revoked and gets
+/// `200` with a rotated session token. The vault owner setting another
+/// account's answers `204`. That is the whole of it: the account's sessions carry on,
 /// and its holder keeps the new password until they change it themselves.
 #[utoipa::path(
     put,
@@ -854,15 +851,7 @@ pub async fn set_password_handler(
     let mut conn = state.db.acquire().await?;
     match require_owner_or_self(&mut conn, &auth, target).await? {
         Reach::Own => {
-            let Some(current) = req.current_password.as_deref() else {
-                return Err(ApiError::validation(
-                    "current_password is required to change your own password",
-                ));
-            };
-            if current.len() > MAX_PASSWORD_BYTES {
-                return Err(ApiError::validation("password is too long"));
-            }
-            let token = change_password_on_conn(&mut conn, target, current, new_hash).await?;
+            let token = change_password_on_conn(&mut conn, target, new_hash).await?;
             Ok(Json(SetPasswordResponse { token }).into_response())
         }
         Reach::Owner => {

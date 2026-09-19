@@ -24,6 +24,17 @@ of, and a search that reads the same everywhere.
 
 ### Features
 
+- 2026-09-19: **Every screen can tell you which version it is.** Settings →
+  System shows the version of the app you are using, in the browser and in the
+  desktop app. The vault owner's Vault Settings shows the vault's version and
+  its schema fingerprint, and User Accounts gains an App column: which app
+  each account connects with, the desktop app or the website, and its version.
+  A build between two releases carries the commit it came from, such as
+  `0.9.0+343fe0d8`, so two dev builds can be told apart. When an app and its
+  vault come from different releases, the app says so in a line under the
+  header, "This vault is 0.10.0. This app is 0.9.0.", and the owner sees that
+  account's row marked. Nothing is blocked: the vault serves every app
+  whatever its version.
 - 2026-09-17: **User Accounts shows when each account last signed in.** A
   Last sign-in column next to Status, in your own time zone, or "Never" for
   an account nobody has signed in to yet. Signing in, claiming the vault and

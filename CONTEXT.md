@@ -247,3 +247,25 @@ _Avoid_: Import Staging Directory, Temp Folder, Working Directory
 
 Extract is not a word for something a person does. It survives only as the
 internal name of the desktop command that reads a backup during Import.
+
+### Versions
+
+**Product Version**:
+The number a release of Message Vault is named by, such as `0.9.0`. The
+vault, the desktop app and the website carry the same one. An app whose
+Product Version differs from its vault's is flagged to the person and to the
+vault owner, and is served all the same.
+_Avoid_: Release, Release number, App version
+
+**Build**:
+A Product Version together with the commit it was built from, such as
+`0.9.0+343fe0d8`, with `.dirty` added when the source held uncommitted
+changes. A build made from a release tag is the Product Version alone. A
+screen shows the Build under the plain label "Version".
+_Avoid_: Revision, Build number, Full version
+
+**Schema Fingerprint**:
+The number derived from the vault database's table definitions, which the
+vault stamps into its database. It is not the `schema_version` of the shared
+chat file format, which is a separate number kept by hand.
+_Avoid_: Schema version, Schema hash, Database version

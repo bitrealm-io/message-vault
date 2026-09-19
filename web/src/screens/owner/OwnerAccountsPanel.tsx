@@ -1,13 +1,15 @@
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
 import TextField from "../../components/TextField";
+import { productVersionOf, productVersionsDiffer } from "../../lib/buildFormat";
 import { formatDateTime } from "../../lib/formatDate";
+import { useVaultInfo } from "../../lib/useVaultInfo";
 import { tdClass, tdMuted, thClass } from "../settings/apiTokensUtils";
 import { formatBytes } from "../settings/storage/storageUtils";
 import { type ManagedAccount, useOwnerAccounts } from "./useOwnerAccounts";
 
 /** Columns the table has, which the "no match" row spans. */
-const COLUMN_COUNT = 5;
+const COLUMN_COUNT = 6;
 
 /** Shown under the second password field once both are filled and differ. */
 function MismatchNote({ first, second }: { first: string; second: string }) {
@@ -30,6 +32,38 @@ function statusLabel(account: ManagedAccount): string {
   return account.disabled ? "Disabled" : "Active";
 }
 
+const APP_NAMES = { desktop: "Desktop app", website: "Website" } as const;
+
+/**
+ * The app an account last connected with and its Build, such as "Desktop app
+ * 0.9.0+343fe0d8". The cell is marked when that app comes from a different
+ * release than this vault; the vault serves it all the same, so the mark is
+ * for the owner to read, not a fault. Only the Product Version is compared.
+ */
+function AppCell({
+  account,
+  vaultVersion,
+}: {
+  account: ManagedAccount;
+  vaultVersion: string | null;
+}) {
+  if (!account.app || !account.app_version) {
+    return <td className={tdMuted} />;
+  }
+  const differs = vaultVersion !== null && productVersionsDiffer(account.app_version, vaultVersion);
+  return (
+    <td className={`${differs ? tdClass : tdMuted} whitespace-nowrap`}>
+      {APP_NAMES[account.app]}{" "}
+      <span className="font-mono text-[0.75rem]">{account.app_version}</span>
+      {differs ? (
+        <span className="block text-[0.75rem] text-muted">
+          This vault is {productVersionOf(vaultVersion)}
+        </span>
+      ) : null}
+    </td>
+  );
+}
+
 /** Whether the search bar's words are in the account's username or preferred name. */
 function matches(account: ManagedAccount, needle: string): boolean {
   return (
@@ -41,14 +75,15 @@ function matches(account: ManagedAccount, needle: string): boolean {
 /**
  * The accounts of this vault, the vault owner's own first.
  *
- * A row carries a username, a preferred name, a status, a message count and a
- * storage total — never a message. The name opens the account's Settings,
+ * A row carries a username, a preferred name, a status, the app the account
+ * connects with, a message count and a storage total — never a message. The name opens the account's Settings,
  * which is where its password, status and permissions are set and where its
  * messages or the account itself are deleted. The table sets nothing; it
  * shows each status so a disabled account stands out.
  */
 export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
   const navigate = useNavigate();
+  const vaultVersion = useVaultInfo().data?.version ?? null;
   const {
     accounts,
     loading,
@@ -168,6 +203,7 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
               <th className={thClass}>Account</th>
               <th className={thClass}>Status</th>
               <th className={thClass}>Last sign-in</th>
+              <th className={thClass}>App</th>
               <th className={thClass}>Messages</th>
               <th className={thClass}>Storage</th>
             </tr>
@@ -194,6 +230,7 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
                   <td className={`${tdMuted} whitespace-nowrap`}>
                     {account.last_sign_in_at ? formatDateTime(account.last_sign_in_at) : "Never"}
                   </td>
+                  <AppCell account={account} vaultVersion={vaultVersion} />
                   <td className={tdMuted}>{account.message_count.toLocaleString()}</td>
                   <td className={tdMuted}>{formatBytes(account.storage_bytes)}</td>
                 </tr>

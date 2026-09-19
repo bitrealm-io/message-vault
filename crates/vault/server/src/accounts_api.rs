@@ -67,6 +67,13 @@ pub struct AccountResponse {
     /// has. Signing in, claiming the vault and registering all count; a
     /// password change does not.
     pub last_sign_in_at: Option<String>,
+    /// Which app last used the account's session, the desktop app or the
+    /// website, or `null` when the account has no session or no request on it
+    /// has named an app.
+    pub app: Option<crate::db::session_tokens::AppKind>,
+    /// The Build that app reported, such as `0.9.0+343fe0d8`. Present exactly
+    /// when `app` is.
+    pub app_version: Option<String>,
     /// May call the import endpoints.
     pub can_import: bool,
     /// May call the export endpoints.
@@ -109,6 +116,7 @@ async fn load_account(
     let message_count = account_message_count(conn, account_id).await?;
     let storage_bytes = vault_imports::account_attachment_bytes(conn, account_id).await?;
     let last_sign_in_at = account_profile::load_last_sign_in(conn, account_id).await?;
+    let app = crate::db::session_tokens::connecting_app_for_account(conn, account_id).await?;
     Ok(Some(AccountResponse {
         account_id,
         username,
@@ -121,6 +129,8 @@ async fn load_account(
         disabled: auth.disabled,
         must_set_up_profile: auth.must_set_up_profile,
         last_sign_in_at,
+        app: app.as_ref().map(|app| app.kind),
+        app_version: app.map(|app| app.build),
         can_import: auth.permissions.import,
         can_export: auth.permissions.export,
         can_delete: auth.permissions.delete,

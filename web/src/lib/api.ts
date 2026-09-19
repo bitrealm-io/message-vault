@@ -1,3 +1,5 @@
+import { appHeaders } from "./build";
+
 let baseUrl = "";
 let authToken: string | null = null;
 let accountId: number | null = null;
@@ -148,6 +150,7 @@ async function request<T>(
 ): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...appHeaders(),
   };
   if (authToken) {
     headers.Authorization = `Bearer ${authToken}`;
@@ -180,7 +183,7 @@ async function requestRaw<T>(
   contentType: string,
   signal?: AbortSignal,
 ): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": contentType };
+  const headers: Record<string, string> = { "Content-Type": contentType, ...appHeaders() };
   if (authToken) {
     headers.Authorization = `Bearer ${authToken}`;
   }

@@ -4,12 +4,15 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { APP_BUILD } from "../lib/build";
+import { productVersionOf } from "../lib/buildFormat";
 import { ThemeProvider } from "../lib/ThemeProvider";
 import { VaultProviders } from "../test/vaultProviders";
 import OwnerHome from "./OwnerHome";
 
 const listAccounts = vi.hoisted(() => vi.fn());
 const getVaultSettings = vi.hoisted(() => vi.fn());
+const getVaultState = vi.hoisted(() => vi.fn());
 const updateVaultSettings = vi.hoisted(() => vi.fn());
 const updateAccount = vi.hoisted(() => vi.fn());
 const setAccountPassword = vi.hoisted(() => vi.fn());
@@ -28,6 +31,7 @@ vi.mock("../lib/vaultApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/vaultApi")>()),
   listAccounts: (...a: unknown[]) => listAccounts(...a),
   getVaultSettings: (...a: unknown[]) => getVaultSettings(...a),
+  getVaultState: (...a: unknown[]) => getVaultState(...a),
   updateVaultSettings: (...a: unknown[]) => updateVaultSettings(...a),
   updateAccount: (...a: unknown[]) => updateAccount(...a),
   setAccountPassword: (...a: unknown[]) => setAccountPassword(...a),
@@ -55,6 +59,8 @@ const anAccount = {
   message_count: 1234,
   storage_bytes: 2048,
   last_sign_in_at: null,
+  app: null,
+  app_version: null,
 };
 
 /** The vault owner's own row, which leads the list and is account 1, the one signed in. */
@@ -78,6 +84,7 @@ beforeEach(() => {
   }));
   listAccounts.mockReset();
   getVaultSettings.mockReset();
+  getVaultState.mockReset();
   updateVaultSettings.mockReset();
   updateAccount.mockReset();
   setAccountPassword.mockReset();
@@ -94,6 +101,12 @@ beforeEach(() => {
   deleteAccountMessages.mockResolvedValue(undefined);
   listAccounts.mockResolvedValue({ items: [theOwner, anAccount] });
   getVaultSettings.mockResolvedValue({ public_registration: false });
+  // The vault and this app are the same release unless a test says otherwise.
+  getVaultState.mockResolvedValue({
+    state: "closed",
+    version: APP_BUILD,
+    schema_fingerprint: 1234567890,
+  });
   updateVaultSettings.mockResolvedValue({ public_registration: true });
   updateAccount.mockResolvedValue({ ...anAccount, disabled: true });
   setAccountPassword.mockResolvedValue(undefined);
@@ -292,7 +305,7 @@ describe("OwnerHome", () => {
     expect(screen.getByText("1,234")).toBeInTheDocument();
     // Column headers are metadata only.
     const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
-    expect(headers).toEqual(["Account", "Status", "Last sign-in", "Messages", "Storage"]);
+    expect(headers).toEqual(["Account", "Status", "Last sign-in", "App", "Messages", "Storage"]);
     // The table sets nothing: status reads as text, and the permissions, like
     // what was the Actions column, are in the account's Settings, behind its name.
     expect(screen.getByText("Active")).toBeInTheDocument();
@@ -327,6 +340,68 @@ describe("OwnerHome", () => {
     // Rendered in the browser's own zone and locale, so match the parts
     // that survive either way.
     expect(screen.getByText(/2026/)).toBeInTheDocument();
+  });
+
+  it("shows the app each account connects with, and marks one from another release", async () => {
+    getVaultState.mockResolvedValue({
+      state: "closed",
+      version: "0.10.0+343fe0d8",
+      schema_fingerprint: 1234567890,
+    });
+    listAccounts.mockResolvedValue({
+      items: [
+        { ...anAccount, app: "desktop", app_version: "0.9.0+aaaa1111" },
+        // A dev build of the vault's own release, from another commit: not marked.
+        {
+          ...anAccount,
+          account_id: 102,
+          username: "carol",
+          app: "website",
+          app_version: "0.10.0+bbbb2222",
+        },
+      ],
+    });
+    renderHome();
+
+    const bob = (await screen.findByText("bob")).closest("tr") as HTMLElement;
+    expect(bob).toHaveTextContent("Desktop app 0.9.0+aaaa1111");
+    await waitFor(() => expect(bob).toHaveTextContent("This vault is 0.10.0"));
+    const carol = screen.getByText("carol").closest("tr") as HTMLElement;
+    expect(carol).toHaveTextContent("Website 0.10.0+bbbb2222");
+    expect(carol).not.toHaveTextContent("This vault is");
+  });
+
+  it("states the vault's version and schema fingerprint in Vault Settings", async () => {
+    renderHome(["/owner/vault"]);
+
+    const version = await screen.findByText("Version");
+    expect(version.nextElementSibling).toHaveTextContent(APP_BUILD);
+    expect(screen.getByText("Schema fingerprint").nextElementSibling).toHaveTextContent(
+      "1234567890",
+    );
+  });
+
+  it("says nothing under the header while the vault and the app are one release", async () => {
+    renderHome();
+
+    await screen.findByText("bob");
+    await waitFor(() => expect(getVaultState).toHaveBeenCalled());
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("states both versions under the header when the vault is another release", async () => {
+    getVaultState.mockResolvedValue({
+      state: "closed",
+      version: "0.10.0",
+      schema_fingerprint: 1234567890,
+    });
+    renderHome();
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      `This vault is 0.10.0. This app is ${productVersionOf(APP_BUILD)}.`,
+    );
+    // It blocks nothing: the screen under it still loads and works.
+    expect(await screen.findByText("bob")).toBeInTheDocument();
   });
 
   it("sets an account's status from its Settings", async () => {

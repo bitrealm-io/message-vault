@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Checkbox from "../../components/Checkbox";
 import { CheckIcon, XIcon } from "../../components/icons";
 import PathPicker from "../../components/PathPicker";
+import { APP_BUILD } from "../../lib/build";
 import { FFMPEG_TOOLS_STORAGE_KEY } from "../../lib/ffmpeg-tools";
 import {
   defaultStagingDir,
@@ -67,6 +68,19 @@ function ToolStatusRow({ name, path }: { name: "ffmpeg" | "ffprobe"; path: strin
         <code className="font-mono text-[0.7rem]">{name}</code> not found
       </span>
     </li>
+  );
+}
+
+/** This app's own Build, shown to every account, in the browser and the desktop app alike. */
+function AppVersion() {
+  return (
+    <div>
+      <h3 className={sectionHeading}>About</h3>
+      <div className={settingsGrid}>
+        <span className={settingsLabel}>Version</span>
+        <span className="pl-2 font-mono text-[0.813rem] text-text">{APP_BUILD}</span>
+      </div>
+    </div>
   );
 }
 
@@ -160,10 +174,13 @@ export function SystemSection() {
 
   if (!isTauri()) {
     return (
-      <p className="m-0 text-[0.875rem] text-muted">
-        System settings (staging directory, ffmpeg tools, and remembered importer paths) are
-        available in the desktop app.
-      </p>
+      <div>
+        <AppVersion />
+        <p className="m-0 mt-8 text-[0.875rem] text-muted">
+          System settings (staging directory, ffmpeg tools, and remembered importer paths) are
+          available in the desktop app.
+        </p>
+      </div>
     );
   }
 
@@ -240,6 +257,10 @@ export function SystemSection() {
             </ul>
           ) : null}
         </div>
+      </div>
+
+      <div className="mt-8">
+        <AppVersion />
       </div>
     </div>
   );

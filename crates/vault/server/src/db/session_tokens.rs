@@ -3,6 +3,7 @@
 use anyhow::{Context, Result, bail};
 use rand::TryRng;
 use sqlx::AnyConnection;
+pub use vault_api_types::AppKind;
 
 const TOKEN_ALPHANUM: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -57,23 +58,51 @@ fn now_unix_secs() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// Look up which account owns this session Bearer (by hash). Expired rows are removed.
+/// The app a request says it comes from, and the Build that app reports.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectingApp {
+    /// Desktop app or website.
+    pub kind: AppKind,
+    /// The app's Build, such as `0.9.0+343fe0d8`.
+    pub build: String,
+}
+
+impl ConnectingApp {
+    /// Pair a stored kind and Build; `None` unless both are present and the
+    /// kind is one the vault knows.
+    fn from_columns(kind: Option<String>, build: Option<String>) -> Option<Self> {
+        let kind = AppKind::parse(kind.as_deref()?)?;
+        Some(Self {
+            kind,
+            build: build?,
+        })
+    }
+}
+
+/// A live session: whose it is, and the app last recorded on it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Session {
+    /// The account the session signs in.
+    pub account_id: i64,
+    /// `None` until a request names its app.
+    pub app: Option<ConnectingApp>,
+}
+
+/// Look up the live session this Bearer names (by hash). Expired rows are removed.
 ///
 /// # Errors
 ///
 /// Returns an error when the lookup or delete fails.
-pub async fn lookup_account_for_token(
-    conn: &mut AnyConnection,
-    token: &str,
-) -> Result<Option<i64>> {
+pub async fn lookup_session(conn: &mut AnyConnection, token: &str) -> Result<Option<Session>> {
     let token_hash = hash_api_token(token);
-    let found: Option<(i64, String)> = sqlx::query_as(
-        "SELECT account_id, expires_at FROM account_session_tokens WHERE token_hash = $1",
+    let found: Option<(i64, String, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT account_id, expires_at, app_kind, app_build \
+         FROM account_session_tokens WHERE token_hash = $1",
     )
     .bind(token_hash.as_str())
     .fetch_optional(&mut *conn)
     .await?;
-    let Some((account_id, expires_at)) = found else {
+    let Some((account_id, expires_at, app_kind, app_build)) = found else {
         return Ok(None);
     };
     let expires = expires_at.parse::<u64>().unwrap_or(0);
@@ -86,7 +115,56 @@ pub async fn lookup_account_for_token(
             .await;
         return Ok(None);
     }
-    Ok(Some(account_id))
+    Ok(Some(Session {
+        account_id,
+        app: ConnectingApp::from_columns(app_kind, app_build),
+    }))
+}
+
+/// Record the app a session's request came from, when it is not the one
+/// already recorded. In practice that is one write at login and one after an
+/// app update; every other request finds the same value and writes nothing.
+///
+/// # Errors
+///
+/// Returns an error when the update fails.
+pub async fn record_connecting_app(
+    conn: &mut AnyConnection,
+    session: &Session,
+    app: &ConnectingApp,
+) -> Result<()> {
+    if session.app.as_ref() == Some(app) {
+        return Ok(());
+    }
+    sqlx::query(
+        "UPDATE account_session_tokens SET app_kind = $1, app_build = $2 WHERE account_id = $3",
+    )
+    .bind(app.kind.as_str())
+    .bind(app.build.as_str())
+    .bind(session.account_id)
+    .execute(&mut *conn)
+    .await
+    .with_context(|| format!("record the connecting app for {}", session.account_id))?;
+    Ok(())
+}
+
+/// The app recorded on an account's session, or `None` when the account has
+/// no session or no request has named an app.
+///
+/// # Errors
+///
+/// Returns an error when the lookup fails.
+pub async fn connecting_app_for_account(
+    conn: &mut AnyConnection,
+    account_id: i64,
+) -> Result<Option<ConnectingApp>> {
+    let found: Option<(Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT app_kind, app_build FROM account_session_tokens WHERE account_id = $1",
+    )
+    .bind(account_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(found.and_then(|(kind, build)| ConnectingApp::from_columns(kind, build)))
 }
 
 /// Create or replace the account's session token hash; returns plaintext once.
@@ -280,12 +358,7 @@ mod tests {
             .execute(&mut *conn)
             .await
             .unwrap();
-        assert!(
-            lookup_account_for_token(&mut conn, &token)
-                .await
-                .unwrap()
-                .is_none()
-        );
+        assert!(lookup_session(&mut conn, &token).await.unwrap().is_none());
     }
 
     #[tokio::test]
@@ -325,18 +398,8 @@ mod tests {
             .await
             .unwrap();
         let token = insert_account_session_token(&mut conn, 7).await.unwrap();
-        assert!(
-            lookup_account_for_token(&mut conn, &token)
-                .await
-                .unwrap()
-                .is_some()
-        );
+        assert!(lookup_session(&mut conn, &token).await.unwrap().is_some());
         assert!(revoke_session_token(&mut conn, &token).await.unwrap());
-        assert!(
-            lookup_account_for_token(&mut conn, &token)
-                .await
-                .unwrap()
-                .is_none()
-        );
+        assert!(lookup_session(&mut conn, &token).await.unwrap().is_none());
     }
 }

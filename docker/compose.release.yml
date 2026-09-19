@@ -18,6 +18,10 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      args:
+        # The commit this image reports after the "+" in its version:
+        #   BUILD_METADATA=$(git rev-parse --short=8 HEAD) docker compose ... up --build
+        BUILD_METADATA: ${BUILD_METADATA:-unknown}
     ports:
       - "0.0.0.0:8080:8080"
     user: "${UID}:${GID}"

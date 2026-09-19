@@ -982,7 +982,27 @@ pub async fn resolve_auth(headers: &HeaderMap, state: &AppState) -> Result<AuthI
     // Always look up against SQLite so rotate/delete in Settings takes effect
     // without restarting serve (no process-local token cache).
     let mut conn = state.db.acquire().await?;
-    resolve_auth_on_conn(&mut conn, &token).await
+    resolve_auth_on_conn(&mut conn, &token, connecting_app(headers).as_ref()).await
+}
+
+pub use vault_api_types::{APP_HEADER, APP_VERSION_HEADER};
+
+/// Longest Build the vault records. A real one is under thirty characters.
+const MAX_APP_BUILD_LEN: usize = 64;
+
+/// The app a request says it comes from. `None` unless both headers are
+/// present and well formed: curl, Swagger UI and a script send neither, and
+/// are served without anything being recorded.
+fn connecting_app(headers: &HeaderMap) -> Option<session_tokens::ConnectingApp> {
+    let kind = session_tokens::AppKind::parse(headers.get(APP_HEADER)?.to_str().ok()?)?;
+    let build = headers.get(APP_VERSION_HEADER)?.to_str().ok()?.trim();
+    let well_formed = !build.is_empty()
+        && build.len() <= MAX_APP_BUILD_LEN
+        && build.chars().all(|c| c.is_ascii_graphic());
+    well_formed.then(|| session_tokens::ConnectingApp {
+        kind,
+        build: build.to_string(),
+    })
 }
 
 /// Credential-specific bit not yet folded into `AuthCapability`: a session
@@ -996,6 +1016,10 @@ enum Credential {
 
 /// Resolve a Bearer credential on an existing connection.
 ///
+/// `app` is the app the request named, if it named one. It is recorded on a
+/// session and ignored for an API token, which belongs to a program rather
+/// than to either app. It never decides whether the request is served.
+///
 /// # Errors
 ///
 /// Unauthorized when the token matches nothing; forbidden when the account is
@@ -1003,13 +1027,15 @@ enum Credential {
 pub async fn resolve_auth_on_conn(
     conn: &mut AnyConnection,
     token: &str,
+    app: Option<&session_tokens::ConnectingApp>,
 ) -> Result<AuthIdentity, ApiError> {
     schema::ensure_accounts_schema(conn).await?;
 
-    let resolved = if let Some(account_id) =
-        session_tokens::lookup_account_for_token(&mut *conn, token).await?
-    {
-        Some((account_id, Credential::Session))
+    let resolved = if let Some(session) = session_tokens::lookup_session(&mut *conn, token).await? {
+        if let Some(app) = app {
+            session_tokens::record_connecting_app(&mut *conn, &session, app).await?;
+        }
+        Some((session.account_id, Credential::Session))
     } else {
         api_tokens::lookup_account_for_api_token(&mut *conn, token)
             .await?

@@ -134,7 +134,7 @@ async fn api_tokens_never_resolve_to_the_owner() {
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let mut conn = state.db.acquire().await.unwrap();
-    let auth = crate::server::resolve_auth_on_conn(&mut conn, &owner.token)
+    let auth = crate::server::resolve_auth_on_conn(&mut conn, &owner.token, None)
         .await
         .unwrap();
     assert!(auth.is_owner(), "the owner's session is the owner");
@@ -161,7 +161,7 @@ async fn the_owner_holds_no_message_permissions() {
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let mut conn = state.db.acquire().await.unwrap();
-    let auth = crate::server::resolve_auth_on_conn(&mut conn, &owner.token)
+    let auth = crate::server::resolve_auth_on_conn(&mut conn, &owner.token, None)
         .await
         .unwrap();
 
@@ -231,8 +231,10 @@ fn sorted_keys(v: &serde_json::Value) -> Vec<&str> {
 }
 
 /// Every field an account row carries, on the list and on the member alike.
-const ACCOUNT_FIELDS: [&str; 16] = [
+const ACCOUNT_FIELDS: [&str; 18] = [
     "account_id",
+    "app",
+    "app_version",
     "can_delete",
     "can_export",
     "can_import",
@@ -636,7 +638,7 @@ async fn the_owner_clears_a_permission_and_it_takes_effect() {
     assert!(!row.can_export);
 
     let mut conn = state.db.acquire().await.unwrap();
-    let auth = crate::server::resolve_auth_on_conn(&mut conn, &bob.token)
+    let auth = crate::server::resolve_auth_on_conn(&mut conn, &bob.token, None)
         .await
         .unwrap();
     assert!(!auth.permissions().import);
@@ -1514,4 +1516,42 @@ async fn the_account_carries_a_time_zone_and_refuses_an_unknown_one() {
         .await
         .unwrap();
     assert_eq!(unchanged.time_zone, "America/New_York");
+}
+
+/// The headers on an ordinary request reach the owner's account list: the
+/// owner reads which app each account connects with, and its Build.
+#[tokio::test]
+async fn the_account_list_shows_the_app_each_account_connects_with() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
+
+    let server = crate::test_support::serve(&state).await;
+    let status = reqwest::Client::new()
+        .get(format!("{}/v1/session", server.base()))
+        .bearer_auth(&bob.token)
+        .header(crate::server::APP_HEADER, "desktop")
+        .header(crate::server::APP_VERSION_HEADER, "0.8.0+1234abcd")
+        .send()
+        .await
+        .unwrap()
+        .status();
+    assert_eq!(status, StatusCode::OK);
+
+    let page: Page<AccountResponse> = get_json(&state, "/v1/accounts", &owner.token).await;
+    let row = |name: &str| {
+        page.items
+            .iter()
+            .find(|a| a.username == name)
+            .unwrap_or_else(|| panic!("{name} is listed"))
+    };
+    assert_eq!(
+        row("bob").app,
+        Some(crate::db::session_tokens::AppKind::Desktop)
+    );
+    assert_eq!(row("bob").app_version.as_deref(), Some("0.8.0+1234abcd"));
+    // The owner's own requests here named no app.
+    assert_eq!(row("keeper").app, None);
+    assert_eq!(row("keeper").app_version, None);
 }

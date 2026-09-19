@@ -11,4 +11,4 @@ editUrl: false
 | Status | `403 Forbidden` |
 | Type | `https://bitrealm.io/vault/developer/reference/errors/account-disabled` |
 
-The account exists but the vault owner has disabled it, so it may not sign in or act. Ask the owner to enable it.
+The account exists but the vault owner has disabled it, so it may not log in or act. Ask the owner to enable it.

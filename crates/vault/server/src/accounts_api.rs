@@ -28,7 +28,7 @@ use crate::credentials::{
 use crate::db::{account_profile, session_tokens, vault_imports, vault_settings};
 use crate::extract::{Json, Path, Query};
 use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_params};
-use crate::server::{ApiError, AppState, AuthIdentity, Created, Owner, SignedIn};
+use crate::server::{ApiError, AppState, AuthIdentity, Created, LoggedIn, Owner};
 
 // ---------------------------------------------------------------------------
 // The account as every caller sees it
@@ -56,17 +56,17 @@ pub struct AccountResponse {
     pub is_demo: bool,
     /// True for the vault owner: manages accounts, holds no messages.
     pub is_owner: bool,
-    /// May not sign in.
+    /// May not log in.
     pub disabled: bool,
     /// The account holder has not set up their profile yet, so profile setup
     /// is owed before the account can be used. The vault decides this, not the
     /// client: the same answer reaches every app, and it survives cleared site
     /// data and a second browser.
     pub must_set_up_profile: bool,
-    /// When the account last signed in (RFC 3339, UTC), or `null` if it never
-    /// has. Signing in, claiming the vault and registering all count; a
+    /// When the account last logged in (RFC 3339, UTC), or `null` if it never
+    /// has. Logging in, claiming the vault and registering all count; a
     /// password change does not.
-    pub last_sign_in_at: Option<String>,
+    pub last_login_at: Option<String>,
     /// May call the import endpoints.
     pub can_import: bool,
     /// May call the export endpoints.
@@ -108,7 +108,7 @@ async fn load_account(
     let profile = account_profile::load_account_profile(conn, account_id).await?;
     let message_count = account_message_count(conn, account_id).await?;
     let storage_bytes = vault_imports::account_attachment_bytes(conn, account_id).await?;
-    let last_sign_in_at = account_profile::load_last_sign_in(conn, account_id).await?;
+    let last_login_at = account_profile::load_last_login(conn, account_id).await?;
     Ok(Some(AccountResponse {
         account_id,
         username,
@@ -120,7 +120,7 @@ async fn load_account(
         is_owner: account_profile::is_vault_owner(account_id),
         disabled: auth.disabled,
         must_set_up_profile: auth.must_set_up_profile,
-        last_sign_in_at,
+        last_login_at,
         can_import: auth.permissions.import,
         can_export: auth.permissions.export,
         can_delete: auth.permissions.delete,
@@ -261,7 +261,7 @@ pub struct CreatedAccountResponse {
     #[serde(flatten)]
     pub account: AccountResponse,
     /// Session token to send as `Authorization: Bearer …`. Present only when
-    /// a stranger registered, because they are signed in on creation.
+    /// a stranger registered, because they are logged in on creation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
 }
@@ -269,9 +269,9 @@ pub struct CreatedAccountResponse {
 /// Create an account.
 ///
 /// The vault owner may always: the owner picks the first password and the
-/// account holder replaces it at first sign-in, so the owner's choice survives
+/// account holder replaces it at first login, so the owner's choice survives
 /// one session and no longer. A stranger with no credential may while the
-/// vault is open, and is signed in on creation. Registering is the vault's
+/// vault is open, and is logged in on creation. Registering is the vault's
 /// only self-service door, shut unless the owner has opened it; an unclaimed
 /// vault is shut too, because its first act is being claimed, not being
 /// joined.
@@ -353,11 +353,11 @@ pub async fn create_account_handler(
     let token = if by_owner {
         None
     } else {
-        // Registering opens a Session, so it is the account's first sign-in.
+        // Registering opens a Session, so it is the account's first login.
         let token = session_tokens::insert_account_session_token(&mut tx, account_id)
             .await
             .map_err(ApiError::Internal)?;
-        account_profile::record_sign_in(&mut tx, account_id).await?;
+        account_profile::record_login(&mut tx, account_id).await?;
         Some(token)
     };
     tx.commit().await?;
@@ -393,7 +393,7 @@ pub async fn create_account_handler(
 pub async fn get_account_handler(
     State(state): State<AppState>,
     Path(target): Path<i64>,
-    SignedIn(auth): SignedIn,
+    LoggedIn(auth): LoggedIn,
 ) -> Result<Json<AccountResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
     require_owner_or_self(&mut conn, &auth, target).await?;
@@ -427,7 +427,7 @@ pub struct PatchAccountRequest {
     /// Handles to unlink from the account profile.
     #[serde(default)]
     pub remove_handles: Vec<ProfileHandleInput>,
-    /// Disable or re-enable sign-in.
+    /// Disable or re-enable login.
     #[serde(default)]
     pub disabled: Option<bool>,
     /// Allow or forbid import.
@@ -668,7 +668,7 @@ async fn apply_flags(
 pub async fn patch_account_handler(
     State(state): State<AppState>,
     Path(target): Path<i64>,
-    SignedIn(auth): SignedIn,
+    LoggedIn(auth): LoggedIn,
     Json(req): Json<PatchAccountRequest>,
 ) -> Result<Json<AccountResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
@@ -741,7 +741,7 @@ pub struct DeleteAccountRequest {
 pub async fn delete_account_handler(
     State(state): State<AppState>,
     Path(target): Path<i64>,
-    SignedIn(auth): SignedIn,
+    LoggedIn(auth): LoggedIn,
     body: Option<Json<DeleteAccountRequest>>,
 ) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
@@ -845,7 +845,7 @@ pub struct SetPasswordResponse {
 pub async fn set_password_handler(
     State(state): State<AppState>,
     Path(target): Path<i64>,
-    SignedIn(auth): SignedIn,
+    LoggedIn(auth): LoggedIn,
     Json(req): Json<SetPasswordRequest>,
 ) -> Result<Response, ApiError> {
     // The owner must have a password; a user account may have none.
@@ -1015,7 +1015,7 @@ pub(crate) struct AccountStorageResponse {
 pub(crate) async fn account_storage_handler(
     State(state): State<AppState>,
     Path(target): Path<i64>,
-    SignedIn(auth): SignedIn,
+    LoggedIn(auth): LoggedIn,
 ) -> Result<Json<AccountStorageResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
     require_owner_or_self(&mut conn, &auth, target).await?;

@@ -50,7 +50,7 @@ Message Vault copies your conversations out of chat apps and phone backups — i
 
 The Message Vault software has three parts:
 
-- **Backend** - The core system that runs on your computer. It keeps you signed in, stores your messages, and powers the search feature.
+- **Backend** - The core system that runs on your computer. It keeps you logged in, stores your messages, and powers the search feature.
 - **Desktop App** - A program that imports your messages into the vault from phone backups and app exports. You can also view, organize, and export your messages from here.
 - **Website** - A read-only version of the desktop app running in a web browser.
 

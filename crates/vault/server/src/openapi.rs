@@ -25,7 +25,7 @@ use crate::server::AppState;
     components(schemas(crate::search::ListKind)),
     tags(
         (name = "Health", description = "Process liveness"),
-        (name = "Session", description = "The signed-in credential: sign in, check it, sign out"),
+        (name = "Session", description = "The logged-in credential: log in, check it, log out"),
         (name = "Accounts", description = "The vault's accounts: the owner manages them, and each account reads and writes its own, API tokens included"),
         (name = "Import", description = "JSONL import sessions and ingest"),
         (name = "Export", description = "Export Runs: create one, page its messages, close it"),
@@ -35,7 +35,7 @@ use crate::server::AppState;
         (name = "Trash", description = "Empty the trash; the one door to permanent deletion, with DELETE on a trashed conversation or contact"),
         (name = "Message tags", description = "Tags on conversations"),
         (name = "Search", description = "The words the search language accepts"),
-        (name = "Vault", description = "The vault's own state: claiming it, and what a signed-out visitor may do")
+        (name = "Vault", description = "The vault's own state: claiming it, and what a logged-out visitor may do")
     )
 )]
 /// OpenAPI document definition assembled from the utoipa-annotated handlers.
@@ -49,7 +49,7 @@ impl Modify for BearerAddon {
     ///
     /// Both are `Authorization: Bearer`, and the vault tells them apart by
     /// the token's own prefix, so one scheme could have described the header.
-    /// Two describe the interface: most routes take a signed-in session and
+    /// Two describe the interface: most routes take a logged-in session and
     /// refuse a token outright, and the ones that take a token say which
     /// scope it needs. The scope names on a requirement are the role names
     /// OpenAPI allows on a non-OAuth scheme: `owner` for the vault owner's
@@ -63,7 +63,7 @@ impl Modify for BearerAddon {
                 HttpBuilder::new()
                     .scheme(HttpAuthScheme::Bearer)
                     .description(Some(
-                        "A signed-in Session: the `mv-user-` token `POST /v1/session` returns. \
+                        "A logged-in Session: the `mv-user-` token `POST /v1/session` returns. \
                          A route naming a scope needs that permission on the account.",
                     ))
                     .build(),
@@ -86,7 +86,7 @@ impl Modify for BearerAddon {
     }
 }
 
-/// The routes a stranger may call: creating an account, signing in, and
+/// The routes a stranger may call: creating an account, logging in, and
 /// reading or claiming the vault. Served behind a small body limit.
 pub fn public_openapi() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
@@ -96,7 +96,7 @@ pub fn public_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::vault_api::claim_vault_handler))
 }
 
-/// Health, the signed-in Session, the accounts collection, and browse routes.
+/// Health, the logged-in Session, the accounts collection, and browse routes.
 pub fn api_openapi() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(crate::server::health))
@@ -310,7 +310,7 @@ mod tests {
         );
         assert!(
             paths["/v1/session"]["post"]["security"].is_null(),
-            "signing in is public"
+            "logging in is public"
         );
         assert!(
             operation_needs("session", &paths["/v1/session"]["get"]),

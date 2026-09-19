@@ -105,7 +105,7 @@
           "Accounts"
         ],
         "summary": "Create an account.",
-        "description": "The vault owner may always: the owner picks the first password and the\naccount holder replaces it at first sign-in, so the owner's choice survives\none session and no longer. A stranger with no credential may while the\nvault is open, and is signed in on creation. Registering is the vault's\nonly self-service door, shut unless the owner has opened it; an unclaimed\nvault is shut too, because its first act is being claimed, not being\njoined.",
+        "description": "The vault owner may always: the owner picks the first password and the\naccount holder replaces it at first login, so the owner's choice survives\none session and no longer. A stranger with no credential may while the\nvault is open, and is logged in on creation. Registering is the vault's\nonly self-service door, shut unless the owner has opened it; an unclaimed\nvault is shut too, because its first act is being claimed, not being\njoined.",
         "operationId": "create_account",
         "requestBody": {
           "content": {
@@ -5496,7 +5496,7 @@
         "tags": [
           "Messages"
         ],
-        "summary": "Messages matching `q`, oldest first unless `sort` says otherwise: the same\nrows an Export Run with a `query` scope would hand over, behind a signed-in\nsession with the list defaults and the list's offset ceiling.",
+        "summary": "Messages matching `q`, oldest first unless `sort` says otherwise: the same\nrows an Export Run with a `query` scope would hand over, behind a logged-in\nsession with the list defaults and the list's offset ceiling.",
         "operationId": "messages_list_handler",
         "parameters": [
           {
@@ -6092,7 +6092,7 @@
         "tags": [
           "Session"
         ],
-        "summary": "The Session the bearer token names: its account, username, and import\nsources. A session token and an API token both answer, because a program\nchecking its token needs the same facts as a browser restoring a sign-in.",
+        "summary": "The Session the bearer token names: its account, username, and import\nsources. A session token and an API token both answer, because a program\nchecking its token needs the same facts as a browser restoring a login.",
         "operationId": "get_session_handler",
         "responses": {
           "200": {
@@ -6139,7 +6139,7 @@
         "tags": [
           "Session"
         ],
-        "summary": "Sign in: verify a local username and password and answer the Session, a\n`201 Created` whose `Location` is the singleton itself.",
+        "summary": "Log in: verify a local username and password and answer the Session, a\n`201 Created` whose `Location` is the singleton itself.",
         "operationId": "create_session_handler",
         "requestBody": {
           "content": {
@@ -6153,7 +6153,7 @@
         },
         "responses": {
           "201": {
-            "description": "Signed in; the Session exists",
+            "description": "Logged in; the Session exists",
             "headers": {
               "Location": {
                 "schema": {
@@ -6216,11 +6216,11 @@
         "tags": [
           "Session"
         ],
-        "summary": "Sign out: revoke the presented session token, ending the Session.",
+        "summary": "Log out: revoke the presented session token, ending the Session.",
         "operationId": "delete_session_handler",
         "responses": {
           "204": {
-            "description": "Signed out"
+            "description": "Logged out"
           },
           "401": {
             "description": "",
@@ -6520,7 +6520,7 @@
           },
           "disabled": {
             "type": "boolean",
-            "description": "May not sign in."
+            "description": "May not log in."
           },
           "emails": {
             "type": "array",
@@ -6537,12 +6537,12 @@
             "type": "boolean",
             "description": "True for the vault owner: manages accounts, holds no messages."
           },
-          "last_sign_in_at": {
+          "last_login_at": {
             "type": [
               "string",
               "null"
             ],
-            "description": "When the account last signed in (RFC 3339, UTC), or `null` if it never\nhas. Signing in, claiming the vault and registering all count; a\npassword change does not."
+            "description": "When the account last logged in (RFC 3339, UTC), or `null` if it never\nhas. Logging in, claiming the vault and registering all count; a\npassword change does not."
           },
           "message_count": {
             "type": "integer",
@@ -7720,7 +7720,7 @@
                   "string",
                   "null"
                 ],
-                "description": "Session token to send as `Authorization: Bearer …`. Present only when\na stranger registered, because they are signed in on creation."
+                "description": "Session token to send as `Authorization: Bearer …`. Present only when\na stranger registered, because they are logged in on creation."
               }
             }
           }
@@ -8744,7 +8744,7 @@
                 },
                 "disabled": {
                   "type": "boolean",
-                  "description": "May not sign in."
+                  "description": "May not log in."
                 },
                 "emails": {
                   "type": "array",
@@ -8761,12 +8761,12 @@
                   "type": "boolean",
                   "description": "True for the vault owner: manages accounts, holds no messages."
                 },
-                "last_sign_in_at": {
+                "last_login_at": {
                   "type": [
                     "string",
                     "null"
                   ],
-                  "description": "When the account last signed in (RFC 3339, UTC), or `null` if it never\nhas. Signing in, claiming the vault and registering all count; a\npassword change does not."
+                  "description": "When the account last logged in (RFC 3339, UTC), or `null` if it never\nhas. Logging in, claiming the vault and registering all count; a\npassword change does not."
                 },
                 "message_count": {
                   "type": "integer",
@@ -10043,7 +10043,7 @@
               "boolean",
               "null"
             ],
-            "description": "Disable or re-enable sign-in."
+            "description": "Disable or re-enable login."
           },
           "handles": {
             "type": "array",
@@ -10257,7 +10257,7 @@
       },
       "SessionResponse": {
         "type": "object",
-        "description": "The signed-in credential's account, username, and import sources.",
+        "description": "The logged-in credential's account, username, and import sources.",
         "required": [
           "sources"
         ],
@@ -10477,7 +10477,7 @@
       },
       "VaultResponse": {
         "type": "object",
-        "description": "The vault's state, for the screen a signed-out person sees.",
+        "description": "The vault's state, for the screen a logged-out person sees.",
         "required": [
           "state"
         ],
@@ -10520,7 +10520,7 @@
       "session": {
         "type": "http",
         "scheme": "bearer",
-        "description": "A signed-in Session: the `mv-user-` token `POST /v1/session` returns. A route naming a scope needs that permission on the account."
+        "description": "A logged-in Session: the `mv-user-` token `POST /v1/session` returns. A route naming a scope needs that permission on the account."
       }
     }
   },
@@ -10531,7 +10531,7 @@
     },
     {
       "name": "Session",
-      "description": "The signed-in credential: sign in, check it, sign out"
+      "description": "The logged-in credential: log in, check it, log out"
     },
     {
       "name": "Accounts",
@@ -10571,7 +10571,7 @@
     },
     {
       "name": "Vault",
-      "description": "The vault's own state: claiming it, and what a signed-out visitor may do"
+      "description": "The vault's own state: claiming it, and what a logged-out visitor may do"
     }
   ]
 }

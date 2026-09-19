@@ -54,10 +54,10 @@ const anAccount = {
   can_delete: false,
   message_count: 1234,
   storage_bytes: 2048,
-  last_sign_in_at: null,
+  last_login_at: null,
 };
 
-/** The vault owner's own row, which leads the list and is account 1, the one signed in. */
+/** The vault owner's own row, which leads the list and is account 1, the one logged in. */
 const theOwner = {
   ...anAccount,
   account_id: 1,
@@ -292,7 +292,7 @@ describe("OwnerHome", () => {
     expect(screen.getByText("1,234")).toBeInTheDocument();
     // Column headers are metadata only.
     const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
-    expect(headers).toEqual(["Account", "Status", "Last sign-in", "Messages", "Storage"]);
+    expect(headers).toEqual(["Account", "Status", "Last login", "Messages", "Storage"]);
     // The table sets nothing: status reads as text, and the permissions, like
     // what was the Actions column, are in the account's Settings, behind its name.
     expect(screen.getByText("Active")).toBeInTheDocument();
@@ -309,7 +309,7 @@ describe("OwnerHome", () => {
     expect(headers).not.toContain("Admin");
   });
 
-  it("shows when each account last signed in, or Never", async () => {
+  it("shows when each account last logged in, or Never", async () => {
     listAccounts.mockResolvedValue({
       items: [
         anAccount,
@@ -317,7 +317,7 @@ describe("OwnerHome", () => {
           ...anAccount,
           account_id: 102,
           username: "carol",
-          last_sign_in_at: "2026-09-17T14:05:00Z",
+          last_login_at: "2026-09-17T14:05:00Z",
         },
       ],
     });
@@ -465,7 +465,7 @@ describe("OwnerHome", () => {
     renderHome(["/owner/accounts/1"]);
 
     expect(await screen.findByText("Change Password")).toBeInTheDocument();
-    // The owner's own account is read as the signed-in account, not as a managed one.
+    // The owner's own account is read as the logged-in account, not as a managed one.
     expect(getAccount).not.toHaveBeenCalled();
     // No Storage, System or Convert: the owner holds no messages.
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([

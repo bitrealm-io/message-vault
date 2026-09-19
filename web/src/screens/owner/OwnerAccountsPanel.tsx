@@ -167,7 +167,7 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
             <tr>
               <th className={thClass}>Account</th>
               <th className={thClass}>Status</th>
-              <th className={thClass}>Last sign-in</th>
+              <th className={thClass}>Last login</th>
               <th className={thClass}>Messages</th>
               <th className={thClass}>Storage</th>
             </tr>
@@ -192,7 +192,7 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
                   </td>
                   <td className={account.disabled ? tdClass : tdMuted}>{statusLabel(account)}</td>
                   <td className={`${tdMuted} whitespace-nowrap`}>
-                    {account.last_sign_in_at ? formatDateTime(account.last_sign_in_at) : "Never"}
+                    {account.last_login_at ? formatDateTime(account.last_login_at) : "Never"}
                   </td>
                   <td className={tdMuted}>{account.message_count.toLocaleString()}</td>
                   <td className={tdMuted}>{formatBytes(account.storage_bytes)}</td>

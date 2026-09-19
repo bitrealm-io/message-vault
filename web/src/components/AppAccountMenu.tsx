@@ -4,14 +4,14 @@ import { useAuth } from "../lib/auth";
 import { useAccountProfile } from "../lib/useAccountProfile";
 import { useIsVaultOwner } from "../lib/useIsVaultOwner";
 import { Z_POPOVER } from "../lib/zLayers";
-import { GearIcon, PersonIcon, SignOutIcon } from "./icons";
+import { GearIcon, LogOutIcon, PersonIcon } from "./icons";
 import PopupMenu from "./PopupMenu";
 
 const itemRow = "flex items-center gap-2";
 
 /**
  * The circle user button at the far right of the header. Its menu names who is
- * signed in (username, then preferred name when one is set) and opens Settings
+ * logged in (username, then preferred name when one is set) and opens Settings
  * or logs out.
  */
 export default function AppAccountMenu() {
@@ -84,7 +84,7 @@ export default function AppAccountMenu() {
             onSelect: () => logout(),
             children: (
               <span className={itemRow}>
-                <SignOutIcon size={15} />
+                <LogOutIcon size={15} />
                 Log out
               </span>
             ),

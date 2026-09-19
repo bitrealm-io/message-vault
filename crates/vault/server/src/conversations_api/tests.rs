@@ -27,7 +27,7 @@ async fn list_conversations(
     .await
 }
 
-/// A vault, a signed-in account, and one conversation holding one message.
+/// A vault, a logged-in account, and one conversation holding one message.
 async fn conversations_fixture() -> (TestVault, String, RegisteredAccount) {
     let vault = test_vault().await;
     let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
@@ -1657,7 +1657,7 @@ async fn conversation_trash_requires_auth() {
     assert_eq!(status, axum::http::StatusCode::UNAUTHORIZED);
 }
 
-/// A signed-in account with one conversation already in the trash,
+/// A logged-in account with one conversation already in the trash,
 /// returning the account and the conversation's id.
 async fn trashed_conversation_fixture() -> (TestVault, RegisteredAccount, i64) {
     let vault = crate::test_support::test_vault().await;
@@ -1877,7 +1877,7 @@ async fn conversation_restore_requires_auth() {
     assert_eq!(status, axum::http::StatusCode::UNAUTHORIZED);
 }
 
-/// A signed-in account and one conversation with no messages yet, for
+/// A logged-in account and one conversation with no messages yet, for
 /// tests that seed their own message rows with specific timestamps and
 /// `sort_order`.
 async fn conversation_messages_fixture() -> (TestVault, RegisteredAccount, i64) {

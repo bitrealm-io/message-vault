@@ -15,7 +15,7 @@ export type VaultState = "unclaimed" | "closed" | "open";
  * desktop app, would be three copies free to drift apart. See
  * `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
  *
- * This is the one query that runs before anyone signs in, so it is a plain
+ * This is the one query that runs before anyone logs in, so it is a plain
  * `useQuery` rather than `useVaultQuery`: there is no account to name the
  * cache entry with, and the answer belongs to the address, not to a person.
  * `serverUrl` is null while no address has been resolved, which keeps the
@@ -34,7 +34,7 @@ export function useVaultState(serverUrl: string | null): {
       const res = await getVaultState({ signal });
       return res.state as VaultState;
     },
-    // A vault does not change state under a signed-out visitor except by their
+    // A vault does not change state under a logged-out visitor except by their
     // own act, and every act that changes it navigates away from this screen.
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,

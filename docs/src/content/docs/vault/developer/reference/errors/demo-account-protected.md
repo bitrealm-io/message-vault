@@ -11,4 +11,4 @@ editUrl: false
 | Status | `403 Forbidden` |
 | Type | `https://bitrealm.io/vault/developer/reference/errors/demo-account-protected` |
 
-The demo account refuses this operation, because it exists to be looked at and reset rather than changed. Sign in as a real account, or run `reset-demo` on the vault to restore the demo data.
+The demo account refuses this operation, because it exists to be looked at and reset rather than changed. Log in as a real account, or run `reset-demo` on the vault to restore the demo data.

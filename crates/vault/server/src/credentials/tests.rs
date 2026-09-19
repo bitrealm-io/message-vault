@@ -292,7 +292,7 @@ async fn change_password_transaction_rolls_back_every_credential() {
 /// The owner must have a password and one character is enough. A user
 /// account has no minimum at all: an empty password is an account with no
 /// password. Both share the maximum, the only thing stopping a megabyte of
-/// text reaching Argon2, which would hash it and make every sign-in slow for
+/// text reaching Argon2, which would hash it and make every login slow for
 /// everybody.
 #[test]
 fn the_owner_needs_one_character_and_a_user_needs_none() {
@@ -326,7 +326,7 @@ fn the_owner_needs_one_character_and_a_user_needs_none() {
 /// The username rule, at both its edges and over its character set.
 ///
 /// `is_valid_username` had no test either. A username is the name an account
-/// is looked up by at sign-in, so accepting a blank one, or one with a slash
+/// is looked up by at login, so accepting a blank one, or one with a slash
 /// or a space in it, makes an account that is awkward or impossible to reach.
 #[test]
 fn a_username_is_one_to_128_characters_of_a_known_set() {

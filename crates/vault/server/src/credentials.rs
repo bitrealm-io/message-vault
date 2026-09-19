@@ -16,7 +16,7 @@ use sqlx::{AnyConnection, Connection};
 use crate::db::{account_profile, api_tokens, session_tokens};
 use crate::server::ApiError;
 
-/// Max password bytes accepted before hashing (creation, sign-in, change).
+/// Max password bytes accepted before hashing (creation, login, change).
 pub(crate) const MAX_PASSWORD_BYTES: usize = 1024;
 /// Sliding window for the routes a stranger may call with a credential.
 pub(crate) const AUTH_RATE_WINDOW: Duration = Duration::from_secs(60);
@@ -221,7 +221,7 @@ pub(crate) async fn require_username_free(
 
 /// Store `new_hash`, drop named API tokens, and issue a fresh session token.
 /// All of that happens in one database transaction so a failure leaves the
-/// old credentials in place. The signed-in session is the credential: the
+/// old credentials in place. The logged-in session is the credential: the
 /// current password is not asked for.
 ///
 /// # Errors

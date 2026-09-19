@@ -88,7 +88,7 @@ pub struct PageQuery {
     pub sort: Option<String>,
 }
 
-/// Which way a sort key runs, from the sign in front of it: `-date` descends,
+/// Which way a sort key runs, from the log in front of it: `-date` descends,
 /// `date` ascends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {

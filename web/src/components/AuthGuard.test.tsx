@@ -81,7 +81,7 @@ describe("AuthGuard", () => {
     expect(screen.queryByText("onboarding")).not.toBeInTheDocument();
   });
 
-  it("sends a signed-out visitor to the login screen before reading a profile", () => {
+  it("sends a logged-out visitor to the login screen before reading a profile", () => {
     authState.isAuthenticated = false;
     profileState.loading = true;
     renderGuard();

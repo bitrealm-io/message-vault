@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     -- IANA time zone (for example America/New_York) every message time, day and year is
     -- read in. Chosen at profile setup; a message records only the instant it arrived.
     time_zone TEXT NOT NULL DEFAULT 'UTC',
-    -- 1 = may not sign in and existing sessions are refused; 0 = active.
+    -- 1 = may not log in and existing sessions are refused; 0 = active.
     disabled INTEGER NOT NULL DEFAULT 0,
     -- 1 = the account holder has not set up their profile yet, so the session
     -- owes profile setup before it goes anywhere; cleared on the first save.
@@ -24,9 +24,9 @@ CREATE TABLE IF NOT EXISTS accounts (
     can_export INTEGER NOT NULL DEFAULT 1,
     -- 1 = may destroy message data (trash, purge, delete-messages, attachments).
     can_delete INTEGER NOT NULL DEFAULT 1,
-    -- RFC 3339 UTC instant of the last successful sign-in (login, claiming
-    -- the vault, or registering); NULL until the account has signed in once.
-    last_sign_in_at TEXT
+    -- RFC 3339 UTC instant of the last successful login (login, claiming
+    -- the vault, or registering); NULL until the account has logged in once.
+    last_login_at TEXT
 );
 
 -- Email addresses attached to an account (not used for login).

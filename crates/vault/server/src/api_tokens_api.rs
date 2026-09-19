@@ -2,7 +2,7 @@
 //!
 //! The account itself, and nobody else. The vault owner has no tokens and
 //! does not manage other people's: a token is a program's credential into
-//! one account's messages, and the owner never reaches those. A signed-in
+//! one account's messages, and the owner never reaches those. A logged-in
 //! session is required; a token cannot mint, rename or revoke tokens.
 
 use crate::extract::{Json, Path, Query};

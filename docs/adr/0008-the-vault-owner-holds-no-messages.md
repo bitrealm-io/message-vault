@@ -5,7 +5,7 @@ that owner has no vault of its own: no conversations, no contacts, no import,
 no export, no trash, and no API tokens. The owner is the vault's
 administrator. It sets the vault's global settings, creates, disables and
 deletes accounts, resets their passwords, deletes their message data, and
-decides whether strangers may sign up. It monitors the vault: how much each
+decides whether strangers may create an account. It monitors the vault: how much each
 account holds and what each account has been doing. It never reads a
 message. A vault
 with no owner is unclaimed and offers only the Create Vault Owner screen; a
@@ -87,7 +87,7 @@ describes an account's data without being that data:
   bytes each takes, per account and for the whole vault;
 - activity: each import and export an account has run, with its source,
   format, time, outcome and the counts it reported, and when the account last
-  signed in;
+  logged in;
 - attachments as files: name, type, size and date.
 
 The owner may not read what a person wrote or whom they wrote to:
@@ -123,7 +123,7 @@ routes that serve them to the account holder refuse the owner today.
 ## The three states of a vault
 
 `GET /v1/vault` is unauthenticated and reports one value: `unclaimed`,
-`closed`, or `open`. The signed-out screen follows from it — Create Vault
+`closed`, or `open`. The logged-out screen follows from it — Create Vault
 Owner, Login alone, or Login plus Create Account.
 
 The server reports the state rather than the two facts behind it (whether an
@@ -180,7 +180,7 @@ the vault can send mail. Until then the owner chooses the password, hands it
 over, and the person keeps it until they change it under Settings; the vault
 does not force that change. (An earlier version marked the account with
 `must_change_password` and made the holder replace the owner's password at
-first sign-in; that mark was removed as more ceremony than a self-hosted
+first login; that mark was removed as more ceremony than a self-hosted
 vault needs.)
 
 ## Consequences
@@ -196,7 +196,7 @@ vault needs.)
   character or more, and cannot clear it; a user account has no minimum and
   may have no password at all. Without
   the seeded owner a demo vault would be unclaimed, and the documented
-  "sign in as `demo`" instruction would reach a screen that offers no login.
+  "log in as `demo`" instruction would reach a screen that offers no login.
 - The owner can delete the demo account and its data. The demo account still
   cannot delete itself.
 - The owner leads the account list they manage, ahead of the rest by
@@ -235,7 +235,7 @@ vault needs.)
   `Owner` OpenAPI tag, `owner_api.rs`, and the `Owner` guard. The interface
   says accounts because it returns account records; the screen says User
   Accounts because it lists the people who use the vault.
-- The owner signs in to Owner Home, a screen of their own, not to the
+- The owner logs in to Owner Home, a screen of their own, not to the
   message-browsing shell. The account-management screen leaves Settings, and an ordinary
   account loses it entirely, because an ordinary account can no longer be an
   administrator.

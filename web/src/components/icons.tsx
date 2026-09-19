@@ -125,7 +125,7 @@ export function GearIcon({ size, className, ...rest }: IconProps) {
 }
 
 /** Open door with an arrow out — log out. */
-export function SignOutIcon({ size, className, ...rest }: IconProps) {
+export function LogOutIcon({ size, className, ...rest }: IconProps) {
   return (
     <IconShell size={size} className={className} {...rest}>
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />

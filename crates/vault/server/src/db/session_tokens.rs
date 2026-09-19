@@ -199,7 +199,7 @@ pub async fn revoke_session_token(conn: &mut AnyConnection, token: &str) -> Resu
 
 /// Revoke every session token belonging to `account_id` (normally at most
 /// one row). Used when an administrator resets someone else's password, so
-/// the reset actually ends their existing sign-in rather than merely
+/// the reset actually ends their existing login rather than merely
 /// changing what a future one would need.
 pub async fn revoke_account_sessions(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
     sqlx::query("DELETE FROM account_session_tokens WHERE account_id = $1")

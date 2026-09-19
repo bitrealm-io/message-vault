@@ -9,7 +9,7 @@ import {
 
 /**
  * Probe vault /health for a server URL with debounce and backoff.
- * Pass `null` to stop (sign-in card). An empty string probes this origin.
+ * Pass `null` to stop (login card). An empty string probes this origin.
  */
 export function useVaultHealth(serverUrl: string | null): VaultHealthStatus {
   const [status, setStatus] = useState<VaultHealthStatus>("unknown");

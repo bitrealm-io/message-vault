@@ -48,12 +48,10 @@ describe("AppAccountMenu", () => {
     renderMenu();
 
     await user.click(screen.getByRole("button", { name: "Account menu" }));
-    const menu = screen.getByRole("menu", { name: "Account menu" });
     expect(screen.getByTestId("account-menu-username").textContent).toBe("ada");
     expect(screen.getByTestId("account-menu-preferred-name").textContent).toBe("Ada Lovelace");
     const items = screen.getAllByRole("menuitem").map((el) => el.textContent);
     expect(items).toEqual(["Settings", "Log out"]);
-    expect(menu.textContent).not.toContain("Sign out");
   });
 
   it("leaves out the preferred name line when none is set", async () => {

@@ -11,7 +11,7 @@ export function ApiTokensSection({
   accountCanExport,
   accountCanDelete,
 }: {
-  /** The signed-in account's own permissions — a token can never exceed them. */
+  /** The logged-in account's own permissions — a token can never exceed them. */
   accountCanImport: boolean;
   accountCanExport: boolean;
   accountCanDelete: boolean;

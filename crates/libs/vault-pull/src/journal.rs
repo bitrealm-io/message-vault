@@ -22,7 +22,7 @@ pub enum PullJournalEvent {
     AssetOk {
         /// Vault base URL the attachment came from.
         url: String,
-        /// Account username the run signed in as.
+        /// Account username the run logged in as.
         username: String,
         /// Hex SHA-256 fingerprint of the attachment bytes; the skip key.
         sha256: String,
@@ -31,7 +31,7 @@ pub enum PullJournalEvent {
     BackupComplete {
         /// Vault base URL the download came from.
         url: String,
-        /// Account username the run signed in as.
+        /// Account username the run logged in as.
         username: String,
         /// Conversations written.
         conversations: u64,

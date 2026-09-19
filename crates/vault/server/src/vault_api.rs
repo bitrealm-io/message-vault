@@ -1,4 +1,4 @@
-//! What a signed-out browser is allowed to know about this vault, and the one
+//! What a logged-out browser is allowed to know about this vault, and the one
 //! act it is allowed to perform: claiming an unclaimed vault.
 //!
 //! `GET /v1/vault` reports the vault's state as a single value rather than the
@@ -7,7 +7,7 @@
 //! server. A browser and a desktop app that each derived the entry screen from
 //! raw fields would be two copies of one rule, free to drift apart.
 //!
-//! These are the vault's only unauthenticated routes besides signing in and
+//! These are the vault's only unauthenticated routes besides logging in and
 //! a stranger's `POST /v1/accounts`, and the first read routes that do not
 //! require a session: the entry screen cannot have one yet, which is the
 //! whole of the exception. See
@@ -32,7 +32,7 @@ pub enum VaultState {
     Open,
 }
 
-/// The vault's state, for the screen a signed-out person sees.
+/// The vault's state, for the screen a logged-out person sees.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct VaultResponse {
     /// `unclaimed` shows Create Vault Owner alone; `closed` shows Login alone;
@@ -134,7 +134,7 @@ pub async fn claim_vault_handler(
     )
     .await
     .map_err(ApiError::Internal)?;
-    account_profile::record_sign_in(&mut tx, account_profile::OWNER_ACCOUNT_ID).await?;
+    account_profile::record_login(&mut tx, account_profile::OWNER_ACCOUNT_ID).await?;
     tx.commit().await?;
 
     Ok(Json(crate::session_api::SessionTokenResponse {

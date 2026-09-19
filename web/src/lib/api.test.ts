@@ -188,7 +188,7 @@ describe("apiClient request shape", () => {
     expect(headers.Authorization).toBe("Bearer mv-user-abc123");
   });
 
-  it("sends no Authorization header while signed out", async () => {
+  it("sends no Authorization header while logged out", async () => {
     const fetchSpy = stubOkFetch();
     setToken(null);
 

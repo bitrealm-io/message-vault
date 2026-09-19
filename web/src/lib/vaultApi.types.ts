@@ -39,9 +39,9 @@ export interface paths {
         /**
          * Create an account.
          * @description The vault owner may always: the owner picks the first password and the
-         *     account holder replaces it at first sign-in, so the owner's choice survives
+         *     account holder replaces it at first login, so the owner's choice survives
          *     one session and no longer. A stranger with no credential may while the
-         *     vault is open, and is signed in on creation. Registering is the vault's
+         *     vault is open, and is logged in on creation. Registering is the vault's
          *     only self-service door, shut unless the owner has opened it; an unclaimed
          *     vault is shut too, because its first act is being claimed, not being
          *     joined.
@@ -888,7 +888,7 @@ export interface paths {
         };
         /**
          * Messages matching `q`, oldest first unless `sort` says otherwise: the same
-         *     rows an Export Run with a `query` scope would hand over, behind a signed-in
+         *     rows an Export Run with a `query` scope would hand over, behind a logged-in
          *     session with the list defaults and the list's offset ceiling.
          */
         get: operations["messages_list_handler"];
@@ -997,16 +997,16 @@ export interface paths {
         /**
          * The Session the bearer token names: its account, username, and import
          *     sources. A session token and an API token both answer, because a program
-         *     checking its token needs the same facts as a browser restoring a sign-in.
+         *     checking its token needs the same facts as a browser restoring a login.
          */
         get: operations["get_session_handler"];
         put?: never;
         /**
-         * Sign in: verify a local username and password and answer the Session, a
+         * Log in: verify a local username and password and answer the Session, a
          *     `201 Created` whose `Location` is the singleton itself.
          */
         post: operations["create_session_handler"];
-        /** Sign out: revoke the presented session token, ending the Session. */
+        /** Log out: revoke the presented session token, ending the Session. */
         delete: operations["delete_session_handler"];
         options?: never;
         head?: never;
@@ -1117,7 +1117,7 @@ export interface components {
             can_export: boolean;
             /** @description May call the import endpoints. */
             can_import: boolean;
-            /** @description May not sign in. */
+            /** @description May not log in. */
             disabled: boolean;
             /** @description Email addresses linked to the account. */
             emails: string[];
@@ -1126,11 +1126,11 @@ export interface components {
             /** @description True for the vault owner: manages accounts, holds no messages. */
             is_owner: boolean;
             /**
-             * @description When the account last signed in (RFC 3339, UTC), or `null` if it never
-             *     has. Signing in, claiming the vault and registering all count; a
+             * @description When the account last logged in (RFC 3339, UTC), or `null` if it never
+             *     has. Logging in, claiming the vault and registering all count; a
              *     password change does not.
              */
-            last_sign_in_at?: string | null;
+            last_login_at?: string | null;
             /**
              * Format: int64
              * @description Messages this account owns.
@@ -1639,7 +1639,7 @@ export interface components {
         CreatedAccountResponse: components["schemas"]["AccountResponse"] & {
             /**
              * @description Session token to send as `Authorization: Bearer …`. Present only when
-             *     a stranger registered, because they are signed in on creation.
+             *     a stranger registered, because they are logged in on creation.
              */
             token?: string | null;
         };
@@ -2116,7 +2116,7 @@ export interface components {
                 can_export: boolean;
                 /** @description May call the import endpoints. */
                 can_import: boolean;
-                /** @description May not sign in. */
+                /** @description May not log in. */
                 disabled: boolean;
                 /** @description Email addresses linked to the account. */
                 emails: string[];
@@ -2125,11 +2125,11 @@ export interface components {
                 /** @description True for the vault owner: manages accounts, holds no messages. */
                 is_owner: boolean;
                 /**
-                 * @description When the account last signed in (RFC 3339, UTC), or `null` if it never
-                 *     has. Signing in, claiming the vault and registering all count; a
+                 * @description When the account last logged in (RFC 3339, UTC), or `null` if it never
+                 *     has. Logging in, claiming the vault and registering all count; a
                  *     password change does not.
                  */
-                last_sign_in_at?: string | null;
+                last_login_at?: string | null;
                 /**
                  * Format: int64
                  * @description Messages this account owns.
@@ -2734,7 +2734,7 @@ export interface components {
             can_export?: boolean | null;
             /** @description Allow or forbid import. */
             can_import?: boolean | null;
-            /** @description Disable or re-enable sign-in. */
+            /** @description Disable or re-enable login. */
             disabled?: boolean | null;
             /** @description Handles to add/link onto the account profile. */
             handles?: components["schemas"]["ProfileHandleInput"][];
@@ -2847,7 +2847,7 @@ export interface components {
             name: string;
             query: string;
         };
-        /** @description The signed-in credential's account, username, and import sources. */
+        /** @description The logged-in credential's account, username, and import sources. */
         SessionResponse: {
             /** Format: int64 */
             account_id?: number | null;
@@ -2951,7 +2951,7 @@ export interface components {
          * @enum {string}
          */
         ValueType: "text" | "name" | "person" | "choice" | "date" | "count" | "size" | "flag";
-        /** @description The vault's state, for the screen a signed-out person sees. */
+        /** @description The vault's state, for the screen a logged-out person sees. */
         VaultResponse: {
             /**
              * @description `unclaimed` shows Create Vault Owner alone; `closed` shows Login alone;
@@ -6928,7 +6928,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Signed in; the Session exists */
+            /** @description Logged in; the Session exists */
             201: {
                 headers: {
                     /** @description `/v1/session` */
@@ -6986,7 +6986,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Signed out */
+            /** @description Logged out */
             204: {
                 headers: {
                     [name: string]: unknown;

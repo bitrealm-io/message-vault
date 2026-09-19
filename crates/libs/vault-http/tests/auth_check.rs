@@ -1,4 +1,4 @@
-//! `auth_check` is the desktop app's sign-in, and every branch in it produces a
+//! `auth_check` is the desktop app's login, and every branch in it produces a
 //! different message for the person typing the URL: "that is the wrong host",
 //! "that key is not valid", "the vault is rate limiting you". Nothing exercised
 //! the function itself before — the unit tests reach the classifiers directly,

@@ -3,7 +3,7 @@
 use serde::Serialize;
 use std::path::{Component, Path, PathBuf};
 
-/// The signed-in user's home folder, plus which OS this process is running on.
+/// The logged-in user's home folder, plus which OS this process is running on.
 #[derive(Debug, Clone, Serialize)]
 pub struct HomeDirInfo {
     /// Home folder as an absolute path the UI can join onto.

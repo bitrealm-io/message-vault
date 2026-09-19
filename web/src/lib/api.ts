@@ -12,7 +12,7 @@ export function setToken(token: string | null) {
   authToken = token;
 }
 
-/** Current session token on the API client, or null when signed out. */
+/** Current session token on the API client, or null when logged out. */
 export function getToken(): string | null {
   return authToken;
 }
@@ -27,7 +27,7 @@ export function setAccountId(id: number | null) {
   accountId = id;
 }
 
-/** The signed-in account's id, or null when signed out. */
+/** The logged-in account's id, or null when logged out. */
 export function getAccountId(): number | null {
   return accountId;
 }

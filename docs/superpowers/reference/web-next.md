@@ -25,7 +25,7 @@ npm ci
 npm run dev                               # http://127.0.0.1:3000
 ```
 
-Sign in as `demo` with an empty password. The vault host comes from
+Log in as `demo` with an empty password. The vault host comes from
 `VAULT_API_URL`, default `http://127.0.0.1:8080`. `npm run gen:api`
 regenerates the response types from `docs/src/assets/openapi.json`.
 
@@ -37,7 +37,7 @@ unscoped text search takes about fifty seconds (issue #413).
 
 ## What works and what does not
 
-Every read works: sign-in, Home, the contact list and tree, direct and group
+Every read works: login, Home, the contact list and tree, direct and group
 threads with paging, the source picker, find in conversation, the Group
 Messages list, Trash, the three search modes, and the Settings pages.
 
@@ -53,7 +53,7 @@ preferences live in a browser cookie. Transcoded media is not served; HEIC and
 MOV attachments show a notice with a link to the raw file. Trash timestamps,
 per-message trash, "delete messages only", surrounding-context search,
 relevance ordering, the import-source filter on lists, the duplicate-copy
-count, contact CSV export, unassigned handles, demo reset, and Hanko sign-in
+count, contact CSV export, unassigned handles, demo reset, and Hanko login
 are all listed with their nearest routes in issue #412. Two behaviours were
 observed on this build: right-clicking a message search result opens no menu,
 and clicking a message hit opens the conversation and then walks it back one
@@ -261,17 +261,17 @@ What each app offers today, by area. The web column comes from `web/src/`
 current build, every write answers 501 as described above. "—" means the app
 has no such feature.
 
-### Sign-in and account
+### Login and account
 
 | Feature | web | web-next |
 |---|---|---|
-| Sign in with username and password | yes | yes |
+| Log in with username and password | yes | yes |
 | Create an account from the login screen | username, password, confirmation | user ID, password, confirmation, display name, phone, "No password" option |
-| Passwordless sign-in | — | yes |
+| Passwordless login | — | yes |
 | Onboarding profile setup | display name and up to five handles (phone, email, WhatsApp) | display name and phone number |
 | Vault address and connection status | address field, test, connected/disconnected line | — (`VAULT_API_URL` at start) |
-| Passkey (Hanko) sign-in | — | present, unwired on this build |
-| Sign out | yes | yes |
+| Passkey (Hanko) login | — | present, unwired on this build |
+| Log out | yes | yes |
 | Change password | yes | yes |
 | Delete all messages, delete account | yes, with confirmation | yes, with confirmation |
 | API tokens | named tokens with import, export and delete permissions; rename, revoke, one-time reveal | one token: generate, delete, one-time reveal |

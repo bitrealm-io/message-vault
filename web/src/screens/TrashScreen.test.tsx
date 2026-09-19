@@ -44,7 +44,7 @@ const deleteConversationMock = vi.mocked(deleteConversation);
 const deleteContactMock = vi.mocked(deleteContact);
 const emptyTrashMock = vi.mocked(emptyTrash);
 
-/** The signed-in account's profile, as far as this screen reads it. */
+/** The logged-in account's profile, as far as this screen reads it. */
 function profile(can_delete: boolean): Awaited<ReturnType<typeof getAccountProfile>> {
   return { can_delete } as unknown as Awaited<ReturnType<typeof getAccountProfile>>;
 }

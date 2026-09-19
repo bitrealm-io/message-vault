@@ -6,7 +6,7 @@ use crate::test_support::{
 };
 use axum::http::StatusCode;
 
-/// A vault, a signed-in account, and `handles` linked as contacts (one
+/// A vault, a logged-in account, and `handles` linked as contacts (one
 /// contact per phone, named `Contact 0`, `Contact 1`, ...).
 async fn contacts_fixture_with_handles(handles: &[&str]) -> (TestVault, String, RegisteredAccount) {
     let vault = test_vault().await;
@@ -27,7 +27,7 @@ async fn contacts_fixture_with_handles(handles: &[&str]) -> (TestVault, String, 
     (vault, token, account)
 }
 
-/// A vault, a signed-in account, and one contact linked to `handle` that
+/// A vault, a logged-in account, and one contact linked to `handle` that
 /// is then trashed.
 async fn contacts_fixture_with_trashed_handle(
     handle: &str,
@@ -47,7 +47,7 @@ async fn contacts_fixture_with_trashed_handle(
     (vault, token, account)
 }
 
-/// A second signed-in account in the same vault, with `handle` linked to
+/// A second logged-in account in the same vault, with `handle` linked to
 /// one of its contacts. Used to prove `/v1/contacts/unmatched-handles` is scoped to
 /// the calling account rather than the whole vault database.
 async fn account_with_handle(vault: &TestVault, handle: &str) -> RegisteredAccount {
@@ -1756,7 +1756,7 @@ async fn trashed_contact_row_count(conn: &mut AnyConnection, account_id: i64, id
     .unwrap()
 }
 
-/// A signed-in account with one named contact on `+15550100`, in one
+/// A logged-in account with one named contact on `+15550100`, in one
 /// conversation (id 1) holding two messages, and already in the trash.
 /// Returns the account and the contact's id.
 async fn trashed_contact_fixture() -> (TestVault, RegisteredAccount, i64) {

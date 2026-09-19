@@ -62,7 +62,7 @@ vi.mock("./api", () => ({
     patch: vi.fn().mockResolvedValue({}),
     delete: vi.fn().mockResolvedValue({}),
   },
-  // The signed-in account, as `auth.tsx` records it after sign-in.
+  // The logged-in account, as `auth.tsx` records it after login.
   getAccountId: () => 7,
 }));
 
@@ -172,7 +172,7 @@ describe("verbs", () => {
     });
   });
 
-  it("deletes an API token at its own id, under the signed-in account", async () => {
+  it("deletes an API token at its own id, under the logged-in account", async () => {
     await deleteApiToken(1);
     expect(del).toHaveBeenCalledWith("/v1/accounts/7/api-tokens/1");
   });
@@ -263,7 +263,7 @@ describe("accounts are one collection", () => {
     });
   });
 
-  it("addresses the signed-in account by the id the session carries", async () => {
+  it("addresses the logged-in account by the id the session carries", async () => {
     await getAccountProfile();
     expect(lastPath(get)).toBe("/v1/accounts/7");
     await updateAccountProfile({ preferred_name: "Ada" });
@@ -289,7 +289,7 @@ describe("accounts are one collection", () => {
     expect(del).toHaveBeenCalledWith("/v1/accounts/12");
   });
 
-  it("keeps API tokens under the signed-in account", async () => {
+  it("keeps API tokens under the logged-in account", async () => {
     await listApiTokens();
     expect(lastPath(get)).toBe("/v1/accounts/7/api-tokens");
     await createApiToken({ label: "cli" });

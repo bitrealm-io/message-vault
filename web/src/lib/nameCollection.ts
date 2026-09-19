@@ -163,7 +163,7 @@ export function patchChips(
   };
 }
 
-/** Live list of one collection's names for the signed-in account. */
+/** Live list of one collection's names for the logged-in account. */
 export function useNameCollection(collection: NameCollection): {
   names: string[];
   loading: boolean;

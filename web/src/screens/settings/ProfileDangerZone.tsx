@@ -13,8 +13,8 @@ const dangerButton = `${dangerButtonClass} !box-border !w-auto !min-w-[10.5rem] 
 /**
  * Delete an account's messages, or the account.
  *
- * For the signed-in account, deleting the account asks for its password and
- * signs out. Given `managedAccountId`, the vault owner is deleting someone
+ * For the logged-in account, deleting the account asks for its password and
+ * logs out. Given `managedAccountId`, the vault owner is deleting someone
  * else's: no password is asked, because the owner does not know it, and the
  * owner lands back on User Accounts. The owner deletes on the strength of the
  * count and the account holder's word, so the confirmation states the count.

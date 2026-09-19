@@ -5,7 +5,7 @@ import { changePassword, setAccountPassword } from "../../lib/vaultApi";
 import { inputClassName, sectionTitleClass } from "./profileStyles";
 
 /**
- * Change an account's password: the signed-in account's own, or, given
+ * Change an account's password: the logged-in account's own, or, given
  * `managedAccountId`, one the vault owner has opened from User Accounts.
  *
  * One form for both. Two copies of a password form would be two places for

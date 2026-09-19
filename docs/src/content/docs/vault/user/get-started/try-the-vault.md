@@ -1,6 +1,6 @@
 ---
 title: Try the vault
-description: Look at sample conversations in the browser — click Try it on a hosted vault, or run Docker and sign in as demo.
+description: Look at sample conversations in the browser — click Try it on a hosted vault, or run Docker and log in as demo.
 ---
 
 Getting a phone backup takes work. The sample account answers whether search, contacts, and media in the vault are useful before that work starts.
@@ -9,7 +9,7 @@ Getting a phone backup takes work. The sample account answers whether search, co
 
 If the vault is already on a public URL, open that URL in a browser and click **Try it**. The website is enough.
 
-**Try it** signs in to a private copy of the sample conversations. The copy lasts 24 hours, or until sign-out. Import and Export are not in the browser.
+**Try it** logs in to a private copy of the sample conversations. The copy lasts 24 hours, or until logout. Import and Export are not in the browser.
 
 To keep a personal archive on that same vault, create an account and continue at [Use your own messages](/vault/user/get-started/your-own-messages/).
 
@@ -50,19 +50,19 @@ Edit the Compose file to change the published port, set `DEMO_DATA=false` to ski
 
 `DEMO_DATA=true` only seeds when the volume is new. Changing the variable later does not add or remove accounts.
 
-With `DEMO_DATA=false` the vault starts unclaimed: it offers **Create Vault Owner** and nothing else until someone claims it. Sample data arrives already claimed, so the sign-in below works straight away.
+With `DEMO_DATA=false` the vault starts unclaimed: it offers **Create Vault Owner** and nothing else until someone claims it. Sample data arrives already claimed, so the login below works straight away.
 
-## Sign in as demo
+## Log in as demo
 
-Open **http://localhost:8080**. Sign in with username `demo` and an empty password.
+Open **http://localhost:8080**. Log in with username `demo` and an empty password.
 
 `demo` is a sample account filled with invented messages, so you can try the vault without making an account of your own. Everything works: browse **Conversations**, open a thread, try [search](/vault/user/how-to/search/), import, export. The demo account cannot delete itself; `reset-demo` puts it back the way it was.
 
-A sample vault also arrives with a vault owner, signed in as `admin` with the password `admin`. The vault owner manages accounts and reads no messages, and those credentials exist only in a sample vault: a real one asks for a username and a password on the Create Vault Owner screen, and the vault owner must have a password. Any other account may have one of any length, or none.
+A sample vault also arrives with a vault owner, logged in as `admin` with the password `admin`. The vault owner manages accounts and reads no messages, and those credentials exist only in a sample vault: a real one asks for a username and a password on the Create Vault Owner screen, and the vault owner must have a password. Any other account may have one of any length, or none.
 
 ## After you have looked around
 
-Sign out. Create your own account on **this same vault**, and continue at [Use your own messages](/vault/user/get-started/your-own-messages/).
+Log out. Create your own account on **this same vault**, and continue at [Use your own messages](/vault/user/get-started/your-own-messages/).
 
 ## Build from source instead
 

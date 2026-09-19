@@ -66,7 +66,7 @@ pub(crate) async fn count_matching_messages(
 }
 
 /// Messages matching `q`, oldest first unless `sort` says otherwise: the same
-/// rows an Export Run with a `query` scope would hand over, behind a signed-in
+/// rows an Export Run with a `query` scope would hand over, behind a logged-in
 /// session with the list defaults and the list's offset ceiling.
 #[utoipa::path(
     get,

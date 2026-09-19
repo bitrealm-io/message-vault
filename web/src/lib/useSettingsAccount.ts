@@ -6,7 +6,7 @@ import { useVaultQuery } from "./vaultQuery";
 /**
  * The account a Settings screen is about.
  *
- * With no id it is the signed-in account, from the entry every other screen
+ * With no id it is the logged-in account, from the entry every other screen
  * reads. With an id it is an account the vault owner has opened from User
  * Accounts, read from the same `/v1/accounts/{id}` row under the owner's list
  * entry, so a change to the list refreshes it.

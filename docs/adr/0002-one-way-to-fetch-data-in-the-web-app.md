@@ -5,7 +5,7 @@ route functions that live in `web/src/lib/vaultApi.ts`. Those functions do
 nothing but talk to the vault — no caching, no cross-component notification, no
 React hooks inside them. Their response types are generated from
 `docs/src/assets/openapi.json` rather than written by hand. Every cache entry is
-named with the signed-in account, so one account cannot be served another
+named with the logged-in account, so one account cannot be served another
 account's data.
 
 Anyone who needs caching, request deduplication, or loading state on a new
@@ -35,13 +35,13 @@ have produced a seventh.
 
 The cost was not theoretical. Four of the six kept a copy of the account's data
 in a module-level variable, so `web/src/lib/auth.tsx` had to clear them by hand
-whenever the signed-in account changed. It did that in two places — lines
-205–208 when someone signs in, lines 255–258 when someone signs out — and both
+whenever the logged-in account changed. It did that in two places — lines
+205–208 when someone logs in, lines 255–258 when someone logs out — and both
 copies of the list named the same four mechanisms and omitted the fifth.
 `savedSearches.ts` holds its list in a module-level `cached` variable and
 returns it without asking the vault whenever a caller passes no abort signal,
-which `useSavedSearches` does. The result: sign in as one account, view the
-sidebar, sign out, sign in as a different account, and the sidebar shows the
+which `useSavedSearches` does. The result: log in as one account, view the
+sidebar, log out, log in as a different account, and the sidebar shows the
 first account's Saved Searches until someone adds, renames, or deletes one, or
 reloads the page.
 
@@ -49,7 +49,7 @@ Two hand-maintained lists both missing the same entry is the argument for this
 decision. Shortening the list would not have fixed the class of mistake, so
 cache entries are named with the account instead: a second account asks for an
 entry that has never been written, finds nothing, and fetches. Clearing the
-cache on sign-out still happens, to release memory rather than for correctness.
+cache on logout still happens, to release memory rather than for correctness.
 
 The route functions are a separate matter from the caching, and they exist for a
 different reason. Before this decision, 52 call sites across 25 files each wrote
@@ -137,7 +137,7 @@ nothing — the opposite of the pattern this decision removes.
 - The five browse and contact-edit routes move off the `/v1/export/` prefix onto
   prefixes naming the resource, and editing a contact becomes `PATCH` rather
   than `POST`. The prefix is only a naming problem: the server already requires
-  a signed-in session for those five and accepts an export-scoped API token only
+  a logged-in session for those five and accepts an export-scoped API token only
   on `GET /v1/export/messages` and `GET /v1/export/messages/count`, which keep
   the prefix. The rename happens in the same pull request as the route
   functions, so those functions are written once against their final URLs.
@@ -150,7 +150,7 @@ nothing — the opposite of the pattern this decision removes.
   leak. The fourth converted the contact-detail and account-profile caches,
   which needed restructuring rather than a swap: one was read during render and
   written in place for optimistic group chips, and the other was loaded from
-  outside React during sign-in.
+  outside React during login.
 - `auth.tsx` clears nothing by hand. Its two lists are one `queryClient.clear()`
   in each path, which releases memory and nothing more.
 - `contact_id` on a conversation participant became an `i64`. It was the only

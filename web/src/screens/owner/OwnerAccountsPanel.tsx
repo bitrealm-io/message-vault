@@ -1,18 +1,13 @@
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
-import Checkbox from "../../components/Checkbox";
-import Select, { ListBoxItem, selectItemClassName } from "../../components/Select";
 import TextField from "../../components/TextField";
 import { formatDateTime } from "../../lib/formatDate";
-import { parseSelectKey } from "../../lib/selectKey";
 import { tdClass, tdMuted, thClass } from "../settings/apiTokensUtils";
 import { formatBytes } from "../settings/storage/storageUtils";
 import { type ManagedAccount, useOwnerAccounts } from "./useOwnerAccounts";
 
-const STATUSES = ["active", "disabled"] as const;
-
 /** Columns the table has, which the "no match" row spans. */
-const COLUMN_COUNT = 8;
+const COLUMN_COUNT = 5;
 
 /** Shown under the second password field once both are filled and differ. */
 function MismatchNote({ first, second }: { first: string; second: string }) {
@@ -29,6 +24,12 @@ function passwordsAgree(first: string, second: string): boolean {
   return first !== "" && first === second;
 }
 
+/** What the Status column reads for one account. */
+function statusLabel(account: ManagedAccount): string {
+  if (account.is_owner) return "Vault owner";
+  return account.disabled ? "Disabled" : "Active";
+}
+
 /** Whether the search bar's words are in the account's username or preferred name. */
 function matches(account: ManagedAccount, needle: string): boolean {
   return (
@@ -42,10 +43,9 @@ function matches(account: ManagedAccount, needle: string): boolean {
  *
  * A row carries a username, a preferred name, a status, a message count and a
  * storage total — never a message. The name opens the account's Settings,
- * which is where its password is set and where its messages or the account
- * itself are deleted; the table keeps what is set at a glance, status and the
- * three permissions. The owner's row has neither: the owner cannot be
- * disabled and holds no messages to import, export or delete.
+ * which is where its password, status and permissions are set and where its
+ * messages or the account itself are deleted. The table sets nothing; it
+ * shows each status so a disabled account stands out.
  */
 export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
   const navigate = useNavigate();
@@ -56,7 +56,6 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
     busy,
     actionError,
     clearError,
-    patch,
     composing,
     setComposing,
     newUsername,
@@ -95,8 +94,8 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
         )}
       </div>
       <p className="mt-[0.35rem] text-[0.875rem] text-muted">
-        The accounts on this vault. Set what each may do here, and open one by its name for its
-        settings. You cannot read an account's messages.
+        The accounts on this vault. Open one by its name to set its password, status and
+        permissions. You cannot read an account's messages.
       </p>
 
       {actionError ? (
@@ -171,9 +170,6 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
               <th className={thClass}>Last sign-in</th>
               <th className={thClass}>Messages</th>
               <th className={thClass}>Storage</th>
-              <th className={thClass}>Import</th>
-              <th className={thClass}>Export</th>
-              <th className={thClass}>Delete</th>
             </tr>
           </thead>
           <tbody>
@@ -194,65 +190,12 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
                       <div className="text-[0.75rem] text-muted">{preferredName}</div>
                     ) : null}
                   </td>
-                  <td className={account.is_owner ? tdMuted : tdClass}>
-                    {account.is_owner ? (
-                      "Vault owner"
-                    ) : (
-                      <Select
-                        size="sm"
-                        selectedKey={account.disabled ? "disabled" : "active"}
-                        isDisabled={busy}
-                        aria-label={`Status of ${account.username}`}
-                        className="w-[7rem]"
-                        onSelectionChange={(key) => {
-                          const next = parseSelectKey(key, STATUSES);
-                          if (next) patch(account.account_id, { disabled: next === "disabled" });
-                        }}
-                      >
-                        <ListBoxItem id="active" className={(s) => selectItemClassName(s, "sm")}>
-                          Active
-                        </ListBoxItem>
-                        <ListBoxItem id="disabled" className={(s) => selectItemClassName(s, "sm")}>
-                          Disabled
-                        </ListBoxItem>
-                      </Select>
-                    )}
-                  </td>
+                  <td className={account.disabled ? tdClass : tdMuted}>{statusLabel(account)}</td>
                   <td className={`${tdMuted} whitespace-nowrap`}>
                     {account.last_sign_in_at ? formatDateTime(account.last_sign_in_at) : "Never"}
                   </td>
                   <td className={tdMuted}>{account.message_count.toLocaleString()}</td>
                   <td className={tdMuted}>{formatBytes(account.storage_bytes)}</td>
-                  {account.is_owner ? (
-                    <td className={tdMuted} colSpan={3} />
-                  ) : (
-                    <>
-                      <td className={tdClass}>
-                        <Checkbox
-                          checked={account.can_import}
-                          disabled={busy}
-                          aria-label={`Allow importing messages for ${account.username}`}
-                          onChange={(checked) => patch(account.account_id, { can_import: checked })}
-                        />
-                      </td>
-                      <td className={tdClass}>
-                        <Checkbox
-                          checked={account.can_export}
-                          disabled={busy}
-                          aria-label={`Allow exporting messages for ${account.username}`}
-                          onChange={(checked) => patch(account.account_id, { can_export: checked })}
-                        />
-                      </td>
-                      <td className={tdClass}>
-                        <Checkbox
-                          checked={account.can_delete}
-                          disabled={busy}
-                          aria-label={`Allow deleting messages and attachments for ${account.username}`}
-                          onChange={(checked) => patch(account.account_id, { can_delete: checked })}
-                        />
-                      </td>
-                    </>
-                  )}
                 </tr>
               );
             })}

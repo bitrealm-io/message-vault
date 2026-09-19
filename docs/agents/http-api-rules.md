@@ -91,9 +91,10 @@ runs an action named by a verb sub-resource. `DELETE` removes. A read is a
 `GET`, except the large-selector `POST` above.
 
 Behaviour that differs by caller lives inside one handler, not in two routes.
-`PUT /v1/accounts/{id}/password` is one route: the owner sets a temporary
-password without the current one, the account itself must supply the current
-one.
+`PUT /v1/accounts/{id}/password` is one route: the owner sets another
+account's password without the current one, a user account changes its own on
+its session alone, and the vault owner changing its own must supply the
+current one, because that account reaches every other.
 
 ## Status codes
 

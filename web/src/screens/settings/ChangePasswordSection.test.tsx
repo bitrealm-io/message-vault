@@ -77,4 +77,25 @@ describe("ChangePasswordSection", () => {
 
     expect(screen.queryByRole("button", { name: "Reset password" })).not.toBeInTheDocument();
   });
+
+  it("asks the vault owner for the current password and sends it", async () => {
+    const user = userEvent.setup();
+    render(<ChangePasswordSection canReset={false} requireCurrent />);
+
+    await user.type(screen.getByLabelText("New password"), "keeperschoice");
+    await user.type(screen.getByLabelText("Confirm new password"), "keeperschoice");
+    // Nothing to send until the current password is typed.
+    expect(screen.getByRole("button", { name: "Change password" })).toBeDisabled();
+
+    await user.type(screen.getByLabelText("Current password"), "hunter2hunter2");
+    await user.click(screen.getByRole("button", { name: "Change password" }));
+
+    await waitFor(() =>
+      expect(changePassword).toHaveBeenCalledWith({
+        password: "keeperschoice",
+        current_password: "hunter2hunter2",
+      }),
+    );
+    await waitFor(() => expect(screen.getByLabelText("Current password")).toHaveValue(""));
+  });
 });

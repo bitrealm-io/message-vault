@@ -871,19 +871,45 @@ async fn an_account_changes_its_own_password() {
     );
 }
 
-/// The owner changes its own password the way every account does: with its
-/// session, on its own row.
+/// The owner changes its own password on its own row, and must give the one
+/// it replaces: without it, or with the wrong one, nothing changes.
 #[tokio::test]
-async fn the_owner_can_change_their_own_password() {
+async fn the_owner_changes_their_own_password_with_the_current_one() {
     let vault = test_vault().await;
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let path = format!("{}/password", member(owner.account_id));
+
+    assert_eq!(
+        put_status(
+            &state,
+            &path,
+            &owner.token,
+            serde_json::json!({ "password": "keeperschoice" }),
+        )
+        .await,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "the session alone does not change the owner's password"
+    );
+    assert_eq!(
+        put_status(
+            &state,
+            &path,
+            &owner.token,
+            serde_json::json!({ "password": "keeperschoice", "current_password": "notthisone" }),
+        )
+        .await,
+        StatusCode::UNAUTHORIZED
+    );
+    // A refused change leaves the password as it was. Signing in opens a new
+    // session, so the change that follows uses its token.
+    let login = sign_in(&state, "keeper", "hunter2hunter2").await;
 
     let _changed: SetPasswordResponse = put_json(
         &state,
-        &format!("{}/password", member(owner.account_id)),
-        &owner.token,
-        serde_json::json!({ "password": "keeperschoice" }),
+        &path,
+        login["token"].as_str().unwrap(),
+        serde_json::json!({ "password": "keeperschoice", "current_password": "hunter2hunter2" }),
     )
     .await;
 
@@ -924,7 +950,7 @@ async fn the_owner_cannot_clear_their_own_password() {
         &state,
         &path,
         login["token"].as_str().unwrap(),
-        serde_json::json!({ "password": "k" }),
+        serde_json::json!({ "password": "k", "current_password": "hunter2hunter2" }),
     )
     .await;
     assert_eq!(

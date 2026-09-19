@@ -28,6 +28,9 @@ const TAB_LABELS: Record<SettingsTab, string> = {
 /** System, Convert and Appearance are this device's, not an account's. */
 const DEVICE_TABS: readonly SettingsTab[] = ["system", "convert", "appearance"];
 
+/** Tabs about messages, which the vault owner does not hold. */
+const OWNER_HIDDEN_TABS: readonly SettingsTab[] = ["storage", "system", "convert"];
+
 /**
  * Tabs this person can open, in display order.
  *
@@ -36,12 +39,13 @@ const DEVICE_TABS: readonly SettingsTab[] = ["system", "convert", "appearance"];
  * - An account the vault owner opened from User Accounts has the tabs that
  *   are the account's. The device tabs would change the owner's own browser,
  *   so they are in the owner's own Settings only.
- * - The vault owner holds no messages, so its own Settings have no Storage.
+ * - The vault owner holds no messages, so its own Settings have no Storage,
+ *   and none of the tools that work on messages: System and Convert.
  */
 function visibleTabs(isDesktop: boolean, managed: boolean, isOwner: boolean): SettingsTab[] {
   return ALL_TABS.filter((id) => {
     if (managed && DEVICE_TABS.includes(id)) return false;
-    if (id === "storage" && isOwner && !managed) return false;
+    if (isOwner && !managed && OWNER_HIDDEN_TABS.includes(id)) return false;
     if (id === "convert") return canUseConvert(isDesktop);
     return true;
   });

@@ -70,8 +70,8 @@ export function useSetAccountPassword(): UseMutationResult<
 }
 
 /**
- * The vault owner's view of every account, with what the table itself does:
- * add an account, and set one's status and permissions. A password and the
+ * The vault owner's view of every account, with the one thing the table
+ * itself does: add an account. A password, status, permissions and the
  * deletions are in the account's Settings, which the account's name opens.
  */
 export function useOwnerAccounts() {
@@ -81,25 +81,10 @@ export function useOwnerAccounts() {
     error: loadError,
   } = useVaultQuery(keys.ownerAccounts.all, fetchAccounts);
   const createAccount = useCreateAccount();
-  const changeAccount = useUpdateAccount();
 
-  const busy = createAccount.isPending || changeAccount.isPending;
-
-  // Each mutate call resets that mutation's own error and stamps a fresh
-  // `submittedAt`, so whichever of the two last started is also whichever
-  // last settled; its error (or lack of one) is `actionError`. A fixed
-  // create-then-update order would instead let an old failure outlive a
-  // later, successful write.
-  const latest =
-    createAccount.submittedAt > changeAccount.submittedAt ? createAccount : changeAccount;
-  const actionError = latest.error ? latest.error.message : "";
-
-  const resetCreate = createAccount.reset;
-  const resetChange = changeAccount.reset;
-  const clearError = useCallback(() => {
-    resetCreate();
-    resetChange();
-  }, [resetCreate, resetChange]);
+  const busy = createAccount.isPending;
+  const actionError = createAccount.error ? createAccount.error.message : "";
+  const clearError = createAccount.reset;
 
   const [composing, setComposing] = useState(false);
   const [newUsername, setNewUsername] = useState("");
@@ -133,15 +118,6 @@ export function useOwnerAccounts() {
     );
   }, [newUsername, newPassword, newPasswordConfirm, createAccount.mutate]);
 
-  const patch = useCallback(
-    (id: number, changes: ManagedAccountChanges) =>
-      changeAccount.mutateAsync({ id, changes }).then(
-        () => undefined,
-        () => undefined,
-      ),
-    [changeAccount.mutateAsync],
-  );
-
   return {
     accounts: data ?? [],
     loading,
@@ -149,7 +125,6 @@ export function useOwnerAccounts() {
     busy,
     actionError,
     clearError,
-    patch,
     composing,
     setComposing,
     newUsername,

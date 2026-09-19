@@ -116,6 +116,18 @@ async fn every_member_route_refuses_another_accounts_session() {
         StatusCode::FORBIDDEN,
         "GET /v1/accounts/{{id}}/storage"
     );
+    for history in ["imports", "imports/1", "exports"] {
+        assert_eq!(
+            get_status(
+                &state,
+                &format!("{}/{history}", member(target)),
+                &alice.token
+            )
+            .await,
+            StatusCode::FORBIDDEN,
+            "GET /v1/accounts/{{id}}/{history}"
+        );
+    }
 
     // And bob is untouched.
     assert_eq!(
@@ -1554,4 +1566,123 @@ async fn the_account_list_shows_the_app_each_account_connects_with() {
     // The owner's own requests here named no app.
     assert_eq!(row("keeper").app, None);
     assert_eq!(row("keeper").app_version, None);
+}
+
+// ---------------------------------------------------------------------------
+// Import and export history
+// ---------------------------------------------------------------------------
+
+/// An account's import and export history is metadata about it (ADR 0008), so
+/// the owner reads what the account reads. The pipelines' own routes still
+/// refuse the owner, who holds no import or export permission.
+#[tokio::test]
+async fn the_owner_and_the_account_read_the_same_import_and_export_history() {
+    let vault = test_vault().await;
+    let owner = claim_vault_as_owner(&vault.state, "keeper", "hunter2hunter2").await;
+    let alice = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let base = member(alice.account_id);
+
+    let (_, import): (String, serde_json::Value) = post_created_json(
+        &vault.state,
+        "/v1/imports",
+        &alice.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+    let (_, export): (String, serde_json::Value) = post_created_json(
+        &vault.state,
+        "/v1/exports",
+        &alice.token,
+        serde_json::json!({ "scope": { "kind": "everything" }, "tool": "tests" }),
+    )
+    .await;
+
+    for path in [
+        format!("{base}/imports"),
+        format!("{base}/imports/{}", import["id"]),
+        format!("{base}/exports"),
+    ] {
+        let by_account: serde_json::Value = get_json(&vault.state, &path, &alice.token).await;
+        let by_owner: serde_json::Value = get_json(&vault.state, &path, &owner.token).await;
+        assert_eq!(by_owner, by_account, "{path}");
+    }
+
+    let imports: serde_json::Value =
+        get_json(&vault.state, &format!("{base}/imports"), &owner.token).await;
+    assert_eq!(imports["total"], 1);
+    assert_eq!(imports["items"][0]["id"], import["id"]);
+    let exports: serde_json::Value =
+        get_json(&vault.state, &format!("{base}/exports"), &owner.token).await;
+    assert_eq!(exports["total"], 1);
+    assert_eq!(exports["items"][0]["id"], export["id"]);
+    let detail: serde_json::Value = get_json(
+        &vault.state,
+        &format!("{base}/imports/{}", import["id"]),
+        &owner.token,
+    )
+    .await;
+    assert_eq!(detail["source"], "imessage");
+    assert_eq!(detail["contacts_new"], 0);
+
+    // The list takes the same `status` filter, and refuses the same unknown value.
+    let running: serde_json::Value = get_json(
+        &vault.state,
+        &format!("{base}/imports?status=completed"),
+        &owner.token,
+    )
+    .await;
+    assert_eq!(running["total"], 0);
+    assert_eq!(
+        get_status(
+            &vault.state,
+            &format!("{base}/exports?status=backup"),
+            &owner.token
+        )
+        .await,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+
+    for pipeline in ["/v1/imports", "/v1/exports"] {
+        assert_eq!(
+            get_status(&vault.state, pipeline, &owner.token).await,
+            StatusCode::FORBIDDEN,
+            "{pipeline} is the pipeline's route and stays closed to the owner"
+        );
+    }
+}
+
+/// An Import Run is read under the account that ran it and nowhere else.
+#[tokio::test]
+async fn an_import_run_is_a_404_under_another_account() {
+    let vault = test_vault().await;
+    let owner = claim_vault_as_owner(&vault.state, "keeper", "hunter2hunter2").await;
+    let alice = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
+    let (_, import): (String, serde_json::Value) = post_created_json(
+        &vault.state,
+        "/v1/imports",
+        &alice.token,
+        serde_json::json!({ "source": "imessage" }),
+    )
+    .await;
+
+    assert_eq!(
+        get_status(
+            &vault.state,
+            &format!("{}/imports/{}", member(bob.account_id), import["id"]),
+            &owner.token
+        )
+        .await,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        get_status(
+            &vault.state,
+            &format!("{}/imports", member(9_999)),
+            &owner.token
+        )
+        .await,
+        StatusCode::NOT_FOUND,
+        "an account that does not exist has no history"
+    );
 }

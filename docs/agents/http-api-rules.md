@@ -240,6 +240,16 @@ What each reaches:
 - `/v1/accounts/{id}` and everything under it is read and written by the owner
   or by that account; a `Location` handed to a newly registered account names a
   row it may read.
+- An account's history is read under the account:
+  `GET /v1/accounts/{id}/imports`, `GET /v1/accounts/{id}/imports/{import_id}`
+  and `GET /v1/accounts/{id}/exports`, beside `GET /v1/accounts/{id}/storage`.
+  They ask who is calling and no permission, so the owner reads them, and so
+  does an account whose `import` or `export` permission is off. `/v1/imports`
+  and `/v1/exports` are the pipelines' routes: they ask for the permission,
+  which the owner's session never carries, and a program's token reaches only
+  them. Each pair answers from one function, so the two lists cannot differ.
+  Which contacts a run created is content, so `/v1/imports/{id}/contacts` has
+  no twin under the account.
 - `GET /v1/vault` and `POST /v1/vault/claim` take no credential.
   `/v1/vault/settings` is the owner's.
 

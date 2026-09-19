@@ -120,6 +120,12 @@ of, and a search that reads the same everywhere.
 
 ### Design
 
+- 2026-09-19: **Settings, Account shows an account's status and
+  permissions.** Permissions lists Import messages, Export messages, and
+  Delete messages and attachments. You can see what your account may do; the
+  vault owner sets it. The owner changes an account's status and permissions
+  from that account's Settings, and User Accounts now shows each status
+  without the Import, Export and Delete columns.
 - 2026-09-19: **Changing the vault owner's password asks for the current
   one.** The owner's account reaches every other account, so Settings,
   Account has a Current password field for the owner, and the vault checks

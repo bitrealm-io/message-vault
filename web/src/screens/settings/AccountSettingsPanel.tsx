@@ -1,11 +1,13 @@
 import { useSettingsAccount } from "../../lib/useSettingsAccount";
+import { AccountPermissionsSection } from "./AccountPermissionsSection";
 import { ApiTokensSection } from "./ApiTokensSection";
 import { ChangePasswordSection } from "./ChangePasswordSection";
 import { ProfileDangerZone } from "./ProfileDangerZone";
 import { inputClassName, sectionTitleClass } from "./profileStyles";
 
 /**
- * Account settings: username, password, API tokens, danger zone.
+ * Account settings: username, password, status, permissions, API tokens,
+ * danger zone.
  *
  * Given `managedAccountId`, the account is one the vault owner opened from
  * User Accounts. API tokens are the account holder's own to mint and see, so
@@ -45,6 +47,11 @@ export function AccountSettingsPanel({ managedAccountId }: { managedAccountId?: 
         requireCurrent={isOwner && !managed}
         managedAccountId={managedAccountId}
       />
+
+      {/* The owner cannot be disabled and holds no messages to import, export or delete. */}
+      {!isOwner ? (
+        <AccountPermissionsSection profile={profile} managedAccountId={managedAccountId} />
+      ) : null}
 
       {!managed && !isOwner ? (
         <ApiTokensSection

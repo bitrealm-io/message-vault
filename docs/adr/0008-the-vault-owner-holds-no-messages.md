@@ -168,8 +168,11 @@ vault needs.)
   owner was left out of the list, on the grounds that it is not one of the
   vault's users.)
 - An account's name in that list opens the account's Settings, laid out as
-  its holder sees them. The owner sets the account's password there and
-  deletes its messages or the account. It reads the account's name, time zone
+  its holder sees them. The owner sets the account's password there, its
+  status and its import, export and delete permissions, and deletes its
+  messages or the account. The list itself sets nothing. The account holder
+  sees the same Status and Permissions sections with nothing to change, so
+  what an account may do is stated to the person it binds. It reads the account's name, time zone
   and handles and changes none, and sees how much the account stores and
   nothing of what: no import or export history, no attachment names, no API
   tokens, no address book. The tabs that belong to a device rather than an

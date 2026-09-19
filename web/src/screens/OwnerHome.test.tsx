@@ -292,17 +292,11 @@ describe("OwnerHome", () => {
     expect(screen.getByText("1,234")).toBeInTheDocument();
     // Column headers are metadata only.
     const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
-    expect(headers).toEqual([
-      "Account",
-      "Status",
-      "Last sign-in",
-      "Messages",
-      "Storage",
-      "Import",
-      "Export",
-      "Delete",
-    ]);
-    // What was the Actions column is in the account's Settings, behind its name.
+    expect(headers).toEqual(["Account", "Status", "Last sign-in", "Messages", "Storage"]);
+    // The table sets nothing: status reads as text, and the permissions, like
+    // what was the Actions column, are in the account's Settings, behind its name.
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reset password" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete account" })).not.toBeInTheDocument();
   });
@@ -335,18 +329,32 @@ describe("OwnerHome", () => {
     expect(screen.getByText(/2026/)).toBeInTheDocument();
   });
 
-  it("sets an account's status from the dropdown, with no separate button", async () => {
+  it("sets an account's status from its Settings", async () => {
     const user = userEvent.setup({ delay: null });
-    renderHome();
+    renderHome(["/owner/accounts/101"]);
 
-    await screen.findByText("bob");
-    expect(screen.queryByRole("button", { name: "Disable" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Enable" })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Status of bob/ }));
+    await user.click(await screen.findByRole("button", { name: /Status/ }));
     await user.click(await screen.findByRole("option", { name: "Disabled" }));
 
     await waitFor(() => expect(updateAccount).toHaveBeenCalledWith(101, { disabled: true }));
+  });
+
+  it("sets an account's permissions from its Settings, under Permissions", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderHome(["/owner/accounts/101"]);
+
+    expect(await screen.findByRole("heading", { name: "Permissions" })).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Delete messages and attachments" }));
+
+    await waitFor(() => expect(updateAccount).toHaveBeenCalledWith(101, { can_delete: true }));
+  });
+
+  it("gives the owner's own account no status and no permissions", async () => {
+    renderHome(["/owner/accounts/1"]);
+
+    await screen.findByRole("heading", { name: "Change Password" });
+    expect(screen.queryByRole("heading", { name: "Permissions" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Status" })).not.toBeInTheDocument();
   });
 
   it("sets an account's password from its Settings, typed twice the same way", async () => {

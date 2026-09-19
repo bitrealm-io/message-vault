@@ -144,11 +144,12 @@ product name, a search bar and the account button across the top, over a
 side panel and a content pane. The side panel lists Vault Settings, then
 User Accounts, and the search bar narrows User Accounts by username or
 preferred name. User Accounts lists every account, the owner's own first,
-each by username with its preferred name under it. There the owner adds
-accounts, sets each one's status to active or disabled, and sets what it may
-do. An account's name opens that account's Settings, the screen its holder
-sees, where the owner sets its password and deletes its messages or the
-account, and reads its profile and storage total without changing the one or
+each by username with its preferred name and its status. There the owner adds
+accounts. An account's name opens that account's Settings, the screen its
+holder sees, where the owner sets its password, its status (active or
+disabled) and its permissions (import, export, delete), and deletes its
+messages or the account. The account holder reads the same status and
+permissions under Settings, Account, and changes none. The owner reads its profile and storage total without changing the one or
 seeing inside the other. The owner's own row opens the owner's own Settings,
 which is also where the account button's Settings goes. An owner's password
 reset sets the password and nothing more: it does not end the person's

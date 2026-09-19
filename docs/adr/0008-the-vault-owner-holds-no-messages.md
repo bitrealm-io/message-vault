@@ -2,9 +2,12 @@
 
 A vault has exactly one vault owner, at a fixed well-known account id, and
 that owner has no vault of its own: no conversations, no contacts, no import,
-no export, no trash, and no API tokens. The owner creates, disables and
+no export, no trash, and no API tokens. The owner is the vault's
+administrator. It sets the vault's global settings, creates, disables and
 deletes accounts, resets their passwords, deletes their message data, and
-decides whether strangers may sign up, and never reads a message. A vault
+decides whether strangers may sign up. It monitors the vault: how much each
+account holds and what each account has been doing. It never reads a
+message. A vault
 with no owner is unclaimed and offers only the Create Vault Owner screen; a
 claimed vault is closed or open depending on whether public registration is
 on.
@@ -69,17 +72,53 @@ account's on every request.
 
 ## What the owner may see
 
+The owner sees metadata and never content. (Revised 2026-09-19. Until then
+the rule was narrower: a message count and a storage total per account, and
+nothing else.)
+
+The owner administers the vault, and administering it means knowing how much
+data it holds and what its accounts have been doing. A count and a byte total
+per account answer neither question well: they do not say which import
+doubled an account's size, whether an account has exported everything it
+holds, or which files fill the disk. So the owner may read anything that
+describes an account's data without being that data:
+
+- counts and totals: messages, conversations, contacts, attachments, and the
+  bytes each takes, per account and for the whole vault;
+- activity: each import and export an account has run, with its source,
+  format, time, outcome and the counts it reported, and when the account last
+  signed in;
+- attachments as files: name, type, size and date.
+
+The owner may not read what a person wrote or whom they wrote to:
+
+- a message's text, subject or transcription, and any search over them;
+- an attachment's bytes, a thumbnail or a preview of it;
+- a contact's name, handles or photo, and which contacts a conversation is
+  between.
+
+An attachment's file name sits on the permitted side on purpose. A name can
+say something about its file, and the owner needs it anyway: "the vault is
+full" is answered by naming the files that fill it, and a size with no name
+cannot be acted on. Contacts sit on the other side. How many contacts an
+account has is a measure of the vault; who they are is the account holder's
+address book.
+
 Nothing in the owner's routes reads `messages.body`,
-`attachments.transcription`, or any other content column. The account list
-reports a username, the disabled and permission flags, a message count and a
-storage total. This was
-already the constraint the administrator module was written to, recorded only
-as a comment above it; this ADR makes it a decision rather than a convention.
+`attachments.transcription`, or any other content column. A new owner route
+is judged by the two lists above, and a column that fits neither is content
+until this ADR says otherwise.
 
 The rule holds even where it costs the owner something. The owner can delete
 an account's message data without being able to look at it first, and so
-deletes on the strength of the count and the account holder's word, not on
-inspection.
+deletes on the strength of the counts, the import history and the account
+holder's word, not on inspection.
+
+Not all of this is built. The account list reports a message count and a
+storage total, and an account's Storage tab shows the owner its usage total.
+Import and export history, attachment file names and sizes, contact and
+conversation counts, and vault-wide totals are deferred, not rejected: the
+routes that serve them to the account holder refuse the owner today.
 
 ## The three states of a vault
 
@@ -172,10 +211,12 @@ vault needs.)
   status and its import, export and delete permissions, and deletes its
   messages or the account. The list itself sets nothing. The account holder
   sees the same Status and Permissions sections with nothing to change, so
-  what an account may do is stated to the person it binds. It reads the account's name, time zone
-  and handles and changes none, and sees how much the account stores and
-  nothing of what: no import or export history, no attachment names, no API
-  tokens, no address book. The tabs that belong to a device rather than an
+  what an account may do is stated to the person it binds. The owner reads
+  the account's name, time zone and handles and changes none. Storage shows
+  the owner how much the account stores; its import and export history and
+  its attachments' names and sizes belong there too under "What the owner may
+  see", and are not built yet. The owner sees no API tokens, which are the
+  holder's credentials, and no address book, which is content. The tabs that belong to a device rather than an
   account (System, Convert, Appearance) are not shown for a managed account.
 - The owner's own Settings are Account, Profile and Appearance. Storage,
   System and Convert work on messages, and Profile has no handles and no

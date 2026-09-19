@@ -92,8 +92,13 @@ _Avoid_: Card, Identity, Person record
 
 **Handle**:
 One address a person can be reached at: a phone number, an email address,
-or a username on a service. A handle belongs to at most one contact.
-_Avoid_: Identity, Address, Number
+or a username on a service. A handle belongs to at most one contact. The id
+a source gives a group conversation (`chat1000000005`) reaches no person: the
+vault keeps it to key the conversation, and it never belongs to a contact.
+Only the people in the group do. Handle is the word in the code and the
+database; the app and the published documentation call the same thing an
+**Identity**.
+_Avoid_: Address, Number
 
 **Unknown**:
 The Contact Group the vault computes from contacts that have no name or no

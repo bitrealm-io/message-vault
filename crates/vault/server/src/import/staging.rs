@@ -457,7 +457,13 @@ impl FileStaging<'_> {
         if flagged {
             stats.phones_needing_review += 1;
         }
-        if !cached {
+        // Only a one-to-one chat's identifier is a person. A group's id (or
+        // `orphaned`) names the conversation, so it gets a handle row and no
+        // contact; the people in it get theirs as participants.
+        let chat_is_a_person = conversation
+            .conversation_type
+            .eq_ignore_ascii_case("individual");
+        if chat_is_a_person && !cached {
             let _ = ensure_contact_for_handle(
                 self.tx,
                 self.stmts.account_id,

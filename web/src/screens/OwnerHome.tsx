@@ -93,7 +93,7 @@ export default function OwnerHome() {
           <div className="mt-6">
             {section === "accounts" && <OwnerAccountsPanel />}
             {section === "vault" && <VaultSettingsPanel />}
-            {section === "password" && <ChangePasswordSection />}
+            {section === "password" && <ChangePasswordSection canReset={false} />}
             {section === "appearance" && <AppearanceSection />}
           </div>
         </div>

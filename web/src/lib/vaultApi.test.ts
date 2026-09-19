@@ -268,11 +268,8 @@ describe("accounts are one collection", () => {
     expect(lastPath(get)).toBe("/v1/accounts/7");
     await updateAccountProfile({ preferred_name: "Ada" });
     expect(patch).toHaveBeenCalledWith("/v1/accounts/7", { preferred_name: "Ada" });
-    await changePassword({ current_password: "old", password: "newer-one" });
-    expect(put).toHaveBeenCalledWith("/v1/accounts/7/password", {
-      current_password: "old",
-      password: "newer-one",
-    });
+    await changePassword({ password: "newer-one" });
+    expect(put).toHaveBeenCalledWith("/v1/accounts/7/password", { password: "newer-one" });
     await deleteAccount({ confirm: true, current_password: "old" });
     expect(del).toHaveBeenCalledWith("/v1/accounts/7", { confirm: true, current_password: "old" });
     await deleteAllMessages({ confirm: true });

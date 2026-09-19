@@ -58,7 +58,7 @@ Open **http://localhost:8080**. Sign in with username `demo` and an empty passwo
 
 `demo` is a sample account filled with invented messages, so you can try the vault without making an account of your own. Everything works: browse **Conversations**, open a thread, try [search](/vault/user/how-to/search/), import, export. The demo account cannot delete itself; `reset-demo` puts it back the way it was.
 
-A sample vault also arrives with a vault owner, signed in as `admin` with the password `admin`. The vault owner manages accounts and reads no messages, and those credentials exist only in a sample vault: a real one asks for a username and a password on the Create Vault Owner screen, and the password must be at least eight characters.
+A sample vault also arrives with a vault owner, signed in as `admin` with the password `admin`. The vault owner manages accounts and reads no messages, and those credentials exist only in a sample vault: a real one asks for a username and a password on the Create Vault Owner screen, and the vault owner must have a password. Any other account may have one of any length, or none.
 
 ## After you have looked around
 

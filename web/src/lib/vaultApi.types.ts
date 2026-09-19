@@ -158,10 +158,10 @@ export interface paths {
         get?: never;
         /**
          * Set an account's password.
-         * @description An account changing its own must supply the current one; the change
-         *     revokes its API tokens and answers `200` with a rotated session token.
-         *     The vault owner sets another account's without the current one and
-         *     answers `204`. That is the whole of it: the account's sessions carry on,
+         * @description The session is the credential, so the current password is never asked
+         *     for. An account changing its own has its API tokens revoked and gets
+         *     `200` with a rotated session token. The vault owner setting another
+         *     account's answers `204`. That is the whole of it: the account's sessions carry on,
          *     and its holder keeps the new password until they change it themselves.
          */
         put: operations["set_account_password"];
@@ -1530,9 +1530,8 @@ export interface components {
         /** @description Body for creating an account, by the vault owner or by a stranger. */
         CreateAccountRequest: {
             /**
-             * @description Local password. The owner must give one, and the account holder
-             *     replaces it at first sign-in. A stranger may leave it absent or empty
-             *     to open an account with no password.
+             * @description Local password, of any length. Absent or empty opens an account with
+             *     no password.
              */
             password?: string | null;
             /** @description Phone number linked to the account. */
@@ -2878,14 +2877,12 @@ export interface components {
              */
             summary?: unknown;
         };
-        /** @description The new password, and the current one when an account changes its own. */
+        /** @description The new password. */
         SetPasswordRequest: {
             /**
-             * @description The account's current password. Required when an account changes its
-             *     own; ignored when the vault owner sets another account's.
+             * @description The new password. Empty clears a user account's password; the vault
+             *     owner's must be one character or more.
              */
-            current_password?: string | null;
-            /** @description The new password. Must satisfy the vault's password policy. */
             password: string;
         };
         /** @description Fresh session token issued after an account changed its own password. */

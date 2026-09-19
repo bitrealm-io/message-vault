@@ -153,8 +153,9 @@ vault needs.)
   convenience: without it a claimed vault could never gain a user.
 - The demo seed creates an owner as well as the demo account, with the
   credentials `admin` / `admin`. Those are reachable only through the seed,
-  which writes the row directly and never calls `validate_password_policy`; a
-  real owner's password still cannot be shorter than eight characters. Without
+  which writes the row directly. The owner must have a password, of one
+  character or more, and cannot clear it; a user account has no minimum and
+  may have no password at all. Without
   the seeded owner a demo vault would be unclaimed, and the documented
   "sign in as `demo`" instruction would reach a screen that offers no login.
 - The owner can delete the demo account and its data. The demo account still

@@ -194,7 +194,7 @@ async fn change_password_transaction_updates_all_credentials() {
         password_change_setup().await;
     let new_hash = hash_password("new-password").unwrap();
 
-    let new_session = change_password_on_conn(&mut conn, TEST_ACCOUNT, "old-password", &new_hash)
+    let new_session = change_password_on_conn(&mut conn, TEST_ACCOUNT, Some(&new_hash))
         .await
         .unwrap();
 
@@ -253,7 +253,7 @@ async fn change_password_transaction_rolls_back_every_credential() {
     let new_hash = hash_password("new-password").unwrap();
 
     assert!(
-        change_password_on_conn(&mut conn, TEST_ACCOUNT, "old-password", &new_hash)
+        change_password_on_conn(&mut conn, TEST_ACCOUNT, Some(&new_hash))
             .await
             .is_err()
     );
@@ -287,31 +287,40 @@ async fn change_password_transaction_rolls_back_every_credential() {
     );
 }
 
-/// The password length rule, at both its edges.
+/// The password length rules, at their edges.
 ///
-/// `validate_password_policy` had no test of its own. It is the only thing
-/// standing between an account and a one-character password, and the only
-/// thing stopping a megabyte of text reaching Argon2, which would hash it and
-/// make every sign-in slow for everybody.
+/// The owner must have a password and one character is enough. A user
+/// account has no minimum at all: an empty password is an account with no
+/// password. Both share the maximum, the only thing stopping a megabyte of
+/// text reaching Argon2, which would hash it and make every sign-in slow for
+/// everybody.
 #[test]
-fn a_password_must_be_long_enough_and_not_absurd() {
-    // Seven characters is refused, eight is accepted: the boundary itself,
-    // which an off-by-one would move without failing anything else.
-    assert!(validate_password_policy("hunter7").is_err(), "seven");
-    validate_password_policy("hunter78").expect("eight is the minimum");
+fn the_owner_needs_one_character_and_a_user_needs_none() {
+    assert!(
+        hash_owner_password("").is_err(),
+        "an owner with no password"
+    );
+    let owner_hash = hash_owner_password("a").expect("one character is the minimum");
+    assert!(verify_password(&owner_hash, "a"));
 
-    assert!(validate_password_policy("").is_err(), "empty");
+    assert_eq!(
+        hash_user_password("").expect("empty is allowed"),
+        None,
+        "an empty password is no password"
+    );
+    let user_hash = hash_user_password("a")
+        .expect("one character is allowed")
+        .expect("and is a real password");
+    assert!(verify_password(&user_hash, "a"));
 
     // The maximum is in bytes, not characters, because that is what Argon2
     // costs. Exactly the limit is accepted; one byte more is not.
     let at_limit = "a".repeat(MAX_PASSWORD_BYTES);
-    validate_password_policy(&at_limit).expect("exactly the limit is allowed");
+    hash_owner_password(&at_limit).expect("exactly the limit is allowed");
+    hash_user_password(&at_limit).expect("exactly the limit is allowed");
     let over = "a".repeat(MAX_PASSWORD_BYTES + 1);
-    assert!(validate_password_policy(&over).is_err(), "one byte over");
-
-    // A short password of multi-byte characters is measured the same way, so
-    // an emoji passphrase is not accidentally rejected for being long.
-    validate_password_policy("pässwörd").expect("eight characters, more bytes");
+    assert!(hash_owner_password(&over).is_err(), "one byte over");
+    assert!(hash_user_password(&over).is_err(), "one byte over");
 }
 
 /// The username rule, at both its edges and over its character set.
@@ -384,7 +393,7 @@ async fn change_password_transaction_rolls_back_every_credential_pg() {
     let new_hash = hash_password("new-password").unwrap();
 
     assert!(
-        change_password_on_conn(&mut conn, TEST_ACCOUNT, "old-password", &new_hash)
+        change_password_on_conn(&mut conn, TEST_ACCOUNT, Some(&new_hash))
             .await
             .is_err()
     );

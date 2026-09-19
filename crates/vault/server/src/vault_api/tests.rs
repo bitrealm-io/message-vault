@@ -132,7 +132,7 @@ async fn a_vault_can_only_be_claimed_once() {
 }
 
 #[tokio::test]
-async fn claiming_enforces_the_password_policy() {
+async fn claiming_needs_a_password_of_one_character_or_more() {
     let vault = test_vault().await;
     let state = vault.state.clone();
 
@@ -140,17 +140,25 @@ async fn claiming_enforces_the_password_policy() {
         &state,
         "/v1/vault/claim",
         "",
-        serde_json::json!({ "username": "keeper", "password": "admin" }),
+        serde_json::json!({ "username": "keeper", "password": "" }),
     )
     .await;
     assert_eq!(
         status,
         StatusCode::UNPROCESSABLE_ENTITY,
-        "a real owner's password cannot be five characters"
+        "the vault owner must have a password"
     );
-
     let after: VaultResponse = get_json(&state, "/v1/vault", "").await;
     assert_eq!(after.state, VaultState::Unclaimed);
+
+    let status = post_status(
+        &state,
+        "/v1/vault/claim",
+        "",
+        serde_json::json!({ "username": "keeper", "password": "k" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "one character is enough");
 }
 
 #[tokio::test]

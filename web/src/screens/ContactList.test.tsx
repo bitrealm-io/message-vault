@@ -11,7 +11,7 @@
  * right away.
  */
 
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import RightPane from "../components/RightPane";
 import { RightToolbarProvider } from "../components/RightToolbarContext";
@@ -113,5 +113,48 @@ describe("ContactList", () => {
       expect(updateMembersMock).toHaveBeenCalledWith(10, { add: [], remove: [1] }),
     );
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "Family" })).not.toBeChecked());
+  });
+
+  it("checks every contact between a shift-click and the furthest checked contact", async () => {
+    const names = ["Alice", "Bob", "Carol", "Dave", "Erin"];
+    listContactsMock.mockResolvedValue({
+      items: names.map((name, i) => ({
+        id: i + 1,
+        name,
+        handle_count: 1,
+        handles: [],
+        groups: [],
+      })),
+      total: names.length,
+      limit: 200,
+      offset: 0,
+    } as unknown as Awaited<ReturnType<typeof listContacts>>);
+
+    render(
+      <VaultProviders>
+        <RightToolbarProvider>
+          <RightPane>
+            <ContactList onSelect={() => {}} />
+          </RightPane>
+        </RightToolbarProvider>
+      </VaultProviders>,
+    );
+
+    const box = (name: string) => screen.getByRole("checkbox", { name: `Select ${name}` });
+    const checkedNames = () => names.filter((name) => (box(name) as HTMLInputElement).checked);
+
+    await screen.findByRole("checkbox", { name: "Select Erin" });
+    fireEvent.click(box("Carol"));
+    fireEvent.click(box("Dave"));
+    await waitFor(() => expect(checkedNames()).toEqual(["Carol", "Dave"]));
+
+    // Above the topmost checked row: reaches down to the bottommost one.
+    fireEvent.click(box("Alice"), { shiftKey: true });
+    await waitFor(() => expect(checkedNames()).toEqual(["Alice", "Bob", "Carol", "Dave"]));
+
+    // Below the bottommost checked row: reaches up to the topmost one.
+    fireEvent.click(box("Bob"));
+    fireEvent.click(box("Erin"), { shiftKey: true });
+    await waitFor(() => expect(checkedNames()).toEqual(names));
   });
 });

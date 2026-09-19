@@ -16,7 +16,7 @@ describe("Checkbox", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Ada" }));
 
     expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange).toHaveBeenCalledWith(true);
+    expect(onChange).toHaveBeenCalledWith(true, expect.anything());
   });
 
   it("toggles from a click on its visible label, still only once", () => {
@@ -30,7 +30,7 @@ describe("Checkbox", () => {
     fireEvent.click(screen.getByText("No name"));
 
     expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange).toHaveBeenCalledWith(true);
+    expect(onChange).toHaveBeenCalledWith(true, expect.anything());
   });
 
   it("takes its accessible name from the visible label", () => {

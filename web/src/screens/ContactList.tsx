@@ -23,6 +23,7 @@ import {
 import { highlightText } from "../lib/highlightText";
 import { PAGE_SIZE_CONTACTS_FIRST, PAGE_SIZE_FIRST } from "../lib/listPaging";
 import { checksFromMembers } from "../lib/membershipChecks";
+import { extendCheckedRange } from "../lib/rangeCheck";
 import { hasFieldToken, stripFieldTokens } from "../lib/searchFields";
 import { useContactGroups } from "../lib/useContactGroups";
 import { listContacts } from "../lib/vaultApi";
@@ -288,6 +289,16 @@ export default function ContactList({
       return next;
     });
   };
+  /** Shift + click: check every row between the clicked one and the furthest checked one. */
+  const checkRangeTo = (id: string) => {
+    setCheckedIds((prev) =>
+      extendCheckedRange(
+        displayContacts.map((c) => c.id),
+        prev,
+        id,
+      ),
+    );
+  };
   const groupChecks = useMemo(
     () =>
       checksFromMembers(
@@ -471,7 +482,11 @@ export default function ContactList({
               id={checkId}
               checked={checked}
               aria-label={`Select ${c.name}`}
-              onChange={() => toggleChecked(c.id)}
+              onChange={(_, e) => {
+                // A checkbox change is a click underneath, so the Shift key is on it.
+                if ((e.nativeEvent as MouseEvent).shiftKey) checkRangeTo(c.id);
+                else toggleChecked(c.id);
+              }}
               className={`absolute ${
                 checked ? "" : "opacity-0 group-hover/avatar:opacity-100 focus-visible:opacity-100"
               }`}

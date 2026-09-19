@@ -41,7 +41,7 @@ export default function ListRangeHeader({
             indeterminate={selectAllIndeterminate}
             disabled={selectAllDisabled}
             aria-label={selectAllLabel}
-            onChange={onSelectAllChange}
+            onChange={(on) => onSelectAllChange(on)}
           />
         </span>
       ) : null}

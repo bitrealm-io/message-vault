@@ -13,17 +13,22 @@ import { inputClassName, sectionTitleClass } from "./profileStyles";
  *
  * A user account may have no password, so Settings offers Reset password, which clears it.
  * The vault owner must keep one, so its own Settings pass `canReset={false}`.
+ * They also pass `requireCurrent`: the owner's account reaches every other, so
+ * the vault asks for the password being replaced before it changes it.
  */
 export function ChangePasswordSection({
   disabled = false,
   canReset = true,
+  requireCurrent = false,
   managedAccountId,
 }: {
   disabled?: boolean;
   canReset?: boolean;
+  requireCurrent?: boolean;
   managedAccountId?: number;
 }) {
   const { updateToken } = useAuth();
+  const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [pwMsg, setPwMsg] = useState("");
@@ -35,7 +40,9 @@ export function ChangePasswordSection({
     setPwOk(false);
     try {
       if (managedAccountId === undefined) {
-        const res = await changePassword({ password });
+        const res = await changePassword(
+          requireCurrent ? { password, current_password: currentPw } : { password },
+        );
         // Changing the password rotates the session, so the old token is dead.
         if (res.token) updateToken(res.token);
       } else {
@@ -46,6 +53,7 @@ export function ChangePasswordSection({
       setPwMsg(
         password ? "Password changed." : "Password reset. This account now has no password.",
       );
+      setCurrentPw("");
       setNewPw("");
       setConfirmPw("");
     } catch (e) {
@@ -66,6 +74,19 @@ export function ChangePasswordSection({
     <>
       <h3 className={sectionTitleClass}>Change Password</h3>
       <div className="mb-6 max-w-[360px]">
+        {requireCurrent && (
+          <label className="mb-2 block">
+            <span className="mb-1 block text-[0.813rem] font-medium">Current password</span>
+            <input
+              type="password"
+              value={currentPw}
+              onChange={(e) => setCurrentPw(e.target.value)}
+              autoComplete="current-password"
+              disabled={disabled}
+              className={inputClassName}
+            />
+          </label>
+        )}
         <label className="mb-2 block">
           <span className="mb-1 block text-[0.813rem] font-medium">New password</span>
           <input
@@ -92,7 +113,7 @@ export function ChangePasswordSection({
           <Button
             variant="primary"
             onClick={handleChangePassword}
-            disabled={disabled || !newPw || !confirmPw}
+            disabled={disabled || !newPw || !confirmPw || (requireCurrent && !currentPw)}
             size="sm"
           >
             Change password

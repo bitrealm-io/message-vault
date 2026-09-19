@@ -128,14 +128,19 @@ profile setup finishes.
 _Avoid_: Login, Profile, Tenant, Workspace
 
 **Vault Owner**:
-The one account that manages a vault's other accounts and settings, and the
-only account that has no vault of its own. The vault owner creates, disables
-and deletes accounts, resets their passwords, deletes their message data, and
-decides whether strangers may sign up. The owner never reads a message: the
-account list shows a name, a status, when the account last signed in, a
-message count and a storage total, and nothing of what those messages say. There is exactly one, it cannot be deleted, and
-no other account can be given its powers.
-_Avoid_: Admin, Administrator, Superuser, Root
+The vault's administrator: the one account that manages a vault's other
+accounts and its global settings, and the only account that has no vault of
+its own. The vault owner creates, disables and deletes accounts, resets their
+passwords, deletes their message data, and decides whether strangers may sign
+up. The owner monitors the vault through metadata: counts and totals of
+messages, contacts and attachments, each account's imports and exports, when
+it last signed in, and attachment file names and sizes. The owner never reads
+content: a message's text, an attachment's bytes, or a contact's name and
+handles. The full line is in `docs/adr/0008`. There is exactly one, it cannot
+be deleted, and no other account can be given its powers.
+_Avoid_ as its name: Admin, Administrator, Superuser, Root. The role is an
+administrator's; the account is called the vault owner, because exactly one
+exists and it is whoever claimed the vault.
 
 **Owner Home**:
 The screen the vault owner lands on at sign-in and works from, the way any
@@ -144,11 +149,12 @@ product name, a search bar and the account button across the top, over a
 side panel and a content pane. The side panel lists Vault Settings, then
 User Accounts, and the search bar narrows User Accounts by username or
 preferred name. User Accounts lists every account, the owner's own first,
-each by username with its preferred name under it. There the owner adds
-accounts, sets each one's status to active or disabled, and sets what it may
-do. An account's name opens that account's Settings, the screen its holder
-sees, where the owner sets its password and deletes its messages or the
-account, and reads its profile and storage total without changing the one or
+each by username with its preferred name and its status. There the owner adds
+accounts. An account's name opens that account's Settings, the screen its
+holder sees, where the owner sets its password, its status (active or
+disabled) and its permissions (import, export, delete), and deletes its
+messages or the account. The account holder reads the same status and
+permissions under Settings, Account, and changes none. The owner reads its profile and storage total without changing the one or
 seeing inside the other. The owner's own row opens the owner's own Settings,
 which is also where the account button's Settings goes. An owner's password
 reset sets the password and nothing more: it does not end the person's

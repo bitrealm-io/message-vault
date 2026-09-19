@@ -801,6 +801,10 @@ pub struct SetPasswordRequest {
     /// The new password. Empty clears a user account's password; the vault
     /// owner's must be one character or more.
     pub password: String,
+    /// The password being replaced. Required when the vault owner changes its
+    /// own; nobody else sends it.
+    #[serde(default)]
+    pub current_password: Option<String>,
 }
 
 /// Fresh session token issued after an account changed its own password.
@@ -812,8 +816,11 @@ pub struct SetPasswordResponse {
 
 /// Set an account's password.
 ///
-/// The session is the credential, so the current password is never asked
-/// for. An account changing its own has its API tokens revoked and gets
+/// For a user account the session is the credential, and the current
+/// password is not asked for. The vault owner changing its own must send
+/// `current_password`: that account reaches every other, so a session left
+/// open on a shared machine must not be enough to take it over.
+/// An account changing its own has its API tokens revoked and gets
 /// `200` with a rotated session token. The vault owner setting another
 /// account's answers `204`. That is the whole of it: the account's sessions carry on,
 /// and its holder keeps the new password until they change it themselves.
@@ -852,6 +859,19 @@ pub async fn set_password_handler(
     let mut conn = state.db.acquire().await?;
     match require_owner_or_self(&mut conn, &auth, target).await? {
         Reach::Own => {
+            if account_profile::is_vault_owner(target) {
+                let Some(current) = req.current_password.as_deref() else {
+                    return Err(ApiError::validation(
+                        "current password is required to change the vault owner's password",
+                    ));
+                };
+                let password_hash = account_profile::load_password_hash(&mut conn, target).await?;
+                if !passwords_match(password_hash.as_deref(), current) {
+                    return Err(ApiError::InvalidCredentials(
+                        "current password is incorrect".into(),
+                    ));
+                }
+            }
             let token = change_password_on_conn(&mut conn, target, new_hash).await?;
             Ok(Json(SetPasswordResponse { token }).into_response())
         }

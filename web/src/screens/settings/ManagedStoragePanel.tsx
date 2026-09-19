@@ -6,9 +6,9 @@ import StorageUsageCard from "./storage/StorageUsageCard";
 
 /**
  * The Storage tab of an account the vault owner opened from User Accounts:
- * how much the account holds, and nothing of what it holds. The import and
- * export history and the largest attachments name files and people, and the
- * owner reads none of an account's content.
+ * how much the account holds. ADR 0008 lets the owner read more metadata
+ * than this (import and export history, attachment file names and sizes);
+ * those routes refuse the owner today, so the usage total is what is built.
  */
 export function ManagedStoragePanel({ accountId }: { accountId: number }) {
   const { data, isPending, error } = useVaultQuery(

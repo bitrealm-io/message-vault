@@ -49,7 +49,17 @@ named, or merged. Junk contacts cost one delete.
 
 **A contact missing a name or an identity is Unknown.** Unknown is computed
 from the contacts, so it empties as people are named. It uses the ordinary
-contacts screen; there is no separate review queue.
+contacts screen; there is no separate review queue. Unknown counts as a
+group: the contact shows it among its Contact Groups, and an Unknown contact
+is not in "No group". Why: a contact listed under Unknown whose own groups
+read "No groups" says two things at once.
+
+**A contact with no preferred name goes by its first identity, in italics.**
+The vault sends the name empty rather than a placeholder such as `(unknown)`,
+and sends `unknown` beside it, computed by the one rule above. The screen
+shows the identity where the name would be. Why: a list of rows that all read
+`(unknown)` cannot be told apart, and the italics keep an address from reading
+as a name someone gave the contact.
 
 **A group conversation is not a person.** A source gives a group an id of its
 own, such as `chat1000000005`. The vault stores it as the conversation's chat

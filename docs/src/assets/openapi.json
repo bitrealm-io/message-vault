@@ -7004,6 +7004,7 @@
         "required": [
           "id",
           "name",
+          "unknown",
           "handles",
           "direct_conversations",
           "group_conversations",
@@ -7048,13 +7049,17 @@
           },
           "name": {
             "type": "string",
-            "description": "Contact display name."
+            "description": "The contact's preferred name; empty when it has none."
           },
           "total_messages": {
             "type": "integer",
             "format": "int64",
             "description": "Messages across all of the contact's conversations.",
             "minimum": 0
+          },
+          "unknown": {
+            "type": "boolean",
+            "description": "True when the contact is in the Unknown Contact Group: it has no\nidentity, or it has identities and no preferred name."
           }
         }
       },
@@ -7266,7 +7271,7 @@
           },
           "name": {
             "type": "string",
-            "description": "Contact display name."
+            "description": "The contact's preferred name; empty when it has none."
           },
           "start_date": {
             "type": [
@@ -7297,6 +7302,7 @@
         "required": [
           "id",
           "name",
+          "unknown",
           "handle_count",
           "last_modified"
         ],
@@ -7332,7 +7338,11 @@
           },
           "name": {
             "type": "string",
-            "description": "Contact display name."
+            "description": "The contact's preferred name; empty when it has none."
+          },
+          "unknown": {
+            "type": "boolean",
+            "description": "True when the contact is in the Unknown Contact Group: it has no\nidentity, or it has identities and no preferred name."
           }
         }
       },
@@ -8973,7 +8983,7 @@
                 },
                 "name": {
                   "type": "string",
-                  "description": "Contact display name."
+                  "description": "The contact's preferred name; empty when it has none."
                 },
                 "start_date": {
                   "type": [
@@ -9022,6 +9032,7 @@
               "required": [
                 "id",
                 "name",
+                "unknown",
                 "handle_count",
                 "last_modified"
               ],
@@ -9057,7 +9068,11 @@
                 },
                 "name": {
                   "type": "string",
-                  "description": "Contact display name."
+                  "description": "The contact's preferred name; empty when it has none."
+                },
+                "unknown": {
+                  "type": "boolean",
+                  "description": "True when the contact is in the Unknown Contact Group: it has no\nidentity, or it has identities and no preferred name."
                 }
               }
             },

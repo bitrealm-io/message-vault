@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { contactBelongsToGroup, groupListQuery, UNKNOWN_GROUP } from "./contactGroups";
+import { contactBelongsToGroup, groupListQuery } from "./contactGroups";
+import { UNKNOWN_GROUP } from "./unknownGroup";
 
 describe("the Unknown contact group", () => {
   it("asks the server for it by name", () => {

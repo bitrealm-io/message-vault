@@ -2,7 +2,9 @@ import { useCallback, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import Button from "../components/Button";
 import ConfirmDialog from "../components/ConfirmDialog";
+import ContactLabel from "../components/ContactLabel";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
+import { contactLabelText } from "../lib/contactLabel";
 import { unsupportedFieldWords, useSearchFields } from "../lib/searchFields";
 import { trashed } from "../lib/searchQuery";
 import {
@@ -354,7 +356,9 @@ export default function TrashScreen() {
                       className="flex items-center justify-between gap-4 border-0 border-b border-solid border-border px-4 py-3 last:border-b-0"
                     >
                       <div className="min-w-0">
-                        <div className="truncate text-[0.875rem] text-text">{contact.name}</div>
+                        <div className="truncate text-[0.875rem] text-text">
+                          <ContactLabel name={contact.name} handles={contact.handles} />
+                        </div>
                         <div className="text-[0.75rem] text-muted">
                           {plural(contact.handle_count, "handle")}
                         </div>
@@ -365,7 +369,7 @@ export default function TrashScreen() {
                           size="sm"
                           // Every row's button reads "Restore", so the name it
                           // answers to says which contact it restores.
-                          aria-label={`Restore ${contact.name}`}
+                          aria-label={`Restore ${contactLabelText(contact.name, contact.handles)}`}
                           disabled={restoreContact.isPending || dialogBusy}
                           onClick={() => restoreContact.mutate(contact.id)}
                         >
@@ -374,11 +378,15 @@ export default function TrashScreen() {
                         <Button
                           variant="danger"
                           size="sm"
-                          aria-label={`Delete ${contact.name}`}
+                          aria-label={`Delete ${contactLabelText(contact.name, contact.handles)}`}
                           disabled={!canDelete || restoreContact.isPending || dialogBusy}
                           title={canDelete ? undefined : CANNOT_DELETE}
                           onClick={() =>
-                            setPending({ kind: "contact", id: contact.id, name: contact.name })
+                            setPending({
+                              kind: "contact",
+                              id: contact.id,
+                              name: contactLabelText(contact.name, contact.handles),
+                            })
                           }
                         >
                           Delete

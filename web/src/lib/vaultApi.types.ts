@@ -1328,13 +1328,18 @@ export interface components {
             id: number;
             /** @description When the contact’s address-book shape last changed (`datetime('now')`). */
             last_modified: string;
-            /** @description Contact display name. */
+            /** @description The contact's preferred name; empty when it has none. */
             name: string;
             /**
              * Format: int64
              * @description Messages across all of the contact's conversations.
              */
             total_messages: number;
+            /**
+             * @description True when the contact is in the Unknown Contact Group: it has no
+             *     identity, or it has identities and no preferred name.
+             */
+            unknown: boolean;
         };
         /** @description One handle on a contact with service and message stats. */
         ContactHandleInfo: {
@@ -1428,7 +1433,7 @@ export interface components {
              * @description Messages in 1:1 conversations with the contact.
              */
             individual_message_count: number;
-            /** @description Contact display name. */
+            /** @description The contact's preferred name; empty when it has none. */
             name: string;
             /** @description Date of the contact's first message. */
             start_date?: string | null;
@@ -1456,8 +1461,13 @@ export interface components {
             id: number;
             /** @description When the contact’s address-book shape last changed (`datetime('now')`). */
             last_modified: string;
-            /** @description Contact display name. */
+            /** @description The contact's preferred name; empty when it has none. */
             name: string;
+            /**
+             * @description True when the contact is in the Unknown Contact Group: it has no
+             *     identity, or it has identities and no preferred name.
+             */
+            unknown: boolean;
         };
         /** @description The previous and new handle values for a link change. */
         ContactUpdateHandlePayload: {
@@ -2225,7 +2235,7 @@ export interface components {
                  * @description Messages in 1:1 conversations with the contact.
                  */
                 individual_message_count: number;
-                /** @description Contact display name. */
+                /** @description The contact's preferred name; empty when it has none. */
                 name: string;
                 /** @description Date of the contact's first message. */
                 start_date?: string | null;
@@ -2260,8 +2270,13 @@ export interface components {
                 id: number;
                 /** @description When the contact’s address-book shape last changed (`datetime('now')`). */
                 last_modified: string;
-                /** @description Contact display name. */
+                /** @description The contact's preferred name; empty when it has none. */
                 name: string;
+                /**
+                 * @description True when the contact is in the Unknown Contact Group: it has no
+                 *     identity, or it has identities and no preferred name.
+                 */
+                unknown: boolean;
             }[];
             /** @description Page size used. */
             limit: number;

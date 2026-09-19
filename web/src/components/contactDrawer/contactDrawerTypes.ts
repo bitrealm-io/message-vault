@@ -26,6 +26,8 @@ export type ContactPreview = {
    */
   handleCount?: number;
   groups?: string[];
+  /** True when the vault counts the contact in the Unknown Contact Group. */
+  unknown?: boolean;
 };
 
 /** List-API contact row (snake_case `handle_count`) mapped into `ContactPreview`. */
@@ -35,6 +37,7 @@ export type ContactListPreviewSource = {
   handles?: string[];
   handle_count?: number;
   groups?: string[];
+  unknown?: boolean;
 };
 
 /** Same three ways a set of conversations narrows by kind, named for this drawer. */
@@ -47,6 +50,7 @@ export function contactPreviewFromListRow(c: ContactListPreviewSource): ContactP
     handles: c.handles,
     handleCount: c.handle_count,
     groups: c.groups,
+    unknown: c.unknown,
   };
 }
 
@@ -73,6 +77,7 @@ export function sameContactPreviews(
       left.id === right.id &&
       left.name === right.name &&
       left.handleCount === right.handleCount &&
+      left.unknown === right.unknown &&
       sameStrings(left.handles, right.handles) &&
       sameStrings(left.groups, right.groups)
     );

@@ -1563,8 +1563,12 @@ async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
     assert_eq!(unknown.total, 2);
     let mut names: Vec<String> = unknown.items.iter().map(|c| c.name.clone()).collect();
     names.sort();
-    // The list renders a nameless contact as "(unknown)".
-    assert_eq!(names, vec!["(unknown)".to_string(), "Sarah".to_string()]);
+    // A nameless contact has an empty name; the client shows its identity.
+    assert_eq!(names, vec![String::new(), "Sarah".to_string()]);
+    assert!(
+        unknown.items.iter().all(|c| c.unknown),
+        "every row of group:unknown says it is Unknown"
+    );
 
     // Naming the nameless one takes it out of Unknown, because membership
     // is computed rather than stored.
@@ -1819,7 +1823,8 @@ async fn contact_delete_makes_it_unknown_and_leaves_its_conversations_alone() {
     let detail: serde_json::Value =
         crate::test_support::get_json(&vault.state, &format!("/v1/contacts/{id}"), &account.token)
             .await;
-    assert_eq!(detail["name"], "(unknown)", "{detail}");
+    assert_eq!(detail["name"], "", "{detail}");
+    assert_eq!(detail["unknown"], true, "{detail}");
     assert_eq!(detail["direct_conversations"], 1, "{detail}");
     assert_eq!(detail["total_messages"], 2, "{detail}");
     let conversations: serde_json::Value = crate::test_support::get_json(

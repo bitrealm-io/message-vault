@@ -178,12 +178,7 @@ fn emit_text(ctx: &ListCtx, out: &mut Sql, term: &TextTerm) {
     match ctx.list {
         ListKind::Contacts => {
             out.push("(");
-            free_text_match(
-                out,
-                e,
-                "COALESCE(NULLIF(trim(ct.preferred_name), ''), '(unknown)')",
-                term,
-            );
+            free_text_match(out, e, "ct.preferred_name", term);
             out.push(
                 " OR EXISTS (SELECT 1 FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id AND (",
             );
@@ -588,9 +583,17 @@ impl NamedSet {
         result
     }
 
-    /// The home row is in no set at all.
+    /// The home row is in no set at all. Unknown is a Contact Group the vault
+    /// computes, so an Unknown contact is in a group and is not in `group:none`.
     fn none(&self, out: &mut Sql) {
-        out.push(&format!("NOT EXISTS ({})", self.membership_from()));
+        if self.home == ListKind::Contacts {
+            out.push(&format!(
+                "(NOT EXISTS ({}) AND NOT {UNKNOWN_CONTACT_SQL})",
+                self.membership_from()
+            ));
+        } else {
+            out.push(&format!("NOT EXISTS ({})", self.membership_from()));
+        }
     }
 }
 

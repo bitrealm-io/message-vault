@@ -42,6 +42,7 @@ function detail(id: number, overrides: Partial<ContactDetail> = {}): ContactDeta
   return {
     id,
     name: `Contact ${id}`,
+    unknown: false,
     last_modified: "2024-01-01T00:00:00Z",
     handles: [
       {
@@ -207,6 +208,29 @@ describe("ContactDrawer", () => {
     expect(screen.getByText("Work")).toBeTruthy();
     expect(screen.getAllByText("99").length).toBeGreaterThan(0);
     expect(screen.getAllByText("11").length).toBeGreaterThan(0);
+  });
+
+  it("names a contact with no preferred name by its first identity, in italics, under Unknown", async () => {
+    seed(detail(5, { name: "", unknown: true, groups: [] }));
+
+    render(<ContactDrawer variant="docked" contactId="5" preview={null} onClose={() => {}} />);
+
+    const heading = await screen.findByRole("heading", { name: "+15550005" });
+    expect(heading.querySelector("em")?.textContent).toBe("+15550005");
+    expect(screen.getByRole("dialog", { name: "+15550005" })).toBeTruthy();
+    expect(screen.getByText("Unknown")).toBeTruthy();
+    expect(screen.queryByText("No groups")).toBeNull();
+  });
+
+  it("sets a preferred name upright and leaves Unknown off a known contact", async () => {
+    seed(detail(6, { name: "Grace", groups: [] }));
+
+    render(<ContactDrawer variant="docked" contactId="6" preview={null} onClose={() => {}} />);
+
+    const heading = await screen.findByRole("heading", { name: "Grace" });
+    expect(heading.querySelector("em")).toBeNull();
+    expect(screen.queryByText("Unknown")).toBeNull();
+    expect(screen.getByText("No groups")).toBeTruthy();
   });
 
   it("does not claim No groups while loading without preview groups", async () => {

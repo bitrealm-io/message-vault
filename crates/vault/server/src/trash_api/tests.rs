@@ -134,7 +134,7 @@ async fn empty_trash_deletes_trashed_conversations_and_forgets_trashed_contacts(
     )
     .await;
     assert_eq!(
-        forgotten["name"], "(unknown)",
+        forgotten["unknown"], true,
         "the trashed contact is Unknown again and can be opened: {forgotten}"
     );
     let untouched: serde_json::Value = get_json(

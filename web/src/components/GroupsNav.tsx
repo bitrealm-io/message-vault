@@ -1,4 +1,5 @@
 import { contactGroups, groupSlug } from "../lib/contactGroups";
+import { UNKNOWN_GROUP_LABEL } from "../lib/unknownGroup";
 import { PeopleGroupIcon, PersonIcon } from "./icons";
 import NavEntityList, { type NavEntityCopy } from "./NavEntityList";
 
@@ -12,7 +13,7 @@ const COPY: NavEntityCopy = {
   // contact with no identity, or with identities and no preferred name. It
   // empties as the person names or links what is in it.
   permanentRoute: "/unknown",
-  permanentLabel: "Unknown",
+  permanentLabel: UNKNOWN_GROUP_LABEL,
   fallbackRoute: "/contacts",
   addLabel: "Create contact group",
   createTitle: "Create contact group",

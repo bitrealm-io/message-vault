@@ -208,7 +208,7 @@ export default function OnboardingScreen() {
     if (!revalidate(handles)) return;
     void run(async () => {
       if (!token || !accountId) {
-        throw new Error("Not signed in");
+        throw new Error("Not logged in");
       }
       await updateAccountProfile({
         preferred_name: displayName.trim(),

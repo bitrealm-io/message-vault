@@ -40,7 +40,7 @@ function sectionLinkClass(active: boolean): string {
 }
 
 /**
- * Owner Home: where the vault owner lands at sign-in and works from, the way
+ * Owner Home: where the vault owner lands at login and works from, the way
  * any other account lands in Messages.
  *
  * The frame is the one every account sees: the header with the product name,

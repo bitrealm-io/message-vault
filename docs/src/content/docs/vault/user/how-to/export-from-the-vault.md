@@ -3,7 +3,7 @@ title: Export from the vault
 description: Save the messages in your vault to a folder on your computer, in the format you choose.
 ---
 
-**Export** writes the messages in your vault, and their attachments, to a folder on your computer. It runs in the desktop app: Export appears in the sidebar once you sign in.
+**Export** writes the messages in your vault, and their attachments, to a folder on your computer. It runs in the desktop app: Export appears in the sidebar once you log in.
 
 Export always writes the whole vault. There is no way yet to export only what you are browsing or only the conversations you have selected.
 
@@ -12,12 +12,12 @@ Every export is recorded as an Export Run: when it started, what it asked for, h
 ## Before you start
 
 - A vault that is running, and an account with messages already imported
-- The desktop app, signed in
+- The desktop app, logged in
 - An empty folder on disk to write into
 
 ## Export from the desktop app
 
-1. Sign in to the vault in the desktop app
+1. Log in to the vault in the desktop app
 2. Open **Export** in the sidebar
 3. Choose the folder to save into
 4. Choose a format

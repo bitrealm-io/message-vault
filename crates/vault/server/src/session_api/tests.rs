@@ -5,7 +5,7 @@ use crate::test_support::{login_status, register_via_api, test_vault};
 
 const TEST_ACCOUNT: i64 = 7;
 
-/// The Session is a singleton: signing in answers `201 Created` with a
+/// The Session is a singleton: logging in answers `201 Created` with a
 /// `Location` naming `/v1/session` itself, `GET` reads it back without an
 /// `ok` flag, and `DELETE` ends it with `204 No Content`.
 #[tokio::test]
@@ -14,7 +14,7 @@ async fn a_session_is_created_read_and_deleted_at_one_path() {
     let state = vault.state.clone();
     register_via_api(&state, "alice", "hunter2hunter2").await;
 
-    let created = crate::test_support::sign_in(&state, "alice", "hunter2hunter2").await;
+    let created = crate::test_support::log_in(&state, "alice", "hunter2hunter2").await;
     assert_eq!(created["username"], "alice");
     let token = created["token"].as_str().unwrap().to_string();
 
@@ -87,7 +87,7 @@ async fn logout_on_conn_leaves_registered_account() {
 }
 
 #[tokio::test]
-async fn disabled_account_cannot_sign_in() {
+async fn disabled_account_cannot_log_in() {
     let vault = test_vault().await;
     let state = vault.state.clone();
     let created = register_via_api(&state, "alice", "hunter2hunter2").await;

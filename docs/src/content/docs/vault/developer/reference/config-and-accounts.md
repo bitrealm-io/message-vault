@@ -65,14 +65,14 @@ from `100` up.
 - Web login uses username + password (Argon2id hash in `accounts.password_hash`).
   An account may have no password (`password_hash` NULL); an empty password is
   accepted only for those accounts.
-- Signing in, creating an account, and claiming the vault are each
+- Logging in, creating an account, and claiming the vault are each
   rate-limited to 20 attempts per username per 60 seconds, tracked separately.
 - Each account can create named **API tokens** for programs that call the HTTP API
   (stored hashed; shown once when created). GUI sessions use a separate rotating
   token.
-- Four columns on `accounts` govern what a signed-in session may do, each
+- Four columns on `accounts` govern what a logged-in session may do, each
   enforced by a guard in `server.rs` rather than left as decoration:
-  - `disabled` — may not sign in; an existing session or API token for a
+  - `disabled` — may not log in; an existing session or API token for a
     disabled account stops working immediately.
   - `can_import`, `can_export`, `can_delete` — may call the import endpoints,
     the export endpoints, and the endpoints that destroy message data,
@@ -88,6 +88,6 @@ from `100` up.
   `reset-owner-password` on the server CLI are the only ways to make or
   recover the owner's login.
 - Demo seed identity: username `demo` (`crates/vault/demo-seed/config/seed.toml`), always
-  no-password. Sign-in stays username `demo` and an empty password.
+  no-password. Login stays username `demo` and an empty password.
 
 See [Settings](/vault/user/how-to/settings/).

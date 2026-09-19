@@ -19,7 +19,7 @@ The full set of rules, with the reason behind each: [HTTP interface rules](https
 
 ## Trash is the only door to deletion
 
-`POST /v1/conversations/{id}/trash` and `POST /v1/contacts/{id}/trash` set a marker; `/restore` clears it. Nothing is deleted until one of three routes runs, and each needs a signed-in session whose account may delete:
+`POST /v1/conversations/{id}/trash` and `POST /v1/contacts/{id}/trash` set a marker; `/restore` clears it. Nothing is deleted until one of three routes runs, and each needs a logged-in session whose account may delete:
 
 - `DELETE /v1/conversations/{id}` removes a trashed conversation, its messages, and any attachment file no remaining message references. A conversation that is not in the trash answers 409.
 - `DELETE /v1/contacts/{id}` does what a phone's Delete Contact does: the name, the person's edits and their Contact Group memberships go, the contact becomes Unknown and leaves the trash, and every conversation stays as it is, showing the handle. A contact that is not in the trash answers 409.
@@ -32,7 +32,7 @@ All three answer `204`. The demo account may delete like any other account. The 
 `/v1/accounts` is the one place accounts live, for the vault owner and for each account alike; there is no `/v1/account` singleton and no `/v1/owner/` prefix, because who may call a route is decided in the handler, never by the path. The credential names the caller, and `POST /v1/session` and `GET /v1/session` both answer its `account_id`, so a client always knows which row is its own.
 
 - `GET /v1/accounts` lists every account but the owner's, with its flags, message count and storage total. The owner only.
-- `POST /v1/accounts` creates an account. Signed in as the owner it takes a `username` and a `password`, which the holder keeps until they change it. With no credential at all it is registration, allowed while the vault is open: the vault opens a Session on the new account and answers its `token`. Either way the answer is `201 Created` with `Location: /v1/accounts/{id}`.
+- `POST /v1/accounts` creates an account. Logged in as the owner it takes a `username` and a `password`, which the holder keeps until they change it. With no credential at all it is registration, allowed while the vault is open: the vault opens a Session on the new account and answers its `token`. Either way the answer is `201 Created` with `Location: /v1/accounts/{id}`.
 - `GET /v1/accounts/{id}` reads one account: profile fields, flags and counts in one document. `PATCH` changes it: the account itself sets `preferred_name`, `time_zone`, `handles` and `remove_handles`; the owner sets another account's `disabled`, `can_import`, `can_export` and `can_delete`. A field the caller may not set answers `403 Forbidden` and nothing in the body is applied.
 - `PUT /v1/accounts/{id}/password` is one route for two callers: an account changing its own supplies `current_password` and gets a rotated session `token` back (`200`); the owner sets another account's without it (`204`), and that is all it does: the account's sessions carry on.
 - `DELETE /v1/accounts/{id}` deletes an account. The owner sends no body; an account deleting itself sends `{confirm, current_password}`. Nobody deletes the owner.
@@ -100,7 +100,7 @@ Every export route takes the `export` scope on a session or an API token. A prog
 
 ## Messages across conversations
 
-`GET /v1/messages?q=` answers one row per message matching `q`, paged like every other list, behind a signed-in session. It is a read route: opening a conversation is `GET /v1/conversations/{id}/messages`, downloading is an Export Run (`POST /v1/exports`), and searching across messages is this. The thread's find box uses it with `in:#id` so a find reaches every message in the conversation, not the page the browser holds.
+`GET /v1/messages?q=` answers one row per message matching `q`, paged like every other list, behind a logged-in session. It is a read route: opening a conversation is `GET /v1/conversations/{id}/messages`, downloading is an Export Run (`POST /v1/exports`), and searching across messages is this. The thread's find box uses it with `in:#id` so a find reaches every message in the conversation, not the page the browser holds.
 
 `GET /v1/messages/{id}` is the same row looked up by id, so a search result links to a message rather than to an offset. It is read-only: an import writes messages and trashing is a conversation operation. The lookup carries the list's own defaults — the caller's account, no trashed conversation, no duplicate — so a row the list hides answers `404` here too, and another account's message is absent rather than forbidden.
 

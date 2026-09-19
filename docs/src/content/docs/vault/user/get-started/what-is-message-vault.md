@@ -16,7 +16,7 @@ The vault you run has a **local** username and password. That login is not a Bit
 
 ## What you can do
 
-- **Try sample conversations** by signing in as `demo` (see [Try the vault](/vault/user/get-started/try-the-vault/))
+- **Try sample conversations** by logging in as `demo` (see [Try the vault](/vault/user/get-started/try-the-vault/))
 - **Import** your own backups with the desktop app
 - **Browse and search** conversations, contacts, and media in the browser or the app
 - **Convert** exports between JSONL (JSON Lines), JSON, CSV, EML, MBOX, and XML when you need files on disk

@@ -42,7 +42,7 @@ export default function PopupMenu({
   /** Accessible name for the menu itself. */
   label: string;
   items: PopupMenuItem[];
-  /** Read-only block above the items, such as who is signed in. Not a focus stop. */
+  /** Read-only block above the items, such as who is logged in. Not a focus stop. */
   header?: ReactNode;
   className?: string;
 }) {

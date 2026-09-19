@@ -18,7 +18,7 @@ export const pageCenter =
 /**
  * Every auth card is the same 448 × 608 box on every screen and in every
  * state — it never resizes and never scrolls, so nothing moves underneath the
- * user as they step through sign-in and setup. The height is set by the
+ * user as they step through login and setup. The height is set by the
  * tallest card: Create Account, whose three fields sit above the pinned
  * action row with room for a two-line error above it.
  */
@@ -44,7 +44,7 @@ export const authCardFooter = "mt-auto flex flex-col";
  */
 export const authTitle = "m-0 text-[1.25rem] font-bold text-text mb-6 text-left";
 /**
- * Name at the top of an auth card. The sign-in card and the vault settings
+ * Name at the top of an auth card. The login card and the vault settings
  * screen share it, so crossing between them never changes the size of the
  * words at the top of the frame. `m-0` because theme.css leaves out Tailwind's
  * preflight, so a heading still carries the browser's own margins otherwise;

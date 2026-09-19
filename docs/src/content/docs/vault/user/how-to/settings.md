@@ -8,9 +8,9 @@ Administrators also see a **Users** tab, and the desktop app adds **System** and
 
 ## Account
 
-- **Username** — read-only account id used for sign-in
+- **Username** — read-only account id used for login
 - **Password** — change password when local auth is enabled
-- **API tokens** — named Bearer secrets for programs that call the vault's [HTTP API](/vault/developer/reference/api/). When creating one, choose **import**, **export**, or **both**. Each secret is shown once at creation; revoke when finished. Signing in to the website uses a separate session token that changes on each login and does not revoke these tokens. Desktop **Import** and **Export** do not need an API token; they use the signed-in session.
+- **API tokens** — named Bearer secrets for programs that call the vault's [HTTP API](/vault/developer/reference/api/). When creating one, choose **import**, **export**, or **both**. Each secret is shown once at creation; revoke when finished. Logging in to the website uses a separate session token that changes on each login and does not revoke these tokens. Desktop **Import** and **Export** do not need an API token; they use the logged-in session.
 - **Danger zone** — delete all messages for the account, or delete the account (the demo account cannot be deleted)
 
 ## Profile

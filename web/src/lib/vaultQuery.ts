@@ -5,7 +5,7 @@
  * loading and error state, and the "this is stale now, refetch whoever is
  * showing it" broadcast. Nothing here reimplements any of that; the only thing
  * this module adds is the rule that every cache entry is named with the
- * signed-in account.
+ * logged-in account.
  *
  * That rule is the point. Before it, four modules kept the account's data in
  * module-level variables and `auth.tsx` cleared them by hand from two separate
@@ -60,10 +60,10 @@ export function createVaultQueryClient(): QueryClient {
 }
 
 /**
- * Signed-in account id, or `"anonymous"` before sign-in.
+ * Logged-in account id, or `"anonymous"` before login.
  *
- * Queries that run on the sign-in screens have no account yet; giving them a
- * name of their own keeps their entries from ever being read by a signed-in
+ * Queries that run on the login screens have no account yet; giving them a
+ * name of their own keeps their entries from ever being read by a logged-in
  * account.
  */
 function useAccountScope(): AccountScope {
@@ -72,7 +72,7 @@ function useAccountScope(): AccountScope {
 }
 
 /**
- * `useQuery`, with the signed-in account added to the front of the key.
+ * `useQuery`, with the logged-in account added to the front of the key.
  *
  * Every option TanStack Query accepts is passed straight through. This adds no
  * caching, no fetching, and no state of its own — only the account prefix, so

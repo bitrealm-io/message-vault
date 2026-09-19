@@ -61,7 +61,7 @@ most one running at a time. A run moves through its Stages and stops at each
 Approval until the person approves or cancels it. The record belongs to the
 account and cannot be deleted by the person; anything in the interface that
 merely points at a run is a shortcut and can be. The HTTP interface creates
-one with `POST /v1/imports`; it is not a session, which is the signed-in
+one with `POST /v1/imports`; it is not a session, which is the logged-in
 account's token.
 _Avoid_: Import Job, Import Session, Push
 
@@ -117,10 +117,10 @@ deletion; something must be trashed before it can be deleted, one item at a
 time or all at once with Empty Trash.
 _Avoid_: Deleted, Archive, Hidden, Bin
 
-### Signing in
+### Logging in
 
 **Account**:
-One person's store inside a vault: the login they sign in with, and the
+One person's store inside a vault: the login they log in with, and the
 conversations, contacts, and handles that store holds. A vault holds many
 accounts and keeps each one's data isolated from the others, so nothing an
 account holds is visible to another. An account is not finished until
@@ -131,10 +131,10 @@ _Avoid_: Login, Profile, Tenant, Workspace
 The vault's administrator: the one account that manages a vault's other
 accounts and its global settings, and the only account that has no vault of
 its own. The vault owner creates, disables and deletes accounts, resets their
-passwords, deletes their message data, and decides whether strangers may sign
-up. The owner monitors the vault through metadata: counts and totals of
+passwords, deletes their message data, and decides whether strangers may create
+an account. The owner monitors the vault through metadata: counts and totals of
 messages, contacts and attachments, each account's imports and exports, when
-it last signed in, and attachment file names and sizes. The owner never reads
+it last logged in, and attachment file names and sizes. The owner never reads
 content: a message's text, an attachment's bytes, or a contact's name and
 handles. The full line is in `docs/adr/0008`. There is exactly one, it cannot
 be deleted, and no other account can be given its powers.
@@ -143,7 +143,7 @@ administrator's; the account is called the vault owner, because exactly one
 exists and it is whoever claimed the vault.
 
 **Owner Home**:
-The screen the vault owner lands on at sign-in and works from, the way any
+The screen the vault owner lands on at login and works from, the way any
 other account lands in Messages. It has the frame every account sees: the
 product name, a search bar and the account button across the top, over a
 side panel and a content pane. The side panel lists Dashboard, Settings, User
@@ -170,17 +170,17 @@ create their own accounts.
 _Avoid_: Setup, First run, Provisioning
 
 **Session**:
-One account's signed-in state, made by signing in with the account's
-password and ended by signing out or by expiry. There is one per signed-in
+One account's logged-in state, made by logging in with the account's
+password and ended by logging out or by expiry. There is one per logged-in
 account, and it is what the browser and the desktop app hold between
 requests. It is not an API token: a token is a named, scoped credential the
-person makes for a program, and it never signs in. Nothing else on the
+person makes for a program, and it never logs in. Nothing else on the
 product is a session; the record of an import attempt is an Import Run.
 _Avoid_: Login, Auth, Import session, Token
 
 **API Token**:
 A named credential an account makes so a program can act for it without
-signing in, limited to the scopes the person chose: importing, exporting, or
+logging in, limited to the scopes the person chose: importing, exporting, or
 deleting. A program holding one can bring messages in, or take them out
 through an Export Run it starts, but it can never browse: reading messages
 outside a run needs a Session. The secret is shown once when the token is
@@ -192,7 +192,7 @@ _Avoid_: App password, Key, Credential, Session
 The person operating Message Vault, in the browser or in the desktop app. A
 user has an account in the vault, and "user" is the colloquial word for that
 account: User names the person at the keyboard, Account names the record
-they sign in to and the data it holds.
+they log in to and the data it holds.
 _Avoid_: Member, Operator, End user
 
 ### Moving messages in and out

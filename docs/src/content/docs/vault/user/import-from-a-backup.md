@@ -3,19 +3,19 @@ title: Import from a backup
 description: Use the desktop app Import screen to read a phone backup and store it in the vault.
 ---
 
-**Import** is in the desktop app sidebar after you sign in. It is not shown in the browser-only UI. Pick a backup source, point at the file or folder, and start the run. The app extracts from that backup and pushes into the vault in one flow.
+**Import** is in the desktop app sidebar after you log in. It is not shown in the browser-only UI. Pick a backup source, point at the file or folder, and start the run. The app extracts from that backup and pushes into the vault in one flow.
 
 JSONL (JSON Lines) folders on disk are a command-line task: [Extract to files](/vault/user/how-to/extract-to-files/).
 
 ## Before you start
 
 - A vault that is running — [Try the vault](/vault/user/get-started/try-the-vault/)
-- The desktop app signed in as **your** account (not `demo`), server URL such as `http://localhost:8080`
+- The desktop app logged in as **your** account (not `demo`), server URL such as `http://localhost:8080`
 - A prepared backup — [Prepare a backup](/vault/user/prepare-a-backup/)
 
 ## Run Import
 
-1. Sign in to the vault in the desktop app
+1. Log in to the vault in the desktop app
 2. Open **Import** in the sidebar
 3. Choose a **source** that matches the backup:
 
@@ -95,4 +95,4 @@ Turn force reprocessing on when a previous run left messages without attachments
 
 The finished run leads with where to go next: **Conversations this import added** opens the conversation list narrowed to the run (`import:#` followed by the run's number), and **Contacts it touched** opens the Contact Group the vault made for the run. The run's record, with the same contact list, stays under **Settings → Storage → Import history**. See [Browse your messages](/vault/user/browse-your-messages/).
 
-API tokens under **Settings → Account** are for programs that call the vault's [HTTP API](/vault/developer/reference/api/), not for this screen. Desktop Import uses the signed-in session.
+API tokens under **Settings → Account** are for programs that call the vault's [HTTP API](/vault/developer/reference/api/), not for this screen. Desktop Import uses the logged-in session.

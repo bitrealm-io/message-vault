@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use super::*;
 use crate::test_support::{
     claim_vault_as_owner, get_json, get_status, patch_status, post_json, post_status,
-    post_status_signed_out, register_via_api, test_vault,
+    post_status_logged_out, register_via_api, test_vault,
 };
 
 /// Turn public registration off, the way a real vault ships.
@@ -59,7 +59,7 @@ async fn a_claimed_vault_with_registration_on_is_open() {
     assert_eq!(body.state, VaultState::Open);
 }
 
-/// The route reports the vault's state to anyone, signed in or not. The
+/// The route reports the vault's state to anyone, logged in or not. The
 /// Create Vault Owner screen has no credential to present.
 #[tokio::test]
 async fn the_state_route_needs_no_credential() {
@@ -75,7 +75,7 @@ async fn the_state_route_needs_no_credential() {
 }
 
 /// The vault says which code it runs and which schema it carries to anyone:
-/// an app has to read both before anybody is signed in, and neither is secret.
+/// an app has to read both before anybody is logged in, and neither is secret.
 #[tokio::test]
 async fn the_state_route_carries_the_build_and_the_schema_fingerprint() {
     let vault = test_vault().await;
@@ -188,7 +188,7 @@ async fn registration_is_refused_while_the_vault_is_closed() {
     let state = vault.state.clone();
     close_registration(&state).await;
 
-    let status = post_status_signed_out(
+    let status = post_status_logged_out(
         &state,
         "/v1/accounts",
         serde_json::json!({ "username": "stranger", "password": "hunter2hunter2" }),
@@ -210,7 +210,7 @@ async fn the_owner_can_open_and_close_registration() {
     assert!(!settings.public_registration);
 
     assert_eq!(
-        post_status_signed_out(
+        post_status_logged_out(
             &state,
             "/v1/accounts",
             serde_json::json!({ "username": "stranger", "password": "hunter2hunter2" }),

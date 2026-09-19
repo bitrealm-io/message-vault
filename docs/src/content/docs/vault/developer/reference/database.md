@@ -68,7 +68,7 @@ derived (converted) paths for the browser. Reactions record `sender_handle_id`
 
 ### `accounts` / `account_emails` / `account_handles` / `account_session_tokens` / `account_api_tokens`
 
-Web accounts sign in with **user ID** (`username`) and optional password.
+Web accounts log in with **user ID** (`username`) and optional password.
 `preferred_name` is the display name. `account_handles` (and optional
 `account_emails`) are handles used to recognize “you” in messages — emails are
 never used for login. GUI **session** tokens live in `account_session_tokens` (one

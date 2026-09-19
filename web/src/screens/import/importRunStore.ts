@@ -109,7 +109,7 @@ function createImportRunStore(initial: ImportRunState) {
   };
 }
 
-/** The one store. There is one Import Run per account, and one account signed in. */
+/** The one store. There is one Import Run per account, and one account logged in. */
 export const importRunStore = createImportRunStore(initialImportRunState([]));
 
 /** The run as it stands, re-rendering the caller whenever any of it changes. */

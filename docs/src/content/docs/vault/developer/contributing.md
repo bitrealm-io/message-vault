@@ -83,7 +83,7 @@ When forking, you only need the default `main` branch.
 
 ## Build and run
 
-You run two processes at the same time: the vault, and a UI that talks to it. The vault is the HTTP API and the SQLite database; it has to be running before anyone can sign in.
+You run two processes at the same time: the vault, and a UI that talks to it. The vault is the HTTP API and the SQLite database; it has to be running before anyone can log in.
 
 Work from the repository root in two terminals. The first server compile takes several minutes.
 
@@ -120,7 +120,7 @@ Same flags as the SQLite script, against the compose Postgres on
 ./scripts/run-vault-pg-dev.sh --reset-demo
 ```
 
-Sign in as username `demo` with an empty password, or as `admin` with the
+Log in as username `demo` with an empty password, or as `admin` with the
 password `admin` to manage accounts. `--reset` wipes the
 Postgres volume and `data/` and starts empty. A run with no flags keeps
 the volume. Stopping the script (Ctrl+C) stops the Postgres container
@@ -135,7 +135,7 @@ Install the frontend packages once, then start the Vite UI. Vite is the local we
 cd web && npm ci && npm run dev
 ```
 
-Open **http://localhost:5173**. Sign in as username `demo` with an empty password. That account holds invented messages and can do everything a real account can, so import and other writes are testable on it; `./scripts/run-vault-dev.sh --reset-demo` puts it back. Signing in as `admin` with the password `admin` reaches the same vault as its owner, which manages accounts and reads no messages.
+Open **http://localhost:5173**. Log in as username `demo` with an empty password. That account holds invented messages and can do everything a real account can, so import and other writes are testable on it; `./scripts/run-vault-dev.sh --reset-demo` puts it back. Logging in as `admin` with the password `admin` reaches the same vault as its owner, which manages accounts and reads no messages.
 
 Later sessions, skip `npm ci` unless `web/package-lock.json` changed.
 

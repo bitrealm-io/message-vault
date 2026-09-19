@@ -168,7 +168,7 @@ First `cargo build --workspace` and first `cargo tauri dev` each take several mi
 
 ### Run the vault (development)
 
-Work from the repository root. The vault process must be running before the website or desktop app can sign in. First compile of the server and of Tauri each take several minutes.
+Work from the repository root. The vault process must be running before the website or desktop app can log in. First compile of the server and of Tauri each take several minutes.
 
 **Terminal 1 — vault API** (leave this running)
 
@@ -183,7 +183,7 @@ Work from the repository root. The vault process must be running before the webs
 
 `--reset` and `--reset-demo` cannot be combined, and `--owner` is rejected with `--reset-demo`, which claims the vault itself. `--help` on either dev script lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
 
-API: **http://127.0.0.1:8080**. After `--reset-demo`, sign in as username `demo` with an empty password. After `--owner`, sign in as `admin` / `admin`. Otherwise create the vault owner in the UI.
+API: **http://127.0.0.1:8080**. After `--reset-demo`, log in as username `demo` with an empty password. After `--owner`, log in as `admin` / `admin`. Otherwise create the vault owner in the UI.
 
 Restart terminal 1 after edits under `crates/vault/server/` (debug `cargo run`; no hot reload).
 
@@ -191,7 +191,7 @@ Restart terminal 1 after edits under `crates/vault/server/` (debug `cargo run`; 
 compose Postgres, runs this checkout's vault with `--db-url
 postgres://vault:vault@127.0.0.1:5432/vault`, and stops the container
 on exit. `--reset` / `--reset-demo` wipe the `vault_pg_data` volume and
-host `data/`. After `--reset-demo`, sign in as `demo` with an empty
+host `data/`. After `--reset-demo`, log in as `demo` with an empty
 password. Pass `--release` to seed and serve with the optimized binary
 (first compile can take several minutes). Do not run this and
 `./scripts/run-vault-dev.sh` at once (both serve on 127.0.0.1:8080).

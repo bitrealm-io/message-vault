@@ -46,7 +46,7 @@ export default function LoginScreen() {
   const [address, setAddress] = useState(() => initialLoginServerUrl(savedUrl, isTauri()));
   const [draft, setDraft] = useState(address);
   const [state, setState] = useState<VaultConnection>("connecting");
-  // Sticky once true: once the sign-in form has been shown, keep showing it
+  // Sticky once true: once the login form has been shown, keep showing it
   // (dimmed while disconnected) instead of reverting to the skeleton.
   const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);

@@ -11,4 +11,4 @@ editUrl: false
 | Status | `401 Unauthorized` |
 | Type | `https://bitrealm.io/vault/developer/reference/errors/authentication-required` |
 
-The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. Sign in again, or issue a new API token, and send the new token.
+The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. Log in again, or issue a new API token, and send the new token.

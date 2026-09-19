@@ -37,9 +37,9 @@ The desktop app reads SMS, iMessage, and attachments. For an iPhone backup it us
 
 ## Known limitations
 
-- You need the device or a Mac with Messages signed in. There is no cloud access.
+- You need the device or a Mac with Messages logged in. There is no cloud access.
 - Android XML cannot store Apple-only fields like message effects and Tapbacks. That matters only if you later [convert](/vault/user/how-to/convert-formats/) to XML.
 
 ## Next step
 
-Open the desktop app, sign in to the vault, and go to **Import**. Choose **iMessage**, then the **Platform** that matches the files. See [Import from a backup](/vault/user/import-from-a-backup/).
+Open the desktop app, log in to the vault, and go to **Import**. Choose **iMessage**, then the **Platform** that matches the files. See [Import from a backup](/vault/user/import-from-a-backup/).

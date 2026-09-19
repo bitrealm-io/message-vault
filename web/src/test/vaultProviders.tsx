@@ -2,7 +2,7 @@
  * Render a component that fetches vault data.
  *
  * Anything using `useVaultQuery` needs two things from the tree: a query client
- * to cache into, and a signed-in account to name the cache entry after. This
+ * to cache into, and a logged-in account to name the cache entry after. This
  * supplies the first. The second comes from `useAuth`, which tests fake in the
  * usual way — see `mockedAuth` below for the shape.
  *

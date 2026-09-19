@@ -51,16 +51,16 @@ function AppRoutes() {
   const { needsSetup: needsOnboarding } = useNeedsProfileSetup();
   useMouseHistoryNavigation();
 
-  // Where a signed-in visitor to the login screen should go next. Same order
+  // Where a logged-in visitor to the login screen should go next. Same order
   // the AuthGuard uses.
-  const signedInDestination = (
+  const loggedInDestination = (
     <Navigate to={isOwner ? "/owner" : needsOnboarding ? "/onboarding" : "/"} replace />
   );
 
   return (
     <Routes>
       {/* Public routes — redirect to / if already authenticated */}
-      <Route path="/login" element={isAuthenticated ? signedInDestination : <LoginScreen />} />
+      <Route path="/login" element={isAuthenticated ? loggedInDestination : <LoginScreen />} />
       {/* Registration is now the second tab of the login card, not its own screen. */}
       <Route path="/register" element={<Navigate to="/login" replace />} />
       {/* Owner Home, outside the AuthGuard's message shell: the owner holds

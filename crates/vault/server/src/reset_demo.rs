@@ -950,7 +950,7 @@ async fn seed_demo_account(target: DbTarget<'_>, account_id: i64, seed: &DemoSee
     pool.close().await;
     Ok(())
 }
-/// Credentials the demo vault's owner signs in with. A demo vault is
+/// Credentials the demo vault's owner logs in with. A demo vault is
 /// throwaway, so these are the obvious pair rather than a secret; they exist
 /// only here, because the claim route and `create-owner` both run the
 /// password policy and `admin` is five characters.
@@ -961,7 +961,7 @@ const DEMO_OWNER_PASSWORD: &str = "admin";
 ///
 /// Without an owner, a seeded vault would be unclaimed and the entry screen
 /// would offer Create Vault Owner and no login at all — so the documented
-/// "sign in as `demo`" would reach a screen with nowhere to type it. The row
+/// "log in as `demo`" would reach a screen with nowhere to type it. The row
 /// is written directly, the way the demo account's own row is, which is what
 /// lets the password be shorter than the policy allows.
 async fn seed_demo_owner_on_conn(conn: &mut sqlx::AnyConnection) -> Result<()> {
@@ -983,7 +983,7 @@ async fn seed_demo_owner_on_conn(conn: &mut sqlx::AnyConnection) -> Result<()> {
     Ok(())
 }
 
-/// Create the demo account row and the profile fields the seed names, so the demo signs in without setup.
+/// Create the demo account row and the profile fields the seed names, so the demo logs in without setup.
 async fn seed_demo_account_on_conn(
     conn: &mut sqlx::AnyConnection,
     account_id: i64,

@@ -23,7 +23,7 @@ export default function LoginForm({
   const [showPassword, setShowPassword] = useState(false);
   const { busy, error, run } = useAsyncAction();
 
-  // A real submit, so the browser treats this as a sign-in: Enter in either
+  // A real submit, so the browser treats this as a login: Enter in either
   // field submits without a per-field key handler, and a password manager can
   // offer to fill the credentials and to save them afterwards.
   const submit = (event: FormEvent) => {
@@ -35,7 +35,7 @@ export default function LoginForm({
       }
       const url = serverUrl.trim();
       // Re-sync the API client with the address this form is showing, the
-      // same as `CreateAccountForm` — `connect()` on the sign-in card can
+      // same as `CreateAccountForm` — `connect()` on the login card can
       // leave the client pointed at a bad host while the form still holds
       // the good address.
       setBaseUrl(url);

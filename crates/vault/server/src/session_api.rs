@@ -1,7 +1,7 @@
 //! The Session singleton: `POST`, `GET` and `DELETE /v1/session`.
 //!
-//! A Session is one per signed-in account or owner. Signing in creates it,
-//! reading it says which account the bearer token names, and signing out
+//! A Session is one per logged-in account or owner. Logging in creates it,
+//! reading it says which account the bearer token names, and logging out
 //! ends it. The password rules it applies live in `credentials`.
 
 use axum::extract::State;
@@ -47,7 +47,7 @@ impl SessionTokenResponse {
         account_id: i64,
     ) -> anyhow::Result<SessionTokenResponse> {
         let token = session_tokens::get_or_create_session_token(conn, account_id).await?;
-        account_profile::record_sign_in(conn, account_id).await?;
+        account_profile::record_login(conn, account_id).await?;
         let username = account_profile::username_for_account(conn, account_id)
             .await?
             .unwrap_or_else(|| account_id.to_string());
@@ -59,7 +59,7 @@ impl SessionTokenResponse {
     }
 }
 
-/// The signed-in credential's account, username, and import sources.
+/// The logged-in credential's account, username, and import sources.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct SessionResponse {
     sources: Vec<String>,
@@ -71,7 +71,7 @@ pub(crate) struct SessionResponse {
 
 /// The Session the bearer token names: its account, username, and import
 /// sources. A session token and an API token both answer, because a program
-/// checking its token needs the same facts as a browser restoring a sign-in.
+/// checking its token needs the same facts as a browser restoring a login.
 #[utoipa::path(
     get,
     path = "/v1/session",
@@ -110,7 +110,7 @@ async fn load_username(pool: &AnyPool, account_id: i64) -> Result<Option<String>
     Ok(account_profile::username_for_account(&mut conn, account_id).await?)
 }
 
-/// Sign in: verify a local username and password and answer the Session, a
+/// Log in: verify a local username and password and answer the Session, a
 /// `201 Created` whose `Location` is the singleton itself.
 #[utoipa::path(
     post,
@@ -120,7 +120,7 @@ async fn load_username(pool: &AnyPool, account_id: i64) -> Result<Option<String>
     responses(
         (
             status = 201,
-            description = "Signed in; the Session exists",
+            description = "Logged in; the Session exists",
             body = SessionTokenResponse,
             headers(("Location" = String, description = "`/v1/session`"))
         ),
@@ -183,14 +183,14 @@ async fn logout_on_conn(conn: &mut AnyConnection, token: &str) -> anyhow::Result
     Ok(())
 }
 
-/// Sign out: revoke the presented session token, ending the Session.
+/// Log out: revoke the presented session token, ending the Session.
 #[utoipa::path(
     delete,
     path = "/v1/session",
     tag = "Session",
     security(("session" = [])),
     responses(
-        (status = 204, description = "Signed out"),
+        (status = 204, description = "Logged out"),
         (status = 401, body = crate::problem::Problem)
     )
 )]

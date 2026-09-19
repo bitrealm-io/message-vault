@@ -66,9 +66,9 @@ of, and a search that reads the same everywhere.
   deleted. If you forget its password, `create-owner` and
   `reset-owner-password` on the server put you back in.
 - 2026-09-05: **New accounts are closed by default.** A vault admits nobody the
-  owner has not admitted, until the owner turns on public sign-up. An account
+  owner has not admitted, until the owner turns on public registration. An account
   the owner creates has to replace the owner's password the first time it
-  signs in, so the owner never keeps knowing it.
+  logs in, so the owner never keeps knowing it.
 - 2026-09-05: **Permanent delete, from the trash only.** Deleting a trashed
   conversation removes it, its messages, and any attachment no other message
   still uses. Deleting a trashed contact does what a phone does: the name and
@@ -118,14 +118,14 @@ of, and a search that reads the same everywhere.
 - 2026-09-05: A trashed contact is set aside rather than gone: an import that
   meets one of its numbers attaches to it and leaves it in the trash, and
   contact counts leave the trash out.
-- 2026-09-04: Only the newest connection check may speak for the sign-in card,
+- 2026-09-04: Only the newest connection check may speak for the login card,
   so a slow answer for an old address cannot overwrite a newer one.
 - 2026-09-03: Importing a file the vault cannot read explains what is wrong —
   which version the file is and which the vault reads, or which line is bad —
   instead of "internal server error".
 - 2026-08-30: Message Vault Settings no longer shows an address green when it
   has not tried it. An address typed but not tested reads **Not tested**.
-- 2026-08-30: The sign-in and profile-setup pages no longer show a scrollbar on
+- 2026-08-30: The login and profile-setup pages no longer show a scrollbar on
   a screen tall enough to hold the card, so opening a dropdown stops shifting
   the card sideways.
 - 2026-08-30: Profile setup refuses a phone number or address already in the
@@ -176,7 +176,7 @@ of, and a search that reads the same everywhere.
   moved to Settings, under the account button, which is also where Log out
   now is.
 - 2026-09-17: **The vault owner's screen is Owner Home, with a side panel.**
-  The owner lands on it at sign-in. Its side panel lists User Accounts first,
+  The owner lands on it at login. Its side panel lists User Accounts first,
   then Vault, Password and Appearance, in place of the tabs across the top.
   In User Accounts, an account's status is a dropdown (Active or Disabled)
   instead of an Enable/Disable button, and both Add account and Reset
@@ -184,7 +184,7 @@ of, and a search that reads the same everywhere.
   Resetting a password now does just that: the person's current session
   carries on, and they keep the new password until they change it themselves.
   The vault no longer makes anyone replace a password the owner chose at
-  their next sign-in.
+  their next login.
 - 2026-09-09: **An import brings back a contact you had trashed.** Until now
   an import that met the handle of a trashed contact attached to it and left
   it in Trash, so someone you set aside once never appeared in Contacts again
@@ -212,7 +212,7 @@ of, and a search that reads the same everywhere.
   curate alike, with no list left answering a bare array — every failure comes
   back in the same shape with a link to a page explaining that kind of failure,
   every created thing answers with its address, and every response carries an
-  id you can quote when reporting a problem. Signing in, and everything to do
+  id you can quote when reporting a problem. Logging in, and everything to do
   with accounts, each moved to one address serving everyone, with the vault
   deciding what a given caller may see rather than the address saying it. A
   single message can now be read by its id, so a search result links to the
@@ -282,7 +282,7 @@ of, and a search that reads the same everywhere.
 
 ### Features
 
-- A grey, green or red light beside the server address on the sign-in screen,
+- A grey, green or red light beside the server address on the login screen,
   so you can see whether the vault is reachable before trying to connect.
 - Settings → System applies changes to the import staging folder and the ffmpeg
   folder immediately, with no Save button, and reports whether ffmpeg was found.
@@ -304,9 +304,9 @@ of, and a search that reads the same everywhere.
 
 ### Design
 
-- Sign-in leads with Connect or Sign in. Extracting and converting files moved
-  off that screen; importing a backup after signing in is unchanged.
-- Closing the desktop window signs out, so the next launch asks you to sign in.
+- Login leads with Connect or Log in. Extracting and converting files moved
+  off that screen; importing a backup after logging in is unchanged.
+- Closing the desktop window logs out, so the next launch asks you to log in.
 - Pushing an import to the vault is considerably faster — larger batches, less
   repeated checking of files the vault already has, and more work overlapped.
 - The navigation panel is width-draggable, and the conversation list can shrink
@@ -337,7 +337,7 @@ of, and a search that reads the same everywhere.
 
 ## [0.7.0] - 2026-08-13
 
-The release where Message Vault became one product: a vault you sign in to and
+The release where Message Vault became one product: a vault you log in to and
 browse, rather than a set of tools that write files.
 
 ### Features
@@ -352,7 +352,7 @@ browse, rather than a set of tools that write files.
 - **Guided import** with a live progress summary, per-stage timings, contact
   name review, and an import that continues past a conversation it cannot read
   instead of stopping. A finished import is saved as a group you can go back to.
-- **Accounts and sign-in**, with profile setup, appearance themes, and a danger
+- **Accounts and login**, with profile setup, appearance themes, and a danger
   zone for deleting your messages or your account.
 - **API tokens** with scopes, for scripting against the vault.
 - A sample inbox you can try the vault with, seeded on first start.
@@ -387,7 +387,7 @@ browse, rather than a set of tools that write files.
 ### Fixes
 
 - Import logs stay responsive under heavy output.
-- Sign-in explains an insecure-to-secure address mismatch instead of failing
+- Login explains an insecure-to-secure address mismatch instead of failing
   obscurely.
 
 ## [0.5.0] - 2026-08-02

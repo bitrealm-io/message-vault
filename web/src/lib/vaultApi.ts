@@ -64,22 +64,22 @@ function accountPath(accountId: number): string {
 }
 
 /**
- * `/v1/accounts/{id}` for the signed-in account.
+ * `/v1/accounts/{id}` for the logged-in account.
  *
  * The vault has no `/v1/account` singleton: an account reads and writes its
  * own row in the same collection the owner manages, addressed by the id the
- * session carries. Signed out, there is no such row, and asking for one is a
+ * session carries. Logged out, there is no such row, and asking for one is a
  * bug in the caller rather than a request worth sending.
  */
 function ownAccountPath(): string {
   const id = getAccountId();
-  if (id === null) throw new Error("Not signed in");
+  if (id === null) throw new Error("Not logged in");
   return accountPath(id);
 }
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 
-/** Sign in. The Session is a singleton, so the vault answers `201` with `Location: /v1/session`. */
+/** Log in. The Session is a singleton, so the vault answers `201` with `Location: /v1/session`. */
 export function login(
   body: Schema["CreateSessionRequest"],
 ): Promise<Schema["SessionTokenResponse"]> {
@@ -91,7 +91,7 @@ export function getSession(opts?: VaultRequestOptions): Promise<Schema["SessionR
   return apiClient.get<Schema["SessionResponse"]>("/v1/session", opts);
 }
 
-/** Sign out: end the Session. The vault answers `204`. */
+/** Log out: end the Session. The vault answers `204`. */
 export function logout(opts?: VaultRequestOptions): Promise<void> {
   return apiClient.delete<void>("/v1/session", undefined, opts);
 }
@@ -99,7 +99,7 @@ export function logout(opts?: VaultRequestOptions): Promise<void> {
 // ── The vault itself ────────────────────────────────────────────────────────
 
 /**
- * What state this vault is in, for the screen a signed-out visitor sees.
+ * What state this vault is in, for the screen a logged-out visitor sees.
  *
  * The vault reports one value rather than the facts behind it, so the rule
  * joining "does an owner exist" to "is registration open" is stated once, on
@@ -120,7 +120,7 @@ export function claimVault(
 //
 // One collection for the vault owner and for each account: the owner reaches
 // every row, an account reaches its own. The functions Owner Home calls take
-// the account id; the ones Settings calls address the signed-in
+// the account id; the ones Settings calls address the logged-in
 // account through `ownAccountPath`.
 
 /** The accounts of this vault, for the owner: the owner's own first, then the rest by username. */
@@ -131,10 +131,10 @@ export function listAccounts(opts?: VaultRequestOptions): Promise<Schema["Page_A
 /**
  * Create an account.
  *
- * Signed out, on an open vault, this is registration: the vault opens a
- * Session on the new account and answers its `token`. Signed in as the owner,
+ * Logged out, on an open vault, this is registration: the vault opens a
+ * Session on the new account and answers its `token`. Logged in as the owner,
  * it creates an account whose holder must replace the password at first
- * sign-in, and no session is opened.
+ * login, and no session is opened.
  */
 export function createAccount(
   body: Schema["CreateAccountRequest"],
@@ -190,33 +190,33 @@ export function updateVaultSettings(
   return apiClient.patch<Schema["VaultSettingsResponse"]>("/v1/vault/settings", body);
 }
 
-// ── The signed-in account's own row ─────────────────────────────────────────
+// ── The logged-in account's own row ─────────────────────────────────────────
 
-/** The signed-in account: profile, flags, and how much it holds. */
+/** The logged-in account: profile, flags, and how much it holds. */
 export function getAccountProfile(opts?: VaultRequestOptions): Promise<Schema["AccountResponse"]> {
   return apiClient.get<Schema["AccountResponse"]>(ownAccountPath(), opts);
 }
 
-/** Change the signed-in account's display name, time zone or handles. */
+/** Change the logged-in account's display name, time zone or handles. */
 export function updateAccountProfile(
   body: Schema["PatchAccountRequest"],
 ): Promise<Schema["AccountResponse"]> {
   return apiClient.patch<Schema["AccountResponse"]>(ownAccountPath(), body);
 }
 
-/** Change the signed-in account's own password. The vault answers a rotated session token. */
+/** Change the logged-in account's own password. The vault answers a rotated session token. */
 export function changePassword(
   body: Schema["SetPasswordRequest"],
 ): Promise<Schema["SetPasswordResponse"]> {
   return apiClient.put<Schema["SetPasswordResponse"]>(`${ownAccountPath()}/password`, body);
 }
 
-/** Delete the signed-in account, confirming with its current password. */
+/** Delete the logged-in account, confirming with its current password. */
 export function deleteAccount(body: Schema["DeleteAccountRequest"]): Promise<void> {
   return apiClient.delete<void>(ownAccountPath(), body);
 }
 
-/** How much an account holds: the signed-in one, or as the owner the one named. */
+/** How much an account holds: the logged-in one, or as the owner the one named. */
 export function getAccountStorage(
   opts?: VaultRequestOptions,
   accountId?: number,
@@ -260,7 +260,7 @@ export function listAccountExports(
   return apiClient.get<Schema["Page_ExportRun"]>(`${accountBase(accountId)}/exports`, opts);
 }
 
-/** Destroy the signed-in account's messages and attachments. Contacts and the login survive. */
+/** Destroy the logged-in account's messages and attachments. Contacts and the login survive. */
 export function deleteAllMessages(
   body: Schema["DeleteMessagesRequest"],
 ): Promise<Schema["DeleteMessagesResponse"]> {

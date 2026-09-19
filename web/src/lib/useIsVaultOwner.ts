@@ -1,7 +1,7 @@
 import { useAccountProfile } from "./useAccountProfile";
 
 /**
- * Whether the signed-in principal is this vault's owner.
+ * Whether the logged-in principal is this vault's owner.
  *
  * A server fact, read from the profile. The owner has no vault of their own,
  * so every screen built around conversations is meaningless to them and the

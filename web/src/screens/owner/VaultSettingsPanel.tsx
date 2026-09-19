@@ -39,7 +39,7 @@ export function VaultSettingsPanel() {
     <section>
       <h3 className="m-0 text-text">Settings</h3>
       <p className="mt-[0.35rem] text-[0.875rem] text-muted">
-        How this vault behaves, whoever is signed in.
+        How this vault behaves, whoever is logged in.
       </p>
 
       <div className="mt-4 rounded-xl border border-border bg-elevated p-4">
@@ -51,8 +51,8 @@ export function VaultSettingsPanel() {
           Let anyone reaching this vault create their own account
         </Checkbox>
         <p className="mt-2 text-[0.75rem] text-muted">
-          Off: you create every account yourself, and the sign-in screen offers only Login. On: the
-          sign-in screen also offers Create Account.
+          Off: you create every account yourself, and the login screen offers only Login. On: the
+          login screen also offers Create Account.
         </p>
         {save.error ? (
           <p className="mt-2 text-[0.813rem] text-danger" role="alert">

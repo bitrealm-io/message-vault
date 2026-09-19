@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extendCheckedRange } from "./rangeCheck";
+import { applyCheckedRange } from "./rangeCheck";
 
 const ids = ["a", "b", "c", "d", "e", "f", "g"];
 
@@ -7,32 +7,36 @@ function sorted(set: Set<string>): string[] {
   return [...set].sort();
 }
 
-describe("extendCheckedRange", () => {
-  it("checks from the bottommost checked row up to a shift-click above the topmost", () => {
-    const next = extendCheckedRange(ids, new Set(["d", "f"]), "b");
-    expect(sorted(next)).toEqual(["b", "c", "d", "e", "f"]);
+describe("applyCheckedRange", () => {
+  it("checks from the last clicked row down to the shift-click", () => {
+    const next = applyCheckedRange(ids, new Set(["b"]), "b", "e", true);
+    expect(sorted(next)).toEqual(["b", "c", "d", "e"]);
   });
 
-  it("checks from the topmost checked row down to a shift-click below the bottommost", () => {
-    const next = extendCheckedRange(ids, new Set(["b", "d"]), "g");
-    expect(sorted(next)).toEqual(["b", "c", "d", "e", "f", "g"]);
+  it("checks from the last clicked row up to the shift-click", () => {
+    const next = applyCheckedRange(ids, new Set(["f"]), "f", "c", true);
+    expect(sorted(next)).toEqual(["c", "d", "e", "f"]);
   });
 
-  it("fills the gaps when the shift-click lands between checked rows", () => {
-    const next = extendCheckedRange(ids, new Set(["b", "f"]), "d");
-    expect(sorted(next)).toEqual(["b", "c", "d", "e", "f"]);
+  it("leaves checked rows outside the range alone", () => {
+    const next = applyCheckedRange(ids, new Set(["a", "e"]), "e", "g", true);
+    expect(sorted(next)).toEqual(["a", "e", "f", "g"]);
   });
 
-  it("checks only the clicked row when nothing is checked yet", () => {
-    expect(sorted(extendCheckedRange(ids, new Set(), "c"))).toEqual(["c"]);
+  it("unchecks the range when the shift-clicked row lands unchecked", () => {
+    const next = applyCheckedRange(ids, new Set(["b", "c", "d", "e", "f"]), "e", "c", false);
+    expect(sorted(next)).toEqual(["b", "f"]);
   });
 
-  it("keeps checked ids that are not in the list", () => {
-    const next = extendCheckedRange(ids, new Set(["zz", "c"]), "a");
-    expect(sorted(next)).toEqual(["a", "b", "c", "zz"]);
+  it("changes only the clicked row when there is no anchor", () => {
+    expect(sorted(applyCheckedRange(ids, new Set(["a"]), null, "c", true))).toEqual(["a", "c"]);
+  });
+
+  it("changes only the clicked row when the anchor is no longer in the list", () => {
+    expect(sorted(applyCheckedRange(ids, new Set(["zz"]), "zz", "c", true))).toEqual(["c", "zz"]);
   });
 
   it("returns the set unchanged when the clicked id is not in the list", () => {
-    expect(sorted(extendCheckedRange(ids, new Set(["c"]), "zz"))).toEqual(["c"]);
+    expect(sorted(applyCheckedRange(ids, new Set(["c"]), "c", "zz", true))).toEqual(["c"]);
   });
 });

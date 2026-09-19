@@ -144,17 +144,21 @@ describe("ContactList", () => {
     const checkedNames = () => names.filter((name) => (box(name) as HTMLInputElement).checked);
 
     await screen.findByRole("checkbox", { name: "Select Erin" });
-    fireEvent.click(box("Carol"));
-    fireEvent.click(box("Dave"));
-    await waitFor(() => expect(checkedNames()).toEqual(["Carol", "Dave"]));
-
-    // Above the topmost checked row: reaches down to the bottommost one.
-    fireEvent.click(box("Alice"), { shiftKey: true });
-    await waitFor(() => expect(checkedNames()).toEqual(["Alice", "Bob", "Carol", "Dave"]));
-
-    // Below the bottommost checked row: reaches up to the topmost one.
     fireEvent.click(box("Bob"));
+    await waitFor(() => expect(checkedNames()).toEqual(["Bob"]));
+
+    // Checks from the last clicked row to the shift-clicked one.
     fireEvent.click(box("Erin"), { shiftKey: true });
-    await waitFor(() => expect(checkedNames()).toEqual(names));
+    await waitFor(() => expect(checkedNames()).toEqual(["Bob", "Carol", "Dave", "Erin"]));
+
+    // Unchecks the same way: uncheck one end, shift-click the other.
+    fireEvent.click(box("Dave"));
+    fireEvent.click(box("Carol"), { shiftKey: true });
+    await waitFor(() => expect(checkedNames()).toEqual(["Bob", "Erin"]));
+
+    // The range starts at the last clicked row (Carol), not at the furthest
+    // checked one (Erin), so Dave stays unchecked.
+    fireEvent.click(box("Alice"), { shiftKey: true });
+    await waitFor(() => expect(checkedNames()).toEqual(["Alice", "Bob", "Carol", "Erin"]));
   });
 });

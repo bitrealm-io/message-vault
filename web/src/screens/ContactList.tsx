@@ -23,7 +23,7 @@ import {
 import { highlightText } from "../lib/highlightText";
 import { PAGE_SIZE_CONTACTS_FIRST, PAGE_SIZE_FIRST } from "../lib/listPaging";
 import { checksFromMembers } from "../lib/membershipChecks";
-import { extendCheckedRange } from "../lib/rangeCheck";
+import { applyCheckedRange } from "../lib/rangeCheck";
 import { hasFieldToken, stripFieldTokens } from "../lib/searchFields";
 import { useContactGroups } from "../lib/useContactGroups";
 import { listContacts } from "../lib/vaultApi";
@@ -127,6 +127,8 @@ export default function ContactList({
   const assignTargetsRef = useRef<Contact[]>([]);
   /** Ignores the row click that follows a checkbox press (nested control). */
   const skipRowSelectRef = useRef(false);
+  /** The last row checked or unchecked by hand: where a Shift + click range starts. */
+  const rangeAnchorRef = useRef<string | null>(null);
   const catalogCompleteRef = useRef(false);
   /** Unfiltered contact list, so group clicks can filter in the browser. */
   const fullCatalogRef = useRef<Contact[] | null>(null);
@@ -177,11 +179,13 @@ export default function ContactList({
   useEffect(() => {
     void filter;
     void groupFilter;
+    rangeAnchorRef.current = null;
     setCheckedIds(new Set());
   }, [filter, groupFilter]);
 
   useEffect(() => {
     if (clearCheckedRev === 0) return;
+    rangeAnchorRef.current = null;
     setCheckedIds(new Set());
   }, [clearCheckedRev]);
 
@@ -282,6 +286,7 @@ export default function ContactList({
   }, [onCheckedChange]);
 
   const toggleChecked = (id: string) => {
+    rangeAnchorRef.current = id;
     setCheckedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -289,13 +294,17 @@ export default function ContactList({
       return next;
     });
   };
-  /** Shift + click: check every row between the clicked one and the furthest checked one. */
-  const checkRangeTo = (id: string) => {
+  /** Shift + click: every row from the last clicked one to this one takes this box's new state. */
+  const setRangeChecked = (id: string, on: boolean) => {
+    const anchor = rangeAnchorRef.current;
+    rangeAnchorRef.current = id;
     setCheckedIds((prev) =>
-      extendCheckedRange(
+      applyCheckedRange(
         displayContacts.map((c) => c.id),
         prev,
+        anchor,
         id,
+        on,
       ),
     );
   };
@@ -418,6 +427,7 @@ export default function ContactList({
       selectAllChecked={selectAllChecked}
       selectAllIndeterminate={selectAllIndeterminate}
       onSelectAllChange={(on) => {
+        rangeAnchorRef.current = null;
         startTransition(() => {
           setCheckedIds(on ? new Set(displayContacts.map((c) => c.id)) : new Set());
         });
@@ -482,9 +492,9 @@ export default function ContactList({
               id={checkId}
               checked={checked}
               aria-label={`Select ${c.name}`}
-              onChange={(_, e) => {
+              onChange={(on, e) => {
                 // A checkbox change is a click underneath, so the Shift key is on it.
-                if ((e.nativeEvent as MouseEvent).shiftKey) checkRangeTo(c.id);
+                if ((e.nativeEvent as MouseEvent).shiftKey) setRangeChecked(c.id, on);
                 else toggleChecked(c.id);
               }}
               className={`absolute ${

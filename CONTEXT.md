@@ -246,8 +246,9 @@ internal name of the desktop command that reads a backup during Import.
 
 **Product Version**:
 The number a release of Message Vault is named by, such as `0.9.0`. The
-vault, the desktop app and the website carry the same one, and it is the only
-value a vault compares when it refuses an app built for a different release.
+vault, the desktop app and the website carry the same one. An app whose
+Product Version differs from its vault's is flagged to the person and to the
+vault owner, and is served all the same.
 _Avoid_: Release, Release number, App version
 
 **Build**:

@@ -6,7 +6,7 @@ export const ATTACHMENT_PAGE_SIZE = 20;
 
 export const sectionTitle = "m-0 text-[0.938rem] font-semibold text-text";
 export const sectionHint = "mt-1 text-[0.813rem] text-muted";
-export const tableWrap = "overflow-x-auto rounded-lg border border-border";
+export const tableCard = "overflow-hidden rounded-lg";
 export const thStyle =
   "border-b border-border bg-elevated p-2 px-3 text-left text-[0.813rem] font-medium text-muted";
 export const tdStyle = "border-b border-border p-2 px-3 text-[0.813rem] text-text";

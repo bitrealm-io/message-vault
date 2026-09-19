@@ -1,3 +1,4 @@
+import ScrollingTableCard from "../../../components/ScrollingTableCard";
 import type { ExportRow } from "./storageUtils";
 import {
   describeExportScope,
@@ -5,7 +6,7 @@ import {
   formatImportDate,
   sectionHint,
   sectionTitle,
-  tableWrap,
+  tableCard,
   tdStyle,
   thStyle,
 } from "./storageUtils";
@@ -39,7 +40,7 @@ export default function ExportHistoryTable({ exports }: { exports: ExportRow[] }
       {exports.length === 0 ? (
         <p className={`${sectionHint} mt-3`}>No exports recorded yet.</p>
       ) : (
-        <div className={`${tableWrap} mt-3`}>
+        <ScrollingTableCard className="mt-3" cardClassName={tableCard}>
           <table className="w-full border-collapse">
             <thead>
               <tr>
@@ -74,7 +75,7 @@ export default function ExportHistoryTable({ exports }: { exports: ExportRow[] }
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollingTableCard>
       )}
     </section>
   );

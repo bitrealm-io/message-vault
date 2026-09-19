@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
+import ScrollingTableCard from "../../components/ScrollingTableCard";
 import TextField from "../../components/TextField";
 import { productVersionOf, productVersionsDiffer } from "../../lib/buildFormat";
 import { formatDateTime } from "../../lib/formatDate";
@@ -196,61 +197,56 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
         </div>
       )}
 
-      {/* The scroller is a plain box and the rounded card sits inside it.
-          A scroller with rounded corners of its own makes the desktop app
-          draw the table's text thinner once the table overflows. */}
-      <div className="mt-4 overflow-x-auto">
-        <div className="w-max min-w-full rounded-xl border border-border bg-elevated">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <th className={thClass}>Account</th>
-                <th className={thClass}>Status</th>
-                <th className={thClass}>Last sign-in</th>
-                <th className={thClass}>App</th>
-                <th className={thClass}>Messages</th>
-                <th className={thClass}>Storage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((account) => {
-                const preferredName = account.preferred_name?.trim() ?? "";
-                return (
-                  <tr key={account.account_id} className="border-t border-border">
-                    <td className={`${tdClass} whitespace-nowrap`}>
-                      <button
-                        type="button"
-                        aria-label={`Settings for ${account.username}`}
-                        onClick={() => navigate(`/owner/accounts/${account.account_id}`)}
-                        className="cursor-pointer border-none bg-transparent p-0 text-left text-[inherit] font-semibold text-accent hover:underline"
-                      >
-                        {account.username}
-                      </button>
-                      {preferredName ? (
-                        <div className="text-[0.75rem] text-muted">{preferredName}</div>
-                      ) : null}
-                    </td>
-                    <td className={account.disabled ? tdClass : tdMuted}>{statusLabel(account)}</td>
-                    <td className={`${tdMuted} whitespace-nowrap`}>
-                      {account.last_sign_in_at ? formatDateTime(account.last_sign_in_at) : "Never"}
-                    </td>
-                    <AppCell account={account} vaultVersion={vaultVersion} />
-                    <td className={tdMuted}>{account.message_count.toLocaleString()}</td>
-                    <td className={tdMuted}>{formatBytes(account.storage_bytes)}</td>
-                  </tr>
-                );
-              })}
-              {shown.length === 0 && needle ? (
-                <tr className="border-t border-border">
-                  <td className={tdMuted} colSpan={COLUMN_COUNT}>
-                    No account matches “{filter.trim()}”.
+      <ScrollingTableCard className="mt-4" cardClassName="rounded-xl bg-elevated">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr>
+              <th className={thClass}>Account</th>
+              <th className={thClass}>Status</th>
+              <th className={thClass}>Last sign-in</th>
+              <th className={thClass}>App</th>
+              <th className={thClass}>Messages</th>
+              <th className={thClass}>Storage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((account) => {
+              const preferredName = account.preferred_name?.trim() ?? "";
+              return (
+                <tr key={account.account_id} className="border-t border-border">
+                  <td className={`${tdClass} whitespace-nowrap`}>
+                    <button
+                      type="button"
+                      aria-label={`Settings for ${account.username}`}
+                      onClick={() => navigate(`/owner/accounts/${account.account_id}`)}
+                      className="cursor-pointer border-none bg-transparent p-0 text-left text-[inherit] font-semibold text-accent hover:underline"
+                    >
+                      {account.username}
+                    </button>
+                    {preferredName ? (
+                      <div className="text-[0.75rem] text-muted">{preferredName}</div>
+                    ) : null}
                   </td>
+                  <td className={account.disabled ? tdClass : tdMuted}>{statusLabel(account)}</td>
+                  <td className={`${tdMuted} whitespace-nowrap`}>
+                    {account.last_sign_in_at ? formatDateTime(account.last_sign_in_at) : "Never"}
+                  </td>
+                  <AppCell account={account} vaultVersion={vaultVersion} />
+                  <td className={tdMuted}>{account.message_count.toLocaleString()}</td>
+                  <td className={tdMuted}>{formatBytes(account.storage_bytes)}</td>
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              );
+            })}
+            {shown.length === 0 && needle ? (
+              <tr className="border-t border-border">
+                <td className={tdMuted} colSpan={COLUMN_COUNT}>
+                  No account matches “{filter.trim()}”.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </ScrollingTableCard>
     </section>
   );
 }

@@ -22,7 +22,10 @@ export default function ScrollingTableCard({
 }: ScrollingTableCardProps) {
   return (
     <div className={`overflow-x-auto ${className}`}>
-      <div className={`w-max min-w-full border border-border ${cardClassName}`}>{children}</div>
+      {/* box-border: the borders count inside min-w-full, or the card is always 2px too wide. */}
+      <div className={`box-border w-max min-w-full border border-border ${cardClassName}`}>
+        {children}
+      </div>
     </div>
   );
 }

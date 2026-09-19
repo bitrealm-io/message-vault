@@ -86,7 +86,7 @@ export default function OwnerHome() {
               onClick={() => void logout()}
               className="cursor-pointer rounded border border-border bg-transparent px-3 py-1.5 text-[0.813rem] text-muted transition-colors hover:text-text"
             >
-              Sign out
+              Log out
             </button>
           </header>
 

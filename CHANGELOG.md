@@ -24,20 +24,27 @@ of, and a search that reads the same everywhere.
 
 ### Features
 
+- 2026-09-19: **The vault owner sees an account's Storage as its holder
+  does.** Open an account from User Accounts and its Storage tab now shows its
+  message count and storage total, every import and export it has run, and
+  its largest attachments by name and size. Opening an import shows its
+  counts, timings and issues, and how many contacts it created and changed;
+  who those contacts are stays with the account. The account's Profile tab
+  shows when it last logged in and which app it connects with.
 - 2026-09-19: **Every screen can tell you which version it is.** Settings →
   System shows the version of the app you are using, in the browser and in the
-  desktop app. The vault owner's Vault Settings shows the vault's version and
-  its schema fingerprint, and User Accounts gains an App column: which app
-  each account connects with, the desktop app or the website, and its version.
+  desktop app. The vault owner's Settings shows the vault's version and
+  its schema fingerprint, and an account's Profile tab shows the owner which app
+  the account connects with, the desktop app or the website, and its version.
   A build between two releases carries the commit it came from, such as
   `0.9.0+343fe0d8`, so two dev builds can be told apart. When an app and its
   vault come from different releases, the app says so in a line under the
-  header, "This vault is 0.10.0. This app is 0.9.0.", and the owner sees that
-  account's row marked. Nothing is blocked: the vault serves every app
+  header, "This vault is 0.10.0. This app is 0.9.0.", and the owner sees it
+  marked on that account's Profile. Nothing is blocked: the vault serves every app
   whatever its version.
-- 2026-09-17: **User Accounts shows when each account last signed in.** A
-  Last sign-in column next to Status, in your own time zone, or "Never" for
-  an account nobody has signed in to yet. Signing in, claiming the vault and
+- 2026-09-17: **User Accounts shows when each account last logged in.** A
+  Last login column next to Status, in your own time zone, or "Never" for
+  an account nobody has logged in to yet. Logging in, claiming the vault and
   registering all count; a password change does not.
 - 2026-09-09: **Import is one screen that fills in as the run goes.** The
   form collapses into "what you asked for" once the run starts, each of the
@@ -131,6 +138,12 @@ of, and a search that reads the same everywhere.
 
 ### Design
 
+- 2026-09-19: **Owner Home has room to grow.** The side panel reads
+  Dashboard, Settings, User Accounts, Activity and Logs. Settings is what was
+  Vault Settings; Dashboard, Activity and Logs are named and empty for now.
+  User Accounts is down to who, their status and their last login: the app, the
+  message count and the storage total moved into the account's own Profile and
+  Storage tabs.
 - 2026-09-19: **Settings, Account shows an account's status and
   permissions.** Permissions lists Import messages, Export messages, and
   Delete messages and attachments. You can see what your account may do; the

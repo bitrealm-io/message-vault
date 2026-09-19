@@ -106,6 +106,9 @@ const EXERCISED: Record<string, () => unknown> = {
   deleteAccount: () =>
     vaultApi.deleteAccount({ confirm: true, current_password: "hunter2hunter2" }),
   getAccountStorage: () => vaultApi.getAccountStorage(),
+  listAccountImports: () => vaultApi.listAccountImports(undefined, 3),
+  getAccountImport: () => vaultApi.getAccountImport(2, undefined, 3),
+  listAccountExports: () => vaultApi.listAccountExports(),
   deleteAllMessages: () => vaultApi.deleteAllMessages({ confirm: true }),
 
   // API tokens
@@ -166,7 +169,6 @@ const EXERCISED: Record<string, () => unknown> = {
   listSearchFields: () => vaultApi.listSearchFields("contacts"),
 
   // Exports
-  listExports: () => vaultApi.listExports(),
   getExport: () => vaultApi.getExport(2),
   createExport: () => vaultApi.createExport({ scope: { kind: "everything" }, tool: "vault-pull" }),
   completeExport: () => vaultApi.completeExport(2),

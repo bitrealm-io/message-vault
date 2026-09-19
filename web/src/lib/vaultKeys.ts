@@ -69,6 +69,8 @@ export const keys = {
     /** One account the owner has opened. Under `all`, so a write to the list refreshes it too. */
     member: (accountId: number) => ["owner-accounts", accountId] as const,
     storage: (accountId: number) => ["owner-accounts", accountId, "storage"] as const,
+    importDetail: (accountId: number, id: number | null) =>
+      ["owner-accounts", accountId, "storage", "import", String(id)] as const,
   },
   vaultSettings: { all: ["vault-settings"] as const },
   /** The vault's own Build and Schema Fingerprint, from `GET /v1/vault`. */

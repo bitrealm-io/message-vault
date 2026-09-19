@@ -221,8 +221,43 @@ export function getAccountStorage(
   opts?: VaultRequestOptions,
   accountId?: number,
 ): Promise<Schema["AccountStorageResponse"]> {
-  const path = accountId === undefined ? ownAccountPath() : accountPath(accountId);
-  return apiClient.get<Schema["AccountStorageResponse"]>(`${path}/storage`, opts);
+  return apiClient.get<Schema["AccountStorageResponse"]>(`${accountBase(accountId)}/storage`, opts);
+}
+
+// An account's import and export history, for its Storage screen. These are
+// not `/v1/imports` and `/v1/exports`: those are the pipelines' own routes and
+// ask for a permission, which the vault owner's session never carries.
+
+function accountBase(accountId?: number): string {
+  return accountId === undefined ? ownAccountPath() : accountPath(accountId);
+}
+
+/** An account's Import Runs, newest first: the signed-in one, or as the owner the one named. */
+export function listAccountImports(
+  opts?: VaultRequestOptions,
+  accountId?: number,
+): Promise<Schema["Page_ImportSummary"]> {
+  return apiClient.get<Schema["Page_ImportSummary"]>(`${accountBase(accountId)}/imports`, opts);
+}
+
+/** One of an account's Import Runs, with its counts, timings and issues. */
+export function getAccountImport(
+  importId: number,
+  opts?: VaultRequestOptions,
+  accountId?: number,
+): Promise<Schema["ImportDetailResponse"]> {
+  return apiClient.get<Schema["ImportDetailResponse"]>(
+    `${accountBase(accountId)}/imports/${importId}`,
+    opts,
+  );
+}
+
+/** An account's Export Runs, newest first: the signed-in one, or as the owner the one named. */
+export function listAccountExports(
+  opts?: VaultRequestOptions,
+  accountId?: number,
+): Promise<Schema["Page_ExportRun"]> {
+  return apiClient.get<Schema["Page_ExportRun"]>(`${accountBase(accountId)}/exports`, opts);
 }
 
 /** Destroy the signed-in account's messages and attachments. Contacts and the login survive. */
@@ -665,21 +700,6 @@ export function getImportContacts(
 //
 // The desktop app pages a run's messages from its Rust side (`vault-pull`),
 // so `GET /v1/exports/{id}/messages` has no function here.
-
-/** The account's Export Runs, newest first, narrowed to one status when given. */
-export type ExportListParams = {
-  status?: "running" | "completed" | "failed" | "cancelled";
-  limit?: number;
-  offset?: number;
-  sort?: "started_at" | "-started_at";
-};
-
-export function listExports(
-  params: ExportListParams = {},
-  opts?: VaultRequestOptions,
-): Promise<Schema["Page_ExportRun"]> {
-  return apiClient.get<Schema["Page_ExportRun"]>(withQuery("/v1/exports", query(params)), opts);
-}
 
 export function getExport(id: number, opts?: VaultRequestOptions): Promise<Schema["ExportRun"]> {
   return apiClient.get<Schema["ExportRun"]>(`/v1/exports/${id}`, opts);

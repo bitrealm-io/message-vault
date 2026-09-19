@@ -20,10 +20,12 @@ export default function ImportHistoryTable({
   selectedImportSummary,
   selectedImportLoading,
   selectedImportError,
+  listContacts,
   onToggle,
   onCloseDetail,
 }: {
   imports: ImportRow[];
+  listContacts: boolean;
   selectedImportId: number | null;
   selectedImport: ImportDetailResponse | null;
   selectedImportSummary: ImportSummaryView | null;
@@ -94,6 +96,7 @@ export default function ImportHistoryTable({
                             selectedImportSummary={selectedImportSummary}
                             selectedImportLoading={selectedImportLoading}
                             selectedImportError={selectedImportError}
+                            listContacts={listContacts}
                             onClose={onCloseDetail}
                           />
                         </td>

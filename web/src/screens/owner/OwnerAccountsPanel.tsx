@@ -46,7 +46,7 @@ function confirmBody(target: ConfirmTarget): string {
  * account's messages is done on the strength of the number and the account
  * holder's word, not on inspection.
  */
-export function OwnerAccountsPanel() {
+export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
   const {
     accounts,
     loading,
@@ -81,6 +81,12 @@ export function OwnerAccountsPanel() {
 
   if (loading) return <p className="text-[0.875rem] text-muted">Loading accounts…</p>;
   if (loadError) return <p className="text-[0.875rem] text-danger">{loadError}</p>;
+
+  // The header search bar narrows the table by username.
+  const needle = filter.trim().toLowerCase();
+  const shown = needle
+    ? accounts.filter((a) => a.username.toLowerCase().includes(needle))
+    : accounts;
 
   const openConfirm = (target: ConfirmTarget) => {
     clearError();
@@ -199,7 +205,7 @@ export function OwnerAccountsPanel() {
             </tr>
           </thead>
           <tbody>
-            {accounts.map((account) => (
+            {shown.map((account) => (
               <tr key={account.account_id} className="border-t border-border">
                 <td className={tdClass}>{account.username}</td>
                 <td className={tdClass}>
@@ -281,6 +287,13 @@ export function OwnerAccountsPanel() {
                 </td>
               </tr>
             ))}
+            {shown.length === 0 && needle ? (
+              <tr className="border-t border-border">
+                <td className={tdMuted} colSpan={9}>
+                  No account matches “{filter.trim()}”.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>

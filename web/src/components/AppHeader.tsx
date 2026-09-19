@@ -14,7 +14,7 @@ import {
 import SearchBar from "./SearchBar";
 
 /** Which list the header search runs against. */
-export type HeaderSearchTarget = "contacts" | "messages" | "trash";
+export type HeaderSearchTarget = "accounts" | "contacts" | "messages" | "trash";
 
 /**
  * Every target uses the same bar; only the wording, the recents bucket, the
@@ -25,8 +25,20 @@ export type HeaderSearchTarget = "contacts" | "messages" | "trash";
  */
 const SEARCH_TARGETS: Record<
   HeaderSearchTarget,
-  { scope: SearchScope; list: SearchList; placeholder: string; advancedMode: AdvancedSearchMode }
+  {
+    scope: SearchScope;
+    list: SearchList | null;
+    placeholder: string;
+    advancedMode: AdvancedSearchMode | null;
+  }
 > = {
+  // Owner Home filters the accounts table by username: no search words, no advanced form.
+  accounts: {
+    scope: "account",
+    list: null,
+    placeholder: "Search accounts",
+    advancedMode: null,
+  },
   contacts: {
     scope: "contact",
     list: "contacts",
@@ -57,7 +69,7 @@ export default function AppHeader({
   searchQuery: string;
   searchTarget: HeaderSearchTarget;
   onSearchChange: (v: string) => void;
-  onSearch: (q: string, mode: AdvancedSearchMode) => void;
+  onSearch: (q: string) => void;
 }) {
   const target = SEARCH_TARGETS[searchTarget];
   // Same key as LeftPanel so a stored width does not flash at the default.

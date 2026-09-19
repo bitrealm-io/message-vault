@@ -32,7 +32,7 @@ export function VaultSettingsPanel() {
 
   return (
     <section>
-      <h3 className="m-0 text-text">Vault</h3>
+      <h3 className="m-0 text-text">Vault Settings</h3>
       <p className="mt-[0.35rem] text-[0.875rem] text-muted">
         How this vault behaves, whoever is signed in.
       </p>

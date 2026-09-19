@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { useAccountProfile } from "../lib/useAccountProfile";
+import { useIsVaultOwner } from "../lib/useIsVaultOwner";
 import { Z_POPOVER } from "../lib/zLayers";
 import { GearIcon, PersonIcon, SignOutIcon } from "./icons";
 import PopupMenu from "./PopupMenu";
@@ -20,7 +21,10 @@ export default function AppAccountMenu() {
   const location = useLocation();
   const { logout } = useAuth();
   const { profile } = useAccountProfile();
-  const settingsActive = location.pathname.startsWith("/settings");
+  // The owner's settings are a section of Owner Home; every other account has /settings.
+  const { isOwner } = useIsVaultOwner();
+  const settingsPath = isOwner ? "/owner/settings" : "/settings";
+  const settingsActive = location.pathname.startsWith(settingsPath);
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -66,7 +70,7 @@ export default function AppAccountMenu() {
         items={[
           {
             label: "Settings",
-            onSelect: () => navigate("/settings"),
+            onSelect: () => navigate(settingsPath),
             children: (
               <span className={`${itemRow} ${settingsActive ? "font-semibold" : ""}`}>
                 <GearIcon size={15} />

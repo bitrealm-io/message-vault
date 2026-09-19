@@ -1,20 +1,28 @@
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { useState } from "react";
+import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import AppHeader from "../components/AppHeader";
+import { loadWidth } from "../components/columnResize";
+import {
+  LEFT_PANEL_DEFAULT_WIDTH,
+  LEFT_PANEL_MAX_WIDTH,
+  LEFT_PANEL_MIN_WIDTH,
+  LEFT_PANEL_STORAGE_KEY,
+} from "../components/leftPanelWidth";
 import { NAV_LEADING_ROW_CLASS } from "../components/navSectionLayout";
-import { useAuth } from "../lib/auth";
 import { parseSelectKey } from "../lib/selectKey";
 import { OwnerAccountsPanel } from "./owner/OwnerAccountsPanel";
 import { VaultSettingsPanel } from "./owner/VaultSettingsPanel";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { ChangePasswordSection } from "./settings/ChangePasswordSection";
 
-const SECTIONS = ["accounts", "vault", "password", "appearance"] as const;
-type Section = (typeof SECTIONS)[number];
+/** What the side panel lists, in its order. */
+const NAV_SECTIONS = ["vault", "accounts"] as const;
+/** Settings is a section too, reached from the account button the way /settings is. */
+const SECTIONS = [...NAV_SECTIONS, "settings"] as const;
 
-const SECTION_LABELS: Record<Section, string> = {
+const SECTION_LABELS: Record<(typeof NAV_SECTIONS)[number], string> = {
+  vault: "Vault Settings",
   accounts: "User Accounts",
-  vault: "Vault",
-  password: "Password",
-  appearance: "Appearance",
 };
 
 function sectionLinkClass(active: boolean): string {
@@ -27,20 +35,31 @@ function sectionLinkClass(active: boolean): string {
  * Owner Home: where the vault owner lands at sign-in and works from, the way
  * any other account lands in Messages.
  *
- * The owner has no conversations, no contacts, no import, no export and no
- * trash, so the message-browsing shell means nothing to them. This screen has
- * a side panel of its own instead, with User Accounts first because managing
- * accounts is what the owner is for.
+ * The frame is the one every account sees: the header with the product name,
+ * a search bar and the account button, over a side panel and a content pane.
+ * What fills it is the owner's own. The owner has no conversations, no
+ * contacts, no import, no export and no trash, so the side panel lists Vault
+ * Settings and User Accounts, and the search bar filters the accounts table.
  *
- * The entry named **Password** rather than Account is the whole of what the
- * owner has of their own — no profile, no time zone, no vault. See
+ * The owner's Settings, behind the account button, are a password and an
+ * appearance and nothing else — no profile, no time zone, no vault. See
  * `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
  */
 export default function OwnerHome() {
   const { section: raw } = useParams();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const section = parseSelectKey(raw ?? null, SECTIONS);
+  // The width the message shell's side panel was last dragged to, so the
+  // product name sits over a panel of the same width on both screens.
+  const [navWidth] = useState(() =>
+    loadWidth(
+      LEFT_PANEL_STORAGE_KEY,
+      LEFT_PANEL_DEFAULT_WIDTH,
+      LEFT_PANEL_MIN_WIDTH,
+      LEFT_PANEL_MAX_WIDTH,
+    ),
+  );
 
   // `/owner` and any unknown section land on User Accounts, and the address
   // bar says so, so a reload comes back to the same place.
@@ -48,20 +67,33 @@ export default function OwnerHome() {
     return <Navigate to="/owner/accounts" replace />;
   }
 
+  const accountSearch = searchParams.get("q") || "";
+
+  // The bar searches accounts from any section, so typing elsewhere goes there.
+  const handleSearchChange = (q: string) => {
+    if (section !== "accounts") {
+      navigate(`/owner/accounts${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+      return;
+    }
+    // `replace`, so typing does not fill the history with one entry per keystroke.
+    setSearchParams(q ? { q } : {}, { replace: true });
+  };
+
   return (
-    <div className="flex min-h-screen bg-bg text-text">
-      <nav
-        aria-label="Owner Home sections"
-        className="flex w-[220px] shrink-0 flex-col border-r border-border bg-panel"
-      >
-        <div className="border-b border-border px-4 py-3">
-          <h1 className="m-0 text-[1.125rem] font-semibold tracking-[-0.015em] text-text">
-            Message Vault
-          </h1>
-          <p className="mt-1 text-[0.75rem] text-muted">Vault owner</p>
-        </div>
-        <div className="flex flex-col gap-0.5 px-2 py-2">
-          {SECTIONS.map((id) => (
+    <div className="flex h-screen flex-col bg-bg font-sans text-text">
+      <AppHeader
+        searchQuery={accountSearch}
+        searchTarget="accounts"
+        onSearchChange={handleSearchChange}
+        onSearch={handleSearchChange}
+      />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <nav
+          aria-label="Owner Home sections"
+          className="flex h-full shrink-0 flex-col gap-0.5 overflow-auto border-r border-border bg-panel px-3 py-2"
+          style={{ width: navWidth }}
+        >
+          {NAV_SECTIONS.map((id) => (
             <button
               key={id}
               type="button"
@@ -72,31 +104,20 @@ export default function OwnerHome() {
               {SECTION_LABELS[id]}
             </button>
           ))}
-        </div>
-      </nav>
+        </nav>
 
-      <div className="min-w-0 flex-1 overflow-auto">
-        <div className="mx-auto max-w-[900px] p-6">
-          <header className="flex flex-wrap items-start justify-between gap-3">
-            <p className="m-0 text-[0.875rem] text-muted">
-              You are the owner of this vault. You manage who may use it, and you read no messages.
-            </p>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="cursor-pointer rounded border border-border bg-transparent px-3 py-1.5 text-[0.813rem] text-muted transition-colors hover:text-text"
-            >
-              Log out
-            </button>
-          </header>
-
-          <div className="mt-6">
-            {section === "accounts" && <OwnerAccountsPanel />}
+        <main className="min-w-0 flex-1 overflow-auto bg-bg text-text">
+          <div className="mx-auto max-w-[900px] p-6">
             {section === "vault" && <VaultSettingsPanel />}
-            {section === "password" && <ChangePasswordSection canReset={false} />}
-            {section === "appearance" && <AppearanceSection />}
+            {section === "accounts" && <OwnerAccountsPanel filter={accountSearch} />}
+            {section === "settings" && (
+              <div className="flex flex-col gap-8">
+                <ChangePasswordSection canReset={false} />
+                <AppearanceSection />
+              </div>
+            )}
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );

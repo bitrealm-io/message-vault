@@ -66,12 +66,18 @@ export function stripFieldTokens(q: string): string {
     .trim();
 }
 
-/** The words one list accepts, from the vault, cached for the session. */
-export function useSearchFields(list: SearchList): { fields: SearchField[]; loading: boolean } {
+/**
+ * The words one list accepts, from the vault, cached for the session. A `null`
+ * list asks the vault nothing and has no words.
+ */
+export function useSearchFields(list: SearchList | null): {
+  fields: SearchField[];
+  loading: boolean;
+} {
   const { data, isPending } = useVaultQuery(
-    keys.searchFields.list(list),
-    async (signal) => (await listSearchFields(list, { signal })).items,
-    { staleTime: Number.POSITIVE_INFINITY },
+    keys.searchFields.list(list ?? "conversations"),
+    async (signal) => (await listSearchFields(list ?? "conversations", { signal })).items,
+    { staleTime: Number.POSITIVE_INFINITY, enabled: list !== null },
   );
   return { fields: data ?? [], loading: isPending };
 }

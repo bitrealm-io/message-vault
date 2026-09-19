@@ -70,7 +70,7 @@ export function applySuggestionToQuery(value: string, suggestion: Suggestion): s
  * word the list has; a choice word offers its values; a person word fetches
  * matching contacts and inserts `word:#id`.
  */
-export function useSearchSuggestions(value: string, list: SearchList): Suggestion[] {
+export function useSearchSuggestions(value: string, list: SearchList | null): Suggestion[] {
   const { fields } = useSearchFields(list);
   const [contacts, setContacts] = useState<ContactName[]>([]);
 

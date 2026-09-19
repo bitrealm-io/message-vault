@@ -120,6 +120,12 @@ of, and a search that reads the same everywhere.
 
 ### Design
 
+- 2026-09-19: **Owner Home looks like the screen every account sees.** The
+  product name, a search bar and the account button now run across the top.
+  The search bar narrows User Accounts by username. The side panel lists
+  Vault Settings, then User Accounts. The owner's password and appearance
+  moved to Settings, under the account button, which is also where Log out
+  now is.
 - 2026-09-17: **The vault owner's screen is Owner Home, with a side panel.**
   The owner lands on it at sign-in. Its side panel lists User Accounts first,
   then Vault, Password and Appearance, in place of the tabs across the top.

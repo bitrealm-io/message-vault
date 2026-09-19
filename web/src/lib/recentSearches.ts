@@ -3,7 +3,7 @@
  * trash bars do not offer each other's history — a `handle:` query is noise in
  * the contacts bar, and a contact name is noise in the messages bar.
  */
-export type SearchScope = "contact" | "message" | "trash";
+export type SearchScope = "account" | "contact" | "message" | "trash";
 
 /**
  * `contact` keeps the key it shipped with so existing history survives the move

@@ -139,8 +139,12 @@ _Avoid_: Admin, Administrator, Superuser, Root
 
 **Owner Home**:
 The screen the vault owner lands on at sign-in and works from, the way any
-other account lands in Messages. Its side panel lists User Accounts first,
-then Vault, Password and Appearance. User Accounts is where the owner adds
+other account lands in Messages. It has the frame every account sees: the
+product name, a search bar and the account button across the top, over a
+side panel and a content pane. The side panel lists Vault Settings, then
+User Accounts, and the search bar narrows User Accounts by username. The
+owner's own password and appearance are under Settings, behind the account
+button, where every other account finds its Settings. User Accounts is where the owner adds
 accounts, sets each one's status to active or disabled, sets what it may do,
 resets its password, and deletes its messages or the account. An owner's
 password reset sets the password and nothing more: it does not end the

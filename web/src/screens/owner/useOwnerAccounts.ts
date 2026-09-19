@@ -69,7 +69,11 @@ export function useSetAccountPassword(): UseMutationResult<
   return useOwnerWrite(({ id, password }) => setVaultAccountPassword(id, { password }), false);
 }
 
-/** The vault owner's view of every account, plus the actions on one. */
+/**
+ * The vault owner's view of every account, with what the table itself does:
+ * add an account, and set one's status and permissions. A password and the
+ * deletions are in the account's Settings, which the account's name opens.
+ */
 export function useOwnerAccounts() {
   const {
     data,
@@ -78,52 +82,29 @@ export function useOwnerAccounts() {
   } = useVaultQuery(keys.ownerAccounts.all, fetchAccounts);
   const createAccount = useCreateAccount();
   const changeAccount = useUpdateAccount();
-  const removeAccount = useDeleteAccount();
-  const removeMessages = useDeleteAccountMessages();
-  const changePassword = useSetAccountPassword();
 
-  const busy =
-    createAccount.isPending ||
-    changeAccount.isPending ||
-    removeAccount.isPending ||
-    removeMessages.isPending ||
-    changePassword.isPending;
+  const busy = createAccount.isPending || changeAccount.isPending;
 
   // Each mutate call resets that mutation's own error and stamps a fresh
-  // `submittedAt`, so whichever of the five last started is also whichever
+  // `submittedAt`, so whichever of the two last started is also whichever
   // last settled; its error (or lack of one) is `actionError`. A fixed
-  // create-then-update-then-… order would instead let an old failure outlive
-  // a later, successful write.
-  const latest = [
-    createAccount,
-    changeAccount,
-    removeAccount,
-    removeMessages,
-    changePassword,
-  ].reduce((newest, next) => (next.submittedAt > newest.submittedAt ? next : newest));
+  // create-then-update order would instead let an old failure outlive a
+  // later, successful write.
+  const latest =
+    createAccount.submittedAt > changeAccount.submittedAt ? createAccount : changeAccount;
   const actionError = latest.error ? latest.error.message : "";
 
   const resetCreate = createAccount.reset;
   const resetChange = changeAccount.reset;
-  const resetRemove = removeAccount.reset;
-  const resetRemoveMessages = removeMessages.reset;
-  const resetChangePassword = changePassword.reset;
   const clearError = useCallback(() => {
     resetCreate();
     resetChange();
-    resetRemove();
-    resetRemoveMessages();
-    resetChangePassword();
-  }, [resetCreate, resetChange, resetRemove, resetRemoveMessages, resetChangePassword]);
+  }, [resetCreate, resetChange]);
 
   const [composing, setComposing] = useState(false);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
-
-  const [passwordTarget, setPasswordTarget] = useState<ManagedAccount | null>(null);
-  const [resetPasswordValue, setResetPasswordValue] = useState("");
-  const [resetPasswordConfirm, setResetPasswordConfirm] = useState("");
 
   const cancelCompose = useCallback(() => {
     setComposing(false);
@@ -133,7 +114,7 @@ export function useOwnerAccounts() {
     clearError();
   }, [clearError]);
 
-  // Both forms take the password twice and save only when the two agree; the
+  // The form takes the password twice and saves only when the two agree; the
   // panel disables Save until then, and this is the same rule on the way out.
   const createOne = useCallback(() => {
     const username = newUsername.trim();
@@ -152,48 +133,6 @@ export function useOwnerAccounts() {
     );
   }, [newUsername, newPassword, newPasswordConfirm, createAccount.mutate]);
 
-  const openPasswordReset = useCallback(
-    (account: ManagedAccount) => {
-      clearError();
-      setPasswordTarget(account);
-      setResetPasswordValue("");
-      setResetPasswordConfirm("");
-    },
-    [clearError],
-  );
-
-  const closePasswordReset = useCallback(() => {
-    if (busy) return;
-    setPasswordTarget(null);
-    setResetPasswordValue("");
-    setResetPasswordConfirm("");
-  }, [busy]);
-
-  /** Store `password` on the account the dialog is open for; empty clears it. */
-  const savePassword = useCallback(
-    (password: string) => {
-      if (!passwordTarget) return;
-      changePassword.mutate(
-        { id: passwordTarget.account_id, password },
-        {
-          onSuccess: () => {
-            setPasswordTarget(null);
-            setResetPasswordValue("");
-            setResetPasswordConfirm("");
-          },
-        },
-      );
-    },
-    [passwordTarget, changePassword.mutate],
-  );
-
-  const setAccountPassword = useCallback(() => {
-    if (!resetPasswordValue || resetPasswordValue !== resetPasswordConfirm) return;
-    savePassword(resetPasswordValue);
-  }, [resetPasswordValue, resetPasswordConfirm, savePassword]);
-
-  const clearAccountPassword = useCallback(() => savePassword(""), [savePassword]);
-
   const patch = useCallback(
     (id: number, changes: ManagedAccountChanges) =>
       changeAccount.mutateAsync({ id, changes }).then(
@@ -201,26 +140,6 @@ export function useOwnerAccounts() {
         () => undefined,
       ),
     [changeAccount.mutateAsync],
-  );
-
-  // These two answer whether the vault agreed, so the confirmation dialog can
-  // stay open and show the refusal instead of closing as though it had worked.
-  const deleteMessages = useCallback(
-    (id: number) =>
-      removeMessages.mutateAsync(id).then(
-        () => true,
-        () => false,
-      ),
-    [removeMessages.mutateAsync],
-  );
-
-  const deleteOne = useCallback(
-    (id: number) =>
-      removeAccount.mutateAsync(id).then(
-        () => true,
-        () => false,
-      ),
-    [removeAccount.mutateAsync],
   );
 
   return {
@@ -231,8 +150,6 @@ export function useOwnerAccounts() {
     actionError,
     clearError,
     patch,
-    deleteMessages,
-    deleteAccount: deleteOne,
     composing,
     setComposing,
     newUsername,
@@ -243,14 +160,5 @@ export function useOwnerAccounts() {
     setNewPasswordConfirm,
     cancelCompose,
     createAccount: createOne,
-    passwordTarget,
-    resetPassword: resetPasswordValue,
-    setResetPassword: setResetPasswordValue,
-    resetPasswordConfirm,
-    setResetPasswordConfirm,
-    openPasswordReset,
-    closePasswordReset,
-    setAccountPassword,
-    clearAccountPassword,
   };
 }

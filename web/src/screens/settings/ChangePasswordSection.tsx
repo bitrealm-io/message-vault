@@ -1,25 +1,27 @@
 import { useState } from "react";
 import Button from "../../components/Button";
 import { useAuth } from "../../lib/auth";
-import { changePassword } from "../../lib/vaultApi";
+import { changePassword, setAccountPassword } from "../../lib/vaultApi";
 import { inputClassName, sectionTitleClass } from "./profileStyles";
 
 /**
- * Change the signed-in account's own password.
+ * Change an account's password: the signed-in account's own, or, given
+ * `managedAccountId`, one the vault owner has opened from User Accounts.
  *
- * Shared by Settings → Account and by Owner Home, which has no Settings to
- * reach. Two copies of a password form would be two places for
+ * One form for both. Two copies of a password form would be two places for
  * the confirmation rule and the token rotation to drift apart.
  *
  * A user account may have no password, so Settings offers Reset password, which clears it.
- * The vault owner must keep one, so Owner Home passes `canReset={false}`.
+ * The vault owner must keep one, so its own Settings pass `canReset={false}`.
  */
 export function ChangePasswordSection({
   disabled = false,
   canReset = true,
+  managedAccountId,
 }: {
   disabled?: boolean;
   canReset?: boolean;
+  managedAccountId?: number;
 }) {
   const { updateToken } = useAuth();
   const [newPw, setNewPw] = useState("");
@@ -32,11 +34,14 @@ export function ChangePasswordSection({
     setPwMsg("");
     setPwOk(false);
     try {
-      const res = await changePassword({
-        password,
-      });
-      // Changing the password rotates the session, so the old token is dead.
-      if (res.token) updateToken(res.token);
+      if (managedAccountId === undefined) {
+        const res = await changePassword({ password });
+        // Changing the password rotates the session, so the old token is dead.
+        if (res.token) updateToken(res.token);
+      } else {
+        // Someone else's password: the owner's own session is untouched.
+        await setAccountPassword(managedAccountId, { password });
+      }
       setPwOk(true);
       setPwMsg(
         password ? "Password changed." : "Password reset. This account now has no password.",

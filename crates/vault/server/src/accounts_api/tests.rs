@@ -191,15 +191,16 @@ async fn the_owner_sees_every_account_but_no_messages() {
     let body: crate::paging::Page<AccountResponse> =
         get_json(&state, "/v1/accounts", &owner.token).await;
 
-    assert_eq!(body.items.len(), 2);
+    assert_eq!(body.items.len(), 3, "the owner, alice and bob");
     let bob = body.items.iter().find(|a| a.username == "bob").unwrap();
     assert_eq!(bob.message_count, 0);
     assert!(!bob.disabled);
 }
 
-/// The list holds the users of this vault, and the owner is not one of them.
+/// The owner is an account of this vault too: the list opens with it, ahead
+/// of a username that would sort before its own.
 #[tokio::test]
-async fn the_owner_is_absent_from_the_account_list() {
+async fn the_owner_leads_the_account_list() {
     let vault = test_vault().await;
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
@@ -208,15 +209,12 @@ async fn the_owner_is_absent_from_the_account_list() {
     let body: crate::paging::Page<AccountResponse> =
         get_json(&state, "/v1/accounts", &owner.token).await;
 
-    assert_eq!(body.items.len(), 1, "only the one ordinary account");
-    assert!(
-        !body
-            .items
-            .iter()
-            .any(|a| a.account_id == account_profile::OWNER_ACCOUNT_ID),
-        "the owner must not list itself"
-    );
-    assert!(!body.items.iter().any(|a| a.username == "keeper"));
+    assert_eq!(body.total, 2);
+    let usernames: Vec<&str> = body.items.iter().map(|a| a.username.as_str()).collect();
+    assert_eq!(usernames, ["keeper", "alice"]);
+    assert_eq!(body.items[0].account_id, account_profile::OWNER_ACCOUNT_ID);
+    assert!(body.items[0].is_owner);
+    assert!(!body.items[1].is_owner);
 }
 
 /// Sort and return an object's keys. Panics if `v` is not an object —
@@ -1131,7 +1129,12 @@ async fn the_owner_deletes_any_account_outright() {
 
     let body: crate::paging::Page<AccountResponse> =
         get_json(&state, "/v1/accounts", &owner.token).await;
-    assert!(body.items.is_empty(), "both are gone");
+    let left: Vec<&str> = body.items.iter().map(|a| a.username.as_str()).collect();
+    assert_eq!(
+        left,
+        ["keeper"],
+        "both are gone, and only the owner is left"
+    );
     assert_eq!(
         login_status(&state, "bob", "hunter2hunter2").await,
         StatusCode::UNAUTHORIZED

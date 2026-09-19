@@ -220,7 +220,8 @@ export function ProfileSettingsPanel() {
       {handleError && <div className="mb-6 text-[0.813rem] text-danger">{handleError}</div>}
       {!handleError && <div className="mb-6" />}
 
-      <AddressBookSection />
+      {/* The vault owner holds no contacts, so it has no address book to load. */}
+      {profile.is_owner ? null : <AddressBookSection />}
     </div>
   );
 }

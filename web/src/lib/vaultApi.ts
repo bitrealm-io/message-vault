@@ -123,7 +123,7 @@ export function claimVault(
 // the account id; the ones Settings calls address the signed-in
 // account through `ownAccountPath`.
 
-/** The accounts of this vault, for the owner. The owner's own is not among them. */
+/** The accounts of this vault, for the owner: the owner's own first, then the rest by username. */
 export function listAccounts(opts?: VaultRequestOptions): Promise<Schema["Page_AccountResponse"]> {
   return apiClient.get<Schema["Page_AccountResponse"]>("/v1/accounts", opts);
 }
@@ -140,6 +140,14 @@ export function createAccount(
   body: Schema["CreateAccountRequest"],
 ): Promise<Schema["CreatedAccountResponse"]> {
   return apiClient.post<Schema["CreatedAccountResponse"]>("/v1/accounts", body);
+}
+
+/** One account, as the owner: profile, flags, and how much it holds. */
+export function getAccount(
+  accountId: number,
+  opts?: VaultRequestOptions,
+): Promise<Schema["AccountResponse"]> {
+  return apiClient.get<Schema["AccountResponse"]>(accountPath(accountId), opts);
 }
 
 /** Change an account's disabled flag or its import, export and delete grants, as the owner. */
@@ -208,10 +216,13 @@ export function deleteAccount(body: Schema["DeleteAccountRequest"]): Promise<voi
   return apiClient.delete<void>(ownAccountPath(), body);
 }
 
+/** How much an account holds: the signed-in one, or as the owner the one named. */
 export function getAccountStorage(
   opts?: VaultRequestOptions,
+  accountId?: number,
 ): Promise<Schema["AccountStorageResponse"]> {
-  return apiClient.get<Schema["AccountStorageResponse"]>(`${ownAccountPath()}/storage`, opts);
+  const path = accountId === undefined ? ownAccountPath() : accountPath(accountId);
+  return apiClient.get<Schema["AccountStorageResponse"]>(`${path}/storage`, opts);
 }
 
 /** Destroy the signed-in account's messages and attachments. Contacts and the login survive. */

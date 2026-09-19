@@ -1,11 +1,14 @@
 import { SelectionIndicator, Tab, TabList, TabPanel, Tabs } from "react-aria-components";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { canUseConvert } from "../lib/desktopFeatures";
 import { parseSelectKey } from "../lib/selectKey";
 import { isTauri } from "../lib/tauri-check";
+import { useSettingsAccount } from "../lib/useSettingsAccount";
 import { AccountSettingsPanel } from "./settings/AccountSettingsPanel";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { ConvertSection } from "./settings/ConvertSection";
+import { ManagedProfilePanel } from "./settings/ManagedProfilePanel";
+import { ManagedStoragePanel } from "./settings/ManagedStoragePanel";
 import { ProfileSettingsPanel } from "./settings/ProfileSettingsPanel";
 import { StorageSection } from "./settings/StorageSection";
 import { SystemSection } from "./settings/SystemSection";
@@ -22,13 +25,23 @@ const TAB_LABELS: Record<SettingsTab, string> = {
   appearance: "Appearance",
 };
 
+/** System, Convert and Appearance are this device's, not an account's. */
+const DEVICE_TABS: readonly SettingsTab[] = ["system", "convert", "appearance"];
+
 /**
- * Tabs this person can open, in display order. Convert is a desktop-only
- * tool: it runs `message-reexport` in the desktop process, so a browser
- * visiting the website never sees it.
+ * Tabs this person can open, in display order.
+ *
+ * - Convert is a desktop-only tool: it runs `message-reexport` in the desktop
+ *   process, so a browser visiting the website never sees it.
+ * - An account the vault owner opened from User Accounts has the tabs that
+ *   are the account's. The device tabs would change the owner's own browser,
+ *   so they are in the owner's own Settings only.
+ * - The vault owner holds no messages, so its own Settings have no Storage.
  */
-function visibleTabs(isDesktop: boolean): SettingsTab[] {
+function visibleTabs(isDesktop: boolean, managed: boolean, isOwner: boolean): SettingsTab[] {
   return ALL_TABS.filter((id) => {
+    if (managed && DEVICE_TABS.includes(id)) return false;
+    if (id === "storage" && isOwner && !managed) return false;
     if (id === "convert") return canUseConvert(isDesktop);
     return true;
   });
@@ -51,16 +64,37 @@ function tabClassName({ isSelected }: { isSelected: boolean }) {
   }`;
 }
 
-export default function SettingsScreen() {
+/**
+ * Settings for the signed-in account, or, given `managedAccountId`, for an
+ * account the vault owner opened from User Accounts. The same screen and the
+ * same tabs either way, so the owner sees an account's settings laid out as
+ * the account holder does.
+ */
+export default function SettingsScreen({ managedAccountId }: { managedAccountId?: number }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabs = visibleTabs(isTauri());
+  const { profile } = useSettingsAccount(managedAccountId);
+  const managed = managedAccountId !== undefined;
+  const tabs = visibleTabs(isTauri(), managed, profile?.is_owner === true);
   const tab = tabFromSearchParam(searchParams.get("tab"), tabs);
+  const whose = managed && profile ? `${profile.username}'s` : "your";
 
   return (
     <div className="max-w-[820px] p-6 text-text">
       <header>
-        <h2 className="m-0 text-text">Settings</h2>
-        <p className="mt-[0.35rem] text-[0.875rem] text-muted">Manage your {tabSummary(tabs)}.</p>
+        {managed ? (
+          <Link
+            to="/owner/accounts"
+            className="mb-2 inline-block text-[0.813rem] text-muted no-underline hover:text-text"
+          >
+            ← User Accounts
+          </Link>
+        ) : null}
+        <h2 className="m-0 text-text">
+          {managed && profile ? `Settings for ${profile.username}` : "Settings"}
+        </h2>
+        <p className="mt-[0.35rem] text-[0.875rem] text-muted">
+          Manage {whose} {tabSummary(tabs)}.
+        </p>
       </header>
 
       <Tabs
@@ -86,25 +120,35 @@ export default function SettingsScreen() {
         </TabList>
 
         <TabPanel id="account" className="mt-6">
-          <AccountSettingsPanel />
+          <AccountSettingsPanel managedAccountId={managedAccountId} />
         </TabPanel>
         <TabPanel id="profile" className="mt-6">
-          <ProfileSettingsPanel />
+          {managed ? (
+            <ManagedProfilePanel accountId={managedAccountId} />
+          ) : (
+            <ProfileSettingsPanel />
+          )}
         </TabPanel>
-        <TabPanel id="storage" className="mt-6">
-          <StorageSection />
-        </TabPanel>
-        <TabPanel id="system" className="mt-6">
-          <SystemSection />
-        </TabPanel>
+        {tabs.includes("storage") ? (
+          <TabPanel id="storage" className="mt-6">
+            {managed ? <ManagedStoragePanel accountId={managedAccountId} /> : <StorageSection />}
+          </TabPanel>
+        ) : null}
+        {tabs.includes("system") ? (
+          <TabPanel id="system" className="mt-6">
+            <SystemSection />
+          </TabPanel>
+        ) : null}
         {tabs.includes("convert") ? (
           <TabPanel id="convert" className="mt-6">
             <ConvertSection />
           </TabPanel>
         ) : null}
-        <TabPanel id="appearance" className="mt-6">
-          <AppearanceSection />
-        </TabPanel>
+        {tabs.includes("appearance") ? (
+          <TabPanel id="appearance" className="mt-6">
+            <AppearanceSection />
+          </TabPanel>
+        ) : null}
       </Tabs>
     </div>
   );

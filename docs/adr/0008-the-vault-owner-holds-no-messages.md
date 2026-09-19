@@ -160,8 +160,20 @@ vault needs.)
   "sign in as `demo`" instruction would reach a screen that offers no login.
 - The owner can delete the demo account and its data. The demo account still
   cannot delete itself.
-- The owner does not appear in the account list they manage. The list holds
-  the users of the vault, and the owner is not one of them.
+- The owner leads the account list they manage, ahead of the rest by
+  username. The owner is an account of the vault too, and its row is how the
+  owner reaches its own Settings, the same way it reaches anyone else's. The
+  row has no status and no permissions to set: the owner cannot be disabled,
+  and holds no messages to import, export or delete. (Until 2026-09-19 the
+  owner was left out of the list, on the grounds that it is not one of the
+  vault's users.)
+- An account's name in that list opens the account's Settings, laid out as
+  its holder sees them. The owner sets the account's password there and
+  deletes its messages or the account. It reads the account's name, time zone
+  and handles and changes none, and sees how much the account stores and
+  nothing of what: no import or export history, no attachment names, no API
+  tokens, no address book. The tabs that belong to a device rather than an
+  account (System, Convert, Appearance) are in the owner's own Settings only.
 - A forgotten owner password cannot be reset from inside the product, because
   no account stands above the owner. `vault reset-owner-password` resets it
   from a shell on the server, which is the credential the owner already holds

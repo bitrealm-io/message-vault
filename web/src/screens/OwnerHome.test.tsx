@@ -459,16 +459,24 @@ describe("OwnerHome", () => {
     expect(await screen.findByText("Change Password")).toBeInTheDocument();
     // The owner's own account is read as the signed-in account, not as a managed one.
     expect(getAccount).not.toHaveBeenCalled();
-    // No Storage: the owner holds no messages. The device tabs are here,
-    // because this is the owner's own browser.
+    // No Storage, System or Convert: the owner holds no messages.
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Account",
       "Profile",
-      "System",
       "Appearance",
     ]);
+    // The owner's account reaches every other, so its password change asks for the current one.
+    expect(screen.getByLabelText("Current password")).toBeInTheDocument();
     // No API tokens and no danger zone: the owner mints no token and cannot be deleted.
     expect(screen.queryByText(/API tokens/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Danger zone/ })).not.toBeInTheDocument();
+  });
+
+  it("shows the owner a name and a time zone on Profile, and no handles", async () => {
+    renderHome(["/owner/accounts/1?tab=profile"]);
+
+    expect(await screen.findByText("Display Name")).toBeInTheDocument();
+    expect(screen.getByText("Time Zone")).toBeInTheDocument();
+    expect(screen.queryByText("My Handles")).not.toBeInTheDocument();
   });
 });

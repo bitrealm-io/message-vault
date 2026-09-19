@@ -120,6 +120,13 @@ of, and a search that reads the same everywhere.
 
 ### Design
 
+- 2026-09-19: **Changing the vault owner's password asks for the current
+  one.** The owner's account reaches every other account, so Settings,
+  Account has a Current password field for the owner, and the vault checks
+  it before it stores the new password. Every other account changes its
+  password as before. The owner's Settings are now Account, Profile and
+  Appearance: System and Convert work on messages, which the owner does not
+  hold, and Profile no longer asks the owner for handles.
 - 2026-09-19: **An account's name in User Accounts opens its Settings.** The
   screen is the one the account holder sees, with the Account, Profile and
   Storage tabs. Reset password, Delete messages and Delete account moved

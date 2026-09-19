@@ -159,8 +159,11 @@ export interface paths {
         get?: never;
         /**
          * Set an account's password.
-         * @description The session is the credential, so the current password is never asked
-         *     for. An account changing its own has its API tokens revoked and gets
+         * @description For a user account the session is the credential, and the current
+         *     password is not asked for. The vault owner changing its own must send
+         *     `current_password`: that account reaches every other, so a session left
+         *     open on a shared machine must not be enough to take it over.
+         *     An account changing its own has its API tokens revoked and gets
          *     `200` with a rotated session token. The vault owner setting another
          *     account's answers `204`. That is the whole of it: the account's sessions carry on,
          *     and its holder keeps the new password until they change it themselves.
@@ -2880,6 +2883,11 @@ export interface components {
         };
         /** @description The new password. */
         SetPasswordRequest: {
+            /**
+             * @description The password being replaced. Required when the vault owner changes its
+             *     own; nobody else sends it.
+             */
+            current_password?: string | null;
             /**
              * @description The new password. Empty clears a user account's password; the vault
              *     owner's must be one character or more.

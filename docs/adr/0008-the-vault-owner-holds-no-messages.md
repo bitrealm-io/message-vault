@@ -173,7 +173,14 @@ vault needs.)
   and handles and changes none, and sees how much the account stores and
   nothing of what: no import or export history, no attachment names, no API
   tokens, no address book. The tabs that belong to a device rather than an
-  account (System, Convert, Appearance) are in the owner's own Settings only.
+  account (System, Convert, Appearance) are not shown for a managed account.
+- The owner's own Settings are Account, Profile and Appearance. Storage,
+  System and Convert work on messages, and Profile has no handles and no
+  address book, for the same reason: there are no messages for a handle to
+  claim. Changing the owner's password takes the current one, checked by the
+  vault, because that account reaches every other and an open session must
+  not be enough to take it over. A user account changes its own on its
+  session alone.
 - A forgotten owner password cannot be reset from inside the product, because
   no account stands above the owner. `vault reset-owner-password` resets it
   from a shell on the server, which is the credential the owner already holds

@@ -42,6 +42,7 @@ export function AccountSettingsPanel({ managedAccountId }: { managedAccountId?: 
       <ChangePasswordSection
         disabled={isDemo}
         canReset={!isOwner}
+        requireCurrent={isOwner && !managed}
         managedAccountId={managedAccountId}
       />
 

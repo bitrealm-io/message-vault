@@ -11,7 +11,7 @@
  * right away.
  */
 
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import RightPane from "../components/RightPane";
 import { RightToolbarProvider } from "../components/RightToolbarContext";
@@ -113,5 +113,52 @@ describe("ContactList", () => {
       expect(updateMembersMock).toHaveBeenCalledWith(10, { add: [], remove: [1] }),
     );
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "Family" })).not.toBeChecked());
+  });
+
+  it("checks every contact between a shift-click and the furthest checked contact", async () => {
+    const names = ["Alice", "Bob", "Carol", "Dave", "Erin"];
+    listContactsMock.mockResolvedValue({
+      items: names.map((name, i) => ({
+        id: i + 1,
+        name,
+        handle_count: 1,
+        handles: [],
+        groups: [],
+      })),
+      total: names.length,
+      limit: 200,
+      offset: 0,
+    } as unknown as Awaited<ReturnType<typeof listContacts>>);
+
+    render(
+      <VaultProviders>
+        <RightToolbarProvider>
+          <RightPane>
+            <ContactList onSelect={() => {}} />
+          </RightPane>
+        </RightToolbarProvider>
+      </VaultProviders>,
+    );
+
+    const box = (name: string) => screen.getByRole("checkbox", { name: `Select ${name}` });
+    const checkedNames = () => names.filter((name) => (box(name) as HTMLInputElement).checked);
+
+    await screen.findByRole("checkbox", { name: "Select Erin" });
+    fireEvent.click(box("Bob"));
+    await waitFor(() => expect(checkedNames()).toEqual(["Bob"]));
+
+    // Checks from the last clicked row to the shift-clicked one.
+    fireEvent.click(box("Erin"), { shiftKey: true });
+    await waitFor(() => expect(checkedNames()).toEqual(["Bob", "Carol", "Dave", "Erin"]));
+
+    // Unchecks the same way: uncheck one end, shift-click the other.
+    fireEvent.click(box("Dave"));
+    fireEvent.click(box("Carol"), { shiftKey: true });
+    await waitFor(() => expect(checkedNames()).toEqual(["Bob", "Erin"]));
+
+    // The range starts at the last clicked row (Carol), not at the furthest
+    // checked one (Erin), so Dave stays unchecked.
+    fireEvent.click(box("Alice"), { shiftKey: true });
+    await waitFor(() => expect(checkedNames()).toEqual(["Alice", "Bob", "Carol", "Erin"]));
   });
 });

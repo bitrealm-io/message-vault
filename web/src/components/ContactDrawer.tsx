@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
 import { type ContactDetail, useContactDetail, useUpdateContact } from "../lib/contactDetail";
+import { contactLabelText } from "../lib/contactLabel";
 import { useTrashContact } from "../lib/trash";
+import { UNKNOWN_GROUP_LABEL } from "../lib/unknownGroup";
 import Button from "./Button";
+import ContactLabel from "./ContactLabel";
 import { ContactDrawerHandles } from "./contactDrawer/ContactDrawerHandles";
 import {
   type ContactBrowseKind,
@@ -173,13 +176,18 @@ export default function ContactDrawer({
       : [];
 
   // null = membership unknown (loading, no preview groups); [] = known empty.
-  const displayGroups: string[] | null = detailMatches
+  const storedGroups: string[] | null = detailMatches
     ? (matchedDetail.groups ?? [])
     : previewMatches && preview?.groups != null
       ? preview.groups
       : loading
         ? null
         : [];
+  // Unknown is the one group the vault computes, so it arrives as a flag
+  // beside the stored group names and leads them here.
+  const isUnknown = detailMatches ? matchedDetail.unknown : previewMatches && !!preview?.unknown;
+  const displayGroups =
+    storedGroups && isUnknown ? [UNKNOWN_GROUP_LABEL, ...storedGroups] : storedGroups;
 
   const browse = (args: { kind: ContactBrowseKind; handle?: string }) => {
     if (!onBrowseConversations || !contactId) return;
@@ -223,7 +231,10 @@ export default function ContactDrawer({
   return (
     <aside
       role="dialog"
-      aria-label={displayName}
+      aria-label={contactLabelText(
+        displayName ?? "",
+        handleRows.map((h) => h.handle),
+      )}
       aria-busy={loading || undefined}
       className={panelClass}
       style={panelStyle}
@@ -262,7 +273,16 @@ export default function ContactDrawer({
             </div>
           ) : (
             <div className="flex min-w-0 items-center gap-2">
-              <h2 className="m-0 min-w-0 truncate text-[1.125rem] font-semibold">{displayName}</h2>
+              <h2 className="m-0 min-w-0 truncate text-[1.125rem] font-semibold">
+                {detailMatches || previewMatches ? (
+                  <ContactLabel
+                    name={displayName ?? ""}
+                    handles={handleRows.map((h) => h.handle)}
+                  />
+                ) : (
+                  displayName
+                )}
+              </h2>
               <Button
                 variant="ghostNeutral"
                 size="icon"

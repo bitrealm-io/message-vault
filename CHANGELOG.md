@@ -83,6 +83,10 @@ of, and a search that reads the same everywhere.
 
 ### Fixes
 
+- 2026-09-19: **A contact with no name shows who it is.** The contact list,
+  the contact's own panel and the Trash show its first identity, in italics,
+  where they used to read "(unknown)" on every row. Its Contact Groups now
+  say Unknown, and it no longer appears under No group as well.
 - 2026-09-05: Long-running vaults no longer grow in memory for every file ever
   uploaded and every username ever tried.
 - 2026-09-05: A failure now says what actually went wrong — the step that

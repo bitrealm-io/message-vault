@@ -1196,7 +1196,8 @@ mod people_words {
         );
         assert_eq!(
             run(&mut conn, ListKind::Contacts, "group:none").await,
-            sorted(vec![f.bo, f.cy, f.jane, f.sam, f.nameless])
+            sorted(vec![f.bo, f.cy, f.jane, f.sam]),
+            "Unknown is a group, so the nameless contact is not in none"
         );
         assert_eq!(
             run(&mut conn, ListKind::Contacts, "group:unknown").await,

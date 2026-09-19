@@ -30,8 +30,11 @@ use crate::server::{ApiError, AppState, FullAccess, FullDeleteAccess, content_ty
 pub struct ContactSummary {
     /// Contact id.
     pub id: i64,
-    /// Contact display name.
+    /// The contact's preferred name; empty when it has none.
     pub name: String,
+    /// True when the contact is in the Unknown Contact Group: it has no
+    /// identity, or it has identities and no preferred name.
+    pub unknown: bool,
     /// Number of handles linked to the contact.
     pub handle_count: u64,
     /// Normalized (and raw when distinct) handle values for client-side filter.
@@ -122,8 +125,11 @@ pub struct ContactMutationBody {
 pub struct ContactDetail {
     /// Contact id.
     pub id: i64,
-    /// Contact display name.
+    /// The contact's preferred name; empty when it has none.
     pub name: String,
+    /// True when the contact is in the Unknown Contact Group: it has no
+    /// identity, or it has identities and no preferred name.
+    pub unknown: bool,
     /// Every handle linked to the contact, with per-handle stats.
     pub handles: Vec<ContactHandleInfo>,
     /// 1:1 conversations the contact appears in.
@@ -152,7 +158,7 @@ pub struct ContactSummariesBody {
 pub struct ContactSelectionSummary {
     /// Contact id.
     pub id: i64,
-    /// Contact display name.
+    /// The contact's preferred name; empty when it has none.
     pub name: String,
     /// Date of the contact's first message.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -268,7 +274,8 @@ pub async fn list_contacts_sorted(
     };
     let sql = renumber_placeholders(&format!(
         "SELECT * FROM (SELECT ct.id,
-                COALESCE(NULLIF(trim(ct.preferred_name), ''), '(unknown)') AS name,
+                trim(ct.preferred_name) AS name,
+                CASE WHEN {unknown} THEN 1 ELSE 0 END AS is_unknown,
                 (SELECT COUNT(*)
                  FROM contact_handles ch
                  WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id) AS handle_count,
@@ -295,6 +302,7 @@ pub async fn list_contacts_sorted(
          WHERE {where_sql}) AS ct
          {order_by}
          LIMIT ? OFFSET ?",
+        unknown = contacts::UNKNOWN_CONTACT_SQL,
         handles_agg = group_concat_unit_separator(engine, "val"),
         groups_agg = group_concat_unit_separator(engine, "cl.name"),
     ));
@@ -308,7 +316,7 @@ pub async fn list_contacts_sorted(
     let contacts = rows
         .into_iter()
         .map(
-            |(id, name, handle_count, handles_blob, last_modified, groups_blob)| {
+            |(id, name, is_unknown, handle_count, handles_blob, last_modified, groups_blob)| {
                 let handles = handles_blob
                     .map(|s| {
                         s.split('\u{1f}')
@@ -327,6 +335,7 @@ pub async fn list_contacts_sorted(
                 ContactSummary {
                     id,
                     name,
+                    unknown: is_unknown != 0,
                     handle_count: handle_count.max(0) as u64,
                     handles,
                     last_modified,
@@ -344,7 +353,15 @@ pub async fn list_contacts_sorted(
     })
 }
 
-type ContactRow = (i64, String, i64, Option<String>, String, Option<String>);
+type ContactRow = (
+    i64,
+    String,
+    i64,
+    i64,
+    Option<String>,
+    String,
+    Option<String>,
+);
 
 /// Full contact view: per-handle service + date range + direct message count,
 /// plus conversation and total-message stats across all the contact's handles.
@@ -357,7 +374,7 @@ pub async fn get_contact_detail(
     account_id: i64,
     contact_id: i64,
 ) -> Result<Option<ContactDetail>, ApiError> {
-    let Some((name, last_modified)) =
+    let Some((name, unknown, last_modified)) =
         contact_name_and_modified(conn, account_id, contact_id).await?
     else {
         return Ok(None);
@@ -375,6 +392,7 @@ pub async fn get_contact_detail(
     Ok(Some(ContactDetail {
         id: contact_id,
         name,
+        unknown,
         handles,
         direct_conversations: totals.direct,
         group_conversations: totals.groups,
@@ -384,24 +402,28 @@ pub async fn get_contact_detail(
     }))
 }
 
-/// The contact's display name (`(unknown)` when blank) and last-modified
-/// stamp, or `None` when it is missing, another account's, or in the trash.
+/// The contact's preferred name (empty when it has none), whether it is
+/// Unknown, and its last-modified stamp; `None` when it is missing, another
+/// account's, or in the trash.
 async fn contact_name_and_modified(
     conn: &mut AnyConnection,
     account_id: i64,
     contact_id: i64,
-) -> Result<Option<(String, String)>, ApiError> {
-    Ok(sqlx::query_as(&format!(
-        "SELECT COALESCE(NULLIF(trim(preferred_name), ''), '(unknown)'),
-                last_modified
+) -> Result<Option<(String, bool, String)>, ApiError> {
+    let row: Option<(String, i64, String)> = sqlx::query_as(&format!(
+        "SELECT trim(ct.preferred_name),
+                CASE WHEN {unknown} THEN 1 ELSE 0 END,
+                ct.last_modified
          FROM contacts ct
          WHERE ct.id = $1 AND ct.account_id = $2
            AND {NOT_TRASHED_CONTACT}",
+        unknown = contacts::UNKNOWN_CONTACT_SQL,
     ))
     .bind(contact_id)
     .bind(account_id)
     .fetch_optional(&mut *conn)
-    .await?)
+    .await?;
+    Ok(row.map(|(name, unknown, last_modified)| (name, unknown != 0, last_modified)))
 }
 
 /// One row of [`contact_handle_stats`]: handle, service, first and last
@@ -559,7 +581,7 @@ pub async fn get_contact_summaries(
         "WITH selected AS (
             SELECT ct.id,
                    ct.account_id,
-                   COALESCE(NULLIF(trim(ct.preferred_name), ''), '(unknown)') AS name
+                   trim(ct.preferred_name) AS name
             FROM contacts ct
             WHERE ct.account_id = $1
               AND ct.id IN ({placeholders})

@@ -3,7 +3,9 @@ import {
   useNameCollectionActions,
   useSetNamedSetMembers,
 } from "./nameCollection";
+
 import { forGroup } from "./searchQuery";
+import { UNKNOWN_GROUP } from "./unknownGroup";
 import {
   createContactGroup,
   deleteContactGroup,
@@ -120,12 +122,6 @@ export function groupFromSlug(slug: string, groups: readonly string[]): string |
 }
 
 /** True when this contact should appear on the given group page. */
-/**
- * The permanent Contact Group holding what the vault could not identify: a
- * contact with no identity, or with identities and no preferred name. The
- * server computes its membership, so it is never stored on a contact.
- */
-export const UNKNOWN_GROUP = "unknown";
 
 export function contactBelongsToGroup(
   groups: readonly string[] | undefined,

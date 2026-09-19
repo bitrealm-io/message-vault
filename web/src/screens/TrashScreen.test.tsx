@@ -89,7 +89,7 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
 
 /** One trashed contact as `GET /v1/contacts?q=trashed:yes` returns it. */
 function contact(id: number, name: string) {
-  return { id, name, handle_count: 1, last_modified: "2026-09-04T00:00:00Z" };
+  return { id, name, unknown: false, handle_count: 1, last_modified: "2026-09-04T00:00:00Z" };
 }
 
 function contactPage(items: ReturnType<typeof contact>[]) {

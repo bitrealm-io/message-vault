@@ -1,6 +1,7 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Checkbox from "../components/Checkbox";
 import ContactInitialCircle from "../components/ContactInitialCircle";
+import ContactLabel from "../components/ContactLabel";
 import ContactSortMenu from "../components/ContactSortMenu";
 import GroupsMenu from "../components/GroupsMenu";
 import InfiniteOffsetList from "../components/InfiniteOffsetList";
@@ -9,10 +10,10 @@ import { apiErrorMessage } from "../lib/apiErrorMessage";
 import {
   contactBelongsToGroup,
   groupListQuery,
-  UNKNOWN_GROUP,
   useContactGroupActions,
   useSetContactGroupMembers,
 } from "../lib/contactGroups";
+import { contactLabelText } from "../lib/contactLabel";
 import {
   type ContactNameSortState,
   compareContactsByName,
@@ -25,6 +26,7 @@ import { PAGE_SIZE_CONTACTS_FIRST, PAGE_SIZE_FIRST } from "../lib/listPaging";
 import { checksFromMembers } from "../lib/membershipChecks";
 import { applyCheckedRange } from "../lib/rangeCheck";
 import { hasFieldToken, stripFieldTokens } from "../lib/searchFields";
+import { UNKNOWN_GROUP } from "../lib/unknownGroup";
 import { useContactGroups } from "../lib/useContactGroups";
 import { listContacts } from "../lib/vaultApi";
 import type { components } from "../lib/vaultApi.types";
@@ -236,7 +238,14 @@ export default function ContactList({
     () =>
       [...filteredContacts]
         .filter((c) => contactBelongsToGroup(c.groups, groupFilter))
-        .sort((a, b) => compareContactsByName(a.name, b.name, nameSort.sort, nameSort.order)),
+        .sort((a, b) =>
+          compareContactsByName(
+            contactLabelText(a.name, a.handles),
+            contactLabelText(b.name, b.handles),
+            nameSort.sort,
+            nameSort.order,
+          ),
+        ),
     [filteredContacts, nameSort, groupFilter],
   );
 
@@ -434,13 +443,17 @@ export default function ContactList({
       }}
       selectAllLabel="Select all contacts"
       getId={(c) => c.id}
-      getTextValue={(c) => c.name}
+      getTextValue={(c) => contactLabelText(c.name, c.handles)}
       ariaLabel="Contacts"
       errorPrefix="Could not load contacts"
       headerActions={
         <ContactSortMenu sort={nameSort.sort} order={nameSort.order} onChange={onNameSortChange} />
       }
-      getSectionLetter={filterActive ? undefined : (c) => contactSortLetter(c.name, nameSort.sort)}
+      getSectionLetter={
+        filterActive
+          ? undefined
+          : (c) => contactSortLetter(contactLabelText(c.name, c.handles), nameSort.sort)
+      }
       empty={
         !loading ? (
           <div className="p-4 text-[0.813rem] text-muted">
@@ -491,7 +504,7 @@ export default function ContactList({
             <Checkbox
               id={checkId}
               checked={checked}
-              aria-label={`Select ${c.name}`}
+              aria-label={`Select ${contactLabelText(c.name, c.handles)}`}
               onChange={(on, e) => {
                 // A checkbox change is a click underneath, so the Shift key is on it.
                 if ((e.nativeEvent as MouseEvent).shiftKey) setRangeChecked(c.id, on);
@@ -505,14 +518,20 @@ export default function ContactList({
         );
       }}
       renderRow={(c) => {
-        const nameKey = c.name.trim().toLowerCase();
+        const nameKey = contactLabelText(c.name, c.handles).toLowerCase();
         const shownHandles = filterActive
           ? matchingHandles(c.handles, filter).filter((h) => h.trim().toLowerCase() !== nameKey)
           : [];
         return (
           <div className="min-w-0 flex-1">
             <div className="truncate text-[0.875rem] font-medium">
-              {filterActive && nameMarkTerm ? highlightText(c.name, nameMarkTerm) : c.name}
+              <ContactLabel
+                name={c.name}
+                handles={c.handles}
+                render={(text) =>
+                  filterActive && nameMarkTerm ? highlightText(text, nameMarkTerm) : text
+                }
+              />
             </div>
             {shownHandles.length > 0 && (
               <div className="mt-0.5">

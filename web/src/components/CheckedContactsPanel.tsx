@@ -9,10 +9,12 @@ import {
   TableHeader,
 } from "react-aria-components";
 import type { ContactDetail } from "../lib/contactDetail";
+import { contactLabelText } from "../lib/contactLabel";
 import { getContactSummaries } from "../lib/vaultApi";
 import { keys } from "../lib/vaultKeys";
 import { useVaultCache } from "../lib/vaultQuery";
 import Button from "./Button";
+import ContactLabel from "./ContactLabel";
 import { type ContactPreview, sumHandleTotals } from "./contactDrawer/contactDrawerTypes";
 import { CountCell, SortableColumn } from "./contactDrawer/handleTableHelpers";
 import { conversationCount, handleDateCell } from "./contactDrawer/handleTableLogic";
@@ -49,6 +51,7 @@ type RowMetrics = {
 type ContactRow = {
   id: string;
   name: string;
+  handles: string[] | undefined;
   totals: ContactTotals | null;
 };
 
@@ -75,7 +78,7 @@ function sortValue(row: ContactRow, col: string): string | number {
   const totals = row.totals;
   switch (col) {
     case "name":
-      return row.name.toLowerCase();
+      return contactLabelText(row.name, row.handles).toLowerCase();
     case "start_date":
       return totals?.start_date ?? "";
     case "end_date":
@@ -167,6 +170,7 @@ export default function CheckedContactsPanel({
       return {
         id: c.id,
         name: row?.name ?? c.name,
+        handles: c.handles,
         totals: row?.totals ?? null,
       };
     });
@@ -178,7 +182,7 @@ export default function CheckedContactsPanel({
       const bv = sortValue(b, col);
       if (av < bv) return -1 * dir;
       if (av > bv) return 1 * dir;
-      return a.name.localeCompare(b.name);
+      return contactLabelText(a.name, a.handles).localeCompare(contactLabelText(b.name, b.handles));
     });
   }, [contacts, metrics, sortDescriptor]);
 
@@ -246,7 +250,9 @@ export default function CheckedContactsPanel({
             {(row) => (
               <Row id={row.id} className="outline-none">
                 <Cell className={`${tdClass} !text-left`}>
-                  <span className="min-w-0 truncate font-medium">{row.name}</span>
+                  <span className="min-w-0 truncate font-medium">
+                    <ContactLabel name={row.name} handles={row.handles} />
+                  </span>
                 </Cell>
                 <Cell className={`${tdCenterClass} whitespace-nowrap text-muted`}>
                   <MetricCell loaded={row.totals != null}>

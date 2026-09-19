@@ -81,7 +81,7 @@ describe("SearchBar", () => {
     await user.click(input);
     await user.keyboard("{ArrowDown}{Enter}");
 
-    expect(onSubmit).toHaveBeenCalledWith("ada", "contacts");
+    expect(onSubmit).toHaveBeenCalledWith("ada");
   });
 
   it("submits the typed text when no row is highlighted", async () => {
@@ -91,7 +91,7 @@ describe("SearchBar", () => {
     await user.click(input);
     await user.keyboard("{Enter}");
 
-    expect(onSubmit).toHaveBeenCalledWith("typed", "contacts");
+    expect(onSubmit).toHaveBeenCalledWith("typed");
   });
 
   it("reaches the advanced-search row by keyboard", async () => {

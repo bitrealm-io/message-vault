@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ThemeProvider } from "../lib/ThemeProvider";
 import { VaultProviders } from "../test/vaultProviders";
 import OwnerHome from "./OwnerHome";
 
@@ -13,6 +14,7 @@ const updateVaultSettings = vi.hoisted(() => vi.fn());
 const updateAccount = vi.hoisted(() => vi.fn());
 const setAccountPassword = vi.hoisted(() => vi.fn());
 const createAccount = vi.hoisted(() => vi.fn());
+const getAccountProfile = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/auth", () => ({
   useAuth: () => ({ logout: vi.fn(), updateToken: vi.fn(), accountId: 1 }),
@@ -26,6 +28,7 @@ vi.mock("../lib/vaultApi", async (importOriginal) => ({
   updateAccount: (...a: unknown[]) => updateAccount(...a),
   setAccountPassword: (...a: unknown[]) => setAccountPassword(...a),
   createAccount: (...a: unknown[]) => createAccount(...a),
+  getAccountProfile: (...a: unknown[]) => getAccountProfile(...a),
 }));
 
 const anAccount = {
@@ -41,12 +44,20 @@ const anAccount = {
 };
 
 beforeEach(() => {
+  // jsdom has no matchMedia, and the theme reads the system colour scheme from it.
+  vi.stubGlobal("matchMedia", () => ({
+    matches: false,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
   listAccounts.mockReset();
   getVaultSettings.mockReset();
   updateVaultSettings.mockReset();
   updateAccount.mockReset();
   setAccountPassword.mockReset();
   createAccount.mockReset();
+  getAccountProfile.mockReset();
+  getAccountProfile.mockResolvedValue({ username: "root", preferred_name: null, is_owner: true });
   listAccounts.mockResolvedValue({ items: [anAccount] });
   getVaultSettings.mockResolvedValue({ public_registration: false });
   updateVaultSettings.mockResolvedValue({ public_registration: true });
@@ -59,13 +70,15 @@ afterEach(cleanup);
 
 function renderHome(entries: string[] = ["/owner/accounts"]) {
   render(
-    <VaultProviders>
-      <MemoryRouter initialEntries={entries}>
-        <Routes>
-          <Route path="/owner/:section?" element={<OwnerHome />} />
-        </Routes>
-      </MemoryRouter>
-    </VaultProviders>,
+    <ThemeProvider>
+      <VaultProviders>
+        <MemoryRouter initialEntries={entries}>
+          <Routes>
+            <Route path="/owner/:section?" element={<OwnerHome />} />
+          </Routes>
+        </MemoryRouter>
+      </VaultProviders>
+    </ThemeProvider>,
   );
 }
 
@@ -80,18 +93,21 @@ function selectedSection(): string | undefined {
 }
 
 describe("OwnerHome", () => {
-  it("offers exactly the four things the vault owner has, User Accounts first", () => {
+  it("lists Vault Settings, then User Accounts, and nothing else in the side panel", () => {
     renderHome();
 
-    expect(sectionLinks().map((b) => b.textContent)).toEqual([
-      "User Accounts",
-      "Vault",
-      "Password",
-      "Appearance",
-    ]);
+    expect(sectionLinks().map((b) => b.textContent)).toEqual(["Vault Settings", "User Accounts"]);
   });
 
-  it("has no message-browsing chrome at all", () => {
+  it("has the header every account sees: the product name, a search bar, the account button", () => {
+    renderHome();
+
+    expect(screen.getByText("Message Vault")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Search accounts" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
+  });
+
+  it("has nothing that frames messages", () => {
     renderHome();
 
     // The owner holds no messages, so nothing that frames messages belongs here.
@@ -102,10 +118,42 @@ describe("OwnerHome", () => {
     expect(screen.queryByRole("button", { name: "Export" })).not.toBeInTheDocument();
   });
 
-  it("says what the vault owner is, and is not", () => {
+  it("narrows the accounts table to the usernames the search bar matches", async () => {
+    const user = userEvent.setup({ delay: null });
+    listAccounts.mockResolvedValue({
+      items: [anAccount, { ...anAccount, account_id: 102, username: "carol" }],
+    });
     renderHome();
 
-    expect(screen.getByText(/you read no messages/i)).toBeInTheDocument();
+    await screen.findByText("bob");
+    await user.type(screen.getByRole("combobox", { name: "Search accounts" }), "CAR");
+
+    expect(screen.getByText("carol")).toBeInTheDocument();
+    expect(screen.queryByText("bob")).not.toBeInTheDocument();
+    // No search words and no advanced form: a username is all there is to match.
+    expect(screen.queryByRole("option", { name: "Advanced search" })).not.toBeInTheDocument();
+  });
+
+  it("searches accounts from another section by going to User Accounts", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderHome(["/owner/vault"]);
+
+    await user.type(screen.getByRole("combobox", { name: "Search accounts" }), "b");
+
+    expect(selectedSection()).toBe("User Accounts");
+    expect(await screen.findByText("bob")).toBeInTheDocument();
+  });
+
+  it("opens the owner's Settings from the account button", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderHome();
+
+    await screen.findByText("bob");
+    await user.click(screen.getByRole("button", { name: "Account menu" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Settings" }));
+
+    expect(await screen.findByText("Change Password")).toBeInTheDocument();
+    expect(selectedSection()).toBe("");
   });
 
   it("lists the accounts with counts and no message content", async () => {
@@ -208,9 +256,7 @@ describe("OwnerHome", () => {
   });
 
   it("offers the owner no way to reset their own password to none", async () => {
-    const user = userEvent.setup();
-    renderHome();
-    await user.click(screen.getByRole("button", { name: "Password" }));
+    renderHome(["/owner/settings"]);
 
     expect(screen.getByRole("button", { name: "Change password" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reset password" })).not.toBeInTheDocument();
@@ -239,7 +285,7 @@ describe("OwnerHome", () => {
   it("opens the section named in the address", async () => {
     renderHome(["/owner/vault"]);
 
-    expect(selectedSection()).toBe("Vault");
+    expect(selectedSection()).toBe("Vault Settings");
     expect(
       await screen.findByText(/Let anyone reaching this vault create their own account/),
     ).toBeInTheDocument();
@@ -259,12 +305,14 @@ describe("OwnerHome", () => {
     const user = userEvent.setup({ delay: null });
     renderHome();
 
-    await user.click(screen.getByRole("button", { name: "Password" }));
-    expect(selectedSection()).toBe("Password");
-    expect(await screen.findByText("Change Password")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Vault Settings" }));
+    expect(selectedSection()).toBe("Vault Settings");
+    expect(
+      await screen.findByText(/Let anyone reaching this vault create their own account/),
+    ).toBeInTheDocument();
   });
 
-  it("turns public registration on from the Vault section", async () => {
+  it("turns public registration on from Vault Settings", async () => {
     const user = userEvent.setup({ delay: null });
     renderHome(["/owner/vault"]);
 
@@ -282,10 +330,11 @@ describe("OwnerHome", () => {
     );
   });
 
-  it("offers the owner a password and nothing else of their own", async () => {
-    renderHome(["/owner/password"]);
+  it("offers the owner a password, an appearance, and nothing else of their own", async () => {
+    renderHome(["/owner/settings"]);
 
     expect(await screen.findByText("Change Password")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Theme" })).toBeInTheDocument();
     // No profile, no time zone, no API tokens, no danger zone: the owner has
     // no vault for any of them to act on.
     expect(screen.queryByText("Username")).not.toBeInTheDocument();

@@ -10,7 +10,6 @@ import { useContactGroups } from "../lib/useContactGroups";
 import { useMessageTags } from "../lib/useMessageTags";
 import ContactList from "../screens/ContactList";
 import ConversationList from "../screens/ConversationList";
-import type { AdvancedSearchMode } from "./AdvancedSearchForm";
 import AppHeader from "./AppHeader";
 import CheckedContactsPanel from "./CheckedContactsPanel";
 import { ColumnResizeProvider } from "./ColumnResizeContext";
@@ -127,10 +126,10 @@ export default function AppLayout() {
     setSearchParams(next, { replace: true });
   }
 
-  const handleSearch = (q: string, mode: AdvancedSearchMode) => {
+  const handleSearch = (q: string) => {
     if (trashMode) {
       navigate(`/trash${q ? `?tq=${encodeURIComponent(q)}` : ""}`);
-    } else if (mode === "contacts" || contactsMode) {
+    } else if (contactsMode) {
       const params = q ? `?cq=${encodeURIComponent(q)}` : "";
       if (noGroupMode) {
         navigate(`/no-group${params}`);

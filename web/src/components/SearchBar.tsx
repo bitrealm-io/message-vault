@@ -106,16 +106,16 @@ export default function SearchBar({
 }: {
   value: string;
   onChange: (v: string) => void;
-  /** Runs the search. The mode says which list the typed query is meant for. */
-  onSubmit: (q: string, mode: AdvancedSearchMode) => void;
+  /** Runs the search. */
+  onSubmit: (q: string) => void;
   /** Which bar this is: picks the recents bucket and the DOM id namespace. */
   scope: SearchScope;
-  /** Which list the vault should describe the search words of. */
-  list: SearchList;
+  /** Which list the vault should describe the search words of; `null` autocompletes nothing. */
+  list: SearchList | null;
   /** Placeholder and accessible name, e.g. "Search contacts". */
   placeholder: string;
-  /** Which advanced form to show. */
-  advancedMode: AdvancedSearchMode;
+  /** Which advanced form to show; `null` offers none. */
+  advancedMode: AdvancedSearchMode | null;
   /** True while the popdown or advanced panel is open (for list-column stacking). */
   onOpenChange?: (open: boolean) => void;
 }) {
@@ -145,7 +145,7 @@ export default function SearchBar({
 
   const applyQuery = (q: string, { save }: { save: boolean }) => {
     onChange(q);
-    onSubmit(q, advancedMode);
+    onSubmit(q);
     if (save && q.trim()) {
       pushRecentSearch(scope, q);
       setRecents(loadRecentSearches(scope));
@@ -190,7 +190,7 @@ export default function SearchBar({
           id: optionId(scope, q),
           run: () => applyQuery(q, { save: true }),
         })),
-        { id: advancedOptionId(scope), run: openAdvanced },
+        ...(advancedMode ? [{ id: advancedOptionId(scope), run: openAdvanced }] : []),
       ];
   const active = activeIndex >= 0 && activeIndex < options.length ? options[activeIndex] : null;
 
@@ -259,7 +259,9 @@ export default function SearchBar({
               else applyQuery(value, { save: true });
             }
           }}
-          className="min-w-0 flex-1 border-none bg-transparent px-2 py-2.5 text-[0.875rem] text-text outline-none"
+          // The bar has a Clear search button of its own, so the one the browser
+          // draws inside a search input is hidden; otherwise there are two.
+          className="min-w-0 flex-1 border-none bg-transparent px-2 py-2.5 text-[0.875rem] text-text outline-none [&::-webkit-search-cancel-button]:appearance-none"
         />
         {value ? (
           <button
@@ -267,7 +269,7 @@ export default function SearchBar({
             aria-label="Clear search"
             onClick={() => {
               onChange("");
-              onSubmit("", advancedMode);
+              onSubmit("");
               inputRef.current?.focus();
             }}
             className="mr-2 cursor-pointer border-none bg-transparent px-1 text-[1rem] leading-none text-muted hover:text-text"
@@ -277,7 +279,7 @@ export default function SearchBar({
         ) : null}
       </div>
 
-      {popdownOpen && !showAdvanced ? (
+      {popdownOpen && !showAdvanced && options.length > 0 ? (
         <div
           id={popdownId}
           role="listbox"
@@ -345,26 +347,28 @@ export default function SearchBar({
                   <div className="mx-2 border-t border-border" />
                 </>
               ) : null}
-              <button
-                type="button"
-                role="option"
-                id={advancedOptionId(scope)}
-                aria-selected={activeIndex === recents.length}
-                onMouseEnter={() => setActiveIndex(recents.length)}
-                onClick={openAdvanced}
-                className={`flex w-full cursor-pointer items-center gap-2 border-none px-3 py-2.5 text-left text-[0.875rem] text-text hover:bg-hover ${
-                  activeIndex === recents.length ? "bg-hover" : "bg-transparent"
-                }`}
-              >
-                <SlidersIcon />
-                Advanced search
-              </button>
+              {advancedMode ? (
+                <button
+                  type="button"
+                  role="option"
+                  id={advancedOptionId(scope)}
+                  aria-selected={activeIndex === recents.length}
+                  onMouseEnter={() => setActiveIndex(recents.length)}
+                  onClick={openAdvanced}
+                  className={`flex w-full cursor-pointer items-center gap-2 border-none px-3 py-2.5 text-left text-[0.875rem] text-text hover:bg-hover ${
+                    activeIndex === recents.length ? "bg-hover" : "bg-transparent"
+                  }`}
+                >
+                  <SlidersIcon />
+                  Advanced search
+                </button>
+              ) : null}
             </>
           )}
         </div>
       ) : null}
 
-      {showAdvanced ? (
+      {showAdvanced && advancedMode ? (
         <div className={`absolute top-full left-0 mt-2 w-full min-w-[300px] ${Z_INLINE_PANEL}`}>
           <Suspense fallback={null}>
             <AdvancedSearchForm

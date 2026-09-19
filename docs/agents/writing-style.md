@@ -196,6 +196,12 @@ WhatsApp keeps its own name. The Text Message collapsing covers the Apple and
 carrier texting transports only, and the underlying `service` value still
 records `imessage`, `sms`, and `mms` — only the presentation collapses.
 
+One thing carries two names on purpose. A phone number, email address, or
+username a person is reached at is a **handle** in the code and the database
+(`handles`, `contact_handles`) and an **Identity** in the UI and the published
+documentation. Neither is a stale name: backend code is not renamed to
+`identity`, and UI copy does not say "handle".
+
 A stale name met in passing is fixed, not matched.
 
 ## Commit messages and pull requests

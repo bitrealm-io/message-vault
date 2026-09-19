@@ -67,7 +67,7 @@ export function AddressBookSection() {
 
   return (
     <section>
-      <h2 className={sectionTitleClass}>Address book</h2>
+      <h3 className={sectionTitleClass}>Address book</h3>
       <p className="mb-3 text-[0.813rem] text-muted">
         Load a VCF or vCard CSV to put names to the phone numbers in your messages. Loading again
         refreshes these entries and leaves your contact groups, the names you typed, and the

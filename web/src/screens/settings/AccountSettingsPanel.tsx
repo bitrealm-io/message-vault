@@ -1,5 +1,4 @@
 import { useAccountProfile } from "../../lib/useAccountProfile";
-import { AddressBookSection } from "./AddressBookSection";
 import { ApiTokensSection } from "./ApiTokensSection";
 import { ChangePasswordSection } from "./ChangePasswordSection";
 import { ProfileDangerZone } from "./ProfileDangerZone";
@@ -31,8 +30,6 @@ export function AccountSettingsPanel() {
         />
       </div>
       <ChangePasswordSection disabled={isDemo} />
-
-      <AddressBookSection />
 
       <ApiTokensSection
         accountCanImport={profile.can_import ?? true}

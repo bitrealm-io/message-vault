@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import type { ImportSummaryView } from "../../../components/import/ImportSummaryPanel";
+import ScrollingTableCard from "../../../components/ScrollingTableCard";
 import ImportDetailPanel from "./ImportDetailPanel";
 import type { ImportDetailResponse, ImportRow } from "./storageUtils";
 import {
@@ -7,7 +8,7 @@ import {
   formatImportDate,
   sectionHint,
   sectionTitle,
-  tableWrap,
+  tableCard,
   tdStyle,
   thStyle,
 } from "./storageUtils";
@@ -38,7 +39,7 @@ export default function ImportHistoryTable({
       {imports.length === 0 ? (
         <p className={`${sectionHint} mt-3`}>No imports recorded yet.</p>
       ) : (
-        <div className={`${tableWrap} mt-3`}>
+        <ScrollingTableCard className="mt-3" cardClassName={tableCard}>
           <table className="w-full border-collapse">
             <thead>
               <tr>
@@ -103,7 +104,7 @@ export default function ImportHistoryTable({
               })}
             </tbody>
           </table>
-        </div>
+        </ScrollingTableCard>
       )}
     </section>
   );

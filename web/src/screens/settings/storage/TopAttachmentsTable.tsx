@@ -1,11 +1,12 @@
 import Button from "../../../components/Button";
+import ScrollingTableCard from "../../../components/ScrollingTableCard";
 import type { TopAttachment } from "./storageUtils";
 import {
   ATTACHMENT_PAGE_SIZE,
   formatBytes,
   sectionHint,
   sectionTitle,
-  tableWrap,
+  tableCard,
   tdStyle,
   thStyle,
 } from "./storageUtils";
@@ -36,7 +37,7 @@ export default function TopAttachmentsTable({
         <p className={`${sectionHint} mt-3`}>No attachments with sizes yet.</p>
       ) : (
         <div className="mt-3 flex flex-col gap-3">
-          <div className={tableWrap}>
+          <ScrollingTableCard cardClassName={tableCard}>
             <table className="w-full border-collapse">
               <thead>
                 <tr>
@@ -59,7 +60,7 @@ export default function TopAttachmentsTable({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollingTableCard>
           {topAttachments.length > ATTACHMENT_PAGE_SIZE && (
             <div className="flex items-center justify-between gap-3">
               <span className="text-[0.75rem] text-muted">

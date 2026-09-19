@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
+import ScrollingTableCard from "../../components/ScrollingTableCard";
 import TextField from "../../components/TextField";
 import { productVersionOf, productVersionsDiffer } from "../../lib/buildFormat";
 import { formatDateTime } from "../../lib/formatDate";
@@ -196,7 +197,7 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
         </div>
       )}
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-elevated">
+      <ScrollingTableCard className="mt-4" cardClassName="rounded-xl bg-elevated">
         <table className="w-full border-collapse">
           <thead>
             <tr>
@@ -245,7 +246,7 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
             ) : null}
           </tbody>
         </table>
-      </div>
+      </ScrollingTableCard>
     </section>
   );
 }

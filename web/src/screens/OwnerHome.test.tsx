@@ -379,6 +379,26 @@ describe("OwnerHome", () => {
     expect(screen.getByRole("heading", { name: /export history/i })).toBeInTheDocument();
   });
 
+  it("lists an account's largest attachments for the owner by name and size, with no conversation", async () => {
+    getAccountStorage.mockResolvedValue({
+      total_bytes: 3000,
+      attachment_count: 1,
+      // What the vault answers the owner: the file, and not where it sits.
+      top_attachments: [
+        { id: 5, original_name: "big.mov", mime_type: "video/quicktime", size_bytes: 3000 },
+      ],
+    });
+    const user = userEvent.setup({ delay: null });
+    renderHome(["/owner/accounts/101"]);
+
+    await user.click(await screen.findByRole("tab", { name: "Storage" }));
+
+    expect(await screen.findByText("big.mov")).toBeInTheDocument();
+    const table = screen.getByText("big.mov").closest("table") as HTMLElement;
+    const headers = Array.from(table.querySelectorAll("th")).map((h) => h.textContent);
+    expect(headers).toEqual(["Name", "Size"]);
+  });
+
   it("counts the contacts an import made for the owner, and does not name them", async () => {
     const user = userEvent.setup({ delay: null });
     renderHome(["/owner/accounts/101"]);

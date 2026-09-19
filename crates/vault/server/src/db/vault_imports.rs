@@ -881,12 +881,27 @@ pub struct TopAttachment {
     pub mime_type: Option<String>,
     /// Attachment byte size.
     pub size_bytes: i64,
-    /// Conversation that holds the attachment.
-    pub conversation_id: i64,
+    /// Conversation that holds the attachment. Like the two fields after it,
+    /// absent when the vault owner reads another account's storage: which
+    /// conversation a file is in, and who it is with, is the holder's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation_id: Option<i64>,
     /// Conversation label, when set.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub conversation_title: Option<String>,
     /// Raw text of the conversation's chat handle (via `handles`).
-    pub chat_identifier: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chat_identifier: Option<String>,
+}
+
+impl TopAttachment {
+    /// The attachment as a file and nothing else: name, type and size.
+    pub fn without_conversation(mut self) -> Self {
+        self.conversation_id = None;
+        self.conversation_title = None;
+        self.chat_identifier = None;
+        self
+    }
 }
 
 /// Raw row for [`top_attachments_by_size`] before mapping to [`TopAttachment`].
@@ -945,9 +960,9 @@ pub async fn top_attachments_by_size(
                 original_name,
                 mime_type,
                 size_bytes,
-                conversation_id,
+                conversation_id: Some(conversation_id),
                 conversation_title,
-                chat_identifier,
+                chat_identifier: Some(chat_identifier),
             },
         )
         .collect())

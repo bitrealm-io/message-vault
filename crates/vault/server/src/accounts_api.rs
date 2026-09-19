@@ -1008,6 +1008,9 @@ pub(crate) struct AccountStorageResponse {
 
 /// Attachment storage usage for an account: total bytes, count, and the 100
 /// largest files. The owner reads any account's; an account reads its own.
+/// The owner is told each file's name, type and size and not the conversation
+/// it is in, which says who the account talks to
+/// (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
 #[utoipa::path(
     get,
     path = "/v1/accounts/{id}/storage",
@@ -1028,10 +1031,17 @@ pub(crate) async fn account_storage_handler(
     SignedIn(auth): SignedIn,
 ) -> Result<Json<AccountStorageResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_owner_or_self(&mut conn, &auth, target).await?;
+    let reach = require_owner_or_self(&mut conn, &auth, target).await?;
     let total_bytes = vault_imports::account_attachment_bytes(&mut conn, target).await?;
     let attachment_count = vault_imports::account_attachment_count(&mut conn, target).await?;
-    let top_attachments = vault_imports::top_attachments_by_size(&mut conn, target, 100).await?;
+    let mut top_attachments =
+        vault_imports::top_attachments_by_size(&mut conn, target, 100).await?;
+    if matches!(reach, Reach::Owner) {
+        top_attachments = top_attachments
+            .into_iter()
+            .map(vault_imports::TopAttachment::without_conversation)
+            .collect();
+    }
     Ok(Json(AccountStorageResponse {
         total_bytes,
         attachment_count,

@@ -246,6 +246,9 @@ export interface paths {
         /**
          * Attachment storage usage for an account: total bytes, count, and the 100
          *     largest files. The owner reads any account's; an account reads its own.
+         *     The owner is told each file's name, type and size and not the conversation
+         *     it is in, which says who the account talks to
+         *     (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
          */
         get: operations["get_account_storage"];
         put?: never;
@@ -2997,12 +3000,14 @@ export interface components {
         /** @description One of an account's largest attachments by byte size. */
         TopAttachment: {
             /** @description Raw text of the conversation's chat handle (via `handles`). */
-            chat_identifier: string;
+            chat_identifier?: string | null;
             /**
              * Format: int64
-             * @description Conversation that holds the attachment.
+             * @description Conversation that holds the attachment. Like the two fields after it,
+             *     absent when the vault owner reads another account's storage: which
+             *     conversation a file is in, and who it is with, is the holder's.
              */
-            conversation_id: number;
+            conversation_id?: number | null;
             /** @description Conversation label, when set. */
             conversation_title?: string | null;
             /**

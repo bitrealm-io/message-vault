@@ -1325,8 +1325,22 @@ async fn the_storage_route_sums_attachment_bytes_and_lists_the_largest_first() {
     assert_eq!(top[1]["original_name"], "small.jpg");
     assert_eq!(top[1]["size_bytes"], 1000);
 
+    // The owner reads the same totals and the same files by name, type and
+    // size, and not which conversation a file is in: that says who the
+    // account talks to.
     let by_owner: serde_json::Value = get_json(&vault.state, &path, &owner.token).await;
-    assert_eq!(by_owner, storage);
+    assert_eq!(by_owner["total_bytes"], storage["total_bytes"]);
+    assert_eq!(by_owner["attachment_count"], storage["attachment_count"]);
+    let owner_top = by_owner["top_attachments"].as_array().unwrap();
+    assert_eq!(owner_top.len(), 2);
+    assert_eq!(owner_top[0]["original_name"], "big.mov");
+    assert_eq!(owner_top[0]["mime_type"], "video/quicktime");
+    assert_eq!(owner_top[0]["size_bytes"], 3000);
+    for file in owner_top {
+        for held_back in ["conversation_id", "conversation_title", "chat_identifier"] {
+            assert!(file.get(held_back).is_none(), "{held_back}: {file}");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

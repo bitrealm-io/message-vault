@@ -15,10 +15,13 @@ export default function TopAttachmentsTable({
   topAttachments,
   page,
   onPageChange,
+  showConversation,
 }: {
   topAttachments: TopAttachment[];
   page: number;
   onPageChange: (page: number) => void;
+  /** False for the vault owner, whom the vault does not tell which conversation a file is in. */
+  showConversation: boolean;
 }) {
   const pageCount = Math.max(1, Math.ceil(topAttachments.length / ATTACHMENT_PAGE_SIZE));
   const pageRows = topAttachments.slice(
@@ -42,7 +45,7 @@ export default function TopAttachmentsTable({
               <thead>
                 <tr>
                   <th className={thStyle}>Name</th>
-                  <th className={thStyle}>Conversation</th>
+                  {showConversation ? <th className={thStyle}>Conversation</th> : null}
                   <th className={`${thStyle} text-right`}>Size</th>
                 </tr>
               </thead>
@@ -52,7 +55,9 @@ export default function TopAttachmentsTable({
                     <td className={`${tdStyle} max-w-[14rem] truncate`}>
                       {row.original_name || row.mime_type || `Attachment ${row.id}`}
                     </td>
-                    <td className={tdStyle}>{row.conversation_title || row.chat_identifier}</td>
+                    {showConversation ? (
+                      <td className={tdStyle}>{row.conversation_title || row.chat_identifier}</td>
+                    ) : null}
                     <td className={`${tdStyle} text-right tabular-nums`}>
                       {formatBytes(row.size_bytes)}
                     </td>

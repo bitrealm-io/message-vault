@@ -119,8 +119,10 @@ shows the account holder: the message count and the storage total, each import
 and export the account has run, and its largest attachments by name and size.
 The owner reads them at `/v1/accounts/{id}/storage`, `/imports` and `/exports`;
 `/v1/imports` and `/v1/exports` stay the pipelines' own and still refuse the
-owner. An import's detail gives the owner how many contacts it created and
-changed, and not who they are. Contact and conversation counts and vault-wide
+owner. Two things on that screen say who the account talks to, and the owner
+gets neither: an import's detail gives the owner how many contacts it created
+and changed and not who they are, and a large attachment comes to the owner
+as a name, a type and a size, without the conversation it is in. Contact and conversation counts and vault-wide
 totals are deferred, not rejected.
 
 ## The three states of a vault

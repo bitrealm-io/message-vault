@@ -28,8 +28,9 @@ of, and a search that reads the same everywhere.
   does.** Open an account from User Accounts and its Storage tab now shows its
   message count and storage total, every import and export it has run, and
   its largest attachments by name and size. Opening an import shows its
-  counts, timings and issues, and how many contacts it created and changed;
-  who those contacts are stays with the account. The account's Profile tab
+  counts, timings and issues, and how many contacts it created and changed.
+  Who those contacts are, and which conversation a file is in, stay with the
+  account. The account's Profile tab
   shows when it last logged in and which app it connects with.
 - 2026-09-19: **Every screen can tell you which version it is.** Settings →
   System shows the version of the app you are using, in the browser and in the

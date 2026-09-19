@@ -1342,7 +1342,7 @@
         "tags": [
           "Accounts"
         ],
-        "summary": "Attachment storage usage for an account: total bytes, count, and the 100\nlargest files. The owner reads any account's; an account reads its own.",
+        "summary": "Attachment storage usage for an account: total bytes, count, and the 100\nlargest files. The owner reads any account's; an account reads its own.\nThe owner is told each file's name, type and size and not the conversation\nit is in, which says who the account talks to\n(`docs/adr/0008-the-vault-owner-holds-no-messages.md`).",
         "operationId": "get_account_storage",
         "parameters": [
           {
@@ -10752,19 +10752,23 @@
         "description": "One of an account's largest attachments by byte size.",
         "required": [
           "id",
-          "size_bytes",
-          "conversation_id",
-          "chat_identifier"
+          "size_bytes"
         ],
         "properties": {
           "chat_identifier": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Raw text of the conversation's chat handle (via `handles`)."
           },
           "conversation_id": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
-            "description": "Conversation that holds the attachment."
+            "description": "Conversation that holds the attachment. Like the two fields after it,\nabsent when the vault owner reads another account's storage: which\nconversation a file is in, and who it is with, is the holder's."
           },
           "conversation_title": {
             "type": [

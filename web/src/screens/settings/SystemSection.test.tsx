@@ -3,6 +3,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { APP_BUILD } from "../../lib/build";
 import { SystemSection } from "./SystemSection";
 
 const tauriState = vi.hoisted(() => ({ isTauri: true }));
@@ -54,6 +55,17 @@ beforeEach(() => {
 });
 
 describe("SystemSection", () => {
+  it("shows this app's version in the browser and in the desktop app", async () => {
+    tauriState.isTauri = false;
+    render(<SystemSection />);
+    expect(screen.getByText("Version").nextElementSibling).toHaveTextContent(APP_BUILD);
+    cleanup();
+
+    tauriState.isTauri = true;
+    render(<SystemSection />);
+    expect((await screen.findByText("Version")).nextElementSibling).toHaveTextContent(APP_BUILD);
+  });
+
   it("shows the desktop-only stub when not in Tauri", () => {
     tauriState.isTauri = false;
     render(<SystemSection />);

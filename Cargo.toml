@@ -13,6 +13,7 @@ members = [
     "crates/libs/media",
     "crates/libs/go-sms-mms",
     "crates/libs/journal",
+    "crates/libs/build-version",
     "crates/libs/vault-http",
     "crates/libs/vault-api-types",
     "crates/exporters/go-sms-pro-exporter",

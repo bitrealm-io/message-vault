@@ -63,6 +63,12 @@ CREATE TABLE IF NOT EXISTS account_session_tokens (
     created_at TEXT NOT NULL,
     -- Unix-seconds string; session rejected after this time.
     expires_at TEXT NOT NULL DEFAULT '0',
+    -- Which app last used this session: 'desktop' or 'website'. NULL until a
+    -- request names one.
+    app_kind TEXT,
+    -- The Build that app reported, e.g. '0.9.0+343fe0d8'. Set with app_kind,
+    -- and rewritten only when either differs from what a request sends.
+    app_build TEXT,
     PRIMARY KEY (account_id)
 );
 

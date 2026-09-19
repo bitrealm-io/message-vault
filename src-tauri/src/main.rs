@@ -18,6 +18,10 @@ use std::sync::{Arc, Mutex};
 
 /// Start the desktop window and wait until the user quits.
 fn main() {
+    // Import and export name this Build to the vault on every request; the SPA
+    // does the same for its own requests (`web/src/lib/api.ts`).
+    vault_http::identify_desktop_app(env!("MESSAGE_VAULT_BUILD"));
+
     let app_state = Arc::new(Mutex::new(AppState::new()));
 
     // Native open/save dialogs. A WebView page cannot show the OS file picker.

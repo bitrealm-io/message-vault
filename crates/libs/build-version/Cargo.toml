@@ -1,0 +1,9 @@
+[package]
+name = "build-version"
+version = "0.1.0"
+edition = "2024"
+description = "Works out the Build string (Product Version plus commit) for a build script to embed"
+license = "LicenseRef-FCL-1.0-ALv2"
+
+[lints]
+workspace = true

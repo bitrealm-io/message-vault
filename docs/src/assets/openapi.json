@@ -6506,6 +6506,24 @@
             "format": "int64",
             "description": "Account id."
           },
+          "app": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AppKind",
+                "description": "Which app last used the account's session, the desktop app or the\nwebsite, or `null` when the account has no session or no request on it\nhas named an app."
+              }
+            ]
+          },
+          "app_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The Build that app reported, such as `0.9.0+343fe0d8`. Present exactly\nwhen `app` is."
+          },
           "can_delete": {
             "type": "boolean",
             "description": "May destroy message data."
@@ -6698,6 +6716,14 @@
             "description": "Masked secret for Settings (e.g. `mv-api-Sd..mE`)."
           }
         }
+      },
+      "AppKind": {
+        "type": "string",
+        "description": "Which app a session's requests come from. The vault records it beside the\napp's Build and shows both to the vault owner; it never refuses a request\non account of either.",
+        "enum": [
+          "desktop",
+          "website"
+        ]
       },
       "AssetPutResponse": {
         "type": "object",
@@ -8730,6 +8756,24 @@
                   "format": "int64",
                   "description": "Account id."
                 },
+                "app": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AppKind",
+                      "description": "Which app last used the account's session, the desktop app or the\nwebsite, or `null` when the account has no session or no request on it\nhas named an app."
+                    }
+                  ]
+                },
+                "app_version": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The Build that app reported, such as `0.9.0+343fe0d8`. Present exactly\nwhen `app` is."
+                },
                 "can_delete": {
                   "type": "boolean",
                   "description": "May destroy message data."
@@ -10479,12 +10523,23 @@
         "type": "object",
         "description": "The vault's state, for the screen a signed-out person sees.",
         "required": [
-          "state"
+          "state",
+          "version",
+          "schema_fingerprint"
         ],
         "properties": {
+          "schema_fingerprint": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The Schema Fingerprint, the number this vault stamps into its database."
+          },
           "state": {
             "$ref": "#/components/schemas/VaultState",
             "description": "`unclaimed` shows Create Vault Owner alone; `closed` shows Login alone;\n`open` shows Login and Create Account."
+          },
+          "version": {
+            "type": "string",
+            "description": "This vault's Build: its Product Version, plus the commit it was built\nfrom unless it is a release. An app compares the Product Version with\nits own and says so when they differ; the vault serves it either way."
           }
         }
       },

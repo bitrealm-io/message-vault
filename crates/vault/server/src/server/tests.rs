@@ -74,7 +74,7 @@ async fn api_token_cannot_exceed_its_owner() {
             .await
             .unwrap();
 
-    let identity = resolve_auth_on_conn(&mut conn, &created.token)
+    let identity = resolve_auth_on_conn(&mut conn, &created.token, None)
         .await
         .unwrap();
 
@@ -96,7 +96,7 @@ async fn disabling_an_account_kills_its_live_session() {
         .unwrap();
 
     // The token works while the account is active.
-    resolve_auth_on_conn(&mut conn, &token).await.unwrap();
+    resolve_auth_on_conn(&mut conn, &token, None).await.unwrap();
 
     sqlx::query("UPDATE accounts SET disabled = 1 WHERE id = $1")
         .bind(TEST_ACCOUNT)
@@ -104,7 +104,9 @@ async fn disabling_an_account_kills_its_live_session() {
         .await
         .unwrap();
 
-    let err = resolve_auth_on_conn(&mut conn, &token).await.unwrap_err();
+    let err = resolve_auth_on_conn(&mut conn, &token, None)
+        .await
+        .unwrap_err();
     assert!(
         matches!(err, ApiError::AccountDisabled(_)),
         "a disabled account's existing token must stop working, got {err:?}"
@@ -124,7 +126,7 @@ async fn disabling_an_account_kills_its_live_api_token() {
     let token = created.token;
 
     // The API token works while the account is active.
-    resolve_auth_on_conn(&mut conn, &token).await.unwrap();
+    resolve_auth_on_conn(&mut conn, &token, None).await.unwrap();
 
     sqlx::query("UPDATE accounts SET disabled = 1 WHERE id = $1")
         .bind(TEST_ACCOUNT)
@@ -132,7 +134,9 @@ async fn disabling_an_account_kills_its_live_api_token() {
         .await
         .unwrap();
 
-    let err = resolve_auth_on_conn(&mut conn, &token).await.unwrap_err();
+    let err = resolve_auth_on_conn(&mut conn, &token, None)
+        .await
+        .unwrap_err();
     assert!(
         matches!(err, ApiError::AccountDisabled(_)),
         "a disabled account's existing API token must stop working, got {err:?}"
@@ -1363,4 +1367,117 @@ async fn discard_body_reports_a_stream_that_fails_midway() {
 
     assert_eq!(error.status(), StatusCode::BAD_REQUEST);
     assert_eq!(error.to_string(), "failed to read body: connection reset");
+}
+
+// ---------------------------------------------------------------------------
+// The app a session connects with
+// ---------------------------------------------------------------------------
+
+fn app_headers(app: &str, version: &str) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert(APP_HEADER, app.parse().unwrap());
+    headers.insert(APP_VERSION_HEADER, version.parse().unwrap());
+    headers
+}
+
+#[test]
+fn a_request_names_its_app_with_two_headers() {
+    let app = connecting_app(&app_headers("desktop", "0.9.0+343fe0d8")).unwrap();
+    assert_eq!(app.kind, session_tokens::AppKind::Desktop);
+    assert_eq!(app.build, "0.9.0+343fe0d8");
+}
+
+#[test]
+fn a_request_that_names_no_app_or_names_it_badly_records_nothing() {
+    assert_eq!(connecting_app(&HeaderMap::new()), None);
+    assert_eq!(connecting_app(&app_headers("toaster", "0.9.0")), None);
+    assert_eq!(connecting_app(&app_headers("website", "")), None);
+    assert_eq!(
+        connecting_app(&app_headers("website", &"9".repeat(65))),
+        None
+    );
+    let mut only_the_app = HeaderMap::new();
+    only_the_app.insert(APP_HEADER, "website".parse().unwrap());
+    assert_eq!(connecting_app(&only_the_app), None);
+}
+
+#[tokio::test]
+async fn a_session_records_the_app_it_connects_with() {
+    let (_dir, mut conn) = test_conn().await;
+    account_profile::insert_account_at(&mut conn, TEST_ACCOUNT, "alice", None, None)
+        .await
+        .unwrap();
+    let token = session_tokens::insert_account_session_token(&mut conn, TEST_ACCOUNT)
+        .await
+        .unwrap();
+
+    // A request that names no app is served and leaves the row as it was.
+    resolve_auth_on_conn(&mut conn, &token, None).await.unwrap();
+    assert_eq!(
+        session_tokens::connecting_app_for_account(&mut conn, TEST_ACCOUNT)
+            .await
+            .unwrap(),
+        None
+    );
+
+    let desktop = session_tokens::ConnectingApp {
+        kind: session_tokens::AppKind::Desktop,
+        build: "0.9.0+343fe0d8".into(),
+    };
+    resolve_auth_on_conn(&mut conn, &token, Some(&desktop))
+        .await
+        .unwrap();
+    assert_eq!(
+        session_tokens::connecting_app_for_account(&mut conn, TEST_ACCOUNT)
+            .await
+            .unwrap(),
+        Some(desktop)
+    );
+
+    // The same session from an updated app: the row follows, no new login.
+    let website = session_tokens::ConnectingApp {
+        kind: session_tokens::AppKind::Website,
+        build: "0.10.0".into(),
+    };
+    resolve_auth_on_conn(&mut conn, &token, Some(&website))
+        .await
+        .unwrap();
+    assert_eq!(
+        session_tokens::connecting_app_for_account(&mut conn, TEST_ACCOUNT)
+            .await
+            .unwrap(),
+        Some(website)
+    );
+}
+
+/// An API token belongs to a program, not to either app, and has no session
+/// row to write to.
+#[tokio::test]
+async fn an_api_token_records_no_app() {
+    let (_dir, mut conn) = test_conn().await;
+    account_profile::insert_account_at(&mut conn, TEST_ACCOUNT, "alice", None, None)
+        .await
+        .unwrap();
+    session_tokens::insert_account_session_token(&mut conn, TEST_ACCOUNT)
+        .await
+        .unwrap();
+    let created =
+        api_tokens::create_api_token(&mut conn, TEST_ACCOUNT, "tool", Permissions::all(), None)
+            .await
+            .unwrap();
+
+    let desktop = session_tokens::ConnectingApp {
+        kind: session_tokens::AppKind::Desktop,
+        build: "0.9.0".into(),
+    };
+    resolve_auth_on_conn(&mut conn, &created.token, Some(&desktop))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        session_tokens::connecting_app_for_account(&mut conn, TEST_ACCOUNT)
+            .await
+            .unwrap(),
+        None
+    );
 }

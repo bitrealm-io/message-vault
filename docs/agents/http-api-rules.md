@@ -270,3 +270,17 @@ holds what was asked for and how much matched, never what the messages said.
 it: endpoint names, request and response shapes, and stored formats change
 whenever a better design is found, and breaking a client is an accepted cost.
 No compatibility alias, deprecation window or version handshake is ever added.
+
+The vault says which code it runs, and an app says which code it is, and
+neither decides anything. `GET /v1/vault` carries the vault's Build in
+`version` and the Schema Fingerprint in `schema_fingerprint`. The desktop app
+and the website send `x-message-vault-app` (`desktop` or `website`) and
+`x-message-vault-version` (their Build) on every request; the vault records
+the pair on the account's session, rewrites it only when it changes, and shows
+it to the vault owner. A request that sends neither header, or sends them
+malformed, is served and nothing is recorded, which covers curl, Swagger UI
+and any program holding an API token. No route refuses, redirects or changes
+its answer on account of either header: this is a record of what connected,
+not a handshake. The Product Version is the only value an app or Owner Home
+compares, and the HTTP interface has no version number of its own beyond the
+`1` in the path.

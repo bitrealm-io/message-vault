@@ -204,15 +204,16 @@ async fn change_password_transaction_updates_all_credentials() {
         .unwrap();
     assert!(passwords_match(Some(&stored_hash), "new-password"));
     assert!(
-        session_tokens::lookup_account_for_token(&mut conn, &old_session)
+        session_tokens::lookup_session(&mut conn, &old_session)
             .await
             .unwrap()
             .is_none()
     );
     assert_eq!(
-        session_tokens::lookup_account_for_token(&mut conn, &new_session)
+        session_tokens::lookup_session(&mut conn, &new_session)
             .await
-            .unwrap(),
+            .unwrap()
+            .map(|s| s.account_id),
         Some(TEST_ACCOUNT)
     );
     for api_token in api_tokens {
@@ -264,9 +265,10 @@ async fn change_password_transaction_rolls_back_every_credential() {
         .unwrap();
     assert!(passwords_match(Some(&stored_hash), "old-password"));
     assert_eq!(
-        session_tokens::lookup_account_for_token(&mut conn, &old_session)
+        session_tokens::lookup_session(&mut conn, &old_session)
             .await
-            .unwrap(),
+            .unwrap()
+            .map(|s| s.account_id),
         Some(TEST_ACCOUNT)
     );
     for api_token in api_tokens {
@@ -412,9 +414,10 @@ async fn change_password_transaction_rolls_back_every_credential_pg() {
         "the old password must still be the stored one"
     );
     assert_eq!(
-        session_tokens::lookup_account_for_token(&mut conn, &old_session)
+        session_tokens::lookup_session(&mut conn, &old_session)
             .await
-            .unwrap(),
+            .unwrap()
+            .map(|s| s.account_id),
         Some(TEST_ACCOUNT),
         "the old session must survive the failed change"
     );

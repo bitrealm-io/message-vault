@@ -38,6 +38,12 @@ pub struct VaultResponse {
     /// `unclaimed` shows Create Vault Owner alone; `closed` shows Login alone;
     /// `open` shows Login and Create Account.
     pub state: VaultState,
+    /// This vault's Build: its Product Version, plus the commit it was built
+    /// from unless it is a release. An app compares the Product Version with
+    /// its own and says so when they differ; the vault serves it either way.
+    pub version: String,
+    /// The Schema Fingerprint, the number this vault stamps into its database.
+    pub schema_fingerprint: i64,
 }
 
 /// Body for claiming a vault.
@@ -76,6 +82,8 @@ pub async fn vault_state_handler(
     let mut conn = state.db.acquire().await?;
     Ok(Json(VaultResponse {
         state: state_on_conn(&mut conn).await?,
+        version: crate::BUILD.to_string(),
+        schema_fingerprint: crate::db::schema::SCHEMA_FINGERPRINT,
     }))
 }
 

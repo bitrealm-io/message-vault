@@ -305,6 +305,10 @@ Three version numbers are easy to mix up:
 | Product version | `0.9.0`             | Desktop app + vault image. Git tag is `v0.9.0`.                                        |
 | Docker Hub tag  | `0.9.0` (no `v`)    | `bitrealm/message-vault:0.9.0`. Also `0.9`, `latest`, and `sha-…`.                     |
 | JSONL schema    | `schema_version: 4` | Shared chat file format. Independent of the product version. Version 3 is refused, never upgraded. |
+| Build           | `0.9.0+343fe0d8`    | The product version plus the commit, which is what a screen shows as "Version". `.dirty` follows the commit when tracked files held uncommitted changes; a build from a `v*` tag is `0.9.0` alone; `0.9.0+unknown` when nothing is known. Nobody writes it: `crates/libs/build-version` works it out for the vault and the desktop app, and `web/vite.config.ts` for the SPA, under the same rules. |
+| Schema fingerprint | `1818757801`     | Derived from `schema/sql/*.sql` and stamped into the vault database. Shown in Owner Home → Vault Settings. Never bumped by hand. |
+
+The Build asks git for the commit. Where there is no `.git`, which is the case inside `docker/Dockerfile`, set `MESSAGE_VAULT_BUILD_METADATA` to the part after the `+` (the Dockerfile takes it as the `BUILD_METADATA` build argument). Set and empty means a release, and is what the tag job passes.
 
 **Product version files** (keep these in lockstep; current value is `0.9.0`; CI's `version` job fails when they disagree, and on a `v*` tag when the tag disagrees with them):
 

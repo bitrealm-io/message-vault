@@ -13,6 +13,7 @@ crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+build-version = { path = "../crates/libs/build-version" }
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -37,6 +38,7 @@ imessage-ir-exporter = { path = "../crates/exporters/imessage-ir-exporter", defa
 message-reexport = { path = "../crates/libs/reexport" }
 vault-push = { path = "../crates/libs/vault-push" }
 vault-pull = { path = "../crates/libs/vault-pull" }
+vault-http = { path = "../crates/libs/vault-http" }
 
 [dev-dependencies]
 tempfile = "3"

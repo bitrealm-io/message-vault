@@ -12,6 +12,7 @@ import {
   LEFT_PANEL_WIDTH_VAR,
 } from "./leftPanelWidth";
 import SearchBar from "./SearchBar";
+import VersionNotice from "./VersionNotice";
 
 /** Which list the header search runs against. */
 export type HeaderSearchTarget = "accounts" | "contacts" | "messages" | "trash";
@@ -83,30 +84,33 @@ export default function AppHeader({
   );
 
   return (
-    <header className="relative z-20 flex shrink-0 items-center border-b border-border bg-panel">
-      <div
-        className="box-border flex h-12 shrink-0 items-center px-3"
-        style={{ width: `var(${LEFT_PANEL_WIDTH_VAR}, ${brandWidth}px)` }}
-      >
-        <span className="text-[0.875rem] font-bold text-text">Message Vault</span>
-      </div>
-      <div className="flex min-w-0 flex-1 items-center justify-center px-3 py-2">
-        <div className="w-full max-w-xl">
-          <SearchBar
-            key={searchTarget}
-            value={searchQuery}
-            scope={target.scope}
-            list={target.list}
-            placeholder={target.placeholder}
-            advancedMode={target.advancedMode}
-            onChange={onSearchChange}
-            onSubmit={onSearch}
-          />
+    <>
+      <header className="relative z-20 flex shrink-0 items-center border-b border-border bg-panel">
+        <div
+          className="box-border flex h-12 shrink-0 items-center px-3"
+          style={{ width: `var(${LEFT_PANEL_WIDTH_VAR}, ${brandWidth}px)` }}
+        >
+          <span className="text-[0.875rem] font-bold text-text">Message Vault</span>
         </div>
-      </div>
-      <div className="flex shrink-0 items-center px-3">
-        <AppAccountMenu />
-      </div>
-    </header>
+        <div className="flex min-w-0 flex-1 items-center justify-center px-3 py-2">
+          <div className="w-full max-w-xl">
+            <SearchBar
+              key={searchTarget}
+              value={searchQuery}
+              scope={target.scope}
+              list={target.list}
+              placeholder={target.placeholder}
+              advancedMode={target.advancedMode}
+              onChange={onSearchChange}
+              onSubmit={onSearch}
+            />
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center px-3">
+          <AppAccountMenu />
+        </div>
+      </header>
+      <VersionNotice />
+    </>
   );
 }

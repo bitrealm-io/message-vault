@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import Checkbox from "../../components/Checkbox";
 import { apiErrorMessage } from "../../lib/apiErrorMessage";
+import { useVaultInfo } from "../../lib/useVaultInfo";
 import { getVaultSettings, updateVaultSettings } from "../../lib/vaultApi";
 import { keys } from "../../lib/vaultKeys";
 import { useVaultCache, useVaultQuery } from "../../lib/vaultQuery";
@@ -9,7 +10,10 @@ import { useVaultCache, useVaultQuery } from "../../lib/vaultQuery";
  * Settings that belong to the whole vault rather than to one account.
  *
  * One so far. Public registration is off on a fresh vault, so a vault admits
- * nobody its owner has not admitted until the owner decides otherwise.
+ * nobody its owner has not admitted until the owner decides otherwise. Under
+ * it the vault states which code it runs and which schema its database
+ * carries: the Build, and the Schema Fingerprint as the number the vault
+ * stamps into the database and names in its startup warning.
  */
 export function VaultSettingsPanel() {
   const cache = useVaultCache();
@@ -20,6 +24,7 @@ export function VaultSettingsPanel() {
     mutationFn: (public_registration: boolean) => updateVaultSettings({ public_registration }),
     onSuccess: (settings) => cache.set(keys.vaultSettings.all, settings),
   });
+  const info = useVaultInfo();
 
   if (isPending) return <p className="text-[0.875rem] text-muted">Loading settings…</p>;
   if (error) {
@@ -55,6 +60,17 @@ export function VaultSettingsPanel() {
           </p>
         ) : null}
       </div>
+
+      {info.data ? (
+        <dl className="mt-4 grid grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-x-6 gap-y-2 rounded-xl border border-border bg-elevated p-4 text-[0.875rem]">
+          <dt className="text-muted">Version</dt>
+          <dd className="m-0 font-mono text-[0.813rem] text-text">{info.data.version}</dd>
+          <dt className="text-muted">Schema fingerprint</dt>
+          <dd className="m-0 font-mono text-[0.813rem] text-text">
+            {info.data.schema_fingerprint}
+          </dd>
+        </dl>
+      ) : null}
     </section>
   );
 }

@@ -31,6 +31,37 @@ pub struct AuthInfo {
     pub username: Option<String>,
 }
 
+/// The desktop app's Build, set once at startup by [`identify_desktop_app`].
+static DESKTOP_BUILD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Say which Build of the desktop app this process is, so every vault request
+/// made through [`build_client`] carries it. The vault records it on the
+/// account's session and shows it to the vault owner.
+///
+/// This crate cannot work the Build out itself: it is a library at `0.1.0`,
+/// and the Product Version belongs to the app that links it. Called once, from
+/// the desktop app's `main`; a second call changes nothing.
+pub fn identify_desktop_app(build: &str) {
+    let _ = DESKTOP_BUILD.set(build.to_string());
+}
+
+/// The headers that name this app to the vault, empty until
+/// [`identify_desktop_app`] has run.
+fn app_headers() -> reqwest::header::HeaderMap {
+    let mut headers = reqwest::header::HeaderMap::new();
+    let build = DESKTOP_BUILD
+        .get()
+        .and_then(|build| reqwest::header::HeaderValue::from_str(build).ok());
+    if let Some(build) = build {
+        headers.insert(
+            vault_api_types::APP_HEADER,
+            reqwest::header::HeaderValue::from_static(vault_api_types::AppKind::Desktop.as_str()),
+        );
+        headers.insert(vault_api_types::APP_VERSION_HEADER, build);
+    }
+    headers
+}
+
 /// Idle connections kept per vault host for worker threads.
 const POOL_MAX_IDLE_PER_HOST: usize = 64;
 
@@ -45,6 +76,7 @@ const POOL_MAX_IDLE_PER_HOST: usize = 64;
 pub fn build_client() -> Result<reqwest::blocking::Client> {
     reqwest::blocking::Client::builder()
         .pool_max_idle_per_host(POOL_MAX_IDLE_PER_HOST)
+        .default_headers(app_headers())
         .build()
         .context("build HTTP client")
 }

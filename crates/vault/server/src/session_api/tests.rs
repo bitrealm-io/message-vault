@@ -79,7 +79,7 @@ async fn logout_on_conn_leaves_registered_account() {
         Some("alice")
     );
     assert!(
-        session_tokens::lookup_account_for_token(&mut conn, &token)
+        session_tokens::lookup_session(&mut conn, &token)
             .await
             .unwrap()
             .is_none()

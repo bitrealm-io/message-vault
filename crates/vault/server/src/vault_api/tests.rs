@@ -74,6 +74,27 @@ async fn the_state_route_needs_no_credential() {
     );
 }
 
+/// The vault says which code it runs and which schema it carries to anyone:
+/// an app has to read both before anybody is signed in, and neither is secret.
+#[tokio::test]
+async fn the_state_route_carries_the_build_and_the_schema_fingerprint() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+
+    let body: VaultResponse = get_json(&state, "/v1/vault", "").await;
+
+    assert_eq!(body.version, crate::BUILD);
+    assert!(
+        body.version.starts_with(env!("CARGO_PKG_VERSION")),
+        "a Build starts with the Product Version, got {}",
+        body.version
+    );
+    assert_eq!(
+        body.schema_fingerprint,
+        crate::db::schema::SCHEMA_FINGERPRINT
+    );
+}
+
 #[tokio::test]
 async fn claiming_an_unowned_vault_creates_the_owner_and_signs_them_in() {
     let vault = test_vault().await;
@@ -93,7 +114,7 @@ async fn claiming_an_unowned_vault_creates_the_owner_and_signs_them_in() {
     // The token it hands back is the owner's session, usable at once.
     let token = body["token"].as_str().unwrap();
     let mut conn = state.db.acquire().await.unwrap();
-    let auth = crate::server::resolve_auth_on_conn(&mut conn, token)
+    let auth = crate::server::resolve_auth_on_conn(&mut conn, token, None)
         .await
         .unwrap();
     assert!(auth.is_owner());

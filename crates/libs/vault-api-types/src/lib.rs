@@ -29,6 +29,45 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Request header naming the app a request comes from: `desktop` or
+/// `website`, the two values of [`AppKind`].
+pub const APP_HEADER: &str = "x-message-vault-app";
+
+/// Request header carrying that app's Build, such as `0.9.0+343fe0d8`.
+pub const APP_VERSION_HEADER: &str = "x-message-vault-version";
+
+/// Which app a session's requests come from. The vault records it beside the
+/// app's Build and shows both to the vault owner; it never refuses a request
+/// on account of either.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum AppKind {
+    /// The desktop app, from its SPA or from its import and export code.
+    Desktop,
+    /// The SPA the vault serves to a browser.
+    Website,
+}
+
+impl AppKind {
+    /// The value sent in [`APP_HEADER`] and stored by the vault.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Desktop => "desktop",
+            Self::Website => "website",
+        }
+    }
+
+    /// Read a sent or stored value; anything else names no app.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "desktop" => Some(Self::Desktop),
+            "website" => Some(Self::Website),
+            _ => None,
+        }
+    }
+}
+
 /// What happens to a source's messages that were imported before: `replace`
 /// wipes them first, `append` keeps them and adds only new ones.
 // Every path that carries a mode, the `POST /v1/imports` body, the `import` CLI flag, `vault-push`'s settings and the

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiClient, getBaseUrl, problemFromBody, setBaseUrl, setToken, VaultApiError } from "./api";
+import { APP_BUILD } from "./build";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -154,6 +155,21 @@ describe("apiClient no-content", () => {
  * every one of them, and every screen would have failed against a real vault.
  */
 describe("apiClient request shape", () => {
+  it("names this app and its Build on every request, signed in or not", async () => {
+    const fetchSpy = stubOkFetch();
+
+    await apiClient.get("/v1/vault");
+    await apiClient.postRaw("/v1/imports/1/conversations", "{}", "application/x-ndjson");
+
+    for (const [, init] of fetchSpy.mock.calls as [string, RequestInit][]) {
+      const headers = init.headers as Record<string, string>;
+      // A browser here, not the desktop app: nothing has set up Tauri.
+      expect(headers["x-message-vault-app"]).toBe("website");
+      expect(headers["x-message-vault-version"]).toBe(APP_BUILD);
+    }
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("puts the path after the base URL", async () => {
     const fetchSpy = stubOkFetch();
     setBaseUrl("https://vault.example.test");

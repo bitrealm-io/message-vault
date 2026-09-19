@@ -24,6 +24,8 @@ use std::{
 const HELPER: &str = "imessage-reader";
 
 fn main() {
+    // The desktop app's Build, which it sends to the vault with every request.
+    build_version::emit();
     build_sidecar();
     tauri_build::build();
 }

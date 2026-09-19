@@ -409,12 +409,6 @@ jobs:
             type=raw,value=latest
             type=sha,prefix=sha-
 
-      - name: Build stamp
-        id: stamp
-        run: |
-          echo "build_id=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          echo "build_date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
-
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
@@ -423,9 +417,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Empty on purpose: a release reports the Product Version alone,
+          # and the image cannot ask git because .git is not in its context.
           build-args: |
-            BUILD_ID=${{ steps.stamp.outputs.build_id }}
-            BUILD_DATE=${{ steps.stamp.outputs.build_date }}
+            BUILD_METADATA=
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

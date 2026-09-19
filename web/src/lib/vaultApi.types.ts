@@ -1111,6 +1111,12 @@ export interface components {
              * @description Account id.
              */
             account_id: number;
+            app?: null | components["schemas"]["AppKind"];
+            /**
+             * @description The Build that app reported, such as `0.9.0+343fe0d8`. Present exactly
+             *     when `app` is.
+             */
+            app_version?: string | null;
             /** @description May destroy message data. */
             can_delete: boolean;
             /** @description May call the export endpoints. */
@@ -1212,6 +1218,13 @@ export interface components {
             /** @description Masked secret for Settings (e.g. `mv-api-Sd..mE`). */
             token_hint: string;
         };
+        /**
+         * @description Which app a session's requests come from. The vault records it beside the
+         *     app's Build and shows both to the vault owner; it never refuses a request
+         *     on account of either.
+         * @enum {string}
+         */
+        AppKind: "desktop" | "website";
         /** @description Stored asset fingerprint and path. */
         AssetPutResponse: {
             already_present: boolean;
@@ -2110,6 +2123,12 @@ export interface components {
                  * @description Account id.
                  */
                 account_id: number;
+                app?: null | components["schemas"]["AppKind"];
+                /**
+                 * @description The Build that app reported, such as `0.9.0+343fe0d8`. Present exactly
+                 *     when `app` is.
+                 */
+                app_version?: string | null;
                 /** @description May destroy message data. */
                 can_delete: boolean;
                 /** @description May call the export endpoints. */
@@ -2954,10 +2973,21 @@ export interface components {
         /** @description The vault's state, for the screen a signed-out person sees. */
         VaultResponse: {
             /**
+             * Format: int64
+             * @description The Schema Fingerprint, the number this vault stamps into its database.
+             */
+            schema_fingerprint: number;
+            /**
              * @description `unclaimed` shows Create Vault Owner alone; `closed` shows Login alone;
              *     `open` shows Login and Create Account.
              */
             state: components["schemas"]["VaultState"];
+            /**
+             * @description This vault's Build: its Product Version, plus the commit it was built
+             *     from unless it is a release. An app compares the Product Version with
+             *     its own and says so when they differ; the vault serves it either way.
+             */
+            version: string;
         };
         /** @description The vault settings the owner controls. */
         VaultSettingsResponse: {

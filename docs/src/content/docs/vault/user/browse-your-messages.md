@@ -17,7 +17,7 @@ Group chats appear in the same list as one-to-one threads. Search with `kind:gro
 | **Import** | Push a backup into the vault (desktop app only) |
 | **Export** | Pull messages to disk (desktop app only) — [Export from the vault](/vault/user/how-to/export-from-the-vault/) |
 | **Settings** | Account, profile, storage, appearance |
-| **Sign out** | End the session |
+| **Log out** | End the session (in the account menu, the circle at the top right) |
 
 **Saved groups** under the sidebar store search queries. Create one with **+ New**, then click a name to run that search again — [Saved searches](/vault/user/how-to/saved-searches/).
 

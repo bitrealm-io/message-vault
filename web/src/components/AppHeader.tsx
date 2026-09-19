@@ -47,7 +47,7 @@ const SEARCH_TARGETS: Record<
   },
 };
 
-/** Full-width bar: app name on the left, search in the remaining space. */
+/** Full-width bar: app name on the left, search in the middle, the account button on the far right. */
 export default function AppHeader({
   searchQuery,
   searchTarget,
@@ -76,7 +76,7 @@ export default function AppHeader({
         className="box-border flex h-12 shrink-0 items-center px-3"
         style={{ width: `var(${LEFT_PANEL_WIDTH_VAR}, ${brandWidth}px)` }}
       >
-        <AppAccountMenu />
+        <span className="text-[0.875rem] font-bold text-text">Message Vault</span>
       </div>
       <div className="flex min-w-0 flex-1 items-center justify-center px-3 py-2">
         <div className="w-full max-w-xl">
@@ -91,6 +91,9 @@ export default function AppHeader({
             onSubmit={onSearch}
           />
         </div>
+      </div>
+      <div className="flex shrink-0 items-center px-3">
+        <AppAccountMenu />
       </div>
     </header>
   );

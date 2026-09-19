@@ -32,6 +32,7 @@ export default function PopupMenu({
   triggerRef,
   label,
   items,
+  header,
   className = "",
 }: {
   open: boolean;
@@ -41,6 +42,8 @@ export default function PopupMenu({
   /** Accessible name for the menu itself. */
   label: string;
   items: PopupMenuItem[];
+  /** Read-only block above the items, such as who is signed in. Not a focus stop. */
+  header?: ReactNode;
   className?: string;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -57,6 +60,11 @@ export default function PopupMenu({
       onKeyDown={onKeyDown}
       className={`min-w-[7.5rem] rounded-lg border border-border bg-popover py-1 ${popupShadow} ${className}`}
     >
+      {header ? (
+        <div className="mb-1 border-b border-border px-3 pt-1 pb-2 text-[0.813rem] text-text">
+          {header}
+        </div>
+      ) : null}
       {items.map((item) => (
         <button
           key={item.label}

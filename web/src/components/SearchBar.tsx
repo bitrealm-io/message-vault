@@ -259,7 +259,9 @@ export default function SearchBar({
               else applyQuery(value, { save: true });
             }
           }}
-          className="min-w-0 flex-1 border-none bg-transparent px-2 py-2.5 text-[0.875rem] text-text outline-none"
+          // The bar has a Clear search button of its own, so the one the browser
+          // draws inside a search input is hidden; otherwise there are two.
+          className="min-w-0 flex-1 border-none bg-transparent px-2 py-2.5 text-[0.875rem] text-text outline-none [&::-webkit-search-cancel-button]:appearance-none"
         />
         {value ? (
           <button

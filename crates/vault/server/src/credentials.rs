@@ -18,7 +18,6 @@ use crate::server::ApiError;
 
 /// Max password bytes accepted before hashing (creation, sign-in, change).
 pub(crate) const MAX_PASSWORD_BYTES: usize = 1024;
-const MIN_PASSWORD_CHARS: usize = 8;
 /// Sliding window for the routes a stranger may call with a credential.
 pub(crate) const AUTH_RATE_WINDOW: Duration = Duration::from_secs(60);
 pub(crate) const AUTH_RATE_MAX: usize = 20;
@@ -136,13 +135,28 @@ pub(crate) fn verify_login_password(password_hash: Option<&str>, password: &str)
     }
 }
 
-/// Reject passwords that are too short or too long.
-pub(crate) fn validate_password_policy(password: &str) -> Result<(), ApiError> {
-    if password.len() < MIN_PASSWORD_CHARS {
-        return Err(ApiError::validation(format!(
-            "password must be at least {MIN_PASSWORD_CHARS} characters"
-        )));
+/// Hash the vault owner's password. The owner must have one, so an empty
+/// password is refused; one character is enough.
+pub(crate) fn hash_owner_password(password: &str) -> Result<String, ApiError> {
+    if password.is_empty() {
+        return Err(ApiError::validation("the vault owner must have a password"));
     }
+    require_hashable(password)?;
+    Ok(hash_password(password)?)
+}
+
+/// Hash a user account's password. There is no minimum length: an empty
+/// password is `None`, an account with no password.
+pub(crate) fn hash_user_password(password: &str) -> Result<Option<String>, ApiError> {
+    if password.is_empty() {
+        return Ok(None);
+    }
+    require_hashable(password)?;
+    Ok(Some(hash_password(password)?))
+}
+
+/// Refuse a password longer than Argon2 should be asked to hash.
+fn require_hashable(password: &str) -> Result<(), ApiError> {
     if password.len() > MAX_PASSWORD_BYTES {
         return Err(ApiError::validation("password is too long"));
     }
@@ -245,7 +259,7 @@ pub(crate) async fn change_password_on_conn(
     conn: &mut AnyConnection,
     account_id: i64,
     current_password: &str,
-    new_hash: &str,
+    new_hash: Option<&str>,
 ) -> std::result::Result<String, ChangePasswordError> {
     let mut tx = conn.begin().await?;
     let current_hash = account_profile::load_password_hash(&mut tx, account_id).await?;

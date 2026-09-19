@@ -107,8 +107,7 @@ pub async fn claim_vault_handler(
 ) -> Result<Json<crate::session_api::SessionTokenResponse>, ApiError> {
     let username = crate::credentials::require_valid_username(&req.username)?;
     crate::credentials::check_auth_rate_limit(&state.auth_rate_limits, "claim")?;
-    crate::credentials::validate_password_policy(&req.password)?;
-    let password_hash = crate::credentials::hash_password(&req.password)?;
+    let password_hash = crate::credentials::hash_owner_password(&req.password)?;
 
     let mut conn = state.db.acquire().await?;
     // The claim check and the insert share a transaction: two requests racing

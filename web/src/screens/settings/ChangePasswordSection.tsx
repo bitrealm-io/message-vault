@@ -10,8 +10,17 @@ import { inputClassName, sectionTitleClass } from "./profileStyles";
  * Shared by Settings → Account and by Owner Home, which has no Settings to
  * reach. Two copies of a password form would be two places for
  * the confirmation rule and the token rotation to drift apart.
+ *
+ * A user account may have no password, so Settings offers Clear password.
+ * The vault owner must keep one, so Owner Home passes `canClear={false}`.
  */
-export function ChangePasswordSection({ disabled = false }: { disabled?: boolean }) {
+export function ChangePasswordSection({
+  disabled = false,
+  canClear = true,
+}: {
+  disabled?: boolean;
+  canClear?: boolean;
+}) {
   const { updateToken } = useAuth();
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -19,32 +28,34 @@ export function ChangePasswordSection({ disabled = false }: { disabled?: boolean
   const [pwMsg, setPwMsg] = useState("");
   const [pwOk, setPwOk] = useState(false);
 
-  const handleChangePassword = async () => {
+  /** Store `password` as the new one; an empty string clears it. */
+  const savePassword = async (password: string) => {
     setPwMsg("");
     setPwOk(false);
-    if (newPw.length < 8) {
-      setPwMsg("New password must be at least 8 characters.");
-      return;
-    }
-    if (newPw !== confirmPw) {
-      setPwMsg("New password and confirmation do not match.");
-      return;
-    }
     try {
       const res = await changePassword({
         current_password: currentPw,
-        password: newPw,
+        password,
       });
       // Changing the password rotates the session, so the old token is dead.
       if (res.token) updateToken(res.token);
       setPwOk(true);
-      setPwMsg("Password changed.");
+      setPwMsg(password ? "Password changed." : "Password cleared.");
       setCurrentPw("");
       setNewPw("");
       setConfirmPw("");
     } catch (e) {
       setPwMsg(e instanceof Error ? e.message : String(e));
     }
+  };
+
+  const handleChangePassword = async () => {
+    if (newPw !== confirmPw) {
+      setPwOk(false);
+      setPwMsg("New password and confirmation do not match.");
+      return;
+    }
+    await savePassword(newPw);
   };
 
   return (
@@ -84,14 +95,27 @@ export function ChangePasswordSection({ disabled = false }: { disabled?: boolean
             className={inputClassName}
           />
         </label>
-        <Button
-          variant="primary"
-          onClick={handleChangePassword}
-          disabled={disabled || !currentPw || !newPw || !confirmPw}
-          size="sm"
-        >
-          Change password
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {/* The current password may be empty: the account may have none. */}
+          <Button
+            variant="primary"
+            onClick={handleChangePassword}
+            disabled={disabled || !newPw || !confirmPw}
+            size="sm"
+          >
+            Change password
+          </Button>
+          {canClear && (
+            <Button
+              variant="secondary"
+              onClick={() => void savePassword("")}
+              disabled={disabled}
+              size="sm"
+            >
+              Clear password
+            </Button>
+          )}
+        </div>
         {pwMsg && (
           <div
             className="mt-1.5 text-[0.813rem]"

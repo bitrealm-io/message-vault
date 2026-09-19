@@ -200,7 +200,7 @@ pub async fn load_password_hash(
 pub async fn update_password_hash(
     conn: &mut AnyConnection,
     account_id: i64,
-    password_hash: &str,
+    password_hash: Option<&str>,
 ) -> Result<()> {
     sqlx::query("UPDATE accounts SET password_hash = $1 WHERE id = $2")
         .bind(password_hash)
@@ -704,7 +704,7 @@ mod tests {
         let vault = crate::test_support::test_vault().await;
         vault.account_with_id(ACCOUNT_ID, "Alice").await;
         let mut conn = vault.conn().await;
-        update_password_hash(&mut conn, ACCOUNT_ID, "$argon2id$example")
+        update_password_hash(&mut conn, ACCOUNT_ID, Some("$argon2id$example"))
             .await
             .unwrap();
         let hash = load_password_hash(&mut conn, ACCOUNT_ID).await.unwrap();

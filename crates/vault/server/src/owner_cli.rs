@@ -20,7 +20,7 @@ use crate::open_vault::OpenVault;
 /// # Errors
 ///
 /// Fails when the vault already has an owner, when the username is malformed
-/// or taken, or when the password is shorter than the vault's policy allows.
+/// or taken, or when the password is empty.
 pub async fn create_owner(vault: &OpenVault, username: &str, password: &str) -> Result<String> {
     let mut conn = vault.conn().await?;
 
@@ -28,9 +28,10 @@ pub async fn create_owner(vault: &OpenVault, username: &str, password: &str) -> 
         Ok(username) => username,
         Err(e) => bail!("{e}"),
     };
-    if let Err(e) = crate::credentials::validate_password_policy(password) {
-        bail!("{e}");
-    }
+    let hash = match crate::credentials::hash_owner_password(password) {
+        Ok(hash) => hash,
+        Err(e) => bail!("{e}"),
+    };
 
     if account_profile::vault_is_claimed(&mut conn).await? {
         bail!(
@@ -41,7 +42,6 @@ pub async fn create_owner(vault: &OpenVault, username: &str, password: &str) -> 
         bail!("{e}");
     }
 
-    let hash = crate::credentials::hash_password(password)?;
     account_profile::insert_account_at(
         &mut conn,
         account_profile::OWNER_ACCOUNT_ID,
@@ -61,21 +61,24 @@ pub async fn create_owner(vault: &OpenVault, username: &str, password: &str) -> 
 ///
 /// # Errors
 ///
-/// Fails when the vault has no owner, or when the password is shorter than
-/// the vault's policy allows.
+/// Fails when the vault has no owner, or when the password is empty.
 pub async fn reset_owner_password(vault: &OpenVault, password: &str) -> Result<String> {
     let mut conn = vault.conn().await?;
 
-    if let Err(e) = crate::credentials::validate_password_policy(password) {
-        bail!("{e}");
-    }
+    let hash = match crate::credentials::hash_owner_password(password) {
+        Ok(hash) => hash,
+        Err(e) => bail!("{e}"),
+    };
     if !account_profile::vault_is_claimed(&mut conn).await? {
         bail!("this vault has no owner yet; use `create-owner` to claim it");
     }
 
-    let hash = crate::credentials::hash_password(password)?;
-    account_profile::update_password_hash(&mut conn, account_profile::OWNER_ACCOUNT_ID, &hash)
-        .await?;
+    account_profile::update_password_hash(
+        &mut conn,
+        account_profile::OWNER_ACCOUNT_ID,
+        Some(&hash),
+    )
+    .await?;
     // The old password is gone, so every session it opened should be too.
     crate::db::session_tokens::revoke_account_sessions(
         &mut conn,

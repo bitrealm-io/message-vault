@@ -196,6 +196,26 @@ describe("OwnerHome", () => {
     expect(screen.queryByText(/made to replace/)).not.toBeInTheDocument();
   });
 
+  it("clears a user's password from the reset dialog", async () => {
+    const user = userEvent.setup();
+    renderHome();
+
+    await user.click(await screen.findByRole("button", { name: "Reset password" }));
+    const dialog = await screen.findByRole("dialog", { name: "Reset password" });
+    await user.click(within(dialog).getByRole("button", { name: "Clear password" }));
+
+    await waitFor(() => expect(setAccountPassword).toHaveBeenCalledWith(101, { password: "" }));
+  });
+
+  it("offers the owner no way to clear their own password", async () => {
+    const user = userEvent.setup();
+    renderHome();
+    await user.click(screen.getByRole("button", { name: "Password" }));
+
+    expect(screen.getByRole("button", { name: "Change password" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear password" })).not.toBeInTheDocument();
+  });
+
   it("adds an account only once its password is typed twice the same way", async () => {
     const user = userEvent.setup({ delay: null });
     renderHome();

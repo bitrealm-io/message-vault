@@ -7479,7 +7479,7 @@
               "string",
               "null"
             ],
-            "description": "Local password. The owner must give one, and the account holder\nreplaces it at first sign-in. A stranger may leave it absent or empty\nto open an account with no password."
+            "description": "Local password, of any length. Absent or empty opens an account with\nno password."
           },
           "phone": {
             "type": [

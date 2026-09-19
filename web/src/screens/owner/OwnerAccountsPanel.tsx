@@ -75,6 +75,7 @@ export function OwnerAccountsPanel() {
     openPasswordReset,
     closePasswordReset,
     setAccountPassword,
+    clearAccountPassword,
   } = useOwnerAccounts();
   const [confirming, setConfirming] = useState<ConfirmTarget | null>(null);
 
@@ -322,8 +323,8 @@ export function OwnerAccountsPanel() {
         maxWidth="24rem"
       >
         <p className="mb-3 text-[0.813rem] text-muted">
-          Set a new password for {passwordTarget?.username}. They keep it until they change it
-          themselves.
+          Set a new password for {passwordTarget?.username}, or clear it so they sign in with none.
+          They keep it until they change it themselves.
         </p>
         <TextField
           label="New password"
@@ -352,6 +353,9 @@ export function OwnerAccountsPanel() {
         <DialogFooter>
           <Button onPress={closePasswordReset} isDisabled={busy}>
             Cancel
+          </Button>
+          <Button onPress={clearAccountPassword} isDisabled={busy}>
+            Clear password
           </Button>
           <Button
             variant="primary"

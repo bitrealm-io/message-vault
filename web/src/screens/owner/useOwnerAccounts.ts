@@ -169,21 +169,30 @@ export function useOwnerAccounts() {
     setResetPasswordConfirm("");
   }, [busy]);
 
-  const setAccountPassword = useCallback(() => {
-    if (!passwordTarget || !resetPasswordValue || resetPasswordValue !== resetPasswordConfirm) {
-      return;
-    }
-    changePassword.mutate(
-      { id: passwordTarget.account_id, password: resetPasswordValue },
-      {
-        onSuccess: () => {
-          setPasswordTarget(null);
-          setResetPasswordValue("");
-          setResetPasswordConfirm("");
+  /** Store `password` on the account the dialog is open for; empty clears it. */
+  const savePassword = useCallback(
+    (password: string) => {
+      if (!passwordTarget) return;
+      changePassword.mutate(
+        { id: passwordTarget.account_id, password },
+        {
+          onSuccess: () => {
+            setPasswordTarget(null);
+            setResetPasswordValue("");
+            setResetPasswordConfirm("");
+          },
         },
-      },
-    );
-  }, [passwordTarget, resetPasswordValue, resetPasswordConfirm, changePassword.mutate]);
+      );
+    },
+    [passwordTarget, changePassword.mutate],
+  );
+
+  const setAccountPassword = useCallback(() => {
+    if (!resetPasswordValue || resetPasswordValue !== resetPasswordConfirm) return;
+    savePassword(resetPasswordValue);
+  }, [resetPasswordValue, resetPasswordConfirm, savePassword]);
+
+  const clearAccountPassword = useCallback(() => savePassword(""), [savePassword]);
 
   const patch = useCallback(
     (id: number, changes: ManagedAccountChanges) =>
@@ -242,5 +251,6 @@ export function useOwnerAccounts() {
     openPasswordReset,
     closePasswordReset,
     setAccountPassword,
+    clearAccountPassword,
   };
 }

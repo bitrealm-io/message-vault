@@ -1520,9 +1520,8 @@ export interface components {
         /** @description Body for creating an account, by the vault owner or by a stranger. */
         CreateAccountRequest: {
             /**
-             * @description Local password. The owner must give one, and the account holder
-             *     replaces it at first sign-in. A stranger may leave it absent or empty
-             *     to open an account with no password.
+             * @description Local password, of any length. Absent or empty opens an account with
+             *     no password.
              */
             password?: string | null;
             /** @description Phone number linked to the account. */

@@ -314,22 +314,24 @@ async fn a_created_account_must_replace_the_password_the_owner_chose() {
     );
 }
 
-/// The owner must give a password: an account with none would sign in with
-/// an empty one, and the forced change would have nothing to replace.
+/// A user account has no password length rule, so the owner may create one
+/// with a single character or with none, and both sign in.
 #[tokio::test]
-async fn the_owner_cannot_create_a_passwordless_account() {
+async fn the_owner_creates_accounts_with_a_short_password_or_none() {
     let vault = test_vault().await;
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let status = post_status(
-        &state,
-        "/v1/accounts",
-        &owner.token,
+    for body in [
         serde_json::json!({ "username": "carol" }),
-    )
-    .await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        serde_json::json!({ "username": "dave", "password": "a" }),
+    ] {
+        let status = post_status(&state, "/v1/accounts", &owner.token, body).await;
+        assert_eq!(status, StatusCode::CREATED);
+    }
+
+    assert_eq!(login_status(&state, "carol", "").await, StatusCode::CREATED);
+    assert_eq!(login_status(&state, "dave", "a").await, StatusCode::CREATED);
 }
 
 /// A stranger's registration answers the new row and the Session the vault
@@ -921,6 +923,91 @@ async fn the_owner_can_change_their_own_password() {
     );
     assert_eq!(
         login_status(&state, "keeper", "hunter2hunter2").await,
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+/// The owner must have a password: one character is enough, none is refused,
+/// and the refusal leaves the old password in place.
+#[tokio::test]
+async fn the_owner_cannot_clear_their_own_password() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let path = format!("{}/password", member(owner.account_id));
+
+    assert_eq!(
+        put_status(
+            &state,
+            &path,
+            &owner.token,
+            serde_json::json!({ "current_password": "hunter2hunter2", "password": "" })
+        )
+        .await,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+
+    // The old password is still the current one, so the refusal stored nothing.
+    let _changed: SetPasswordResponse = put_json(
+        &state,
+        &path,
+        &owner.token,
+        serde_json::json!({ "current_password": "hunter2hunter2", "password": "k" }),
+    )
+    .await;
+    assert_eq!(
+        login_status(&state, "keeper", "k").await,
+        StatusCode::CREATED
+    );
+}
+
+/// An empty new password clears it. An account clears its own with its
+/// current password and can set one again from none; the owner clears a
+/// user's the same way it sets one.
+#[tokio::test]
+async fn a_user_password_can_be_cleared_by_the_account_or_the_owner() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
+    let path = format!("{}/password", member(bob.account_id));
+
+    let _cleared: SetPasswordResponse = put_json(
+        &state,
+        &path,
+        &bob.token,
+        serde_json::json!({ "current_password": "hunter2hunter2", "password": "" }),
+    )
+    .await;
+    assert_eq!(
+        login_status(&state, "bob", "hunter2hunter2").await,
+        StatusCode::UNAUTHORIZED,
+        "the old password is gone"
+    );
+
+    // Signing in opens a new session, so the next change uses its token.
+    let login = sign_in(&state, "bob", "").await;
+    let _set_again: SetPasswordResponse = put_json(
+        &state,
+        &path,
+        login["token"].as_str().unwrap(),
+        serde_json::json!({ "current_password": "", "password": "b" }),
+    )
+    .await;
+    assert_eq!(login_status(&state, "bob", "b").await, StatusCode::CREATED);
+
+    let owner = sign_in(&state, "keeper", "hunter2hunter2").await;
+    let status = put_status(
+        &state,
+        &path,
+        owner["token"].as_str().unwrap(),
+        serde_json::json!({ "password": "" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(login_status(&state, "bob", "").await, StatusCode::CREATED);
+    assert_eq!(
+        login_status(&state, "bob", "b").await,
         StatusCode::UNAUTHORIZED
     );
 }

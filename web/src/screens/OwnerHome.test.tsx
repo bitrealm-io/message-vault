@@ -15,6 +15,10 @@ const updateAccount = vi.hoisted(() => vi.fn());
 const setAccountPassword = vi.hoisted(() => vi.fn());
 const createAccount = vi.hoisted(() => vi.fn());
 const getAccountProfile = vi.hoisted(() => vi.fn());
+const getAccount = vi.hoisted(() => vi.fn());
+const getAccountStorage = vi.hoisted(() => vi.fn());
+const deleteAccountById = vi.hoisted(() => vi.fn());
+const deleteAccountMessages = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/auth", () => ({
   useAuth: () => ({ logout: vi.fn(), updateToken: vi.fn(), accountId: 1 }),
@@ -29,11 +33,21 @@ vi.mock("../lib/vaultApi", async (importOriginal) => ({
   setAccountPassword: (...a: unknown[]) => setAccountPassword(...a),
   createAccount: (...a: unknown[]) => createAccount(...a),
   getAccountProfile: (...a: unknown[]) => getAccountProfile(...a),
+  getAccount: (...a: unknown[]) => getAccount(...a),
+  getAccountStorage: (...a: unknown[]) => getAccountStorage(...a),
+  deleteAccountById: (...a: unknown[]) => deleteAccountById(...a),
+  deleteAccountMessages: (...a: unknown[]) => deleteAccountMessages(...a),
 }));
 
 const anAccount = {
   account_id: 101,
   username: "bob",
+  preferred_name: "Bob Archer",
+  time_zone: "America/New_York",
+  phones: ["+15555550100"],
+  emails: [],
+  is_demo: false,
+  is_owner: false,
   disabled: false,
   can_import: true,
   can_export: true,
@@ -41,6 +55,18 @@ const anAccount = {
   message_count: 1234,
   storage_bytes: 2048,
   last_sign_in_at: null,
+};
+
+/** The vault owner's own row, which leads the list and is account 1, the one signed in. */
+const theOwner = {
+  ...anAccount,
+  account_id: 1,
+  username: "root",
+  preferred_name: null,
+  phones: [],
+  is_owner: true,
+  message_count: 0,
+  storage_bytes: 0,
 };
 
 beforeEach(() => {
@@ -57,8 +83,16 @@ beforeEach(() => {
   setAccountPassword.mockReset();
   createAccount.mockReset();
   getAccountProfile.mockReset();
-  getAccountProfile.mockResolvedValue({ username: "root", preferred_name: null, is_owner: true });
-  listAccounts.mockResolvedValue({ items: [anAccount] });
+  getAccount.mockReset();
+  getAccountStorage.mockReset();
+  deleteAccountById.mockReset();
+  deleteAccountMessages.mockReset();
+  getAccountProfile.mockResolvedValue(theOwner);
+  getAccount.mockResolvedValue(anAccount);
+  getAccountStorage.mockResolvedValue({ total_bytes: 2048, attachment_count: 7 });
+  deleteAccountById.mockResolvedValue(undefined);
+  deleteAccountMessages.mockResolvedValue(undefined);
+  listAccounts.mockResolvedValue({ items: [theOwner, anAccount] });
   getVaultSettings.mockResolvedValue({ public_registration: false });
   updateVaultSettings.mockResolvedValue({ public_registration: true });
   updateAccount.mockResolvedValue({ ...anAccount, disabled: true });
@@ -74,7 +108,7 @@ function renderHome(entries: string[] = ["/owner/accounts"]) {
       <VaultProviders>
         <MemoryRouter initialEntries={entries}>
           <Routes>
-            <Route path="/owner/:section?" element={<OwnerHome />} />
+            <Route path="/owner/:section?/:accountId?" element={<OwnerHome />} />
           </Routes>
         </MemoryRouter>
       </VaultProviders>
@@ -152,8 +186,103 @@ describe("OwnerHome", () => {
     await user.click(screen.getByRole("button", { name: "Account menu" }));
     await user.click(await screen.findByRole("menuitem", { name: "Settings" }));
 
+    // The owner's own row in User Accounts is the owner's Settings.
+    expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
     expect(await screen.findByText("Change Password")).toBeInTheDocument();
-    expect(selectedSection()).toBe("");
+    expect(selectedSection()).toBe("User Accounts");
+  });
+
+  it("lists the vault owner first, with no status or permissions to set", async () => {
+    renderHome();
+
+    const rows = (await screen.findAllByRole("row")).slice(1);
+    expect(within(rows[0]).getByRole("button", { name: "Settings for root" })).toBeInTheDocument();
+    expect(within(rows[0]).getByText("Vault owner")).toBeInTheDocument();
+    // The owner cannot be disabled and holds no messages to import, export or delete.
+    expect(within(rows[0]).queryByRole("button", { name: /Status of/ })).not.toBeInTheDocument();
+    expect(within(rows[0]).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(rows[1]).getByRole("button", { name: "Settings for bob" })).toBeInTheDocument();
+  });
+
+  it("shows an account's preferred name under its username, and searches it too", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderHome();
+
+    expect(await screen.findByText("Bob Archer")).toBeInTheDocument();
+    await user.type(screen.getByRole("combobox", { name: "Search accounts" }), "archer");
+
+    expect(screen.getByText("bob")).toBeInTheDocument();
+    expect(screen.queryByText("root")).not.toBeInTheDocument();
+  });
+
+  it("opens an account's Settings from its name, with the account's own tabs", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderHome();
+
+    await user.click(await screen.findByRole("button", { name: "Settings for bob" }));
+
+    expect(await screen.findByRole("heading", { name: "Settings for bob" })).toBeInTheDocument();
+    expect(getAccount).toHaveBeenCalledWith(101, expect.anything());
+    // System, Convert and Appearance are this device's, not bob's.
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Account",
+      "Profile",
+      "Storage",
+    ]);
+    // API tokens are the account holder's own to see.
+    expect(screen.queryByText(/API tokens/i)).not.toBeInTheDocument();
+  });
+
+  it("shows an account's profile without offering to change it", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderHome(["/owner/accounts/101"]);
+
+    await user.click(await screen.findByRole("tab", { name: "Profile" }));
+
+    expect(await screen.findByLabelText("Display name")).toHaveValue("Bob Archer");
+    expect(screen.getByLabelText("Display name")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("Time zone")).toHaveValue("America/New_York");
+    expect(screen.getByText("+15555550100")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
+  });
+
+  it("shows how much an account holds, and nothing of what", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderHome(["/owner/accounts/101"]);
+
+    await user.click(await screen.findByRole("tab", { name: "Storage" }));
+
+    await waitFor(() => expect(getAccountStorage).toHaveBeenCalledWith(expect.anything(), 101));
+    expect(screen.queryByText(/import history/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/largest/i)).not.toBeInTheDocument();
+  });
+
+  it("deletes an account from its Settings and returns to User Accounts", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderHome(["/owner/accounts/101"]);
+
+    await user.click(await screen.findByRole("button", { name: /Danger zone/ }));
+    await user.click(screen.getByRole("button", { name: "Delete account" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete bob's account?" });
+    // The owner deletes on the strength of the count, so the dialog states it.
+    expect(dialog).toHaveTextContent("1,234 messages");
+    await user.click(within(dialog).getByRole("button", { name: "Delete account" }));
+
+    await waitFor(() => expect(deleteAccountById).toHaveBeenCalledWith(101));
+    expect(await screen.findByRole("heading", { name: "User Accounts" })).toBeInTheDocument();
+  });
+
+  it("deletes an account's messages from its Settings", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderHome(["/owner/accounts/101"]);
+
+    await user.click(await screen.findByRole("button", { name: /Danger zone/ }));
+    await user.click(screen.getByRole("button", { name: "Delete all messages" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete bob's messages?" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete all messages" }));
+
+    await waitFor(() => expect(deleteAccountMessages).toHaveBeenCalledWith(101));
   });
 
   it("lists the accounts with counts and no message content", async () => {
@@ -172,8 +301,10 @@ describe("OwnerHome", () => {
       "Import",
       "Export",
       "Delete",
-      "Actions",
     ]);
+    // What was the Actions column is in the account's Settings, behind its name.
+    expect(screen.queryByRole("button", { name: "Reset password" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete account" })).not.toBeInTheDocument();
   });
 
   it("has no Admin column, because no account can be made one", async () => {
@@ -218,25 +349,19 @@ describe("OwnerHome", () => {
     await waitFor(() => expect(updateAccount).toHaveBeenCalledWith(101, { disabled: true }));
   });
 
-  it("resets a password only once it is typed twice the same way", async () => {
+  it("sets an account's password from its Settings, typed twice the same way", async () => {
     const user = userEvent.setup({ delay: null });
-    renderHome();
+    renderHome(["/owner/accounts/101"]);
 
-    await screen.findByText("bob");
-    await user.click(screen.getByRole("button", { name: "Reset password" }));
-    const dialog = await screen.findByRole("dialog", { name: "Reset password" });
-    const save = within(dialog).getByRole("button", { name: "Save" });
+    await user.type(await screen.findByLabelText("New password"), "correct horse");
+    await user.type(screen.getByLabelText("Confirm new password"), "correct hors");
+    await user.click(screen.getByRole("button", { name: "Change password" }));
+    expect(await screen.findByText(/do not match/)).toBeInTheDocument();
+    expect(setAccountPassword).not.toHaveBeenCalled();
 
-    await user.type(within(dialog).getByLabelText("New password"), "correct horse");
-    await user.type(within(dialog).getByLabelText("Confirm password"), "correct hors");
-    expect(within(dialog).getByRole("alert")).toHaveTextContent("Passwords do not match.");
-    expect(save).toBeDisabled();
+    await user.type(screen.getByLabelText("Confirm new password"), "e");
+    await user.click(screen.getByRole("button", { name: "Change password" }));
 
-    await user.type(within(dialog).getByLabelText("Confirm password"), "e");
-    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
-    expect(save).toBeEnabled();
-
-    await user.click(save);
     await waitFor(() =>
       expect(setAccountPassword).toHaveBeenCalledWith(101, { password: "correct horse" }),
     );
@@ -244,21 +369,19 @@ describe("OwnerHome", () => {
     expect(screen.queryByText(/made to replace/)).not.toBeInTheDocument();
   });
 
-  it("clears a user's password from the reset dialog", async () => {
+  it("clears a user's password from the account's Settings", async () => {
     const user = userEvent.setup();
-    renderHome();
+    renderHome(["/owner/accounts/101"]);
 
     await user.click(await screen.findByRole("button", { name: "Reset password" }));
-    const dialog = await screen.findByRole("dialog", { name: "Reset password" });
-    await user.click(within(dialog).getByRole("button", { name: "Clear password" }));
 
     await waitFor(() => expect(setAccountPassword).toHaveBeenCalledWith(101, { password: "" }));
   });
 
   it("offers the owner no way to reset their own password to none", async () => {
-    renderHome(["/owner/settings"]);
+    renderHome(["/owner/accounts/1"]);
 
-    expect(screen.getByRole("button", { name: "Change password" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Change password" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reset password" })).not.toBeInTheDocument();
   });
 
@@ -330,15 +453,22 @@ describe("OwnerHome", () => {
     );
   });
 
-  it("offers the owner a password, an appearance, and nothing else of their own", async () => {
-    renderHome(["/owner/settings"]);
+  it("gives the owner's own Settings the tabs that mean something to an owner", async () => {
+    renderHome(["/owner/accounts/1"]);
 
     expect(await screen.findByText("Change Password")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Theme" })).toBeInTheDocument();
-    // No profile, no time zone, no API tokens, no danger zone: the owner has
-    // no vault for any of them to act on.
-    expect(screen.queryByText("Username")).not.toBeInTheDocument();
+    // The owner's own account is read as the signed-in account, not as a managed one.
+    expect(getAccount).not.toHaveBeenCalled();
+    // No Storage: the owner holds no messages. The device tabs are here,
+    // because this is the owner's own browser.
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Account",
+      "Profile",
+      "System",
+      "Appearance",
+    ]);
+    // No API tokens and no danger zone: the owner mints no token and cannot be deleted.
     expect(screen.queryByText(/API tokens/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Time Zone/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Danger zone/ })).not.toBeInTheDocument();
   });
 });

@@ -142,13 +142,17 @@ The screen the vault owner lands on at sign-in and works from, the way any
 other account lands in Messages. It has the frame every account sees: the
 product name, a search bar and the account button across the top, over a
 side panel and a content pane. The side panel lists Vault Settings, then
-User Accounts, and the search bar narrows User Accounts by username. The
-owner's own password and appearance are under Settings, behind the account
-button, where every other account finds its Settings. User Accounts is where the owner adds
-accounts, sets each one's status to active or disabled, sets what it may do,
-resets its password, and deletes its messages or the account. An owner's
-password reset sets the password and nothing more: it does not end the
-person's session and does not make them choose a new one.
+User Accounts, and the search bar narrows User Accounts by username or
+preferred name. User Accounts lists every account, the owner's own first,
+each by username with its preferred name under it. There the owner adds
+accounts, sets each one's status to active or disabled, and sets what it may
+do. An account's name opens that account's Settings, the screen its holder
+sees, where the owner sets its password and deletes its messages or the
+account, and reads its profile and storage total without changing the one or
+seeing inside the other. The owner's own row opens the owner's own Settings,
+which is also where the account button's Settings goes. An owner's password
+reset sets the password and nothing more: it does not end the person's
+session and does not make them choose a new one.
 _Avoid_: Console, Dashboard, Admin, Admin panel
 
 **Claiming**:

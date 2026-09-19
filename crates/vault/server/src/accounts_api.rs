@@ -183,8 +183,9 @@ async fn require_owner_or_self(
 // ---------------------------------------------------------------------------
 
 /// List the accounts this vault holds, with their flags, message count, and
-/// storage use. The owner's own account is not among them: the list holds
-/// the users of this vault, and the owner is not one of them.
+/// storage use. The owner's own account comes first, then the rest by
+/// username: the owner is an account of this vault too, and reaches its own
+/// settings from the same list as everyone else's.
 #[utoipa::path(
     get,
     path = "/v1/accounts",
@@ -208,12 +209,12 @@ pub async fn list_accounts_handler(
 ) -> Result<Json<Page<AccountResponse>>, ApiError> {
     let page = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts WHERE id != $1")
-        .bind(account_profile::OWNER_ACCOUNT_ID)
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
         .fetch_one(&mut *conn)
         .await?;
     let ids: Vec<i64> = sqlx::query_scalar(
-        "SELECT id FROM accounts WHERE id != $1 ORDER BY username LIMIT $2 OFFSET $3",
+        "SELECT id FROM accounts \
+         ORDER BY CASE WHEN id = $1 THEN 0 ELSE 1 END, username LIMIT $2 OFFSET $3",
     )
     .bind(account_profile::OWNER_ACCOUNT_ID)
     .bind(page.limit as i64)

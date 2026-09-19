@@ -19,11 +19,11 @@ export default function AppAccountMenu() {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, accountId } = useAuth();
   const { profile } = useAccountProfile();
-  // The owner's settings are a section of Owner Home; every other account has /settings.
+  // The owner's Settings are its own row in User Accounts; every other account has /settings.
   const { isOwner } = useIsVaultOwner();
-  const settingsPath = isOwner ? "/owner/settings" : "/settings";
+  const settingsPath = isOwner ? `/owner/accounts/${accountId}` : "/settings";
   const settingsActive = location.pathname.startsWith(settingsPath);
 
   const close = useCallback(() => setOpen(false), []);

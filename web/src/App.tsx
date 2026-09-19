@@ -66,7 +66,7 @@ function AppRoutes() {
       {/* Owner Home, outside the AuthGuard's message shell: the owner holds
           no messages, so none of what that shell frames exists for them. */}
       <Route
-        path="/owner/:section?"
+        path="/owner/:section?/:accountId?"
         element={isAuthenticated && isOwner ? <OwnerHome /> : <Navigate to="/" replace />}
       />
       <Route

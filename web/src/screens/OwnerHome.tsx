@@ -9,18 +9,16 @@ import {
   LEFT_PANEL_STORAGE_KEY,
 } from "../components/leftPanelWidth";
 import { NAV_LEADING_ROW_CLASS } from "../components/navSectionLayout";
+import { useAuth } from "../lib/auth";
 import { parseSelectKey } from "../lib/selectKey";
 import { OwnerAccountsPanel } from "./owner/OwnerAccountsPanel";
 import { VaultSettingsPanel } from "./owner/VaultSettingsPanel";
-import { AppearanceSection } from "./settings/AppearanceSection";
-import { ChangePasswordSection } from "./settings/ChangePasswordSection";
+import SettingsScreen from "./SettingsScreen";
 
 /** What the side panel lists, in its order. */
-const NAV_SECTIONS = ["vault", "accounts"] as const;
-/** Settings is a section too, reached from the account button the way /settings is. */
-const SECTIONS = [...NAV_SECTIONS, "settings"] as const;
+const SECTIONS = ["vault", "accounts"] as const;
 
-const SECTION_LABELS: Record<(typeof NAV_SECTIONS)[number], string> = {
+const SECTION_LABELS: Record<(typeof SECTIONS)[number], string> = {
   vault: "Vault Settings",
   accounts: "User Accounts",
 };
@@ -41,13 +39,15 @@ function sectionLinkClass(active: boolean): string {
  * contacts, no import, no export and no trash, so the side panel lists Vault
  * Settings and User Accounts, and the search bar filters the accounts table.
  *
- * The owner's Settings, behind the account button, are a password and an
- * appearance and nothing else — no profile, no time zone, no vault. See
- * `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
+ * `/owner/accounts/{id}` is one account's Settings, the screen its holder
+ * sees, opened from the account's name in the table. The owner's own row
+ * opens the owner's own Settings, which is also where the account button's
+ * Settings goes. See `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
  */
 export default function OwnerHome() {
-  const { section: raw } = useParams();
+  const { section: raw, accountId: rawAccountId } = useParams();
   const navigate = useNavigate();
+  const { accountId: ownAccountId } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const section = parseSelectKey(raw ?? null, SECTIONS);
   // The width the message shell's side panel was last dragged to, so the
@@ -67,11 +67,20 @@ export default function OwnerHome() {
     return <Navigate to="/owner/accounts" replace />;
   }
 
+  // An id that is not a number names no account; the list is the way back.
+  const openAccountId =
+    section === "accounts" && rawAccountId && /^\d+$/.test(rawAccountId)
+      ? Number(rawAccountId)
+      : null;
+  if (rawAccountId && openAccountId === null) {
+    return <Navigate to="/owner/accounts" replace />;
+  }
+
   const accountSearch = searchParams.get("q") || "";
 
-  // The bar searches accounts from any section, so typing elsewhere goes there.
+  // The bar searches the accounts table, so typing anywhere else goes to it.
   const handleSearchChange = (q: string) => {
-    if (section !== "accounts") {
+    if (section !== "accounts" || openAccountId !== null) {
       navigate(`/owner/accounts${q ? `?q=${encodeURIComponent(q)}` : ""}`);
       return;
     }
@@ -93,7 +102,7 @@ export default function OwnerHome() {
           className="flex h-full shrink-0 flex-col gap-0.5 overflow-auto border-r border-border bg-panel px-3 py-2"
           style={{ width: navWidth }}
         >
-          {NAV_SECTIONS.map((id) => (
+          {SECTIONS.map((id) => (
             <button
               key={id}
               type="button"
@@ -107,16 +116,18 @@ export default function OwnerHome() {
         </nav>
 
         <main className="min-w-0 flex-1 overflow-auto bg-bg text-text">
-          <div className="mx-auto max-w-[900px] p-6">
-            {section === "vault" && <VaultSettingsPanel />}
-            {section === "accounts" && <OwnerAccountsPanel filter={accountSearch} />}
-            {section === "settings" && (
-              <div className="flex flex-col gap-8">
-                <ChangePasswordSection canReset={false} />
-                <AppearanceSection />
-              </div>
-            )}
-          </div>
+          {openAccountId !== null ? (
+            // The owner's own row is the owner's own Settings, not a managed account's.
+            <SettingsScreen
+              key={openAccountId}
+              managedAccountId={openAccountId === ownAccountId ? undefined : openAccountId}
+            />
+          ) : (
+            <div className="mx-auto max-w-[900px] p-6">
+              {section === "vault" && <VaultSettingsPanel />}
+              {section === "accounts" && <OwnerAccountsPanel filter={accountSearch} />}
+            </div>
+          )}
         </main>
       </div>
     </div>

@@ -36,7 +36,7 @@
         "tags": [
           "Accounts"
         ],
-        "summary": "List the accounts this vault holds, with their flags, message count, and\nstorage use. The owner's own account is not among them: the list holds\nthe users of this vault, and the owner is not one of them.",
+        "summary": "List the accounts this vault holds, with their flags, message count, and\nstorage use. The owner's own account comes first, then the rest by\nusername: the owner is an account of this vault too, and reaches its own\nsettings from the same list as everyone else's.",
         "operationId": "list_accounts",
         "parameters": [
           {

@@ -283,6 +283,8 @@ describe("OwnerHome", () => {
     expect(within(rows[0]).queryByRole("button", { name: /Status of/ })).not.toBeInTheDocument();
     expect(within(rows[0]).queryByRole("checkbox")).not.toBeInTheDocument();
     expect(within(rows[1]).getByRole("button", { name: "Settings for bob" })).toBeInTheDocument();
+    // The gear opens the account; the name itself is plain text.
+    expect(within(rows[1]).getByText("bob").closest("button")).toBeNull();
   });
 
   it("shows an account's preferred name under its username, and searches it too", async () => {
@@ -296,7 +298,7 @@ describe("OwnerHome", () => {
     expect(screen.queryByText("root")).not.toBeInTheDocument();
   });
 
-  it("opens an account's Settings from its name, with the account's own tabs", async () => {
+  it("opens an account's Settings from the gear in its row, with the account's own tabs", async () => {
     const user = userEvent.setup({ delay: null });
     renderHome();
 
@@ -448,7 +450,7 @@ describe("OwnerHome", () => {
     expect(screen.queryByText("1,234")).not.toBeInTheDocument();
     expect(screen.queryByText(/The accounts on this vault/)).not.toBeInTheDocument();
     // The table sets nothing: status reads as text, and the permissions, like
-    // what was the Actions column, are in the account's Settings, behind its name.
+    // what was the Actions column, are in the account's Settings, behind its gear.
     expect(screen.getByText("Active")).toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reset password" })).not.toBeInTheDocument();

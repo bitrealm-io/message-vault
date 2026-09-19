@@ -158,14 +158,15 @@ of, and a search that reads the same everywhere.
   password as before. The owner's Settings are now Account, Profile and
   Appearance: System and Convert work on messages, which the owner does not
   hold, and Profile no longer asks the owner for handles.
-- 2026-09-19: **An account's name in User Accounts opens its Settings.** The
-  screen is the one the account holder sees, with the Account, Profile and
+- 2026-09-19: **A gear in each User Accounts row opens that account's
+  Settings.** It appears at the left of the row while the pointer is in it.
+  The screen is the one the account holder sees, with the Account, Profile and
   Storage tabs. Reset password, Delete messages and Delete account moved
   there from the Actions column, which is gone. You can read an account's
   profile and how much it stores; you cannot change the profile or see what
   is stored. Each account shows its preferred name under its username, and
   the search bar matches either. Your own account now leads the list, and its
-  name opens your own Settings.
+  gear opens your own Settings.
 - 2026-09-19: **Owner Home looks like the screen every account sees.** The
   product name, a search bar and the account button now run across the top.
   The search bar narrows User Accounts by username. The side panel lists

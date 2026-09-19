@@ -946,6 +946,58 @@ async fn name_only_participant_becomes_a_contact_with_no_identity() {
     );
 }
 
+/// A group chat's identifier names the conversation, not a person, so only
+/// the people in the group become contacts.
+#[tokio::test]
+async fn a_group_chat_identifier_never_becomes_a_contact() {
+    sqlx::any::install_default_drivers();
+    let tmp = TempDir::new().unwrap();
+    let db = tmp.path().join("vault.db");
+    let assets = tmp.path().join("assets");
+    let path = write_jsonl(
+        tmp.path(),
+        "group.jsonl",
+        r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"chat1000000005","conversation_type":"group","group_title":"Trip","participants":[{"handle":"+15555550123","display_name":null},{"handle":"+15555550999","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
+{"guid":"g-group","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}
+"#,
+    );
+    let opts = replace_opts(&assets, tmp.path(), "imessage");
+    import_jsonl_files(&db, &[path], &opts).await.unwrap();
+
+    let (_pool, mut conn) = open_verify(&db).await;
+
+    let linked: Vec<String> = sqlx::query_scalar(
+        "SELECT h.raw FROM contact_handles ch
+         JOIN handles h ON h.id = ch.handle_id
+         WHERE ch.account_id = $1
+         ORDER BY h.raw",
+    )
+    .bind(TEST_ACCOUNT)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(linked, ["+15555550123", "+15555550999"]);
+
+    let contacts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM contacts WHERE account_id = $1")
+        .bind(TEST_ACCOUNT)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(contacts, 2, "one contact per person in the group");
+
+    // The conversation itself is still stored under its group identifier.
+    let chat: String = sqlx::query_scalar(
+        "SELECT h.raw FROM conversations c
+         JOIN handles h ON h.id = c.chat_handle_id
+         WHERE c.account_id = $1",
+    )
+    .bind(TEST_ACCOUNT)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(chat, "chat1000000005");
+}
+
 /// `resolve_name_only_participant` returns `(None, None)` when the source
 /// recorded neither an address nor a name for a participant, but the
 /// insert that follows it in `staging.rs` runs unconditionally — so this

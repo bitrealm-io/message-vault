@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Button from "../../components/Button";
-import Select, { ListBoxItem, selectItemClassName } from "../../components/Select";
-import { timeZoneOptions } from "../../lib/timeZone";
+import TimeZoneField from "../../components/TimeZoneField";
 import { useSettingsAccount, useUpdateSettingsProfile } from "../../lib/useSettingsAccount";
 import { AccountActivitySection } from "./AccountActivitySection";
 import { AddressBookSection } from "./AddressBookSection";
@@ -24,7 +23,6 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
   const [nameSaved, setNameSaved] = useState(false);
   const [nameError, setNameError] = useState("");
   const [zoneError, setZoneError] = useState("");
-  const zones = useMemo(() => timeZoneOptions(profile?.time_zone), [profile?.time_zone]);
 
   useEffect(() => {
     if (profile) setName(profile.preferred_name ?? "");
@@ -83,21 +81,12 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
       {!nameError && <div className="mb-6" />}
 
       <h3 className={sectionTitleClass}>Time Zone</h3>
-      <Select
-        selectedKey={profile.time_zone}
-        onSelectionChange={(k) => {
-          if (typeof k === "string") void handleChangeZone(k);
-        }}
+      <TimeZoneField
+        value={profile.time_zone}
+        onChange={(zone) => void handleChangeZone(zone)}
         isDisabled={updateProfile.isPending}
-        aria-label="Time zone"
-        className="mb-[0.35rem] max-w-[22rem]"
-      >
-        {zones.map((z) => (
-          <ListBoxItem key={z} id={z} className={selectItemClassName}>
-            {z}
-          </ListBoxItem>
-        ))}
-      </Select>
+        className="mb-[0.35rem] max-w-[28rem]"
+      />
       <div className="text-[0.813rem] text-muted">
         Message times, days and years are shown in this zone.
       </div>

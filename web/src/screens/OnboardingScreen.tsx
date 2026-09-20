@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import AuthBackButton from "../components/AuthBackButton";
 import AuthErrorFooter from "../components/AuthErrorFooter";
 import AuthSubmitButton from "../components/AuthSubmitButton";
@@ -6,6 +6,7 @@ import Button from "../components/Button";
 import { PersonIcon, PhoneIcon } from "../components/icons";
 import Select, { ListBoxItem, selectItemClassName } from "../components/Select";
 import TextField from "../components/TextField";
+import TimeZoneField from "../components/TimeZoneField";
 import { useAuth } from "../lib/auth";
 import {
   DUPLICATE_HANDLE_MESSAGE,
@@ -17,7 +18,7 @@ import {
   handleValidationError,
 } from "../lib/handleService";
 import { parseSelectKey } from "../lib/selectKey";
-import { browserTimeZone, timeZoneOptions } from "../lib/timeZone";
+import { browserTimeZone } from "../lib/timeZone";
 import { authCard, authCardBody, authCardFooter, authTitle, pageCenter } from "../lib/uiStyles";
 import { useAsyncAction } from "../lib/useAsyncAction";
 import { updateAccountProfile } from "../lib/vaultApi";
@@ -104,7 +105,6 @@ export default function OnboardingScreen() {
   // searches draw their day boundaries from it. The browser's zone is the
   // right first guess for where this person reads their messages.
   const [timeZone, setTimeZone] = useState(browserTimeZone);
-  const zones = useMemo(() => timeZoneOptions(timeZone), [timeZone]);
   const [handles, setHandles] = useState<HandleInput[]>(() => [newHandleRow()]);
   // Rows whose value does not read as the kind of account it is set to. Held
   // by id rather than index so removing a row cannot move the mark onto a
@@ -245,20 +245,12 @@ export default function OnboardingScreen() {
             placeholder="Your name"
           />
 
-          <Select
+          <TimeZoneField
             label="Time Zone"
-            selectedKey={timeZone}
-            onSelectionChange={(k) => {
-              if (typeof k === "string") setTimeZone(k);
-            }}
+            value={timeZone}
+            onChange={setTimeZone}
             className="mt-4"
-          >
-            {zones.map((z) => (
-              <ListBoxItem key={z} id={z} className={selectItemClassName}>
-                {z}
-              </ListBoxItem>
-            ))}
-          </Select>
+          />
 
           <div className="mt-4 mb-2 block text-[0.875rem] font-medium text-text">Your Accounts</div>
 

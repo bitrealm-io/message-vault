@@ -20,7 +20,8 @@ const SECTIONS = ["dashboard", "settings", "accounts", "activity", "logs"] as co
 
 const SECTION_LABELS: Record<(typeof SECTIONS)[number], string> = {
   dashboard: "Dashboard",
-  settings: "Settings",
+  // Not "Settings": that is the screen an account is managed from, here and in the app.
+  settings: "Vault Settings",
   accounts: "User Accounts",
   activity: "Activity",
   logs: "Logs",

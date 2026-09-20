@@ -193,7 +193,7 @@ describe("OwnerHome", () => {
 
     expect(sectionLinks().map((b) => b.textContent)).toEqual([
       "Dashboard",
-      "Settings",
+      "Vault Settings",
       "User Accounts",
       "Activity",
       "Logs",
@@ -268,7 +268,9 @@ describe("OwnerHome", () => {
     await user.click(await screen.findByRole("menuitem", { name: "Settings" }));
 
     // The owner's own row in User Accounts is the owner's Settings.
-    expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Settings for Vault Owner" }),
+    ).toBeInTheDocument();
     expect(await screen.findByText("Change Password")).toBeInTheDocument();
     expect(selectedSection()).toBe("User Accounts");
     // It was opened from User Accounts, so it links back there as any account does.
@@ -644,7 +646,7 @@ describe("OwnerHome", () => {
   it("opens the section named in the address", async () => {
     renderHome(["/owner/settings"]);
 
-    expect(selectedSection()).toBe("Settings");
+    expect(selectedSection()).toBe("Vault Settings");
     expect(
       await screen.findByText(/Let anyone reaching this vault create their own account/),
     ).toBeInTheDocument();
@@ -664,8 +666,8 @@ describe("OwnerHome", () => {
     const user = userEvent.setup({ delay: null });
     renderHome();
 
-    await user.click(screen.getByRole("button", { name: "Settings" }));
-    expect(selectedSection()).toBe("Settings");
+    await user.click(screen.getByRole("button", { name: "Vault Settings" }));
+    expect(selectedSection()).toBe("Vault Settings");
     expect(
       await screen.findByText(/Let anyone reaching this vault create their own account/),
     ).toBeInTheDocument();

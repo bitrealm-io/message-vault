@@ -84,8 +84,8 @@ const NEW_ACCOUNT_DISABLED_TABS: readonly SettingsTab[] = ["profile", "storage"]
  * Creating it opens that account's Settings, with every tab.
  *
  * Given `backToAccounts`, the screen was opened from User Accounts and carries
- * a link back to it above the heading. Owner Home sets it for every account it
- * opens, the owner's own included.
+ * a link back to it above the heading, which says whose Settings these are.
+ * Owner Home sets it for every account it opens, the owner's own included.
  */
 export default function SettingsScreen({
   managedAccountId,
@@ -121,7 +121,9 @@ export default function SettingsScreen({
             ? "New account"
             : managed && profile
               ? `Settings for ${profile.username}`
-              : "Settings"}
+              : backToAccounts
+                ? "Settings for Vault Owner"
+                : "Settings"}
         </h2>
         <p className="mt-[0.35rem] text-[0.875rem] text-muted">
           {creating

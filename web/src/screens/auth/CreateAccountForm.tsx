@@ -6,11 +6,14 @@ import PasswordField from "../../components/PasswordField";
 import TextField from "../../components/TextField";
 import { setBaseUrl } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { useAsyncAction } from "../../lib/useAsyncAction";
-import { createAccount } from "../../lib/vaultApi";
+import { useCreateAccountForm } from "./useCreateAccountForm";
 
 /**
  * New vault account: username plus the password twice.
+ *
+ * The checks and the request are `useCreateAccountForm`'s, which the vault
+ * owner's new-account Settings use too; this is how they look on the Login
+ * screen, and what follows here is a login.
  *
  * This is the first half of creating an account, not the whole of it. The name
  * and phone numbers are not asked for here — the account opens with an empty
@@ -26,51 +29,43 @@ export default function CreateAccountForm({
   disabled?: boolean;
 }) {
   const { login } = useAuth();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const { busy, error, run } = useAsyncAction();
-
-  // A real submit, the same as `LoginForm`: Enter submits from any field, and
-  // a password manager can recognise the pair of new-password fields and offer
-  // to store what it generates.
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (busy || disabled) return;
-    void run(async () => {
-      if (!username.trim()) {
-        throw new Error("Username is required.");
-      }
-      // Only the mismatch is checked here. Length is the server's rule, so it
-      // stays there rather than being restated and left to drift.
-      if (password !== confirmPassword) {
-        throw new Error("Passwords do not match.");
-      }
-
-      const url = serverUrl.trim();
-      setBaseUrl(url);
-      const res = await createAccount({
-        username: username.trim(),
-        password,
-        preferred_name: null,
-        phone: null,
-      });
+  const {
+    username,
+    setUsername,
+    password,
+    setPassword,
+    confirmPassword,
+    setConfirmPassword,
+    busy,
+    error,
+    submit,
+  } = useCreateAccountForm({
+    onBeforeCreate: () => setBaseUrl(serverUrl.trim()),
+    onCreated: async (created) => {
       // A stranger's registration opens a Session on the new account; the
       // token is absent only when the owner created it, which this form never
       // does.
-      if (!res.token) {
+      if (!created.token) {
         throw new Error("The vault created the account but opened no session.");
       }
       // Awaited so the empty-profile check inside `login` runs before this form
       // drops its busy state, sending the new account on to profile setup.
-      await login(url, res.token, res.account_id);
-    });
+      await login(serverUrl.trim(), created.token, created.account_id);
+    },
+  });
+
+  // A real submit, the same as `LoginForm`: Enter submits from any field, and
+  // a password manager can recognise the pair of new-password fields and offer
+  // to store what it generates.
+  const onSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!disabled) submit();
   };
 
   return (
-    <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
+    <form className="flex min-h-0 flex-1 flex-col" onSubmit={onSubmit}>
       <TextField
         label="Username"
         leadingIcon={<PersonIcon size={16} />}

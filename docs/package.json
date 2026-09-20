@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@astrojs/markdown-satteri": "0.4.1",
-    "@astrojs/starlight": "^0.42.0",
+    "@astrojs/starlight": "^0.42.1",
     "@scalar/api-reference": "^1.68.0",
     "astro": "^7.3.2",
     "astro-mermaid": "^2.1.0",

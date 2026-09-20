@@ -123,7 +123,7 @@ export default function SettingsScreen({
             : managed && profile
               ? `${profile.username}'s account`
               : backToAccounts
-                ? "Your account"
+                ? "Vault Owner"
                 : "Settings"}
         </h2>
         <p className="mt-[0.35rem] text-[0.875rem] text-muted">

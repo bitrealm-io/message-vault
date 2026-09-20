@@ -265,10 +265,10 @@ describe("OwnerHome", () => {
 
     await screen.findByText("bob");
     await user.click(screen.getByRole("button", { name: "Account menu" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Your account" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Vault Owner" }));
 
     // The owner's own row in User Accounts is the owner's Settings.
-    expect(await screen.findByRole("heading", { name: "Your account" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Vault Owner" })).toBeInTheDocument();
     expect(await screen.findByText("Change Password")).toBeInTheDocument();
     expect(selectedSection()).toBe("User Accounts");
     // It was opened from User Accounts, so it links back there as any account does.

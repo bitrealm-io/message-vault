@@ -176,6 +176,8 @@
     color: var(--text);
     background-color: var(--bg);
     border-color: var(--border);
+    /* Inputs inherit the body font (needed for portaled React Aria inputs) */
+    font-family: inherit;
   }
 
   select option {
@@ -229,6 +231,19 @@
     border-color: var(--border);
   }
 
+  /* Native <select> often ignores background and paints OS chrome (muddy on
+   WebKit). Force our surface + a themed chevron instead. */
+  select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: var(--bg);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23999' d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.55rem center;
+    background-size: 0.75rem;
+    padding-right: 1.75rem;
+  }
+
   [data-theme="dark"]
     input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
   [data-theme="dark"] select,
@@ -241,19 +256,6 @@
   [data-theme="light"] select,
   [data-theme="light"] textarea {
     color-scheme: light;
-  }
-
-  /* Native <select> often ignores background and paints OS chrome (muddy on
-   WebKit). Force our surface + a themed chevron instead. */
-  select {
-    appearance: none;
-    -webkit-appearance: none;
-    background-color: var(--bg);
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23999' d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.55rem center;
-    background-size: 0.75rem;
-    padding-right: 1.75rem;
   }
 
   [data-theme="dark"] select {
@@ -339,12 +341,5 @@
     100% {
       transform: translateX(400%);
     }
-  }
-
-  /* Inputs inherit the body font (needed for portaled React Aria inputs) */
-  input,
-  select,
-  textarea {
-    font-family: inherit;
   }
 }

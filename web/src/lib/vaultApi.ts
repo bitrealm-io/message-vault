@@ -27,7 +27,6 @@ import {
   getBaseUrl,
   getToken,
   problemFromBody,
-  VaultApiError,
 } from "./api";
 import { buildAssetPath } from "./assetUrl";
 import type { components } from "./vaultApi.types";

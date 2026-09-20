@@ -31,22 +31,6 @@ export function knowsTimeZone(zone: string): boolean {
   }
 }
 
-/**
- * Every IANA zone this runtime knows, for a picker. `current` is included even
- * when the runtime does not list it, so a saved zone is never shown as blank.
- */
-export function timeZoneOptions(current?: string): string[] {
-  let zones: string[];
-  try {
-    zones = Intl.supportedValuesOf("timeZone");
-  } catch {
-    zones = [browserTimeZone()];
-  }
-  if (!zones.includes("UTC")) zones = [...zones, "UTC"];
-  if (current && !zones.includes(current)) zones = [current, ...zones];
-  return zones;
-}
-
 /** The calendar year `iso` falls in, read in `zone`; `NaN` when unparseable. */
 export function yearIn(iso: string, zone: string): number {
   const d = new Date(iso);

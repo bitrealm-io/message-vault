@@ -48,7 +48,7 @@ describe("ImportContactsPanel", () => {
     expect(screen.getByText("Mary Jackson")).toBeInTheDocument();
     expect(screen.getByText("Named")).toBeInTheDocument();
     expect(screen.getByText("Katherine Johnson")).toBeInTheDocument();
-    expect(screen.getByText("Handle added")).toBeInTheDocument();
+    expect(screen.getByText("Identity added")).toBeInTheDocument();
   });
 
   it("shows a contact the run found an address for but no name", async () => {

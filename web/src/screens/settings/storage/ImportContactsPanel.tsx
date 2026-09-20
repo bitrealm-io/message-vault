@@ -17,7 +17,7 @@ const REASON_LABEL: Record<ContactReason, string> = {
   created: "New",
   replaced_trashed: "New, replaces a trashed contact",
   named: "Named",
-  handle_added: "Handle added",
+  handle_added: "Identity added",
 };
 
 /** One page of them, as every list route answers. */

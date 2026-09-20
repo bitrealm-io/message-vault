@@ -240,6 +240,17 @@ fn counts_conversations_messages_and_distinct_contacts() {
 }
 
 #[test]
+fn the_summary_carries_the_limit_its_verdicts_were_measured_against() {
+    let dir = staged_fixture();
+    let options = TranscodeOptions {
+        asset_max_bytes: 7 * 1024 * 1024,
+        ..summary_options()
+    };
+    let summary = summarize_staging(dir.path(), &options, &mut |_| {}).unwrap();
+    assert_eq!(summary.asset_max_bytes, 7 * 1024 * 1024);
+}
+
+#[test]
 fn attachment_bytes_are_measured_on_disk_not_read_from_the_document() {
     // size_bytes in the document is what the writer recorded. The folder is
     // the truth, and a resumed run must not trust a stale field.

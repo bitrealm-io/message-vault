@@ -5,7 +5,7 @@ import type {
   SizeVerdict,
   StagingSummary,
 } from "../../lib/tauri";
-import { importOutcome } from "./importOutcome";
+import { importOutcome, stableStem } from "./importOutcome";
 
 function report(overrides: Partial<PushFinishedReport> = {}): PushFinishedReport {
   return {
@@ -64,8 +64,20 @@ function approvedPlan(counts: { tooLarge?: number } = {}): StagingSummary {
       cannotProcess: 0,
     },
     forecasts,
+    assetMaxBytes: 50 * 1024 * 1024,
   };
 }
+
+describe("stableStem", () => {
+  it("reads a converted file as the same attachment it was staged as", () => {
+    expect(stableStem("attachments/2024-01-15-9f2a3b4c.heic")).toBe("2024-01-15-9f2a3b4c");
+    expect(stableStem("attachments/2024-01-15-9f2a3b4c-mv.jpg")).toBe("2024-01-15-9f2a3b4c");
+  });
+
+  it("keeps a name with no extension whole", () => {
+    expect(stableStem("attachments/README")).toBe("README");
+  });
+});
 
 describe("importOutcome", () => {
   it("is completed for a clean run", () => {

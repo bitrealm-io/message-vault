@@ -12,6 +12,21 @@ import {
 
 const ISSUE_COLUMNS = "grid-cols-[minmax(0,1fr)_4.5rem_minmax(0,1.4fr)]";
 
+/**
+ * The Stage (CONTEXT.md) each reported step belongs to. Reading the backup,
+ * copying its attachments and writing the conversation files are all
+ * Staging from the person's side. A step this build does not know shows as
+ * it arrived.
+ */
+const STAGE_FOR_STEP: Record<string, string> = {
+  setup: "Staging",
+  parse: "Staging",
+  attachments: "Staging",
+  prepare: "Staging",
+  media: "Media",
+  upload: "Upload",
+};
+
 function parseFileLabel(group: ImportIssueGroup): string {
   if (group.items.length === 1) {
     return group.items[0] ?? "";
@@ -84,7 +99,7 @@ export default function VirtualizedImportIssuesTable({ issues }: { issues: Impor
           {/* biome-ignore lint/a11y/useFocusableInteractive: virtualized grid cannot use native table elements */}
           {/* biome-ignore lint/a11y/useSemanticElements: virtualized grid cannot use native table elements */}
           <div role="columnheader" className="px-3 py-2 font-medium">
-            Step
+            Stage
           </div>
           {/* biome-ignore lint/a11y/useFocusableInteractive: virtualized grid cannot use native table elements */}
           {/* biome-ignore lint/a11y/useSemanticElements: virtualized grid cannot use native table elements */}
@@ -144,7 +159,7 @@ export default function VirtualizedImportIssuesTable({ issues }: { issues: Impor
                 </div>
                 {/* biome-ignore lint/a11y/useSemanticElements: virtualized grid cannot use native table elements */}
                 <div role="cell" className="overflow-hidden px-3 py-2 capitalize text-text">
-                  <span className="block truncate">{group.step}</span>
+                  <span className="block truncate">{STAGE_FOR_STEP[group.step] ?? group.step}</span>
                 </div>
                 {/* biome-ignore lint/a11y/useSemanticElements: virtualized grid cannot use native table elements */}
                 <div

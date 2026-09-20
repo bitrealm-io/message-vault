@@ -19,6 +19,8 @@ export type ImportSummaryView = {
   messagesInserted?: number;
   messagesDeduped?: number;
   messagesFailed?: number;
+  /** Attachment files the upload sent; known only to the run that did the upload. */
+  attachmentsUploaded?: number;
   parseMs?: number | null;
   attachmentsMs?: number | null;
   prepareMs?: number | null;

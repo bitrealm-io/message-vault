@@ -34,3 +34,47 @@ describe("StepProgress completion badge", () => {
     expect(badge?.className).toContain("bg-ok");
   });
 });
+
+describe("StepProgress wide list", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("puts each step's content under its label and its duration or note beside it", () => {
+    render(
+      <StepProgress
+        wide
+        steps={[
+          {
+            label: "Staging",
+            status: "done",
+            durationMs: 46_000,
+            content: <p>681 conversations</p>,
+          },
+          { label: "Staging Approval", status: "done", note: "Approved" },
+          { label: "Upload", status: "pending" },
+        ]}
+      />,
+    );
+    const [staging, approval, upload] = screen.getAllByRole("listitem");
+    expect(staging).toHaveTextContent("46s");
+    expect(staging).toHaveTextContent("681 conversations");
+    expect(approval).toHaveTextContent("Approved");
+    expect(upload).toHaveTextContent("3");
+  });
+
+  it("marks a row that is waiting on the person as the current step", () => {
+    render(
+      <StepProgress
+        wide
+        steps={[
+          { label: "Staging", status: "done" },
+          { label: "Staging Approval", status: "waiting" },
+        ]}
+      />,
+    );
+    const [staging, approval] = screen.getAllByRole("listitem");
+    expect(staging).not.toHaveAttribute("aria-current");
+    expect(approval).toHaveAttribute("aria-current", "step");
+  });
+});

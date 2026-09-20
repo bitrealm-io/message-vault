@@ -16,14 +16,16 @@
 export const pageCenter =
   "min-h-screen box-border flex items-center justify-center bg-bg p-4 overflow-y-auto";
 /**
- * Every auth card is the same 448 × 608 box on every screen and in every
+ * Every auth card is the same 576 × 608 box on every screen and in every
  * state — it never resizes and never scrolls, so nothing moves underneath the
  * user as they step through login and setup. The height is set by the
  * tallest card: Create Account, whose three fields sit above the pinned
- * action row with room for a two-line error above it.
+ * action row with room for a two-line error above it. The width is set by
+ * Profile Setup: a time zone row ("(UTC−10:00) Hawaii-Aleutian Time —
+ * Honolulu, East Honolulu") reads on one line.
  */
 export const authCard =
-  "box-border flex h-[38rem] w-full max-w-md flex-col bg-panel border border-border rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.15)] p-8";
+  "box-border flex h-[38rem] w-full max-w-xl flex-col bg-panel border border-border rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.15)] p-8";
 
 /** Content region of an auth card: everything above the pinned action row. */
 export const authCardBody = "flex min-h-0 flex-1 flex-col";

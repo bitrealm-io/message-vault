@@ -21,6 +21,19 @@ vi.mock("../lib/vaultApi", () => ({
   updateAccountProfile: (...args: unknown[]) => apiPost(...(args as [])),
 }));
 
+// What the vault says the account already holds; a test sets it to what the owner filled in.
+const blankProfile = { preferred_name: null, time_zone: "UTC", phones: [], emails: [] };
+let profile: {
+  preferred_name: string | null;
+  time_zone: string;
+  phones: string[];
+  emails: string[];
+} = blankProfile;
+
+vi.mock("../lib/useAccountProfile", () => ({
+  useAccountProfile: () => ({ profile, loading: false, error: "" }),
+}));
+
 import OnboardingScreen, { SAME_GESTURE_MS } from "./OnboardingScreen";
 
 const rowValue = (n: number) => screen.getByRole("textbox", { name: `Account ${n} value` });
@@ -36,6 +49,7 @@ describe("OnboardingScreen", () => {
   beforeEach(() => {
     logout.mockReset();
     apiPost.mockReset();
+    profile = blankProfile;
   });
 
   afterEach(() => {
@@ -50,6 +64,33 @@ describe("OnboardingScreen", () => {
     expect(screen.queryByText(/How you show up/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Source Accounts/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Welcome to the Message Vault/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the name and zone the owner set, for the holder to check", () => {
+    profile = { ...blankProfile, preferred_name: "Bob Archer", time_zone: "Asia/Tokyo" };
+    render(<OnboardingScreen />);
+
+    expect(screen.getByRole("textbox", { name: "Display Name" })).toHaveValue("Bob Archer");
+    expect(screen.getByRole("combobox", { name: "Time Zone" })).toHaveValue(
+      "(UTC+09:00) Japan Time \u2014 Tokyo, Yokohama",
+    );
+  });
+
+  it("starts on this browser's zone when nobody has chosen one", () => {
+    render(<OnboardingScreen />);
+    expect(screen.getByRole("textbox", { name: "Display Name" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Time Zone" })).not.toHaveValue("");
+  });
+
+  it("counts an identity the owner added, so another is not required", async () => {
+    profile = { ...blankProfile, phones: ["+15555550100"] };
+    render(<OnboardingScreen />);
+
+    expect(screen.getByText("Already on this account: +15555550100")).toBeInTheDocument();
+    const go = screen.getByRole("button", { name: "Continue to vault" });
+    expect(go).toBeDisabled();
+    await setupUser().type(screen.getByRole("textbox", { name: "Display Name" }), "Bob");
+    expect(go).toBeEnabled();
   });
 
   it("shows an example in the empty value field", () => {

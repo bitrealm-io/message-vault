@@ -1,11 +1,9 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
 import { GearIcon } from "../../components/icons";
 import NavGlyphButton from "../../components/NavGlyphButton";
 import ScrollingTableCard from "../../components/ScrollingTableCard";
 import { formatDateTime } from "../../lib/formatDate";
-import CreateAccountForm from "../auth/CreateAccountForm";
 import { tdClass, tdMuted } from "../settings/apiTokensUtils";
 import { type ManagedAccount, useOwnerAccounts } from "./useOwnerAccounts";
 
@@ -49,12 +47,12 @@ function matches(account: ManagedAccount, needle: string): boolean {
  * the account's Settings, which is where the rest is: the app it connects with
  * under Profile, what it holds under Storage, and its password, status and
  * permissions under Account. The table sets nothing; it shows each status so a
- * disabled account stands out.
+ * disabled account stands out. Add account opens the same Settings for an
+ * account that does not exist yet.
  */
 export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
   const navigate = useNavigate();
-  const { accounts, loading, loadError, refresh } = useOwnerAccounts();
-  const [composing, setComposing] = useState(false);
+  const { accounts, loading, loadError } = useOwnerAccounts();
 
   if (loading) return <p className="text-[0.875rem] text-muted">Loading accounts…</p>;
   if (loadError) return <p className="text-[0.875rem] text-danger">{loadError}</p>;
@@ -67,33 +65,11 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
     <section>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="m-0 text-text">User Accounts</h3>
-        {!composing && (
-          <Button variant="secondary" size="xs" onClick={() => setComposing(true)}>
-            Add account
-          </Button>
-        )}
+        {/* A new account starts where an existing one is changed: its Settings. */}
+        <Button variant="secondary" size="xs" onClick={() => navigate("/owner/accounts/new")}>
+          Add account
+        </Button>
       </div>
-
-      {/* The Create Account form of the Login screen, as it is there. The vault
-          opens no session for an account its owner creates, so what follows is
-          the new row in the table rather than a login. */}
-      {composing && (
-        <div className="mt-3 flex max-w-[24rem] flex-col rounded-xl border border-border bg-elevated p-4">
-          <p className="mb-4 text-[0.75rem] text-muted">
-            Hand this password over yourself. The person keeps it until they change it under their
-            own Settings.
-          </p>
-          <CreateAccountForm
-            submitLabel="Add account"
-            busyLabel="Adding…"
-            onCreated={async () => {
-              await refresh();
-              setComposing(false);
-            }}
-            onCancel={() => setComposing(false)}
-          />
-        </div>
-      )}
 
       <ScrollingTableCard className="mt-4" cardClassName="rounded-xl bg-elevated">
         <table className="w-full border-collapse">

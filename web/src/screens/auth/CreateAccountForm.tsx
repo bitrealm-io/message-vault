@@ -1,85 +1,71 @@
 import { type FormEvent, useState } from "react";
 import AuthErrorFooter from "../../components/AuthErrorFooter";
 import AuthSubmitButton from "../../components/AuthSubmitButton";
-import Button from "../../components/Button";
 import { LockIcon, PersonIcon } from "../../components/icons";
 import PasswordField from "../../components/PasswordField";
 import TextField from "../../components/TextField";
-import { useAsyncAction } from "../../lib/useAsyncAction";
-import { createAccount } from "../../lib/vaultApi";
-import type { components } from "../../lib/vaultApi.types";
-
-/** What the vault answers when it creates an account. */
-export type CreatedAccount = components["schemas"]["CreatedAccountResponse"];
+import { setBaseUrl } from "../../lib/api";
+import { useAuth } from "../../lib/auth";
+import { useCreateAccountForm } from "./useCreateAccountForm";
 
 /**
  * New vault account: username plus the password twice.
  *
- * The one form for creating an account, whoever creates it: a stranger on the
- * Login screen of an open vault, and the vault owner under User Accounts. The
- * fields, the checks and the request are the same. What happens next differs,
- * and `onCreated` holds it; so does the wording of the action.
+ * The checks and the request are `useCreateAccountForm`'s, which the vault
+ * owner's new-account Settings use too; this is how they look on the Login
+ * screen, and what follows here is a login.
  *
  * This is the first half of creating an account, not the whole of it. The name
  * and phone numbers are not asked for here — the account opens with an empty
  * profile, which sends the user straight to profile setup, and only finishing
- * that leaves them with a fully set up account. The Login screen labels the
- * action "Continue" for that reason.
+ * that leaves them with a fully set up account. The action is labelled
+ * "Continue" for that reason.
  */
 export default function CreateAccountForm({
-  submitLabel,
-  busyLabel,
-  onBeforeCreate,
-  onCreated,
-  onCancel,
+  serverUrl,
   disabled = false,
 }: {
-  submitLabel: string;
-  busyLabel: string;
-  /** Runs once the fields pass, before the request: the Login screen points the app at the vault here. */
-  onBeforeCreate?: () => void;
-  /** Runs with the vault's answer. The form stays busy until it settles, and shows what it throws. */
-  onCreated: (created: CreatedAccount) => Promise<void> | void;
-  /** Given where the form can be put away; adds Cancel beside the action. */
-  onCancel?: () => void;
+  serverUrl: string;
   disabled?: boolean;
 }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const { busy, error, run } = useAsyncAction();
+  const {
+    username,
+    setUsername,
+    password,
+    setPassword,
+    confirmPassword,
+    setConfirmPassword,
+    busy,
+    error,
+    submit,
+  } = useCreateAccountForm({
+    onBeforeCreate: () => setBaseUrl(serverUrl.trim()),
+    onCreated: async (created) => {
+      // A stranger's registration opens a Session on the new account; the
+      // token is absent only when the owner created it, which this form never
+      // does.
+      if (!created.token) {
+        throw new Error("The vault created the account but opened no session.");
+      }
+      // Awaited so the empty-profile check inside `login` runs before this form
+      // drops its busy state, sending the new account on to profile setup.
+      await login(serverUrl.trim(), created.token, created.account_id);
+    },
+  });
 
   // A real submit, the same as `LoginForm`: Enter submits from any field, and
   // a password manager can recognise the pair of new-password fields and offer
   // to store what it generates.
-  const submit = (event: FormEvent) => {
+  const onSubmit = (event: FormEvent) => {
     event.preventDefault();
-    if (busy || disabled) return;
-    void run(async () => {
-      if (!username.trim()) {
-        throw new Error("Username is required.");
-      }
-      // Only the mismatch is checked here. Length is the server's rule, so it
-      // stays there rather than being restated and left to drift.
-      if (password !== confirmPassword) {
-        throw new Error("Passwords do not match.");
-      }
-
-      onBeforeCreate?.();
-      const created = await createAccount({
-        username: username.trim(),
-        password,
-        preferred_name: null,
-        phone: null,
-      });
-      await onCreated(created);
-    });
+    if (!disabled) submit();
   };
 
   return (
-    <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
+    <form className="flex min-h-0 flex-1 flex-col" onSubmit={onSubmit}>
       <TextField
         label="Username"
         leadingIcon={<PersonIcon size={16} />}
@@ -118,25 +104,11 @@ export default function CreateAccountForm({
         isDisabled={disabled}
       />
 
-      {onCancel ? (
-        <div className="mt-5 flex gap-2">
-          <Button
-            variant="secondary"
-            disabled={busy || disabled}
-            onPress={onCancel}
-            className="flex-1"
-          >
-            Cancel
-          </Button>
-          <AuthSubmitButton disabled={busy || disabled} className="flex-1">
-            {busy ? busyLabel : submitLabel}
-          </AuthSubmitButton>
-        </div>
-      ) : (
-        <AuthSubmitButton disabled={busy || disabled}>
-          {busy ? busyLabel : submitLabel}
-        </AuthSubmitButton>
-      )}
+      {/* "Continue", not "Create account": this step opens the account but does
+          not finish it — the profile setup screen it leads to does. */}
+      <AuthSubmitButton disabled={busy || disabled}>
+        {busy ? "Continuing…" : "Continue"}
+      </AuthSubmitButton>
 
       {/* Pushed to the foot of the panel so the message lands just above the
           rule that closes the card, clear of the action that produced it. The

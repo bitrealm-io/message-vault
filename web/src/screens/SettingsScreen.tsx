@@ -8,6 +8,7 @@ import { AccountSettingsPanel } from "./settings/AccountSettingsPanel";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { ConvertSection } from "./settings/ConvertSection";
 import { ManagedProfilePanel } from "./settings/ManagedProfilePanel";
+import { NewAccountPanel } from "./settings/NewAccountPanel";
 import { ProfileSettingsPanel } from "./settings/ProfileSettingsPanel";
 import { StorageSection } from "./settings/StorageSection";
 import { SystemSection } from "./settings/SystemSection";
@@ -61,30 +62,47 @@ function tabFromSearchParam(raw: string | null, allowed: readonly SettingsTab[])
   return parseSelectKey(raw, allowed) ?? "account";
 }
 
-function tabClassName({ isSelected }: { isSelected: boolean }) {
-  return `relative -mb-px cursor-pointer border-none bg-transparent px-3 py-2 text-[0.813rem] font-medium outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent ${
-    isSelected ? "text-text" : "text-muted hover:text-text"
-  }`;
+function tabClassName({ isSelected, isDisabled }: { isSelected: boolean; isDisabled: boolean }) {
+  const tone = isDisabled
+    ? "cursor-default text-muted opacity-50"
+    : `cursor-pointer ${isSelected ? "text-text" : "text-muted hover:text-text"}`;
+  return `relative -mb-px border-none bg-transparent px-3 py-2 text-[0.813rem] font-medium outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent ${tone}`;
 }
+
+/** A new account has an Account section to fill in; the rest waits for the account. */
+const NEW_ACCOUNT_DISABLED_TABS: readonly SettingsTab[] = ["profile", "storage"];
 
 /**
  * Settings for the logged-in account, or, given `managedAccountId`, for an
  * account the vault owner opened from User Accounts. The same screen and the
  * same tabs either way, so the owner sees an account's settings laid out as
  * the account holder does.
+ *
+ * Given `creating`, the account is one the owner is adding. It has the tabs a
+ * managed account has, so the owner sees what the account will hold, but only
+ * Account opens: a profile and storage belong to an account that exists.
+ * Creating it opens that account's Settings, with every tab.
  */
-export default function SettingsScreen({ managedAccountId }: { managedAccountId?: number }) {
+export default function SettingsScreen({
+  managedAccountId,
+  creating = false,
+}: {
+  managedAccountId?: number;
+  creating?: boolean;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { profile } = useSettingsAccount(managedAccountId);
   const managed = managedAccountId !== undefined;
-  const tabs = visibleTabs(isTauri(), managed, profile?.is_owner === true);
-  const tab = tabFromSearchParam(searchParams.get("tab"), tabs);
+  const tabs = creating
+    ? visibleTabs(isTauri(), true, false)
+    : visibleTabs(isTauri(), managed, profile?.is_owner === true);
+  const tab = creating ? "account" : tabFromSearchParam(searchParams.get("tab"), tabs);
   const whose = managed && profile ? `${profile.username}'s` : "your";
 
   return (
     <div className="max-w-[820px] p-6 text-text">
       <header>
-        {managed ? (
+        {managed || creating ? (
           <Link
             to="/owner/accounts"
             className="mb-2 inline-block text-[0.813rem] text-muted no-underline hover:text-text"
@@ -93,14 +111,21 @@ export default function SettingsScreen({ managedAccountId }: { managedAccountId?
           </Link>
         ) : null}
         <h2 className="m-0 text-text">
-          {managed && profile ? `Settings for ${profile.username}` : "Settings"}
+          {creating
+            ? "New account"
+            : managed && profile
+              ? `Settings for ${profile.username}`
+              : "Settings"}
         </h2>
         <p className="mt-[0.35rem] text-[0.875rem] text-muted">
-          Manage {whose} {tabSummary(tabs)}.
+          {creating
+            ? "Profile and Storage open once the account is created."
+            : `Manage ${whose} ${tabSummary(tabs)}.`}
         </p>
       </header>
 
       <Tabs
+        disabledKeys={creating ? NEW_ACCOUNT_DISABLED_TABS : undefined}
         selectedKey={tab}
         onSelectionChange={(key) => {
           const next = parseSelectKey(key, tabs);
@@ -123,7 +148,11 @@ export default function SettingsScreen({ managedAccountId }: { managedAccountId?
         </TabList>
 
         <TabPanel id="account" className="mt-6">
-          <AccountSettingsPanel managedAccountId={managedAccountId} />
+          {creating ? (
+            <NewAccountPanel />
+          ) : (
+            <AccountSettingsPanel managedAccountId={managedAccountId} />
+          )}
         </TabPanel>
         <TabPanel id="profile" className="mt-6">
           {managed ? (

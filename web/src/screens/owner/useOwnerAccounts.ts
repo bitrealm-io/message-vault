@@ -1,5 +1,4 @@
 import { type UseMutationResult, useMutation } from "@tanstack/react-query";
-import { useCallback } from "react";
 import { apiErrorMessage } from "../../lib/apiErrorMessage";
 import {
   deleteAccountById,
@@ -61,10 +60,9 @@ export function useSetAccountPassword(): UseMutationResult<
 }
 
 /**
- * The vault owner's view of every account. Adding one is the Create Account
- * form's work; `refresh` is what the panel calls once the form has made it. A
+ * The vault owner's view of every account. The table changes nothing: a
  * password, status, permissions and the deletions are in the account's
- * Settings, which the account's gear opens.
+ * Settings, which the account's gear opens, and a new account starts there too.
  */
 export function useOwnerAccounts() {
   const {
@@ -72,13 +70,10 @@ export function useOwnerAccounts() {
     isPending: loading,
     error: loadError,
   } = useVaultQuery(keys.ownerAccounts.all, fetchAccounts);
-  const cache = useVaultCache();
-  const refresh = useCallback(() => cache.invalidate(keys.ownerAccounts.all), [cache]);
 
   return {
     accounts: data ?? [],
     loading,
     loadError: loadError ? apiErrorMessage(loadError, "Could not load accounts.") : "",
-    refresh,
   };
 }

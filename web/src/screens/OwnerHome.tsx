@@ -52,9 +52,11 @@ function sectionLinkClass(active: boolean): string {
  * name: nothing is built behind them yet.
  *
  * `/owner/accounts/{id}` is one account's Settings, the screen its holder
- * sees, opened from the account's name in the table. The owner's own row
+ * sees, opened from the gear in the account's row. The owner's own row
  * opens the owner's own Settings, which is also where the account button's
- * Settings goes. See `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
+ * Settings goes. `/owner/accounts/new` is the same screen for an account that
+ * does not exist yet, which Add account opens in place of the table. See
+ * `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
  */
 export default function OwnerHome() {
   const { section: raw, accountId: rawAccountId } = useParams();
@@ -79,12 +81,14 @@ export default function OwnerHome() {
     return <Navigate to="/owner/accounts" replace />;
   }
 
+  // `new` in place of an id is the account the owner is adding.
+  const creatingAccount = section === "accounts" && rawAccountId === "new";
   // An id that is not a number names no account; the list is the way back.
   const openAccountId =
     section === "accounts" && rawAccountId && /^\d+$/.test(rawAccountId)
       ? Number(rawAccountId)
       : null;
-  if (rawAccountId && openAccountId === null) {
+  if (rawAccountId && openAccountId === null && !creatingAccount) {
     return <Navigate to="/owner/accounts" replace />;
   }
 
@@ -92,7 +96,7 @@ export default function OwnerHome() {
 
   // The bar searches the accounts table, so typing anywhere else goes to it.
   const handleSearchChange = (q: string) => {
-    if (section !== "accounts" || openAccountId !== null) {
+    if (section !== "accounts" || openAccountId !== null || creatingAccount) {
       navigate(`/owner/accounts${q ? `?q=${encodeURIComponent(q)}` : ""}`);
       return;
     }
@@ -128,7 +132,9 @@ export default function OwnerHome() {
         </nav>
 
         <main className="min-w-0 flex-1 overflow-auto bg-bg text-text">
-          {openAccountId !== null ? (
+          {creatingAccount ? (
+            <SettingsScreen key="new" creating />
+          ) : openAccountId !== null ? (
             // The owner's own row is the owner's own Settings, not a managed account's.
             <SettingsScreen
               key={openAccountId}

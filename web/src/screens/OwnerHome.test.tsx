@@ -582,23 +582,48 @@ describe("OwnerHome", () => {
     expect(screen.queryByRole("button", { name: "Reset password" })).not.toBeInTheDocument();
   });
 
-  it("adds an account only once its password is typed twice the same way", async () => {
+  it("opens a new account's Settings from Add account, in place of the table", async () => {
     const user = userEvent.setup({ delay: null });
     renderHome();
 
     await screen.findByText("bob");
     await user.click(screen.getByRole("button", { name: "Add account" }));
 
-    // The Login screen's Create Account form, with its fields and its check.
-    await user.type(screen.getByLabelText("Username"), "carol");
+    expect(await screen.findByRole("heading", { name: "New account" })).toBeInTheDocument();
+    expect(screen.queryByText("bob")).not.toBeInTheDocument();
+    // The username is typed here, where an existing account's is only shown.
+    expect(screen.getByLabelText("Username")).not.toHaveAttribute("readonly");
+    expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
+    // Status, permissions and the deletions are an existing account's.
+    expect(screen.queryByRole("button", { name: "Reset password" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Danger Zone")).not.toBeInTheDocument();
+  });
+
+  it("holds a new account's Profile and Storage back until the account exists", async () => {
+    renderHome(["/owner/accounts/new?tab=storage"]);
+
+    expect(await screen.findByRole("tab", { name: "Account" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: "Profile" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("tab", { name: "Storage" })).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("creates the account once its password is typed twice the same way, then opens it", async () => {
+    const user = userEvent.setup({ delay: null });
+    renderHome(["/owner/accounts/new"]);
+
+    await user.type(await screen.findByLabelText("Username"), "carol");
     await user.type(screen.getByLabelText("Password"), "hunter2hunter2");
-    await user.type(screen.getByLabelText("Confirm Password"), "hunter2hunter");
-    await user.click(screen.getByRole("button", { name: "Add account" }));
+    await user.type(screen.getByLabelText("Confirm password"), "hunter2hunter");
+    await user.click(screen.getByRole("button", { name: "Create" }));
     expect(await screen.findByText("Passwords do not match.")).toBeInTheDocument();
     expect(createAccount).not.toHaveBeenCalled();
 
-    await user.type(screen.getByLabelText("Confirm Password"), "2");
-    await user.click(screen.getByRole("button", { name: "Add account" }));
+    await user.type(screen.getByLabelText("Confirm password"), "2");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    // The same request Create Account on the Login screen sends.
     await waitFor(() =>
       expect(createAccount).toHaveBeenCalledWith({
         username: "carol",
@@ -607,9 +632,10 @@ describe("OwnerHome", () => {
         phone: null,
       }),
     );
-    // The form is put away and the table is read again for the new row.
-    await waitFor(() =>
-      expect(screen.queryByLabelText("Confirm Password")).not.toBeInTheDocument(),
+    // The created account's own Settings, with every tab.
+    await waitFor(() => expect(getAccount).toHaveBeenCalledWith(102, expect.anything()));
+    expect(await screen.findByRole("tab", { name: "Storage" })).not.toHaveAttribute(
+      "aria-disabled",
     );
   });
 

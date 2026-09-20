@@ -95,4 +95,4 @@ Turn force reprocessing on when a previous run left messages without attachments
 
 The finished run leads with where to go next: **Conversations this import added** opens the conversation list narrowed to the run (`import:#` followed by the run's number), and **Contacts it touched** opens the Contact Group the vault made for the run. The run's record, with the same contact list, stays under **Settings → Storage → Import history**. See [Browse your messages](/vault/user/browse-your-messages/).
 
-API tokens under **Settings → Account** are for programs that call the vault's [HTTP API](/vault/developer/reference/api/), not for this screen. Desktop Import uses the logged-in session.
+API tokens under **Settings → Login** are for programs that call the vault's [HTTP API](/vault/developer/reference/api/), not for this screen. Desktop Import uses the logged-in session.

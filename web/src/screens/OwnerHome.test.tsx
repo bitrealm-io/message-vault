@@ -265,10 +265,10 @@ describe("OwnerHome", () => {
 
     await screen.findByText("bob");
     await user.click(screen.getByRole("button", { name: "Account menu" }));
-    await user.click(await screen.findByRole("menuitem", { name: "Settings" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Your account" }));
 
     // The owner's own row in User Accounts is the owner's Settings.
-    expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Your account" })).toBeInTheDocument();
     expect(await screen.findByText("Change Password")).toBeInTheDocument();
     expect(selectedSection()).toBe("User Accounts");
     // It was opened from User Accounts, so it links back there as any account does.
@@ -279,12 +279,12 @@ describe("OwnerHome", () => {
     renderHome();
 
     const rows = (await screen.findAllByRole("row")).slice(1);
-    expect(within(rows[0]).getByRole("button", { name: "Settings for root" })).toBeInTheDocument();
+    expect(within(rows[0]).getByRole("button", { name: "root's account" })).toBeInTheDocument();
     expect(within(rows[0]).getByText("Vault owner")).toBeInTheDocument();
     // The owner cannot be disabled and holds no messages to import, export or delete.
     expect(within(rows[0]).queryByRole("button", { name: /Status of/ })).not.toBeInTheDocument();
     expect(within(rows[0]).queryByRole("checkbox")).not.toBeInTheDocument();
-    expect(within(rows[1]).getByRole("button", { name: "Settings for bob" })).toBeInTheDocument();
+    expect(within(rows[1]).getByRole("button", { name: "bob's account" })).toBeInTheDocument();
     // The gear opens the account; the name itself is plain text.
     expect(within(rows[1]).getByText("bob").closest("button")).toBeNull();
   });
@@ -304,13 +304,13 @@ describe("OwnerHome", () => {
     const user = userEvent.setup({ delay: null });
     renderHome();
 
-    await user.click(await screen.findByRole("button", { name: "Settings for bob" }));
+    await user.click(await screen.findByRole("button", { name: "bob's account" }));
 
-    expect(await screen.findByRole("heading", { name: "Settings for bob" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "bob's account" })).toBeInTheDocument();
     expect(getAccount).toHaveBeenCalledWith(101, expect.anything());
     // System, Convert and Appearance are this device's, not bob's.
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
-      "Account",
+      "Login",
       "Profile",
       "Storage",
     ]);
@@ -604,7 +604,7 @@ describe("OwnerHome", () => {
   it("holds a new account's Profile and Storage back until the account exists", async () => {
     renderHome(["/owner/accounts/new?tab=storage"]);
 
-    expect(await screen.findByRole("tab", { name: "Account" })).toHaveAttribute(
+    expect(await screen.findByRole("tab", { name: "Login" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -697,7 +697,7 @@ describe("OwnerHome", () => {
     expect(getAccount).not.toHaveBeenCalled();
     // No Storage, System or Convert: the owner holds no messages.
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
-      "Account",
+      "Login",
       "Profile",
       "Appearance",
     ]);

@@ -92,7 +92,7 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
                 >
                   <td className="w-6 py-2 pl-3 align-middle">
                     <NavGlyphButton
-                      aria-label={`Settings for ${account.username}`}
+                      aria-label={`${account.username}'s account`}
                       onClick={() => navigate(`/owner/accounts/${account.account_id}`)}
                       className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                     >

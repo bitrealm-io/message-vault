@@ -9,7 +9,7 @@ import SettingsScreen from "./SettingsScreen";
 /**
  * Settings holds no account management. The vault owner manages accounts from
  * a console of their own, and an ordinary account never could. `?tab=users`
- * must therefore fall back to Account rather than render anything.
+ * must therefore fall back to Login rather than render anything.
  */
 
 const profileState = vi.hoisted(() => ({
@@ -78,24 +78,24 @@ describe("SettingsScreen has no account management", () => {
     renderSettings(["/settings?tab=users"]);
 
     expect(screen.queryByRole("tab", { name: "Users" })).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Account" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Login" })).toHaveAttribute("aria-selected", "true");
   });
 });
 
 /**
  * Convert runs `message-reexport` inside the desktop process, so the tab is a
  * desktop-only tool. In a browser the tab must not exist and `?tab=convert`
- * must fall back to Account, the same way the admin gate treats Users.
+ * must fall back to Login, the same way the admin gate treats Users.
  */
 describe("SettingsScreen convert gate", () => {
-  it("hides the Convert tab in the browser and falls ?tab=convert back to Account", () => {
+  it("hides the Convert tab in the browser and falls ?tab=convert back to Login", () => {
     profileState.profile = baseProfile();
     renderSettings(["/settings?tab=convert"]);
 
     expect(screen.queryByRole("tab", { name: "Convert" })).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Account" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Login" })).toHaveAttribute("aria-selected", "true");
     expect(
-      screen.getByText(/Manage your account, profile, storage, system, and appearance\./),
+      screen.getByText(/Manage your login, profile, storage, system, and appearance\./),
     ).toBeInTheDocument();
   });
 
@@ -109,7 +109,7 @@ describe("SettingsScreen convert gate", () => {
     expect(screen.getByLabelText("Output folder")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Convert" })).toBeDisabled();
     expect(
-      screen.getByText(/Manage your account, profile, storage, system, convert, and appearance\./),
+      screen.getByText(/Manage your login, profile, storage, system, convert, and appearance\./),
     ).toBeInTheDocument();
   });
 });

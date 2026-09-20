@@ -49,4 +49,4 @@ See [Search](/vault/user/how-to/search/) for the rest of the operators.
 
 ## Remove everything at once
 
-To remove all message content for an account without trashing each conversation first, use the danger-zone actions under **Settings → Account**. See [Settings](/vault/user/how-to/settings/).
+To remove all message content for an account without trashing each conversation first, use the danger-zone actions under **Settings → Login**. See [Settings](/vault/user/how-to/settings/).

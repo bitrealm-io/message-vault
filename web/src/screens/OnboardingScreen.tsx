@@ -20,8 +20,12 @@ import {
 import { parseSelectKey } from "../lib/selectKey";
 import { browserTimeZone } from "../lib/timeZone";
 import { authCard, authCardBody, authCardFooter, authTitle, pageCenter } from "../lib/uiStyles";
+import { useAccountProfile } from "../lib/useAccountProfile";
 import { useAsyncAction } from "../lib/useAsyncAction";
 import { updateAccountProfile } from "../lib/vaultApi";
+
+/** The zone an account has until someone chooses one (`accounts.time_zone`'s default). */
+const DEFAULT_TIME_ZONE = "UTC";
 
 /**
  * The card never scrolls and never resizes, so the list of accounts is bounded
@@ -112,6 +116,21 @@ export default function OnboardingScreen() {
   const [invalidIds, setInvalidIds] = useState<string[]>([]);
   const [validationError, setValidationError] = useState("");
   const { busy, error, run } = useAsyncAction();
+
+  // The vault owner may have filled some of this in when making the account.
+  // What the owner set is shown for the holder to check and correct, once, and
+  // never over something the holder has already typed. A new account's zone is
+  // UTC until someone chooses one, so only another zone is the owner's choice.
+  const { profile } = useAccountProfile();
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!profile || seeded.current) return;
+    seeded.current = true;
+    if (profile.preferred_name) setDisplayName((typed) => typed || (profile.preferred_name ?? ""));
+    if (profile.time_zone !== DEFAULT_TIME_ZONE) setTimeZone(profile.time_zone);
+  }, [profile]);
+  // Identities the owner already added count: the holder is not made to add another.
+  const existingIdentities = profile ? [...profile.phones, ...profile.emails] : [];
 
   const blinkTimer = useRef<number | null>(null);
   const lastAsked = useRef<{ message: string; at: number }>({ message: "", at: 0 });
@@ -222,7 +241,9 @@ export default function OnboardingScreen() {
     });
   };
 
-  const canSubmit = Boolean(displayName.trim()) && handles.some((h) => h.handle.trim());
+  const canSubmit =
+    Boolean(displayName.trim()) &&
+    (existingIdentities.length > 0 || handles.some((h) => h.handle.trim()));
 
   // The empty row at the bottom of the list is already the place to put the
   // next account, so adding another one on top of it would only produce a
@@ -253,6 +274,11 @@ export default function OnboardingScreen() {
           />
 
           <div className="mt-4 mb-2 block text-[0.875rem] font-medium text-text">Your Accounts</div>
+          {existingIdentities.length > 0 && (
+            <div className="mb-2 truncate text-[0.813rem] text-muted">
+              Already on this account: {existingIdentities.join(", ")}
+            </div>
+          )}
 
           {handles.map((h, i) => {
             const invalid = invalidIds.includes(h.id);

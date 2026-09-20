@@ -31,7 +31,7 @@ describe("AccountPermissionsSection", () => {
     expect(screen.queryByRole("button", { name: /Status/ })).not.toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Import messages" })).toBeChecked();
     expect(
-      screen.getByRole("checkbox", { name: "Delete messages and attachments" }),
+      screen.getByRole("checkbox", { name: "Delete messages & attachments" }),
     ).not.toBeChecked();
     for (const box of screen.getAllByRole("checkbox")) expect(box).toBeDisabled();
     expect(

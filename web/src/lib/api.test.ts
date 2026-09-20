@@ -237,6 +237,17 @@ describe("apiClient request shape", () => {
     expect(lastCall(fetchSpy)[1].body).toBeUndefined();
   });
 
+  it("does not claim a JSON body on a request that carries none", async () => {
+    const fetchSpy = stubOkFetch();
+
+    // The vault reads a body wherever the media type promises one, and refuses
+    // an empty one as unparseable: a DELETE marked as JSON answered 400.
+    await apiClient.delete("/v1/accounts/101");
+
+    const headers = lastCall(fetchSpy)[1].headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBeUndefined();
+  });
+
   it("uses the method the verb names", async () => {
     const fetchSpy = stubOkFetch();
 

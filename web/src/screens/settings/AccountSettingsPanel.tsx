@@ -41,17 +41,17 @@ export function AccountSettingsPanel({ managedAccountId }: { managedAccountId?: 
           className={`${inputClassName} !text-muted`}
         />
       </div>
+      {/* The owner cannot be disabled and holds no messages to import, export or delete. */}
+      {!isOwner ? (
+        <AccountPermissionsSection profile={profile} managedAccountId={managedAccountId} />
+      ) : null}
+
       <ChangePasswordSection
         disabled={isDemo}
         canReset={!isOwner}
         requireCurrent={isOwner && !managed}
         managedAccountId={managedAccountId}
       />
-
-      {/* The owner cannot be disabled and holds no messages to import, export or delete. */}
-      {!isOwner ? (
-        <AccountPermissionsSection profile={profile} managedAccountId={managedAccountId} />
-      ) : null}
 
       {!managed && !isOwner ? (
         <ApiTokensSection

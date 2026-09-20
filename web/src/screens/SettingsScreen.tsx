@@ -7,7 +7,6 @@ import { useSettingsAccount } from "../lib/useSettingsAccount";
 import { AccountSettingsPanel } from "./settings/AccountSettingsPanel";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { ConvertSection } from "./settings/ConvertSection";
-import { ManagedProfilePanel } from "./settings/ManagedProfilePanel";
 import { NewAccountPanel } from "./settings/NewAccountPanel";
 import { ProfileSettingsPanel } from "./settings/ProfileSettingsPanel";
 import { StorageSection } from "./settings/StorageSection";
@@ -51,11 +50,10 @@ function visibleTabs(isDesktop: boolean, managed: boolean, isOwner: boolean): Se
   });
 }
 
-/** "account, profile, and appearance" — the header sentence built from the visible tabs. */
-function tabSummary(tabs: SettingsTab[]): string {
-  const names = tabs.map((id) => TAB_LABELS[id].toLowerCase());
-  if (names.length <= 1) return names.join("");
-  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+/** "User Settings: Bob Smith | bob", or without a preferred name "User Settings: bob". */
+function managedHeading(username: string, preferredName: string | null | undefined): string {
+  const name = preferredName?.trim() ?? "";
+  return `User Settings: ${name ? `${name} | ${username}` : username}`;
 }
 
 function tabFromSearchParam(raw: string | null, allowed: readonly SettingsTab[]): SettingsTab {
@@ -103,7 +101,6 @@ export default function SettingsScreen({
     ? visibleTabs(isTauri(), true, false)
     : visibleTabs(isTauri(), managed, profile?.is_owner === true);
   const tab = creating ? "account" : tabFromSearchParam(searchParams.get("tab"), tabs);
-  const whose = managed && profile ? `${profile.username}'s` : "your";
 
   return (
     <div className="max-w-[820px] p-6 text-text">
@@ -120,16 +117,16 @@ export default function SettingsScreen({
           {creating
             ? "New account"
             : managed && profile
-              ? `Settings for ${profile.username}`
+              ? managedHeading(profile.username, profile.preferred_name)
               : backToAccounts
                 ? "Settings for Vault Owner"
                 : "Settings"}
         </h2>
-        <p className="mt-[0.35rem] text-[0.875rem] text-muted">
-          {creating
-            ? "Profile and Storage open once the account is created."
-            : `Manage ${whose} ${tabSummary(tabs)}.`}
-        </p>
+        {creating ? (
+          <p className="mt-[0.35rem] text-[0.875rem] text-muted">
+            Profile and Storage open once the account is created.
+          </p>
+        ) : null}
       </header>
 
       <Tabs
@@ -163,11 +160,7 @@ export default function SettingsScreen({
           )}
         </TabPanel>
         <TabPanel id="profile" className="mt-6">
-          {managed ? (
-            <ManagedProfilePanel accountId={managedAccountId} />
-          ) : (
-            <ProfileSettingsPanel />
-          )}
+          <ProfileSettingsPanel managedAccountId={managedAccountId} />
         </TabPanel>
         {tabs.includes("storage") ? (
           <TabPanel id="storage" className="mt-6">

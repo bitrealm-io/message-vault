@@ -365,7 +365,7 @@
         "tags": [
           "Accounts"
         ],
-        "summary": "Change an account. The account itself sets its display name, time zone\nand handles; the vault owner sets another account's disabled flag and\nits import, export and delete permissions. A field the caller may not\nset answers `403 Forbidden`, and the reloaded account is the answer.",
+        "summary": "Change an account. Its display name, time zone and handles are set by\nthe account itself or by the vault owner; only the vault owner sets an\naccount's disabled flag and its import, export and delete permissions. A\nfield the caller may not set answers `403 Forbidden`, and the reloaded\naccount is the answer.",
         "operationId": "patch_account",
         "parameters": [
           {
@@ -10369,7 +10369,7 @@
       },
       "PatchAccountRequest": {
         "type": "object",
-        "description": "Body for changing an account. Omitted fields are left alone. The name,\nzone and handles are the account's own to set; the disabled flag and the\nthree permissions are the vault owner's.",
+        "description": "Body for changing an account. Omitted fields are left alone. The name,\nzone and handles are set by the account or by the vault owner; the\ndisabled flag and the three permissions are the vault owner's alone.",
         "properties": {
           "can_delete": {
             "type": [

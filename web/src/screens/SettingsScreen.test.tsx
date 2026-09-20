@@ -94,9 +94,6 @@ describe("SettingsScreen convert gate", () => {
 
     expect(screen.queryByRole("tab", { name: "Convert" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Account" })).toHaveAttribute("aria-selected", "true");
-    expect(
-      screen.getByText(/Manage your account, profile, storage, system, and appearance\./),
-    ).toBeInTheDocument();
   });
 
   it("shows the Convert tab and tool in the desktop app", () => {
@@ -108,8 +105,5 @@ describe("SettingsScreen convert gate", () => {
     expect(screen.getByLabelText("Input folder")).toBeInTheDocument();
     expect(screen.getByLabelText("Output folder")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Convert" })).toBeDisabled();
-    expect(
-      screen.getByText(/Manage your account, profile, storage, system, convert, and appearance\./),
-    ).toBeInTheDocument();
   });
 });

@@ -87,9 +87,7 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
         isDisabled={updateProfile.isPending}
         className="mb-[0.35rem] max-w-[28rem]"
       />
-      <div className="text-[0.813rem] text-muted">
-        Message times, days and years are shown in this zone.
-      </div>
+      <div className="text-[0.813rem] text-muted">Message times are shown in this zone.</div>
       {zoneError && <div className="mb-6 text-[0.813rem] text-danger">{zoneError}</div>}
       {!zoneError && <div className="mb-6" />}
 

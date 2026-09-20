@@ -20,7 +20,8 @@ const SECTIONS = ["dashboard", "settings", "accounts", "activity", "logs"] as co
 
 const SECTION_LABELS: Record<(typeof SECTIONS)[number], string> = {
   dashboard: "Dashboard",
-  settings: "Settings",
+  // Not "Settings": that is the screen an account is managed from, here and in the app.
+  settings: "Vault Settings",
   accounts: "User Accounts",
   activity: "Activity",
   logs: "Logs",
@@ -133,11 +134,12 @@ export default function OwnerHome() {
 
         <main className="min-w-0 flex-1 overflow-auto bg-bg text-text">
           {creatingAccount ? (
-            <SettingsScreen key="new" creating />
+            <SettingsScreen key="new" creating backToAccounts />
           ) : openAccountId !== null ? (
             // The owner's own row is the owner's own Settings, not a managed account's.
             <SettingsScreen
               key={openAccountId}
+              backToAccounts
               managedAccountId={openAccountId === ownAccountId ? undefined : openAccountId}
             />
           ) : (

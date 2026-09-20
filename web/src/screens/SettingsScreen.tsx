@@ -13,11 +13,11 @@ import { ProfileSettingsPanel } from "./settings/ProfileSettingsPanel";
 import { StorageSection } from "./settings/StorageSection";
 import { SystemSection } from "./settings/SystemSection";
 
-const ALL_TABS = ["login", "profile", "storage", "system", "convert", "appearance"] as const;
+const ALL_TABS = ["account", "profile", "storage", "system", "convert", "appearance"] as const;
 type SettingsTab = (typeof ALL_TABS)[number];
 
 const TAB_LABELS: Record<SettingsTab, string> = {
-  login: "Login",
+  account: "Account",
   profile: "Profile",
   storage: "Storage",
   system: "System",
@@ -51,7 +51,7 @@ function visibleTabs(isDesktop: boolean, managed: boolean, isOwner: boolean): Se
   });
 }
 
-/** "login, profile, and appearance" — the header sentence built from the visible tabs. */
+/** "account, profile, and appearance" — the header sentence built from the visible tabs. */
 function tabSummary(tabs: SettingsTab[]): string {
   const names = tabs.map((id) => TAB_LABELS[id].toLowerCase());
   if (names.length <= 1) return names.join("");
@@ -59,7 +59,7 @@ function tabSummary(tabs: SettingsTab[]): string {
 }
 
 function tabFromSearchParam(raw: string | null, allowed: readonly SettingsTab[]): SettingsTab {
-  return parseSelectKey(raw, allowed) ?? "login";
+  return parseSelectKey(raw, allowed) ?? "account";
 }
 
 function tabClassName({ isSelected, isDisabled }: { isSelected: boolean; isDisabled: boolean }) {
@@ -69,7 +69,7 @@ function tabClassName({ isSelected, isDisabled }: { isSelected: boolean; isDisab
   return `relative -mb-px border-none bg-transparent px-3 py-2 text-[0.813rem] font-medium outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent ${tone}`;
 }
 
-/** A new account has a Login section to fill in; the rest waits for the account. */
+/** A new account has an Account section to fill in; the rest waits for the account. */
 const NEW_ACCOUNT_DISABLED_TABS: readonly SettingsTab[] = ["profile", "storage"];
 
 /**
@@ -80,13 +80,12 @@ const NEW_ACCOUNT_DISABLED_TABS: readonly SettingsTab[] = ["profile", "storage"]
  *
  * Given `creating`, the account is one the owner is adding. It has the tabs a
  * managed account has, so the owner sees what the account will hold, but only
- * Login opens: a profile and storage belong to an account that exists.
- * Creating it opens that account, with every tab.
+ * Account opens: a profile and storage belong to an account that exists.
+ * Creating it opens that account's Settings, with every tab.
  *
- * Given `backToAccounts`, the screen was opened from User Accounts. There it is
- * an account, not Settings: Owner Home has a Settings section of its own, for
- * the vault. The heading names the account and a link back sits above it.
- * Owner Home sets it for every account it opens, the owner's own included.
+ * Given `backToAccounts`, the screen was opened from User Accounts and carries
+ * a link back to it above the heading. Owner Home sets it for every account it
+ * opens, the owner's own included.
  */
 export default function SettingsScreen({
   managedAccountId,
@@ -103,7 +102,7 @@ export default function SettingsScreen({
   const tabs = creating
     ? visibleTabs(isTauri(), true, false)
     : visibleTabs(isTauri(), managed, profile?.is_owner === true);
-  const tab = creating ? "login" : tabFromSearchParam(searchParams.get("tab"), tabs);
+  const tab = creating ? "account" : tabFromSearchParam(searchParams.get("tab"), tabs);
   const whose = managed && profile ? `${profile.username}'s` : "your";
 
   return (
@@ -121,10 +120,8 @@ export default function SettingsScreen({
           {creating
             ? "New account"
             : managed && profile
-              ? `${profile.username}'s account`
-              : backToAccounts
-                ? "Your account"
-                : "Settings"}
+              ? `Settings for ${profile.username}`
+              : "Settings"}
         </h2>
         <p className="mt-[0.35rem] text-[0.875rem] text-muted">
           {creating
@@ -145,7 +142,7 @@ export default function SettingsScreen({
         }}
       >
         <TabList
-          aria-label={backToAccounts ? "Account sections" : "Settings sections"}
+          aria-label="Settings sections"
           className="relative mt-5 flex gap-1 border-b border-border"
         >
           {tabs.map((id) => (
@@ -156,7 +153,7 @@ export default function SettingsScreen({
           ))}
         </TabList>
 
-        <TabPanel id="login" className="mt-6">
+        <TabPanel id="account" className="mt-6">
           {creating ? (
             <NewAccountPanel />
           ) : (

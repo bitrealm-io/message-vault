@@ -21,11 +21,9 @@ export default function AppAccountMenu() {
   const location = useLocation();
   const { logout, accountId } = useAuth();
   const { profile } = useAccountProfile();
-  // The owner's account is its own row in User Accounts; every other account has /settings.
+  // The owner's Settings are its own row in User Accounts; every other account has /settings.
   const { isOwner } = useIsVaultOwner();
   const settingsPath = isOwner ? `/owner/accounts/${accountId}` : "/settings";
-  // Owner Home has a Settings section of its own, for the vault.
-  const settingsLabel = isOwner ? "Your account" : "Settings";
   const settingsActive = location.pathname.startsWith(settingsPath);
 
   const close = useCallback(() => setOpen(false), []);
@@ -71,12 +69,12 @@ export default function AppAccountMenu() {
         }
         items={[
           {
-            label: settingsLabel,
+            label: "Settings",
             onSelect: () => navigate(settingsPath),
             children: (
               <span className={`${itemRow} ${settingsActive ? "font-semibold" : ""}`}>
                 <GearIcon size={15} />
-                {settingsLabel}
+                Settings
               </span>
             ),
           },

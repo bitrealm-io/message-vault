@@ -1,12 +1,12 @@
 ---
 title: Settings
-description: Login, profile, storage, system, convert, and appearance settings.
+description: Account, profile, storage, system, convert, and appearance settings.
 ---
 
 Open **Settings** in the sidebar. Settings has a tab for each area below.
 Administrators also see a **Users** tab, and the desktop app adds **System** and **Convert**.
 
-## Login
+## Account
 
 - **Username** — read-only account id used for login
 - **Password** — change password when local auth is enabled

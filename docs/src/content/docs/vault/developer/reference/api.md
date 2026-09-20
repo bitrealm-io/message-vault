@@ -46,7 +46,7 @@ An account addressing a row that is not its own answers `403` whether or not the
 
 Auth is per-account. There is no host-wide admin token.
 
-Create a named **API token** under **Settings → Login** (shown once) for a program of your own that calls this API. A website login uses a **session** Bearer that rotates on each login, and the desktop app uses that session rather than a token. Do not paste a session token into a program expecting a long-lived token.
+Create a named **API token** under **Settings → Account** (shown once) for a program of your own that calls this API. A website login uses a **session** Bearer that rotates on each login, and the desktop app uses that session rather than a token. Do not paste a session token into a program expecting a long-lived token.
 
 Send either token as:
 

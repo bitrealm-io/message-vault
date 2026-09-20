@@ -22,6 +22,7 @@ describe("TimeZoneField", () => {
     render(<TimeZoneField value="Etc/UTC" onChange={onChange} />);
     await userEvent.click(field());
     await userEvent.keyboard("dallas");
+    expect(field().value).toBe("dallas");
     const options = within(screen.getByRole("listbox")).getAllByRole("option");
     expect(options).toHaveLength(1);
     await userEvent.click(options[0]);

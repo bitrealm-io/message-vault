@@ -91,7 +91,11 @@ export default function TimeZoneField({
         <Input
           className={`${textInputClassName} pr-9`}
           placeholder="Search by city, country or zone"
-          onFocus={(e) => e.currentTarget.select()}
+          // Typing replaces the picked row's label. Focus comes back to the
+          // field each time the rows change, and by then it holds a search.
+          onFocus={(e) => {
+            if (e.currentTarget.value === selected.label) e.currentTarget.select();
+          }}
         />
         <Button className="absolute inset-y-0 right-0 flex w-9 items-center justify-center border-0 bg-transparent text-muted outline-none">
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">

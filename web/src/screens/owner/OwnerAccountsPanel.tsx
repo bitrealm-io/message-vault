@@ -5,11 +5,26 @@ import NavGlyphButton from "../../components/NavGlyphButton";
 import ScrollingTableCard from "../../components/ScrollingTableCard";
 import TextField from "../../components/TextField";
 import { formatDateTime } from "../../lib/formatDate";
-import { tdClass, tdMuted, thClass } from "../settings/apiTokensUtils";
+import { tdClass, tdMuted } from "../settings/apiTokensUtils";
 import { type ManagedAccount, useOwnerAccounts } from "./useOwnerAccounts";
 
 /** Columns the table has, which the "no match" row spans. */
 const COLUMN_COUNT = 4;
+
+/** A column heading: bold, in the text color, so it stands apart from the rows. */
+const thClass = "px-3 py-2 text-left text-[0.75rem] font-bold text-text";
+
+/** The line between one column heading and the next. */
+const thSeparator = "border-l border-border";
+
+/**
+ * Every other row is a shade lighter. The shade is on the cells, and the last
+ * row's end cells are rounded, so it follows the card's bottom corners; the
+ * card cannot clip it, because a rounded clipping box thins the table's text
+ * in the desktop app.
+ */
+const rowStripe =
+  "even:[&>td]:bg-hover/50 last:[&>td:first-child]:rounded-bl-[0.6875rem] last:[&>td:last-child]:rounded-br-[0.6875rem]";
 
 /** Shown under the second password field once both are filled and differ. */
 function MismatchNote({ first, second }: { first: string; second: string }) {
@@ -167,15 +182,18 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
               {/* The gear column has no heading; each gear is labelled with its account. */}
               <td className="w-6 py-2 pl-3" />
               <th className={thClass}>User</th>
-              <th className={thClass}>Status</th>
-              <th className={thClass}>Last login</th>
+              <th className={`${thClass} ${thSeparator}`}>Status</th>
+              <th className={`${thClass} ${thSeparator}`}>Last login</th>
             </tr>
           </thead>
           <tbody>
             {shown.map((account) => {
               const preferredName = account.preferred_name?.trim() ?? "";
               return (
-                <tr key={account.account_id} className="group border-t border-border">
+                <tr
+                  key={account.account_id}
+                  className={`group border-t border-border ${rowStripe}`}
+                >
                   <td className="w-6 py-2 pl-3 align-middle">
                     <NavGlyphButton
                       aria-label={`Settings for ${account.username}`}

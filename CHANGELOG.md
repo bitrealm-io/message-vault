@@ -160,6 +160,8 @@ of, and a search that reads the same everywhere.
   hold, and Profile no longer asks the owner for handles.
 - 2026-09-19: **A gear in each User Accounts row opens that account's
   Settings.** It appears at the left of the row while the pointer is in it.
+  The column headings are bold with a line between them, and every other row
+  is a shade lighter.
   The screen is the one the account holder sees, with the Account, Profile and
   Storage tabs. Reset password, Delete messages and Delete account moved
   there from the Actions column, which is gone. You can read an account's

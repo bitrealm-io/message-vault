@@ -1,13 +1,30 @@
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
+import { GearIcon } from "../../components/icons";
+import NavGlyphButton from "../../components/NavGlyphButton";
 import ScrollingTableCard from "../../components/ScrollingTableCard";
 import TextField from "../../components/TextField";
 import { formatDateTime } from "../../lib/formatDate";
-import { tdClass, tdMuted, thClass } from "../settings/apiTokensUtils";
+import { tdClass, tdMuted } from "../settings/apiTokensUtils";
 import { type ManagedAccount, useOwnerAccounts } from "./useOwnerAccounts";
 
 /** Columns the table has, which the "no match" row spans. */
-const COLUMN_COUNT = 3;
+const COLUMN_COUNT = 4;
+
+/** A column heading: bold, in the text color, so it stands apart from the rows. */
+const thClass = "px-3 py-2 text-left text-[0.75rem] font-bold text-text";
+
+/** The line between one column heading and the next. */
+const thSeparator = "border-l border-border";
+
+/**
+ * Every other row is a shade lighter. The shade is on the cells, and the last
+ * row's end cells are rounded, so it follows the card's bottom corners; the
+ * card cannot clip it, because a rounded clipping box thins the table's text
+ * in the desktop app.
+ */
+const rowStripe =
+  "even:[&>td]:bg-hover/50 last:[&>td:first-child]:rounded-bl-[0.6875rem] last:[&>td:last-child]:rounded-br-[0.6875rem]";
 
 /** Shown under the second password field once both are filled and differ. */
 function MismatchNote({ first, second }: { first: string; second: string }) {
@@ -42,10 +59,11 @@ function matches(account: ManagedAccount, needle: string): boolean {
  * The accounts of this vault, the vault owner's own first.
  *
  * A row carries a username, a preferred name, a status and the last login.
- * The name opens the account's Settings, which is where the rest is: the app
- * it connects with under Profile, what it holds under Storage, and its
- * password, status and permissions under Account. The table sets nothing; it
- * shows each status so a disabled account stands out.
+ * The gear at the left of a row, shown while the pointer is in the row, opens
+ * the account's Settings, which is where the rest is: the app it connects with
+ * under Profile, what it holds under Storage, and its password, status and
+ * permissions under Account. The table sets nothing; it shows each status so a
+ * disabled account stands out.
  */
 export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
   const navigate = useNavigate();
@@ -161,25 +179,32 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
         <table className="w-full border-collapse">
           <thead>
             <tr>
+              {/* The gear column has no heading; each gear is labelled with its account. */}
+              <td className="w-6 py-2 pl-3" />
               <th className={thClass}>User</th>
-              <th className={thClass}>Status</th>
-              <th className={thClass}>Last login</th>
+              <th className={`${thClass} ${thSeparator}`}>Status</th>
+              <th className={`${thClass} ${thSeparator}`}>Last login</th>
             </tr>
           </thead>
           <tbody>
             {shown.map((account) => {
               const preferredName = account.preferred_name?.trim() ?? "";
               return (
-                <tr key={account.account_id} className="border-t border-border">
-                  <td className={`${tdClass} whitespace-nowrap`}>
-                    <button
-                      type="button"
+                <tr
+                  key={account.account_id}
+                  className={`group border-t border-border ${rowStripe}`}
+                >
+                  <td className="w-6 py-2 pl-3 align-middle">
+                    <NavGlyphButton
                       aria-label={`Settings for ${account.username}`}
                       onClick={() => navigate(`/owner/accounts/${account.account_id}`)}
-                      className="cursor-pointer border-none bg-transparent p-0 text-left text-[inherit] font-semibold text-accent hover:underline"
+                      className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                     >
-                      {account.username}
-                    </button>
+                      <GearIcon size={15} />
+                    </NavGlyphButton>
+                  </td>
+                  <td className={`${tdClass} whitespace-nowrap`}>
+                    <div className="font-semibold">{account.username}</div>
                     {preferredName ? (
                       <div className="text-[0.75rem] text-muted">{preferredName}</div>
                     ) : null}

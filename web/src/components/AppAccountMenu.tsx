@@ -25,7 +25,7 @@ export default function AppAccountMenu() {
   const { isOwner } = useIsVaultOwner();
   const settingsPath = isOwner ? `/owner/accounts/${accountId}` : "/settings";
   // Owner Home has a Settings section of its own, for the vault.
-  const settingsLabel = isOwner ? "Vault Owner" : "Settings";
+  const settingsLabel = isOwner ? "Your account" : "Settings";
   const settingsActive = location.pathname.startsWith(settingsPath);
 
   const close = useCallback(() => setOpen(false), []);

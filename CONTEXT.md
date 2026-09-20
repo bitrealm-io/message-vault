@@ -155,8 +155,11 @@ accounts. An account's name opens that account's Settings, the screen its
 holder sees, where the owner sets its password, its status (active or
 disabled) and its permissions (import, export, delete), and deletes its
 messages or the account. The account holder reads the same status and
-permissions under Settings, Account, and changes none. The owner reads its profile, with its last login and the app it connects with, and its Storage tab as the holder sees it, without changing the one or
-seeing inside the other. The owner's own row opens the owner's own Settings,
+permissions under Settings, Account, and changes none. The owner sets the
+account's display name, time zone and identities on Profile as the holder does,
+which is not the holder's own profile setup, and reads there its last login and
+the app it connects with. The owner reads the Storage tab as the holder sees
+it, without seeing inside it. The owner's own row opens the owner's own Settings,
 which is also where the account button's Settings goes. An owner's password
 reset sets the password and nothing more: it does not end the person's
 session and does not make them choose a new one.

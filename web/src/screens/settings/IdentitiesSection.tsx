@@ -10,15 +10,25 @@ import {
 } from "../../lib/handleService";
 import { phonesMatch } from "../../lib/phoneTokens";
 import { parseSelectKey } from "../../lib/selectKey";
-import { useUpdateAccountProfile } from "../../lib/useAccountProfile";
+import { useUpdateSettingsProfile } from "../../lib/useSettingsAccount";
 import { inputClassName, sectionTitleClass } from "./profileStyles";
 
 /**
  * The phone numbers and email addresses that are this account's own, which is
- * how the vault tells the messages it sent from the ones it received.
+ * how the vault tells the messages it sent from the ones it received. The
+ * vault calls them handles; the screen calls them identities.
+ *
+ * Given `managedAccountId`, they are an account's the vault owner opened from
+ * User Accounts, and the owner adds and removes them as the holder does.
  */
-export function MyHandlesSection({ profile }: { profile: AccountProfile }) {
-  const updateProfile = useUpdateAccountProfile();
+export function IdentitiesSection({
+  profile,
+  managedAccountId,
+}: {
+  profile: AccountProfile;
+  managedAccountId?: number;
+}) {
+  const updateProfile = useUpdateSettingsProfile(managedAccountId);
   const [newHandle, setNewHandle] = useState("");
   const [newHandleService, setNewHandleService] = useState<HandleService>("phone");
   const [handleError, setHandleError] = useState("");
@@ -42,7 +52,7 @@ export function MyHandlesSection({ profile }: { profile: AccountProfile }) {
         handles: [{ handle: value, service: newHandleService }],
       });
       if (!handleListIncludes(updated, value, newHandleService)) {
-        throw new Error("The vault did not add that handle.");
+        throw new Error("The vault did not add that identity.");
       }
       setNewHandle("");
     } catch (e) {
@@ -57,7 +67,7 @@ export function MyHandlesSection({ profile }: { profile: AccountProfile }) {
         remove_handles: [{ handle, service }],
       });
       if (handleListIncludes(updated, handle, service)) {
-        throw new Error("The vault did not remove that handle.");
+        throw new Error("The vault did not remove that identity.");
       }
     } catch (e) {
       setHandleError(e instanceof Error ? e.message : String(e));
@@ -71,11 +81,11 @@ export function MyHandlesSection({ profile }: { profile: AccountProfile }) {
 
   return (
     <>
-      <h3 className={sectionTitleClass}>My Handles</h3>
+      <h3 className={sectionTitleClass}>
+        {managedAccountId === undefined ? "My Identities" : "Identities"}
+      </h3>
       {handles.length === 0 ? (
-        <div className="mb-3 text-[0.875rem] text-muted">
-          No phone or email handles on this account yet.
-        </div>
+        <div className="mb-3 text-[0.875rem] text-muted">None</div>
       ) : (
         <div className="mb-3">
           {handles.map((h) => (
@@ -105,7 +115,7 @@ export function MyHandlesSection({ profile }: { profile: AccountProfile }) {
             const service = parseSelectKey(k, HANDLE_SERVICES);
             if (service) setNewHandleService(service);
           }}
-          aria-label="Handle service"
+          aria-label="Identity service"
           className="shrink-0 min-w-[7rem]"
         >
           {HANDLE_SERVICE_OPTIONS.map((s) => (

@@ -79,10 +79,11 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Change an account. The account itself sets its display name, time zone
-         *     and handles; the vault owner sets another account's disabled flag and
-         *     its import, export and delete permissions. A field the caller may not
-         *     set answers `403 Forbidden`, and the reloaded account is the answer.
+         * Change an account. Its display name, time zone and handles are set by
+         *     the account itself or by the vault owner; only the vault owner sets an
+         *     account's disabled flag and its import, export and delete permissions. A
+         *     field the caller may not set answers `403 Forbidden`, and the reloaded
+         *     account is the answer.
          */
         patch: operations["patch_account"];
         trace?: never;
@@ -2806,8 +2807,8 @@ export interface components {
         };
         /**
          * @description Body for changing an account. Omitted fields are left alone. The name,
-         *     zone and handles are the account's own to set; the disabled flag and the
-         *     three permissions are the vault owner's.
+         *     zone and handles are set by the account or by the vault owner; the
+         *     disabled flag and the three permissions are the vault owner's alone.
          */
         PatchAccountRequest: {
             /** @description Allow or forbid deleting message data. */

@@ -10,7 +10,7 @@ const STATUSES = ["active", "disabled"] as const;
 const PERMISSIONS = [
   { flag: "can_import", label: "Import messages" },
   { flag: "can_export", label: "Export messages" },
-  { flag: "can_delete", label: "Delete messages and attachments" },
+  { flag: "can_delete", label: "Delete messages & attachments" },
 ] as const;
 
 /**
@@ -29,7 +29,9 @@ export function AccountPermissionsSection({
 }) {
   const updateAccount = useUpdateAccount();
   const managed = managedAccountId !== undefined;
-  const locked = !managed || updateAccount.isPending;
+  // Not locked while a change is sent: the vault answers in a moment, and
+  // greying all four controls for that moment reads as a flash.
+  const locked = !managed;
 
   const change = (changes: ManagedAccountChanges) => {
     if (managedAccountId === undefined) return;

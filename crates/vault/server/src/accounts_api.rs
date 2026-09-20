@@ -420,8 +420,8 @@ pub struct ProfileHandleInput {
 }
 
 /// Body for changing an account. Omitted fields are left alone. The name,
-/// zone and handles are the account's own to set; the disabled flag and the
-/// three permissions are the vault owner's.
+/// zone and handles are set by the account or by the vault owner; the
+/// disabled flag and the three permissions are the vault owner's alone.
 #[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
 pub struct PatchAccountRequest {
     /// Display name to set; `None` (or empty) leaves the current name unchanged.
@@ -452,7 +452,7 @@ pub struct PatchAccountRequest {
 }
 
 impl PatchAccountRequest {
-    /// True when the body names a field only the account itself may set.
+    /// True when the body names the display name, the time zone or a handle.
     fn touches_profile(&self) -> bool {
         self.preferred_name.is_some()
             || self.time_zone.is_some()
@@ -605,6 +605,7 @@ async fn update_profile_on_conn(
     conn: &mut AnyConnection,
     account_id: i64,
     req: &PatchAccountRequest,
+    completes_setup: bool,
 ) -> std::result::Result<(), ProfileUpdateError> {
     let mut tx = conn.begin().await?;
     apply_profile_update(
@@ -616,10 +617,13 @@ async fn update_profile_on_conn(
         &req.remove_handles,
     )
     .await?;
-    // Saving a profile is what profile setup is, so the account no longer owes
-    // one. Cleared in the same transaction as the change it describes, so the
-    // flag cannot outlive the fact it stands for.
-    account_profile::set_must_set_up_profile(&mut tx, account_id, false).await?;
+    // An account saving its own profile is what profile setup is, so it no
+    // longer owes one. Cleared in the same transaction as the change it
+    // describes, so the flag cannot outlive the fact it stands for. The vault
+    // owner filling a profile in ahead of time is not the holder's setup.
+    if completes_setup {
+        account_profile::set_must_set_up_profile(&mut tx, account_id, false).await?;
+    }
     tx.commit().await?;
     Ok(())
 }
@@ -654,10 +658,11 @@ async fn apply_flags(
     Ok(())
 }
 
-/// Change an account. The account itself sets its display name, time zone
-/// and handles; the vault owner sets another account's disabled flag and
-/// its import, export and delete permissions. A field the caller may not
-/// set answers `403 Forbidden`, and the reloaded account is the answer.
+/// Change an account. Its display name, time zone and handles are set by
+/// the account itself or by the vault owner; only the vault owner sets an
+/// account's disabled flag and its import, export and delete permissions. A
+/// field the caller may not set answers `403 Forbidden`, and the reloaded
+/// account is the answer.
 #[utoipa::path(
     patch,
     path = "/v1/accounts/{id}",
@@ -696,13 +701,13 @@ pub async fn patch_account_handler(
                     )
                 });
             }
-            update_profile_on_conn(&mut conn, target, &req).await?;
+            update_profile_on_conn(&mut conn, target, &req, true).await?;
         }
         Reach::Owner => {
+            // The owner sets up an account for its holder: the name, zone and
+            // handles as well as the flags.
             if req.touches_profile() {
-                return Err(ApiError::InsufficientScope(
-                    "an account's name, time zone and handles are its own to set".into(),
-                ));
+                update_profile_on_conn(&mut conn, target, &req, false).await?;
             }
             apply_flags(&mut conn, target, &req).await?;
         }

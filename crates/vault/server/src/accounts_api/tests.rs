@@ -587,10 +587,10 @@ async fn patching_with_an_unknown_time_zone_is_a_validation_failure() {
     );
 }
 
-/// The flags are the owner's and the profile is the account's. A field the
-/// caller may not set is refused whole: nothing in the body is applied.
+/// The flags are the owner's alone. A body naming one is refused whole when
+/// the account sends it: nothing in it is applied.
 #[tokio::test]
-async fn each_caller_sets_only_its_own_fields() {
+async fn an_account_does_not_set_its_own_flags() {
     let vault = test_vault().await;
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
@@ -611,23 +611,59 @@ async fn each_caller_sets_only_its_own_fields() {
     );
     assert!(sentence.contains("vault owner"), "{sentence}");
 
-    let (status, sentence) = patch_failure(
-        &state,
-        &path,
-        &owner.token,
-        serde_json::json!({ "preferred_name": "Robert", "can_export": false }),
-    )
-    .await;
-    assert_eq!(
-        status,
-        StatusCode::FORBIDDEN,
-        "the owner does not set a profile"
-    );
-    assert!(sentence.contains("its own"), "{sentence}");
-
     let row: AccountResponse = get_json(&state, &path, &owner.token).await;
     assert_eq!(row.preferred_name, None, "nothing was applied");
     assert!(row.can_export);
+}
+
+/// The owner sets up an account for its holder: a name, a zone and handles,
+/// alone or beside a flag. That is not the holder's profile setup, which the
+/// account still owes at its first login.
+#[tokio::test]
+async fn the_owner_sets_a_managed_accounts_profile() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &state,
+        "/v1/accounts",
+        &owner.token,
+        serde_json::json!({ "username": "carol", "password": "hunter2hunter2" }),
+    )
+    .await;
+    let path = member(created["account_id"].as_i64().unwrap());
+
+    let patched: serde_json::Value = patch_json(
+        &state,
+        &path,
+        &owner.token,
+        serde_json::json!({
+            "preferred_name": "Carol",
+            "time_zone": "America/New_York",
+            "handles": [{ "handle": "Carol@Example.com", "service": "email" }],
+            "can_export": false
+        }),
+    )
+    .await;
+    assert_eq!(patched["preferred_name"], "Carol");
+    assert_eq!(patched["time_zone"], "America/New_York");
+    assert_eq!(patched["emails"], serde_json::json!(["carol@example.com"]));
+    assert_eq!(patched["can_export"], false);
+    assert_eq!(
+        patched["must_set_up_profile"], true,
+        "the holder's own setup is still owed"
+    );
+
+    let patched: serde_json::Value = patch_json(
+        &state,
+        &path,
+        &owner.token,
+        serde_json::json!({
+            "remove_handles": [{ "handle": "carol@example.com", "service": "email" }]
+        }),
+    )
+    .await;
+    assert_eq!(patched["emails"], serde_json::json!([]));
 }
 
 /// Clearing a permission narrows the account, and every token it has already
@@ -1423,6 +1459,7 @@ async fn saving_a_profile_clears_the_setup_owed_flag() {
             preferred_name: Some("Alex".into()),
             ..PatchAccountRequest::default()
         },
+        true,
     )
     .await
     .unwrap();
@@ -1481,6 +1518,7 @@ async fn profile_update_rolls_back_when_a_handle_service_is_unsupported() {
             }],
             ..PatchAccountRequest::default()
         },
+        true,
     )
     .await;
 
@@ -1512,6 +1550,7 @@ async fn the_account_carries_a_time_zone_and_refuses_an_unknown_one() {
             time_zone: Some("America/New_York".into()),
             ..PatchAccountRequest::default()
         },
+        true,
     )
     .await
     .unwrap();
@@ -1527,6 +1566,7 @@ async fn the_account_carries_a_time_zone_and_refuses_an_unknown_one() {
             time_zone: Some("Mars/Olympus_Mons".into()),
             ..PatchAccountRequest::default()
         },
+        true,
     )
     .await
     .unwrap_err();

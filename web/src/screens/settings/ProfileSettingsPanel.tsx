@@ -2,15 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import Button from "../../components/Button";
 import Select, { ListBoxItem, selectItemClassName } from "../../components/Select";
 import { timeZoneOptions } from "../../lib/timeZone";
-import { useAccountProfile, useUpdateAccountProfile } from "../../lib/useAccountProfile";
+import { useSettingsAccount, useUpdateSettingsProfile } from "../../lib/useSettingsAccount";
+import { AccountActivitySection } from "./AccountActivitySection";
 import { AddressBookSection } from "./AddressBookSection";
-import { MyHandlesSection } from "./MyHandlesSection";
+import { IdentitiesSection } from "./IdentitiesSection";
 import { inputClassName, sectionTitleClass } from "./profileStyles";
 
-/** Profile settings: display name, time zone, phone/email/WhatsApp handles, address book. */
-export function ProfileSettingsPanel() {
-  const { profile, loading, error: loadError } = useAccountProfile();
-  const updateProfile = useUpdateAccountProfile();
+/**
+ * Profile settings: display name, time zone, identities, address book.
+ *
+ * Given `managedAccountId`, the account is one the vault owner opened from
+ * User Accounts. The owner sets its name, zone and identities as the holder
+ * does, and reads when it last logged in and which app it connects with. The
+ * address book is the account's contacts, which the owner does not reach.
+ */
+export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: number }) {
+  const { profile, loading, error: loadError } = useSettingsAccount(managedAccountId);
+  const updateProfile = useUpdateSettingsProfile(managedAccountId);
+  const managed = managedAccountId !== undefined;
   const [name, setName] = useState("");
   const [nameSaved, setNameSaved] = useState(false);
   const [nameError, setNameError] = useState("");
@@ -61,6 +70,7 @@ export function ProfileSettingsPanel() {
       <div className="mb-[0.35rem] flex gap-2">
         <input
           type="text"
+          aria-label="Display name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           className={`${inputClassName} flex-1`}
@@ -98,8 +108,8 @@ export function ProfileSettingsPanel() {
           against and no contacts, so neither section is its to fill in. */}
       {profile.is_owner ? null : (
         <>
-          <MyHandlesSection profile={profile} />
-          <AddressBookSection />
+          <IdentitiesSection profile={profile} managedAccountId={managedAccountId} />
+          {managed ? <AccountActivitySection profile={profile} /> : <AddressBookSection />}
         </>
       )}
     </div>

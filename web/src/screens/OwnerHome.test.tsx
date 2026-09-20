@@ -308,7 +308,9 @@ describe("OwnerHome", () => {
 
     await user.click(await screen.findByRole("button", { name: "Settings for bob" }));
 
-    expect(await screen.findByRole("heading", { name: "Settings for bob" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "User Settings: Bob Archer | bob" }),
+    ).toBeInTheDocument();
     expect(getAccount).toHaveBeenCalledWith(101, expect.anything());
     // System, Convert and Appearance are this device's, not bob's.
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
@@ -320,18 +322,36 @@ describe("OwnerHome", () => {
     expect(screen.queryByText(/API tokens/i)).not.toBeInTheDocument();
   });
 
-  it("shows an account's profile without offering to change it", async () => {
+  it("sets an account's display name and identities from its Profile, as its holder does", async () => {
     const user = userEvent.setup({ delay: null });
     renderHome(["/owner/accounts/101"]);
 
     await user.click(await screen.findByRole("tab", { name: "Profile" }));
 
-    expect(await screen.findByLabelText("Display name")).toHaveValue("Bob Archer");
-    expect(screen.getByLabelText("Display name")).toHaveAttribute("readonly");
-    expect(screen.getByLabelText("Time zone")).toHaveValue("America/New_York");
+    const name = await screen.findByLabelText("Display name");
+    expect(name).toHaveValue("Bob Archer");
+    expect(screen.getByRole("heading", { name: "Identities" })).toBeInTheDocument();
     expect(screen.getByText("+15555550100")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Remove" })).not.toBeInTheDocument();
+    // The address book is the account's contacts, which the owner does not reach.
+    expect(screen.queryByText("Address book")).not.toBeInTheDocument();
+
+    updateAccount.mockResolvedValue({ ...anAccount, preferred_name: "Robert" });
+    await user.clear(name);
+    await user.type(name, "Robert");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(updateAccount).toHaveBeenCalledWith(101, { preferred_name: "Robert" }),
+    );
+
+    updateAccount.mockResolvedValue({ ...anAccount, phones: [] });
+    getAccount.mockResolvedValue({ ...anAccount, phones: [] });
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await waitFor(() =>
+      expect(updateAccount).toHaveBeenCalledWith(101, {
+        remove_handles: [{ handle: "+15555550100", service: "phone" }],
+      }),
+    );
+    expect(await screen.findByText("None")).toBeInTheDocument();
   });
 
   it("shows an account's last login and its app on Profile, marking another release", async () => {
@@ -537,7 +557,7 @@ describe("OwnerHome", () => {
     renderHome(["/owner/accounts/101"]);
 
     expect(await screen.findByRole("heading", { name: "Permissions" })).toBeInTheDocument();
-    await user.click(screen.getByRole("checkbox", { name: "Delete messages and attachments" }));
+    await user.click(screen.getByRole("checkbox", { name: "Delete messages & attachments" }));
 
     await waitFor(() => expect(updateAccount).toHaveBeenCalledWith(101, { can_delete: true }));
   });
@@ -710,11 +730,11 @@ describe("OwnerHome", () => {
     expect(screen.queryByRole("button", { name: /Danger zone/ })).not.toBeInTheDocument();
   });
 
-  it("shows the owner a name and a time zone on Profile, and no handles", async () => {
+  it("shows the owner a name and a time zone on Profile, and no identities", async () => {
     renderHome(["/owner/accounts/1?tab=profile"]);
 
     expect(await screen.findByText("Display Name")).toBeInTheDocument();
     expect(screen.getByText("Time Zone")).toBeInTheDocument();
-    expect(screen.queryByText("My Handles")).not.toBeInTheDocument();
+    expect(screen.queryByText("My Identities")).not.toBeInTheDocument();
   });
 });

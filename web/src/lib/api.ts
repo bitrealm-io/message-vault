@@ -148,10 +148,13 @@ async function request<T>(
   body?: unknown,
   signal?: AbortSignal,
 ): Promise<T> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...appHeaders(),
-  };
+  const headers: Record<string, string> = { ...appHeaders() };
+  // A request says it carries JSON only when it does. The vault reads a body
+  // wherever the media type promises one, so an empty DELETE marked as JSON is
+  // refused as unparseable.
+  if (body) {
+    headers["Content-Type"] = "application/json";
+  }
   if (authToken) {
     headers.Authorization = `Bearer ${authToken}`;
   }

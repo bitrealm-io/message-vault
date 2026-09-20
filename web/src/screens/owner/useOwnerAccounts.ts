@@ -34,12 +34,24 @@ function useOwnerWrite<V>(
   });
 }
 
+/**
+ * Change an account's status or permissions. The vault answers with the
+ * account as it now stands, which goes straight into the entry its Settings
+ * read, so a checkbox shows its new state without waiting for the list.
+ */
 export function useUpdateAccount(): UseMutationResult<
-  unknown,
+  ManagedAccount,
   Error,
   { id: number; changes: ManagedAccountChanges }
 > {
-  return useOwnerWrite(({ id, changes }) => updateAccount(id, changes));
+  const cache = useVaultCache();
+  return useMutation<ManagedAccount, Error, { id: number; changes: ManagedAccountChanges }>({
+    mutationFn: ({ id, changes }) => updateAccount(id, changes),
+    onSuccess: (account) => {
+      cache.set(keys.ownerAccounts.member(account.account_id), account);
+      void cache.invalidate(keys.ownerAccounts.all);
+    },
+  });
 }
 
 export function useDeleteAccount(): UseMutationResult<unknown, Error, number> {

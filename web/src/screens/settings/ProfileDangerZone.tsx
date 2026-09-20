@@ -114,7 +114,7 @@ export function ProfileDangerZone({
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 gap-y-5">
               <div className="min-w-0">
                 <p className="m-0 text-[0.813rem] font-bold text-text">
-                  Delete all messages and attachments
+                  Delete all messages &amp; attachments
                 </p>
                 <p className="m-0 mt-0.5 text-[0.813rem] text-muted">
                   {managed

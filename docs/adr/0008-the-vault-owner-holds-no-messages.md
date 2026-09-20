@@ -216,9 +216,13 @@ vault needs.)
   status and its import, export and delete permissions, and deletes its
   messages or the account. The list itself sets nothing. The account holder
   sees the same Status and Permissions sections with nothing to change, so
-  what an account may do is stated to the person it binds. The owner reads
-  the account's name, time zone and handles and changes none, and reads
-  there when the account last logged in and which app it connects with.
+  what an account may do is stated to the person it binds. The owner sets
+  the account's name, time zone and handles as the holder does, so an
+  account can be handed over ready to import into; the holder's own profile
+  setup at first login is still owed. (Until 2026-09-19 all three were the
+  account's own to set, and the owner only read them.) The
+  owner reads there when the account last logged in and which app it
+  connects with.
   Storage shows the owner what it shows the holder: how much the account
   stores, its import and export history, and its largest attachments' names
   and sizes. The owner sees no API tokens, which are the

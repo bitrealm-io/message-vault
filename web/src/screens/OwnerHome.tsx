@@ -135,7 +135,7 @@ export default function OwnerHome() {
               managedAccountId={openAccountId === ownAccountId ? undefined : openAccountId}
             />
           ) : (
-            <div className="mx-auto max-w-[900px] p-6">
+            <div className="max-w-[900px] p-6">
               {EMPTY_SECTIONS.has(section) && (
                 <h3 className="m-0 text-text">{SECTION_LABELS[section]}</h3>
               )}

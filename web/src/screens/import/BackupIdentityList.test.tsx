@@ -12,6 +12,18 @@ afterEach(() => {
 const profile = { phones: ["+15550001111"], emails: [] };
 
 describe("BackupIdentityList", () => {
+  it("drops the box around each identity when shown as rows inside a stage", () => {
+    const { rerender } = render(
+      <BackupIdentityList identities={["+15550001111"]} profile={profile} onAdd={vi.fn()} />,
+    );
+    expect(screen.getByRole("listitem").className).toContain("border");
+    rerender(
+      <BackupIdentityList identities={["+15550001111"]} profile={profile} onAdd={vi.fn()} rows />,
+    );
+    expect(screen.getByRole("listitem").className).not.toContain("border");
+    expect(screen.getByText("On your profile")).toBeInTheDocument();
+  });
+
   it("marks matched addresses and offers to add unmatched ones", () => {
     render(
       <BackupIdentityList

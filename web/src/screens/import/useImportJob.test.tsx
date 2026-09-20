@@ -24,7 +24,6 @@ import type {
 } from "../../lib/tauri";
 import type { AttachmentMediaMode, ImportIssueEvent, ImportProgressEvent } from "../../lib/types";
 import { restoreFormFromSnapshot } from "./formSnapshot";
-import { gateDelta } from "./gateDelta";
 
 const createImportMock = vi.fn();
 const completeImportMock = vi.fn();
@@ -202,6 +201,7 @@ function stagingSummary(overrides: Partial<StagingSummary> = {}): StagingSummary
       cannotProcess: 0,
     },
     forecasts: [],
+    assetMaxBytes: 50 * 1024 * 1024,
     ...overrides,
   };
 }
@@ -514,6 +514,38 @@ describe("useImportJob wiring", () => {
 
     expect(setImportStageMock).toHaveBeenCalledWith(1, "pushing", recomputed);
     expect(setImportStageMock).not.toHaveBeenCalledWith(1, "pushing", gate1Approved);
+  });
+
+  it("keeps what Staging made beside what Media made, with Media's failed count", async () => {
+    runMock.mockImplementationOnce(
+      runResult({
+        summary: "Transcode finished.",
+        transcode: {
+          converted: 5,
+          skipped: 0,
+          too_large: 1,
+          failed: 2,
+          missing: 0,
+          repointed: 0,
+          bytes_before: 100,
+          bytes_after: 40,
+        },
+      }),
+    );
+    const staged = stagingSummary({ conversations: 1, attachmentBytes: 100 });
+    const afterMedia = stagingSummary({ conversations: 1, attachmentBytes: 40 });
+    invokeSummarizeStagingMock.mockResolvedValueOnce(staged);
+    invokeSummarizeStagingMock.mockResolvedValueOnce(afterMedia);
+
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
+    expect(result.current.mediaSummary).toBeNull();
+    await act(() => result.current.approve());
+
+    expect(result.current.phase).toBe("media_approval");
+    expect(result.current.stagingSummary).toEqual(staged);
+    expect(result.current.mediaSummary).toEqual(afterMedia);
+    expect(result.current.mediaFailedCount).toBe(2);
   });
 
   it("reaches a failed push through Gate 2 the same way copy mode does through Gate 1", async () => {
@@ -1248,7 +1280,7 @@ describe("useImportJob resumeAtGate", () => {
     expect(result.current.steps.map((s) => s.status)).toEqual(["done", "pending", "pending"]);
   });
 
-  it("resumes at Gate 2 by diffing the STORED approved plan against a RECOMPUTED actual summary", async () => {
+  it("resumes at the Media Approval showing the STORED plan for Staging and a RECOMPUTED summary for Media", async () => {
     const approved = stagingSummary({
       conversations: 3,
       verdictCounts: {
@@ -1281,14 +1313,13 @@ describe("useImportJob resumeAtGate", () => {
 
     expect(invokeSummarizeStagingMock).toHaveBeenCalledTimes(1);
     expect(result.current.phase).toBe("media_approval");
-    // What's shown is always the recomputed summary, never the stored one.
-    expect(result.current.stagingSummary).toEqual(actual);
-    // And the delta is exactly what gateDelta(storedApproved, recomputed,
-    // undefined) says — both inputs actually feed it, not just one.
-    expect(result.current.mediaDelta).toEqual(gateDelta(approved, actual, undefined));
-    // Sanity: the two summaries genuinely differ, so a bug that fed the
-    // same value in for both (or ignored the stored plan) would zero this.
-    expect(result.current.mediaDelta?.lostCount).toBeGreaterThan(0);
+    // The Staging row shows what was approved before Media; what the
+    // person is deciding on is always recomputed from the folder. The two
+    // genuinely differ here, so a bug that fed one value to both shows.
+    expect(result.current.stagingSummary).toEqual(approved);
+    expect(result.current.mediaSummary).toEqual(actual);
+    // Media's own report is gone on a resume: unknown, not zero.
+    expect(result.current.mediaFailedCount).toBeNull();
     // Decision 39: landing on a gate to look at it again writes nothing.
     expect(setImportStageMock).not.toHaveBeenCalled();
     // The media pass already ran (in an earlier session) to get here -- its
@@ -1415,11 +1446,10 @@ describe("useImportJob resumeAtGate", () => {
     });
 
     expect(result.current.phase).toBe("media_approval");
-    // No baseline to diff against: an unknown history reads as the mildest
-    // severity, so the currently-flagged row shows as new information
-    // instead of the resume silently blocking or throwing.
-    expect(result.current.mediaDelta).toEqual(gateDelta(undefined, actual, undefined));
-    expect(result.current.mediaDelta?.stillFlagged[0]?.regressed).toBe(true);
+    // No stored plan to show for Staging: the resume still lands on the
+    // approval with the recomputed folder, instead of blocking or throwing.
+    expect(result.current.stagingSummary).toBeNull();
+    expect(result.current.mediaSummary).toEqual(actual);
   });
 
   it("does nothing for a session at a stage this function doesn't handle", async () => {

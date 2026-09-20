@@ -5,9 +5,25 @@ import type {
   SizeVerdict,
   StagingSummary,
 } from "../../lib/tauri";
-import { stableStem } from "./gateDelta";
 
 export type ImportOutcome = "completed" | "completed_with_issues" | "failed";
+
+/**
+ * The stable identity of a staged attachment across Media.
+ *
+ * A committed derivative changes name: `attachments/2024-01-15-9f2a3b4c.heic`
+ * becomes `attachments/2024-01-15-9f2a3b4c-mv.jpg`. The stem gains a literal
+ * `-mv` suffix and the extension changes, but the `{date}-{digest16}` stem in
+ * front of it is stable (`attachment_dest_name`,
+ * `crates/core/message-vault-io-core/src/attachments.rs`). Match on that, or
+ * a converted file reads as a different file from the one that was approved.
+ */
+export function stableStem(path: string): string {
+  const base = path.split("/").pop() ?? path;
+  const dot = base.lastIndexOf(".");
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  return stem.endsWith("-mv") ? stem.slice(0, -3) : stem;
+}
 
 /**
  * Verdicts that predict a file will not make it into the vault at all

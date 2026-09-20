@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActiveImportSession } from "../lib/importSession";
 import type { StagingSummary } from "../lib/tauri";
 import { mockedAuth, renderWithVault } from "../test/vaultProviders";
-import type { GateDelta } from "./import/gateDelta";
 import type { ResumeDecision } from "./import/resumeDecision";
 
 const hookState = vi.hoisted(() => ({
@@ -23,19 +22,17 @@ const hookState = vi.hoisted(() => ({
     | "done"
     | "identity_stop",
   stagingSummary: null as StagingSummary | null,
-  mediaDelta: null as GateDelta | null,
+  mediaSummary: null as StagingSummary | null,
+  mediaFailedCount: null as number | null,
   mediaToolsMissing: false,
   mediaPartiallyRan: false,
   resumeError: null as string | null,
   sourceIdentities: null as string[] | null,
-  approvalDismissed: false,
 }));
 const startImportMock = vi.hoisted(() => vi.fn());
 const resumeAtGateMock = vi.hoisted(() => vi.fn());
 const approveMock = vi.hoisted(() => vi.fn());
 const cancelRunMock = vi.hoisted(() => vi.fn());
-const dismissApprovalMock = vi.hoisted(() => vi.fn());
-const reviewApprovalMock = vi.hoisted(() => vi.fn());
 const cancelMock = vi.hoisted(() => vi.fn());
 const returnToFormMock = vi.hoisted(() => vi.fn());
 const continueAfterIdentityStopMock = vi.hoisted(() => vi.fn());
@@ -64,21 +61,18 @@ vi.mock("./import/useImportJob", async (importOriginal) => {
       stagingDir: null,
       importSessionId: null,
       stagingSummary: hookState.stagingSummary,
-      mediaDelta: hookState.mediaDelta,
-      attachmentMedia: "copy",
+      mediaSummary: hookState.mediaSummary,
+      mediaFailedCount: hookState.mediaFailedCount,
       mediaToolsMissing: hookState.mediaToolsMissing,
       mediaPartiallyRan: hookState.mediaPartiallyRan,
       resumeError: hookState.resumeError,
       sourceIdentities: hookState.sourceIdentities,
       computingSummary: false,
       completionText: undefined,
-      approvalDismissed: hookState.approvalDismissed,
       startImport: startImportMock,
       resumeAtGate: resumeAtGateMock,
       approve: approveMock,
       cancelRun: cancelRunMock,
-      dismissApproval: dismissApprovalMock,
-      reviewApproval: reviewApprovalMock,
       cancel: cancelMock,
       returnToForm: returnToFormMock,
       continueAfterIdentityStop: continueAfterIdentityStopMock,
@@ -123,11 +117,26 @@ vi.mock("./import/ImportFormFields", () => ({
 }));
 
 vi.mock("./import/ImportRunView", () => ({
-  default: (props: { approvalWaiting: string | null; onReview: () => void }) => (
+  default: (props: {
+    approvalWaiting: string | null;
+    unknownContacts: number | null;
+    identityPanel?: unknown;
+    onApprove: () => void;
+    onCancelRun: () => void;
+    onBack: () => void;
+  }) => (
     <div data-testid="import-run">
       <span data-testid="run-approval-waiting">{String(props.approvalWaiting)}</span>
-      <button type="button" onClick={props.onReview}>
-        run-review
+      <span data-testid="run-unknown-contacts">{String(props.unknownContacts)}</span>
+      <span data-testid="run-has-identities">{String(props.identityPanel != null)}</span>
+      <button type="button" onClick={props.onApprove}>
+        run-approve
+      </button>
+      <button type="button" onClick={props.onCancelRun}>
+        run-cancel-run
+      </button>
+      <button type="button" onClick={props.onBack}>
+        run-back
       </button>
     </div>
   ),
@@ -153,31 +162,6 @@ vi.mock("./import/ResumeImportPanel", () => ({
   ),
 }));
 
-vi.mock("./import/ImportApprovalScreen", () => ({
-  default: (props: {
-    kind: "staging" | "media";
-    summary: StagingSummary;
-    unknownContacts: number | null;
-    onApprove: () => void;
-    onCancel: () => void;
-    onBack: () => void;
-  }) => (
-    <div data-testid="approval">
-      <span data-testid="approval-kind">{props.kind}</span>
-      <span data-testid="approval-unknown-contacts">{String(props.unknownContacts)}</span>
-      <button type="button" onClick={props.onApprove}>
-        approval-approve
-      </button>
-      <button type="button" onClick={props.onCancel}>
-        approval-cancel
-      </button>
-      <button type="button" onClick={props.onBack}>
-        approval-back
-      </button>
-    </div>
-  ),
-}));
-
 const { default: ImportScreen } = await import("./ImportScreen");
 
 function stagingSummary(overrides: Partial<StagingSummary> = {}): StagingSummary {
@@ -195,6 +179,7 @@ function stagingSummary(overrides: Partial<StagingSummary> = {}): StagingSummary
       cannotProcess: 0,
     },
     forecasts: [],
+    assetMaxBytes: 50 * 1024 * 1024,
     ...overrides,
   };
 }
@@ -232,8 +217,8 @@ describe("ImportScreen entering Import", () => {
   beforeEach(() => {
     hookState.phase = "form";
     hookState.stagingSummary = null;
-    hookState.mediaDelta = null;
-    hookState.approvalDismissed = false;
+    hookState.mediaSummary = null;
+    hookState.mediaFailedCount = null;
     hookState.mediaToolsMissing = false;
     hookState.mediaPartiallyRan = false;
     hookState.resumeError = null;
@@ -797,8 +782,8 @@ describe("ImportScreen gates", () => {
   beforeEach(() => {
     hookState.phase = "form";
     hookState.stagingSummary = null;
-    hookState.mediaDelta = null;
-    hookState.approvalDismissed = false;
+    hookState.mediaSummary = null;
+    hookState.mediaFailedCount = null;
     hookState.mediaToolsMissing = false;
     hookState.mediaPartiallyRan = false;
     hookState.resumeError = null;
@@ -832,66 +817,51 @@ describe("ImportScreen gates", () => {
     cleanup();
   });
 
-  it("renders the Staging Approval with the summary and wires approve and cancel through to the hook", async () => {
+  it("shows the Staging Approval inside the run, with approve and cancel wired to the hook", async () => {
     hookState.phase = "staging_approval";
     hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["+15551234567"] });
-    const user = userEvent.setup();
-    renderWithVault(<ImportScreen />);
-
-    expect(await screen.findByTestId("approval")).toBeInTheDocument();
-    expect(screen.queryByTestId("import-form")).not.toBeInTheDocument();
-
-    await user.click(screen.getByText("approval-approve"));
-    expect(approveMock).toHaveBeenCalledTimes(1);
-
-    await user.click(screen.getByText("approval-cancel"));
-    expect(cancelRunMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows the run with the approval waiting once the person steps back from it", async () => {
-    hookState.phase = "staging_approval";
-    hookState.stagingSummary = stagingSummary();
-    hookState.approvalDismissed = true;
+    hookState.sourceIdentities = ["+15550001111"];
     const user = userEvent.setup();
     renderWithVault(<ImportScreen />);
 
     expect(await screen.findByTestId("import-run")).toBeInTheDocument();
-    expect(screen.queryByTestId("approval")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("import-form")).not.toBeInTheDocument();
     expect(screen.getByTestId("run-approval-waiting")).toHaveTextContent("staging");
+    expect(screen.getByTestId("run-has-identities")).toHaveTextContent("true");
 
-    await user.click(screen.getByText("run-review"));
-    expect(reviewApprovalMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("lets the person step back from the approval without deciding", async () => {
-    hookState.phase = "media_approval";
-    hookState.stagingSummary = stagingSummary();
-    hookState.mediaDelta = { lostCount: 0, stillFlagged: [], cameOutFine: 0, hasChanges: false };
-    const user = userEvent.setup();
-    renderWithVault(<ImportScreen />);
-
-    expect(await screen.findByTestId("approval")).toBeInTheDocument();
-    expect(screen.getByTestId("approval-kind")).toHaveTextContent("media");
-    await user.click(screen.getByText("approval-back"));
-    expect(dismissApprovalMock).toHaveBeenCalledTimes(1);
-    expect(approveMock).not.toHaveBeenCalled();
-    expect(cancelRunMock).not.toHaveBeenCalled();
-  });
-
-  it("renders the Media Approval with the delta and wires approve and cancel through to the hook", async () => {
-    hookState.phase = "media_approval";
-    hookState.stagingSummary = stagingSummary();
-    hookState.mediaDelta = { lostCount: 0, stillFlagged: [], cameOutFine: 0, hasChanges: false };
-    const user = userEvent.setup();
-    renderWithVault(<ImportScreen />);
-
-    expect(await screen.findByTestId("approval")).toBeInTheDocument();
-
-    await user.click(screen.getByText("approval-approve"));
+    await user.click(screen.getByText("run-approve"));
     expect(approveMock).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByText("approval-cancel"));
+    await user.click(screen.getByText("run-cancel-run"));
     expect(cancelRunMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the Media Approval inside the run, without the backup's identities", async () => {
+    hookState.phase = "media_approval";
+    hookState.stagingSummary = stagingSummary();
+    hookState.mediaSummary = stagingSummary();
+    hookState.sourceIdentities = ["+15550001111"];
+    const user = userEvent.setup();
+    renderWithVault(<ImportScreen />);
+
+    expect(await screen.findByTestId("import-run")).toBeInTheDocument();
+    expect(screen.getByTestId("run-approval-waiting")).toHaveTextContent("media");
+    expect(screen.getByTestId("run-has-identities")).toHaveTextContent("false");
+
+    await user.click(screen.getByText("run-approve"));
+    expect(approveMock).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByText("run-cancel-run"));
+    expect(cancelRunMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns to the form when the person goes back from a finished run", async () => {
+    hookState.phase = "done";
+    const user = userEvent.setup();
+    renderWithVault(<ImportScreen />);
+
+    await user.click(await screen.findByText("run-back"));
+    expect(returnToFormMock).toHaveBeenCalledTimes(1);
   });
 
   it("looks up which of the staged contacts are unknown, in one batch under the server cap", async () => {
@@ -900,14 +870,14 @@ describe("ImportScreen gates", () => {
     apiPostMock.mockResolvedValue({ items: ["a", "c"], total: 2, limit: 500, offset: 0 });
     renderWithVault(<ImportScreen />);
 
-    await screen.findByTestId("approval");
+    await screen.findByTestId("import-run");
     await act(async () => {
       await Promise.resolve();
     });
 
     expect(apiPostMock).toHaveBeenCalledTimes(1);
     expect(apiPostMock).toHaveBeenCalledWith({ identifiers: ["a", "b", "c"] });
-    expect(screen.getByTestId("approval-unknown-contacts")).toHaveTextContent("2");
+    expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("2");
   });
 
   it("batches the contact-match lookup at 500 identifiers per request and sums unknown across batches", async () => {
@@ -928,7 +898,7 @@ describe("ImportScreen gates", () => {
     });
     renderWithVault(<ImportScreen />);
 
-    await screen.findByTestId("approval");
+    await screen.findByTestId("import-run");
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -938,7 +908,7 @@ describe("ImportScreen gates", () => {
     const bodies = apiPostMock.mock.calls.map(([body]) => body as { identifiers: string[] });
     expect(bodies[0]?.identifiers).toHaveLength(500);
     expect(bodies[1]?.identifiers).toHaveLength(120);
-    expect(screen.getByTestId("approval-unknown-contacts")).toHaveTextContent("430");
+    expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("430");
   });
 
   it("renders the approval without the unknown-contact count when the lookup fails", async () => {
@@ -947,12 +917,12 @@ describe("ImportScreen gates", () => {
     apiPostMock.mockRejectedValue(new Error("network down"));
     renderWithVault(<ImportScreen />);
 
-    await screen.findByTestId("approval");
+    await screen.findByTestId("import-run");
     await act(async () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByTestId("approval-unknown-contacts")).toHaveTextContent("null");
+    expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("null");
   });
 
   it("shows the identity stop screen for the identity_stop phase", async () => {

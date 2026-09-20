@@ -47,6 +47,21 @@ of, and a search that reads the same everywhere.
   Last login column next to Status, in your own time zone, or "Never" for
   an account nobody has logged in to yet. Logging in, claiming the vault and
   registering all count; a password change does not.
+- 2026-09-20: **An import run and its approvals are one list.** The run
+  screen is the list of stages, and each approval is a row in that list where
+  the run stops, with the decision inside it. There is no separate approval
+  screen to open and come back from. Each stage's row holds what that stage
+  made, one fact per line: Staging has the staging directory, conversations
+  and messages, and the attachments' operation, count and total size. The
+  Staging Approval shows contacts as Existing and New, the size limit per
+  file (50 MB, which no screen showed before), and the files over it, which
+  open to each file and its size. With Convert or Compress it adds estimates
+  in three groups: Likely within limit, May exceed limit, and Not audio or
+  video. The Media Approval shows what is true after Media, not how it
+  compares with the estimate. The import log link sits in Upload's row and
+  appears once Upload starts, so it no longer opens onto a file that does
+  not exist yet. A finished run offers "View imported conversations", "View
+  modified contacts" and Back; errors are in one table under the list.
 - 2026-09-09: **Import is one screen that fills in as the run goes.** The
   form collapses into "what you asked for" once the run starts, each of the
   three stages (Staging, Media, Upload) adds its result underneath, and the

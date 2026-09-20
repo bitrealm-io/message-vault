@@ -3,12 +3,7 @@ import { EXPORT_SOURCES } from "../../lib/exportSources";
 import { IMESSAGE_METHODS, isImessageMethod } from "../../lib/imessageImport";
 import { isWhatsappMethod, WHATSAPP_METHODS } from "../../lib/whatsappImport";
 import { ATTACHMENT_OPTIONS } from "./ImportFormUi";
-import {
-  type ImportPhase,
-  type ImportStep,
-  MEDIA_LABEL,
-  UPLOAD_LABEL,
-} from "./importProgressState";
+import type { ImportPhase } from "./importProgressState";
 import type { ImportJobFormValues } from "./useImportJob";
 
 /** Which of the run's two approvals (CONTEXT.md, "Approval"). */
@@ -48,25 +43,10 @@ export function runHeading(
   const status = summaryView?.status;
   const inserted = summaryView?.messagesInserted;
   if ((status === "completed" || status === "completed_with_issues") && inserted != null) {
-    return `Imported ${inserted.toLocaleString()} ${inserted === 1 ? "message" : "messages"}`;
+    const imported = `Imported ${inserted.toLocaleString()} ${inserted === 1 ? "message" : "messages"}`;
+    return status === "completed_with_issues" ? `${imported}, with errors` : imported;
   }
   return completionText ?? "Import finished";
-}
-
-/**
- * The stage rows as an approval shows them: the stage the approval guards
- * carries "Needs your approval" so the list itself says what is being
- * decided. The Staging Approval guards Media when there is one and Upload
- * otherwise; the Media Approval always guards Upload.
- */
-export function approvalSteps(steps: ImportStep[], kind: ApprovalKind): ImportStep[] {
-  const hasMedia = steps.some((step) => step.label === MEDIA_LABEL);
-  const guarded = kind === "staging" && hasMedia ? MEDIA_LABEL : UPLOAD_LABEL;
-  return steps.map((step) =>
-    step.label === guarded && step.status === "pending"
-      ? { ...step, detail: "Needs your approval" }
-      : step,
-  );
 }
 
 /**

@@ -47,7 +47,6 @@ import { importSessionCreateBody } from "../../lib/vaultSource";
 import { whatsappExtractFields } from "../../lib/whatsappExtractFields";
 import { isWhatsappMethod } from "../../lib/whatsappImport";
 import { formSnapshot, isStringArray } from "./formSnapshot";
-import { gateDelta as computeGateDelta } from "./gateDelta";
 import { mediaJobVerb } from "./gateForecast";
 import { importOutcome } from "./importOutcome";
 import {
@@ -306,8 +305,8 @@ function isAttachmentForecast(value: unknown): value is AttachmentForecast {
  * from the database rather than from this session's own state, so its
  * shape is checked field by field rather than trusted; returns `undefined`
  * — not a throw — for anything that doesn't match. A resume with no usable
- * baseline still proceeds: `gateDelta` and `importOutcome` both tolerate an
- * absent one, they just can't diff against one.
+ * baseline still proceeds: `importOutcome` tolerates an absent one, it just
+ * can't diff against one.
  */
 export function parseStoredStagingSummary(raw: unknown): StagingSummary | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
@@ -329,6 +328,7 @@ export function parseStoredStagingSummary(raw: unknown): StagingSummary | undefi
     return undefined;
   }
   if (!Array.isArray(r.forecasts) || !r.forecasts.every(isAttachmentForecast)) return undefined;
+  if (typeof r.assetMaxBytes !== "number") return undefined;
 
   return {
     conversations: r.conversations,
@@ -344,6 +344,7 @@ export function parseStoredStagingSummary(raw: unknown): StagingSummary | undefi
       cannotProcess: vc.cannotProcess,
     },
     forecasts: r.forecasts,
+    assetMaxBytes: r.assetMaxBytes,
   };
 }
 
@@ -440,11 +441,11 @@ function returnToForm(): void {
     stagingDir: null,
     importSessionId: null,
     stagingSummary: null,
-    mediaDelta: null,
+    mediaSummary: null,
+    mediaFailedCount: null,
     mediaToolsMissing: false,
     mediaPartiallyRan: false,
     computingSummary: false,
-    approvalDismissed: false,
     form: null,
   });
 }
@@ -597,7 +598,7 @@ async function mediaToolsMissingFor(mode: AttachmentMediaMode): Promise<boolean>
 
 /** Stop at an approval: the run waits, and the approval takes the screen. */
 function waitAtApproval(phase: "staging_approval" | "media_approval"): void {
-  store.set({ phase, running: false, computingSummary: false, approvalDismissed: false });
+  store.set({ phase, running: false, computingSummary: false });
 }
 
 /**
@@ -658,6 +659,7 @@ async function finishImport(args: {
     messagesInserted: pushReport?.messages_inserted,
     messagesDeduped: pushReport?.messages_deduped,
     messagesFailed: pushReport?.messages_failed,
+    attachmentsUploaded: pushReport?.assets_uploaded,
     parseMs,
     attachmentsMs,
     prepareMs,
@@ -789,8 +791,8 @@ async function runPush(
  * silent fall-through to Upload.
  *
  * `approvedSummary` is undefined on a resume whose stored plan failed to
- * parse (`parseStoredStagingSummary`): `moveStage` and `computeGateDelta`
- * both tolerate that absence, so the stage still runs rather than blocking
+ * parse (`parseStoredStagingSummary`): `moveStage` tolerates that absence,
+ * so the stage still runs rather than blocking
  * the resume over a plan that can no longer be read.
  */
 async function runMediaPass(
@@ -864,8 +866,7 @@ async function runMediaPass(
       staging_dir: outputDir,
       ...stagingMediaFields(form),
     });
-    const delta = computeGateDelta(approvedSummary, actual, transcodeReport);
-    store.set({ stagingSummary: actual, mediaDelta: delta });
+    store.set({ mediaSummary: actual, mediaFailedCount: transcodeReport?.failed ?? null });
     await moveStage(sessionId, "awaiting_gate_2", approvedSummary);
     waitAtApproval("media_approval");
   } catch (e: unknown) {
@@ -936,12 +937,12 @@ async function runImport(
     stagingDir: null,
     importSessionId: null,
     stagingSummary: null,
-    mediaDelta: null,
+    mediaSummary: null,
+    mediaFailedCount: null,
     mediaToolsMissing: false,
     mediaPartiallyRan: false,
     resumeError: null,
     computingSummary: false,
-    approvalDismissed: false,
   });
 
   let sessionId: number | null = null;
@@ -1114,16 +1115,6 @@ async function cancelRun(): Promise<void> {
   returnToForm();
 }
 
-/** Leave the approval for the run view; the run keeps waiting. */
-function dismissApproval(): void {
-  store.set({ approvalDismissed: true });
-}
-
-/** Open the waiting approval again from the run view. */
-function reviewApproval(): void {
-  store.set({ approvalDismissed: false });
-}
-
 /** Stop the stage that is running. The run stays where it got to. */
 async function cancel(): Promise<void> {
   await invokeCancel();
@@ -1214,8 +1205,12 @@ export function useImportJob() {
       phase,
       importSessionId: sessionId,
       stagingDir: outputDir,
-      stagingSummary: approvedSummary,
+      stagingSummary,
+      mediaSummary,
     } = store.get();
+    // What the person is approving: the folder as Media left it at the
+    // Media Approval, as Staging left it at the Staging Approval.
+    const approvedSummary = phase === "media_approval" ? mediaSummary : stagingSummary;
     if (!form || sessionId == null || outputDir == null || approvedSummary == null) return;
 
     scratch.approvalAction = true;
@@ -1282,10 +1277,10 @@ export function useImportJob() {
       stagingDir: outputDir,
       importSessionId: sessionId,
       stagingSummary: null,
-      mediaDelta: null,
+      mediaSummary: null,
+      mediaFailedCount: null,
       mediaToolsMissing: false,
       mediaPartiallyRan: false,
-      approvalDismissed: false,
       sourceIdentities: parseSourceIdentities(session.source_identities),
     });
 
@@ -1313,13 +1308,14 @@ export function useImportJob() {
             mediaPartiallyRan: partiallyRan,
           });
         } else {
-          // No transcode report to diff against on a resume (the stage
-          // already ran in an earlier session), so this falls back to
-          // gateDelta's conservation math, or, when `approved` itself is
-          // undefined, treats everything actual still flags as new.
+          // The Staging row shows the plan approved before Media, read
+          // back from the run; the Media rows show the folder as it is now.
+          // Media's own report is gone on a resume, so its failed count is
+          // unknown rather than zero.
           store.set({
-            stagingSummary: actual,
-            mediaDelta: computeGateDelta(approved, actual, undefined),
+            stagingSummary: approved ?? null,
+            mediaSummary: actual,
+            mediaFailedCount: null,
           });
         }
         waitAtApproval(approval);
@@ -1364,10 +1360,8 @@ export function useImportJob() {
     stagingDir: state.stagingDir,
     importSessionId: state.importSessionId,
     stagingSummary: state.stagingSummary,
-    mediaDelta: state.mediaDelta,
-    // The mode the approvals approve, read from the submitted form so they
-    // never depend on live form state.
-    attachmentMedia: state.form?.attachmentMedia ?? "copy",
+    mediaSummary: state.mediaSummary,
+    mediaFailedCount: state.mediaFailedCount,
     mediaToolsMissing: state.mediaToolsMissing,
     mediaPartiallyRan: state.mediaPartiallyRan,
     resumeError: state.resumeError,
@@ -1375,14 +1369,11 @@ export function useImportJob() {
     completionText:
       state.phase === "done" ? completionTextFor(state.summaryView?.status) : undefined,
     sourceIdentities: state.sourceIdentities,
-    approvalDismissed: state.approvalDismissed,
     startImport,
     continueAfterIdentityStop,
     cancelIdentityStop,
     approve,
     cancelRun,
-    dismissApproval,
-    reviewApproval,
     resumeAtGate,
     cancel,
     returnToForm,

@@ -50,7 +50,6 @@ import {
 import BackupIdentityList from "./import/BackupIdentityList";
 import BackupIdentityStopScreen from "./import/BackupIdentityStopScreen";
 import { restoreFormFromSnapshot } from "./import/formSnapshot";
-import ImportApprovalScreen from "./import/ImportApprovalScreen";
 import ImportFormFields from "./import/ImportFormFields";
 import ImportRunView from "./import/ImportRunView";
 import { isApprovalPhase } from "./import/importRunStore";
@@ -117,20 +116,17 @@ export default function ImportScreen() {
     stagingDir,
     importSessionId,
     stagingSummary,
-    mediaDelta,
-    attachmentMedia: runAttachmentMedia,
+    mediaSummary,
+    mediaFailedCount,
     mediaToolsMissing,
     mediaPartiallyRan,
     resumeError,
     sourceIdentities,
     computingSummary,
     completionText,
-    approvalDismissed,
     startImport,
     approve,
     cancelRun,
-    dismissApproval,
-    reviewApproval,
     resumeAtGate,
     cancel,
     returnToForm,
@@ -773,22 +769,40 @@ export default function ImportScreen() {
         />
       )}
 
-      {(phase === "running" || phase === "done" || (approvalWaiting && approvalDismissed)) && (
+      {(phase === "running" || phase === "done" || approvalWaiting) && (
         <ImportRunView
           phase={phase}
           steps={steps}
           running={running}
           form={form}
           stagingSummary={stagingSummary}
-          mediaDelta={mediaDelta}
+          mediaSummary={mediaSummary}
+          mediaFailedCount={mediaFailedCount}
           summaryView={summaryView}
           stagingDir={stagingDir}
           importSessionId={importSessionId}
           completionText={completionText}
           approvalWaiting={approvalWaiting}
+          unknownContacts={unknownContacts}
+          mediaToolsMissing={mediaToolsMissing}
+          mediaPartiallyRan={mediaPartiallyRan}
+          identityPanel={
+            approvalWaiting === "staging" && sourceIdentities != null ? (
+              <BackupIdentityList
+                identities={sourceIdentities}
+                profile={identityProfile}
+                onAdd={addIdentityToProfile}
+                busy={running || identityAddBusy}
+                error={identityAddError}
+                rows
+              />
+            ) : undefined
+          }
+          approvalBusy={running}
+          onApprove={() => void approve()}
+          onCancelRun={() => void cancelRun()}
           onCancel={() => void cancel()}
-          onReview={reviewApproval}
-          onImportAnother={returnToForm}
+          onBack={returnToForm}
           cancelDisabled={computingSummary}
         />
       )}
@@ -802,34 +816,6 @@ export default function ImportScreen() {
           onCancel={cancelIdentityStop}
           busy={running || identityAddBusy}
           error={identityAddError}
-        />
-      )}
-
-      {approvalWaiting && !approvalDismissed && stagingSummary && (
-        <ImportApprovalScreen
-          kind={approvalWaiting}
-          steps={steps}
-          summary={stagingSummary}
-          delta={approvalWaiting === "media" ? mediaDelta : null}
-          unknownContacts={unknownContacts}
-          mode={runAttachmentMedia}
-          onApprove={() => void approve()}
-          onCancel={() => void cancelRun()}
-          onBack={dismissApproval}
-          busy={running}
-          mediaToolsMissing={mediaToolsMissing}
-          mediaPartiallyRan={mediaPartiallyRan}
-          identityPanel={
-            approvalWaiting === "staging" && sourceIdentities != null ? (
-              <BackupIdentityList
-                identities={sourceIdentities}
-                profile={identityProfile}
-                onAdd={addIdentityToProfile}
-                busy={running || identityAddBusy}
-                error={identityAddError}
-              />
-            ) : undefined
-          }
         />
       )}
     </div>

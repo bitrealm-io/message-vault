@@ -12,6 +12,7 @@ export default function BackupIdentityList({
   onAdd,
   busy,
   error,
+  rows,
 }: {
   identities: string[];
   /** Null while the profile is loading or its fetch failed — marks and
@@ -24,6 +25,8 @@ export default function BackupIdentityList({
    * address — a short factual line shown under the list, not tied to any
    * one row (the failing identity isn't tracked separately). */
   error?: string | null;
+  /** Plain rows with no box around each, for use inside a stage of the run. */
+  rows?: boolean;
 }) {
   if (identities.length === 0) {
     return (
@@ -35,15 +38,21 @@ export default function BackupIdentityList({
 
   return (
     <>
-      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      <ul className={`m-0 flex list-none flex-col p-0 ${rows ? "" : "gap-2"}`}>
         {identities.map((identity) => {
           const matched = profile != null ? identityOnProfile(identity, profile) : null;
           return (
             <li
               key={identity}
-              className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
+              className={
+                rows
+                  ? "flex flex-wrap items-center justify-between gap-x-4 py-0.5 pl-4"
+                  : "flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
+              }
             >
-              <span className="text-[0.875rem] text-text">{identity}</span>
+              <span className={`text-text ${rows ? "text-[0.813rem]" : "text-[0.875rem]"}`}>
+                {identity}
+              </span>
               {matched === true && (
                 <span className="text-[0.813rem] text-muted">On your profile</span>
               )}
@@ -52,6 +61,7 @@ export default function BackupIdentityList({
                   <span className="text-[0.813rem] text-muted">Not on your profile</span>
                   <Button
                     variant="ghost"
+                    size={rows ? "chip" : undefined}
                     onClick={() => void onAdd(identity, identityService(identity))}
                     disabled={busy}
                   >

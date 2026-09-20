@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { ImportSummaryView } from "../../components/import/ImportSummaryPanel";
 import type { StagingSummary } from "../../lib/tauri";
-import type { GateDelta } from "./gateDelta";
 import type { ImportPhase, ImportStep } from "./importProgressState";
 import type { ImportJobFormValues } from "./useImportJob";
 
@@ -25,14 +24,18 @@ export type ImportRunState = {
   summaryView: ImportSummaryView | null;
   stagingDir: string | null;
   importSessionId: number | null;
-  /**
-   * What the staging folder holds, read after Staging and again after Media
-   * (the folder is the truth, not the last estimate). Shown at both
-   * approvals and on the main screen once Staging is done.
-   */
+  /** What the staging folder held once Staging finished; the Staging row's facts. */
   stagingSummary: StagingSummary | null;
-  /** How Media's result differs from what was approved; null until Media ran. */
-  mediaDelta: GateDelta | null;
+  /**
+   * What the folder holds after Media, read again from disk (the folder is
+   * the truth, not the last estimate). Null until Media ran.
+   */
+  mediaSummary: StagingSummary | null;
+  /**
+   * Files Media tried and could not convert or compress. Null when Media
+   * has not run, and on a resume, where the pass's own report is gone.
+   */
+  mediaFailedCount: number | null;
   mediaToolsMissing: boolean;
   /**
    * True only for a resume that landed at the Staging Approval because
@@ -55,12 +58,6 @@ export type ImportRunState = {
    */
   computingSummary: boolean;
   sourceIdentities: string[] | null;
-  /**
-   * The person clicked "Back to the run" on an approval. The run view then
-   * shows the approval as waiting with a button to reopen it, instead of
-   * the approval taking the screen again on the next render.
-   */
-  approvalDismissed: boolean;
 };
 
 export function initialImportRunState(steps: ImportStep[]): ImportRunState {
@@ -73,13 +70,13 @@ export function initialImportRunState(steps: ImportStep[]): ImportRunState {
     stagingDir: null,
     importSessionId: null,
     stagingSummary: null,
-    mediaDelta: null,
+    mediaSummary: null,
+    mediaFailedCount: null,
     mediaToolsMissing: false,
     mediaPartiallyRan: false,
     resumeError: null,
     computingSummary: false,
     sourceIdentities: null,
-    approvalDismissed: false,
   };
 }
 

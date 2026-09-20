@@ -115,6 +115,10 @@ pub struct StagingSummary {
     /// One row per physical file whose verdict is not `fits_as_is` — see the
     /// module docs on aliasing.
     pub forecasts: Vec<AttachmentForecast>,
+    /// The largest single attachment the upload accepts, in bytes: the limit
+    /// every verdict above was measured against, carried so the screen shows
+    /// the same number the verdicts used.
+    pub asset_max_bytes: u64,
 }
 
 /// How far [`summarize_staging`] has got, reported over attachments.
@@ -179,7 +183,10 @@ pub fn summarize_staging(
 ) -> Result<StagingSummary> {
     let files = conversation_files(staging_dir)?;
 
-    let mut summary = StagingSummary::default();
+    let mut summary = StagingSummary {
+        asset_max_bytes: options.asset_max_bytes,
+        ..StagingSummary::default()
+    };
     let mut contacts = BTreeSet::new();
     // Gathered while walking the documents for their conversation/message/
     // contact counts, so the classification pass below can run over a flat

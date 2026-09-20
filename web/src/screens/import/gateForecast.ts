@@ -1,109 +1,82 @@
-import type { SizeVerdict, VerdictCounts } from "../../lib/tauri";
+import type { AttachmentForecast, StagingSummary } from "../../lib/tauri";
 import type { AttachmentMediaMode } from "../../lib/types";
 
-/** The job the media step is doing, in the user's words (decisions 18, 19). */
+/** The job the Media stage is doing, in the person's words. */
 export function mediaJobVerb(mode: AttachmentMediaMode): "converting" | "compressing" | null {
   if (mode === "convert") return "converting";
   if (mode === "compress") return "compressing";
   return null;
 }
 
-function capitalize(word: string): string {
-  return word.charAt(0).toUpperCase() + word.slice(1);
+/** Largest first: the file most likely to matter leads its list. */
+function bySizeDescending(a: AttachmentForecast, b: AttachmentForecast): number {
+  return b.sizeBytes - a.sizeBytes;
 }
 
-/** "1 file" or "12 files" — every caller here folds the count into a
- * sentence, so this spells out the plural rather than leaving each call
- * site to remember the `=== 1` check. */
-export function pluralFiles(count: number): string {
-  return `${count.toLocaleString()} file${count === 1 ? "" : "s"}`;
+/**
+ * The staged files larger than the limit right now. Exact, read from the
+ * sizes on disk: no estimate is involved, so this is the same list before
+ * and after Media, measured against whatever the folder holds at the time.
+ */
+export function filesOverLimit(summary: StagingSummary): AttachmentForecast[] {
+  return summary.forecasts
+    .filter((row) => row.sizeBytes > summary.assetMaxBytes)
+    .sort(bySizeDescending);
 }
 
-export interface VerdictCopy {
+export type EstimatePileKey = "likely_within" | "may_exceed" | "not_media";
+
+/** One group of files the Staging Approval's estimates sort into. */
+export interface EstimatePile {
+  key: EstimatePileKey;
   label: string;
-  hint: string;
+  /** What the pile means, shown above its files once it is opened. */
+  note: string;
+  files: AttachmentForecast[];
+  /** False for files Media leaves alone: they have no second size to show. */
+  showsEstimate: boolean;
 }
 
 /**
- * Wording for one verdict, in the mode it was forecast under. Labels that
- * name the job route through `mediaJobVerb` so `convert` and `compress`
- * copy can never drift apart from each other.
+ * The Staging Approval's estimates, before Media has run: three piles, the
+ * empty ones dropped. The backend's five verdicts fold into these. A file
+ * under the limit that Media may push over it (`may_grow`) sits with the
+ * files expected to stay over it, because both may be left out of the vault
+ * and that is what the person is weighing. `fits_as_is` files carry no
+ * forecast row at all.
  */
-export function verdictCopy(verdict: SizeVerdict, mode: AttachmentMediaMode): VerdictCopy {
-  const verb = mediaJobVerb(mode);
-  switch (verdict) {
-    case "fits_as_is":
-      return {
-        label: "Fits as-is",
-        hint: verb
-          ? "Already under the size limit, so the media step leaves it alone."
-          : "Already under the size limit, so it uploads as-is.",
-      };
-    case "likely_fits":
-      return {
-        label: verb ? `Likely to fit after ${verb}` : "Likely to fit",
-        hint: "Close to the limit today; the estimate expects it to land under it.",
-      };
-    case "may_grow":
-      return {
-        label: "May grow past the limit",
-        hint: verb
-          ? `${capitalize(verb)} can add size, so a file under the limit today can land over it.`
-          : "A file under the limit today can land over it after the media step.",
-      };
-    case "probably_too_big":
-      return {
-        // "Probably still" hedges an estimate that only exists when there is
-        // a media step to run first; under copy/skip the size is exact and
-        // already over, so the plain fact reads true without the hedge.
-        label: verb ? "Probably still too big" : "Over the size limit",
-        hint: verb
-          ? "Expected to stay over the limit even after the media step."
-          : "Over the size limit, so it will not be uploaded.",
-      };
-    case "cannot_process": {
-      const doneForm = mode === "convert" ? "converted" : mode === "compress" ? "compressed" : null;
-      return {
-        label: doneForm ? `Cannot be ${doneForm} — not audio or video` : "Not audio or video",
-        hint: verb
-          ? "This file type is not audio or video, so the media step does not touch it."
-          : "This file type is not audio or video.",
-      };
-    }
-    default:
-      return verdict satisfies never;
-  }
+export function estimatePiles(summary: StagingSummary): EstimatePile[] {
+  const of = (...verdicts: AttachmentForecast["verdict"][]) =>
+    summary.forecasts.filter((row) => verdicts.includes(row.verdict)).sort(bySizeDescending);
+  const piles: EstimatePile[] = [
+    {
+      key: "likely_within",
+      label: "Likely within limit",
+      note: "Over the limit as staged, and expected to come out under it.",
+      files: of("likely_fits"),
+      showsEstimate: true,
+    },
+    {
+      key: "may_exceed",
+      label: "May exceed limit",
+      note: "Expected to come out over the limit. That includes files under it now that are expected to come out larger.",
+      files: of("probably_too_big", "may_grow"),
+      showsEstimate: true,
+    },
+    {
+      key: "not_media",
+      label: "Not audio or video",
+      note: "Over the limit, and not a kind of file Media changes.",
+      files: of("cannot_process"),
+      showsEstimate: false,
+    },
+  ];
+  return piles.filter((pile) => pile.files.length > 0);
 }
 
-export interface ForecastGroup extends VerdictCopy {
-  verdict: SizeVerdict;
-  count: number;
-}
-
-/** What needs attention first, what is fine last (decision 11). */
-const GROUP_ORDER: SizeVerdict[] = [
-  "probably_too_big",
-  "may_grow",
-  "cannot_process",
-  "likely_fits",
-  "fits_as_is",
-];
-
-const COUNT_KEY: Record<SizeVerdict, keyof VerdictCounts> = {
-  fits_as_is: "fitsAsIs",
-  likely_fits: "likelyFits",
-  may_grow: "mayGrow",
-  probably_too_big: "probablyTooBig",
-  cannot_process: "cannotProcess",
-};
-
-/**
- * The verdict groups worth showing, in priority order, with the empty ones
- * dropped — a row reading "0 files may grow past the limit" is noise on a
- * screen whose job is to be read quickly.
- */
-export function forecastGroups(counts: VerdictCounts, mode: AttachmentMediaMode): ForecastGroup[] {
-  return GROUP_ORDER.map((verdict) => ({ verdict, count: counts[COUNT_KEY[verdict]] }))
-    .filter((group) => group.count > 0)
-    .map((group) => ({ ...group, ...verdictCopy(group.verdict, mode) }));
+/** "Compression estimates" or "Conversion estimates"; null when there is no Media stage. */
+export function estimatesHeading(mode: AttachmentMediaMode): string | null {
+  if (mode === "compress") return "Compression estimates";
+  if (mode === "convert") return "Conversion estimates";
+  return null;
 }

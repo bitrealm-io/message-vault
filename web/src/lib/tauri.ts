@@ -107,6 +107,8 @@ export interface StagingSummary {
   attachmentBytes: number;
   verdictCounts: VerdictCounts;
   forecasts: AttachmentForecast[];
+  /** Largest single attachment the upload accepts; what the verdicts were measured against. */
+  assetMaxBytes: number;
 }
 
 /** Recompute what a staged folder holds, for the first approval gate. */

@@ -82,13 +82,19 @@ const NEW_ACCOUNT_DISABLED_TABS: readonly SettingsTab[] = ["profile", "storage"]
  * managed account has, so the owner sees what the account will hold, but only
  * Account opens: a profile and storage belong to an account that exists.
  * Creating it opens that account's Settings, with every tab.
+ *
+ * Given `backToAccounts`, the screen was opened from User Accounts and carries
+ * a link back to it above the heading. Owner Home sets it for every account it
+ * opens, the owner's own included.
  */
 export default function SettingsScreen({
   managedAccountId,
   creating = false,
+  backToAccounts = false,
 }: {
   managedAccountId?: number;
   creating?: boolean;
+  backToAccounts?: boolean;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { profile } = useSettingsAccount(managedAccountId);
@@ -102,7 +108,7 @@ export default function SettingsScreen({
   return (
     <div className="max-w-[820px] p-6 text-text">
       <header>
-        {managed || creating ? (
+        {backToAccounts ? (
           <Link
             to="/owner/accounts"
             className="mb-2 inline-block text-[0.813rem] text-muted no-underline hover:text-text"

@@ -271,6 +271,8 @@ describe("OwnerHome", () => {
     expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
     expect(await screen.findByText("Change Password")).toBeInTheDocument();
     expect(selectedSection()).toBe("User Accounts");
+    // It was opened from User Accounts, so it links back there as any account does.
+    expect(screen.getByRole("link", { name: "← User Accounts" })).toBeInTheDocument();
   });
 
   it("lists the vault owner first, with no status or permissions to set", async () => {

@@ -1,8 +1,7 @@
 import { type UseMutationResult, useMutation } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { apiErrorMessage } from "../../lib/apiErrorMessage";
 import {
-  createAccount as createVaultAccount,
   deleteAccountById,
   deleteAccountMessages,
   listAccounts,
@@ -36,14 +35,6 @@ function useOwnerWrite<V>(
   });
 }
 
-export function useCreateAccount(): UseMutationResult<
-  unknown,
-  Error,
-  { username: string; password: string }
-> {
-  return useOwnerWrite((body) => createVaultAccount(body));
-}
-
 export function useUpdateAccount(): UseMutationResult<
   unknown,
   Error,
@@ -70,9 +61,10 @@ export function useSetAccountPassword(): UseMutationResult<
 }
 
 /**
- * The vault owner's view of every account, with the one thing the table
- * itself does: add an account. A password, status, permissions and the
- * deletions are in the account's Settings, which the account's name opens.
+ * The vault owner's view of every account. Adding one is the Create Account
+ * form's work; `refresh` is what the panel calls once the form has made it. A
+ * password, status, permissions and the deletions are in the account's
+ * Settings, which the account's gear opens.
  */
 export function useOwnerAccounts() {
   const {
@@ -80,60 +72,13 @@ export function useOwnerAccounts() {
     isPending: loading,
     error: loadError,
   } = useVaultQuery(keys.ownerAccounts.all, fetchAccounts);
-  const createAccount = useCreateAccount();
-
-  const busy = createAccount.isPending;
-  const actionError = createAccount.error ? createAccount.error.message : "";
-  const clearError = createAccount.reset;
-
-  const [composing, setComposing] = useState(false);
-  const [newUsername, setNewUsername] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
-
-  const cancelCompose = useCallback(() => {
-    setComposing(false);
-    setNewUsername("");
-    setNewPassword("");
-    setNewPasswordConfirm("");
-    clearError();
-  }, [clearError]);
-
-  // The form takes the password twice and saves only when the two agree; the
-  // panel disables Save until then, and this is the same rule on the way out.
-  const createOne = useCallback(() => {
-    const username = newUsername.trim();
-    const password = newPassword;
-    if (!username || !password || password !== newPasswordConfirm) return;
-    createAccount.mutate(
-      { username, password },
-      {
-        onSuccess: () => {
-          setNewUsername("");
-          setNewPassword("");
-          setNewPasswordConfirm("");
-          setComposing(false);
-        },
-      },
-    );
-  }, [newUsername, newPassword, newPasswordConfirm, createAccount.mutate]);
+  const cache = useVaultCache();
+  const refresh = useCallback(() => cache.invalidate(keys.ownerAccounts.all), [cache]);
 
   return {
     accounts: data ?? [],
     loading,
     loadError: loadError ? apiErrorMessage(loadError, "Could not load accounts.") : "",
-    busy,
-    actionError,
-    clearError,
-    composing,
-    setComposing,
-    newUsername,
-    setNewUsername,
-    newPassword,
-    setNewPassword,
-    newPasswordConfirm,
-    setNewPasswordConfirm,
-    cancelCompose,
-    createAccount: createOne,
+    refresh,
   };
 }

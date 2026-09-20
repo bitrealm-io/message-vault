@@ -588,17 +588,28 @@ describe("OwnerHome", () => {
 
     await screen.findByText("bob");
     await user.click(screen.getByRole("button", { name: "Add account" }));
-    const save = screen.getByRole("button", { name: "Save" });
 
-    await user.type(screen.getByLabelText("New account's username"), "carol");
-    await user.type(screen.getByLabelText("New account's password"), "hunter2hunter2");
-    expect(save).toBeDisabled();
-    await user.type(screen.getByLabelText("Confirm the new account's password"), "hunter2hunter2");
-    expect(save).toBeEnabled();
+    // The Login screen's Create Account form, with its fields and its check.
+    await user.type(screen.getByLabelText("Username"), "carol");
+    await user.type(screen.getByLabelText("Password"), "hunter2hunter2");
+    await user.type(screen.getByLabelText("Confirm Password"), "hunter2hunter");
+    await user.click(screen.getByRole("button", { name: "Add account" }));
+    expect(await screen.findByText("Passwords do not match.")).toBeInTheDocument();
+    expect(createAccount).not.toHaveBeenCalled();
 
-    await user.click(save);
+    await user.type(screen.getByLabelText("Confirm Password"), "2");
+    await user.click(screen.getByRole("button", { name: "Add account" }));
     await waitFor(() =>
-      expect(createAccount).toHaveBeenCalledWith({ username: "carol", password: "hunter2hunter2" }),
+      expect(createAccount).toHaveBeenCalledWith({
+        username: "carol",
+        password: "hunter2hunter2",
+        preferred_name: null,
+        phone: null,
+      }),
+    );
+    // The form is put away and the table is read again for the new row.
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Confirm Password")).not.toBeInTheDocument(),
     );
   });
 

@@ -1,31 +1,49 @@
 import { type FormEvent, useState } from "react";
 import AuthErrorFooter from "../../components/AuthErrorFooter";
 import AuthSubmitButton from "../../components/AuthSubmitButton";
+import Button from "../../components/Button";
 import { LockIcon, PersonIcon } from "../../components/icons";
 import PasswordField from "../../components/PasswordField";
 import TextField from "../../components/TextField";
-import { setBaseUrl } from "../../lib/api";
-import { useAuth } from "../../lib/auth";
 import { useAsyncAction } from "../../lib/useAsyncAction";
 import { createAccount } from "../../lib/vaultApi";
+import type { components } from "../../lib/vaultApi.types";
+
+/** What the vault answers when it creates an account. */
+export type CreatedAccount = components["schemas"]["CreatedAccountResponse"];
 
 /**
  * New vault account: username plus the password twice.
  *
+ * The one form for creating an account, whoever creates it: a stranger on the
+ * Login screen of an open vault, and the vault owner under User Accounts. The
+ * fields, the checks and the request are the same. What happens next differs,
+ * and `onCreated` holds it; so does the wording of the action.
+ *
  * This is the first half of creating an account, not the whole of it. The name
  * and phone numbers are not asked for here — the account opens with an empty
  * profile, which sends the user straight to profile setup, and only finishing
- * that leaves them with a fully set up account. The action is labelled
- * "Continue" for that reason.
+ * that leaves them with a fully set up account. The Login screen labels the
+ * action "Continue" for that reason.
  */
 export default function CreateAccountForm({
-  serverUrl,
+  submitLabel,
+  busyLabel,
+  onBeforeCreate,
+  onCreated,
+  onCancel,
   disabled = false,
 }: {
-  serverUrl: string;
+  submitLabel: string;
+  busyLabel: string;
+  /** Runs once the fields pass, before the request: the Login screen points the app at the vault here. */
+  onBeforeCreate?: () => void;
+  /** Runs with the vault's answer. The form stays busy until it settles, and shows what it throws. */
+  onCreated: (created: CreatedAccount) => Promise<void> | void;
+  /** Given where the form can be put away; adds Cancel beside the action. */
+  onCancel?: () => void;
   disabled?: boolean;
 }) {
-  const { login } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -49,23 +67,14 @@ export default function CreateAccountForm({
         throw new Error("Passwords do not match.");
       }
 
-      const url = serverUrl.trim();
-      setBaseUrl(url);
-      const res = await createAccount({
+      onBeforeCreate?.();
+      const created = await createAccount({
         username: username.trim(),
         password,
         preferred_name: null,
         phone: null,
       });
-      // A stranger's registration opens a Session on the new account; the
-      // token is absent only when the owner created it, which this form never
-      // does.
-      if (!res.token) {
-        throw new Error("The vault created the account but opened no session.");
-      }
-      // Awaited so the empty-profile check inside `login` runs before this form
-      // drops its busy state, sending the new account on to profile setup.
-      await login(url, res.token, res.account_id);
+      await onCreated(created);
     });
   };
 
@@ -109,11 +118,25 @@ export default function CreateAccountForm({
         isDisabled={disabled}
       />
 
-      {/* "Continue", not "Create account": this step opens the account but does
-          not finish it — the profile setup screen it leads to does. */}
-      <AuthSubmitButton disabled={busy || disabled}>
-        {busy ? "Continuing…" : "Continue"}
-      </AuthSubmitButton>
+      {onCancel ? (
+        <div className="mt-5 flex gap-2">
+          <Button
+            variant="secondary"
+            disabled={busy || disabled}
+            onPress={onCancel}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <AuthSubmitButton disabled={busy || disabled} className="flex-1">
+            {busy ? busyLabel : submitLabel}
+          </AuthSubmitButton>
+        </div>
+      ) : (
+        <AuthSubmitButton disabled={busy || disabled}>
+          {busy ? busyLabel : submitLabel}
+        </AuthSubmitButton>
+      )}
 
       {/* Pushed to the foot of the panel so the message lands just above the
           rule that closes the card, clear of the action that produced it. The

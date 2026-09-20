@@ -1,7 +1,9 @@
 import { SelectionIndicator, Tab, TabList, TabPanel, Tabs } from "react-aria-components";
+import { setBaseUrl } from "../../lib/api";
+import { useAuth } from "../../lib/auth";
 import type { VaultState } from "../../lib/useVaultState";
 import ClaimVaultForm from "./ClaimVaultForm";
-import CreateAccountForm from "./CreateAccountForm";
+import CreateAccountForm, { type CreatedAccount } from "./CreateAccountForm";
 import LoginForm from "./LoginForm";
 
 function tabClassName({ isSelected }: { isSelected: boolean }) {
@@ -35,6 +37,19 @@ export default function LocalAuthTabs({
   vaultState: VaultState;
   disabled?: boolean;
 }) {
+  const { login } = useAuth();
+
+  const logInToNewAccount = async (created: CreatedAccount) => {
+    // A stranger's registration opens a Session on the new account; the token
+    // is absent only when the owner created it, which this screen never does.
+    if (!created.token) {
+      throw new Error("The vault created the account but opened no session.");
+    }
+    // Awaited so the empty-profile check inside `login` runs before the form
+    // drops its busy state, sending the new account on to profile setup.
+    await login(serverUrl.trim(), created.token, created.account_id);
+  };
+
   // One thing to do, so no tab strip to choose between things.
   if (vaultState === "unclaimed") {
     return (
@@ -78,7 +93,15 @@ export default function LocalAuthTabs({
         <LoginForm serverUrl={serverUrl} disabled={disabled} />
       </TabPanel>
       <TabPanel id="create" className="flex min-h-0 flex-1 flex-col outline-none">
-        <CreateAccountForm serverUrl={serverUrl} disabled={disabled} />
+        {/* "Continue", not "Create account": this step opens the account but
+            does not finish it — the profile setup screen it leads to does. */}
+        <CreateAccountForm
+          submitLabel="Continue"
+          busyLabel="Continuing…"
+          onBeforeCreate={() => setBaseUrl(serverUrl.trim())}
+          onCreated={logInToNewAccount}
+          disabled={disabled}
+        />
       </TabPanel>
     </Tabs>
   );

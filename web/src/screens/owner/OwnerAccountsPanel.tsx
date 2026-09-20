@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
 import { GearIcon } from "../../components/icons";
 import NavGlyphButton from "../../components/NavGlyphButton";
 import ScrollingTableCard from "../../components/ScrollingTableCard";
-import TextField from "../../components/TextField";
 import { formatDateTime } from "../../lib/formatDate";
+import CreateAccountForm from "../auth/CreateAccountForm";
 import { tdClass, tdMuted } from "../settings/apiTokensUtils";
 import { type ManagedAccount, useOwnerAccounts } from "./useOwnerAccounts";
 
@@ -25,21 +26,6 @@ const thSeparator = "border-l border-border";
  */
 const rowStripe =
   "even:[&>td]:bg-hover/50 last:[&>td:first-child]:rounded-bl-[0.6875rem] last:[&>td:last-child]:rounded-br-[0.6875rem]";
-
-/** Shown under the second password field once both are filled and differ. */
-function MismatchNote({ first, second }: { first: string; second: string }) {
-  if (!first || !second || first === second) return null;
-  return (
-    <p className="mt-1 text-[0.75rem] text-danger" role="alert">
-      Passwords do not match.
-    </p>
-  );
-}
-
-/** A password may be saved once it is typed twice the same way. */
-function passwordsAgree(first: string, second: string): boolean {
-  return first !== "" && first === second;
-}
 
 /** What the Status column reads for one account. */
 function statusLabel(account: ManagedAccount): string {
@@ -67,24 +53,8 @@ function matches(account: ManagedAccount, needle: string): boolean {
  */
 export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
   const navigate = useNavigate();
-  const {
-    accounts,
-    loading,
-    loadError,
-    busy,
-    actionError,
-    clearError,
-    composing,
-    setComposing,
-    newUsername,
-    setNewUsername,
-    newPassword,
-    setNewPassword,
-    newPasswordConfirm,
-    setNewPasswordConfirm,
-    cancelCompose,
-    createAccount,
-  } = useOwnerAccounts();
+  const { accounts, loading, loadError, refresh } = useOwnerAccounts();
+  const [composing, setComposing] = useState(false);
 
   if (loading) return <p className="text-[0.875rem] text-muted">Loading accounts…</p>;
   if (loadError) return <p className="text-[0.875rem] text-danger">{loadError}</p>;
@@ -98,80 +68,30 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="m-0 text-text">User Accounts</h3>
         {!composing && (
-          <Button
-            variant="secondary"
-            size="xs"
-            disabled={busy}
-            onClick={() => {
-              clearError();
-              setComposing(true);
-            }}
-          >
+          <Button variant="secondary" size="xs" onClick={() => setComposing(true)}>
             Add account
           </Button>
         )}
       </div>
 
-      {actionError ? (
-        <p className="mt-3 text-[0.875rem] text-danger" role="alert">
-          {actionError}
-        </p>
-      ) : null}
-
+      {/* The Create Account form of the Login screen, as it is there. The vault
+          opens no session for an account its owner creates, so what follows is
+          the new row in the table rather than a login. */}
       {composing && (
-        <div className="mt-3 flex flex-col gap-3 rounded-xl border border-border bg-elevated p-3">
-          <div className="flex flex-wrap items-start gap-2">
-            <TextField
-              value={newUsername}
-              onChange={setNewUsername}
-              placeholder="Username"
-              isDisabled={busy}
-              aria-label="New account's username"
-              className="min-w-[10rem] flex-1"
-            />
-            <TextField
-              value={newPassword}
-              onChange={setNewPassword}
-              type="password"
-              placeholder="Password"
-              isDisabled={busy}
-              aria-label="New account's password"
-              className="min-w-[10rem] flex-1"
-            />
-            <div className="min-w-[10rem] flex-1">
-              <TextField
-                value={newPasswordConfirm}
-                onChange={setNewPasswordConfirm}
-                type="password"
-                placeholder="Confirm password"
-                isDisabled={busy}
-                aria-label="Confirm the new account's password"
-              />
-              <MismatchNote first={newPassword} second={newPasswordConfirm} />
-            </div>
-            <Button
-              variant="secondary"
-              disabled={
-                busy || !newUsername.trim() || !passwordsAgree(newPassword, newPasswordConfirm)
-              }
-              onClick={() => void createAccount()}
-              className="!px-3 !py-1.5 !text-[0.75rem]"
-            >
-              Save
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={busy}
-              onClick={cancelCompose}
-              className="!px-3 !py-1.5 !text-[0.75rem]"
-            >
-              Cancel
-            </Button>
-          </div>
-          <p className="text-[0.75rem] text-muted">
+        <div className="mt-3 flex max-w-[24rem] flex-col rounded-xl border border-border bg-elevated p-4">
+          <p className="mb-4 text-[0.75rem] text-muted">
             Hand this password over yourself. The person keeps it until they change it under their
             own Settings.
           </p>
+          <CreateAccountForm
+            submitLabel="Add account"
+            busyLabel="Adding…"
+            onCreated={async () => {
+              await refresh();
+              setComposing(false);
+            }}
+            onCancel={() => setComposing(false)}
+          />
         </div>
       )}
 

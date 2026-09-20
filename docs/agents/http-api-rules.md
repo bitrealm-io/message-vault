@@ -44,7 +44,7 @@ row.
 ## Naming a route
 
 A collection is plural, and a member is `/{collection}/{id}`. A singular path
-is legal only for a singleton: one per vault (`/v1/vault`), or one per signed-in
+is legal only for a singleton: one per vault (`/v1/vault`), or one per logged-in
 credential (`/v1/session`). `/v1/trash` is a singleton by the same rule.
 
 A path segment names a resource, never a caller's role. Who may call a route is
@@ -81,7 +81,7 @@ change and a URL has to be renamed to match.
 
 Rejected: `/v1/auth/login` and its siblings. `/v1/auth` was neither a
 collection nor a singleton, so the verb rule could not reach it. A Session is
-one per signed-in credential, which makes it a singleton, and login, logout and
+one per logged-in credential, which makes it a singleton, and login, logout and
 check are its `POST`, `DELETE` and `GET`.
 
 ## Methods
@@ -213,7 +213,7 @@ send one, and the rule would refuse the web app on its first request.
 Two credentials exist, and the OpenAPI document declares each as a security
 scheme with its scopes, so every route says which it accepts.
 
-- A **Session** is one per signed-in account or owner, made by
+- A **Session** is one per logged-in account or owner, made by
   `POST /v1/session` and ended by `DELETE /v1/session`. It carries the
   account's own permissions: `import`, `export`, `delete`. The owner's session
   carries none of those and reaches only the accounts collection and the vault

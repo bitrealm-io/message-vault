@@ -14,7 +14,7 @@ function PermissionCheckbox({
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled: boolean;
-  /** Whether the signed-in account itself holds this permission. */
+  /** Whether the logged-in account itself holds this permission. */
   allowed: boolean;
   children: string;
 }) {
@@ -64,7 +64,7 @@ export function ApiTokenCreateForm({
   onCanExportChange: (value: boolean) => void;
   canDelete: boolean;
   onCanDeleteChange: (value: boolean) => void;
-  /** The signed-in account's own permissions — a token can never exceed them. */
+  /** The logged-in account's own permissions — a token can never exceed them. */
   accountCanImport: boolean;
   accountCanExport: boolean;
   accountCanDelete: boolean;

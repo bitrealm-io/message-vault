@@ -155,7 +155,7 @@ describe("apiClient no-content", () => {
  * every one of them, and every screen would have failed against a real vault.
  */
 describe("apiClient request shape", () => {
-  it("names this app and its Build on every request, signed in or not", async () => {
+  it("names this app and its Build on every request, logged in or not", async () => {
     const fetchSpy = stubOkFetch();
 
     await apiClient.get("/v1/vault");
@@ -204,7 +204,7 @@ describe("apiClient request shape", () => {
     expect(headers.Authorization).toBe("Bearer mv-user-abc123");
   });
 
-  it("sends no Authorization header while signed out", async () => {
+  it("sends no Authorization header while logged out", async () => {
     const fetchSpy = stubOkFetch();
     setToken(null);
 

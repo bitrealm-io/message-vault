@@ -1,4 +1,4 @@
-/** What every vault sign-in route returns: a session token and the account it belongs to. */
+/** What every vault login route returns: a session token and the account it belongs to. */
 export interface SessionResponse {
   token: string;
   account_id: number;

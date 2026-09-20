@@ -1,7 +1,7 @@
 import type { components } from "./vaultApi.types";
 
 /**
- * The signed-in account as the vault returns it from `GET /v1/accounts/{id}`:
+ * The logged-in account as the vault returns it from `GET /v1/accounts/{id}`:
  * its profile, its flags, and how much it holds.
  *
  * Generated from the vault's own OpenAPI document rather than written here, so

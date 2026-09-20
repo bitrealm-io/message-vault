@@ -68,7 +68,7 @@ function tabClassName({ isSelected }: { isSelected: boolean }) {
 }
 
 /**
- * Settings for the signed-in account, or, given `managedAccountId`, for an
+ * Settings for the logged-in account, or, given `managedAccountId`, for an
  * account the vault owner opened from User Accounts. The same screen and the
  * same tabs either way, so the owner sees an account's settings laid out as
  * the account holder does.

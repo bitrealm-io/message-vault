@@ -497,7 +497,7 @@ describe("LoginScreen", () => {
   // form's job, which is what lets the browser submit on Enter by itself.
   // jsdom does not perform that implicit submission, so this drives the form
   // element directly — that the key reaches it is the browser's part.
-  it("runs the sign-in from the form's own submit event", async () => {
+  it("runs the login from the form's own submit event", async () => {
     stubVault();
     renderScreen();
 

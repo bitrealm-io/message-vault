@@ -12,7 +12,7 @@ Convert is for the case where an export already exists in one format and a copy 
 
 ## Before starting
 
-- The desktop app, signed in
+- The desktop app, logged in
 - A folder that holds one existing export
 - A second, different folder to write into
 

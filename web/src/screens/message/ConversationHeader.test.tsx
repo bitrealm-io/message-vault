@@ -32,7 +32,7 @@ const listContactGroupsMock = vi.mocked(listContactGroups);
 const createContactGroupMock = vi.mocked(createContactGroup);
 const updateContactGroupMembersMock = vi.mocked(updateContactGroupMembers);
 
-/** The signed-in account: one phone, so the owner can be told apart from the others. */
+/** The logged-in account: one phone, so the owner can be told apart from the others. */
 const PROFILE = {
   account_id: 7,
   username: "me",

@@ -65,7 +65,7 @@ export function ManagedProfilePanel({ accountId }: { accountId: number }) {
 
       <h3 className={sectionTitleClass}>Last Login</h3>
       <div className="mb-6 text-[0.875rem] text-text">
-        {profile.last_sign_in_at ? formatDateTime(profile.last_sign_in_at) : "Never"}
+        {profile.last_login_at ? formatDateTime(profile.last_login_at) : "Never"}
       </div>
 
       <h3 className={sectionTitleClass}>App</h3>

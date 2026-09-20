@@ -168,7 +168,7 @@ First `cargo build --workspace` and first `cargo tauri dev` each take several mi
 
 ### Run the vault (development)
 
-Work from the repository root. The vault process must be running before the website or desktop app can sign in. First compile of the server and of Tauri each take several minutes.
+Work from the repository root. The vault process must be running before the website or desktop app can log in. First compile of the server and of Tauri each take several minutes.
 
 **Terminal 1 — vault API** (leave this running)
 
@@ -183,7 +183,7 @@ Work from the repository root. The vault process must be running before the webs
 
 `--reset` and `--reset-demo` cannot be combined, and `--owner` is rejected with `--reset-demo`, which claims the vault itself. `--help` on either dev script lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
 
-API: **http://127.0.0.1:8080**. After `--reset-demo`, sign in as username `demo` with an empty password. After `--owner`, sign in as `admin` / `admin`. Otherwise create the vault owner in the UI.
+API: **http://127.0.0.1:8080**. After `--reset-demo`, log in as username `demo` with an empty password. After `--owner`, log in as `admin` / `admin`. Otherwise create the vault owner in the UI.
 
 Restart terminal 1 after edits under `crates/vault/server/` (debug `cargo run`; no hot reload).
 
@@ -191,7 +191,7 @@ Restart terminal 1 after edits under `crates/vault/server/` (debug `cargo run`; 
 compose Postgres, runs this checkout's vault with `--db-url
 postgres://vault:vault@127.0.0.1:5432/vault`, and stops the container
 on exit. `--reset` / `--reset-demo` wipe the `vault_pg_data` volume and
-host `data/`. After `--reset-demo`, sign in as `demo` with an empty
+host `data/`. After `--reset-demo`, log in as `demo` with an empty
 password. Pass `--release` to seed and serve with the optimized binary
 (first compile can take several minutes). Do not run this and
 `./scripts/run-vault-dev.sh` at once (both serve on 127.0.0.1:8080).
@@ -306,7 +306,7 @@ Three version numbers are easy to mix up:
 | Docker Hub tag  | `0.9.0` (no `v`)    | `bitrealm/message-vault:0.9.0`. Also `0.9`, `latest`, and `sha-…`.                     |
 | JSONL schema    | `schema_version: 4` | Shared chat file format. Independent of the product version. Version 3 is refused, never upgraded. |
 | Build           | `0.9.0+343fe0d8`    | The product version plus the commit, which is what a screen shows as "Version". `.dirty` follows the commit when tracked files held uncommitted changes; a build from a `v*` tag is `0.9.0` alone; `0.9.0+unknown` when nothing is known. Nobody writes it: `crates/libs/build-version` works it out for the vault and the desktop app, and `web/vite.config.ts` for the SPA, under the same rules. |
-| Schema fingerprint | `1818757801`     | Derived from `schema/sql/*.sql` and stamped into the vault database. Shown in Owner Home → Vault Settings. Never bumped by hand. |
+| Schema fingerprint | `345080516`      | Derived from `schema/sql/*.sql` and stamped into the vault database. Shown in Owner Home → Vault Settings. Never bumped by hand. |
 
 The Build asks git for the commit. Where there is no `.git`, which is the case inside `docker/Dockerfile`, set `MESSAGE_VAULT_BUILD_METADATA` to the part after the `+` (the Dockerfile takes it as the `BUILD_METADATA` build argument). Set and empty means a release, and is what the tag job passes.
 

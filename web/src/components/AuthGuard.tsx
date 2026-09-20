@@ -16,7 +16,7 @@ export function AuthGuard() {
     return <Navigate to="/login" replace />;
   }
 
-  // The profile is fetched during sign-in, so this is over before it is seen.
+  // The profile is fetched during login, so this is over before it is seen.
   // Rendering the app first and redirecting after would flash a screen this
   // account is not finished earning.
   if (loading) {

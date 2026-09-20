@@ -8,11 +8,11 @@ import { useVaultCache, useVaultQuery } from "./vaultQuery";
 import { ANONYMOUS_ACCOUNT, vaultQueryKey } from "./vaultQueryKey";
 
 /**
- * The signed-in account's profile.
+ * The logged-in account's profile.
  *
  * This used to be a module-level store with its own in-flight guard, its own
  * subscriber list, and a `clearAccountProfile` that `auth.tsx` had to remember
- * to call on both sign-in and sign-out. All of that is TanStack Query's now,
+ * to call on both login and logout. All of that is TanStack Query's now,
  * and the entry is named with the account, so nothing has to be cleared for
  * one account to stop seeing another's profile.
  */
@@ -53,10 +53,10 @@ export function useUpdateAccountProfile(): UseMutationResult<
 }
 
 /**
- * Read the profile outside a render — during sign-in, and before an import
+ * Read the profile outside a render — during login, and before an import
  * decides whether the backup belongs to this person.
  *
- * `accountId` is passed explicitly because sign-in knows the account before the
+ * `accountId` is passed explicitly because login knows the account before the
  * auth state carries it, and the entry has to land under the key the hook above
  * will read.
  */
@@ -70,7 +70,7 @@ export function fetchAccountProfileFor(
   return client.fetchQuery({ queryKey: key, queryFn: () => getAccountProfile() }).catch(() => null);
 }
 
-/** The same, for a caller that is already inside the signed-in tree. */
+/** The same, for a caller that is already inside the logged-in tree. */
 export function useFetchAccountProfile(): (force?: boolean) => Promise<AccountProfile | null> {
   const client = useQueryClient();
   const { accountId } = useAuth();

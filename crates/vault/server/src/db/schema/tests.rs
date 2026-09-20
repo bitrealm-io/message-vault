@@ -208,7 +208,7 @@ async fn assert_current_schema_contract(conn: &mut AnyConnection) {
             "can_import",
             "can_export",
             "can_delete",
-            "last_sign_in_at"
+            "last_login_at"
         ]
     );
     assert_eq!(

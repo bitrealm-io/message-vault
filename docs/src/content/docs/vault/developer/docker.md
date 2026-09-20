@@ -74,7 +74,7 @@ This is the usual local path. Compose compiles `docker/Dockerfile` and starts th
 docker compose -f docker/compose.release.yml up --build
 ```
 
-The vault is at **http://127.0.0.1:8080**. On an empty data volume, `DEMO_DATA=true` (the default) loads the sample inbox and claims the vault for a sample owner. Sign in as `demo` with an empty password, or as `admin` with the password `admin` to manage accounts.
+The vault is at **http://127.0.0.1:8080**. On an empty data volume, `DEMO_DATA=true` (the default) loads the sample inbox and claims the vault for a sample owner. Log in as `demo` with an empty password, or as `admin` with the password `admin` to manage accounts.
 
 With `DEMO_DATA=false` nothing is seeded and the vault starts unclaimed, so the first screen is **Create Vault Owner** rather than a login.
 

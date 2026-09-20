@@ -211,7 +211,7 @@ export function OwnerAccountsPanel({ filter = "" }: { filter?: string }) {
                   </td>
                   <td className={account.disabled ? tdClass : tdMuted}>{statusLabel(account)}</td>
                   <td className={`${tdMuted} whitespace-nowrap`}>
-                    {account.last_sign_in_at ? formatDateTime(account.last_sign_in_at) : "Never"}
+                    {account.last_login_at ? formatDateTime(account.last_login_at) : "Never"}
                   </td>
                 </tr>
               );

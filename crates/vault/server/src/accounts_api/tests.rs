@@ -5,10 +5,10 @@ use crate::db::api_tokens;
 use crate::db::permissions::Permissions;
 use crate::test_support::{
     SeedConversation, SeedMessage, claim_vault_as_owner, delete_json, delete_json_with_body,
-    delete_status, delete_status_with_body, get_json, get_raw, get_status, login_status,
+    delete_status, delete_status_with_body, get_json, get_raw, get_status, log_in, login_status,
     patch_failure, patch_json, patch_status, post_created_json, post_status,
-    post_status_signed_out, put_json, put_status, register_via_api, seed_conversation,
-    seed_one_message, sign_in, test_vault,
+    post_status_logged_out, put_json, put_status, register_via_api, seed_conversation,
+    seed_one_message, test_vault,
 };
 
 fn member(id: i64) -> String {
@@ -185,7 +185,7 @@ async fn the_owner_holds_no_message_permissions() {
     // `FullAccess` means an ordinary account's session; the owner has none.
     assert!(crate::server::require_full_access(&auth).is_err());
     // The routes under `/v1/accounts/{id}` still admit them, for its own row.
-    assert!(crate::server::require_signed_in(&auth).is_ok());
+    assert!(crate::server::require_logged_in(&auth).is_ok());
 }
 
 // ---------------------------------------------------------------------------
@@ -254,7 +254,7 @@ const ACCOUNT_FIELDS: [&str; 18] = [
     "emails",
     "is_demo",
     "is_owner",
-    "last_sign_in_at",
+    "last_login_at",
     "message_count",
     "must_set_up_profile",
     "phones",
@@ -292,7 +292,7 @@ async fn account_rows_carry_no_message_content_fields() {
 // ---------------------------------------------------------------------------
 
 /// The owner picks a first password and the account holder replaces it, so
-/// the owner's choice survives one sign-in and no longer. The owner's
+/// the owner's choice survives one login and no longer. The owner's
 /// creation opens no session.
 #[tokio::test]
 async fn a_created_account_must_replace_the_password_the_owner_chose() {
@@ -322,12 +322,12 @@ async fn a_created_account_must_replace_the_password_the_owner_chose() {
     assert_eq!(
         login_status(&state, "carol", "hunter2hunter2").await,
         StatusCode::CREATED,
-        "the owner's password signs in once"
+        "the owner's password logs in once"
     );
 }
 
 /// A user account has no password length rule, so the owner may create one
-/// with a single character or with none, and both sign in.
+/// with a single character or with none, and both log in.
 #[tokio::test]
 async fn the_owner_creates_accounts_with_a_short_password_or_none() {
     let vault = test_vault().await;
@@ -347,11 +347,11 @@ async fn the_owner_creates_accounts_with_a_short_password_or_none() {
 }
 
 /// A stranger's registration answers the new row and the Session the vault
-/// opened on it, so the person is signed in on creation. It never grants
+/// opened on it, so the person is logged in on creation. It never grants
 /// anything beyond an ordinary account: the owner is claimed at a fixed id,
 /// never promoted from whoever arrived first.
 #[tokio::test]
-async fn a_stranger_is_signed_in_on_creation_and_never_becomes_the_owner() {
+async fn a_stranger_is_logged_in_on_creation_and_never_becomes_the_owner() {
     let vault = test_vault().await;
     let state = vault.state.clone();
 
@@ -383,7 +383,7 @@ async fn a_registration_that_names_the_account_owes_no_profile_setup() {
     let vault = test_vault().await;
     let state = vault.state.clone();
 
-    let status = post_status_signed_out(
+    let status = post_status_logged_out(
         &state,
         "/v1/accounts",
         serde_json::json!({
@@ -414,7 +414,7 @@ async fn a_stranger_may_register_without_a_password() {
     let vault = test_vault().await;
     let state = vault.state.clone();
 
-    let status = post_status_signed_out(
+    let status = post_status_logged_out(
         &state,
         "/v1/accounts",
         serde_json::json!({ "username": "passwordless" }),
@@ -427,7 +427,7 @@ async fn a_stranger_may_register_without_a_password() {
     );
 }
 
-/// A closed vault admits nobody the owner has not admitted, and a signed-in
+/// A closed vault admits nobody the owner has not admitted, and a logged-in
 /// account is not the owner: creating accounts for others is the owner's.
 #[tokio::test]
 async fn a_closed_vault_and_an_ordinary_session_are_both_refused() {
@@ -444,7 +444,7 @@ async fn a_closed_vault_and_an_ordinary_session_are_both_refused() {
 
     let body = serde_json::json!({ "username": "stranger", "password": "hunter2hunter2" });
     assert_eq!(
-        post_status_signed_out(&state, "/v1/accounts", body.clone()).await,
+        post_status_logged_out(&state, "/v1/accounts", body.clone()).await,
         StatusCode::FORBIDDEN,
         "a stranger on a closed vault"
     );
@@ -464,11 +464,11 @@ async fn a_taken_username_is_a_conflict() {
 
     // Usernames are compared ignoring case, which the problem page says out
     // loud. A comparison that stopped ignoring it would let "ALICE" register
-    // beside "alice" and leave one of the two unreachable at sign-in, because
+    // beside "alice" and leave one of the two unreachable at login, because
     // the lookup is the same comparison.
     for taken in ["alice", "ALICE", "Alice"] {
         assert_eq!(
-            post_status_signed_out(
+            post_status_logged_out(
                 &state,
                 "/v1/accounts",
                 serde_json::json!({ "username": taken, "password": "otherpassword" }),
@@ -504,7 +504,7 @@ async fn creating_an_account_is_rate_limited_by_username() {
         |username: &str| serde_json::json!({ "username": username, "password": "hunter2hunter2" });
 
     for attempt in 0..crate::credentials::AUTH_RATE_MAX {
-        let status = post_status_signed_out(&state, "/v1/accounts", body("flood")).await;
+        let status = post_status_logged_out(&state, "/v1/accounts", body("flood")).await;
         // The first attempt creates the account and the rest collide with it.
         // Either way the attempt counts against the bucket.
         assert!(
@@ -514,7 +514,7 @@ async fn creating_an_account_is_rate_limited_by_username() {
     }
 
     assert_eq!(
-        post_status_signed_out(&state, "/v1/accounts", body("flood")).await,
+        post_status_logged_out(&state, "/v1/accounts", body("flood")).await,
         StatusCode::TOO_MANY_REQUESTS,
         "the attempt past the limit must be refused"
     );
@@ -522,7 +522,7 @@ async fn creating_an_account_is_rate_limited_by_username() {
     // The bucket is named by username, so one client spraying a single name
     // must not shut the vault to everybody else.
     assert_eq!(
-        post_status_signed_out(&state, "/v1/accounts", body("bystander")).await,
+        post_status_logged_out(&state, "/v1/accounts", body("bystander")).await,
         StatusCode::CREATED,
         "an unrelated username must still be able to register"
     );
@@ -694,7 +694,7 @@ async fn the_owners_own_row_cannot_be_disabled_or_deleted() {
         "the owner cannot delete itself"
     );
 
-    // And the refusals changed nothing: the owner still signs in.
+    // And the refusals changed nothing: the owner still logs in.
     assert_eq!(
         login_status(&state, "keeper", "hunter2hunter2").await,
         StatusCode::CREATED
@@ -743,14 +743,14 @@ async fn owner_routes_on_a_missing_account_are_404() {
 }
 
 // ---------------------------------------------------------------------------
-// Last sign-in
+// Last login
 // ---------------------------------------------------------------------------
 
-/// Registering and signing in both stamp the account; an account the owner
+/// Registering and logging in both stamp the account; an account the owner
 /// made and nobody has used yet carries no stamp; and the owner setting a
-/// password does not count as that account signing in.
+/// password does not count as that account logging in.
 #[tokio::test]
-async fn last_sign_in_follows_sessions_being_opened() {
+async fn last_login_follows_sessions_being_opened() {
     let vault = test_vault().await;
     let state = vault.state.clone();
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
@@ -758,8 +758,8 @@ async fn last_sign_in_follows_sessions_being_opened() {
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let row: AccountResponse = get_json(&state, &member(alice.account_id), &owner.token).await;
     let registered_at = row
-        .last_sign_in_at
-        .expect("registering opens a session, so it is a sign-in");
+        .last_login_at
+        .expect("registering opens a session, so it is a login");
     assert!(
         chrono::DateTime::parse_from_rfc3339(&registered_at).is_ok(),
         "RFC 3339: {registered_at}"
@@ -774,8 +774,8 @@ async fn last_sign_in_follows_sessions_being_opened() {
     .await;
     let carol = created["account_id"].as_i64().unwrap();
     assert!(
-        created["last_sign_in_at"].is_null(),
-        "an account the owner made has not signed in: {created}"
+        created["last_login_at"].is_null(),
+        "an account the owner made has not logged in: {created}"
     );
 
     let status = put_status(
@@ -788,16 +788,13 @@ async fn last_sign_in_follows_sessions_being_opened() {
     assert_eq!(status, StatusCode::NO_CONTENT);
     let row: AccountResponse = get_json(&state, &member(carol), &owner.token).await;
     assert!(
-        row.last_sign_in_at.is_none(),
-        "the owner setting a password is not carol signing in"
+        row.last_login_at.is_none(),
+        "the owner setting a password is not carol logging in"
     );
 
-    sign_in(&state, "carol", "resetbytheowner").await;
+    log_in(&state, "carol", "resetbytheowner").await;
     let row: AccountResponse = get_json(&state, &member(carol), &owner.token).await;
-    assert!(
-        row.last_sign_in_at.is_some(),
-        "signing in stamps the account"
-    );
+    assert!(row.last_login_at.is_some(), "logging in stamps the account");
 }
 
 // ---------------------------------------------------------------------------
@@ -862,7 +859,7 @@ async fn an_account_changes_its_own_password() {
     )
     .await;
     let id = created["account_id"].as_i64().unwrap();
-    let login = sign_in(&state, "carol", "hunter2hunter2").await;
+    let login = log_in(&state, "carol", "hunter2hunter2").await;
     let token = login["token"].as_str().unwrap();
     let path = format!("{}/password", member(id));
 
@@ -915,9 +912,9 @@ async fn the_owner_changes_their_own_password_with_the_current_one() {
         .await,
         StatusCode::UNAUTHORIZED
     );
-    // A refused change leaves the password as it was. Signing in opens a new
+    // A refused change leaves the password as it was. Logging in opens a new
     // session, so the change that follows uses its token.
-    let login = sign_in(&state, "keeper", "hunter2hunter2").await;
+    let login = log_in(&state, "keeper", "hunter2hunter2").await;
 
     let _changed: SetPasswordResponse = put_json(
         &state,
@@ -957,9 +954,9 @@ async fn the_owner_cannot_clear_their_own_password() {
         StatusCode::UNPROCESSABLE_ENTITY
     );
 
-    // The refusal stored nothing: the old password still signs in. That opens
+    // The refusal stored nothing: the old password still logs in. That opens
     // a new session, so the next change uses its token.
-    let login = sign_in(&state, "keeper", "hunter2hunter2").await;
+    let login = log_in(&state, "keeper", "hunter2hunter2").await;
     let _changed: SetPasswordResponse = put_json(
         &state,
         &path,
@@ -997,8 +994,8 @@ async fn a_user_password_can_be_cleared_by_the_account_or_the_owner() {
         "the old password is gone"
     );
 
-    // Signing in opens a new session, so the next change uses its token.
-    let login = sign_in(&state, "bob", "").await;
+    // Logging in opens a new session, so the next change uses its token.
+    let login = log_in(&state, "bob", "").await;
     let _set_again: SetPasswordResponse = put_json(
         &state,
         &path,
@@ -1008,7 +1005,7 @@ async fn a_user_password_can_be_cleared_by_the_account_or_the_owner() {
     .await;
     assert_eq!(login_status(&state, "bob", "b").await, StatusCode::CREATED);
 
-    let owner = sign_in(&state, "keeper", "hunter2hunter2").await;
+    let owner = log_in(&state, "keeper", "hunter2hunter2").await;
     let status = put_status(
         &state,
         &path,
@@ -1230,7 +1227,7 @@ async fn an_account_deletes_itself_with_its_password_and_the_demo_account_refuse
     let demo = vault
         .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
         .await;
-    let demo_token = sign_in(&state, "demo", "").await["token"]
+    let demo_token = log_in(&state, "demo", "").await["token"]
         .as_str()
         .unwrap()
         .to_string();

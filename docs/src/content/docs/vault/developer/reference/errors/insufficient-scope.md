@@ -11,4 +11,4 @@ editUrl: false
 | Status | `403 Forbidden` |
 | Type | `https://bitrealm.io/vault/developer/reference/errors/insufficient-scope` |
 
-The credential was accepted but may not do this. An API token carries import and export permissions and never a signed-in session's full access; an account may be restricted from import, export or deletion by the owner. Use a session, a token with the right scope, or ask the owner.
+The credential was accepted but may not do this. An API token carries import and export permissions and never a logged-in session's full access; an account may be restricted from import, export or deletion by the owner. Use a session, a token with the right scope, or ask the owner.

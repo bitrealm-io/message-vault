@@ -69,7 +69,7 @@ pub struct CompileRequest<'a> {
     pub list: ListKind,
     /// The query string as typed.
     pub query: &'a str,
-    /// The signed-in account; every fragment is scoped to it.
+    /// The logged-in account; every fragment is scoped to it.
     pub account_id: i64,
     /// Which engine's SQL to write.
     pub engine: DbEngine,

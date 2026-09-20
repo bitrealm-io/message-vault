@@ -1,6 +1,6 @@
 //! Router assembly, shared state, auth resolution, and HTTP plumbing.
 //!
-//! Domain handlers live in their own modules: `session_api` (signing in and
+//! Domain handlers live in their own modules: `session_api` (logging in and
 //! out), `accounts_api` (the accounts collection), `api_tokens_api`,
 //! `contacts_api`, `conversations_api`, `export_api` (messages and counts),
 //! `import` (JSONL ingest and Import Runs), and `assets` (asset bytes and
@@ -41,13 +41,13 @@ use crate::problem::{Problem, ProblemType};
 /// What a Bearer credential is allowed to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthCapability {
-    /// Signed-in session on an ordinary account. Carries the account's own
+    /// Logged-in session on an ordinary account. Carries the account's own
     /// permissions.
     Session {
         /// What the account may do.
         permissions: Permissions,
     },
-    /// Signed-in vault owner. Carries no permissions at all, so every guard
+    /// Logged-in vault owner. Carries no permissions at all, so every guard
     /// that asks for one refuses it and the owner cannot reach message data.
     /// See `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
     Owner,
@@ -76,21 +76,21 @@ impl AuthIdentity {
         }
     }
 
-    /// True only for the signed-in vault owner. An API token can never be the
+    /// True only for the logged-in vault owner. An API token can never be the
     /// owner, because no token resolves to [`AuthCapability::Owner`].
     pub fn is_owner(&self) -> bool {
         matches!(self.capability, AuthCapability::Owner)
     }
 
-    /// True when the credential is a signed-in session on an ordinary account:
+    /// True when the credential is a logged-in session on an ordinary account:
     /// not a token, and not the vault owner.
     pub fn is_session(&self) -> bool {
         matches!(self.capability, AuthCapability::Session { .. })
     }
 
-    /// True when a person signed in, whether as the vault owner or on an
+    /// True when a person logged in, whether as the vault owner or on an
     /// ordinary account. False for every API token.
-    pub fn is_signed_in(&self) -> bool {
+    pub fn is_logged_in(&self) -> bool {
         self.is_session() || self.is_owner()
     }
 }
@@ -105,12 +105,12 @@ pub fn require_full_access(auth: &AuthIdentity) -> Result<(), ApiError> {
         return Ok(());
     }
     Err(ApiError::InsufficientScope(
-        "this endpoint requires a signed-in session; use an API token only for import/export"
+        "this endpoint requires a logged-in session; use an API token only for import/export"
             .into(),
     ))
 }
 
-/// Reject anything that is not the signed-in vault owner.
+/// Reject anything that is not the logged-in vault owner.
 ///
 /// # Errors
 ///
@@ -124,7 +124,7 @@ pub fn require_owner(auth: &AuthIdentity) -> Result<(), ApiError> {
     ))
 }
 
-/// Allow any signed-in person, vault owner or ordinary account, and reject
+/// Allow any logged-in person, vault owner or ordinary account, and reject
 /// API tokens. The guard for the routes under `/v1/accounts/{id}`, where a
 /// handler then decides whether the caller is the owner or the account
 /// itself; the owner needs them for its own row as much as anyone.
@@ -132,12 +132,12 @@ pub fn require_owner(auth: &AuthIdentity) -> Result<(), ApiError> {
 /// # Errors
 ///
 /// Returns forbidden when the credential is a named API token.
-pub fn require_signed_in(auth: &AuthIdentity) -> Result<(), ApiError> {
-    if auth.is_signed_in() {
+pub fn require_logged_in(auth: &AuthIdentity) -> Result<(), ApiError> {
+    if auth.is_logged_in() {
         return Ok(());
     }
     Err(ApiError::InsufficientScope(
-        "this endpoint requires a signed-in session; use an API token only for import/export"
+        "this endpoint requires a logged-in session; use an API token only for import/export"
             .into(),
     ))
 }
@@ -199,7 +199,7 @@ pub fn require_delete_access(auth: &AuthIdentity) -> Result<(), ApiError> {
     ))
 }
 
-/// Allow a signed-in session that may destroy message data: the guard for
+/// Allow a logged-in session that may destroy message data: the guard for
 /// permanent deletion out of the trash. Both halves matter. Trash is a GUI
 /// affair, so an API token is refused the way every trash route refuses it,
 /// and the account's own `can_delete` grant is what keeps the demo account
@@ -271,20 +271,20 @@ macro_rules! auth_guard {
 }
 
 auth_guard!(
-    /// Signed-in session (API tokens rejected); wraps [`require_full_access`].
+    /// Logged-in session (API tokens rejected); wraps [`require_full_access`].
     FullAccess,
     require_full_access
 );
 auth_guard!(
-    /// Signed-in vault owner; wraps [`require_owner`].
+    /// Logged-in vault owner; wraps [`require_owner`].
     Owner,
     require_owner
 );
 auth_guard!(
-    /// Any signed-in person, owner or ordinary account; wraps
-    /// [`require_signed_in`].
-    SignedIn,
-    require_signed_in
+    /// Any logged-in person, owner or ordinary account; wraps
+    /// [`require_logged_in`].
+    LoggedIn,
+    require_logged_in
 );
 auth_guard!(
     /// Credential that may import; wraps [`require_import_access`].
@@ -303,7 +303,7 @@ auth_guard!(
     require_import_or_export_access
 );
 auth_guard!(
-    /// Signed-in session whose account may destroy message data; wraps
+    /// Logged-in session whose account may destroy message data; wraps
     /// [`require_full_delete_access`].
     FullDeleteAccess,
     require_full_delete_access
@@ -414,7 +414,7 @@ pub enum ApiError {
     NotTheOwner(String),
     /// `403` — the credential is valid but lacks the scope the route needs.
     InsufficientScope(String),
-    /// `403` — the account may not sign in or act.
+    /// `403` — the account may not log in or act.
     AccountDisabled(String),
     /// `400` — the search language refused a word.
     SearchQueryInvalid {

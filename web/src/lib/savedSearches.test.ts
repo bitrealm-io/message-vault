@@ -70,8 +70,8 @@ describe("useSavedSearches", () => {
    * The bug this whole change exists for.
    *
    * Saved searches used to be held in a module-level variable that `auth.tsx`
-   * had to clear by hand on sign-in and sign-out. Both of its clearing lists
-   * named four other caches and omitted this one, so signing in as a second
+   * had to clear by hand on login and logout. Both of its clearing lists
+   * named four other caches and omitted this one, so logging in as a second
    * account showed the first account's saved searches until something else
    * refreshed them. The entry is now named with the account, so the second
    * account asks for something that was never written.

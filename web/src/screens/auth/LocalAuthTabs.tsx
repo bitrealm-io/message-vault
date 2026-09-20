@@ -61,7 +61,7 @@ export default function LocalAuthTabs({
   return (
     <Tabs defaultSelectedKey="login" className="flex min-h-0 flex-1 flex-col">
       <TabList
-        aria-label="Sign in or create an account"
+        aria-label="Log in or create an account"
         className="relative mb-6 flex border-b border-border"
       >
         <Tab id="login" className={tabClassName}>

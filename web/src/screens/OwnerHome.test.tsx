@@ -66,12 +66,12 @@ const anAccount = {
   can_delete: false,
   message_count: 1234,
   storage_bytes: 2048,
-  last_sign_in_at: null,
+  last_login_at: null,
   app: null,
   app_version: null,
 };
 
-/** The vault owner's own row, which leads the list and is account 1, the one signed in. */
+/** The vault owner's own row, which leads the list and is account 1, the one logged in. */
 const theOwner = {
   ...anAccount,
   account_id: 1,
@@ -338,7 +338,7 @@ describe("OwnerHome", () => {
     });
     getAccount.mockResolvedValue({
       ...anAccount,
-      last_sign_in_at: "2026-09-01T10:00:00Z",
+      last_login_at: "2026-09-01T10:00:00Z",
       app: "desktop",
       app_version: "0.9.0+aaaa1111",
     });
@@ -473,7 +473,7 @@ describe("OwnerHome", () => {
           ...anAccount,
           account_id: 102,
           username: "carol",
-          last_sign_in_at: "2026-09-17T14:05:00Z",
+          last_login_at: "2026-09-17T14:05:00Z",
         },
       ],
     });

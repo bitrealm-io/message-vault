@@ -105,7 +105,7 @@ pub async fn link_account_handle_with_service(
 /// The id of the account whose username is `username`, compared without
 /// regard to case. `None` when no account has that username.
 ///
-/// Sign-in and the username-free check use this, never
+/// Login and the username-free check use this, never
 /// [`lookup_account_ref`]: a username is what a person types, and an account
 /// whose username happens to be digits must not be mistaken for an id.
 pub async fn lookup_account_by_username(
@@ -211,27 +211,24 @@ pub async fn update_password_hash(
     Ok(())
 }
 
-/// Record that the account signed in just now. Called by every route that
-/// opens a Session for a person: sign-in, claiming the vault, and
-/// registering. Rotating a token on a password change is not a sign-in.
-pub async fn record_sign_in(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
+/// Record that the account logged in just now. Called by every route that
+/// opens a Session for a person: login, claiming the vault, and
+/// registering. Rotating a token on a password change is not a login.
+pub async fn record_login(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    sqlx::query("UPDATE accounts SET last_sign_in_at = $1 WHERE id = $2")
+    sqlx::query("UPDATE accounts SET last_login_at = $1 WHERE id = $2")
         .bind(now)
         .bind(account_id)
         .execute(&mut *conn)
         .await
-        .with_context(|| format!("record sign-in for {account_id}"))?;
+        .with_context(|| format!("record login for {account_id}"))?;
     Ok(())
 }
 
-/// When the account last signed in, as stored, or `None` if it never has.
-pub async fn load_last_sign_in(
-    conn: &mut AnyConnection,
-    account_id: i64,
-) -> Result<Option<String>> {
+/// When the account last logged in, as stored, or `None` if it never has.
+pub async fn load_last_login(conn: &mut AnyConnection, account_id: i64) -> Result<Option<String>> {
     let at: Option<Option<String>> =
-        sqlx::query_scalar("SELECT last_sign_in_at FROM accounts WHERE id = $1")
+        sqlx::query_scalar("SELECT last_login_at FROM accounts WHERE id = $1")
             .bind(account_id)
             .fetch_optional(&mut *conn)
             .await?;
@@ -283,7 +280,7 @@ pub async fn vault_is_claimed(conn: &mut AnyConnection) -> Result<bool> {
 /// and its permissions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AccountAuth {
-    /// May not sign in; existing sessions are refused.
+    /// May not log in; existing sessions are refused.
     pub disabled: bool,
     /// The holder has not set up their profile; they must before going on.
     pub must_set_up_profile: bool,
@@ -606,12 +603,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_username_made_of_digits_is_a_username_at_sign_in() {
+    async fn a_username_made_of_digits_is_a_username_at_login() {
         let vault = crate::test_support::test_vault().await;
         vault.account_with_id(ACCOUNT_ID, "Alice").await;
         let digits = vault.account("7").await;
         let mut conn = vault.conn().await;
-        // `--account 7` names the id; signing in as "7" names the username.
+        // `--account 7` names the id; logging in as "7" names the username.
         assert_eq!(
             resolve_account_ref(&mut conn, "7").await.unwrap(),
             ACCOUNT_ID

@@ -105,7 +105,7 @@ sequenceDiagram
     end
 ```
 
-### Sign in
+### Log in
 
 **Prerequisite**
 
@@ -113,7 +113,7 @@ sequenceDiagram
 - Desktop App is running.
   - Vite is serving the WebView on `:5173`.
 
-The developer types credentials in the SPA. Login is an Auth API call to the vault, not a sign-in to Tauri.
+The developer types credentials in the SPA. Login is an Auth API call to the vault, not a login to Tauri.
 
 ```mermaid
 sequenceDiagram
@@ -139,7 +139,7 @@ sequenceDiagram
 - Vault is running on `:8080`
 - Desktop App is running.
   - Vite is serving webview on `:5173`.
-- User is signed in.
+- User is logged in.
 
 Messages and attachments are uploaded to the vault using the `vault-push` library.
 
@@ -173,7 +173,7 @@ sequenceDiagram
 - Vault is running on `:8080`
 - Desktop App is running.
   - Vite is serving webview on `:5173`.
-- User is signed in.
+- User is logged in.
 
 Messages and attachments are downloaded from the vault using the `vault-pull` library.
 

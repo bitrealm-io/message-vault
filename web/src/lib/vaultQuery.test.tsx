@@ -34,7 +34,7 @@ beforeEach(() => {
 });
 
 describe("useVaultQuery", () => {
-  it("names the cache entry after the signed-in account", async () => {
+  it("names the cache entry after the logged-in account", async () => {
     const { result } = renderHook(() => useVaultQuery(["contact-groups"], async () => ["Family"]), {
       wrapper,
     });
@@ -202,7 +202,7 @@ describe("useVaultPagedList", () => {
 });
 
 describe("useVaultCache", () => {
-  it("reads and writes under the signed-in account's name", () => {
+  it("reads and writes under the logged-in account's name", () => {
     const { result } = renderHook(() => useVaultCache(), { wrapper });
     act(() => {
       result.current.set(["contact-groups"], [{ id: 1, name: "Family" }]);

@@ -5,7 +5,7 @@ import { useAccountProfile } from "./useAccountProfile";
  *
  * A server fact, read from the profile, not inferred here from a profile that
  * looks empty and then cached in `localStorage`. The vault decides once and
- * every client gets the same answer, so clearing site data or signing in from
+ * every client gets the same answer, so clearing site data or logging in from
  * a second browser cannot change what the product believes about an account.
  *
  * `loading` matters to the caller: a guard that read "not loaded yet" as

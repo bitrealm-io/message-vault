@@ -53,12 +53,12 @@ Examples:
   ./scripts/$(basename "$0") --reset
       Empty, unclaimed vault: the web UI opens on Create Vault Owner
   ./scripts/$(basename "$0") --reset --owner
-      Empty vault, sign in as admin / admin
+      Empty vault, log in as admin / admin
   ./scripts/$(basename "$0") --owner
       Claim the existing vault as admin / admin (warns and carries on if it
       is already claimed)
   ./scripts/$(basename "$0") --reset-demo
-      Sample inbox, sign in as demo with an empty password
+      Sample inbox, log in as demo with an empty password
   ./scripts/$(basename "$0") --reset-demo --release --sqlweb
       Sample inbox on the optimized binary, with the SQLite browser on
       http://127.0.0.1:8081

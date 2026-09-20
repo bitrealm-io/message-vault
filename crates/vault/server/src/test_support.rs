@@ -240,7 +240,7 @@ pub async fn register_via_api(
     }
 }
 
-/// Claim the test vault: create its owner directly, then sign in as them.
+/// Claim the test vault: create its owner directly, then log in as them.
 ///
 /// The row goes in through `insert_account_at` at the well-known owner id,
 /// exactly as `create-owner` does it from a shell; `vault_api`'s own tests
@@ -263,7 +263,7 @@ pub async fn claim_vault_as_owner(
     .expect("insert the vault owner");
     drop(conn);
 
-    let body = sign_in(state, username, password).await;
+    let body = log_in(state, username, password).await;
     RegisteredAccount {
         account_id: crate::db::account_profile::OWNER_ACCOUNT_ID,
         username: username.to_string(),
@@ -271,7 +271,7 @@ pub async fn claim_vault_as_owner(
     }
 }
 
-/// The status of a sign-in attempt, `POST /v1/session`.
+/// The status of a login attempt, `POST /v1/session`.
 pub async fn login_status(state: &AppState, username: &str, password: &str) -> StatusCode {
     request(
         state,
@@ -286,10 +286,10 @@ pub async fn login_status(state: &AppState, username: &str, password: &str) -> S
     .0
 }
 
-/// Sign in through `POST /v1/session`, asserting the `201 Created` and the
+/// Log in through `POST /v1/session`, asserting the `201 Created` and the
 /// `Location: /v1/session` the singleton answers with, and return the body
 /// (`token`, `account_id`, `username`).
-pub async fn sign_in(state: &AppState, username: &str, password: &str) -> serde_json::Value {
+pub async fn log_in(state: &AppState, username: &str, password: &str) -> serde_json::Value {
     let server = serve(state).await;
     let response = reqwest::Client::new()
         .post(format!("{}/v1/session", server.base()))
@@ -307,12 +307,12 @@ pub async fn sign_in(state: &AppState, username: &str, password: &str) -> serde_
     assert_eq!(
         status,
         StatusCode::CREATED,
-        "signing in as {username} must answer 201 Created, got: {text}"
+        "logging in as {username} must answer 201 Created, got: {text}"
     );
     assert_eq!(
         location.as_deref(),
         Some("/v1/session"),
-        "signing in must answer Location: /v1/session"
+        "logging in must answer Location: /v1/session"
     );
     serde_json::from_str(&text)
         .unwrap_or_else(|e| panic!("POST /v1/session returned non-JSON ({e}): {text}"))
@@ -433,7 +433,7 @@ pub async fn post_status(
 
 /// POST a JSON body with no credential at all, returning only the status.
 /// For the routes a stranger calls: creating an account, claiming the vault.
-pub async fn post_status_signed_out(
+pub async fn post_status_logged_out(
     state: &AppState,
     path: &str,
     body: serde_json::Value,

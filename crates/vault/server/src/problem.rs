@@ -46,7 +46,7 @@ pub enum ProblemType {
     NotTheOwner,
     /// The token is valid but lacks the scope the route needs.
     InsufficientScope,
-    /// The account exists but may not sign in or act.
+    /// The account exists but may not log in or act.
     AccountDisabled,
     /// The search language refused a word.
     SearchQueryInvalid,
@@ -183,18 +183,18 @@ impl ProblemType {
             Self::UnsupportedMediaType => "The request's `Content-Type` is absent or not one this route accepts. An import body is `application/x-ndjson` or `application/jsonl`; a JSON route takes `application/json`. Send the right header with the same body.".to_string(),
             Self::PayloadTooLarge => "The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. Auth routes cap at 32 KiB; other routes at `[server] max_body_bytes`. Send less, or raise the cap on the vault.".to_string(),
             Self::InvalidCredentials => "The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong. The vault does not say which half failed. Check both and try again; repeated attempts are rate limited.".to_string(),
-            Self::AuthenticationRequired => "The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. Sign in again, or issue a new API token, and send the new token.".to_string(),
+            Self::AuthenticationRequired => "The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. Log in again, or issue a new API token, and send the new token.".to_string(),
             Self::RateLimited => format!(
-                "The vault refused an authentication attempt because the same username has tried too often: more than {} attempts to sign in, register or claim the vault inside {} seconds. Wait the number of seconds in the `Retry-After` header (repeated as `retry_after` in the body) and try again.",
+                "The vault refused an authentication attempt because the same username has tried too often: more than {} attempts to log in, register or claim the vault inside {} seconds. Wait the number of seconds in the `Retry-After` header (repeated as `retry_after` in the body) and try again.",
                 crate::credentials::AUTH_RATE_MAX,
                 crate::credentials::AUTH_RATE_WINDOW.as_secs()
             ),
             Self::UsernameTaken => "The username already belongs to an account on this vault. Usernames are compared ignoring case. Pick another.".to_string(),
             Self::NameTaken => "A Contact Group, Message Tag or Saved Search with this name already exists for the account. Names are compared ignoring case. Pick another, or rename the existing one.".to_string(),
-            Self::DemoAccountProtected => "The demo account refuses this operation, because it exists to be looked at and reset rather than changed. Sign in as a real account, or run `reset-demo` on the vault to restore the demo data.".to_string(),
+            Self::DemoAccountProtected => "The demo account refuses this operation, because it exists to be looked at and reset rather than changed. Log in as a real account, or run `reset-demo` on the vault to restore the demo data.".to_string(),
             Self::NotTheOwner => "This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates. Ask the owner to do it, or to give you what you need.".to_string(),
-            Self::InsufficientScope => "The credential was accepted but may not do this. An API token carries import and export permissions and never a signed-in session's full access; an account may be restricted from import, export or deletion by the owner. Use a session, a token with the right scope, or ask the owner.".to_string(),
-            Self::AccountDisabled => "The account exists but the vault owner has disabled it, so it may not sign in or act. Ask the owner to enable it.".to_string(),
+            Self::InsufficientScope => "The credential was accepted but may not do this. An API token carries import and export permissions and never a logged-in session's full access; an account may be restricted from import, export or deletion by the owner. Use a session, a token with the right scope, or ask the owner.".to_string(),
+            Self::AccountDisabled => "The account exists but the vault owner has disabled it, so it may not log in or act. Ask the owner to enable it.".to_string(),
             Self::SearchQueryInvalid => "The search language refused the query. `detail` names the word and the list it was used on; `word` carries the word, and `did_you_mean` a word the language does have when one is close. The query language is documented in the search reference.".to_string(),
             Self::StateConflict => "The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. `detail` says which. Read the resource's current state and choose the operation it allows.".to_string(),
             Self::AssetUploadInvalid => "Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived. `detail` says which. Start the upload again.".to_string(),

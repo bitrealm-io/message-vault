@@ -317,17 +317,17 @@ async fn run_create_owner(args: CreateOwnerArgs) -> Result<()> {
     let vault = OpenVault::open(cfg).await?;
     let username = crate::owner_cli::create_owner(&vault, &args.username, &args.password).await?;
     vault.close().await;
-    println!("Vault claimed. Sign in as {username}.");
+    println!("Vault claimed. Log in as {username}.");
     Ok(())
 }
 
-/// Set the vault owner's password and report the username to sign in with.
+/// Set the vault owner's password and report the username to log in with.
 async fn run_reset_owner_password(args: ResetOwnerPasswordArgs) -> Result<()> {
     let cfg = Config::load(&args.config)?.with_db_overrides(None, args.db_url);
     let vault = OpenVault::open(cfg).await?;
     let username = crate::owner_cli::reset_owner_password(&vault, &args.password).await?;
     vault.close().await;
-    println!("Owner password set. Sign in as {username}.");
+    println!("Owner password set. Log in as {username}.");
     Ok(())
 }
 

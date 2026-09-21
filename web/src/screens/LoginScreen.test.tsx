@@ -7,9 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const login = vi.fn();
 const setServer = vi.fn();
+const retrySavedLogin = vi.fn();
 
 vi.mock("../lib/auth", () => ({
-  useAuth: () => ({ login, setServer, serverUrl: "" }),
+  useAuth: () => ({ login, setServer, retrySavedLogin, serverUrl: "" }),
 }));
 
 vi.mock("../lib/tauri-check", () => ({
@@ -471,6 +472,33 @@ describe("LoginScreen", () => {
       await screen.findByRole("tab", { name: "Login" }, { timeout: 3000 }),
     ).toBeInTheDocument();
     expect(await screen.findByText("Connected")).toBeInTheDocument();
+  });
+
+  it("tries the saved login again once the vault is healthy again", async () => {
+    let healthy = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return healthy
+          ? {
+              ok: true,
+              status: 200,
+              text: async () => JSON.stringify({ state: "open" }),
+              json: async () => ({ state: "open" }),
+            }
+          : { ok: false, status: 503 };
+      }),
+    );
+    retrySavedLogin.mockClear();
+    renderScreen();
+
+    await screen.findByText("Disconnected");
+    expect(retrySavedLogin).not.toHaveBeenCalled();
+
+    healthy = true;
+
+    await waitFor(() => expect(retrySavedLogin).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    expect(retrySavedLogin).toHaveBeenCalledWith("");
   });
 
   it("carries an abort signal on the health probe", async () => {

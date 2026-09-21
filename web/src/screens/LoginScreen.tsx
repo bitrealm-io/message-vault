@@ -42,7 +42,7 @@ function OrRule() {
  * product name, and changed on a settings screen when the default is wrong.
  */
 export default function LoginScreen() {
-  const { setServer: setAuthServer, serverUrl: savedUrl } = useAuth();
+  const { setServer: setAuthServer, serverUrl: savedUrl, retrySavedLogin } = useAuth();
   const [address, setAddress] = useState(() => initialLoginServerUrl(savedUrl, isTauri()));
   const [draft, setDraft] = useState(address);
   const [state, setState] = useState<VaultConnection>("connecting");
@@ -121,8 +121,11 @@ export default function LoginScreen() {
     previousHealth.current = health;
     if (state === "disconnected" && becameHealthy) {
       void connect(address);
+      // A login saved before the vault went quiet was never rejected, so it
+      // is checked now; a vault that accepts it takes the person straight in.
+      retrySavedLogin(address);
     }
-  }, [health, state, address, connect]);
+  }, [health, state, address, connect, retrySavedLogin]);
 
   // Only the newest Test may write the result: an earlier slow probe must not
   // stamp its answer over a later one, or over a screen that has since closed.

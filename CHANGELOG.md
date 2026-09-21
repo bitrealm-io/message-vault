@@ -127,6 +127,10 @@ of, and a search that reads the same everywhere.
 
 ### Fixes
 
+- 2026-09-21: **Reloading the website while the vault is down no longer logs
+  you out.** The Login screen shows Disconnected as before, and when the vault
+  answers again you go straight back in without typing your password. A login
+  the vault itself rejects still asks for the password.
 - 2026-09-19: **A contact with no name shows who it is.** The contact list,
   the contact's own panel and the Trash show its first identity, in italics,
   where they used to read "(unknown)" on every row. Its Contact Groups now

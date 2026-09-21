@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { getToken, setAccountId, setBaseUrl, setToken } from "./api";
+import { getToken, setAccountId, setBaseUrl, setToken, VaultApiError } from "./api";
 import { parsePersistedAuth } from "./authGuards";
 import { isTauri } from "./tauri-check";
 import { fetchAccountProfileFor } from "./useAccountProfile";
@@ -29,6 +29,13 @@ interface AuthContextValue extends AuthState {
   /** Revoke the vault session (best-effort) and clear the saved login. */
   logout: () => Promise<void>;
   setServer: (url: string) => void;
+  /**
+   * Check the saved login again, after a startup check the vault never
+   * answered. `serverUrl` is the address just found reachable: a login saved
+   * for any other address is left alone, so a token only ever goes to the
+   * vault that issued it. Does nothing when no login is saved.
+   */
+  retrySavedLogin: (serverUrl: string) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -155,13 +162,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (!cancelled) setRestored(true);
-      } catch {
-        // Token is no longer valid. Clear it and show the login screen.
+      } catch (err) {
+        // Only the vault can say a token is no longer valid, and it says so
+        // with a 401. A request nothing answered, or a 502 from a proxy, says
+        // nothing about the token, so the saved login stays for
+        // `retrySavedLogin`. Either way this session shows the login screen.
         if (!cancelled) {
           authEpoch.current++;
           setToken(null);
           setAccountId(null);
-          clearPersisted();
+          if (err instanceof VaultApiError && err.status === 401) clearPersisted();
           setState((s) => ({
             ...s,
             token: null,
@@ -181,6 +191,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setServer = useCallback((url: string) => {
     setBaseUrl(url);
     setState((s) => ({ ...s, serverUrl: url }));
+  }, []);
+
+  const retrySavedLogin = useCallback((serverUrl: string) => {
+    const persisted = loadPersisted();
+    if (!persisted?.token || persisted.serverUrl !== serverUrl) return;
+    // Back to the state the app starts in, which runs the check above again.
+    setState({
+      serverUrl: persisted.serverUrl,
+      token: persisted.token,
+      accountId: persisted.accountId,
+      isAuthenticated: true,
+    });
+    setRestored(false);
   }, []);
 
   const login = useCallback(
@@ -292,7 +315,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [logout]);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, updateToken, setServer }}>
+    <AuthContext.Provider
+      value={{ ...state, login, logout, updateToken, setServer, retrySavedLogin }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -20,6 +20,13 @@ let currentToken: string | null = null;
 let currentAccountId: number | null = null;
 
 vi.mock("./api", () => ({
+  VaultApiError: class VaultApiError extends Error {
+    readonly status: number;
+    constructor(status: number, message: string) {
+      super(message);
+      this.status = status;
+    }
+  },
   setToken: (token: string | null) => {
     currentToken = token;
     setTokenFn(token);
@@ -259,5 +266,106 @@ describe("AuthProvider logout", () => {
       await handler({ preventDefault: vi.fn() });
     });
     expect(destroy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("AuthProvider restoring a saved login", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    currentToken = null;
+    get.mockReset();
+    getProfile.mockReset();
+    isTauri.mockReset();
+    isTauri.mockReturnValue(false);
+    getProfile.mockResolvedValue({ preferred_name: "Sam", phones: ["+1"], emails: [] });
+  });
+
+  async function renderAuth() {
+    const { AuthProvider, useAuth } = await import("./auth");
+    return renderHook(() => useAuth(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <VaultProviders>
+          <AuthProvider>{children}</AuthProvider>
+        </VaultProviders>
+      ),
+    });
+  }
+
+  it("keeps the saved login when the vault gives no answer", async () => {
+    seedSession();
+    get.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const { result } = await renderAuth();
+
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(false));
+    expect(currentToken).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEY)).toContain("session-token");
+  });
+
+  it("keeps the saved login when something other than the vault answers", async () => {
+    seedSession();
+    const { VaultApiError } = await import("./api");
+    get.mockRejectedValue(new VaultApiError(502, "Bad Gateway"));
+
+    const { result } = await renderAuth();
+
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(false));
+    expect(localStorage.getItem(STORAGE_KEY)).toContain("session-token");
+  });
+
+  it("deletes the saved login when the vault rejects it", async () => {
+    seedSession();
+    const { VaultApiError } = await import("./api");
+    get.mockRejectedValue(new VaultApiError(401, "Unauthorized"));
+
+    const { result } = await renderAuth();
+
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(false));
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("logs in with the saved login once the vault answers again", async () => {
+    seedSession();
+    get.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    get.mockResolvedValue({ account_id: 7 });
+
+    const { result } = await renderAuth();
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(false));
+
+    act(() => {
+      result.current.retrySavedLogin("http://127.0.0.1:8080");
+    });
+
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    expect(currentToken).toBe("session-token");
+    expect(result.current.accountId).toBe(7);
+  });
+
+  it("does nothing on a retry when no login is saved", async () => {
+    const { result } = await renderAuth();
+
+    act(() => {
+      result.current.retrySavedLogin("http://127.0.0.1:8080");
+    });
+
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("never sends a saved login to a different vault address", async () => {
+    seedSession();
+    get.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    const { result } = await renderAuth();
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(false));
+    get.mockClear();
+
+    act(() => {
+      result.current.retrySavedLogin("http://elsewhere.example:8080");
+    });
+
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(get).not.toHaveBeenCalled();
+    expect(localStorage.getItem(STORAGE_KEY)).toContain("session-token");
   });
 });

@@ -98,11 +98,19 @@ export interface VerdictCounts {
   cannotProcess: number;
 }
 
+/** How many outgoing messages one of the owner's handles sent. */
+export interface OutgoingHandleCount {
+  handle: string;
+  messages: number;
+}
+
 /** What a staged folder holds, recomputed for the first approval gate. */
 export interface StagingSummary {
   conversations: number;
   messages: number;
   contactIdentifiers: string[];
+  /** Outgoing messages under the owner handle each was sent from. */
+  outgoingHandles: OutgoingHandleCount[];
   attachments: number;
   attachmentBytes: number;
   verdictCounts: VerdictCounts;

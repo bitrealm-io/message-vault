@@ -73,10 +73,13 @@ export function FactRow({
  */
 export function ExpandableFactRow({
   label,
+  caption,
   value,
   children,
 }: {
   label: string;
+  /** Muted words after the label that say what becomes of the things it counts. */
+  caption?: string;
   value?: ReactNode;
   children: ReactNode;
 }) {
@@ -99,6 +102,7 @@ export function ExpandableFactRow({
             ▸
           </span>
           {label}
+          {caption ? <span className="ml-1.5 text-muted">{caption}</span> : null}
         </span>
         {value != null ? <span className="tabular-nums text-text">{value}</span> : null}
       </button>

@@ -1,10 +1,20 @@
 import Button from "../../components/Button";
-import { type IdentityService, identityOnProfile, identityService } from "../../lib/backupIdentity";
+import {
+  type IdentityService,
+  identityMessageCount,
+  identityOnProfile,
+  identityService,
+} from "../../lib/backupIdentity";
+
+const HEAD_CELL =
+  "border-b border-border pb-1 pr-4 text-left text-[0.75rem] font-normal text-muted";
+const BODY_CELL = "border-b border-border py-1 pr-4 align-middle";
 
 /**
  * The addresses a backup's device sent from, each marked as on the
  * account's profile or not, with an inline add for the ones that are not.
- * Renders on the identity stop and as a section on Gate 1.
+ * Renders as boxed rows on the identity stop, and as a table on the Staging
+ * Review, where staging has counted the messages each address sent.
  */
 export default function BackupIdentityList({
   identities,
@@ -12,7 +22,7 @@ export default function BackupIdentityList({
   onAdd,
   busy,
   error,
-  rows,
+  messageCounts,
 }: {
   identities: string[];
   /** Null while the profile is loading or its fetch failed — marks and
@@ -25,8 +35,11 @@ export default function BackupIdentityList({
    * address — a short factual line shown under the list, not tied to any
    * one row (the failing identity isn't tracked separately). */
   error?: string | null;
-  /** Plain rows with no box around each, for use inside a stage of the run. */
-  rows?: boolean;
+  /**
+   * Outgoing messages staged under each owner handle. Given, the identities
+   * are a table inside a stage of the run, with a Messages column.
+   */
+  messageCounts?: { handle: string; messages: number }[];
 }) {
   if (identities.length === 0) {
     return (
@@ -36,23 +49,75 @@ export default function BackupIdentityList({
     );
   }
 
+  if (messageCounts) {
+    return (
+      <>
+        <div className="overflow-x-auto pl-4">
+          <table className="w-full border-collapse text-[0.813rem]">
+            <thead>
+              <tr>
+                <th scope="col" className={HEAD_CELL}>
+                  Identity
+                </th>
+                <th scope="col" className={`${HEAD_CELL} text-right`}>
+                  Messages
+                </th>
+                <th scope="col" className={HEAD_CELL}>
+                  On your profile
+                </th>
+                <th scope="col" className={`${HEAD_CELL} w-px pr-0`}>
+                  <span className="sr-only">Action</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {identities.map((identity) => {
+                const matched = profile != null ? identityOnProfile(identity, profile) : null;
+                return (
+                  <tr key={identity}>
+                    <td className={`${BODY_CELL} text-text [overflow-wrap:anywhere]`}>
+                      {identity}
+                    </td>
+                    <td className={`${BODY_CELL} text-right tabular-nums text-text`}>
+                      {identityMessageCount(identity, messageCounts).toLocaleString()}
+                    </td>
+                    <td className={`${BODY_CELL} text-muted`}>
+                      {matched == null ? "" : matched ? "Yes" : "No"}
+                    </td>
+                    <td className={`${BODY_CELL} whitespace-nowrap pr-0 text-right`}>
+                      {matched === false ? (
+                        <Button
+                          variant="ghost"
+                          size="chip"
+                          onClick={() => void onAdd(identity, identityService(identity))}
+                          disabled={busy}
+                        >
+                          Add to profile
+                        </Button>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {error && <p className="m-0 mt-2 text-[0.813rem] text-danger">{error}</p>}
+      </>
+    );
+  }
+
   return (
     <>
-      <ul className={`m-0 flex list-none flex-col p-0 ${rows ? "" : "gap-2"}`}>
+      <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {identities.map((identity) => {
           const matched = profile != null ? identityOnProfile(identity, profile) : null;
           return (
             <li
               key={identity}
-              className={
-                rows
-                  ? "flex flex-wrap items-center justify-between gap-x-4 py-0.5 pl-4"
-                  : "flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
-              }
+              className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
             >
-              <span className={`text-text ${rows ? "text-[0.813rem]" : "text-[0.875rem]"}`}>
-                {identity}
-              </span>
+              <span className="text-[0.875rem] text-text">{identity}</span>
               {matched === true && (
                 <span className="text-[0.813rem] text-muted">On your profile</span>
               )}
@@ -61,7 +126,6 @@ export default function BackupIdentityList({
                   <span className="text-[0.813rem] text-muted">Not on your profile</span>
                   <Button
                     variant="ghost"
-                    size={rows ? "chip" : undefined}
                     onClick={() => void onAdd(identity, identityService(identity))}
                     disabled={busy}
                   >

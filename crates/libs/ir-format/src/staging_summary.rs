@@ -25,11 +25,12 @@
 //! the `attachments` count alone. Mirrors `pending_in`'s dedup in
 //! `transcode.rs`, which faces the identical fact about the folder.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::Path;
 
 use anyhow::Result;
 use media::{MediaMode, SizeVerdict, classify_probed, estimate_bytes, needs_probe, probe_media};
+use message_ir::IrDirection;
 
 use crate::read_json::read_conversation_jsonl;
 use crate::transcode::{COMMITTED_SUFFIX, TranscodeOptions, conversation_files};
@@ -91,6 +92,16 @@ impl VerdictCounts {
     }
 }
 
+/// How many outgoing messages one of the owner's handles sent.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutgoingHandleCount {
+    /// The handle as the staged messages record it.
+    pub handle: String,
+    /// Outgoing messages whose sender is this handle.
+    pub messages: u64,
+}
+
 /// What a staged folder holds.
 #[derive(Debug, Clone, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -102,6 +113,10 @@ pub struct StagingSummary {
     /// Distinct participant identifiers, sorted. The vault decides which of
     /// these it already knows.
     pub contact_identifiers: Vec<String>,
+    /// Outgoing messages counted under the owner handle each was sent from,
+    /// sorted by handle. The screen sets these beside the backup's
+    /// identities, so a person sees how much of the backup each one carries.
+    pub outgoing_handles: Vec<OutgoingHandleCount>,
     /// Attachments referenced by the documents, including ones already marked
     /// missing and every reference to a shared, content-addressed file.
     pub attachments: usize,
@@ -188,6 +203,7 @@ pub fn summarize_staging(
         ..StagingSummary::default()
     };
     let mut contacts = BTreeSet::new();
+    let mut outgoing: BTreeMap<String, u64> = BTreeMap::new();
     // Gathered while walking the documents for their conversation/message/
     // contact counts, so the classification pass below can run over a flat
     // list with a known total up front, matching `on_progress`'s contract.
@@ -203,6 +219,12 @@ pub fn summarize_staging(
             }
         }
         for msg in &doc.messages {
+            if msg.direction == IrDirection::Outgoing
+                && let Some(handle) = msg.sender_handle.as_deref()
+                && !handle.is_empty()
+            {
+                *outgoing.entry(handle.to_string()).or_insert(0) += 1;
+            }
             for att in &msg.attachments {
                 attachments.push(AttachmentRef {
                     path: att.path.clone(),
@@ -213,6 +235,10 @@ pub fn summarize_staging(
         }
     }
     summary.contact_identifiers = contacts.into_iter().collect();
+    summary.outgoing_handles = outgoing
+        .into_iter()
+        .map(|(handle, messages)| OutgoingHandleCount { handle, messages })
+        .collect();
 
     let total = attachments.len();
     on_progress(SummaryProgress { done: 0, total });

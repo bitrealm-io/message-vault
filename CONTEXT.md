@@ -58,7 +58,7 @@ _Avoid_: Attachment file, Blob, Media, Upload
 One attempt to bring messages from a backup into the vault, recorded
 permanently whether it succeeded, failed, or was cancelled. An account has at
 most one running at a time. A run moves through its Stages and stops at each
-Approval until the person approves or cancels it. The record belongs to the
+Review until the person approves or cancels it. The record belongs to the
 account and cannot be deleted by the person; anything in the interface that
 merely points at a run is a shortcut and can be. The HTTP interface creates
 one with `POST /v1/imports`; it is not a session, which is the logged-in
@@ -233,16 +233,16 @@ messages and attachments into the vault. A run shows its stages as one list
 that fills in as it goes.
 _Avoid_: Step, Phase, Pass, Gate
 
-**Approval**:
+**Review**:
 A stop inside an Import Run where the run shows what it has staged and waits
 for the person to approve or cancel it before spending more time or touching
-the vault. There are at most two: the Staging Approval after Staging, and
-the Media Approval after Media. Approving continues the run; cancelling ends
-it and deletes what was staged. A run left at an approval keeps waiting, on
-another screen or after the app is closed, until the person decides.
-_Avoid_: Gate, Review, Checkpoint, Confirmation, Deny
-
-**Staging Directory**:
+the vault. There are at most two: the Staging Review after Staging, and
+the Media Review after Media. A waiting review reads "Awaiting approval".
+Approving continues the run; cancelling ends it and deletes what was staged.
+A run left at a review keeps waiting, on another screen or after the app is
+closed, until the person decides. The stop is named for what the person does
+there; "approve" stays the word for the decision that continues the run.
+_Avoid_: Gate, Approval (for the stop), Checkpoint, Confirmation, Deny**Staging Directory**:
 The folder where Message Vault writes intermediate files that neither the
 person nor the vault keeps — a backup being prepared for import, or JSON
 Lines waiting to be converted into the format an export asked for. Its

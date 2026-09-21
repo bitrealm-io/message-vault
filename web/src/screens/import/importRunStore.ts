@@ -38,7 +38,7 @@ export type ImportRunState = {
   mediaFailedCount: number | null;
   mediaToolsMissing: boolean;
   /**
-   * True only for a resume that landed at the Staging Approval because
+   * True only for a resume that landed at the Staging Review because
    * ffmpeg went missing mid Media, not for the genuine not-yet-run case:
    * the approval's copy must not claim Media has not run when it partly has.
    */

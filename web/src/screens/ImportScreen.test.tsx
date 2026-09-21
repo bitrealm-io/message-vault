@@ -169,6 +169,7 @@ function stagingSummary(overrides: Partial<StagingSummary> = {}): StagingSummary
     conversations: 1,
     messages: 1,
     contactIdentifiers: [],
+    outgoingHandles: [],
     attachments: 0,
     attachmentBytes: 0,
     verdictCounts: {
@@ -817,7 +818,7 @@ describe("ImportScreen gates", () => {
     cleanup();
   });
 
-  it("shows the Staging Approval inside the run, with approve and cancel wired to the hook", async () => {
+  it("shows the Staging Review inside the run, with approve and cancel wired to the hook", async () => {
     hookState.phase = "staging_approval";
     hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["+15551234567"] });
     hookState.sourceIdentities = ["+15550001111"];
@@ -836,7 +837,7 @@ describe("ImportScreen gates", () => {
     expect(cancelRunMock).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the Media Approval inside the run, without the backup's identities", async () => {
+  it("shows the Media Review inside the run, without the backup's identities", async () => {
     hookState.phase = "media_approval";
     hookState.stagingSummary = stagingSummary();
     hookState.mediaSummary = stagingSummary();

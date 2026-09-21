@@ -21,6 +21,24 @@ export function identityOnProfile(
 }
 
 /**
+ * Outgoing messages staged under one backup identity. A handle is the same
+ * address as the identity when it matches the way a profile entry would, so
+ * two spellings of one phone number count together.
+ */
+export function identityMessageCount(
+  identity: string,
+  outgoingHandles: { handle: string; messages: number }[],
+): number {
+  const sentFrom =
+    identityService(identity) === "email"
+      ? { phones: [], emails: [identity] }
+      : { phones: [identity], emails: [] };
+  return outgoingHandles
+    .filter(({ handle }) => identityOnProfile(handle, sentFrom))
+    .reduce((total, { messages }) => total + messages, 0);
+}
+
+/**
  * Whether Import should stop before creating the session: identities were
  * read and none is on the profile. Fails open — no identities read, or no
  * profile loaded (fetch failed), never blocks an import.

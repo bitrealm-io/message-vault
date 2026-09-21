@@ -123,12 +123,15 @@ export default function StepProgress({ steps, completionText, wide }: StepProgre
             >
               <StepGlyph status={step.status} index={i} />
               <div className="min-w-0">
+                {/* The rule sets each stage apart from the facts listed under it. */}
                 <div
-                  className={`flex items-baseline justify-between gap-4 text-[0.875rem] ${stepLabelClass(step.status)}`}
+                  className={`flex items-baseline justify-between gap-4 border-b border-border pb-1 text-[0.875rem] ${stepLabelClass(step.status)}`}
                 >
                   <span>{step.label}</span>
                   {aside ? (
-                    <span className="text-[0.813rem] font-normal tabular-nums text-muted">
+                    <span
+                      className={`text-[0.813rem] font-normal tabular-nums ${step.status === "waiting" ? "text-accent" : "text-muted"}`}
+                    >
                       {aside}
                     </span>
                   ) : null}

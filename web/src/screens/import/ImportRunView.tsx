@@ -279,7 +279,7 @@ export default function ImportRunView({
         ) : null}
         {form ? (
           <FactGroup title="Attachments">
-            <FactRow label="Operation" value={attachmentsAsked(form)} />
+            <FactRow label="Action" value={attachmentsAsked(form)} />
             {stagingSummary ? (
               <>
                 <FactRow label="Count" value={stagingSummary.attachments.toLocaleString()} />

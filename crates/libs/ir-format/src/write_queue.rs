@@ -473,14 +473,16 @@ fn run_media_post_pass(
     // The desktop never runs this branch (it stages with Clone and converts
     // on its own after the gate); the events are for any other consumer.
     let report = transcode_staged(output_dir, &transcode_options, cancel, &mut |p| {
-        emit_log(log, format!("  media {}/{}", p.done, p.total));
-        emit_progress(
+        let due = emit_progress(
             progress,
             ProgressEvent::Media {
                 done: p.done,
                 total: p.total,
             },
         );
+        if due {
+            emit_log(log, format!("  media {}/{}", p.done, p.total));
+        }
     })?;
 
     let mut media = media::MediaReport {
@@ -576,11 +578,7 @@ fn report_attachments(
     bytes_done: u64,
     bytes_total: u64,
 ) {
-    emit_log(
-        log,
-        format!("  attachments {done}/{total} {bytes_done}/{bytes_total}"),
-    );
-    emit_progress(
+    let due = emit_progress(
         progress,
         ProgressEvent::Attachments {
             done,
@@ -589,6 +587,12 @@ fn report_attachments(
             bytes_total,
         },
     );
+    if due {
+        emit_log(
+            log,
+            format!("  attachments {done}/{total} {bytes_done}/{bytes_total}"),
+        );
+    }
 }
 
 /// Log the write queue's totals, noting resumed work.

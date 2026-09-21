@@ -355,7 +355,7 @@ fn typed_progress_covers_prepare_and_attachments_across_units() {
 
     let seen = Arc::new(Mutex::new(Vec::<ProgressEvent>::new()));
     let sink_seen = Arc::clone(&seen);
-    let sink = ProgressSink::new(move |event| sink_seen.lock().unwrap().push(event));
+    let sink = ProgressSink::unpaced(move |event| sink_seen.lock().unwrap().push(event));
 
     drain_write_queue(&out, units, &options, None, Some(&sink), None).unwrap();
 
@@ -421,7 +421,7 @@ fn sequential_drain_reports_prepare_in_order_and_counts_resumed_units() {
     // describes the whole import, so it walks 0 -> 1 -> 2 of 2.
     let seen = Arc::new(Mutex::new(Vec::<ProgressEvent>::new()));
     let sink_seen = Arc::clone(&seen);
-    let sink = ProgressSink::new(move |event| sink_seen.lock().unwrap().push(event));
+    let sink = ProgressSink::unpaced(move |event| sink_seen.lock().unwrap().push(event));
     drain_write_queue_with_loader(
         &out,
         build(),

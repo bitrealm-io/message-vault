@@ -237,14 +237,15 @@ pub fn report_attachment_progress<'a>(
     progress: Option<&'a ProgressSink>,
 ) -> impl FnMut(AttachmentProgress) + 'a {
     move |counts| {
-        emit_log(
-            log,
-            format!(
-                "  attachments {}/{} {}/{}",
-                counts.done, counts.total, counts.bytes_done, counts.bytes_total
-            ),
-        );
-        emit_progress(progress, ProgressEvent::from(counts));
+        if emit_progress(progress, ProgressEvent::from(counts)) {
+            emit_log(
+                log,
+                format!(
+                    "  attachments {}/{} {}/{}",
+                    counts.done, counts.total, counts.bytes_done, counts.bytes_total
+                ),
+            );
+        }
     }
 }
 

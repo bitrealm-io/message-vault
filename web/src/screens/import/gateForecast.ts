@@ -26,7 +26,7 @@ export function filesOverLimit(summary: StagingSummary): AttachmentForecast[] {
 
 export type EstimatePileKey = "likely_within" | "may_exceed" | "not_media";
 
-/** One group of files the Staging Approval's estimates sort into. */
+/** One group of files the Staging Review's estimates sort into. */
 export interface EstimatePile {
   key: EstimatePileKey;
   label: string;
@@ -38,7 +38,7 @@ export interface EstimatePile {
 }
 
 /**
- * The Staging Approval's estimates, before Media has run: three piles, the
+ * The Staging Review's estimates, before Media has run: three piles, the
  * empty ones dropped. The backend's five verdicts fold into these. A file
  * under the limit that Media may push over it (`may_grow`) sits with the
  * files expected to stay over it, because both may be left out of the vault

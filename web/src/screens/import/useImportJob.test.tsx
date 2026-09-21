@@ -191,6 +191,7 @@ function stagingSummary(overrides: Partial<StagingSummary> = {}): StagingSummary
     conversations: 1,
     messages: 10,
     contactIdentifiers: [],
+    outgoingHandles: [],
     attachments: 0,
     attachmentBytes: 0,
     verdictCounts: {
@@ -1259,12 +1260,12 @@ describe("useImportJob resumeAtGate", () => {
     expect(setImportStageMock).not.toHaveBeenCalled();
     // Copy mode has no Media row: two rows, Staging already marked done,
     // matching the state a fresh startImport run would show right before
-    // the Staging Approval.
+    // the Staging Review.
     expect(result.current.steps.map((s) => s.status)).toEqual(["done", "pending"]);
     expect(result.current.mediaPartiallyRan).toBe(false);
   });
 
-  it("rebuilds a 3-row step list for a convert-mode session resuming at the Staging Approval, Media pending", async () => {
+  it("rebuilds a 3-row step list for a convert-mode session resuming at the Staging Review, Media pending", async () => {
     invokeSummarizeStagingMock.mockResolvedValueOnce(stagingSummary({ conversations: 9 }));
     const { result } = renderHook(() => useImportJob());
 
@@ -1280,7 +1281,7 @@ describe("useImportJob resumeAtGate", () => {
     expect(result.current.steps.map((s) => s.status)).toEqual(["done", "pending", "pending"]);
   });
 
-  it("resumes at the Media Approval showing the STORED plan for Staging and a RECOMPUTED summary for Media", async () => {
+  it("resumes at the Media Review showing the STORED plan for Staging and a RECOMPUTED summary for Media", async () => {
     const approved = stagingSummary({
       conversations: 3,
       verdictCounts: {

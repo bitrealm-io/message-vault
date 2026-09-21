@@ -31,8 +31,8 @@ import { ExpandableFactRow, FactGroup, FactGroups, FactList, FactRow } from "./R
 import type { ImportJobFormValues } from "./useImportJob";
 import { PUSH_LOG_NAME } from "./useImportJob";
 
-const STAGING_APPROVAL_LABEL = "Staging Approval";
-const MEDIA_APPROVAL_LABEL = "Media Approval";
+const STAGING_REVIEW_LABEL = "Staging Review";
+const MEDIA_REVIEW_LABEL = "Media Review";
 
 /** What approving does next, in the mode's own verb. */
 const APPROVE_LABEL: Record<AttachmentMediaMode, string> = {
@@ -45,10 +45,6 @@ const APPROVE_LABEL: Record<AttachmentMediaMode, string> = {
 const PATH_LINK =
   "max-w-full border-0 bg-transparent p-0 text-right text-[0.813rem] text-accent underline-offset-2 [overflow-wrap:anywhere] hover:underline";
 
-/** What happens to a file over the limit; said once, above the list of them. */
-const OVER_LIMIT_NOTE =
-  "Larger than the limit, so they stay out of the vault. Each message keeps its text and a placeholder.";
-
 function count(value: number | undefined | null): string {
   return value == null ? "—" : value.toLocaleString();
 }
@@ -60,9 +56,12 @@ function AttachmentLimitGroup({ summary }: { summary: StagingSummary }) {
     <FactGroup title="Attachments">
       <FactRow label="Size limit per file" value={formatBytes(summary.assetMaxBytes)} />
       {over.length > 0 ? (
-        <ExpandableFactRow label="Files over the limit" value={over.length.toLocaleString()}>
+        <ExpandableFactRow
+          label="Files over the limit"
+          caption="Skip vault upload"
+          value={over.length.toLocaleString()}
+        >
           <FactList
-            note={OVER_LIMIT_NOTE}
             items={over}
             itemKey={(file) => file.path}
             renderName={(file) => file.name}
@@ -99,7 +98,7 @@ function ApprovalActions({
       <Button variant="primary" size="wide" onClick={onApprove} disabled={busy || approveDisabled}>
         {approveLabel}
       </Button>
-      <Button variant="ghost" onClick={onCancelRun} disabled={busy}>
+      <Button onClick={onCancelRun} disabled={busy}>
         Cancel this import
       </Button>
     </div>
@@ -218,7 +217,7 @@ export default function ImportRunView({
   /** Convert or compress is chosen and ffmpeg was not found: approving would only fail later. */
   mediaToolsMissing?: boolean;
   /**
-   * This Staging Approval is a resume that found Media partway through, so
+   * This Staging Review is a resume that found Media partway through, so
    * the folder holds a mix of originals and processed files and an estimate
    * of what Media "will" do would be wrong.
    */
@@ -279,7 +278,7 @@ export default function ImportRunView({
         ) : null}
         {form ? (
           <FactGroup title="Attachments">
-            <FactRow label="Operation" value={attachmentsAsked(form)} />
+            <FactRow label="Action" value={attachmentsAsked(form)} />
             {stagingSummary ? (
               <>
                 <FactRow label="Count" value={stagingSummary.attachments.toLocaleString()} />
@@ -337,7 +336,7 @@ export default function ImportRunView({
             </FactGroup>
           ) : null}
           {identityPanel ? (
-            <FactGroup title="Identities" caption="outgoing messages sent from">
+            <FactGroup title="Identities" caption="Taken from outgoing sent messages">
               {identityPanel}
             </FactGroup>
           ) : null}
@@ -439,12 +438,13 @@ export default function ImportRunView({
 
   /** An approval's row: waiting, approved once the stage it guards has started, or still ahead. */
   function approvalRow(kind: ApprovalKind, guarded: ImportStep | undefined): Step {
-    const label = kind === "staging" ? STAGING_APPROVAL_LABEL : MEDIA_APPROVAL_LABEL;
+    const label = kind === "staging" ? STAGING_REVIEW_LABEL : MEDIA_REVIEW_LABEL;
     if (approvalWaiting === kind) {
       const summary = kind === "staging" ? stagingSummary : mediaSummary;
       return {
-        label: `${label} · waiting for you`,
+        label,
         status: "waiting",
+        note: "Awaiting approval",
         content: summary
           ? kind === "staging"
             ? stagingApprovalContent(summary)

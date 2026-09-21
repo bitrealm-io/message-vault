@@ -51,7 +51,7 @@ describe("StepProgress wide list", () => {
             durationMs: 46_000,
             content: <p>681 conversations</p>,
           },
-          { label: "Staging Approval", status: "done", note: "Approved" },
+          { label: "Staging Review", status: "done", note: "Approved" },
           { label: "Upload", status: "pending" },
         ]}
       />,
@@ -69,7 +69,7 @@ describe("StepProgress wide list", () => {
         wide
         steps={[
           { label: "Staging", status: "done" },
-          { label: "Staging Approval", status: "waiting" },
+          { label: "Staging Review", status: "waiting" },
         ]}
       />,
     );

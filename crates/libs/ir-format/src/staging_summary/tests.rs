@@ -452,3 +452,45 @@ fn progress_cadence_is_pinned_at_every_hundred_plus_a_final_call() {
     );
     assert_eq!(summary.attachments, 250);
 }
+
+#[test]
+fn outgoing_messages_are_counted_under_the_owner_handle_that_sent_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut doc = message_ir::testutil::sample_document("incoming, never counted");
+    let template = doc.messages[0].clone();
+    let outgoing = |guid: &str, from: Option<&str>| {
+        let mut msg = template.clone();
+        msg.guid = guid.into();
+        msg.direction = message_ir::IrDirection::Outgoing;
+        msg.sender_handle = from.map(str::to_string);
+        msg
+    };
+    doc.messages.extend([
+        outgoing("out-1", Some("owner@example.com")),
+        outgoing("out-2", Some("+15555550100")),
+        outgoing("out-3", Some("owner@example.com")),
+        // An outgoing message with no recorded sender belongs to no handle.
+        outgoing("out-4", None),
+        outgoing("out-5", Some("")),
+    ]);
+    doc.finalize_stats();
+    let jsonl = dir.path().join(format!("{}.jsonl", doc.filename_stem()));
+    write_conversation_jsonl_to(&jsonl, &doc).unwrap();
+
+    let summary = summarize_staging(dir.path(), &summary_options(), &mut |_| {}).unwrap();
+
+    assert_eq!(
+        summary.outgoing_handles,
+        vec![
+            OutgoingHandleCount {
+                handle: "+15555550100".into(),
+                messages: 1
+            },
+            OutgoingHandleCount {
+                handle: "owner@example.com".into(),
+                messages: 2
+            },
+        ],
+        "sorted by handle; the incoming sender is not an owner handle"
+    );
+}

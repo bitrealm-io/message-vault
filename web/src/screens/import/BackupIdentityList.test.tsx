@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import BackupIdentityList from "./BackupIdentityList";
@@ -12,16 +12,36 @@ afterEach(() => {
 const profile = { phones: ["+15550001111"], emails: [] };
 
 describe("BackupIdentityList", () => {
-  it("drops the box around each identity when shown as rows inside a stage", () => {
-    const { rerender } = render(
-      <BackupIdentityList identities={["+15550001111"]} profile={profile} onAdd={vi.fn()} />,
+  it("is a table inside a stage: messages per identity, and Add only where the answer is No", () => {
+    render(
+      <BackupIdentityList
+        identities={["+15550001111", "owner@example.com"]}
+        profile={profile}
+        onAdd={vi.fn()}
+        messageCounts={[
+          // Two spellings of one number count under the same identity.
+          { handle: "+15550001111", messages: 1200 },
+          { handle: "(555) 000-1111", messages: 34 },
+          { handle: "owner@example.com", messages: 7 },
+        ]}
+      />,
     );
-    expect(screen.getByRole("listitem").className).toContain("border");
-    rerender(
-      <BackupIdentityList identities={["+15550001111"]} profile={profile} onAdd={vi.fn()} rows />,
-    );
-    expect(screen.getByRole("listitem").className).not.toContain("border");
-    expect(screen.getByText("On your profile")).toBeInTheDocument();
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Identity",
+      "Messages",
+      "On your profile",
+      "Action",
+    ]);
+    const [, phone, email] = screen.getAllByRole("row");
+    expect(
+      within(phone)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["+15550001111", "1,234", "Yes", ""]);
+    expect(within(email).getByText("7")).toBeInTheDocument();
+    expect(within(email).getByText("No")).toBeInTheDocument();
+    expect(within(email).getByRole("button", { name: "Add to profile" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
   it("marks matched addresses and offers to add unmatched ones", () => {

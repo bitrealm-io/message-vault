@@ -47,6 +47,16 @@ of, and a search that reads the same everywhere.
   Last login column next to Status, in your own time zone, or "Never" for
   an account nobody has logged in to yet. Logging in, claiming the vault and
   registering all count; a password change does not.
+- 2026-09-21: **The stop in an import run is a review, and it shows how many
+  messages each identity sent.** "Staging Approval" and "Media Approval" are
+  now "Staging Review" and "Media Review", and a waiting one reads "Awaiting
+  approval". Identities is a table: each address the backup sent from, how
+  many of the staged messages it sent, whether it is on your profile, and
+  "Add to profile" at the end of the row for one that is not. "Files over the
+  limit" says "Skip vault upload" beside it instead of a sentence above the
+  list. Each stage's title has a rule under it, "Cancel this import" looks
+  like a button before the pointer reaches it, and the attachments'
+  "Operation" is "Action".
 - 2026-09-20: **An import run and its approvals are one list.** The run
   screen is the list of stages, and each approval is a row in that list where
   the run stops, with the decision inside it. There is no separate approval

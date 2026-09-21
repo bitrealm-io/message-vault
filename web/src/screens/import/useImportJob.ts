@@ -30,6 +30,7 @@ import {
   invokePush,
   invokeSummarizeStaging,
   invokeTranscodeStaging,
+  type OutgoingHandleCount,
   onExtractEvents,
   type PushFinishedReport,
   probeFfmpegTools,
@@ -295,6 +296,12 @@ function isAttachmentForecast(value: unknown): value is AttachmentForecast {
   );
 }
 
+function isOutgoingHandleCount(value: unknown): value is OutgoingHandleCount {
+  if (typeof value !== "object" || value === null) return false;
+  const r = value as Record<string, unknown>;
+  return typeof r.handle === "string" && typeof r.messages === "number";
+}
+
 /**
  * Parse a session's stored `summary` (Task 6) back into a `StagingSummary`
  * — the plan approved at the last gate the session passed.
@@ -314,6 +321,9 @@ export function parseStoredStagingSummary(raw: unknown): StagingSummary | undefi
   if (typeof r.conversations !== "number") return undefined;
   if (typeof r.messages !== "number") return undefined;
   if (!isStringArray(r.contactIdentifiers)) return undefined;
+  if (!Array.isArray(r.outgoingHandles) || !r.outgoingHandles.every(isOutgoingHandleCount)) {
+    return undefined;
+  }
   if (typeof r.attachments !== "number") return undefined;
   if (typeof r.attachmentBytes !== "number") return undefined;
   if (typeof r.verdictCounts !== "object" || r.verdictCounts === null) return undefined;
@@ -334,6 +344,7 @@ export function parseStoredStagingSummary(raw: unknown): StagingSummary | undefi
     conversations: r.conversations,
     messages: r.messages,
     contactIdentifiers: r.contactIdentifiers,
+    outgoingHandles: r.outgoingHandles,
     attachments: r.attachments,
     attachmentBytes: r.attachmentBytes,
     verdictCounts: {
@@ -721,8 +732,8 @@ async function finishImport(args: {
 
 /**
  * Upload to the vault and record the outcome: the tail end shared by a
- * resumed run (jumps straight here), the Staging Approval when there is no
- * Media stage, and the Media Approval. Never throws: a push failure is
+ * resumed run (jumps straight here), the Staging Review when there is no
+ * Media stage, and the Media Review. Never throws: a push failure is
  * folded into the finished summary via `finishImport`, exactly like any
  * other terminal outcome.
  */
@@ -784,9 +795,9 @@ async function runPush(
 }
 
 /**
- * Convert or compress the staged files after the Staging Approval, then
+ * Convert or compress the staged files after the Staging Review, then
  * recompute the summary against the folder as it now stands (the folder is
- * the truth, not the last estimate) and stop at the Media Approval. A
+ * the truth, not the last estimate) and stop at the Media Review. A
  * failed stage ends the import the same way a failed Upload does, never a
  * silent fall-through to Upload.
  *
@@ -805,7 +816,7 @@ async function runMediaPass(
   scratch.activeStep = "media";
   setRowByLabel(MEDIA_LABEL, { status: "active", detail: `${mediaVerb(form.attachmentMedia)}…` });
 
-  // Carries the plan approved at the Staging Approval even on this stage: a
+  // Carries the plan approved at the Staging Review even on this stage: a
   // crash mid-pass must not leave `summary_json` null with no baseline for
   // a later resume to diff against.
   await moveStage(sessionId, "transcode", approvedSummary);
@@ -1041,7 +1052,7 @@ async function runImport(
               detail: attachmentDoneLine,
               durationMs: parseMs + attachmentsMs + prepareMs,
             }
-          : // Media and Upload: not run yet, the Staging Approval comes first.
+          : // Media and Upload: not run yet, the Staging Review comes first.
             step,
       ),
       computingSummary: true,
@@ -1196,7 +1207,7 @@ export function useImportJob() {
     returnToForm();
   }
 
-  /** Approve the waiting approval: Media after the Staging Approval when there is one, Upload otherwise. */
+  /** Approve the waiting approval: Media after the Staging Review when there is one, Upload otherwise. */
   async function approve(): Promise<void> {
     if (!isTauri()) return;
     if (scratch.approvalAction) return;
@@ -1209,7 +1220,7 @@ export function useImportJob() {
       mediaSummary,
     } = store.get();
     // What the person is approving: the folder as Media left it at the
-    // Media Approval, as Staging left it at the Staging Approval.
+    // Media Review, as Staging left it at the Staging Review.
     const approvedSummary = phase === "media_approval" ? mediaSummary : stagingSummary;
     if (!form || sessionId == null || outputDir == null || approvedSummary == null) return;
 
@@ -1242,7 +1253,7 @@ export function useImportJob() {
    *
    * The folder is the truth. Every landing recomputes the summary fresh
    * from the staging folder; the run's stored `summary` is read only as the
-   * approved baseline for the Media Approval's delta and the Media stage's
+   * approved baseline for the Media Review's delta and the Media stage's
    * own bookkeeping, never as something restored and shown directly.
    *
    * A recompute failing here is a transient read of the staging folder, not
@@ -1340,7 +1351,7 @@ export function useImportJob() {
 
     // transcode: Media died mid-run. Re-running it is safe (the stage is
     // resumable), so long as the tools it needs are there: a resume with
-    // ffmpeg missing falls back to the Staging Approval's recomputed
+    // ffmpeg missing falls back to the Staging Review's recomputed
     // summary instead of starting a job that can only fail, using the same
     // `mediaToolsMissing` gate the normal flow shows there.
     if (await mediaToolsMissingFor(resumedForm.attachmentMedia)) {

@@ -66,6 +66,7 @@ function staged(overrides: Partial<StagingSummary> = {}): StagingSummary {
     conversations: 312,
     messages: 48205,
     contactIdentifiers: [],
+    outgoingHandles: [],
     attachments: 6118,
     attachmentBytes: 9.4 * 1024 * 1024 * 1024,
     verdictCounts: {
@@ -154,8 +155,8 @@ function stageRow(label: string): HTMLElement {
   return item;
 }
 
-const WAITING_STAGING = "Staging Approval · waiting for you";
-const WAITING_MEDIA = "Media Approval · waiting for you";
+const WAITING_STAGING = "Staging Review";
+const WAITING_MEDIA = "Media Review";
 
 describe("runHeading and the operation line", () => {
   it("names the source while the run is going", () => {
@@ -208,7 +209,7 @@ describe("ImportRunView", () => {
     const labels = screen
       .getAllByRole("listitem")
       .map((item) => item.querySelector("div > div > span")?.textContent);
-    expect(labels).toEqual(["Staging", "Staging Approval", "Media", "Media Approval", "Upload"]);
+    expect(labels).toEqual(["Staging", "Staging Review", "Media", "Media Review", "Upload"]);
   });
 
   it("has no Media rows when the operation has no Media stage", () => {
@@ -219,7 +220,7 @@ describe("ImportRunView", () => {
     const labels = screen
       .getAllByRole("listitem")
       .map((item) => item.querySelector("div > div > span")?.textContent);
-    expect(labels).toEqual(["Staging", "Staging Approval", "Upload"]);
+    expect(labels).toEqual(["Staging", "Staging Review", "Upload"]);
   });
 
   it("puts the backup path under the heading and the staging directory in the Staging row", async () => {
@@ -272,7 +273,7 @@ describe("ImportRunView", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
   });
 
-  it("waits at the Staging Approval with the staged facts, the limit and the decision", async () => {
+  it("waits at the Staging Review with the staged facts, the limit and the decision", async () => {
     const onApprove = vi.fn();
     const onCancelRun = vi.fn();
     const user = userEvent.setup();
@@ -312,7 +313,12 @@ describe("ImportRunView", () => {
     await user.click(approval.getByRole("button", { name: /Files over the limit/ }));
     const names = approval.getAllByText(/\.mov$/).map((node) => node.textContent);
     expect(names).toEqual(["big.mov", "small.mov"]);
-    expect(approval.getByText(/stay out of the vault/)).toBeInTheDocument();
+    // What becomes of them is said beside the label, not in a sentence above the list.
+    expect(approval.getByRole("button", { name: /Files over the limit/ })).toHaveTextContent(
+      "Skip vault upload",
+    );
+    expect(approval.queryByText(/stay out of the vault/)).not.toBeInTheDocument();
+    expect(approval.getByText("Awaiting approval")).toBeInTheDocument();
 
     await user.click(approval.getByRole("button", { name: "Upload to vault" }));
     expect(onApprove).toHaveBeenCalledTimes(1);
@@ -391,7 +397,7 @@ describe("ImportRunView", () => {
     expect(screen.getByText(/picks up where it left off/)).toBeInTheDocument();
   });
 
-  it("waits at the Media Approval with what is true now, and no comparison", () => {
+  it("waits at the Media Review with what is true now, and no comparison", () => {
     renderView({
       phase: "media_approval",
       running: false,
@@ -405,7 +411,7 @@ describe("ImportRunView", () => {
       approvalWaiting: "media",
     });
 
-    expect(within(stageRow("Staging Approval")).getByText("Approved")).toBeInTheDocument();
+    expect(within(stageRow("Staging Review")).getByText("Approved")).toBeInTheDocument();
     // The Staging row keeps what Staging made; Media's row holds what Media made.
     expect(within(stageRow("Staging")).getByText("9.4 GB")).toBeInTheDocument();
     const media = within(stageRow("Media"));

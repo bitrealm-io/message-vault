@@ -5,7 +5,7 @@ use crate::db::contacts::UNKNOWN_CONTACT_SQL;
 use crate::db::dialect::name_eq_ci;
 use crate::db::engine::DbEngine;
 
-use super::bridge::{ListCtx, Sql, contact_conversations_link};
+use super::bridge::{ListCtx, MessageAgg, Sql, contact_conversations_link};
 use super::error::{QueryError, QueryErrorKind};
 use super::fts;
 use super::parse::{Expr, FieldTerm, TextTerm};
@@ -208,12 +208,17 @@ fn emit_text(ctx: &ListCtx, out: &mut Sql, term: &TextTerm) {
         // reaches "IMG_0001.jpg" through the index there, while SQLite's
         // tokenizer does split it. The file-name match makes the two engines
         // agree and makes part of a file name findable on either.
+        //
+        // One `IN` over the union of both id sets, so the planner walks the
+        // matching ids rather than every message of the account: an `OR`
+        // between the index and an `EXISTS` on attachments forced that scan
+        // (0.26 s on the demo vault against 2 ms for this shape).
         ListKind::Messages => {
-            out.push("(");
-            fts::leaf(out, e, term);
-            out.push(" OR EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id AND ");
+            out.push("m.id IN (");
+            fts::matching_ids(out, e, term);
+            out.push(" UNION ALL SELECT a.message_id FROM attachments a WHERE ");
             free_text_match(out, e, "coalesce(a.original_name, '')", term);
-            out.push("))");
+            out.push(")");
         }
     }
 }
@@ -927,11 +932,12 @@ fn date_sql(out: &mut Sql, expr: &str, cmp: &DateCmp, zone: chrono_tz::Tz) {
 
 /// The eight date-and-count words: `date`, `first-message`, `last-message`,
 /// `messages`, `conversations`, `groups`, `participants`, `attachments`.
-/// `first-message:` and `last-message:` compare through a correlated MIN or
-/// MAX rather than building a list of ids first; the five plural words are
-/// correlated counts. `groups:` and `conversations:` are registered for
-/// Contacts only, so they read `ct.` directly; `attachments:` is registered
-/// for Messages only, so it reads `m.` directly.
+/// `first-message:`, `last-message:`, and `messages:` compare through one
+/// aggregate over the base row's messages (`ListCtx::message_aggregate`);
+/// the other plural words are correlated counts. `groups:` and
+/// `conversations:` are registered for Contacts only, so they read `ct.`
+/// directly; `attachments:` is registered for Messages only, so it reads
+/// `m.` directly.
 fn emit_measure_word(
     ctx: &ListCtx,
     out: &mut Sql,
@@ -944,26 +950,17 @@ fn emit_measure_word(
             Ok(())
         }
         ("first-message", Value::Date(cmp)) => {
-            let expr = format!(
-                "(SELECT MIN(m2.timestamp) FROM messages m2 WHERE {})",
-                ctx.messages_link("m2")
-            );
+            let expr = ctx.message_aggregate(MessageAgg::First);
             date_sql(out, &expr, cmp, ctx.zone);
             Ok(())
         }
         ("last-message", Value::Date(cmp)) => {
-            let expr = format!(
-                "(SELECT MAX(m2.timestamp) FROM messages m2 WHERE {})",
-                ctx.messages_link("m2")
-            );
+            let expr = ctx.message_aggregate(MessageAgg::Last);
             date_sql(out, &expr, cmp, ctx.zone);
             Ok(())
         }
         ("messages", Value::Count(cmp)) => {
-            let expr = format!(
-                "(SELECT COUNT(*) FROM messages m2 WHERE {})",
-                ctx.messages_link("m2")
-            );
+            let expr = ctx.message_aggregate(MessageAgg::Count);
             cmp_sql(out, &expr, cmp);
             Ok(())
         }

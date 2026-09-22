@@ -151,6 +151,11 @@ of, and a search that reads the same everywhere.
   date at the front of an attachment's filename is now the message's time in
   UTC. It used to be the time zone of the computer running the export, so the
   same backup exported on two computers named its attachments differently.
+- 2026-09-21: **Searching every conversation for a word answers at once.** A
+  word or phrase typed into Messages without an `in:` scope, and
+  `messages:0` or `first-message:` on Contacts, took ten seconds to several
+  minutes on a vault of 600,000 messages. Both now answer in well under a
+  second with the same results.
 - 2026-09-21: **Reloading the website while the vault is down no longer logs
   you out.** The Login screen shows Disconnected as before, and when the vault
   answers again you go straight back in without typing your password. A login

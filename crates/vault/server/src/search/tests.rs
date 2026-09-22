@@ -918,6 +918,87 @@ mod free_text {
         assert_eq!(f.where_sql().matches('?').count(), f.params().len());
     }
 
+    /// Free text on Messages asks the full-text index once, as an `IN` over
+    /// the matching ids, never as an `EXISTS` correlated to the message
+    /// row: SQLite cannot drive that from the FTS index, so it ran the
+    /// match once per message and an unscoped word took 10 s to minutes
+    /// on the demo vault (#413). Both engines, every term shape.
+    #[test]
+    fn free_text_on_messages_asks_the_index_once() {
+        for engine in [DbEngine::Sqlite, DbEngine::Postgres] {
+            for (query, terms) in [
+                ("avocado", 1),
+                ("avoc*", 1),
+                ("\"two words\"", 1),
+                ("avocado -toast", 2),
+            ] {
+                let f = compile(CompileRequest {
+                    list: ListKind::Messages,
+                    query,
+                    account_id: ACCOUNT,
+                    engine,
+                    today: today(),
+                    zone: chrono_tz::UTC,
+                })
+                .unwrap();
+                let sql = f.where_sql();
+                let (index, per_term) = match engine {
+                    DbEngine::Sqlite => (
+                        "SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?",
+                        "m.id IN (SELECT rowid FROM messages_fts",
+                    ),
+                    DbEngine::Postgres => (
+                        "SELECT fm.id FROM messages fm WHERE fm.search_tsv @@",
+                        "m.id IN (SELECT fm.id FROM messages fm",
+                    ),
+                };
+                assert_eq!(
+                    sql.matches(index).count(),
+                    terms,
+                    "{engine:?} {query}: {sql}"
+                );
+                assert_eq!(
+                    sql.matches(per_term).count(),
+                    terms,
+                    "{engine:?} {query}: {sql}"
+                );
+                assert!(
+                    !sql.contains("fts.rowid = m.id")
+                        && !sql.contains("EXISTS (SELECT 1 FROM messages_fts"),
+                    "{engine:?} {query}: the index is asked per message row: {sql}"
+                );
+            }
+        }
+    }
+
+    /// `messages:` on Contacts counts each conversation's messages in a
+    /// subquery that names no outer alias, so the engine computes it once
+    /// for the list. The earlier shape scanned every message of the
+    /// account again for each contact (#413).
+    #[test]
+    fn contact_message_counts_come_from_one_grouped_count() {
+        for engine in [DbEngine::Sqlite, DbEngine::Postgres] {
+            let f = compile(CompileRequest {
+                list: ListKind::Contacts,
+                query: "messages:0",
+                account_id: ACCOUNT,
+                engine,
+                today: today(),
+                zone: chrono_tz::UTC,
+            })
+            .unwrap();
+            let sql = f.where_sql();
+            assert!(
+                sql.contains("(SELECT m2.conversation_id, COUNT(*) AS v FROM messages m2 WHERE m2.duplicate_of IS NULL GROUP BY m2.conversation_id) mc"),
+                "{engine:?}: {sql}"
+            );
+            assert!(
+                !sql.contains("COUNT(*) FROM messages m2 WHERE m2.account_id = ct.account_id"),
+                "{engine:?}: messages are counted per contact again: {sql}"
+            );
+        }
+    }
+
     /// Free text on Messages is two legs, the index and the file name, and
     /// each binds its own value; Postgres is the engine where the two spell
     /// themselves differently, so check the binding there.

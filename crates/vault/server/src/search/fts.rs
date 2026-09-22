@@ -1,6 +1,6 @@
-//! The full-text leaf for a free-text term on Messages. SQLite uses the
-//! contentless FTS5 table; Postgres uses the `search_tsv` column. Both index
-//! body, subject, attachment names, and transcriptions.
+//! The full-text index's answer to a free-text term on Messages. SQLite
+//! uses the contentless FTS5 table; Postgres uses the `search_tsv` column.
+//! Both index body, subject, attachment names, and transcriptions.
 
 use crate::db::engine::DbEngine;
 
@@ -21,8 +21,12 @@ fn pg_prefix(term: &str) -> Option<String> {
     Some(format!("'{term}':*"))
 }
 
-/// Message `m` matches `term` in the full-text index.
-pub(crate) fn leaf(out: &mut Sql, engine: DbEngine, term: &TextTerm) {
+/// A `SELECT` of the ids of every message whose indexed text matches
+/// `term`: the index asked once for the whole search. The caller puts it
+/// inside `m.id IN (...)`. Never a correlated `EXISTS` per message row,
+/// which SQLite cannot drive from the FTS index and so ran the match once
+/// per candidate message (#413).
+pub(crate) fn matching_ids(out: &mut Sql, engine: DbEngine, term: &TextTerm) {
     match engine {
         DbEngine::Sqlite => {
             let q = match term {
@@ -33,11 +37,8 @@ pub(crate) fn leaf(out: &mut Sql, engine: DbEngine, term: &TextTerm) {
                 }
                 | TextTerm::Phrase(text) => fts5_literal(text),
             };
-            out.push(
-                "EXISTS (SELECT 1 FROM messages_fts fts WHERE fts.rowid = m.id AND messages_fts MATCH ",
-            );
+            out.push("SELECT rowid FROM messages_fts WHERE messages_fts MATCH ");
             out.bind_text(q);
-            out.push(")");
         }
         DbEngine::Postgres => {
             let (func, arg) = match term {
@@ -51,7 +52,9 @@ pub(crate) fn leaf(out: &mut Sql, engine: DbEngine, term: &TextTerm) {
                 } => ("plainto_tsquery", text.clone()),
                 TextTerm::Phrase(text) => ("phraseto_tsquery", text.clone()),
             };
-            out.push(&format!("m.search_tsv @@ {func}('simple', "));
+            out.push(&format!(
+                "SELECT fm.id FROM messages fm WHERE fm.search_tsv @@ {func}('simple', "
+            ));
             out.bind_text(arg);
             out.push(")");
         }

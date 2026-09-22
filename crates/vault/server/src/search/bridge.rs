@@ -196,26 +196,54 @@ impl ListCtx {
         }
     }
 
-    /// A WHERE fragment tying messages alias `m2` to the base row, for
-    /// MIN, MAX, and COUNT subqueries. Excludes duplicates.
-    pub fn messages_link(&self, m2: &str) -> String {
+    /// A scalar subquery over the base row's non-duplicate messages: how
+    /// many, the earliest timestamp, or the latest. On Messages and
+    /// Conversations that is the one conversation's messages, reached
+    /// through the conversation index.
+    ///
+    /// A contact's messages are those of every conversation the contact is
+    /// in, trashed conversations left out, the same answer the contact
+    /// drawer gives, so `messages:>0` and the number in the drawer cannot
+    /// disagree once something is trashed. They are counted per
+    /// conversation in a subquery that mentions no outer alias, so SQLite
+    /// computes it once for the whole list and each contact sums the rows
+    /// of its conversations. The earlier shape counted every message of the
+    /// account again for each contact, with an `EXISTS` per message, and
+    /// `messages:0` took minutes on the demo vault (#413).
+    pub fn message_aggregate(&self, agg: MessageAgg) -> String {
+        let (per_conversation, over_conversations) = match agg {
+            MessageAgg::Count => ("COUNT(*)", "COALESCE(SUM(mc.v), 0)"),
+            MessageAgg::First => ("MIN(m2.timestamp)", "MIN(mc.v)"),
+            MessageAgg::Last => ("MAX(m2.timestamp)", "MAX(mc.v)"),
+        };
         match self.list {
-            ListKind::Messages => {
-                format!("{m2}.conversation_id = m.conversation_id AND {m2}.duplicate_of IS NULL")
-            }
-            ListKind::Conversations => {
-                format!("{m2}.conversation_id = c.id AND {m2}.duplicate_of IS NULL")
-            }
-            // A contact's message count leaves trashed conversations out, the
-            // same answer the contact drawer gives, so `messages:>0` and the
-            // number in the drawer cannot disagree once something is trashed.
+            ListKind::Messages => format!(
+                "(SELECT {per_conversation} FROM messages m2 WHERE m2.conversation_id = m.conversation_id AND m2.duplicate_of IS NULL)"
+            ),
+            ListKind::Conversations => format!(
+                "(SELECT {per_conversation} FROM messages m2 WHERE m2.conversation_id = c.id AND m2.duplicate_of IS NULL)"
+            ),
             ListKind::Contacts => format!(
-                "{m2}.account_id = ct.account_id AND {m2}.duplicate_of IS NULL AND EXISTS (SELECT 1 FROM conversations c2 WHERE c2.id = {m2}.conversation_id AND {} AND {})",
-                conversation_involves("c2", "ct.id"),
+                "(SELECT {over_conversations} FROM conversations c2 \
+                   JOIN (SELECT m2.conversation_id, {per_conversation} AS v FROM messages m2 WHERE m2.duplicate_of IS NULL GROUP BY m2.conversation_id) mc \
+                     ON mc.conversation_id = c2.id \
+                   WHERE {} AND {})",
+                contact_conversations_link("c2"),
                 super::emit::not_trashed_conversation("c2")
             ),
         }
     }
+}
+
+/// What [`ListCtx::message_aggregate`] asks of the base row's messages.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum MessageAgg {
+    /// How many there are.
+    Count,
+    /// The earliest timestamp, NULL when there are none.
+    First,
+    /// The latest timestamp, NULL when there are none.
+    Last,
 }
 
 /// A WHERE fragment tying conversations alias `c2` to the base contact `ct`.

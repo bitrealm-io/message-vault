@@ -155,6 +155,12 @@ of, and a search that reads the same everywhere.
 
 ### Fixes
 
+- 2026-09-22: **An unread Apple Messages message no longer claims it was
+  read on 2001-01-01.** Messages stores no read time for a message nobody
+  has read, and the reader turned that empty value into the earliest date
+  Apple's clock can express, so every unread message imported from a Mac or
+  an iPhone backup carried a read receipt from the start of 2001. An unread
+  message now carries no read receipt; a read one keeps its real time.
 - 2026-09-21: **A finished import no longer leaves its staging folder
   behind.** Every import wrote a copy of the backup's messages and
   attachments into the staging directory and left it there after the upload,

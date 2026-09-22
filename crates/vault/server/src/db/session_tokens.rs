@@ -82,7 +82,7 @@ impl ConnectingApp {
 /// A live session: whose it is, and the app last recorded on it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Session {
-    /// The account the session signs in.
+    /// The account the session logs in.
     pub account_id: i64,
     /// `None` until a request names its app.
     pub app: Option<ConnectingApp>,
@@ -301,7 +301,7 @@ mod tests {
     /// Known-answer vectors, not a round trip.
     ///
     /// Every session and API token in every existing vault is stored as this
-    /// hash and looked up by it, so changing the algorithm signs everyone out
+    /// hash and looked up by it, so changing the algorithm logs everyone out
     /// and invalidates every issued API token at once. A test that only
     /// checked the length and determinism would pass after such a change —
     /// any 64-character hex hash is stable and 64 characters long. These

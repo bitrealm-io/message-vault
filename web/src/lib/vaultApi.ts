@@ -231,7 +231,7 @@ function accountBase(accountId?: number): string {
   return accountId === undefined ? ownAccountPath() : accountPath(accountId);
 }
 
-/** An account's Import Runs, newest first: the signed-in one, or as the owner the one named. */
+/** An account's Import Runs, newest first: the logged-in one, or as the owner the one named. */
 export function listAccountImports(
   opts?: VaultRequestOptions,
   accountId?: number,
@@ -251,7 +251,7 @@ export function getAccountImport(
   );
 }
 
-/** An account's Export Runs, newest first: the signed-in one, or as the owner the one named. */
+/** An account's Export Runs, newest first: the logged-in one, or as the owner the one named. */
 export function listAccountExports(
   opts?: VaultRequestOptions,
   accountId?: number,

@@ -715,7 +715,7 @@ describe("OwnerHome", () => {
     renderHome(["/owner/accounts/1"]);
 
     expect(await screen.findByText("Change Password")).toBeInTheDocument();
-    // The owner's own account is read as the signed-in account, not as a managed one.
+    // The owner's own account is read as the logged-in account, not as a managed one.
     expect(getAccount).not.toHaveBeenCalled();
     // No Storage, System or Convert: the owner holds no messages.
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([

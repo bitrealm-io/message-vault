@@ -12,19 +12,22 @@ names a conversation, a contact or a line of text. The side panel has
 
 The Dashboard is a column of three sections about the whole vault.
 
-- **Vault contents** — how much attachment storage the vault holds, and how
-  many messages, attachments, conversations and contacts there are across
-  every account.
-- **Database** — three measured figures side by side: the size of the
-  database on disk, how much of it the messages take, and how much the
-  full-text search index adds. The database size excludes attachment files,
-  which are counted under Vault contents. The search index is one shared
-  structure, so it is reported once for the vault rather than per account.
-- **Messages by account** — one row per account with its username, how many
-  messages it holds, how much text they are, and an estimated size on disk.
-  The estimate is the messages-on-disk figure split by each account's share
-  of text, so the rows add up to the whole-vault figure in the totals row at
-  the bottom. An account with no messages reads zero.
+**Vault contents** shows how much attachment storage the vault holds, and
+how many messages, attachments, conversations and contacts there are across
+every account.
+
+**Database** shows three measured figures side by side: the size of the
+database on disk, how much of it the messages take, and how much the
+full-text search index adds. The database size excludes attachment files,
+because they are stored as files beside the database and are counted under
+Vault contents. The search index is one shared structure, so it is reported
+once for the vault rather than per account.
+
+**Messages by account** has one row per account with its username, how many
+messages it holds, how much text they are, and an estimated size on disk. The
+estimate is the messages-on-disk figure split by each account's share of
+text, so the rows add up to the whole-vault figure in the totals row at the
+bottom. An account with no messages reads zero.
 
 ## Vault Settings
 

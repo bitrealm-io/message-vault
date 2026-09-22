@@ -2,9 +2,8 @@ import type { ReactNode } from "react";
 
 /**
  * One headed section of the Dashboard: a title, an optional hint under it
- * that says how to read the figures, and the section's card or table.
- * Every section on the page is one of these, so a later dashboard can stack
- * the same pieces in another order.
+ * that says how to read the figures, and the section's card or table. The
+ * three sections share this shape, so the heading and hint are written once.
  */
 export function DashboardSection({
   title,

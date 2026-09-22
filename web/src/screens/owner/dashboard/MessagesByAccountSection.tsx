@@ -1,20 +1,12 @@
 import ScrollingTableCard from "../../../components/ScrollingTableCard";
 import { tdClass, tdMuted } from "../../settings/apiTokensUtils";
 import { formatBytes } from "../../settings/storage/storageUtils";
+import { rowStripe, thClass, thSeparator } from "../ownerTableStyles";
 import { DashboardSection } from "./DashboardSection";
 import type { VaultStorage } from "./types";
 
-/** A column heading: bold, in the text color, as the User Accounts table has it. */
-const thClass = "px-3 py-2 text-left text-[0.75rem] font-bold text-text";
-
-/** The line between one column heading and the next. */
-const thSeparator = "border-l border-border";
-
 /** A figure lines up on the right, so sizes can be read down the column. */
 const numberCell = "whitespace-nowrap text-right";
-
-/** Every other row is a shade lighter, the way the User Accounts table is striped. */
-const rowStripe = "even:[&>td]:bg-hover/50";
 
 /**
  * One row per account: its username, how many messages it holds, how much

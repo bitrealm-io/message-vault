@@ -137,9 +137,10 @@ pub async fn fts_bytes(conn: &mut AnyConnection) -> Result<i64> {
 /// Bytes the `messages` table and its indexes take, without the full-text
 /// search index, so the figure means the same thing on both engines. On
 /// SQLite the FTS index is separate tables, so the table's `dbstat` pages are
-/// the answer; on Postgres the FTS vector is a column on the table, so it is
-/// subtracted.
-pub async fn messages_bytes(conn: &mut AnyConnection) -> Result<i64> {
+/// the answer. On Postgres the FTS vector is a column on the table, so
+/// `fts_bytes`, which the caller has already measured, is subtracted; the
+/// measurement scans every message, so it is not repeated here.
+pub async fn messages_bytes(conn: &mut AnyConnection, fts_bytes: i64) -> Result<i64> {
     match engine_of(conn) {
         DbEngine::Sqlite => {
             let n: i64 = sqlx::query_scalar(
@@ -156,23 +157,29 @@ pub async fn messages_bytes(conn: &mut AnyConnection) -> Result<i64> {
             let total: i64 = sqlx::query_scalar("SELECT pg_total_relation_size('messages')")
                 .fetch_one(&mut *conn)
                 .await?;
-            let fts = fts_bytes(conn).await?;
-            Ok((total - fts).max(0))
+            Ok((total - fts_bytes).max(0))
         }
     }
 }
 
 /// Every account with its message count and text bytes, the owner first and
 /// then by username: the order the User Accounts table uses. An account with
-/// no messages is listed with zeros.
+/// no messages is listed with zeros. Text is counted in bytes, not
+/// characters: `LENGTH` on either engine counts characters, so SQLite reads
+/// the text as a blob and Postgres uses `octet_length`.
 pub async fn text_by_account(conn: &mut AnyConnection) -> Result<Vec<AccountText>> {
-    let rows: Vec<(i64, String, i64, i64)> = sqlx::query_as(
-        "SELECT a.id, a.username, COUNT(m.id), \
-                COALESCE(SUM(COALESCE(LENGTH(m.body), 0) + COALESCE(LENGTH(m.subject), 0)), 0) \
+    let bytes_of = match engine_of(conn) {
+        DbEngine::Sqlite => |column: &str| format!("COALESCE(LENGTH(CAST({column} AS BLOB)), 0)"),
+        DbEngine::Postgres => |column: &str| format!("COALESCE(octet_length({column}), 0)"),
+    };
+    let rows: Vec<(i64, String, i64, i64)> = sqlx::query_as(&format!(
+        "SELECT a.id, a.username, COUNT(m.id), COALESCE(SUM({} + {}), 0) \
          FROM accounts a LEFT JOIN messages m ON m.account_id = a.id \
          GROUP BY a.id, a.username \
          ORDER BY CASE WHEN a.id = $1 THEN 0 ELSE 1 END, a.username",
-    )
+        bytes_of("m.body"),
+        bytes_of("m.subject"),
+    ))
     .bind(OWNER_ACCOUNT_ID)
     .fetch_all(&mut *conn)
     .await?;
@@ -202,9 +209,11 @@ pub fn split_by_text(messages_bytes: i64, accounts: &[AccountText]) -> Vec<i64> 
     let mut shares: Vec<i64> = accounts
         .iter()
         .map(|a| {
+            // Widened for the product. The share is at most messages_bytes,
+            // because text_bytes is at most total_text, so it fits an i64.
             let share =
                 i128::from(messages_bytes) * i128::from(a.text_bytes) / i128::from(total_text);
-            i64::try_from(share).unwrap_or(i64::MAX)
+            i64::try_from(share).expect("a share is at most messages_bytes")
         })
         .collect();
     if let Some(last) = accounts.iter().rposition(|a| a.text_bytes > 0) {

@@ -261,13 +261,13 @@ pub struct AccountMessagesResponse {
     pub estimated_message_bytes: i64,
 }
 
-/// Read what the vault holds: the message, conversation, contact and
-/// attachment counts and the attachment bytes, summed over every account;
-/// what the database takes on disk, measured; and each account's estimated
-/// share of message storage. Counts and totals only, never a name or a line
-/// of text (`docs/adr/0008-the-vault-owner-holds-no-messages.md`, "What the
-/// owner may see"). The owner's, because the owner administers the vault and
-/// nobody else holds more than their own account.
+/// Read what the vault holds. The counts and the attachment bytes are summed
+/// over every account. The database, messages and full-text search sizes
+/// are measured on disk. Each account's share of message storage is an
+/// estimate from its share of text. Counts and totals only, never a name or
+/// a line of text (`docs/adr/0008-the-vault-owner-holds-no-messages.md`,
+/// "What the owner may see"). The owner's, because the owner administers the
+/// vault and nobody else holds more than their own account.
 #[utoipa::path(
     get,
     path = "/v1/vault/storage",
@@ -286,7 +286,8 @@ pub async fn vault_storage_handler(
 ) -> Result<Json<VaultStorageResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let scope = storage::Scope::Vault;
-    let messages_bytes = storage::messages_bytes(&mut conn).await?;
+    let fts_bytes = storage::fts_bytes(&mut conn).await?;
+    let messages_bytes = storage::messages_bytes(&mut conn, fts_bytes).await?;
     let by_account = storage::text_by_account(&mut conn).await?;
     let shares = storage::split_by_text(messages_bytes, &by_account);
     let accounts = by_account
@@ -310,7 +311,7 @@ pub async fn vault_storage_handler(
         total_bytes: storage::attachment_bytes(&mut conn, scope).await?,
         database_bytes: storage::database_bytes(&mut conn).await?,
         messages_bytes,
-        fts_bytes: storage::fts_bytes(&mut conn).await?,
+        fts_bytes,
         accounts,
     }))
 }

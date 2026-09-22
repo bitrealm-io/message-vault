@@ -1188,13 +1188,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read what the vault holds: the message, conversation, contact and
-         *     attachment counts and the attachment bytes, summed over every account;
-         *     what the database takes on disk, measured; and each account's estimated
-         *     share of message storage. Counts and totals only, never a name or a line
-         *     of text (`docs/adr/0008-the-vault-owner-holds-no-messages.md`, "What the
-         *     owner may see"). The owner's, because the owner administers the vault and
-         *     nobody else holds more than their own account.
+         * Read what the vault holds. The counts and the attachment bytes are summed
+         *     over every account. The database, messages and full-text search sizes
+         *     are measured on disk. Each account's share of message storage is an
+         *     estimate from its share of text. Counts and totals only, never a name or
+         *     a line of text (`docs/adr/0008-the-vault-owner-holds-no-messages.md`,
+         *     "What the owner may see"). The owner's, because the owner administers the
+         *     vault and nobody else holds more than their own account.
          */
         get: operations["vault_storage"];
         put?: never;

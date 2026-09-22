@@ -145,7 +145,7 @@ deleting underlying rows.
 ## How storage sizes are measured
 
 The vault owner's Dashboard reports what the database takes on disk. Every
-figure is measured from the database on both engines; the queries are in
+figure is measured from the database on both engines. The queries are in
 `crates/vault/server/src/db/storage.rs`, branched on the engine like the rest
 of the database layer.
 
@@ -154,14 +154,19 @@ of the database layer.
 | Database size | `page_count * page_size` | `pg_database_size(current_database())` |
 | Messages on disk | `dbstat` pages of `messages` and every index on it | `pg_total_relation_size('messages')` minus the FTS figure |
 | Full-text search index | `dbstat` pages of the four `messages_fts_*` shadow tables | `sum(pg_column_size(search_tsv))` plus `pg_relation_size('ix_messages_search_tsv')` |
-| Text bytes per account | `sum(length(body) + length(subject))` grouped by `account_id` | the same |
+| Text bytes per account | `sum(length(cast(body as blob)) + length(cast(subject as blob)))` grouped by `account_id` | `sum(octet_length(body) + octet_length(subject))` grouped by `account_id` |
 
-The bundled SQLite is compiled with `SQLITE_ENABLE_DBSTAT_VTAB`, so the
-`dbstat` virtual table is available; a build without it should turn it back
-on rather than estimate. On Postgres the search vector is a column on
-`messages`, so the table's total size includes it, and subtracting the FTS
-figure leaves a messages-only number that means the same thing as the SQLite
-one. The database size never counts attachment files on disk.
+The bundled SQLite is compiled with `SQLITE_ENABLE_DBSTAT_VTAB`
+(`libsqlite3-sys`'s `build.rs` sets the flag), so the `dbstat` virtual table
+is available. A build without it must turn the flag back on rather than
+estimate, because every other figure on the Dashboard is measured and one
+estimate among them would be read as measured too. Text is counted in bytes,
+not characters: `length()` counts characters on both engines, so SQLite reads
+the text as a blob and Postgres uses `octet_length`. On Postgres the search
+vector is a column on `messages`, so the table's total size includes it, and
+subtracting the FTS figure leaves a messages-only number that means the same
+thing as the SQLite one. The database size never counts attachment files on
+disk.
 
 The one estimate is each account's share of message storage: the
 messages-on-disk figure times the account's share of all text bytes. The

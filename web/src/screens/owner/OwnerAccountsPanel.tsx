@@ -5,25 +5,11 @@ import NavGlyphButton from "../../components/NavGlyphButton";
 import ScrollingTableCard from "../../components/ScrollingTableCard";
 import { formatDateTime } from "../../lib/formatDate";
 import { tdClass, tdMuted } from "../settings/apiTokensUtils";
+import { rowStripe, thClass, thSeparator } from "./ownerTableStyles";
 import { type ManagedAccount, useOwnerAccounts } from "./useOwnerAccounts";
 
 /** Columns the table has, which the "no match" row spans. */
 const COLUMN_COUNT = 4;
-
-/** A column heading: bold, in the text color, so it stands apart from the rows. */
-const thClass = "px-3 py-2 text-left text-[0.75rem] font-bold text-text";
-
-/** The line between one column heading and the next. */
-const thSeparator = "border-l border-border";
-
-/**
- * Every other row is a shade lighter. The shade is on the cells, and the last
- * row's end cells are rounded, so it follows the card's bottom corners; the
- * card cannot clip it, because a rounded clipping box thins the table's text
- * in the desktop app.
- */
-const rowStripe =
-  "even:[&>td]:bg-hover/50 last:[&>td:first-child]:rounded-bl-[0.6875rem] last:[&>td:last-child]:rounded-br-[0.6875rem]";
 
 /** What the Status column reads for one account. */
 function statusLabel(account: ManagedAccount): string {

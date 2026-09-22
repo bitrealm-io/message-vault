@@ -356,7 +356,7 @@ async fn the_owner_reads_the_vault_totals_summed_over_every_account() {
     );
 
     for (account_id, handle, bodies) in [
-        (alice.account_id, "+15555550100", &["hi", "there"][..]),
+        (alice.account_id, "+15555550100", &["hi", "thérè"][..]),
         (bob.account_id, "+15555550200", &["yo"][..]),
     ] {
         let messages: Vec<SeedMessage> = bodies
@@ -442,10 +442,11 @@ async fn the_owner_reads_the_vault_totals_summed_over_every_account() {
         totals.database_bytes
     );
 
-    // Alice wrote "hi" and "there" (7 bytes), Bob wrote "yo" (2 bytes), and
-    // the owner wrote nothing. The estimates split messages_bytes by those
-    // shares and add up to it exactly, the last account with text taking the
-    // rounding.
+    // Alice wrote "hi" and "thérè", which is 9 bytes: text is counted in
+    // bytes, not characters, and each accented letter is two. Bob wrote "yo"
+    // (2 bytes), and the owner wrote nothing. The estimates split
+    // messages_bytes by those shares and add up to it exactly, the last
+    // account with text taking the rounding.
     let by_account: Vec<_> = totals
         .accounts
         .iter()
@@ -462,7 +463,7 @@ async fn the_owner_reads_the_vault_totals_summed_over_every_account() {
         by_account,
         vec![
             (owner.account_id, "keeper", 0, 0),
-            (alice.account_id, "alice", 2, 7),
+            (alice.account_id, "alice", 2, 9),
             (bob.account_id, "bob", 1, 2)
         ]
     );
@@ -471,7 +472,7 @@ async fn the_owner_reads_the_vault_totals_summed_over_every_account() {
         .iter()
         .map(|a| a.estimated_message_bytes)
         .collect();
-    let alice_share = totals.messages_bytes * 7 / 9;
+    let alice_share = totals.messages_bytes * 9 / 11;
     assert_eq!(
         estimates,
         vec![0, alice_share, totals.messages_bytes - alice_share]

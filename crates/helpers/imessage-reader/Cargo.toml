@@ -28,6 +28,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+chat-db-fixture = { path = "../chat-db-fixture" }
 tempfile = { workspace = true }
 
 [lints]

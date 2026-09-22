@@ -139,3 +139,87 @@ impl MailSession {
             .and_then(|internal_id| self.participants.get(internal_id))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::FixtureDb;
+    use chat_db_fixture::{FRIEND_EMAIL, FRIEND_PHONE, GROUP_CHAT_IDENTIFIER, OWNER};
+
+    /// The caches hold what the fixture wrote: two chats, both deduped to
+    /// themselves, two handles each carrying its raw address as its details.
+    #[test]
+    fn a_session_caches_the_chats_and_handles() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+
+        assert_eq!(session.chatrooms.len(), 2);
+        assert_eq!(session.chatrooms[&2].chat_identifier, GROUP_CHAT_IDENTIFIER);
+        assert_eq!(session.real_chatrooms.len(), 2);
+        assert_eq!(session.chatroom_participants[&1], BTreeSet::from([1]));
+        assert_eq!(session.chatroom_participants[&2], BTreeSet::from([1, 2]));
+
+        let phone = session.resolve_participant(1).expect("handle 1");
+        assert_eq!(phone.details, FRIEND_PHONE);
+        assert_eq!(phone.full, "", "no contacts file, so no name");
+        assert_eq!(
+            session.resolve_participant(2).unwrap().details,
+            FRIEND_EMAIL
+        );
+        assert_eq!(session.resolve_participant(99), None);
+        assert!(session.tapbacks.is_empty());
+    }
+
+    /// A message finds its chat by `chat_id`; a message whose chat id names
+    /// no chat row lands nowhere. The deduped id is what the two chats with
+    /// one participant set share, numbered from zero.
+    #[test]
+    fn a_message_resolves_to_its_conversation() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let messages = FixtureDb::messages(&session);
+        assert_eq!(messages.len(), 3);
+
+        let (chat, real_id) = session.conversation(&messages[2]).expect("the group chat");
+        assert_eq!(chat.rowid, 2);
+        // Deduped chat ids are sequential in chat id order, not chat rowids.
+        assert_eq!(*real_id, 1);
+        assert_eq!(
+            session.conversation(&messages[0]).map(|(_, id)| *id),
+            Some(0)
+        );
+
+        let mut orphan = FixtureDb::messages(&session).remove(0);
+        orphan.chat_id = Some(42);
+        orphan.deleted_from = None;
+        assert!(session.conversation(&orphan).is_none());
+        orphan.chat_id = None;
+        assert!(session.conversation(&orphan).is_none());
+    }
+
+    /// The sender's name: the owner by caller id, a contact by name, a bare
+    /// handle when the book has no name for it, and Unknown for nobody.
+    #[test]
+    fn who_names_the_owner_a_contact_or_unknown() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session_with_contacts();
+
+        assert_eq!(session.who(None, true, Some(OWNER)), OWNER);
+        assert_eq!(session.who(None, true, None), ME);
+        assert_eq!(session.who(Some(1), false, None), "Sam Example");
+        assert_eq!(session.who(Some(2), false, None), "Robin");
+        assert_eq!(session.who(Some(99), false, None), UNKNOWN);
+        assert_eq!(session.who(None, false, None), UNKNOWN);
+
+        // Without the caller id option the owner is always Me.
+        let mut options = fixture.options();
+        options.use_caller_id = false;
+        let session = MailSession::new(options).unwrap();
+        assert_eq!(session.who(None, true, Some(OWNER)), ME);
+        assert_eq!(
+            session.who(Some(1), false, None),
+            FRIEND_PHONE,
+            "no contacts file: the handle stands in for the name"
+        );
+    }
+}

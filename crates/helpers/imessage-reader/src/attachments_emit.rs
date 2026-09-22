@@ -102,3 +102,78 @@ pub(super) fn collect_parts_and_attachments(
 
     Ok((parts, records))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::FixtureDb;
+    use chat_db_fixture::PHOTO_BYTES;
+
+    /// The photo message has no parsed body, so every join row is kept, and
+    /// the record names the file on disk with its size. The text message
+    /// has one run part and no attachments.
+    #[test]
+    fn the_fixture_photo_is_one_attachment_record() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let messages = FixtureDb::messages(&session);
+
+        let (parts, records) = collect_parts_and_attachments(&session, &messages[0]).unwrap();
+        assert!(parts.is_empty(), "no attributedBody, so no parts");
+        assert_eq!(records.len(), 1);
+        let record = &records[0];
+        assert_eq!(record.original_name.as_deref(), Some("photo.jpg"));
+        assert_eq!(record.mime_type.as_deref(), Some("image/jpeg"));
+        assert!(!record.is_sticker);
+        assert_eq!(record.transcription, None);
+        assert_eq!(record.sticker_effect, None);
+        let AttachmentSource::Path { path, size_hint } = &record.source else {
+            panic!("a file on disk: {:?}", record.source);
+        };
+        assert_eq!(path, &fixture.dir.path().join("photo.jpg"));
+        assert_eq!(*size_hint, Some(PHOTO_BYTES.len() as u64));
+
+        let (parts, records) = collect_parts_and_attachments(&session, &messages[1]).unwrap();
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0].text.as_deref(), Some("Nice"));
+        assert!(records.is_empty());
+    }
+
+    /// Part indices point into the full attachment list from the database;
+    /// the emitted list keeps only the referenced rows, so the indices are
+    /// rewritten to that shorter list and an unreferenced index is dropped.
+    #[test]
+    fn part_indices_are_rewritten_to_the_kept_list() {
+        let mut parts = vec![
+            PartRecord {
+                index: 0,
+                kind: "run",
+                text: None,
+                attachment_indices: vec![2, 0, 5],
+                effects: Vec::new(),
+                emoji_image: false,
+            },
+            PartRecord {
+                index: 1,
+                kind: "run",
+                text: None,
+                attachment_indices: vec![1],
+                effects: Vec::new(),
+                emoji_image: false,
+            },
+        ];
+        let index_by_full = std::collections::HashMap::from([(0, 0), (2, 1)]);
+        remap_part_attachment_indices(&mut parts, &index_by_full);
+        assert_eq!(parts[0].attachment_indices, vec![1, 0]);
+        assert!(parts[1].attachment_indices.is_empty());
+    }
+
+    /// A plain row is not handwriting.
+    #[test]
+    fn a_plain_row_renders_no_handwriting() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let messages = FixtureDb::messages(&session);
+        assert!(try_handwriting_svg(&session, &messages[1]).is_none());
+    }
+}

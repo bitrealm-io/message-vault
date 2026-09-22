@@ -24,6 +24,7 @@ members = [
     "crates/exporters/imessage-ir-exporter",
     "crates/exporters/whatsapp-exporter",
     "crates/helpers/imessage-reader-protocol",
+    "crates/helpers/chat-db-fixture",
     "crates/helpers/imessage-reader",
     "crates/core/message-vault-io-core",
     "crates/libs/vault-push",

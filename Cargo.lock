@@ -398,6 +398,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "chat-db-fixture"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "tempfile",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1562,12 +1570,12 @@ name = "imessage-ir-exporter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chat-db-fixture",
  "imessage-reader-protocol",
  "message-ir",
  "message-ir-format",
  "message-vault-io-core",
  "plist",
- "rusqlite",
  "serde_json",
  "tempfile",
 ]
@@ -1576,6 +1584,7 @@ dependencies = [
 name = "imessage-reader"
 version = "0.1.0"
 dependencies = [
+ "chat-db-fixture",
  "chrono",
  "crabapple",
  "imessage-database",

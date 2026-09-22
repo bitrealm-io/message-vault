@@ -165,3 +165,66 @@ impl Drop for DataSource {
         drop(self.temp_messages_db.take());
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{FixtureDb, mac_source};
+    use imessage_reader_protocol::ExportRequest;
+
+    /// A Mac `chat.db` opens in place: no backup, nothing decrypted, nothing
+    /// to clean up, and the connection answers queries.
+    #[test]
+    fn a_mac_database_opens_in_place() {
+        let fixture = FixtureDb::write();
+        let source = DataSource::from(&fixture.options()).unwrap();
+        assert!(!source.is_encrypted());
+        assert!(source.backup.is_none());
+        assert!(source.temp_messages_db.is_none());
+        let chats: i64 = source
+            .db()
+            .query_row("SELECT count(*) FROM chat", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(chats, 2);
+    }
+
+    /// A contacts file that cannot be read is logged and the run goes on
+    /// without names, rather than failing the whole export.
+    #[test]
+    fn an_unreadable_contacts_file_leaves_the_index_empty() {
+        let fixture = FixtureDb::write();
+        let not_a_db = fixture.dir.path().join("contacts.db");
+        std::fs::write(&not_a_db, b"not sqlite").unwrap();
+        let options = ReaderOptions::from_export(ExportRequest {
+            contacts_path: Some(not_a_db),
+            ..fixture.export_request()
+        });
+        let source = DataSource::from(&options).unwrap();
+        assert_eq!(source.contacts_index.lookup("+15550000002"), None);
+        assert!(
+            DataSource::get_contacts_index(Some(&fixture.dir.path().join("missing.db"))).is_none()
+        );
+    }
+
+    /// A database that is not there is the error the app shows, not a panic.
+    #[test]
+    fn a_missing_database_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let options = ReaderOptions::from_source(mac_source(&dir.path().join("chat.db")));
+        assert!(DataSource::from(&options).is_err());
+    }
+
+    /// A temp database is deleted when its handle drops, and a path that is
+    /// already gone only logs.
+    #[test]
+    fn a_temp_database_is_removed_on_drop() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sms.db");
+        std::fs::write(&path, b"bytes").unwrap();
+        let temp = TempDatabase::new(path.clone());
+        assert_eq!(temp.path(), path);
+        drop(temp);
+        assert!(!path.exists());
+        drop(TempDatabase::new(path));
+    }
+}

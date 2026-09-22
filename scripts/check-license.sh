@@ -12,13 +12,15 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
 EXPECTED_CARGO_LICENSE="LicenseRef-FCL-1.0-ALv2"
-# The two crates that are deliberately not FCL, and the licence each carries.
-# The helper program links GPL code, so it is GPL; the protocol crate is
-# linked by both the GPL helper and the FCL app, so it is permissive. Every
-# other crate is FCL. Why: docs/agents/licences.md.
+# The three crates that are deliberately not FCL, and the licence each
+# carries. The helper program links GPL code, so it is GPL; the protocol crate
+# is linked by both the GPL helper and the FCL app, and the chat.db fixture by
+# the tests of both, so those two are permissive. Every other crate is FCL.
+# Why: docs/agents/licences.md.
 declare -A LICENCE_EXCEPTIONS=(
   ["crates/helpers/imessage-reader/Cargo.toml"]="GPL-3.0-or-later"
   ["crates/helpers/imessage-reader-protocol/Cargo.toml"]="MIT OR Apache-2.0"
+  ["crates/helpers/chat-db-fixture/Cargo.toml"]="MIT OR Apache-2.0"
 )
 EXPECTED_WEB_LICENSE="SEE LICENSE IN ../LICENSE.md"
 EXPECTED_SPEC_LICENSE="Fair Core License 1.0 (ALv2 future)"

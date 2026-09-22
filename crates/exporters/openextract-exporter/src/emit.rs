@@ -8,9 +8,9 @@ use message_ir::{
     ExportMeta, HandleType, IrParticipant, IrService, IrSource, PendingConversation,
     PendingMessage, ProjectionHooks, ensure_conversation,
 };
-use message_ir_format::{AttachmentSource, ExportTransforms, ExportWriter, FormatSinkResult};
+use message_ir_format::{AttachmentSource, ExportWriter};
 use message_vault_io_core::{
-    CancelFlag, ExportReport, OutputFormat, prepare_outputs, project_conversation,
+    CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
 };
 use phone::sanitize_number;
 use serde_json::{Map, json};
@@ -42,9 +42,7 @@ pub(crate) struct ConvertExportArgs<'a> {
 ///
 /// Returns an error when output overlaps input, a CSV cannot be parsed, or the
 /// user cancels.
-pub(crate) fn convert_export(
-    args: ConvertExportArgs<'_>,
-) -> Result<(ExportReport, FormatSinkResult)> {
+pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport> {
     let ConvertExportArgs {
         input,
         output,
@@ -86,14 +84,14 @@ pub(crate) fn convert_export(
     }
 
     // OpenExtract carries no attachments; every attachment source is Missing.
-    let sink_result = writer.finish(
+    writer.finish(
         documents,
         &mut |att| (AttachmentSource::Missing, att.size_bytes),
         cancel,
         &mut report,
     )?;
 
-    Ok((report, sink_result))
+    Ok(report)
 }
 
 /// Parse-time state shared across every CSV file in one export.
@@ -409,10 +407,7 @@ mod tests {
         path
     }
 
-    fn convert(
-        input: &std::path::Path,
-        output: &std::path::Path,
-    ) -> Result<(ExportReport, FormatSinkResult)> {
+    fn convert(input: &std::path::Path, output: &std::path::Path) -> Result<ExportReport> {
         convert_export(ConvertExportArgs {
             input,
             output,
@@ -434,7 +429,7 @@ mod tests {
 2020-01-01T12:01:00+00:00,me,Hi,True,False\n",
         );
         let out = dir.path().join("out");
-        let (report, _) = convert(dir.path(), &out).unwrap();
+        let report = convert(dir.path(), &out).unwrap();
         assert_eq!(report.conversations, 1);
         assert_eq!(report.extra("name_only_chat"), 0);
         let body = fs::read_to_string(out.join("+15555550122.csv")).unwrap();
@@ -452,7 +447,7 @@ mod tests {
 2020-01-01T12:01:00+00:00,me,Hello,True,False\n",
         );
         let out = dir.path().join("out");
-        let (report, _) = convert(dir.path(), &out).unwrap();
+        let report = convert(dir.path(), &out).unwrap();
         assert_eq!(report.extra("name_only_chat"), 1);
         assert_eq!(report.conversations, 1);
         let csv_path = out.join("Cathy_Arp.csv");
@@ -476,7 +471,7 @@ mod tests {
 2020-01-01T12:01:00+00:00,me,Hi,True,False\n",
         );
         let out = dir.path().join("out");
-        let (report, _) = convert(dir.path(), &out).unwrap();
+        let report = convert(dir.path(), &out).unwrap();
         assert_eq!(report.duplicates_dropped, 1);
         assert_eq!(report.messages, 2);
         assert_eq!(report.conversations, 1);

@@ -1,12 +1,11 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
-use message_ir_format::{ExportTransforms, FormatSinkResult};
 use message_vault_io_core::testutil::assert_csv_row;
-use message_vault_io_core::{ExportReport, OutputFormat};
+use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn convert(input: &Path, output: &Path) -> Result<(ExportReport, FormatSinkResult)> {
+fn convert(input: &Path, output: &Path) -> Result<ExportReport> {
     convert_export(ConvertExportArgs {
         input,
         output,
@@ -44,7 +43,7 @@ fn convert_all_conversations_keys_the_chat_by_its_number() {
     assert!(csv.is_file(), "missing {}", csv.display());
 
     let tmp = tempfile::tempdir().expect("tempdir");
-    let (report, _) = convert(&csv, tmp.path()).expect("convert");
+    let report = convert(&csv, tmp.path()).expect("convert");
 
     assert_eq!(report.conversations, 1);
     assert_eq!(report.messages, 2);
@@ -101,7 +100,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
         })
     };
 
-    let (report, _) = run(false).expect("convert");
+    let report = run(false).expect("convert");
     assert!(report.conversations >= 1);
     assert_eq!(
         report.conversations_skipped, 0,
@@ -129,7 +128,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
     // a resumed run that quietly rewrote every conversation would produce the
     // same bytes and this test would still pass. `conversations_skipped` is
     // the only observable difference between resuming and starting over.
-    let (resumed, _) = run(true).expect("resume convert");
+    let resumed = run(true).expect("resume convert");
     assert_eq!(
         resumed.conversations_skipped, report.conversations,
         "a resumed run must skip every conversation the first run wrote"

@@ -4,7 +4,9 @@
 //! context-rich path errors) so the desktop app stays lightweight. Callers map
 //! `String` errors at the edge when needed.
 
+use crate::config::OutputFormat;
 use anyhow::{Context, bail};
+use media::MediaReport;
 use message_csv::DateRange;
 use message_ir::{
     ConversationDocument, PendingConversation, ProjectionHooks, ProjectionTally,
@@ -63,8 +65,9 @@ pub struct RunResult {
     pub messages: Vec<String>,
 }
 
-/// Export run statistics. Per-exporter extension counters (PDU counts,
-/// dedupe counts, etc.) are stored in the `extra` map.
+/// Export run statistics: what was counted while parsing and what the
+/// write tail did. Per-exporter extension counters (PDU counts, dedupe
+/// counts, etc.) are stored in the `extra` map.
 #[derive(Debug, Default, Clone)]
 pub struct ExportReport {
     /// Conversations exported.
@@ -87,6 +90,10 @@ pub struct ExportReport {
     pub duplicates_dropped: u64,
     /// Attachment files saved to the output.
     pub attachments_saved: u64,
+    /// The convert or compress pass over the staged attachments.
+    pub media: MediaReport,
+    /// Documents whose handles, names and bodies were obfuscated.
+    pub obfuscated_docs: u64,
     /// Human-readable error/warning lines (capped by each exporter).
     pub errors: Vec<String>,
     /// Per-exporter extension counters keyed by name.
@@ -94,11 +101,56 @@ pub struct ExportReport {
 }
 
 impl ExportReport {
-    /// Append one or more summary lines to `out`.
-    pub fn summary_lines(&self, output: &std::path::Path, out: &mut Vec<String>) {
+    /// Refuse a run whose media pass failed on every file it tried, when
+    /// the mode needed ffmpeg: that is a missing tool, not a bad file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `needs_tools` is set, the media pass reported
+    /// errors, and it processed nothing.
+    pub fn check_media(&self, needs_tools: bool) -> anyhow::Result<()> {
+        if needs_tools && !self.media.errors.is_empty() && self.media.processed == 0 {
+            bail!("media processing failed for all candidate files");
+        }
+        Ok(())
+    }
+
+    /// Human-readable lines about the write tail: the media pass and
+    /// obfuscation. Empty when neither did anything.
+    pub fn media_lines(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        if self.media.processed > 0 || self.media.skipped > 0 || !self.media.errors.is_empty() {
+            lines.push(format!(
+                "Media: processed {} file(s), skipped {}",
+                self.media.processed, self.media.skipped
+            ));
+            for err in self.media.errors.iter().take(10) {
+                lines.push(format!("  media warning: {err}"));
+            }
+            if self.media.errors.len() > 10 {
+                lines.push(format!("  …and {} more", self.media.errors.len() - 10));
+            }
+        }
+        if self.obfuscated_docs > 0 {
+            lines.push(format!(
+                "Obfuscated {} conversation(s)",
+                self.obfuscated_docs
+            ));
+        }
+        lines
+    }
+
+    /// Append the summary lines to `out`: where the export went, then every
+    /// count that is not zero.
+    pub fn summary_lines(
+        &self,
+        format: OutputFormat,
+        output: &std::path::Path,
+        out: &mut Vec<String>,
+    ) {
         out.push(format!(
             "Wrote {} export under {}",
-            crate::name_stem(output.to_string_lossy().as_ref()),
+            format.as_str(),
             output.display()
         ));
         if self.conversations_skipped > 0 {

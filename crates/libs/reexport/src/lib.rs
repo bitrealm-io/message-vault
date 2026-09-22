@@ -4,13 +4,14 @@ use anyhow::{Context, Result, bail};
 use media::{CompressOptions, MediaMode};
 use message_ir::ConversationDocument;
 use message_ir_format::{
-    CSV_HEADERS, ExportTransforms, FormatSink, FormatSinkResult, clean_previous_ir_output,
-    read_conversation_csv, read_conversation_eml_dir, read_conversation_json,
-    read_conversation_jsonl, read_conversation_mbox,
+    CSV_HEADERS, FormatSink, clean_previous_ir_output, read_conversation_csv,
+    read_conversation_eml_dir, read_conversation_json, read_conversation_jsonl,
+    read_conversation_mbox,
 };
 pub use message_vault_io_core::RunResult;
 use message_vault_io_core::{
-    ExporterConfig, MediaConfig, OutputFormat, document_messages, stage_conversation_attachments,
+    ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat, document_messages,
+    stage_conversation_attachments,
 };
 use sms_backup_restore_exporter::{ReadOptions, SbrArchive, read_backup};
 use std::collections::HashSet;
@@ -43,10 +44,9 @@ struct DetectedExport {
 #[derive(Debug, Default)]
 struct ReexportReport {
     detected_format: String,
-    conversations: usize,
-    /// Distinct attachment files a convert or compress pass wrote.
-    attachments_saved: u64,
-    sink: FormatSinkResult,
+    /// Conversations written, attachments a convert or compress pass
+    /// staged, the media pass, and obfuscation.
+    report: ExportReport,
 }
 
 impl ReexportReport {
@@ -54,12 +54,15 @@ impl ReexportReport {
     fn log_lines(&self) -> Vec<String> {
         let mut lines = vec![
             format!("Detected input format: {}", self.detected_format),
-            format!("Conversations: {}", self.conversations),
+            format!("Conversations: {}", self.report.conversations),
         ];
-        if self.attachments_saved > 0 {
-            lines.push(format!("  saved {} attachments", self.attachments_saved));
+        if self.report.attachments_saved > 0 {
+            lines.push(format!(
+                "  saved {} attachments",
+                self.report.attachments_saved
+            ));
         }
-        lines.extend(self.sink.log_lines());
+        lines.extend(self.report.media_lines());
         lines
     }
 }
@@ -92,14 +95,12 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
     if documents.is_empty() {
         bail!("no conversations loaded from {}", input_dir.display());
     }
-    let attachments_saved = if matches!(transforms.media, MediaMode::Convert | MediaMode::Compress)
-    {
-        apply_reexport_convert(&mut documents, config, &transforms)?
-    } else {
-        0
-    };
+    let mut report = ExportReport::default();
+    if matches!(transforms.media, MediaMode::Convert | MediaMode::Compress) {
+        report.attachments_saved += apply_reexport_convert(&mut documents, config, &transforms)?;
+    }
 
-    let conversations = documents.len();
+    report.conversations = documents.len() as u64;
     let mut sink = FormatSink::open(&config.output, config.output_format, transforms)?;
     if config.output_format == OutputFormat::Xml {
         sink = sink.with_archive(Box::new(SbrArchive));
@@ -107,13 +108,11 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
     for document in documents {
         sink.write_document(document)?;
     }
-    let sink = sink.finish()?;
+    sink.finish(&mut report)?;
 
     Ok(ReexportReport {
         detected_format: detected.format.as_str().to_string(),
-        conversations,
-        attachments_saved,
-        sink,
+        report,
     })
 }
 

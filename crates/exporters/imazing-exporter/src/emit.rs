@@ -13,9 +13,9 @@ use message_ir::{
     ExportMeta, HandleType, IrAttachment, IrParticipant, IrService, IrSource, PendingAttachment,
     PendingConversation, PendingMessage, ProjectedRole, ProjectionHooks,
 };
-use message_ir_format::{AttachmentSource, ExportTransforms, ExportWriter, FormatSinkResult};
+use message_ir_format::{AttachmentSource, ExportWriter};
 use message_vault_io_core::{
-    CancelFlag, ExportReport, OutputFormat, prepare_outputs, project_conversation,
+    CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
 };
 use serde_json::Map;
 use std::collections::{BTreeMap, HashSet};
@@ -64,9 +64,7 @@ pub(crate) struct ConvertExportArgs<'a> {
 ///
 /// Returns an error when output overlaps input, a CSV cannot be parsed, or the
 /// user cancels.
-pub(crate) fn convert_export(
-    args: ConvertExportArgs<'_>,
-) -> Result<(ExportReport, FormatSinkResult)> {
+pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport> {
     let ConvertExportArgs {
         input,
         output,
@@ -122,7 +120,7 @@ pub(crate) fn convert_export(
     }
 
     let mut source_iter = sources.into_iter();
-    let sink_result = writer.finish(
+    writer.finish(
         documents,
         &mut |att| match source_iter.next().flatten() {
             Some(path) => {
@@ -139,7 +137,7 @@ pub(crate) fn convert_export(
         &mut report,
     )?;
 
-    Ok((report, sink_result))
+    Ok(report)
 }
 
 /// Parse-time state shared across every CSV file in one export.

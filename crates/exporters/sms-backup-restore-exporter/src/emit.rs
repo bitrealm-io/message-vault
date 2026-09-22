@@ -4,8 +4,8 @@
 use crate::read::{ReadOptions, ReadReport, read_backup};
 use crate::write::SbrArchive;
 use anyhow::Result;
-use message_ir_format::{AttachmentSource, ExportTransforms, ExportWriter, FormatSinkResult};
-use message_vault_io_core::{CancelFlag, ExportReport, OutputFormat};
+use message_ir_format::{AttachmentSource, ExportWriter};
+use message_vault_io_core::{CancelFlag, ExportReport, ExportTransforms, OutputFormat};
 use std::path::Path;
 
 /// Map the ir-format read report onto the shared [`ExportReport`] shape,
@@ -64,9 +64,7 @@ pub(crate) struct ConvertExportArgs<'a> {
 ///
 /// Returns an error when the XML cannot be read, a conversation cannot be
 /// written, or the user cancels.
-pub(crate) fn convert_export(
-    args: ConvertExportArgs<'_>,
-) -> Result<(ExportReport, FormatSinkResult)> {
+pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport> {
     // The read options still need the compress settings after `transforms`
     // moves into the writer.
     let compress = args.transforms.compress.clone();
@@ -103,11 +101,11 @@ pub(crate) fn convert_export(
     // write tail's fold counts only the documents it actually writes.
     let mut core = to_core_report(report);
     core.conversations = 0;
-    let sink_result = writer.finish(
+    writer.finish(
         documents,
         &mut AttachmentSource::take_bytes,
         args.cancel,
         &mut core,
     )?;
-    Ok((core, sink_result))
+    Ok(core)
 }

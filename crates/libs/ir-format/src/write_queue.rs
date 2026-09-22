@@ -145,6 +145,18 @@ pub struct WriteQueueReport {
     pub media: media::MediaReport,
 }
 
+impl WriteQueueReport {
+    /// Add this drain's counts to the run's report. Skipped conversations
+    /// count as conversations too: they are part of the export, and
+    /// `conversations_skipped` says how many this run did not have to write.
+    pub fn fold_into(&self, report: &mut message_vault_io_core::ExportReport) {
+        report.conversations += (self.conversations_written + self.conversations_skipped) as u64;
+        report.conversations_skipped += self.conversations_skipped as u64;
+        report.attachments_saved += self.attachments_saved as u64;
+        report.media = self.media.clone();
+    }
+}
+
 /// Read one attachment source.
 ///
 /// `Bytes` are moved out of the source rather than copied — every source is
@@ -286,16 +298,9 @@ pub fn drain_units(
     progress: Option<&ProgressSink>,
     cancel: Option<&CancelFlag>,
     report: &mut message_vault_io_core::ExportReport,
-) -> Result<crate::FormatSinkResult> {
-    let queue_report = drain_write_queue(output_dir, units, options, log, progress, cancel)?;
-    report.conversations +=
-        (queue_report.conversations_written + queue_report.conversations_skipped) as u64;
-    report.conversations_skipped += queue_report.conversations_skipped as u64;
-    report.attachments_saved += queue_report.attachments_saved as u64;
-    Ok(crate::FormatSinkResult {
-        media: queue_report.media,
-        obfuscated_docs: 0,
-    })
+) -> Result<()> {
+    drain_write_queue(output_dir, units, options, log, progress, cancel)?.fold_into(report);
+    Ok(())
 }
 
 /// Drain `units` across a pool of writer threads.

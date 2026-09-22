@@ -12,7 +12,7 @@ fn write_fixture(dir: &Path, format: OutputFormat) {
     }
     sink.write_document(message_ir::testutil::sample_document("hello reexport"))
         .unwrap();
-    sink.finish().unwrap();
+    sink.finish(&mut ExportReport::default()).unwrap();
 }
 
 fn config(input: &Path, output: &Path, output_format: OutputFormat) -> ExporterConfig {
@@ -76,7 +76,7 @@ fn detect_json_and_convert_to_csv() {
         &config(source.path(), destination.path(), OutputFormat::Csv),
     )
     .unwrap();
-    assert_eq!(report.conversations, 1);
+    assert_eq!(report.report.conversations, 1);
     assert_eq!(report.detected_format, "json");
     let csv = fs::read_dir(destination.path())
         .unwrap()
@@ -146,7 +146,7 @@ fn convert_xml_with_ir_reader() {
     )
     .unwrap();
     assert_eq!(report.detected_format, "xml");
-    assert_eq!(report.conversations, 1);
+    assert_eq!(report.report.conversations, 1);
     let json = fs::read_dir(destination.path())
         .unwrap()
         .filter_map(Result::ok)
@@ -167,7 +167,7 @@ fn mixed_formats_error() {
         FormatSink::open(source.path(), OutputFormat::Csv, ExportTransforms::none()).unwrap();
     sink.write_document(message_ir::testutil::sample_document("hello reexport"))
         .unwrap();
-    sink.finish().unwrap();
+    sink.finish(&mut ExportReport::default()).unwrap();
     let error = detect_ir_export(source.path()).unwrap_err().to_string();
     assert!(error.contains("mixed"), "{error}");
 }
@@ -248,9 +248,10 @@ fn run_refuses_an_empty_output_directory() {
 fn log_lines_name_the_detected_format_and_the_conversation_count() {
     let report = ReexportReport {
         detected_format: "mbox".to_string(),
-        conversations: 3,
-        attachments_saved: 0,
-        sink: FormatSinkResult::default(),
+        report: ExportReport {
+            conversations: 3,
+            ..ExportReport::default()
+        },
     };
 
     assert_eq!(
@@ -263,14 +264,14 @@ fn log_lines_name_the_detected_format_and_the_conversation_count() {
 }
 
 #[test]
-fn log_lines_append_the_sink_lines_after_the_count() {
+fn log_lines_append_the_media_lines_after_the_count() {
     let report = ReexportReport {
         detected_format: "json".to_string(),
-        conversations: 1,
-        attachments_saved: 4,
-        sink: FormatSinkResult {
+        report: ExportReport {
+            conversations: 1,
+            attachments_saved: 4,
             obfuscated_docs: 2,
-            ..FormatSinkResult::default()
+            ..ExportReport::default()
         },
     };
 

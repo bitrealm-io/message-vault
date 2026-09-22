@@ -13,10 +13,7 @@ fn write(dir: &tempfile::TempDir, name: &str, body: &str) -> PathBuf {
     path
 }
 
-fn convert(
-    input: &std::path::Path,
-    output: &std::path::Path,
-) -> Result<(ExportReport, FormatSinkResult)> {
+fn convert(input: &std::path::Path, output: &std::path::Path) -> Result<ExportReport> {
     convert_export(ConvertExportArgs {
         input,
         output,
@@ -78,7 +75,7 @@ Bob McRoy,2020-01-01 12:00:00,SMS,Incoming,+13212462167,Bob McRoy,Read,,,Hello,,
 Bob McRoy,2020-01-01 12:01:00,SMS,Outgoing,,,Read,,,Hi,,,\n",
     );
     let out = dir.path().join("out");
-    let (report, _) = convert(dir.path(), &out).unwrap();
+    let report = convert(dir.path(), &out).unwrap();
     assert_eq!(report.conversations, 1);
     assert_eq!(report.extra("name_only_chat"), 0);
     assert_eq!(report.messages, 2);
@@ -101,7 +98,7 @@ Mystery Person,2020-01-01 12:00:00,SMS,Incoming,,,Read,,,Hello,,,\n\
 Mystery Person,2020-01-01 12:01:00,SMS,Outgoing,,,Read,,,Hi,,,\n",
     );
     let out = dir.path().join("out");
-    let (report, _) = convert(dir.path(), &out).unwrap();
+    let report = convert(dir.path(), &out).unwrap();
     assert!(report.extra("name_only_chat") >= 1);
     assert_eq!(report.conversations, 1);
     assert!(out.join("Mystery_Person.csv").is_file());
@@ -123,7 +120,7 @@ Bob,2020-01-01 12:00:00,SMS,Outgoing,,,Read,,,Same,,,\n\
 Bob,2020-01-01 12:00:00,SMS,Outgoing,,,Read,,,Same,,,\n",
     );
     let out = dir.path().join("out");
-    let (report, _) = convert(dir.path(), &out).unwrap();
+    let report = convert(dir.path(), &out).unwrap();
     assert_eq!(report.messages, 1);
     assert_eq!(report.duplicates_dropped, 1);
 }
@@ -139,7 +136,7 @@ Bob,2020-01-01 12:00:00,SMS,Incoming,+15555550100,Bob,Read,,,Photo,,a.jpg,Image\
 Bob,2020-01-01 12:00:00,SMS,Incoming,+15555550100,Bob,Read,,,Photo,,b.jpg,Image\n",
     );
     let out = dir.path().join("out");
-    let (report, _) = convert(dir.path(), &out).unwrap();
+    let report = convert(dir.path(), &out).unwrap();
     assert_eq!(report.messages, 2);
     assert_eq!(report.duplicates_dropped, 0);
 }
@@ -155,7 +152,7 @@ Alice Example & Bob Example & Carol Silent,2020-01-01 12:00:00,iMessage,Incoming
 Alice Example & Bob Example & Carol Silent,2020-01-01 12:01:00,iMessage,Incoming,+15555550122,Bob Example,Read,,,Hey,,,\n",
     );
     let out = dir.path().join("out");
-    let (report, _) = convert(dir.path(), &out).unwrap();
+    let report = convert(dir.path(), &out).unwrap();
     assert_eq!(report.conversations, 1);
     // Carol Silent sent nothing, so the source recorded no address for
     // her. The exporter reports her rather than inventing one.
@@ -175,7 +172,7 @@ Alice Example & Bob Example & Carol Silent,2020-01-01 12:00:00,iMessage,Incoming
 Alice Example & Bob Example & Carol Silent,2020-01-01 12:01:00,iMessage,Incoming,+15555550122,Bob Example,Read,,,Hey,,,\n",
     );
     let out = dir.path().join("out");
-    let (report, _) = convert(dir.path(), &out).unwrap();
+    let report = convert(dir.path(), &out).unwrap();
     assert_eq!(report.conversations, 1);
     assert_eq!(report.extra("unresolved_group_participants"), 1);
 }
@@ -196,7 +193,7 @@ Bob,2020-01-01 12:00:00,,,,,SMS,Incoming,+15555550100,Bob,Read,,,SMS hi,,,\n",
 Bob,2020-01-01 12:05:00,,Incoming,+15555550100,Bob,Read,,,WA hi,,,,\n",
     );
     let out = dir.path().join("out");
-    let (report, _) = convert(dir.path(), &out).unwrap();
+    let report = convert(dir.path(), &out).unwrap();
     assert_eq!(report.conversations, 2);
     assert_eq!(report.extra("messages_files"), 1);
     assert_eq!(report.extra("whatsapp_files"), 1);
@@ -226,7 +223,7 @@ Bob McRoy,2020-01-01 12:00:00,,,,,SMS,Incoming,+15555550100,Bob,Read,,,Hi,,image
     .unwrap();
     fs::write(chat.join("ABC123_image000000.jpg"), b"fake-jpeg-bytes").unwrap();
     let out = dir.path().join("out");
-    let (report, _) = convert(&chat, &out).unwrap();
+    let report = convert(&chat, &out).unwrap();
     assert_eq!(report.attachments_saved, 1);
     assert_eq!(report.messages, 1);
     let att_dir = out.join("attachments");
@@ -248,7 +245,7 @@ Bob McRoy,2020-01-01 12:00:00,iMessage,Incoming,bob2024@gmail.com,Bob McRoy,Read
 Bob McRoy,2020-01-01 12:01:00,iMessage,Outgoing,,,Read,,,Hi,,,\n",
     );
     let out = dir.path().join("out");
-    let (report, _) = convert(dir.path(), &out).unwrap();
+    let report = convert(dir.path(), &out).unwrap();
     assert_eq!(report.conversations, 1);
     assert_eq!(report.messages, 2);
     // Chat id stays the full email; the CSV filename stems `@` to `_`.
@@ -278,7 +275,7 @@ Group Chat,2020-01-01 12:00:00,iMessage,Incoming,+15555550111,Alice,Read,,,Same,
 Group Chat,2020-01-01 12:00:00,iMessage,Incoming,+15555550122,Bob,Read,,,Same,,,\n",
     );
     let out = dir.path().join("out");
-    let (report, _) = convert(dir.path(), &out).unwrap();
+    let report = convert(dir.path(), &out).unwrap();
     assert_eq!(report.messages, 2);
     assert_eq!(report.duplicates_dropped, 0);
 }

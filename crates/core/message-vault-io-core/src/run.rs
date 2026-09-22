@@ -1,7 +1,9 @@
 //! The shared exporter run skeleton and tail.
 
-use crate::{ExportTransforms, FormatSinkResult};
-use message_vault_io_core::{ExportReport, ExporterConfig, RunResult, check_cancel};
+use crate::config::ExporterConfig;
+use crate::pipeline::{ExportReport, RunResult};
+use crate::process::check_cancel;
+use crate::transforms::ExportTransforms;
 
 /// The shared exporter run skeleton: cancel check, transforms, conversion,
 /// media-failure bail, and result assembly.
@@ -17,21 +19,14 @@ use message_vault_io_core::{ExportReport, ExporterConfig, RunResult, check_cance
 /// processing fails for every candidate file.
 pub fn run_pipeline(
     config: &ExporterConfig,
-    convert: impl FnOnce(ExportTransforms) -> anyhow::Result<(ExportReport, FormatSinkResult)>,
+    convert: impl FnOnce(ExportTransforms) -> anyhow::Result<ExportReport>,
 ) -> anyhow::Result<RunResult> {
     check_cancel(config.cancel.as_ref())?;
-    let mut messages = Vec::new();
-    let (report, sink) = convert(ExportTransforms::from_config(config))?;
-    if !sink.media.errors.is_empty() && sink.media.processed == 0 && config.media.mode.needs_tools()
-    {
-        anyhow::bail!("media processing failed for all candidate files");
-    }
-    messages.extend(sink.log_lines());
-    report.summary_lines(&config.output, &mut messages);
-    Ok(RunResult { messages })
+    let report = convert(ExportTransforms::from_config(config))?;
+    finish_run(config, &report, config.media.mode.needs_tools())
 }
 
-/// The run tail shared by exporters whose middle diverges (WhatsApp):
+/// The run tail shared by exporters whose middle diverges (WhatsApp, iMessage):
 /// media-failure bail plus log-line and summary assembly.
 ///
 /// # Errors
@@ -40,13 +35,10 @@ pub fn run_pipeline(
 pub fn finish_run(
     config: &ExporterConfig,
     report: &ExportReport,
-    sink: &FormatSinkResult,
     needs_tools: bool,
 ) -> anyhow::Result<RunResult> {
-    if !sink.media.errors.is_empty() && sink.media.processed == 0 && needs_tools {
-        anyhow::bail!("media processing failed for all candidate files");
-    }
-    let mut messages = sink.log_lines();
-    report.summary_lines(&config.output, &mut messages);
+    report.check_media(needs_tools)?;
+    let mut messages = report.media_lines();
+    report.summary_lines(config.output_format, &config.output, &mut messages);
     Ok(RunResult { messages })
 }

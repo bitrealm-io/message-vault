@@ -16,7 +16,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     };
     message_vault_io_core::check_cancel(config.cancel.as_ref())?;
     let input = config.require_input().map_err(anyhow::Error::msg)?;
-    message_ir_format::run_pipeline(config, |transforms| {
+    message_vault_io_core::run_pipeline(config, |transforms| {
         convert_export(ConvertExportArgs {
             input,
             output: &config.output,

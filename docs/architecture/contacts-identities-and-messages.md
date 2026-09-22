@@ -82,6 +82,23 @@ person types or loads from an address book replaces an imported one. A later
 backup with a different spelling does not. See
 [ADR 0006](../adr/0006-an-import-names-the-contact.md).
 
+**Reloading an address book updates its contacts in place.** A contact the
+book created (`origin = 'address_book'`) is matched to a card in the new file
+by phone number. A match keeps its row and its id: the name and the phone
+numbers change to what the card says, and the Contact Groups the person put
+it in, the conversations it takes part in, and the record of the import that
+met it all stay attached. A card that matches nothing becomes a new contact.
+A book contact that no card matches is deleted, memberships included, because
+the person is out of the file. A card whose number changed between two loads
+matches nothing, so it reads as one contact gone and one arrived. Why: three
+things hang off `contacts.id` (`contact_group_members`, `participants`,
+`vault_import_contacts`), and deleting the row and making a new one would
+drop all three every time the book is refreshed. A card whose phone is on a
+contact an import discovered or the person typed joins that contact instead
+and never makes a book contact. An identity the book dropped stays in the
+vault while a conversation, a message, or the account's own profile uses it;
+a stale identity nothing uses goes with the link.
+
 **A participant's display name has one rule.** The contact's name, else what
 that backup called them in that conversation, else the identity. One loader
 applies it for the conversation list, the message pane, and Export.

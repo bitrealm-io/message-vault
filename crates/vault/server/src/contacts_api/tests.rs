@@ -1530,6 +1530,278 @@ async fn loading_an_address_book_replaces_only_its_own_rows() {
 }
 
 #[tokio::test]
+async fn reloading_an_address_book_keeps_a_contact_still_in_the_file() {
+    let vault = test_vault().await;
+    let account = vault.account_with_id(101, "alice").await;
+    let dir = vault.dir();
+    let mut conn = vault.conn().await;
+
+    // Ada exists only because of the book.
+    let book = dir.join("book.vcf");
+    std::fs::write(
+        &book,
+        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nN:Lovelace;Ada;;;\nTEL:+15551234567\nEND:VCARD\n",
+    )
+    .unwrap();
+    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
+        .await
+        .unwrap();
+    let (ada, origin): (i64, String) =
+        sqlx::query_as("SELECT id, origin FROM contacts WHERE account_id = $1")
+            .bind(account)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(origin, "address_book");
+
+    // Three things hang off her id: a Contact Group the person built, a
+    // conversation her number is in, and the record of the import that met
+    // her.
+    crate::named_membership::set_membership(
+        crate::named_membership::group_spec(),
+        &mut conn,
+        account,
+        &[ada],
+        "Family",
+        true,
+    )
+    .await
+    .unwrap();
+    insert_direct_conversation(
+        &mut conn,
+        account,
+        1,
+        "+15551234567",
+        "sms",
+        &["2024-01-01T00:00:00Z"],
+    )
+    .await;
+    sqlx::query("UPDATE participants SET contact_id = $1 WHERE conversation_id = 1")
+        .bind(ada)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let run_id: i64 = sqlx::query_scalar(
+        "INSERT INTO vault_imports (account_id, source, mode, status, started_at)
+         VALUES ($1, 'imessage', 'push', 'completed', '2024-01-01T00:00:00Z') RETURNING id",
+    )
+    .bind(account)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    crate::db::import_contacts::record(
+        &mut conn,
+        Some(run_id),
+        ada,
+        crate::db::import_contacts::ContactReason::HandleAdded,
+    )
+    .await
+    .unwrap();
+
+    // The same file again, with her name corrected and a second number.
+    std::fs::write(
+        &book,
+        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada King\nN:King;Ada;;;\nTEL:+15551234567\nTEL:+15559990000\nEND:VCARD\n",
+    )
+    .unwrap();
+    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
+        .await
+        .unwrap();
+
+    // Same row, new name.
+    let rows: Vec<(i64, String)> =
+        sqlx::query_as("SELECT id, preferred_name FROM contacts WHERE account_id = $1")
+            .bind(account)
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(rows, vec![(ada, "Ada King".to_string())]);
+
+    let mut phones: Vec<String> = sqlx::query_scalar(
+        "SELECT h.normalized FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id
+         WHERE ch.account_id = $1 AND ch.contact_id = $2",
+    )
+    .bind(account)
+    .bind(ada)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    phones.sort();
+    assert_eq!(
+        phones,
+        vec!["+15551234567".to_string(), "+15559990000".to_string()]
+    );
+
+    let members: Vec<i64> = sqlx::query_scalar(
+        "SELECT gm.contact_id FROM contact_group_members gm
+         JOIN contact_groups g ON g.id = gm.group_id
+         WHERE g.account_id = $1 AND g.name = 'Family'",
+    )
+    .bind(account)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(members, vec![ada], "the Contact Group membership survives");
+
+    let participant_contact: Option<i64> =
+        sqlx::query_scalar("SELECT contact_id FROM participants WHERE conversation_id = 1")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(
+        participant_contact,
+        Some(ada),
+        "the participant link survives"
+    );
+
+    let import_contacts = crate::db::import_contacts::contact_ids(&mut conn, run_id)
+        .await
+        .unwrap();
+    assert_eq!(import_contacts, vec![ada], "the import record survives");
+}
+
+#[tokio::test]
+async fn reloading_an_address_book_drops_a_number_the_card_no_longer_lists() {
+    let vault = test_vault().await;
+    let account = vault.account_with_id(101, "alice").await;
+    let dir = vault.dir();
+    let mut conn = vault.conn().await;
+
+    let book = dir.join("book.vcf");
+    std::fs::write(
+        &book,
+        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nN:Lovelace;Ada;;;\nTEL:+15551234567\nTEL:+15559990000\nEND:VCARD\n",
+    )
+    .unwrap();
+    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
+        .await
+        .unwrap();
+    let ada: i64 = sqlx::query_scalar("SELECT id FROM contacts WHERE account_id = $1")
+        .bind(account)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+
+    // The second number is in a conversation; the first never was.
+    insert_direct_conversation(
+        &mut conn,
+        account,
+        1,
+        "+15559990000",
+        "sms",
+        &["2024-01-01T00:00:00Z"],
+    )
+    .await;
+
+    // The card drops the second number, and a new card changes its number
+    // entirely, which reads as one person gone and one arrived.
+    std::fs::write(
+        &book,
+        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nN:Lovelace;Ada;;;\nTEL:+15551234567\nEND:VCARD\n",
+    )
+    .unwrap();
+    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
+        .await
+        .unwrap();
+
+    let phones: Vec<String> = sqlx::query_scalar(
+        "SELECT h.normalized FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id
+         WHERE ch.account_id = $1 AND ch.contact_id = $2",
+    )
+    .bind(account)
+    .bind(ada)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(phones, vec!["+15551234567".to_string()]);
+
+    // The dropped number stays an identity because a conversation holds it;
+    // it is just nobody's any more.
+    let conversations: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM conversations c JOIN handles h ON h.id = c.chat_handle_id
+         WHERE c.account_id = $1 AND h.normalized = '+15559990000'",
+    )
+    .bind(account)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(
+        conversations, 1,
+        "a conversation on a dropped number survives"
+    );
+}
+
+#[tokio::test]
+async fn a_card_whose_number_changed_is_a_new_contact() {
+    let vault = test_vault().await;
+    let account = vault.account_with_id(101, "alice").await;
+    let dir = vault.dir();
+    let mut conn = vault.conn().await;
+
+    let book = dir.join("book.vcf");
+    std::fs::write(
+        &book,
+        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nN:Lovelace;Ada;;;\nTEL:+15551234567\nEND:VCARD\n",
+    )
+    .unwrap();
+    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
+        .await
+        .unwrap();
+    let ada: i64 = sqlx::query_scalar("SELECT id FROM contacts WHERE account_id = $1")
+        .bind(account)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    crate::named_membership::set_membership(
+        crate::named_membership::group_spec(),
+        &mut conn,
+        account,
+        &[ada],
+        "Family",
+        true,
+    )
+    .await
+    .unwrap();
+
+    std::fs::write(
+        &book,
+        "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nN:Lovelace;Ada;;;\nTEL:+15550001111\nEND:VCARD\n",
+    )
+    .unwrap();
+    contacts::load_contacts_if_needed(&mut conn, Some(&book), true, account)
+        .await
+        .unwrap();
+
+    // Nothing ties the new card to the old row, so the old row goes with its
+    // memberships and a new one stands in its place.
+    let rows: Vec<(i64, String)> =
+        sqlx::query_as("SELECT id, preferred_name FROM contacts WHERE account_id = $1")
+            .bind(account)
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_ne!(rows[0].0, ada);
+    assert_eq!(rows[0].1, "Ada Lovelace");
+    let members: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM contact_group_members")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(members, 0);
+    let stale_handles: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM handles WHERE account_id = $1 AND normalized = '+15551234567'",
+    )
+    .bind(account)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(
+        stale_handles, 0,
+        "an identity nothing holds or uses goes too"
+    );
+}
+
+#[tokio::test]
 async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
     let vault = test_vault().await;
     let account = vault.account_with_id(101, "alice").await;

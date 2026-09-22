@@ -224,6 +224,12 @@ of, and a search that reads the same everywhere.
 
 ### Design
 
+- 2026-09-22: **The desktop app says what it ships from others.** Apple
+  Messages are read by a separate program, the Apple Messages reader, which is
+  free software under the GNU General Public License. Settings → About now has
+  a Third-party software note naming it, with links to its source and license
+  for the exact version you are running, and every installer carries the
+  license text beside the program.
 - 2026-09-19: **Owner Home has room to grow.** The side panel reads
   Dashboard, Settings, User Accounts, Activity and Logs. Settings is what was
   Vault Settings; Dashboard, Activity and Logs are named and empty for now.

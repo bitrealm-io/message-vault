@@ -1136,6 +1136,168 @@ async fn list_contacts_filters_has_messages_and_never_messaged() {
     assert_eq!(never.items[0].name, "Silent");
 }
 
+/// One received message in `conversation_id`, sent from `phone`'s handle at `ts`.
+async fn insert_message_from(
+    conn: &mut AnyConnection,
+    account: i64,
+    conversation_id: i64,
+    phone: &str,
+    ts: &str,
+    is_from_me: bool,
+) {
+    let handle_id: i64 = sqlx::query_scalar(
+        "SELECT id FROM handles WHERE account_id = $1 AND (raw = $2 OR normalized = $2) LIMIT 1",
+    )
+    .bind(account)
+    .bind(phone)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO messages (
+            conversation_id, account_id, source, service, timestamp, is_from_me,
+            sender_handle_id, sort_order, body
+         ) VALUES ($1, $2, 'imessage', 'imessage', $3, $4, $5, 0, 'hi')",
+    )
+    .bind(conversation_id)
+    .bind(account)
+    .bind(ts)
+    .bind(i64::from(is_from_me))
+    .bind(handle_id)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+}
+
+/// `last_heard_at` is the newest message the contact's own handles sent.
+/// A message the owner sent in the contact's thread does not count, and a
+/// contact whose handles never sent anything has no value and sorts last in
+/// either direction.
+#[tokio::test]
+async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
+    let vault = test_vault().await;
+    let account = vault.account_with_id(101, "alice").await;
+    let mut conn = vault.conn().await;
+    insert_contact_with_handle(&mut conn, account, "Recent", "+15555550100").await;
+    insert_contact_with_handle(&mut conn, account, "Older", "+15555550200").await;
+    insert_contact_with_handle(&mut conn, account, "Silent", "+15555550300").await;
+    // A thread per contact; the owner's messages ride on the owner's handle.
+    account_profile::link_account_handle(&mut conn, account, "+15555550001", HandleType::Phone)
+        .await
+        .unwrap();
+    insert_direct_conversation(&mut conn, account, 1, "+15555550100", "imessage", &[]).await;
+    insert_direct_conversation(&mut conn, account, 2, "+15555550200", "imessage", &[]).await;
+    insert_direct_conversation(&mut conn, account, 3, "+15555550300", "imessage", &[]).await;
+    insert_message_from(
+        &mut conn,
+        account,
+        1,
+        "+15555550100",
+        "2024-01-01T00:00:00Z",
+        false,
+    )
+    .await;
+    insert_message_from(
+        &mut conn,
+        account,
+        1,
+        "+15555550100",
+        "2024-06-01T00:00:00Z",
+        false,
+    )
+    .await;
+    insert_message_from(
+        &mut conn,
+        account,
+        2,
+        "+15555550200",
+        "2024-03-01T00:00:00Z",
+        false,
+    )
+    .await;
+    // The owner wrote to Silent last year and to Older yesterday: neither
+    // is hearing from them.
+    insert_message_from(
+        &mut conn,
+        account,
+        3,
+        "+15555550001",
+        "2023-12-01T00:00:00Z",
+        true,
+    )
+    .await;
+    insert_message_from(
+        &mut conn,
+        account,
+        2,
+        "+15555550001",
+        "2025-01-01T00:00:00Z",
+        true,
+    )
+    .await;
+
+    let newest_first = names_and_last_heard(&mut conn, account, "-last_heard").await;
+    assert_eq!(
+        newest_first,
+        [
+            (
+                "Recent".to_string(),
+                Some("2024-06-01T00:00:00Z".to_string())
+            ),
+            (
+                "Older".to_string(),
+                Some("2024-03-01T00:00:00Z".to_string())
+            ),
+            ("Silent".to_string(), None),
+        ]
+    );
+    let oldest_first = names_and_last_heard(&mut conn, account, "last_heard").await;
+    assert_eq!(
+        oldest_first
+            .iter()
+            .map(|(n, _)| n.as_str())
+            .collect::<Vec<_>>(),
+        ["Older", "Recent", "Silent"]
+    );
+}
+
+/// The whole contact list under `sort`, as (name, last_heard_at) pairs.
+async fn names_and_last_heard(
+    conn: &mut AnyConnection,
+    account: i64,
+    sort: &str,
+) -> Vec<(String, Option<String>)> {
+    let page = list_contacts_sorted(
+        conn,
+        account,
+        "",
+        &parse_sort(Some(sort), &CONTACT_SORT_KEYS, &DEFAULT_CONTACT_SORT).unwrap(),
+        DEFAULT_LIST_LIMIT,
+        0,
+        crate::search::tests::clock(),
+    )
+    .await
+    .unwrap();
+    page.items
+        .into_iter()
+        .map(|c| (c.name, c.last_heard_at))
+        .collect()
+}
+
+#[tokio::test]
+async fn contacts_route_accepts_last_heard_and_refuses_other_keys() {
+    let (vault, token, _) = contacts_fixture_with_handles(&["+15555550100"]).await;
+    let page: serde_json::Value =
+        crate::test_support::get_json(&vault.state, "/v1/contacts?sort=-last_heard", &token).await;
+    assert_eq!(page["items"][0]["name"], "Contact 0");
+    assert!(page["items"][0]["last_heard_at"].is_null());
+
+    let (status, body) =
+        crate::test_support::get_raw(&vault.state, "/v1/contacts?sort=last_seen", &token).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert!(body.contains("name, last_heard"), "{body}");
+}
+
 #[tokio::test]
 async fn list_contacts_filters_no_handle() {
     let vault = test_vault().await;

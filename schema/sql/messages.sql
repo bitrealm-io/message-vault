@@ -93,6 +93,11 @@ CREATE INDEX IF NOT EXISTS ix_messages_account_id ON messages (account_id);
 -- messages by time; this serves the default sort without a scan.
 CREATE INDEX IF NOT EXISTS ix_messages_account_timestamp
     ON messages (account_id, timestamp, id);
+-- `GET /v1/contacts` computes when the vault last heard from each contact:
+-- the newest message any of the contact's handles sent. This answers that
+-- MAX(timestamp) per sender without a scan.
+CREATE INDEX IF NOT EXISTS ix_messages_sender_timestamp
+    ON messages (sender_handle_id, timestamp);
 CREATE UNIQUE INDEX IF NOT EXISTS ix_messages_account_source_guid
     ON messages (account_id, source, guid)
     WHERE guid IS NOT NULL AND guid != '';

@@ -15,6 +15,7 @@ use sqlx::AnyConnection;
 
 use crate::db::contacts::{self, contact_id_for_handle};
 use crate::db::dialect::{engine_of, group_concat_unit_separator, name_ci_expr};
+use crate::db::engine::DbEngine;
 use crate::db::handles::{infer_handle_type_from_shape, normalize_handle};
 use crate::db::sql::{SqlParam, bind_args, in_placeholders, renumber_placeholders};
 use crate::db::trash::{DeleteOutcome, Trashable, delete_trashed, move_to_trash, restore};
@@ -42,6 +43,11 @@ pub struct ContactSummary {
     pub handles: Vec<String>,
     /// When the contact’s address-book shape last changed (`datetime('now')`).
     pub last_modified: String,
+    /// When the vault last heard from the contact: the newest message one of
+    /// the contact's handles sent (RFC 3339, UTC). Null when none of them
+    /// ever sent a message. Not the contact's last activity: a message the
+    /// account owner sent, or another member of a group chat, does not count.
+    pub last_heard_at: Option<String>,
     /// Group names on this contact (A–Z).
     #[serde(default)]
     pub groups: Vec<String>,
@@ -203,22 +209,20 @@ fn involves_contact_sql() -> String {
     involves_contact_expr("$2")
 }
 
-/// One page of the contact list for `q`, a query in the search language.
-///
-/// # Errors
-///
-/// `BadRequest` for a query the language refuses; `Internal` when a
-/// statement fails.
-/// The keys `GET /v1/contacts` accepts in `sort=`. One today; a key with
-/// no caller is a key not offered (last heard from is #497).
+/// The keys `GET /v1/contacts` accepts in `sort=`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContactSort {
     /// Display name, case-folded.
     Name,
+    /// When the vault last heard from the contact (`last_heard_at`).
+    LastHeard,
 }
 
 /// The accepted keys, as `sort=` spells them.
-pub const CONTACT_SORT_KEYS: [(&str, ContactSort); 1] = [("name", ContactSort::Name)];
+pub const CONTACT_SORT_KEYS: [(&str, ContactSort); 2] = [
+    ("name", ContactSort::Name),
+    ("last_heard", ContactSort::LastHeard),
+];
 
 /// A to Z: what the list shows when `sort` is absent.
 pub const DEFAULT_CONTACT_SORT: [SortKey<ContactSort>; 1] = [SortKey {
@@ -226,6 +230,45 @@ pub const DEFAULT_CONTACT_SORT: [SortKey<ContactSort>; 1] = [SortKey {
     direction: Direction::Asc,
 }];
 
+/// The `ORDER BY` body for a parsed `sort`, over the derived table the list
+/// query builds (`name` and `last_heard_at` are real columns there).
+///
+/// `name` is a select-list alias and the sort applies lower() to it. SQLite
+/// allows that; Postgres only allows a bare alias in ORDER BY, so the rows
+/// are sorted as a derived table where `name` is a real column.
+///
+/// `last_heard_at` is NULL for a contact none of whose handles ever sent a
+/// message, and the two engines disagree about where NULLs belong: SQLite
+/// sorts them lowest, Postgres puts them last ascending and first
+/// descending. Leading with `(last_heard_at IS NULL)` — false before true
+/// on both — pins those contacts to the end in either direction.
+///
+/// `ct.id` breaks ties in the direction of the last key, so paging cannot
+/// repeat a row.
+fn contact_order_by(engine: DbEngine, keys: &[SortKey<ContactSort>]) -> String {
+    let mut parts: Vec<String> = keys
+        .iter()
+        .map(|k| match k.key {
+            ContactSort::Name => {
+                format!("{} {}", name_ci_expr(engine, "name"), k.direction.sql())
+            }
+            ContactSort::LastHeard => format!(
+                "(last_heard_at IS NULL) ASC, last_heard_at {}",
+                k.direction.sql()
+            ),
+        })
+        .collect();
+    let tie = keys.last().map_or(Direction::Asc, |k| k.direction);
+    parts.push(format!("ct.id {}", tie.sql()));
+    format!("ORDER BY {}", parts.join(", "))
+}
+
+/// One page of the contact list for `q`, a query in the search language.
+///
+/// # Errors
+///
+/// `BadRequest` for a query the language refuses; `Internal` when a
+/// statement fails.
 pub async fn list_contacts_sorted(
     conn: &mut AnyConnection,
     account_id: i64,
@@ -255,23 +298,11 @@ pub async fn list_contacts_sorted(
         .await?;
     let total = total.max(0) as u64;
 
-    // `name` is a select-list alias and the sort applies lower() to it. SQLite
-    // allows that; Postgres only allows a bare alias in ORDER BY, so the rows
-    // are sorted as a derived table where `name` is a real column. `ct.id`
-    // breaks ties in the same direction, so paging cannot repeat a row.
-    let order_by = {
-        let mut parts: Vec<String> = order
-            .iter()
-            .map(|k| match k.key {
-                ContactSort::Name => {
-                    format!("{} {}", name_ci_expr(engine, "name"), k.direction.sql())
-                }
-            })
-            .collect();
-        let tie = order.last().map_or(Direction::Asc, |k| k.direction);
-        parts.push(format!("ct.id {}", tie.sql()));
-        format!("ORDER BY {}", parts.join(", "))
-    };
+    let order_by = contact_order_by(engine, order);
+    // `last_heard_at` is the newest message one of the contact's handles sent.
+    // A flagged duplicate carries the same timestamp as the message it
+    // duplicates, so it cannot move the maximum and is not filtered out; that
+    // keeps the lookup on `ix_messages_sender_timestamp` alone.
     let sql = renumber_placeholders(&format!(
         "SELECT * FROM (SELECT ct.id,
                 trim(ct.preferred_name) AS name,
@@ -294,6 +325,10 @@ pub async fn list_contacts_sorted(
                      AND h.raw IS NOT NULL AND trim(h.raw) != ''
                  )) AS handles,
                 ct.last_modified,
+                (SELECT MAX(m.timestamp)
+                 FROM contact_handles ch
+                 JOIN messages m ON m.sender_handle_id = ch.handle_id
+                 WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id) AS last_heard_at,
                 (SELECT {groups_agg}
                  FROM contact_group_members clm
                  JOIN contact_groups cl ON cl.id = clm.group_id
@@ -316,7 +351,16 @@ pub async fn list_contacts_sorted(
     let contacts = rows
         .into_iter()
         .map(
-            |(id, name, is_unknown, handle_count, handles_blob, last_modified, groups_blob)| {
+            |(
+                id,
+                name,
+                is_unknown,
+                handle_count,
+                handles_blob,
+                last_modified,
+                last_heard_at,
+                groups_blob,
+            )| {
                 let handles = handles_blob
                     .map(|s| {
                         s.split('\u{1f}')
@@ -339,6 +383,7 @@ pub async fn list_contacts_sorted(
                     handle_count: handle_count.max(0) as u64,
                     handles,
                     last_modified,
+                    last_heard_at,
                     groups,
                 }
             },
@@ -360,6 +405,7 @@ type ContactRow = (
     i64,
     Option<String>,
     String,
+    Option<String>,
     Option<String>,
 );
 
@@ -1248,7 +1294,7 @@ impl ContactEditor<'_> {
         ("q" = Option<String>, Query, description = "Contact search; empty lists all"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
         ("offset" = Option<usize>, Query, description = "Page offset, max 50000"),
-        ("sort" = Option<String>, Query, description = "`name` or `-name`. Default `name`.")
+        ("sort" = Option<String>, Query, description = "Comma-separated keys from `name` and `last_heard`, a leading `-` for descending. `last_heard` is when the vault last heard from the contact; contacts it never heard from sort last either way. Default `name`.")
     ),
     responses(
         (status = 200, body = Page<ContactSummary>),

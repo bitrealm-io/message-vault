@@ -37,6 +37,15 @@ of, and a search that reads the same everywhere.
   contacts it holds. An account's Storage tab shows its conversation and
   contact counts beside its message and attachment counts. These are counts
   only: no conversation, contact or message is named to the owner.
+- 2026-09-21: **The contact list shows when you last heard from each
+  contact, and can sort on it.** Every contact row now carries the date of
+  the newest message that contact sent you, and the sort menu gains Last
+  Heard From beside First Name and Last Name, newest first. A message you
+  sent them, or one someone else sent in a group chat, does not count: the
+  date is when they last wrote. Contacts you have never heard from sit at the
+  end whichever way the list runs. The vault's contact list takes the same
+  key: `GET /v1/contacts?sort=-last_heard`, and each contact carries
+  `last_heard_at`.
 - 2026-09-19: **The vault owner sees an account's Storage as its holder
   does.** Open an account from User Accounts and its Storage tab now shows its
   message count and storage total, every import and export it has run, and

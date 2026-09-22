@@ -15,17 +15,20 @@ import {
 } from "../lib/contactGroups";
 import { contactLabelText } from "../lib/contactLabel";
 import {
-  type ContactNameSortState,
-  compareContactsByName,
+  type ContactSortState,
+  compareContacts,
   contactSortLetter,
-  loadContactNameSort,
-  saveContactNameSort,
+  isNameSort,
+  loadContactSort,
+  saveContactSort,
 } from "../lib/contactSort";
+import { formatDay } from "../lib/formatDate";
 import { highlightText } from "../lib/highlightText";
 import { PAGE_SIZE_CONTACTS_FIRST, PAGE_SIZE_FIRST } from "../lib/listPaging";
 import { checksFromMembers } from "../lib/membershipChecks";
 import { applyCheckedRange } from "../lib/rangeCheck";
 import { hasFieldToken, stripFieldTokens } from "../lib/searchFields";
+import { useTimeZone } from "../lib/timeZone";
 import { UNKNOWN_GROUP } from "../lib/unknownGroup";
 import { useContactGroups } from "../lib/useContactGroups";
 import { listContacts } from "../lib/vaultApi";
@@ -122,7 +125,8 @@ export default function ContactList({
   clearCheckedRev?: number;
 }) {
   const [serverQ, setServerQ] = useState("");
-  const [nameSort, setNameSort] = useState<ContactNameSortState>(() => loadContactNameSort());
+  const [sortState, setSortState] = useState<ContactSortState>(() => loadContactSort());
+  const zone = useTimeZone();
   const [checkedIds, setCheckedIds] = useState<Set<string>>(() => new Set());
   const [groupsMenuOpen, setGroupsMenuOpen] = useState(false);
   /** Last contacts the Groups menu assigned to, so a list filter change does not disable an open menu. */
@@ -139,9 +143,9 @@ export default function ContactList({
   const setGroupMembers = useSetContactGroupMembers();
   const setRightToolbar = useSetRightToolbar();
 
-  const onNameSortChange = (next: ContactNameSortState) => {
-    setNameSort(next);
-    saveContactNameSort(next);
+  const onSortChange = (next: ContactSortState) => {
+    setSortState(next);
+    saveContactSort(next);
   };
 
   const fetchPage = useCallback<PagedFetchPage<Contact>>(
@@ -238,15 +242,8 @@ export default function ContactList({
     () =>
       [...filteredContacts]
         .filter((c) => contactBelongsToGroup(c.groups, groupFilter))
-        .sort((a, b) =>
-          compareContactsByName(
-            contactLabelText(a.name, a.handles),
-            contactLabelText(b.name, b.handles),
-            nameSort.sort,
-            nameSort.order,
-          ),
-        ),
-    [filteredContacts, nameSort, groupFilter],
+        .sort((a, b) => compareContacts(a, b, sortState)),
+    [filteredContacts, sortState, groupFilter],
   );
 
   const selectedContact = displayContacts.find((c) => c.id === selectedId) ?? null;
@@ -401,6 +398,12 @@ export default function ContactList({
 
   useEffect(() => () => setRightToolbar(null), [setRightToolbar]);
 
+  // A–Z sections only make sense over a name; a list ordered by date has none.
+  const nameSort = sortState.sort;
+  const sectionLetter = isNameSort(nameSort)
+    ? (c: Contact) => contactSortLetter(contactLabelText(c.name, c.handles), nameSort)
+    : undefined;
+
   const localSlice =
     !advancedActive &&
     (catalogCompleteRef.current || !serverQ.trim()) &&
@@ -446,14 +449,8 @@ export default function ContactList({
       getTextValue={(c) => contactLabelText(c.name, c.handles)}
       ariaLabel="Contacts"
       errorPrefix="Could not load contacts"
-      headerActions={
-        <ContactSortMenu sort={nameSort.sort} order={nameSort.order} onChange={onNameSortChange} />
-      }
-      getSectionLetter={
-        filterActive
-          ? undefined
-          : (c) => contactSortLetter(contactLabelText(c.name, c.handles), nameSort.sort)
-      }
+      headerActions={<ContactSortMenu state={sortState} onChange={onSortChange} />}
+      getSectionLetter={filterActive ? undefined : sectionLetter}
       empty={
         !loading ? (
           <div className="p-4 text-[0.813rem] text-muted">
@@ -524,14 +521,26 @@ export default function ContactList({
           : [];
         return (
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[0.875rem] font-medium">
-              <ContactLabel
-                name={c.name}
-                handles={c.handles}
-                render={(text) =>
-                  filterActive && nameMarkTerm ? highlightText(text, nameMarkTerm) : text
-                }
-              />
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="min-w-0 flex-1 truncate text-[0.875rem] font-medium">
+                <ContactLabel
+                  name={c.name}
+                  handles={c.handles}
+                  render={(text) =>
+                    filterActive && nameMarkTerm ? highlightText(text, nameMarkTerm) : text
+                  }
+                />
+              </div>
+              {/* When the vault last heard from them; blank for a contact that never wrote. */}
+              {c.last_heard_at ? (
+                <span
+                  className="shrink-0 text-[0.75rem] text-muted"
+                  title="Last heard from"
+                  data-testid="contact-last-heard"
+                >
+                  {formatDay(c.last_heard_at, zone)}
+                </span>
+              ) : null}
             </div>
             {shownHandles.length > 0 && (
               <div className="mt-0.5">

@@ -1217,10 +1217,18 @@ export interface components {
         AccountIdentity: {
             /**
              * Format: int64
+             * @description Direct and group conversations the identity takes part in, trashed
+             *     conversations excluded.
+             */
+            conversations: number;
+            /**
+             * Format: int64
              * @description Messages in the one-to-one conversations the identity takes part in,
              *     trashed conversations and duplicates excluded.
              */
             direct_messages: number;
+            /** @description When the newest such message was sent, or null when there is none. */
+            end_date?: string | null;
             /**
              * Format: int64
              * @description Messages in the group conversations the identity takes part in, on the
@@ -1231,6 +1239,11 @@ export interface components {
             handle: string;
             /** @description `phone`, `email`, or `whatsapp`. */
             service: string;
+            /**
+             * @description When the oldest message in a conversation the identity takes part in
+             *     was sent, or null when there is none.
+             */
+            start_date?: string | null;
         };
         /**
          * @description One account: who it is, what it may do, and how much it holds. The owner
@@ -2276,10 +2289,18 @@ export interface components {
             items: {
                 /**
                  * Format: int64
+                 * @description Direct and group conversations the identity takes part in, trashed
+                 *     conversations excluded.
+                 */
+                conversations: number;
+                /**
+                 * Format: int64
                  * @description Messages in the one-to-one conversations the identity takes part in,
                  *     trashed conversations and duplicates excluded.
                  */
                 direct_messages: number;
+                /** @description When the newest such message was sent, or null when there is none. */
+                end_date?: string | null;
                 /**
                  * Format: int64
                  * @description Messages in the group conversations the identity takes part in, on the
@@ -2290,6 +2311,11 @@ export interface components {
                 handle: string;
                 /** @description `phone`, `email`, or `whatsapp`. */
                 service: string;
+                /**
+                 * @description When the oldest message in a conversation the identity takes part in
+                 *     was sent, or null when there is none.
+                 */
+                start_date?: string | null;
             }[];
             /** @description Page size used. */
             limit: number;

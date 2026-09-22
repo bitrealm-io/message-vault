@@ -7,16 +7,9 @@ export const HANDLE_SERVICES = [
   "whatsapp",
 ] as const satisfies readonly HandleService[];
 
-/** Contact drawer identity picker: phone and WhatsApp only. */
-export type ContactIdentityService = "phone" | "whatsapp";
-
-export const CONTACT_IDENTITY_SERVICES = [
-  "phone",
-  "whatsapp",
-] as const satisfies readonly ContactIdentityService[];
-
 /**
- * Services offered on setup and account profile, each with the example shown
+ * The services an identity can be on, offered wherever one is added: setup,
+ * the account profile, and the contact drawer. Each carries the example shown
  * in an empty field. The example lives next to the service so adding one means
  * adding its example on the same line — there is no second place to forget.
  */
@@ -92,15 +85,6 @@ export function handleDuplicateKey(service: HandleService, value: string): strin
   return `${service}:${normalized}`;
 }
 
-/** Contact drawer "Add identity" picker (labels match the handles table). */
-export const CONTACT_IDENTITY_SERVICE_OPTIONS = [
-  { value: "phone", label: "Text message" },
-  { value: "whatsapp", label: "WhatsApp" },
-] as const satisfies ReadonlyArray<{
-  value: ContactIdentityService;
-  label: string;
-}>;
-
 /**
  * Guess the service for a handle when the stored service is empty.
  * Emails contain `@`. Phone-like values are mostly digits.
@@ -134,12 +118,4 @@ export function formatHandleServiceLabel(
   if (lower === "email") return "Email";
   if (lower === "unknown") return "—";
   return lower.charAt(0).toUpperCase() + lower.slice(1);
-}
-
-/** Map a stored or guessed service onto the contact-identity picker (phone or WhatsApp). */
-export function handleServiceSelectValue(
-  handle: string,
-  service: string | null | undefined,
-): ContactIdentityService {
-  return inferService(handle, service) === "whatsapp" ? "whatsapp" : "phone";
 }

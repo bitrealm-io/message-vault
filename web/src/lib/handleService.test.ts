@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  CONTACT_IDENTITY_SERVICES,
   formatHandleServiceLabel,
   HANDLE_SERVICE_OPTIONS,
   HANDLE_SERVICES,
   handleDuplicateKey,
   handlePlaceholder,
-  handleServiceSelectValue,
   handleValidationError,
   inferService,
 } from "./handleService";
@@ -15,10 +13,6 @@ describe("handleService", () => {
   it("lists phone, email, whatsapp for profile/onboarding", () => {
     expect([...HANDLE_SERVICES]).toEqual(["phone", "email", "whatsapp"]);
     expect(HANDLE_SERVICE_OPTIONS.map((o) => o.value)).toEqual(["phone", "email", "whatsapp"]);
-  });
-
-  it("lists phone and whatsapp for contact identity picker", () => {
-    expect([...CONTACT_IDENTITY_SERVICES]).toEqual(["phone", "whatsapp"]);
   });
 
   it("infers email and phone from handle when service empty", () => {
@@ -36,11 +30,6 @@ describe("handleService", () => {
     expect(formatHandleServiceLabel("x", "whatsapp")).toBe("WhatsApp");
     expect(formatHandleServiceLabel("a@b.com", null)).toBe("Email");
     expect(formatHandleServiceLabel("x", null)).toBe("—");
-  });
-
-  it("maps inferred services onto contact-identity select values", () => {
-    expect(handleServiceSelectValue("x", "whatsapp")).toBe("whatsapp");
-    expect(handleServiceSelectValue("a@b.com", null)).toBe("phone");
   });
 });
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { type ContactHandle, useUpdateContact } from "../../lib/contactDetail";
-import { formatHandleServiceLabel, handleServiceSelectValue } from "./contactDrawerTypes";
+import { formatHandleServiceLabel, inferService } from "./contactDrawerTypes";
 import { conversationCount, type RemoveIdentityTarget } from "./handleTableLogic";
 
 export function useHandleMutations({ contactId }: { contactId: string }) {
@@ -25,14 +25,14 @@ export function useHandleMutations({ contactId }: { contactId: string }) {
       handle: h.handle,
       service: h.service ?? null,
       serviceLabel: formatHandleServiceLabel(h.handle, h.service),
-      threadCount: conversationCount(h),
+      conversationCount: conversationCount(h),
     });
   };
 
   const confirmRemoveHandle = () => {
     if (!removeTarget || busy) return;
     const handle = removeTarget.handle;
-    const service = handleServiceSelectValue(handle, removeTarget.service);
+    const service = inferService(handle, removeTarget.service);
     updateContact.mutate(
       { contactId, body: { remove_handle: { handle, service } } },
       { onSuccess: () => setRemoveTarget(null) },

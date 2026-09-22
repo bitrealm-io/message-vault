@@ -6943,15 +6943,29 @@
         "required": [
           "handle",
           "service",
+          "conversations",
           "direct_messages",
           "group_messages"
         ],
         "properties": {
+          "conversations": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Direct and group conversations the identity takes part in, trashed\nconversations excluded.",
+            "minimum": 0
+          },
           "direct_messages": {
             "type": "integer",
             "format": "int64",
             "description": "Messages in the one-to-one conversations the identity takes part in,\ntrashed conversations and duplicates excluded.",
             "minimum": 0
+          },
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the newest such message was sent, or null when there is none."
           },
           "group_messages": {
             "type": "integer",
@@ -6966,6 +6980,13 @@
           "service": {
             "type": "string",
             "description": "`phone`, `email`, or `whatsapp`."
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the oldest message in a conversation the identity takes part in\nwas sent, or null when there is none."
           }
         }
       },
@@ -9246,15 +9267,29 @@
               "required": [
                 "handle",
                 "service",
+                "conversations",
                 "direct_messages",
                 "group_messages"
               ],
               "properties": {
+                "conversations": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Direct and group conversations the identity takes part in, trashed\nconversations excluded.",
+                  "minimum": 0
+                },
                 "direct_messages": {
                   "type": "integer",
                   "format": "int64",
                   "description": "Messages in the one-to-one conversations the identity takes part in,\ntrashed conversations and duplicates excluded.",
                   "minimum": 0
+                },
+                "end_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "When the newest such message was sent, or null when there is none."
                 },
                 "group_messages": {
                   "type": "integer",
@@ -9269,6 +9304,13 @@
                 "service": {
                   "type": "string",
                   "description": "`phone`, `email`, or `whatsapp`."
+                },
+                "start_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "When the oldest message in a conversation the identity takes part in\nwas sent, or null when there is none."
                 }
               }
             },

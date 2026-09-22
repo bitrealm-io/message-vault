@@ -1285,9 +1285,10 @@ async fn an_account_deletes_itself_with_its_password_and_the_demo_account_refuse
 // Storage
 // ---------------------------------------------------------------------------
 
-/// The identities route lists each of the account's identities with how many
-/// messages sit in the direct and the group conversations it takes part in,
-/// trashed conversations and duplicates excluded. The owner reads the same.
+/// The identities route lists each of the account's identities with the
+/// conversations it takes part in, the first and last message among them, and
+/// how many messages sit in the direct and the group ones, trashed
+/// conversations and duplicates excluded. The owner reads the same.
 #[tokio::test]
 async fn the_identities_route_counts_direct_and_group_messages_per_identity() {
     let vault = test_vault().await;
@@ -1417,8 +1418,24 @@ async fn the_identities_route_counts_direct_and_group_messages_per_identity() {
     assert_eq!(
         page["items"],
         serde_json::json!([
-            { "handle": "+15555550100", "service": "phone", "direct_messages": 2, "group_messages": 3 },
-            { "handle": "alice@example.com", "service": "email", "direct_messages": 0, "group_messages": 0 }
+            {
+                "handle": "+15555550100",
+                "service": "phone",
+                "start_date": "2020-01-01T00:00:00Z",
+                "end_date": "2020-02-03T00:00:00Z",
+                "conversations": 2,
+                "direct_messages": 2,
+                "group_messages": 3
+            },
+            {
+                "handle": "alice@example.com",
+                "service": "email",
+                "start_date": null,
+                "end_date": null,
+                "conversations": 0,
+                "direct_messages": 0,
+                "group_messages": 0
+            }
         ])
     );
     let by_owner: serde_json::Value = get_json(&vault.state, &path, &owner.token).await;

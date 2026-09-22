@@ -1071,6 +1071,14 @@ pub struct AccountIdentity {
     pub handle: String,
     /// `phone`, `email`, or `whatsapp`.
     pub service: String,
+    /// When the oldest message in a conversation the identity takes part in
+    /// was sent, or null when there is none.
+    pub start_date: Option<String>,
+    /// When the newest such message was sent, or null when there is none.
+    pub end_date: Option<String>,
+    /// Direct and group conversations the identity takes part in, trashed
+    /// conversations excluded.
+    pub conversations: u64,
     /// Messages in the one-to-one conversations the identity takes part in,
     /// trashed conversations and duplicates excluded.
     pub direct_messages: u64,
@@ -1079,8 +1087,17 @@ pub struct AccountIdentity {
     pub group_messages: u64,
 }
 
-/// One row of [`account_identities`]: handle, service, direct and group message counts.
-type AccountIdentityRow = (String, String, i64, i64);
+/// One row of [`account_identities`]: handle, service, first and last
+/// timestamp, conversation count, direct and group message counts.
+type AccountIdentityRow = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    i64,
+    i64,
+    i64,
+);
 
 /// The account's identities with their message counts, phones before emails
 /// and each in order. Counted the way a contact's identities are in the
@@ -1094,6 +1111,9 @@ async fn account_identities(
                 CASE WHEN h.handle_type = 'email' THEN 'email'
                      WHEN h.service = 'whatsapp' THEN 'whatsapp'
                      ELSE 'phone' END AS service,
+                MIN(m.timestamp),
+                MAX(m.timestamp),
+                COUNT(DISTINCT c.id),
                 COUNT(DISTINCT CASE WHEN c.conversation_type = 'individual' THEN m.id END),
                 COUNT(DISTINCT CASE WHEN c.conversation_type = 'group' THEN m.id END)
          FROM account_handles ah
@@ -1116,12 +1136,19 @@ async fn account_identities(
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(handle, service, direct, group)| AccountIdentity {
-            handle,
-            service,
-            direct_messages: direct.max(0) as u64,
-            group_messages: group.max(0) as u64,
-        })
+        .map(
+            |(handle, service, start_date, end_date, conversations, direct, group)| {
+                AccountIdentity {
+                    handle,
+                    service,
+                    start_date,
+                    end_date,
+                    conversations: conversations.max(0) as u64,
+                    direct_messages: direct.max(0) as u64,
+                    group_messages: group.max(0) as u64,
+                }
+            },
+        )
         .collect())
 }
 

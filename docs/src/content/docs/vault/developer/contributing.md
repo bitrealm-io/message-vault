@@ -307,7 +307,7 @@ gh pr create --base main --title "feat: add support for x" --body "Ref: #123"
 
 ## License
 
-Distributed under the Fair Core License. Contributions are made under that same license. See [LICENSE.md](https://github.com/bitrealm-io/message-vault/blob/main/LICENSE.md) for the full text.
+Message Vault is source-available, not open source. It is distributed under the Fair Core License 1.0 (`FCL-1.0-ALv2`), which lets you read, change, and self-host the code but not sell a competing product built on it; each version becomes Apache 2.0 two years after release. Contributions are made under that same license. See [LICENSE.md](https://github.com/bitrealm-io/message-vault/blob/main/LICENSE.md) for the full text.
 
 ## Release
 

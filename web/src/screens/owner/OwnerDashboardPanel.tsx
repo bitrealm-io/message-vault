@@ -2,16 +2,19 @@ import { apiErrorMessage } from "../../lib/apiErrorMessage";
 import { getVaultStorage } from "../../lib/vaultApi";
 import { keys } from "../../lib/vaultKeys";
 import { useVaultQuery } from "../../lib/vaultQuery";
-import { countOf, formatBytes } from "../settings/storage/storageUtils";
+import { DatabaseSection } from "./dashboard/DatabaseSection";
+import { MessagesByAccountSection } from "./dashboard/MessagesByAccountSection";
+import { VaultContentsSection } from "./dashboard/VaultContentsSection";
 
 /**
- * The Dashboard: what the whole vault holds, summed over every account.
+ * The Dashboard: a column of headed sections about the whole vault.
  *
  * The owner administers the vault, and administering it starts with knowing
- * how much it holds. These are counts and a byte total and nothing else: no
- * message, contact or conversation is named here, and the per-account
- * breakdown is each account's Storage tab under User Accounts
- * (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
+ * how much it holds and where the disk goes. Every section reads the one
+ * storage query, so the page shows one loading line and one error line. The
+ * figures are counts and bytes and nothing else: no message, contact or
+ * conversation is named here, and an account appears only as a username
+ * beside numbers (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
  */
 export function OwnerDashboardPanel() {
   const { data, isPending, error } = useVaultQuery(keys.vaultStorage.all, (signal) =>
@@ -32,18 +35,11 @@ export function OwnerDashboardPanel() {
           {apiErrorMessage(error, "Could not load the vault's totals.")}
         </p>
       ) : (
-        <div className="mt-4 rounded-xl border border-border bg-elevated p-4">
-          <div className="text-[1.375rem] font-semibold text-text">
-            {formatBytes(data.total_bytes)}
-          </div>
-          <div className="mt-1 text-[0.813rem] text-muted">
-            {countOf(data.message_count, "message")}, {countOf(data.attachment_count, "attachment")}
-          </div>
-          <div className="mt-0.5 text-[0.813rem] text-muted">
-            {countOf(data.conversation_count, "conversation")},{" "}
-            {countOf(data.contact_count, "contact")}
-          </div>
-        </div>
+        <>
+          <VaultContentsSection storage={data} />
+          <DatabaseSection storage={data} />
+          <MessagesByAccountSection storage={data} />
+        </>
       )}
     </section>
   );

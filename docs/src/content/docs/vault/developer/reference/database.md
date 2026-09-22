@@ -142,6 +142,34 @@ columns; import resolves handles to ids while rows are being staged.
 `trashed_conversations` and `trashed_contacts` mark items as trashed without
 deleting underlying rows.
 
+## How storage sizes are measured
+
+The vault owner's Dashboard reports what the database takes on disk. Every
+figure is measured from the database on both engines; the queries are in
+`crates/vault/server/src/db/storage.rs`, branched on the engine like the rest
+of the database layer.
+
+| Figure | SQLite | Postgres |
+|---|---|---|
+| Database size | `page_count * page_size` | `pg_database_size(current_database())` |
+| Messages on disk | `dbstat` pages of `messages` and every index on it | `pg_total_relation_size('messages')` minus the FTS figure |
+| Full-text search index | `dbstat` pages of the four `messages_fts_*` shadow tables | `sum(pg_column_size(search_tsv))` plus `pg_relation_size('ix_messages_search_tsv')` |
+| Text bytes per account | `sum(length(body) + length(subject))` grouped by `account_id` | the same |
+
+The bundled SQLite is compiled with `SQLITE_ENABLE_DBSTAT_VTAB`, so the
+`dbstat` virtual table is available; a build without it should turn it back
+on rather than estimate. On Postgres the search vector is a column on
+`messages`, so the table's total size includes it, and subtracting the FTS
+figure leaves a messages-only number that means the same thing as the SQLite
+one. The database size never counts attachment files on disk.
+
+The one estimate is each account's share of message storage: the
+messages-on-disk figure times the account's share of all text bytes. The
+shares are computed so they add up to the measured figure exactly, with the
+last account that has any text absorbing the rounding. An account with no
+messages reports zero. The full-text search index is one shared structure on
+SQLite, so it is reported once for the vault and never per account.
+
 ## Quick map
 
 | You want… | Look in… |

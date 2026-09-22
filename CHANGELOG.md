@@ -17,6 +17,20 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 Bullets under the version still in development carry the date they landed;
 released versions carry their date on the heading.
 
+## [Unreleased]
+
+### Features
+
+- 2026-09-22: **The Dashboard shows where the vault's disk space goes.**
+  Owner Home's Dashboard is now three sections. Vault contents is the card it
+  had. Database shows the size of the database on disk, how much of it the
+  messages take and how much the full-text search index adds, all measured
+  by the vault. Messages by account lists every account with its message
+  count, its text and an estimated size on disk, split from the messages
+  figure by each account's share of text, with a totals row so the split
+  visibly adds up. Attachment files are counted under Vault contents, not in
+  the database size.
+
 ## [0.9.0] - 2026-09-22
 
 The release that gives a vault an owner, a trash you can take things back out

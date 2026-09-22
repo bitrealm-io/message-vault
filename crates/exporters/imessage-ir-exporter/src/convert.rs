@@ -586,7 +586,6 @@ fn drain_conversations(
     .map_err(|e| anyhow!("write conversations: {e:#}"))?;
 
     Ok(FormatSinkResult {
-        xml_path: None,
         media: report.media,
         obfuscated_docs: 0,
     })

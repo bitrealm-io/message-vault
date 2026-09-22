@@ -150,8 +150,12 @@ case into Convert would have to be undone.
 - Progress, by step: (1) the path check is `message_ir::safe_attachment_path`,
   PR #638. (2) `stage_conversation_attachments` takes the messages and returns
   the count of distinct files written; `message-reexport`, the SBR reader and
-  the iMessage exporter call it, and the copies are gone, PR #639. Steps 3 to
-  6 have not started.
+  the iMessage exporter call it, and the copies are gone, PR #639. (3) The
+  seam is the `MergedArchive` trait in `ir-format`, handed to
+  `FormatSink::with_archive` or `ExportWriter::with_archive` by the caller
+  that wants a merged file; `is_sbr_xml()` and `xml_path` are gone, and the
+  SBR writer implements the trait as `SbrArchive`, PR #640. Steps 4 to 6
+  have not started.
 - Nothing here is kept for compatibility. Public items are renamed, moved between
   crates and removed wherever the result is simpler, and tests are rewritten to
   match rather than preserved.

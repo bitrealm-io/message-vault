@@ -79,11 +79,6 @@ impl OutputFormat {
     pub fn is_mail_archive(self) -> bool {
         matches!(self, Self::Eml | Self::Mbox)
     }
-
-    /// True when export writes a single SyncTech `smses.xml` (the `FormatSink` XML path).
-    pub fn is_sbr_xml(self) -> bool {
-        matches!(self, Self::Xml)
-    }
 }
 
 /// Shared export inputs. Source-specific fields are in [`Self::source`].

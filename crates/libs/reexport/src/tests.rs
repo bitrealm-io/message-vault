@@ -7,6 +7,9 @@ fn write_fixture(dir: &Path, format: OutputFormat) {
     fs::create_dir_all(dir).unwrap();
     clean_previous_ir_output(dir).unwrap();
     let mut sink = FormatSink::open(dir, format, ExportTransforms::none()).unwrap();
+    if format == OutputFormat::Xml {
+        sink = sink.with_archive(Box::new(SbrArchive));
+    }
     sink.write_document(message_ir::testutil::sample_document("hello reexport"))
         .unwrap();
     sink.finish().unwrap();
@@ -266,7 +269,6 @@ fn log_lines_append_the_sink_lines_after_the_count() {
         conversations: 1,
         attachments_saved: 4,
         sink: FormatSinkResult {
-            xml_path: Some(PathBuf::from("out/smses.xml")),
             obfuscated_docs: 2,
             ..FormatSinkResult::default()
         },
@@ -279,7 +281,6 @@ fn log_lines_append_the_sink_lines_after_the_count() {
             "Conversations: 1".to_string(),
             "  saved 4 attachments".to_string(),
             "Obfuscated 2 conversation(s)".to_string(),
-            "Wrote out/smses.xml".to_string(),
         ]
     );
 }

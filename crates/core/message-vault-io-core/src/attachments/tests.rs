@@ -33,24 +33,15 @@ fn a_short_digest_is_taken_whole_rather_than_panicking() {
     assert_eq!(digest_prefix("0123456789abcdef0"), "0123456789abcdef");
 }
 
-/// The name is `{local date}-{digest16}{ext}`, and each part has to be there:
+/// The name is `{UTC date}-{digest16}{ext}`, and each part has to be there:
 /// the date so a folder listing reads chronologically, the digest so two
 /// copies of one file share a name, the extension so the operating system
 /// opens it.
 #[test]
 fn the_destination_name_carries_the_date_the_digest_and_the_extension() {
-    // 2014-05-22 11:41:01 UTC. The date part is local time, so this asserts
-    // the pieces rather than a fixed string, which would fail in another zone.
+    // 2014-05-22 15:41:01 UTC, rendered in UTC whatever zone the machine is in.
     let name = attachment_dest_name(1_400_773_261, DIGEST, ".jpg");
-
-    assert!(name.ends_with("-4d1d2c17461355ae.jpg"), "got {name}");
-    let date = name.split('-').next().expect("a date part");
-    assert_eq!(date.len(), 15, "YYYYMMDD_HHMMSS, got {date}");
-    assert!(date.contains('_'), "got {date}");
-    assert!(
-        date.chars().all(|c| c.is_ascii_digit() || c == '_'),
-        "got {date}"
-    );
+    assert_eq!(name, "20140522_154101-4d1d2c17461355ae.jpg");
 
     // Two attachments with the same bytes at the same moment share a name;
     // different bytes do not.
@@ -62,6 +53,62 @@ fn the_destination_name_carries_the_date_the_digest_and_the_extension() {
     // No extension is a name without one, not a trailing dot.
     let bare = attachment_dest_name(1_400_773_261, DIGEST, "");
     assert!(bare.ends_with("-4d1d2c17461355ae"), "got {bare}");
+}
+
+/// One second before midnight UTC on 2024-03-15. Any zone east of Greenwich
+/// is already on the 16th and any zone west of it is hours earlier, so a
+/// name rendered in the host's zone would differ on almost every machine.
+const JUST_BEFORE_MIDNIGHT_UTC: i64 = 1_710_547_199;
+
+/// Prints the name for the fixed instant above. It is a test only so the
+/// zone check below can run it in a fresh process under a chosen `TZ`; on
+/// its own it does nothing. A fresh process is needed because chrono caches
+/// the zone it read from `TZ` for a second, so a value set from inside a
+/// running test would not be seen by a host-zone rendering, and the check
+/// would pass against the very bug it guards.
+#[test]
+fn print_the_name_for_the_zone_check() {
+    if std::env::var_os("MV_ZONE_CHECK").is_none() {
+        return;
+    }
+    println!(
+        "NAME={}",
+        attachment_dest_name(JUST_BEFORE_MIDNIGHT_UTC, DIGEST, ".jpg")
+    );
+}
+
+/// The name is an identifier: the same attachment gets the same name on every
+/// machine that exports it. Running the naming under two zones on opposite
+/// sides of the date line, for an instant a second before midnight UTC, must
+/// give one name, and that name is the UTC rendering.
+#[test]
+fn the_name_does_not_depend_on_the_machines_zone() {
+    let exe = std::env::current_exe().expect("the test binary's path");
+    let name_under = |tz: &str| {
+        let out = std::process::Command::new(&exe)
+            .args(["print_the_name_for_the_zone_check", "--nocapture"])
+            .env("TZ", tz)
+            .env("MV_ZONE_CHECK", "1")
+            .output()
+            .expect("run the test binary");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        stdout
+            .lines()
+            .find_map(|line| line.strip_prefix("NAME="))
+            .unwrap_or_else(|| panic!("no NAME= line in:\n{stdout}"))
+            .to_string()
+    };
+
+    let honolulu = name_under("Pacific/Honolulu");
+    let auckland = name_under("Pacific/Auckland");
+
+    assert_eq!(honolulu, auckland, "the name changed with the zone");
+    assert_eq!(honolulu, "20240315_235959-4d1d2c17461355ae.jpg");
 }
 
 /// A timestamp the calendar cannot represent falls back to the raw seconds

@@ -1581,6 +1581,13 @@ export interface components {
              * @description Contact id.
              */
             id: number;
+            /**
+             * @description When the vault last heard from the contact: the newest message one of
+             *     the contact's handles sent (RFC 3339, UTC). Null when none of them
+             *     ever sent a message. Not the contact's last activity: a message the
+             *     account owner sent, or another member of a group chat, does not count.
+             */
+            last_heard_at?: string | null;
             /** @description When the contact’s address-book shape last changed (`datetime('now')`). */
             last_modified: string;
             /** @description The contact's preferred name; empty when it has none. */
@@ -2395,6 +2402,13 @@ export interface components {
                  * @description Contact id.
                  */
                 id: number;
+                /**
+                 * @description When the vault last heard from the contact: the newest message one of
+                 *     the contact's handles sent (RFC 3339, UTC). Null when none of them
+                 *     ever sent a message. Not the contact's last activity: a message the
+                 *     account owner sent, or another member of a group chat, does not count.
+                 */
+                last_heard_at?: string | null;
                 /** @description When the contact’s address-book shape last changed (`datetime('now')`). */
                 last_modified: string;
                 /** @description The contact's preferred name; empty when it has none. */
@@ -4815,7 +4829,7 @@ export interface operations {
                 limit?: number;
                 /** @description Page offset, max 50000 */
                 offset?: number;
-                /** @description `name` or `-name`. Default `name`. */
+                /** @description Comma-separated keys from `name` and `last_heard`, a leading `-` for descending. `last_heard` is when the vault last heard from the contact; contacts it never heard from sort last either way. Default `name`. */
                 sort?: string;
             };
             header?: never;

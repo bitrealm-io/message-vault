@@ -100,6 +100,16 @@ database; the app and the published documentation call the same thing an
 **Identity**.
 _Avoid_: Address, Number
 
+**Last heard from**:
+When a contact last sent a message: the newest message any of the contact's
+handles was the sender of, shown on the contact list and one of the two ways
+the list can be ordered. It is not the contact's last activity. A message the
+account owner sent to the contact, or one another member of a group chat
+sent, does not move it, because neither is hearing from the contact. A
+contact none of whose handles ever sent a message has no date and sorts last
+whichever way the list runs.
+_Avoid_: Last seen, Last active, Last message
+
 **Unknown**:
 The Contact Group the vault computes from contacts that have no name or no
 handle. It has no members of its own and empties as a person names people.

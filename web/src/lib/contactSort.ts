@@ -1,17 +1,46 @@
+import { contactLabelText } from "./contactLabel";
+
+/** The two name fields the list can order by; each also gives the A–Z section letters. */
 export type ContactNameSort = "first" | "last";
+/**
+ * How the contact list is ordered: a name field, or when the vault last heard
+ * from the contact (`last_heard_at`, the vault's `sort=last_heard`).
+ */
+export type ContactSort = ContactNameSort | "lastHeard";
 export type ContactSortOrder = "asc" | "desc";
 
-export interface ContactNameSortState {
-  sort: ContactNameSort;
+export interface ContactSortState {
+  sort: ContactSort;
   order: ContactSortOrder;
 }
 
-export const DEFAULT_CONTACT_NAME_SORT = {
+export const DEFAULT_CONTACT_SORT = {
   sort: "last",
   order: "asc",
-} as const satisfies ContactNameSortState;
+} as const satisfies ContactSortState;
 
-const STORAGE_KEY = "contactNameSort:v1";
+const STORAGE_KEY = "contactSort:v1";
+
+/** The row fields the sort reads. */
+export interface SortableContact {
+  name: string;
+  handles?: readonly string[];
+  last_heard_at?: string | null;
+}
+
+export function isNameSort(sort: ContactSort): sort is ContactNameSort {
+  return sort === "first" || sort === "last";
+}
+
+/**
+ * The order a field starts in when picked: A to Z for a name, newest first
+ * for last heard. Picking the field that is already active leaves the order
+ * alone, so the menu's Order section still applies to it.
+ */
+export function withSortField(prev: ContactSortState, sort: ContactSort): ContactSortState {
+  if (sort === prev.sort) return prev;
+  return { sort, order: sort === "lastHeard" ? "desc" : "asc" };
+}
 
 /** First word and last word of a display name. A single word is used for both. */
 export function splitContactName(name: string): { first: string; last: string } {
@@ -78,33 +107,64 @@ export function compareContactsByName(
   return order === "desc" ? -cmp : cmp;
 }
 
-function isNameSort(value: unknown): value is ContactNameSort {
-  return value === "first" || value === "last";
+/**
+ * By when the vault last heard from each contact. A contact it never heard
+ * from has no date and goes last in either direction, the way the vault
+ * orders `sort=last_heard`; the timestamps are RFC 3339 in UTC, so string
+ * order is time order.
+ */
+export function compareContactsByLastHeard(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  order: ContactSortOrder,
+): number {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  const cmp = a < b ? -1 : a > b ? 1 : 0;
+  return order === "desc" ? -cmp : cmp;
+}
+
+/** The list's comparator for `state`; ties on last heard fall back to the name, A to Z. */
+export function compareContacts(a: SortableContact, b: SortableContact, state: ContactSortState) {
+  const labelA = contactLabelText(a.name, a.handles);
+  const labelB = contactLabelText(b.name, b.handles);
+  if (isNameSort(state.sort)) {
+    return compareContactsByName(labelA, labelB, state.sort, state.order);
+  }
+  return (
+    compareContactsByLastHeard(a.last_heard_at, b.last_heard_at, state.order) ||
+    compareContactsByName(labelA, labelB, "last", "asc")
+  );
+}
+
+function isSort(value: unknown): value is ContactSort {
+  return value === "first" || value === "last" || value === "lastHeard";
 }
 
 function isSortOrder(value: unknown): value is ContactSortOrder {
   return value === "asc" || value === "desc";
 }
 
-export function loadContactNameSort(): ContactNameSortState {
+export function loadContactSort(): ContactSortState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_CONTACT_NAME_SORT };
+    if (!raw) return { ...DEFAULT_CONTACT_SORT };
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) {
-      return { ...DEFAULT_CONTACT_NAME_SORT };
+      return { ...DEFAULT_CONTACT_SORT };
     }
     const rec = parsed as Record<string, unknown>;
     return {
-      sort: isNameSort(rec.sort) ? rec.sort : DEFAULT_CONTACT_NAME_SORT.sort,
-      order: isSortOrder(rec.order) ? rec.order : DEFAULT_CONTACT_NAME_SORT.order,
+      sort: isSort(rec.sort) ? rec.sort : DEFAULT_CONTACT_SORT.sort,
+      order: isSortOrder(rec.order) ? rec.order : DEFAULT_CONTACT_SORT.order,
     };
   } catch {
-    return { ...DEFAULT_CONTACT_NAME_SORT };
+    return { ...DEFAULT_CONTACT_SORT };
   }
 }
 
-export function saveContactNameSort(state: ContactNameSortState): void {
+export function saveContactSort(state: ContactSortState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {

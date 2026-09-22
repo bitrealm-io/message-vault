@@ -2691,7 +2691,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "`name` or `-name`. Default `name`.",
+            "description": "Comma-separated keys from `name` and `last_heard`, a leading `-` for descending. `last_heard` is when the vault last heard from the contact; contacts it never heard from sort last either way. Default `name`.",
             "required": false,
             "schema": {
               "type": "string"
@@ -7730,6 +7730,13 @@
             "format": "int64",
             "description": "Contact id."
           },
+          "last_heard_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the vault last heard from the contact: the newest message one of\nthe contact's handles sent (RFC 3339, UTC). Null when none of them\never sent a message. Not the contact's last activity: a message the\naccount owner sent, or another member of a group chat, does not count."
+          },
           "last_modified": {
             "type": "string",
             "description": "When the contact’s address-book shape last changed (`datetime('now')`)."
@@ -9477,6 +9484,13 @@
                   "type": "integer",
                   "format": "int64",
                   "description": "Contact id."
+                },
+                "last_heard_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "When the vault last heard from the contact: the newest message one of\nthe contact's handles sent (RFC 3339, UTC). Null when none of them\never sent a message. Not the contact's last activity: a message the\naccount owner sent, or another member of a group chat, does not count."
                 },
                 "last_modified": {
                   "type": "string",

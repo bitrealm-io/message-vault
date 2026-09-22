@@ -24,6 +24,13 @@ of, and a search that reads the same everywhere.
 
 ### Features
 
+- 2026-09-21: **A command-line import that was killed can be cleared from
+  the command line.** An import stopped mid-run leaves its session open, and
+  no later import for that account can start until it is discarded. The
+  vault server now has `imports discard --account <account>`, which discards
+  the account's open session and says which one it was, or that there was
+  none. The refusal names the command, so you no longer need the desktop
+  app's Import screen to get unstuck.
 - 2026-09-19: **The vault owner sees an account's Storage as its holder
   does.** Open an account from User Accounts and its Storage tab now shows its
   message count and storage total, every import and export it has run, and

@@ -346,6 +346,62 @@ async fn stage_advances_and_discard_frees_the_slot() {
 }
 
 #[tokio::test]
+async fn discard_running_import_finds_the_session_by_account_and_skips_finished_ones() {
+    let (pool, _dir) = setup_accounts_only().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let account = ACCOUNT_ID;
+
+    assert!(
+        discard_running_import(&mut conn, account)
+            .await
+            .unwrap()
+            .is_none(),
+        "nothing to discard before a session starts"
+    );
+
+    let args = StartImportArgs::new(account, "imessage", "append", None);
+    let finished = start_import(&mut conn, &args).await.unwrap();
+    complete_import(
+        &mut conn,
+        account,
+        finished,
+        &CompleteImportArgs::succeeded(1, 0),
+    )
+    .await
+    .unwrap();
+    let stranded = start_import(&mut conn, &args).await.unwrap();
+
+    let discarded = discard_running_import(&mut conn, account)
+        .await
+        .unwrap()
+        .expect("the running session is the one discarded");
+    assert_eq!(discarded.id, stranded);
+    assert_eq!(discarded.status, "running", "the row as it was before");
+    assert_eq!(
+        get_owned_import(&mut conn, account, stranded)
+            .await
+            .unwrap()
+            .status,
+        "cancelled"
+    );
+    assert_eq!(
+        get_owned_import(&mut conn, account, finished)
+            .await
+            .unwrap()
+            .status,
+        "completed",
+        "a finished session is left alone"
+    );
+    assert!(
+        discard_running_import(&mut conn, account)
+            .await
+            .unwrap()
+            .is_none(),
+        "the second discard has nothing left"
+    );
+}
+
+#[tokio::test]
 async fn completing_a_session_frees_the_slot_too() {
     let (pool, _dir) = setup_accounts_only().await;
     let mut conn = pool.acquire().await.unwrap();

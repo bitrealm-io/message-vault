@@ -1,17 +1,16 @@
 //! The shared write tail every exporter used to copy: sink opening, the
 //! queue-or-sink decision, and both drain arms.
 
-use crate::export_transforms::ExportTransforms;
-use crate::format_sink::{
-    FormatSink, FormatSinkResult, MergedArchive, write_documents_through_sink,
-};
+use crate::format_sink::{FormatSink, MergedArchive, write_documents_through_sink};
 use crate::write_queue::{
     AttachmentSource, ConversationUnit, WriteQueueOptions, drain_units, load_attachment_source,
 };
 use anyhow::Result;
 use media::{CompressOptions, MediaMode};
 use message_ir::{ConversationDocument, IrAttachment};
-use message_vault_io_core::{CancelFlag, ExportReport, LogSink, OutputFormat, ProgressSink};
+use message_vault_io_core::{
+    CancelFlag, ExportReport, ExportTransforms, LogSink, OutputFormat, ProgressSink,
+};
 use std::path::{Path, PathBuf};
 
 /// Owns the write tail of an exporter run: output preparation, the
@@ -184,7 +183,8 @@ impl ExportWriter {
     /// `att.bytes.take()`; path-backed exporters return
     /// [`AttachmentSource::Path`] from their own source list.
     ///
-    /// Folds conversation and attachment counts into `report`.
+    /// Folds conversation, attachment, media and obfuscation counts into
+    /// `report`.
     ///
     /// # Errors
     ///
@@ -196,7 +196,7 @@ impl ExportWriter {
         source_for: &mut dyn FnMut(&mut IrAttachment) -> (AttachmentSource, Option<u64>),
         cancel: Option<&CancelFlag>,
         report: &mut ExportReport,
-    ) -> Result<FormatSinkResult> {
+    ) -> Result<()> {
         if self.use_queue {
             let units: Vec<ConversationUnit> = documents
                 .into_iter()

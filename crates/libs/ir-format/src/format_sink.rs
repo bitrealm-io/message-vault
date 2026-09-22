@@ -3,12 +3,11 @@
 //! the crate that owns that archive's format.
 
 use crate::clean::clean_previous_ir_output;
-use crate::export_transforms::{ExportTransforms, apply_transforms};
+use crate::export_transforms::apply_transforms;
 use crate::write::write_format;
 use anyhow::{Context, Result};
-use media::MediaReport;
 use message_ir::ConversationDocument;
-use message_vault_io_core::OutputFormat;
+use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -24,41 +23,6 @@ pub trait MergedArchive: std::fmt::Debug + Send {
     /// Returns an error when the file cannot be written or an attachment
     /// it embeds cannot be read.
     fn write(&self, output_dir: &Path, documents: &[ConversationDocument]) -> Result<PathBuf>;
-}
-
-/// Result of [`FormatSink::finish`].
-#[derive(Debug, Default)]
-pub struct FormatSinkResult {
-    /// Media pass report from the finish step.
-    pub media: MediaReport,
-    /// Number of documents obfuscated.
-    pub obfuscated_docs: usize,
-}
-
-impl FormatSinkResult {
-    /// Human-readable lines for CLI / GUI logs.
-    pub fn log_lines(&self) -> Vec<String> {
-        let mut lines = Vec::new();
-        if self.media.processed > 0 || self.media.skipped > 0 || !self.media.errors.is_empty() {
-            lines.push(format!(
-                "Media: processed {} file(s), skipped {}",
-                self.media.processed, self.media.skipped
-            ));
-            for err in self.media.errors.iter().take(10) {
-                lines.push(format!("  media warning: {err}"));
-            }
-            if self.media.errors.len() > 10 {
-                lines.push(format!("  …and {} more", self.media.errors.len() - 10));
-            }
-        }
-        if self.obfuscated_docs > 0 {
-            lines.push(format!(
-                "Obfuscated {} conversation(s)",
-                self.obfuscated_docs
-            ));
-        }
-        lines
-    }
 }
 
 /// Writes conversations in the requested [`OutputFormat`], or through a
@@ -196,11 +160,15 @@ impl FormatSink {
     /// embedded. The staged `attachments/` directory is removed so the output
     /// folder holds only the archive.
     ///
+    /// Folds the obfuscated-document count into `report`. Convert and
+    /// compress ran in the staging step before documents reached the sink,
+    /// so finish itself does no media work and reports none.
+    ///
     /// # Errors
     ///
     /// Returns an error when a transform or a write fails, or the format is
     /// a merged archive and no [`MergedArchive`] was supplied.
-    pub fn finish(mut self) -> Result<FormatSinkResult> {
+    pub fn finish(mut self, report: &mut ExportReport) -> Result<()> {
         let embeds_media = self.format.is_mail_archive() || self.archive.is_some();
         let outcome = apply_transforms(
             &mut self.docs,
@@ -209,12 +177,7 @@ impl FormatSink {
             embeds_media,
         )?;
 
-        let result = FormatSinkResult {
-            // Convert/compress runs in `run_attachment_jobs` before documents
-            // reach the sink; finish itself does no media work.
-            media: MediaReport::default(),
-            obfuscated_docs: outcome.obfuscated_docs,
-        };
+        report.obfuscated_docs += outcome.obfuscated_docs as u64;
 
         if let Some(archive) = &self.archive {
             archive.write(&self.output_dir, &self.docs)?;
@@ -227,7 +190,7 @@ impl FormatSink {
         if embeds_media {
             remove_staged_attachments(&self.output_dir)?;
         }
-        Ok(result)
+        Ok(())
     }
 }
 
@@ -250,8 +213,8 @@ pub fn write_documents_through_sink(
     log: Option<&message_vault_io_core::LogSink>,
     progress: Option<&message_vault_io_core::ProgressSink>,
     cancel: Option<&message_vault_io_core::CancelFlag>,
-    report: &mut message_vault_io_core::ExportReport,
-) -> anyhow::Result<FormatSinkResult> {
+    report: &mut ExportReport,
+) -> anyhow::Result<()> {
     use message_vault_io_core::{ProgressEvent, emit_log, emit_progress};
     let total = documents.len();
     emit_log(log, "");
@@ -274,7 +237,7 @@ pub fn write_documents_through_sink(
             );
         }
     }
-    sink.finish()
+    sink.finish(report)
 }
 
 #[cfg(test)]
@@ -286,7 +249,7 @@ mod tests {
 
     #[test]
     fn write_documents_through_sink_reports_prepare_progress() {
-        use message_vault_io_core::{ExportReport, ProgressEvent, ProgressSink};
+        use message_vault_io_core::{ProgressEvent, ProgressSink};
         use std::sync::{Arc, Mutex};
 
         let tmp = tempfile::tempdir().unwrap();
@@ -324,7 +287,7 @@ mod tests {
             FormatSink::open(tmp.path(), OutputFormat::Csv, ExportTransforms::none()).unwrap();
         sink.write_document(message_ir::testutil::sample_document("hello"))
             .unwrap();
-        sink.finish().unwrap();
+        sink.finish(&mut ExportReport::default()).unwrap();
         assert!(tmp.path().join("+15555550101.csv").is_file());
     }
 
@@ -358,7 +321,7 @@ mod tests {
         let mut doc2 = message_ir::testutil::sample_document("two");
         doc2.conversation.chat_identifier = "+15555550102".into();
         sink.write_document(doc2).unwrap();
-        sink.finish().unwrap();
+        sink.finish(&mut ExportReport::default()).unwrap();
         assert_eq!(
             fs::read_to_string(tmp.path().join("all.txt")).unwrap(),
             "+15555550101\n+15555550102"
@@ -376,7 +339,10 @@ mod tests {
             FormatSink::open(tmp.path(), OutputFormat::Xml, ExportTransforms::none()).unwrap();
         sink.write_document(message_ir::testutil::sample_document("one"))
             .unwrap();
-        let err = sink.finish().unwrap_err().to_string();
+        let err = sink
+            .finish(&mut ExportReport::default())
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("merged archive"), "{err}");
     }
 
@@ -408,7 +374,7 @@ mod tests {
         };
         let mut sink = FormatSink::open(tmp.path(), OutputFormat::Eml, transforms).unwrap();
         sink.write_document(doc).unwrap();
-        sink.finish().unwrap();
+        sink.finish(&mut ExportReport::default()).unwrap();
 
         assert!(!tmp.path().join("attachments").exists());
         let eml_dir = tmp.path().join("+15555550101");
@@ -434,7 +400,7 @@ mod tests {
             FormatSink::open(tmp.path(), OutputFormat::Csv, ExportTransforms::none()).unwrap();
         sink.write_document(message_ir::testutil::sample_document("hello"))
             .unwrap();
-        sink.finish().unwrap();
+        sink.finish(&mut ExportReport::default()).unwrap();
         assert!(tmp.path().join("attachments/photo.jpg").is_file());
     }
 
@@ -457,8 +423,9 @@ mod tests {
             "fixture should carry a vendor bag"
         );
         sink.write_document(doc).unwrap();
-        let result = sink.finish().unwrap();
-        assert_eq!(result.obfuscated_docs, 1);
+        let mut report = ExportReport::default();
+        sink.finish(&mut report).unwrap();
+        assert_eq!(report.obfuscated_docs, 1);
         let mut found = false;
         for entry in fs::read_dir(tmp.path()).unwrap() {
             let path = entry.unwrap().path();

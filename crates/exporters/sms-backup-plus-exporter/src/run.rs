@@ -2,8 +2,7 @@
 
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::{Result, bail};
-use message_ir_format::ExportTransforms;
-use message_vault_io_core::{ExporterConfig, RunResult, SourceConfig};
+use message_vault_io_core::{ExportTransforms, ExporterConfig, RunResult, SourceConfig};
 
 /// Check the required inputs, then convert.
 ///
@@ -33,7 +32,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     }
 
     let transforms = ExportTransforms::from_config(config);
-    let (report, sink) = convert_export(ConvertExportArgs {
+    let report = convert_export(ConvertExportArgs {
         inputs: &config.inputs,
         output_dir: &config.output,
         owner_phones: &source.owner_phones,
@@ -46,20 +45,12 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
         resume: config.resume,
     })?;
     if source.include_summary {
-        return message_ir_format::finish_run(
-            config,
-            &report,
-            &sink,
-            config.media.mode.needs_tools(),
-        );
+        return message_vault_io_core::finish_run(config, &report, config.media.mode.needs_tools());
     }
     // --no-summary: the shared tail appends the summary unconditionally, so
-    // repeat its media-failure bail and keep only the sink log lines.
-    if !sink.media.errors.is_empty() && sink.media.processed == 0 && config.media.mode.needs_tools()
-    {
-        anyhow::bail!("media processing failed for all candidate files");
-    }
+    // keep only the media lines.
+    report.check_media(config.media.mode.needs_tools())?;
     Ok(RunResult {
-        messages: sink.log_lines(),
+        messages: report.media_lines(),
     })
 }

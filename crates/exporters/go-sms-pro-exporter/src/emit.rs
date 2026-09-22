@@ -11,9 +11,9 @@ use message_ir::{
     ExportMeta, HandleType, IrAttachment, IrService, IrSource, PendingAttachment,
     PendingConversation, PendingMessage, ProjectionHooks, ensure_conversation, parse_android_type,
 };
-use message_ir_format::{AttachmentSource, ExportTransforms, ExportWriter, FormatSinkResult};
+use message_ir_format::{AttachmentSource, ExportWriter};
 use message_vault_io_core::{
-    CancelFlag, ExportReport, OutputFormat, prepare_outputs, project_conversation,
+    CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
 };
 use phone::OwnerHandleSet;
 use std::collections::{BTreeMap, HashMap};
@@ -419,9 +419,7 @@ pub(crate) struct ConvertExportArgs<'a> {
 ///
 /// Returns an error when the input is not a directory, output overlaps input,
 /// a file cannot be read or written, or the user cancels.
-pub(crate) fn convert_export(
-    args: ConvertExportArgs<'_>,
-) -> Result<(ExportReport, FormatSinkResult)> {
+pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport> {
     let ConvertExportArgs {
         input_dir,
         output_dir,
@@ -486,7 +484,7 @@ pub(crate) fn convert_export(
         }
     }
 
-    let sink_result = writer.finish(
+    writer.finish(
         documents,
         &mut AttachmentSource::take_bytes,
         cancel,
@@ -501,7 +499,7 @@ pub(crate) fn convert_export(
     write_skipped_empty_pdu_csv(&output_dir, &skips.empty_pdu, skips.empty_pdu_more)?;
     write_skipped_no_party_csv(&output_dir, &skips.no_party, skips.no_party_more)?;
 
-    Ok((report, sink_result))
+    Ok(report)
 }
 
 /// Every file under `dir` matching `predicate`, in path order so runs are repeatable.

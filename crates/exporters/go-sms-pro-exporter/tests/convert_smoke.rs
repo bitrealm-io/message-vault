@@ -1,11 +1,10 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
-use message_ir_format::{ExportTransforms, FormatSinkResult};
 use message_vault_io_core::testutil::{assert_csv_export, assert_csv_row, csv_files};
-use message_vault_io_core::{ExportReport, OutputFormat};
+use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
 use std::path::{Path, PathBuf};
 
-fn convert(input_dir: &Path, output_dir: &Path) -> Result<(ExportReport, FormatSinkResult)> {
+fn convert(input_dir: &Path, output_dir: &Path) -> Result<ExportReport> {
     convert_export(ConvertExportArgs {
         input_dir,
         output_dir,
@@ -23,7 +22,7 @@ fn convert_smoke_writes_csv_not_json() {
     assert!(input.is_dir(), "missing fixture: {}", input.display());
 
     let tmp = tempfile::tempdir().expect("tempdir");
-    let (report, _) = convert(input.as_path(), tmp.path()).expect("convert_export should succeed");
+    let report = convert(input.as_path(), tmp.path()).expect("convert_export should succeed");
     assert!(report.conversations >= 1);
     assert!(report.extra.get("xml_messages_seen").copied().unwrap_or(0) >= 2);
 
@@ -102,7 +101,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
         })
     };
 
-    let (report, _) = run(false).expect("convert");
+    let report = run(false).expect("convert");
     assert!(report.conversations >= 1);
     assert_eq!(
         report.conversations_skipped, 0,
@@ -130,7 +129,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
     // a resumed run that quietly rewrote every conversation would produce the
     // same bytes and this test would still pass. `conversations_skipped` is
     // the only observable difference between resuming and starting over.
-    let (resumed, _) = run(true).expect("resume convert");
+    let resumed = run(true).expect("resume convert");
     assert_eq!(
         resumed.conversations_skipped, report.conversations,
         "a resumed run must skip every conversation the first run wrote"

@@ -10,8 +10,10 @@ mod exporters;
 mod pipeline;
 mod process;
 mod progress;
+mod run;
 #[cfg(feature = "testutil")]
 pub mod testutil;
+mod transforms;
 
 pub use attachment_jobs::{
     AttachmentJob, AttachmentProgress, attachment_jobs, attachment_size_hint, document_messages,
@@ -38,3 +40,5 @@ pub use process::{
     CancelFlag, Cancelled, LogSink, check_cancel, emit_log, is_cancelled, parallel_for_each,
 };
 pub use progress::{ProgressEvent, ProgressSink, emit_progress};
+pub use run::{finish_run, run_pipeline};
+pub use transforms::ExportTransforms;

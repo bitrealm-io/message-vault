@@ -1,8 +1,7 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
-use message_ir_format::{ExportTransforms, FormatSinkResult};
 use message_vault_io_core::testutil::{assert_csv_export, assert_csv_row, csv_files};
-use message_vault_io_core::{ExportReport, OutputFormat};
+use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -11,7 +10,7 @@ fn convert(
     output: &Path,
     owner_phones: &[String],
     output_format: OutputFormat,
-) -> Result<(ExportReport, FormatSinkResult)> {
+) -> Result<ExportReport> {
     convert_export(ConvertExportArgs {
         input,
         output_dir: output,
@@ -29,7 +28,7 @@ fn convert_export_smoke_on_sample_fixture() {
     assert!(fixture.is_file(), "missing fixture: {}", fixture.display());
 
     let tmp = tempfile::tempdir().expect("tempdir");
-    let (report, _) = convert(
+    let report = convert(
         &fixture,
         tmp.path(),
         &["+15555550100".into()],
@@ -126,7 +125,7 @@ fn dedupes_overlapping_xml_files() {
     fs::write(input_dir.join("b.xml"), xml).unwrap();
 
     let out = tmp.path().join("out");
-    let (report, _) = convert(
+    let report = convert(
         &input_dir,
         &out,
         &["+15555550100".into()],
@@ -216,7 +215,7 @@ fn convert_export_eml_writes_conversation_folder() {
     assert!(fixture.is_file(), "missing fixture: {}", fixture.display());
 
     let tmp = tempfile::tempdir().expect("tempdir");
-    let (report, _) = convert(
+    let report = convert(
         &fixture,
         tmp.path(),
         &["+15555550100".into()],
@@ -276,7 +275,7 @@ fn convert_export_json_and_jsonl_use_pristine_v4() {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample.xml");
     let tmp = tempfile::tempdir().expect("tempdir");
 
-    let (report, _) = convert(
+    let report = convert(
         &fixture,
         tmp.path(),
         &["+15555550100".into()],
@@ -320,7 +319,7 @@ fn convert_export_json_and_jsonl_use_pristine_v4() {
 
     let out_jsonl = tmp.path().join("jsonl-out");
     fs::create_dir_all(&out_jsonl).unwrap();
-    let (_report, _) = convert(
+    convert(
         &fixture,
         &out_jsonl,
         &["+15555550100".into()],
@@ -368,7 +367,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
         })
     };
 
-    let (report, _) = run(false).expect("convert");
+    let report = run(false).expect("convert");
     assert!(report.conversations >= 1);
     assert_eq!(
         report.conversations_skipped, 0,
@@ -396,7 +395,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
     // a resumed run that quietly rewrote every conversation would produce the
     // same bytes and this test would still pass. `conversations_skipped` is
     // the only observable difference between resuming and starting over.
-    let (resumed, _) = run(true).expect("resume convert");
+    let resumed = run(true).expect("resume convert");
     assert_eq!(
         resumed.conversations_skipped, report.conversations,
         "a resumed run must skip every conversation the first run wrote"

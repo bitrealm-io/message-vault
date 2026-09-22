@@ -10,9 +10,9 @@ use message_ir::{
     ExportMeta, IrAttachment, IrService, IrSource, PendingAttachment, PendingConversation,
     PendingMessage, ProjectionHooks, parse_android_type,
 };
-use message_ir_format::{AttachmentSource, ExportTransforms, ExportWriter, FormatSinkResult};
+use message_ir_format::{AttachmentSource, ExportWriter};
 use message_vault_io_core::{
-    CancelFlag, ExportReport, LogSink, OutputFormat, emit_log, prepare_outputs,
+    CancelFlag, ExportReport, ExportTransforms, LogSink, OutputFormat, emit_log, prepare_outputs,
     project_conversation,
 };
 use phone::OwnerHandleSet;
@@ -305,7 +305,7 @@ pub(crate) struct ConvertExportArgs<'a, P: AsRef<Path>> {
 /// a file cannot be read or written, or the user cancels.
 pub(crate) fn convert_export<P: AsRef<Path>>(
     args: ConvertExportArgs<'_, P>,
-) -> Result<(ExportReport, FormatSinkResult)> {
+) -> Result<ExportReport> {
     let ConvertExportArgs {
         inputs,
         output_dir,
@@ -388,7 +388,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
             report.duplicates_dropped
         ));
     }
-    let sink_result = writer.finish(
+    writer.finish(
         documents,
         &mut AttachmentSource::take_bytes,
         cancel,
@@ -400,7 +400,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
         report.conversations, report.messages, report.duplicates_dropped, report.attachments_saved
     ));
     verbose.errors(&report);
-    Ok((report, sink_result))
+    Ok(report)
 }
 
 /// Read-only inputs every parallel EML parse needs.

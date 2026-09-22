@@ -11,10 +11,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow, bail};
 use imessage_reader_protocol::{ExportRequest, Platform, Request, Source};
-use message_ir_format::ExportTransforms;
 use message_vault_io_core::{
-    AppleConfig, ApplePlatform, CancelFlag, ExporterConfig, LogSink, OutputFormat, ProgressEvent,
-    ProgressSink, RunResult, SourceConfig, emit_progress,
+    AppleConfig, ApplePlatform, CancelFlag, ExportTransforms, ExporterConfig, LogSink,
+    OutputFormat, ProgressEvent, ProgressSink, RunResult, SourceConfig, emit_progress,
 };
 
 use crate::{backup::ios_backup_encrypted_flag, convert, helper::Helper};
@@ -117,7 +116,6 @@ impl ExportOptions {
 pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     let mut options = options_from_export_config(config)?;
     options.check_cancel()?;
-    let format = options.output_format;
 
     // The program writes decrypted files here and this run deletes the
     // folder when it ends, whichever way it ends.
@@ -131,23 +129,12 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
         options.log.clone(),
         options.progress.clone(),
     )?;
-    let sink = convert::export(&mut helper, &options)?;
+    let report = convert::export(&mut helper, &options)?;
     helper.finish()?;
     drop(scratch);
     options.check_cancel()?;
 
-    if !sink.media.errors.is_empty() && sink.media.processed == 0 && config.media.mode.needs_tools()
-    {
-        bail!("media processing failed for all candidate files");
-    }
-
-    let mut messages = sink.log_lines();
-    messages.push(format!(
-        "Wrote {} export under {}",
-        format.as_str(),
-        config.output.display()
-    ));
-    Ok(RunResult { messages })
+    message_vault_io_core::finish_run(config, &report, config.media.mode.needs_tools())
 }
 
 /// Translate the shared exporter config into this exporter's options, rejecting non-Apple sources.

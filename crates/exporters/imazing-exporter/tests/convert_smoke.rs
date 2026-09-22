@@ -1,12 +1,11 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
-use message_ir_format::{ExportTransforms, FormatSinkResult};
 use message_vault_io_core::testutil::{assert_csv_row, csv_rows};
-use message_vault_io_core::{ExportReport, OutputFormat};
+use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn convert(input: &Path, output: &Path) -> Result<(ExportReport, FormatSinkResult)> {
+fn convert(input: &Path, output: &Path) -> Result<ExportReport> {
     convert_export(ConvertExportArgs {
         input,
         output,
@@ -25,7 +24,7 @@ fn convert_messages_keys_the_chat_by_its_number() {
     assert!(messages.is_file(), "missing {}", messages.display());
 
     let tmp = tempfile::tempdir().expect("tempdir");
-    let (report, _) = convert(&messages, tmp.path()).expect("convert");
+    let report = convert(&messages, tmp.path()).expect("convert");
 
     assert_eq!(report.conversations, 1);
     assert_eq!(report.messages, 3);
@@ -76,7 +75,7 @@ fn convert_whatsapp_csv_direct() {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let whatsapp = fixture.join("whatsapp.csv");
     let tmp = tempfile::tempdir().expect("tempdir");
-    let (report, _) = convert(&whatsapp, tmp.path()).expect("convert");
+    let report = convert(&whatsapp, tmp.path()).expect("convert");
 
     assert_eq!(report.conversations, 1);
     assert_eq!(report.messages, 3);
@@ -121,7 +120,7 @@ fn convert_whatsapp_csv_direct() {
 fn convert_export_root_recursively_keeps_services_separate() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/export_root");
     let tmp = tempfile::tempdir().expect("tempdir");
-    let (report, _) = convert(&root, tmp.path()).expect("convert");
+    let report = convert(&root, tmp.path()).expect("convert");
 
     assert_eq!(report.extra.get("messages_files").copied().unwrap_or(0), 2);
     assert_eq!(report.extra.get("whatsapp_files").copied().unwrap_or(0), 1);
@@ -167,7 +166,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
         })
     };
 
-    let (report, _) = convert_jsonl(false).expect("convert");
+    let report = convert_jsonl(false).expect("convert");
     assert_eq!(report.conversations, 1);
 
     let jsonl_files = |dir: &Path| -> Vec<String> {
@@ -188,7 +187,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
     // a resumed run that quietly rewrote every conversation would produce the
     // same bytes and this test would still pass. `conversations_skipped` is
     // the only observable difference between resuming and starting over.
-    let (resumed, _) = convert_jsonl(true).expect("resume convert");
+    let resumed = convert_jsonl(true).expect("resume convert");
     assert_eq!(resumed.conversations, 1, "resume still accounts for it");
     assert_eq!(
         resumed.conversations_skipped, 1,

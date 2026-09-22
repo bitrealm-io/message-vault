@@ -158,7 +158,11 @@ case into Convert would have to be undone.
   and writer live in `sms-backup-restore-exporter` as `read_backup`,
   `ReadOptions`, `ReadReport` and `SbrArchive`; `message-reexport` depends on
   that crate for them, and `message-ir-format` no longer depends on `sbr` or
-  `contacts`, PR #641. Steps 5 and 6 have not started.
+  `contacts`, PR #641. (5) `ExportTransforms`, `run_pipeline` and
+  `finish_run` live in `io-core`, and `FormatSinkResult` is gone: its media
+  report and obfuscated count are fields of `ExportReport`, so a run has one
+  report and every write tail folds into it, PR #642. Step 6 has not
+  started.
 - Nothing here is kept for compatibility. Public items are renamed, moved between
   crates and removed wherever the result is simpler, and tests are rewritten to
   match rather than preserved.

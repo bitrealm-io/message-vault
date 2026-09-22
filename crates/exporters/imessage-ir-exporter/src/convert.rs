@@ -27,10 +27,10 @@ use message_ir::{
 };
 use message_ir_format::{
     AttachmentSource, ConversationUnit, ExportWriter, ExportWriterParts, FormatSink,
-    FormatSinkResult, WriteQueueOptions,
+    WriteQueueOptions,
 };
 use message_vault_io_core::{
-    MediaConfig, OutputFormat, ProgressEvent, stage_conversation_attachments,
+    ExportReport, MediaConfig, OutputFormat, ProgressEvent, stage_conversation_attachments,
 };
 
 use crate::{
@@ -84,7 +84,7 @@ struct Collected {
 ///
 /// Returns an error when the program fails, a conversation cannot be
 /// written, or the user cancels.
-pub(crate) fn export(helper: &mut Helper, options: &ExportOptions) -> Result<FormatSinkResult> {
+pub(crate) fn export(helper: &mut Helper, options: &ExportOptions) -> Result<ExportReport> {
     let format = options.output_format;
     options.emit_log("");
     options.emit_log(format!(
@@ -125,12 +125,15 @@ pub(crate) fn export(helper: &mut Helper, options: &ExportOptions) -> Result<For
     if use_queue {
         return drain_conversations(helper, options, collected);
     }
+    let mut report = ExportReport::default();
     if is_file_backed(format) {
-        stage_attachments(helper, options, &mut collected, &attachments_dir)?;
+        report.attachments_saved +=
+            stage_attachments(helper, options, &mut collected, &attachments_dir)?;
     }
-    write_conversations(options, &mut sink, collected.conversations)?;
-    sink.finish()
-        .map_err(|e| anyhow!("finish export sink: {e:#}"))
+    report.conversations += write_conversations(options, &mut sink, collected.conversations)?;
+    sink.finish(&mut report)
+        .map_err(|e| anyhow!("finish export sink: {e:#}"))?;
+    Ok(report)
 }
 
 /// Formats whose attachments are files under `attachments/` rather than
@@ -428,23 +431,26 @@ fn embed_attachment_bytes(
 }
 
 /// Write every non-empty conversation through the sink, reporting progress.
+/// Returns how many were written.
 fn write_conversations(
     options: &ExportOptions,
     sink: &mut FormatSink,
     conversations: BTreeMap<String, PendingConversation>,
-) -> Result<()> {
+) -> Result<u64> {
     let format = options.output_format;
     let total = conversations.len();
     options.emit_log("");
     options.emit_log(format!("Preparing {total} conversation file(s)..."));
     options.emit_progress(ProgressEvent::Prepare { done: 0, total });
     let mut written = 0usize;
+    let mut kept = 0u64;
     for (chat_identifier, convo) in conversations {
         options.check_cancel()?;
         written += 1;
         if convo.messages.is_empty() {
             continue;
         }
+        kept += 1;
         let doc = pending_to_document(chat_identifier, convo, options.request.use_caller_id);
         let document_id = doc.conversation.chat_identifier.clone();
         sink.write_document(doc)
@@ -457,7 +463,7 @@ fn write_conversations(
             });
         }
     }
-    Ok(())
+    Ok(kept)
 }
 
 /// Project one accumulated conversation into the shared document shape.
@@ -526,7 +532,7 @@ fn drain_conversations(
     helper: &mut Helper,
     options: &ExportOptions,
     collected: Collected,
-) -> Result<FormatSinkResult> {
+) -> Result<ExportReport> {
     let use_caller_id = options.request.use_caller_id;
     let units: Vec<ConversationUnit> = collected
         .conversations
@@ -545,7 +551,7 @@ fn drain_conversations(
     let progress = options.progress.clone();
     let cancel = options.cancel.as_ref();
 
-    let report = if collected.encrypted {
+    let queue_report = if collected.encrypted {
         // The program decrypts one file at a time over one pipe, so the
         // drain runs on one writer. Decrypt-bound throughput would not have
         // parallelized well anyway.
@@ -585,10 +591,9 @@ fn drain_conversations(
     }
     .map_err(|e| anyhow!("write conversations: {e:#}"))?;
 
-    Ok(FormatSinkResult {
-        media: report.media,
-        obfuscated_docs: 0,
-    })
+    let mut report = ExportReport::default();
+    queue_report.fold_into(&mut report);
+    Ok(report)
 }
 
 /// Write staged attachment bytes after the stream and before conversation
@@ -600,7 +605,7 @@ fn stage_attachments(
     options: &ExportOptions,
     collected: &mut Collected,
     attachments_dir: &Path,
-) -> Result<()> {
+) -> Result<u64> {
     let media = MediaConfig {
         mode: options.transforms.media,
         compress: options.transforms.compress.clone(),
@@ -646,10 +651,7 @@ fn stage_attachments(
     )
     .map_err(|e| anyhow!(e))
     .context("stage attachments")?;
-    if saved > 0 {
-        options.emit_log(format!("  saved {saved} attachments"));
-    }
-    Ok(())
+    Ok(saved)
 }
 
 #[cfg(test)]

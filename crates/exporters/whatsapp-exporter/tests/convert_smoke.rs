@@ -1,6 +1,5 @@
 use crate::emit::convert_json;
-use message_ir_format::ExportTransforms;
-use message_vault_io_core::OutputFormat;
+use message_vault_io_core::{ExportTransforms, OutputFormat};
 use std::fs;
 use std::path::PathBuf;
 
@@ -10,7 +9,7 @@ fn convert_fixture_json_individual_and_group() {
     assert!(fixture.is_file(), "missing {}", fixture.display());
 
     let tmp = tempfile::tempdir().expect("tempdir");
-    let (report, _) = convert_json(
+    let report = convert_json(
         &fixture,
         tmp.path(),
         ExportTransforms::none(),
@@ -78,7 +77,7 @@ fn copies_ios_style_media_true_data_paths() {
     fs::write(&json_path, json.to_string()).expect("write json");
 
     let out = tempfile::tempdir().expect("out");
-    let (report, _) = convert_json(
+    let report = convert_json(
         &json_path,
         out.path(),
         ExportTransforms::none(),
@@ -120,7 +119,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/result.json");
     let tmp = tempfile::tempdir().expect("tempdir");
 
-    let (report, _) = convert_json(
+    let report = convert_json(
         &fixture,
         tmp.path(),
         ExportTransforms::none(),
@@ -151,7 +150,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
 
     // Resuming into the same folder finds both conversations already written
     // and leaves them exactly as they were.
-    let (resumed, _) = convert_json(
+    let resumed = convert_json(
         &fixture,
         tmp.path(),
         ExportTransforms::none(),

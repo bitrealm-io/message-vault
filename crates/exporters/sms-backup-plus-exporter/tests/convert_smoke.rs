@@ -1,8 +1,7 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
-use message_ir_format::{ExportTransforms, FormatSinkResult};
 use message_vault_io_core::testutil::{assert_csv_export, assert_csv_row, csv_files, csv_rows};
-use message_vault_io_core::{ExportReport, OutputFormat};
+use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -10,7 +9,7 @@ fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
 }
 
-fn convert(inputs: &[&Path], output_dir: &Path) -> Result<(ExportReport, FormatSinkResult)> {
+fn convert(inputs: &[&Path], output_dir: &Path) -> Result<ExportReport> {
     convert_export(ConvertExportArgs {
         inputs,
         output_dir,
@@ -52,7 +51,7 @@ fn output_equals_input_bails_before_cleaning() {
 fn convert_smoke_writes_csv_not_json() {
     let input = fixtures();
     let tmp = tempfile::tempdir().unwrap();
-    let (report, _) = convert(&[input.as_path()], tmp.path()).unwrap();
+    let report = convert(&[input.as_path()], tmp.path()).unwrap();
 
     assert!(report.conversations >= 1);
     assert!(report.extra("flat_eml") >= 1);
@@ -111,7 +110,7 @@ fn end_dedupe_collapses_duplicate_flats() {
     fs::write(input_dir.join("b.eml"), &bytes).unwrap();
 
     let out = tmp.path().join("out");
-    let (report, _) = convert(&[input_dir.as_path()], &out).unwrap();
+    let report = convert(&[input_dir.as_path()], &out).unwrap();
 
     assert_eq!(report.extra("flat_eml"), 2);
     assert_eq!(report.extra("messages_before_dedupe"), 2);
@@ -159,7 +158,7 @@ Will do\r\n"
     write("with_id.eml", base_ms + 488, Some("999"));
 
     let out = tmp.path().join("out");
-    let (report, _) = convert(&[input_dir.as_path()], &out).unwrap();
+    let report = convert(&[input_dir.as_path()], &out).unwrap();
 
     assert_eq!(report.extra("messages_before_dedupe"), 2);
     assert_eq!(report.messages, 1, "the two copies are one message");
@@ -196,7 +195,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
         })
     };
 
-    let (report, _) = run(false).expect("convert");
+    let report = run(false).expect("convert");
     assert!(report.conversations >= 1);
     assert_eq!(
         report.conversations_skipped, 0,
@@ -224,7 +223,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
     // a resumed run that quietly rewrote every conversation would produce the
     // same bytes and this test would still pass. `conversations_skipped` is
     // the only observable difference between resuming and starting over.
-    let (resumed, _) = run(true).expect("resume convert");
+    let resumed = run(true).expect("resume convert");
     assert_eq!(
         resumed.conversations_skipped, report.conversations,
         "a resumed run must skip every conversation the first run wrote"
@@ -297,7 +296,7 @@ fn two_messages_sharing_an_smssync_id_both_survive() {
         .expect("write fixture");
     }
 
-    let (report, _) = convert(&[input.as_path()], &out).expect("convert");
+    let report = convert(&[input.as_path()], &out).expect("convert");
 
     assert_eq!(
         report.messages, 4,

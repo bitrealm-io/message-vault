@@ -11,8 +11,10 @@ use message_ir::{
     ExportMeta, HandleType, IrAttachment, IrParticipant, IrService, IrSource, PendingAttachment,
     PendingConversation, PendingMessage, ProjectionHooks, SortKeyUnit,
 };
-use message_ir_format::{AttachmentSource, ExportTransforms, ExportWriter, FormatSinkResult};
-use message_vault_io_core::{CancelFlag, ExportReport, OutputFormat, project_conversation};
+use message_ir_format::{AttachmentSource, ExportWriter};
+use message_vault_io_core::{
+    CancelFlag, ExportReport, ExportTransforms, OutputFormat, project_conversation,
+};
 use serde_json::Map;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -52,7 +54,7 @@ pub(crate) fn convert_json(
     output_format: OutputFormat,
     cancel: Option<&CancelFlag>,
     resume: bool,
-) -> Result<(ExportReport, FormatSinkResult)> {
+) -> Result<ExportReport> {
     fs::create_dir_all(output).with_context(|| format!("create {}", output.display()))?;
     // Load the chat store BEFORE cleaning the output directory. The JSON may live
     // inside the output dir (e.g. wtsexporter_result.json) and cleaning
@@ -101,7 +103,7 @@ pub(crate) fn convert_json(
     }
 
     let mut source_iter = media_sources.into_iter();
-    let sink_result = writer.finish(
+    writer.finish(
         documents,
         &mut |att| {
             let hint = att.size_bytes;
@@ -114,7 +116,7 @@ pub(crate) fn convert_json(
         &mut report,
     )?;
 
-    Ok((report, sink_result))
+    Ok(report)
 }
 
 /// Ingest one WhatsApp chat JSON into a pending conversation (messages + media).

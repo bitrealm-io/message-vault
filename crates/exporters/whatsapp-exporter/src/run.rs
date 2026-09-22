@@ -3,9 +3,8 @@
 use crate::emit::convert_json;
 use crate::wtsexporter::{Platform, WtsexporterArgs, resolve_wtsexporter, run_wtsexporter};
 use anyhow::{Context, Result, bail};
-use message_ir_format::ExportTransforms;
 use message_vault_io_core::{
-    ExporterConfig, RunResult, SourceConfig, WhatsappPlatform as CorePlatform,
+    ExportTransforms, ExporterConfig, RunResult, SourceConfig, WhatsappPlatform as CorePlatform,
 };
 use std::env;
 use std::fs;
@@ -107,7 +106,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     message_vault_io_core::check_cancel(config.cancel.as_ref())?;
     let transforms = ExportTransforms::from_config(config);
     let needs_media_tools = transforms.needs_media_tools();
-    let (report, sink) = convert_json(
+    let report = convert_json(
         &json_path,
         &config.output,
         transforms,
@@ -119,7 +118,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     // Drop tempdir after convert (media files already copied).
     drop(_work_keep_alive);
 
-    let result = message_ir_format::finish_run(config, &report, &sink, needs_media_tools)?;
+    let result = message_vault_io_core::finish_run(config, &report, needs_media_tools)?;
     messages.extend(result.messages);
     Ok(RunResult { messages })
 }

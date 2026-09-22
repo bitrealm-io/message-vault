@@ -1,9 +1,10 @@
-//! Write conversations in one output format (JSON, JSON Lines, CSV, EML, MBOX, or XML).
+//! Write conversations in one output format: one file per conversation
+//! (JSON, JSON Lines, CSV, EML, MBOX), or one merged archive supplied by
+//! the crate that owns that archive's format.
 
 use crate::clean::clean_previous_ir_output;
 use crate::export_transforms::{ExportTransforms, apply_transforms};
 use crate::write::write_format;
-use crate::write_sbr::SbrBackupSession;
 use anyhow::{Context, Result};
 use media::MediaReport;
 use message_ir::ConversationDocument;
@@ -11,11 +12,23 @@ use message_vault_io_core::OutputFormat;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// A format that folds every conversation into one file with the attachment
+/// bytes inside it. The crate that owns such a format implements this and
+/// the caller that wants it hands it to [`FormatSink::with_archive`]; this
+/// crate knows no archive format by name.
+pub trait MergedArchive: std::fmt::Debug + Send {
+    /// Write `documents` under `output_dir` as one file and return its path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the file cannot be written or an attachment
+    /// it embeds cannot be read.
+    fn write(&self, output_dir: &Path, documents: &[ConversationDocument]) -> Result<PathBuf>;
+}
+
 /// Result of [`FormatSink::finish`].
 #[derive(Debug, Default)]
 pub struct FormatSinkResult {
-    /// Path of the written `smses.xml` when the format is XML.
-    pub xml_path: Option<PathBuf>,
     /// Media pass report from the finish step.
     pub media: MediaReport,
     /// Number of documents obfuscated.
@@ -44,14 +57,12 @@ impl FormatSinkResult {
                 self.obfuscated_docs
             ));
         }
-        if let Some(path) = &self.xml_path {
-            lines.push(format!("Wrote {}", path.display()));
-        }
         lines
     }
 }
 
-/// Writes conversations in the requested [`OutputFormat`].
+/// Writes conversations in the requested [`OutputFormat`], or through a
+/// [`MergedArchive`] when the caller supplied one.
 ///
 /// Documents are buffered until [`finish`](Self::finish), which applies
 /// attachment media transforms and obfuscation, then projects all chats.
@@ -60,6 +71,7 @@ pub struct FormatSink {
     output_dir: PathBuf,
     format: OutputFormat,
     transforms: ExportTransforms,
+    archive: Option<Box<dyn MergedArchive>>,
     docs: Vec<ConversationDocument>,
 }
 
@@ -78,8 +90,19 @@ impl FormatSink {
             output_dir: output_dir.to_path_buf(),
             format,
             transforms,
+            archive: None,
             docs: Vec::new(),
         })
+    }
+
+    /// Write every buffered document through `archive` at
+    /// [`finish`](Self::finish) instead of one file per conversation. The
+    /// archive holds the attachment bytes, so the staged `attachments/` is
+    /// removed once it is written.
+    #[must_use]
+    pub fn with_archive(mut self, archive: Box<dyn MergedArchive>) -> Self {
+        self.archive = Some(archive);
+        self
     }
 
     /// Prepare `output` for a fresh export, then open a sink into it.
@@ -169,15 +192,16 @@ impl FormatSink {
 
     /// Apply media and obfuscation transforms, then write all buffered documents.
     ///
-    /// For EML, MBOX, and XML, media is transformed then embedded. The staged
-    /// `attachments/` directory is removed so the output folder holds only the
-    /// archive.
+    /// For EML, MBOX, and a merged archive, media is transformed then
+    /// embedded. The staged `attachments/` directory is removed so the output
+    /// folder holds only the archive.
     ///
     /// # Errors
     ///
-    /// Returns an error when a transform or a write fails.
+    /// Returns an error when a transform or a write fails, or the format is
+    /// a merged archive and no [`MergedArchive`] was supplied.
     pub fn finish(mut self) -> Result<FormatSinkResult> {
-        let embeds_media = self.format.is_mail_archive() || self.format.is_sbr_xml();
+        let embeds_media = self.format.is_mail_archive() || self.archive.is_some();
         let outcome = apply_transforms(
             &mut self.docs,
             &self.output_dir,
@@ -185,20 +209,15 @@ impl FormatSink {
             embeds_media,
         )?;
 
-        let mut result = FormatSinkResult {
-            xml_path: None,
+        let result = FormatSinkResult {
             // Convert/compress runs in `run_attachment_jobs` before documents
             // reach the sink; finish itself does no media work.
             media: MediaReport::default(),
             obfuscated_docs: outcome.obfuscated_docs,
         };
 
-        if self.format.is_sbr_xml() {
-            let mut session = SbrBackupSession::create(&self.output_dir)?;
-            for doc in &self.docs {
-                session.append_document(doc)?;
-            }
-            result.xml_path = Some(session.finish()?);
+        if let Some(archive) = &self.archive {
+            archive.write(&self.output_dir, &self.docs)?;
         } else {
             for doc in self.docs {
                 write_format(&self.output_dir, self.format, doc)?;
@@ -309,23 +328,56 @@ mod tests {
         assert!(tmp.path().join("+15555550101.csv").is_file());
     }
 
+    /// An archive the test owns: every document's chat id on one line each,
+    /// which is enough to see that the sink handed over all of them at once
+    /// and cleaned the staging folder afterwards.
+    #[derive(Debug)]
+    struct LineArchive;
+
+    impl MergedArchive for LineArchive {
+        fn write(&self, output_dir: &Path, documents: &[ConversationDocument]) -> Result<PathBuf> {
+            let path = output_dir.join("all.txt");
+            let body: Vec<String> = documents
+                .iter()
+                .map(|doc| doc.conversation.chat_identifier.clone())
+                .collect();
+            fs::write(&path, body.join("\n"))?;
+            Ok(path)
+        }
+    }
+
     #[test]
-    fn format_sink_xml_merges_documents() {
+    fn format_sink_writes_a_merged_archive_and_drops_the_staging_folder() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(tmp.path().join("attachments")).unwrap();
+        let mut sink = FormatSink::open(tmp.path(), OutputFormat::Xml, ExportTransforms::none())
+            .unwrap()
+            .with_archive(Box::new(LineArchive));
+        sink.write_document(message_ir::testutil::sample_document("one"))
+            .unwrap();
+        let mut doc2 = message_ir::testutil::sample_document("two");
+        doc2.conversation.chat_identifier = "+15555550102".into();
+        sink.write_document(doc2).unwrap();
+        sink.finish().unwrap();
+        assert_eq!(
+            fs::read_to_string(tmp.path().join("all.txt")).unwrap(),
+            "+15555550101\n+15555550102"
+        );
+        assert!(
+            !tmp.path().join("attachments").exists(),
+            "the archive holds the bytes, so the staging folder goes"
+        );
+    }
+
+    #[test]
+    fn a_merged_format_without_its_archive_is_refused_at_finish() {
         let tmp = tempfile::tempdir().unwrap();
         let mut sink =
             FormatSink::open(tmp.path(), OutputFormat::Xml, ExportTransforms::none()).unwrap();
         sink.write_document(message_ir::testutil::sample_document("one"))
             .unwrap();
-        let mut doc2 = message_ir::testutil::sample_document("two");
-        doc2.messages[0].guid = "guid-2".into();
-        doc2.messages[0].timestamp_unix_ms = 1_400_773_262_000;
-        sink.write_document(doc2).unwrap();
-        let result = sink.finish().unwrap();
-        let path = result.xml_path.expect("smses.xml");
-        let text = fs::read_to_string(path).unwrap();
-        assert!(text.contains(r#"count="2""#));
-        assert!(text.contains("one"));
-        assert!(text.contains("two"));
+        let err = sink.finish().unwrap_err().to_string();
+        assert!(err.contains("merged archive"), "{err}");
     }
 
     #[test]

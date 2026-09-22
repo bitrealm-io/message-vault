@@ -293,7 +293,6 @@ pub fn drain_units(
     report.conversations_skipped += queue_report.conversations_skipped as u64;
     report.attachments_saved += queue_report.attachments_saved as u64;
     Ok(crate::FormatSinkResult {
-        xml_path: None,
         media: queue_report.media,
         obfuscated_docs: 0,
     })

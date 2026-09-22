@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use media::{CompressOptions, MediaMode};
 use message_ir::ConversationDocument;
 use message_ir_format::{
-    CSV_HEADERS, ExportTransforms, FormatSink, FormatSinkResult, SbrReadOptions,
+    CSV_HEADERS, ExportTransforms, FormatSink, FormatSinkResult, SbrArchive, SbrReadOptions,
     clean_previous_ir_output, read_conversation_csv, read_conversation_eml_dir,
     read_conversation_json, read_conversation_jsonl, read_conversation_mbox, read_sbr_documents,
 };
@@ -100,6 +100,9 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
 
     let conversations = documents.len();
     let mut sink = FormatSink::open(&config.output, config.output_format, transforms)?;
+    if config.output_format == OutputFormat::Xml {
+        sink = sink.with_archive(Box::new(SbrArchive));
+    }
     for document in documents {
         sink.write_document(document)?;
     }

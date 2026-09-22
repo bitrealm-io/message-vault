@@ -3,7 +3,7 @@
 
 use anyhow::Result;
 use message_ir_format::{
-    AttachmentSource, ExportTransforms, ExportWriter, FormatSinkResult, SbrReadOptions,
+    AttachmentSource, ExportTransforms, ExportWriter, FormatSinkResult, SbrArchive, SbrReadOptions,
     SbrReadReport, read_sbr_documents,
 };
 use message_vault_io_core::{CancelFlag, ExportReport, OutputFormat};
@@ -71,12 +71,17 @@ pub(crate) fn convert_export(
     // The read options still need the compress settings after `transforms`
     // moves into the writer.
     let compress = args.transforms.compress.clone();
-    let writer = ExportWriter::open(
+    let mut writer = ExportWriter::open(
         args.output_dir,
         args.output_format,
         args.transforms,
         args.resume,
     )?;
+    if args.output_format == OutputFormat::Xml {
+        // This crate owns the backup format, so a round trip back to
+        // `smses.xml` goes through its own archive writer.
+        writer = writer.with_archive(Box::new(SbrArchive));
+    }
     let (documents, report) = read_sbr_documents(
         args.input,
         SbrReadOptions {

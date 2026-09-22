@@ -2,7 +2,9 @@
 //! queue-or-sink decision, and both drain arms.
 
 use crate::export_transforms::ExportTransforms;
-use crate::format_sink::{FormatSink, FormatSinkResult, write_documents_through_sink};
+use crate::format_sink::{
+    FormatSink, FormatSinkResult, MergedArchive, write_documents_through_sink,
+};
 use crate::write_queue::{
     AttachmentSource, ConversationUnit, WriteQueueOptions, drain_units, load_attachment_source,
 };
@@ -109,6 +111,15 @@ impl ExportWriter {
             use_queue,
             copy_attachments,
         })
+    }
+
+    /// Write the documents through `archive` instead of one file per
+    /// conversation; see [`FormatSink::with_archive`]. The queue arm never
+    /// applies, since a merged archive is not JSON Lines.
+    #[must_use]
+    pub fn with_archive(mut self, archive: Box<dyn MergedArchive>) -> Self {
+        self.sink = self.sink.with_archive(archive);
+        self
     }
 
     /// Directory attachment files are staged into (`<output>/attachments`).

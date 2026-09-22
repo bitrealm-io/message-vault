@@ -1,7 +1,8 @@
 //! Write [`ConversationDocument`] messages as SMS Backup & Restore XML.
 
+use crate::format_sink::MergedArchive;
 use crate::util::load_attachment_bytes_strict;
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use message_ir::{
     ConversationDocument, IrAttachment, IrConversationType, IrDirection, IrMessage, IrMessageKind,
     nonempty,
@@ -468,10 +469,17 @@ fn inject_attachment_data(
     Ok(())
 }
 
-/// `write_format` must not stream multi-chat XML; use [`crate::FormatSink`].
-pub(crate) fn write_format_xml_unsupported() -> Result<PathBuf> {
-    bail!(
-        "OutputFormat::Xml writes a single smses.xml backup; use FormatSink \
-         (open → write_document → finish) instead of write_format"
-    )
+/// The SMS Backup & Restore backup as a [`MergedArchive`]: every
+/// conversation into one `smses.xml`, attachment bytes inside it.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SbrArchive;
+
+impl MergedArchive for SbrArchive {
+    fn write(&self, output_dir: &Path, documents: &[ConversationDocument]) -> Result<PathBuf> {
+        let mut session = SbrBackupSession::create(output_dir)?;
+        for doc in documents {
+            session.append_document(doc)?;
+        }
+        session.finish()
+    }
 }

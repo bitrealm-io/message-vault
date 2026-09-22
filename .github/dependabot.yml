@@ -35,6 +35,18 @@ updates:
     directory: /docs
     schedule:
       interval: weekly
+    ignore:
+      # @scalar/api-reference is held at 1.68.x. 1.69.0 and 1.69.1 pull in
+      # versions of devalue, undici and @ai-sdk/provider-utils that fail
+      # `npm audit --audit-level=high` in audit.yml (devalue,
+      # GHSA-9rgm-9g3h-6x36, is the high one), while main passes it. #604
+      # failed that audit twice, before and after a rebase. Scalar releases
+      # most weeks, so ignoring one version would only bring the same pull
+      # request back the next Monday.
+      #
+      # Remove this entry when a Scalar release passes the audit: in docs/,
+      # `npm install @scalar/api-reference@latest && npm audit --audit-level=high`.
+      - dependency-name: "@scalar/api-reference"
 
   # web-next/ is intentionally excluded: legacy Next.js browse UI, not in CI
   # and not served. Re-add it here if that tree is ever revived.

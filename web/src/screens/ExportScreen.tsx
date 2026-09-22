@@ -1,9 +1,11 @@
 import { useCallback, useState } from "react";
 import { ListBoxItem } from "react-aria-components";
+import { useSearchParams } from "react-router-dom";
 import FormRow from "../components/FormRow";
 import PathPicker from "../components/PathPicker";
 import Select, { selectItemClassName } from "../components/Select";
 import TauriJobFormShell from "../components/TauriJobFormShell";
+import TextField from "../components/TextField";
 import { useTauriJob } from "../hooks/useTauriJob";
 import { getBaseUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -18,6 +20,18 @@ import {
 } from "../lib/tauri";
 
 const FORMAT_IDS = EXPORT_FORMATS.map((f) => f.id);
+
+/**
+ * What an export covers. `everything` sends a blank query, which vault-pull
+ * reads as the whole account; `search` sends the text of the query box.
+ */
+type ExportScope = "everything" | "search";
+
+const SCOPES: { id: ExportScope; label: string }[] = [
+  { id: "everything", label: "Everything" },
+  { id: "search", label: "Search" },
+];
+const SCOPE_IDS = SCOPES.map((s) => s.id);
 
 /** Label for the chosen format, for the success panel. */
 function formatLabel(id: ExportFormat): string {
@@ -35,10 +49,20 @@ function formatLabel(id: ExportFormat): string {
  * folder the person picked. The staging folder is deleted either way, so a
  * failed conversion does not leave a copy of the vault behind.
  *
+ * The scope is Everything or Search. The screen opens in Search when its URL
+ * carries `?q=`: LeftPanel puts the query the conversation list was browsing
+ * with there when the person clicks Export, so "export what I am looking at"
+ * is one click and the query box shows what that is. `in:#19,#22` names
+ * chosen conversations the same way.
+ *
  * Shown only when Tauri is available (see LeftPanel).
  */
 export default function ExportScreen() {
   const { token } = useAuth();
+  const [searchParams] = useSearchParams();
+  const browsedQuery = (searchParams.get("q") ?? "").trim();
+  const [scope, setScope] = useState<ExportScope>(browsedQuery ? "search" : "everything");
+  const [query, setQuery] = useState(browsedQuery);
   const [savePath, setSavePath] = useState("");
   const [format, setFormat] = useState<ExportFormat>("jsonl");
   const [error, setError] = useState("");
@@ -75,7 +99,7 @@ export default function ExportScreen() {
             username: "",
             key: token,
             out_dir: outDir,
-            query: "",
+            query: scope === "search" ? query.trim() : "",
             skip_attachments: false,
           }),
         { onLog: appendLog },
@@ -130,13 +154,14 @@ export default function ExportScreen() {
       runningLabel="Exporting…"
       running={running || busy}
       log={log}
-      startDisabled={!savePath || busy}
+      startDisabled={!savePath || busy || (scope === "search" && query.trim() === "")}
       onStart={startExport}
       onCancel={cancel}
       error={error}
       intro={
         <p className="mb-6 text-[0.875rem] text-muted">
-          Export the entire vault (plus attachments) into a folder, in the format you choose.
+          Export the whole vault, or only the conversations a search finds, into a folder in the
+          format you choose. Attachments come with the messages.
         </p>
       }
       success={
@@ -147,6 +172,35 @@ export default function ExportScreen() {
         ) : null
       }
     >
+      <FormRow label="Scope">
+        <Select
+          selectedKey={scope}
+          onSelectionChange={(key) => {
+            const next = parseSelectKey(key, SCOPE_IDS);
+            if (next) setScope(next);
+          }}
+          aria-label="Scope"
+          isDisabled={running || busy}
+        >
+          {SCOPES.map((option) => (
+            <ListBoxItem key={option.id} id={option.id} className={selectItemClassName}>
+              {option.label}
+            </ListBoxItem>
+          ))}
+        </Select>
+      </FormRow>
+      {scope === "search" ? (
+        <FormRow label="Search">
+          <TextField
+            aria-label="Search"
+            value={query}
+            onChange={setQuery}
+            isDisabled={running || busy}
+            placeholder="from:me last year"
+            hint="The vault's search language. in:#19,#22 names two conversations by their ids."
+          />
+        </FormRow>
+      ) : null}
       <FormRow label="Save to">
         <PathPicker
           value={savePath}

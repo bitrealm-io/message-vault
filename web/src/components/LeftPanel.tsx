@@ -103,7 +103,18 @@ function browseLinkClass(active: boolean): string {
   }`;
 }
 
-export default function LeftPanel({ onSearchChange }: { onSearchChange: (v: string) => void }) {
+export default function LeftPanel({
+  onSearchChange,
+  browseQuery,
+}: {
+  onSearchChange: (v: string) => void;
+  /**
+   * The query the conversation list is showing right now, or "" when the
+   * person is not looking at conversations. Export opens with it prefilled,
+   * so exporting the current view is one click.
+   */
+  browseQuery: string;
+}) {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile } = useAccountProfile();
@@ -228,7 +239,9 @@ export default function LeftPanel({ onSearchChange }: { onSearchChange: (v: stri
             </button>
             <button
               type="button"
-              onClick={() => navigate("/export")}
+              onClick={() =>
+                navigate(browseQuery ? `/export?q=${encodeURIComponent(browseQuery)}` : "/export")
+              }
               className={`${navGlyphRowClass(isActive("/export"))} cursor-pointer`}
             >
               <span className={NAV_NESTED_ROW_CLASS}>

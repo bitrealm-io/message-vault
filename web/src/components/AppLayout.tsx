@@ -110,7 +110,16 @@ export default function AppLayout() {
     trashSelectedRaw && /^\d+$/.test(trashSelectedRaw) ? Number(trashSelectedRaw) : null;
 
   const trashMode = mode === "trash";
-  const searchQuery = trashMode ? trashSearch : contactsMode ? contactSearch : conversationSearch;
+  const isFullScreen = mode === "import" || mode === "export" || mode === "settings";
+  // The full-screen routes have no list to search. Export carries `?q=` for
+  // its own scope box, which is not a header search.
+  const searchQuery = isFullScreen
+    ? ""
+    : trashMode
+      ? trashSearch
+      : contactsMode
+        ? contactSearch
+        : conversationSearch;
 
   // `replace: true` is inherited from every other caller here and is
   // deliberate: typing in a search box must not fill the history with one
@@ -210,7 +219,10 @@ export default function AppLayout() {
     navigate(`/?q=${encodeURIComponent(query)}&f=${encodeURIComponent(query)}`);
   };
 
-  const isFullScreen = mode === "import" || mode === "export" || mode === "settings";
+  // What Export starts from: the conversation list's query, tag filter
+  // included, and nothing when the person is on contacts, Trash, or a
+  // full-screen route.
+  const browseQuery = mode === "conversations" ? threadListQuery : "";
 
   return (
     <RightToolbarProvider>
@@ -223,7 +235,7 @@ export default function AppLayout() {
         />
         <ColumnResizeProvider>
           <div className="flex min-h-0 flex-1 overflow-hidden">
-            <LeftPanel onSearchChange={handleSearchChange} />
+            <LeftPanel onSearchChange={handleSearchChange} browseQuery={browseQuery} />
 
             {/* Conversations: render list component directly with props */}
             {mode === "conversations" && !isMessageRoute && (

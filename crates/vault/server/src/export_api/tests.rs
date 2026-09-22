@@ -358,6 +358,51 @@ async fn export_boolean_queries_preserve_or_and_and_not() {
     }
 }
 
+/// The Export screen's Search scope names chosen conversations as
+/// `in:#a,#b`: a comma list under one word is OR, so the query selects those
+/// conversations and no other.
+#[tokio::test]
+async fn a_comma_list_of_conversation_ids_exports_exactly_those_conversations() {
+    let (vault, conv1, conv2) = seeded_export_vault().await;
+    let conv3 = seed_conversation(
+        &vault.state,
+        &SeedConversation {
+            account_id: 101,
+            handle: "+1777",
+            conversation_type: "individual",
+            group_title: None,
+            source_file: "backup-a.jsonl",
+            messages: &[],
+        },
+    )
+    .await;
+    let mut conn = vault.conn().await;
+    add_message(&mut conn, 3, conv3, 3, "hello three").await;
+    add_message(&mut conn, 4, conv1, 4, "hello four").await;
+
+    let found = page(
+        &mut conn,
+        101,
+        &query(&format!("in:#{conv1},#{conv2}")),
+        100,
+        0,
+    )
+    .await
+    .unwrap();
+    assert_eq!(ids(&found), vec![1, 2, 4]);
+    assert!(
+        found
+            .items
+            .iter()
+            .all(|m| m.conversation.id == conv1 || m.conversation.id == conv2)
+    );
+
+    let found = page(&mut conn, 101, &query(&format!("in:#{conv3}")), 100, 0)
+        .await
+        .unwrap();
+    assert_eq!(ids(&found), vec![3]);
+}
+
 #[tokio::test]
 async fn rejects_an_oversized_query() {
     let (vault, _conv1, _conv2) = seeded_export_vault().await;

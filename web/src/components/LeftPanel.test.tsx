@@ -2,7 +2,7 @@
 
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mockedAuth, VaultProviders } from "../test/vaultProviders";
 import LeftPanel from "./LeftPanel";
@@ -62,11 +62,19 @@ beforeEach(() => {
   importAttentionState.attention = null;
 });
 
-function renderPanel(initialEntries?: string[]) {
+/** Where the router is now, as `pathname + search`. */
+// biome-ignore lint/style/useComponentExportOnlyModules: local test harness only
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname + location.search}</output>;
+}
+
+function renderPanel(initialEntries?: string[], browseQuery = "") {
   return render(
     <VaultProviders>
       <MemoryRouter initialEntries={initialEntries}>
-        <LeftPanel onSearchChange={() => {}} />
+        <LeftPanel onSearchChange={() => {}} browseQuery={browseQuery} />
+        <LocationProbe />
       </MemoryRouter>
     </VaultProviders>,
   );
@@ -161,6 +169,22 @@ describe("LeftPanel", () => {
       expect(screen.getByRole("button", { name: "Import" })).toBeTruthy();
       expect(screen.queryByText("Waiting")).toBeNull();
       expect(screen.queryByText("Failed")).toBeNull();
+    });
+
+    it("opens Export with the query the conversation list is showing", async () => {
+      // "Export what I am looking at" is one click: the Export screen reads
+      // `?q=` and opens in its Search scope with that text.
+      const user = userEvent.setup();
+      renderPanel(["/?q=from%3Ame"], "from:me tag:Work");
+      await user.click(screen.getByRole("button", { name: "Export" }));
+      expect(screen.getByTestId("location")).toHaveTextContent("/export?q=from%3Ame%20tag%3AWork");
+    });
+
+    it("opens Export plain when no conversation list is showing", async () => {
+      const user = userEvent.setup();
+      renderPanel(["/contacts?cq=ann"]);
+      await user.click(screen.getByRole("button", { name: "Export" }));
+      expect(screen.getByTestId("location")).toHaveTextContent("/export");
     });
 
     it("hides Import and Export when the Messages heading collapses", async () => {

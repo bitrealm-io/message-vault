@@ -8,7 +8,6 @@ import {
   thLeftClass,
   thRightClass,
 } from "./handleTableStyles";
-import { headerLabelMinWidth } from "./headerLabelMinWidth";
 
 export function SortableColumn({
   id,
@@ -34,9 +33,7 @@ export function SortableColumn({
   const textAlign =
     align === "right" ? "text-right" : align === "left" ? "text-left" : "text-center";
   const headerAlign = align === "right" ? thRightClass : align === "left" ? thLeftClass : thClass;
-  const resolvedMinWidth =
-    minWidth ??
-    (allowsResizing && typeof children === "string" ? headerLabelMinWidth(children) : undefined);
+  const resolvedMinWidth = minWidth;
 
   return (
     <Column

@@ -123,7 +123,17 @@ beforeEach(() => {
   });
   listAccountImports.mockResolvedValue({ items: [anImport], total: 1, limit: 40, offset: 0 });
   listAccountIdentities.mockResolvedValue({
-    items: [{ handle: "+15555550100", service: "phone", direct_messages: 12, group_messages: 30 }],
+    items: [
+      {
+        handle: "+15555550100",
+        service: "phone",
+        start_date: "2020-01-01T00:00:00Z",
+        end_date: "2020-02-03T00:00:00Z",
+        conversations: 2,
+        direct_messages: 12,
+        group_messages: 30,
+      },
+    ],
     total: 1,
     limit: 40,
     offset: 0,
@@ -386,7 +396,7 @@ describe("OwnerHome", () => {
     getAccount.mockResolvedValue({ ...anAccount, phones: [] });
     listAccountIdentities.mockResolvedValue({ items: [], total: 0, limit: 40, offset: 0 });
     // Remove asks first; the identity goes only once the dialog agrees.
-    await user.click(screen.getByRole("button", { name: "Remove +15555550100" }));
+    await user.click(screen.getByRole("button", { name: "Remove +15555550100 (Text message)" }));
     expect(updateAccount).not.toHaveBeenCalledWith(
       101,
       expect.objectContaining({ remove_handles: expect.anything() }),
@@ -398,7 +408,7 @@ describe("OwnerHome", () => {
         remove_handles: [{ handle: "+15555550100", service: "phone" }],
       }),
     );
-    expect(await screen.findByText("None")).toBeInTheDocument();
+    expect(await screen.findByText("No identities yet.")).toBeInTheDocument();
   });
 
   it("shows an account's last login and its app on Profile, marking another release", async () => {

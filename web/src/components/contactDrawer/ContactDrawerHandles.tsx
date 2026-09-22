@@ -1,117 +1,34 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
-import {
-  Cell,
-  ResizableTableContainer,
-  Row,
-  type SortDescriptor,
-  Table,
-  TableBody,
-  TableHeader,
-} from "react-aria-components";
+import { type ReactNode, useMemo } from "react";
 import type { ContactDetail, ContactHandle } from "../../lib/contactDetail";
+import AddIdentityDialog from "../AddIdentityDialog";
 import Button from "../Button";
 import ConfirmDialog from "../ConfirmDialog";
-import DataCard, { dataCardHeaderRowClass } from "../DataCard";
-import AddIdentityDialog from "./AddIdentityDialog";
-import {
-  type ContactBrowseKind,
-  emptyHandleRow,
-  formatHandleServiceLabel,
-  sumHandleTotals,
-} from "./contactDrawerTypes";
-import { renderHandleSummaryRow, renderHandleTableRow } from "./HandleTableRow";
-import { SortableColumn } from "./handleTableHelpers";
-import { removeIdentityConfirmBody, sortValue } from "./handleTableLogic";
-import { tdClass } from "./handleTableStyles";
-import {
-  columnInitialWidth,
-  HANDLE_TABLE_COUNT_CELL_PADDING_PX,
-  HANDLE_TABLE_DATE_SAMPLE,
-  HANDLE_TABLE_GROUP_CELL_PADDING_PX,
-  HANDLE_TABLE_MESSAGES_MAX,
-  HANDLE_TABLE_THREADS_MAX,
-  headerLabelMinWidth,
-} from "./headerLabelMinWidth";
+import DataCard from "../DataCard";
+import IdentityTable, { type IdentityRow } from "../IdentityTable";
+import type { ContactBrowseKind } from "./contactDrawerTypes";
+import { conversationCount, removeIdentityConfirmBody } from "./handleTableLogic";
 import { useHandleMutations } from "./useHandleMutations";
 
 type BrowseFn = (args: { kind: ContactBrowseKind; handle?: string }) => void;
 
-const twoLineHeader = (line1: string, line2: string) => (
-  <>
-    <span className="sr-only">{`${line1} ${line2}`}</span>
-    <span className="flex flex-col items-center leading-tight" aria-hidden="true">
-      <span className="whitespace-nowrap">{line1}</span>
-      <span className="whitespace-nowrap">{line2}</span>
-    </span>
-  </>
-);
-
-type ColumnSize = {
-  width: number;
-  min: number;
-};
-
-function collectColumnWidths(handleRows: ContactDetail["handles"]): {
-  service: ColumnSize;
-  handle: ColumnSize;
-  startDate: ColumnSize;
-  endDate: ColumnSize;
-  conversations: ColumnSize;
-  directMessages: ColumnSize;
-  groupMessages: ColumnSize;
-} {
-  const serviceMin = headerLabelMinWidth("Service");
-  const handleMin = headerLabelMinWidth("Identity");
-  const startMin = headerLabelMinWidth("First Seen");
-  const endMin = headerLabelMinWidth("Last Seen");
-  const threadsMin = headerLabelMinWidth("Threads");
-  // Two-line headers: min from the longest line ("Messages").
-  const messagesMin = headerLabelMinWidth("Messages");
-  const dateCol = columnInitialWidth(
-    Math.max(startMin, endMin),
-    [HANDLE_TABLE_DATE_SAMPLE],
-    HANDLE_TABLE_COUNT_CELL_PADDING_PX,
-  );
-  const groupMin = columnInitialWidth(
-    messagesMin,
-    [HANDLE_TABLE_MESSAGES_MAX],
-    HANDLE_TABLE_GROUP_CELL_PADDING_PX,
-  );
-
-  const serviceTexts = [
-    "Summary",
-    ...handleRows.map((h) => formatHandleServiceLabel(h.handle, h.service)),
-  ];
-  const handleTexts = ["—", ...handleRows.map((h) => h.handle)];
-
+/** A contact's identity as the shared table shows it. */
+function toIdentityRow(h: ContactHandle): IdentityRow {
   return {
-    service: { width: columnInitialWidth(serviceMin, serviceTexts), min: serviceMin },
-    handle: { width: columnInitialWidth(handleMin, handleTexts), min: handleMin },
-    startDate: { width: dateCol, min: startMin },
-    endDate: { width: dateCol, min: endMin },
-    conversations: {
-      width: columnInitialWidth(
-        threadsMin,
-        [HANDLE_TABLE_THREADS_MAX],
-        HANDLE_TABLE_COUNT_CELL_PADDING_PX,
-      ),
-      min: threadsMin,
-    },
-    directMessages: {
-      width: columnInitialWidth(
-        messagesMin,
-        [HANDLE_TABLE_MESSAGES_MAX],
-        HANDLE_TABLE_COUNT_CELL_PADDING_PX,
-      ),
-      min: messagesMin,
-    },
-    groupMessages: {
-      width: groupMin,
-      min: groupMin,
-    },
+    handle: h.handle,
+    service: h.service ?? null,
+    start_date: h.start_date ?? null,
+    end_date: h.end_date ?? null,
+    conversations: conversationCount(h),
+    direct_messages: h.individual_message_count,
+    group_messages: h.group_message_count,
   };
 }
 
+/**
+ * The identities of the contact in the drawer, with what each takes part in,
+ * and the way to add one or remove one. The conversation counts lead to the
+ * conversation list, and the Summary row adds every column up.
+ */
 export function ContactDrawerHandles({
   contactId,
   handleRows,
@@ -129,7 +46,6 @@ export function ContactDrawerHandles({
   intro?: ReactNode;
   toolbarExtra?: ReactNode;
 }) {
-  const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor | null>(null);
   const {
     adding,
     setAdding,
@@ -142,46 +58,21 @@ export function ContactDrawerHandles({
     confirmAdd,
   } = useHandleMutations({ contactId });
 
-  const totals = sumHandleTotals(handleRows);
+  const rows = useMemo(() => handleRows.map(toIdentityRow), [handleRows]);
 
-  const columnWidths = useMemo(() => collectColumnWidths(handleRows), [handleRows]);
-  const sortedRows = useMemo(() => {
-    type RowItem = ContactHandle & { id: string };
-    const rows: RowItem[] = handleRows.map((h, i) => ({
-      ...h,
-      id: `${h.handle}-${i}`,
-    }));
-    if (!sortDescriptor?.column) return rows;
-    const col = String(sortDescriptor.column);
-    const dir = sortDescriptor.direction === "descending" ? -1 : 1;
-    return [...rows].sort((a, b) => {
-      const av = sortValue(a, col);
-      const bv = sortValue(b, col);
-      if (av < bv) return -1 * dir;
-      if (av > bv) return 1 * dir;
-      return a.handle.localeCompare(b.handle);
-    });
-  }, [handleRows, sortDescriptor]);
-
-  useEffect(() => {
-    void contactId;
-    setSortDescriptor(null);
-  }, [contactId]);
-
-  const footerAsHandle: ContactHandle = {
-    ...emptyHandleRow(""),
-    ...totals,
+  const requestRemove = (row: IdentityRow) => {
+    const original = handleRows.find(
+      (h) => h.handle === row.handle && (h.service ?? null) === row.service,
+    );
+    if (original) requestRemoveHandle(original);
   };
-
-  // Remount when contact or loading flips so defaultWidth applies to real data after stubs.
-  const tableKey = `${contactId}:${loading ? "loading" : "ready"}`;
 
   return (
     <DataCard
       title={title}
       intro={intro}
       toolbar={toolbarExtra}
-      bodyClassName="min-w-0 overflow-x-hidden"
+      bodyClassName="min-w-0 overflow-x-auto"
     >
       <div className="mb-2 flex justify-end">
         <Button
@@ -193,112 +84,23 @@ export function ContactDrawerHandles({
           Add identity
         </Button>
       </div>
-      <ResizableTableContainer key={tableKey} className="w-full overflow-x-auto">
-        <Table
-          aria-label="Contact handles"
-          className="border-collapse text-left"
-          sortDescriptor={sortDescriptor ?? undefined}
-          onSortChange={setSortDescriptor}
-        >
-          <TableHeader className={dataCardHeaderRowClass}>
-            <SortableColumn
-              id="service"
-              isRowHeader
-              allowsResizing
-              defaultWidth={columnWidths.service.width}
-              minWidth={columnWidths.service.min}
-            >
-              Service
-            </SortableColumn>
-            <SortableColumn
-              id="handle"
-              allowsResizing
-              defaultWidth={columnWidths.handle.width}
-              minWidth={columnWidths.handle.min}
-            >
-              Identity
-            </SortableColumn>
-            <SortableColumn
-              id="start_date"
-              allowsResizing
-              defaultWidth={columnWidths.startDate.width}
-              minWidth={columnWidths.startDate.min}
-            >
-              <span className="whitespace-nowrap">First Seen</span>
-            </SortableColumn>
-            <SortableColumn
-              id="end_date"
-              allowsResizing
-              defaultWidth={columnWidths.endDate.width}
-              minWidth={columnWidths.endDate.min}
-            >
-              <span className="whitespace-nowrap">Last Seen</span>
-            </SortableColumn>
-            <SortableColumn
-              id="conversations"
-              allowsResizing
-              defaultWidth={columnWidths.conversations.width}
-              minWidth={columnWidths.conversations.min}
-            >
-              Threads
-            </SortableColumn>
-            <SortableColumn
-              id="direct_messages"
-              allowsResizing
-              defaultWidth={columnWidths.directMessages.width}
-              minWidth={columnWidths.directMessages.min}
-            >
-              {twoLineHeader("Direct", "Messages")}
-            </SortableColumn>
-            <SortableColumn
-              id="group_messages"
-              allowsResizing
-              defaultWidth="1fr"
-              minWidth={columnWidths.groupMessages.min}
-            >
-              {twoLineHeader("Group", "Messages")}
-            </SortableColumn>
-          </TableHeader>
-          {handleRows.length === 0 ? (
-            <TableBody className="[&_tr]:border-b [&_tr]:border-border">
-              <Row id="handles-empty" className="outline-none">
-                <Cell className={`${tdClass} !text-left text-muted`}>
-                  {loading ? "Loading…" : "No handles"}
-                </Cell>
-                <Cell className={tdClass} />
-                <Cell className={tdClass} />
-                <Cell className={tdClass} />
-                <Cell className={tdClass} />
-                <Cell className={tdClass} />
-                <Cell className={tdClass} />
-              </Row>
-            </TableBody>
-          ) : (
-            <TableBody
-              items={sortedRows}
-              dependencies={[busy, sortDescriptor]}
-              className="[&_tr]:border-b [&_tr]:border-border"
-            >
-              {(h) =>
-                renderHandleTableRow(h, {
-                  busy,
-                  loading,
-                  onBrowse,
-                  onRequestRemove: requestRemoveHandle,
-                })
-              }
-            </TableBody>
-          )}
-          <TableBody className="border-t-2 border-border">
-            {renderHandleSummaryRow(footerAsHandle, onBrowse, loading)}
-          </TableBody>
-        </Table>
-      </ResizableTableContainer>
+      {/* Keyed on the contact so the sort order starts over with each one. */}
+      <IdentityTable
+        key={contactId}
+        ariaLabel="Contact identities"
+        rows={rows}
+        loading={loading}
+        busy={busy}
+        totals
+        emptyText={loading ? "Loading…" : "No identities"}
+        onRemove={requestRemove}
+        onBrowse={onBrowse ? (row) => onBrowse({ kind: "all", handle: row.handle }) : undefined}
+      />
       <AddIdentityDialog
         open={adding}
         busy={busy}
         error={mutationError}
-        existingHandles={handleRows}
+        existing={handleRows}
         onClose={() => {
           if (!busy) setAdding(false);
         }}

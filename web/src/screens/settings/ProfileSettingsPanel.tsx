@@ -65,7 +65,6 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
   return (
     <div>
       <h3 className={sectionTitleClass}>Display Name</h3>
-      {/* The same row as Identities' Add below it, so the two buttons match. */}
       <div className="mb-[0.35rem] flex items-center gap-2">
         <input
           type="text"

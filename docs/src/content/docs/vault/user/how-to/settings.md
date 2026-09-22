@@ -17,7 +17,7 @@ Administrators also see a **Users** tab, and the desktop app adds **System** and
 
 - **Display name** — name shown for messages you sent
 - **Time zone** — the zone every message time, day and year is shown in, and the one `date:` searches count days in. It is chosen at profile setup, starting from the browser's zone or from the zone the vault owner set for the account, and can be changed here at any time. Typing in the field finds a zone by city, country, abbreviation or offset: `dallas`, `germany`, `cst` and `utc-6` all work
-- **My Identities** — phone numbers or emails used to recognize you in imports
+- **My Identities** — your phone numbers and emails. Import uses them to determine which messages belong to you
 
 ## Storage
 

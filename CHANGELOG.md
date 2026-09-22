@@ -54,6 +54,12 @@ of, and a search that reads the same everywhere.
   Last login column next to Status, in your own time zone, or "Never" for
   an account nobody has logged in to yet. Logging in, claiming the vault and
   registering all count; a password change does not.
+- 2026-09-21: **Export can write just the conversations a search finds.**
+  The Export screen opens with a scope: Everything, as before, or Search,
+  which shows a box for a search in the same language as the search bar and
+  exports only what it finds. `in:#19,#22` exports those two conversations
+  and nothing else. Opening Export while browsing a list of conversations
+  starts in Search with that list's search already filled in.
 - 2026-09-21: **The stop in an import run is a review, and it shows how many
   messages each identity sent.** "Staging Approval" and "Media Approval" are
   now "Staging Review" and "Media Review", and a waiting one reads "Awaiting

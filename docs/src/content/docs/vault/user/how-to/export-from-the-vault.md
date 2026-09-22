@@ -5,7 +5,7 @@ description: Save the messages in your vault to a folder on your computer, in th
 
 **Export** writes the messages in your vault, and their attachments, to a folder on your computer. It runs in the desktop app: Export appears in the sidebar once you log in.
 
-Export always writes the whole vault. There is no way yet to export only what you are browsing or only the conversations you have selected.
+An export covers everything in the vault, or only the conversations a search finds. The scope is the first choice on the screen.
 
 Every export is recorded as an Export Run: when it started, what it asked for, how many messages and attachments matched, and how it ended. [Settings → Storage](/vault/user/how-to/settings/) lists them under Export history.
 
@@ -19,9 +19,18 @@ Every export is recorded as an Export Run: when it started, what it asked for, h
 
 1. Log in to the vault in the desktop app
 2. Open **Export** in the sidebar
-3. Choose the folder to save into
-4. Choose a format
-5. Select **Export** and wait for the log to finish
+3. Choose the scope: **Everything** or **Search**
+4. Choose the folder to save into
+5. Choose a format
+6. Select **Export** and wait for the log to finish
+
+## Scope
+
+**Everything** writes every conversation in the vault.
+
+**Search** writes only the conversations a search finds, and shows a box for the search. It takes the same [search language](/vault/user/how-to/search/) as the search bar, so `from:me last year` exports what that search would show. To export particular conversations, name them with `in:`, which takes a title, a handle, or an id: `in:#19,#22` exports those two conversations and nothing else, and `in:"Book Club"` exports the one with that title.
+
+When you open Export while looking at a list of conversations, the screen starts in **Search** with that list's search already in the box, tag included, so exporting what you are looking at is one more click. Opened from Contacts or Trash, or from the sidebar with no search running, it starts in **Everything**.
 
 ## Formats
 

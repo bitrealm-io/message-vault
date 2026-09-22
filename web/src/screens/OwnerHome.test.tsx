@@ -12,6 +12,7 @@ import OwnerHome from "./OwnerHome";
 
 const listAccounts = vi.hoisted(() => vi.fn());
 const getVaultSettings = vi.hoisted(() => vi.fn());
+const getVaultStorage = vi.hoisted(() => vi.fn());
 const getVaultState = vi.hoisted(() => vi.fn());
 const updateVaultSettings = vi.hoisted(() => vi.fn());
 const updateAccount = vi.hoisted(() => vi.fn());
@@ -35,6 +36,7 @@ vi.mock("../lib/vaultApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/vaultApi")>()),
   listAccounts: (...a: unknown[]) => listAccounts(...a),
   getVaultSettings: (...a: unknown[]) => getVaultSettings(...a),
+  getVaultStorage: (...a: unknown[]) => getVaultStorage(...a),
   getVaultState: (...a: unknown[]) => getVaultState(...a),
   updateVaultSettings: (...a: unknown[]) => updateVaultSettings(...a),
   updateAccount: (...a: unknown[]) => updateAccount(...a),
@@ -92,6 +94,7 @@ beforeEach(() => {
   }));
   listAccounts.mockReset();
   getVaultSettings.mockReset();
+  getVaultStorage.mockReset();
   getVaultState.mockReset();
   updateVaultSettings.mockReset();
   updateAccount.mockReset();
@@ -111,6 +114,8 @@ beforeEach(() => {
   getAccountStorage.mockResolvedValue({
     total_bytes: 2048,
     attachment_count: 7,
+    conversation_count: 12,
+    contact_count: 34,
     top_attachments: [],
   });
   listAccountImports.mockResolvedValue({ items: [anImport], total: 1, limit: 40, offset: 0 });
@@ -120,6 +125,13 @@ beforeEach(() => {
   deleteAccountMessages.mockResolvedValue(undefined);
   listAccounts.mockResolvedValue({ items: [theOwner, anAccount] });
   getVaultSettings.mockResolvedValue({ public_registration: false });
+  getVaultStorage.mockResolvedValue({
+    message_count: 5678,
+    conversation_count: 90,
+    contact_count: 120,
+    attachment_count: 21,
+    total_bytes: 3 * 1024 * 1024,
+  });
   // The vault and this app are the same release unless a test says otherwise.
   getVaultState.mockResolvedValue({
     state: "closed",
@@ -200,8 +212,19 @@ describe("OwnerHome", () => {
     ]);
   });
 
+  it("shows what the whole vault holds on the Dashboard, as counts and a byte total", async () => {
+    renderHome(["/owner/dashboard"]);
+
+    expect(selectedSection()).toBe("Dashboard");
+    expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByText("3.0 MB")).toBeInTheDocument();
+    expect(screen.getByText(/5,678 messages, 21 attachments/)).toBeInTheDocument();
+    expect(screen.getByText(/90 conversations, 120 contacts/)).toBeInTheDocument();
+    expect(listAccounts).not.toHaveBeenCalled();
+    expect(getVaultSettings).not.toHaveBeenCalled();
+  });
+
   it.each([
-    ["dashboard", "Dashboard"],
     ["activity", "Activity"],
     ["logs", "Logs"],
   ])("opens /owner/%s on its name and loads nothing", (id, label) => {
@@ -401,6 +424,8 @@ describe("OwnerHome", () => {
     // What the accounts table used to carry: the message count and the storage total.
     expect(await screen.findByText(/1,234 messages/)).toBeInTheDocument();
     expect(screen.getByText(/7 attachments/)).toBeInTheDocument();
+    // Counts of conversations and contacts, and never their names.
+    expect(screen.getByText(/12 conversations, 34 contacts/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Import history" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /export history/i })).toBeInTheDocument();
   });

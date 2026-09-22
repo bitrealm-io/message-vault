@@ -25,6 +25,7 @@ use crate::credentials::{
     change_password_on_conn, check_auth_rate_limit, hash_owner_password, hash_user_password,
     passwords_match, require_username_free, require_valid_username,
 };
+use crate::db::storage::{self, Scope};
 use crate::db::{account_profile, session_tokens, vault_imports, vault_settings};
 use crate::extract::{Json, Path, Query};
 use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_params};
@@ -86,16 +87,6 @@ pub struct AccountResponse {
     pub storage_bytes: i64,
 }
 
-/// Number of messages an account owns. Never touches message content.
-async fn account_message_count(conn: &mut AnyConnection, account_id: i64) -> Result<i64, ApiError> {
-    Ok(
-        sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE account_id = $1")
-            .bind(account_id)
-            .fetch_one(&mut *conn)
-            .await?,
-    )
-}
-
 /// Load one account's row. `None` when the account does not exist.
 async fn load_account(
     conn: &mut AnyConnection,
@@ -113,8 +104,8 @@ async fn load_account(
         .name()
         .to_string();
     let profile = account_profile::load_account_profile(conn, account_id).await?;
-    let message_count = account_message_count(conn, account_id).await?;
-    let storage_bytes = vault_imports::account_attachment_bytes(conn, account_id).await?;
+    let message_count = storage::message_count(conn, Scope::Account(account_id)).await?;
+    let storage_bytes = storage::attachment_bytes(conn, Scope::Account(account_id)).await?;
     let last_login_at = account_profile::load_last_login(conn, account_id).await?;
     let app = crate::db::session_tokens::connecting_app_for_account(conn, account_id).await?;
     Ok(Some(AccountResponse {
@@ -1003,19 +994,26 @@ pub async fn delete_messages_handler(
     }))
 }
 
-/// Attachment usage and the largest files.
+/// What an account holds: counts, attachment bytes and the largest files.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct AccountStorageResponse {
+    /// Attachment bytes, by original file size.
     pub total_bytes: i64,
+    /// Attachment rows.
     pub attachment_count: i64,
+    /// Conversations. A count and never a title: how many an account has is
+    /// a measure of the vault, and who they are with is the holder's.
+    pub conversation_count: i64,
+    /// Contacts, on the same terms as `conversation_count`.
+    pub contact_count: i64,
     pub top_attachments: Vec<vault_imports::TopAttachment>,
 }
 
-/// Attachment storage usage for an account: total bytes, count, and the 100
-/// largest files. The owner reads any account's; an account reads its own.
-/// The owner is told each file's name, type and size and not the conversation
-/// it is in, which says who the account talks to
-/// (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
+/// What an account holds: attachment bytes, the attachment, conversation and
+/// contact counts, and the 100 largest files. The owner reads any account's;
+/// an account reads its own. The owner is told each file's name, type and
+/// size and not the conversation it is in, which says who the account talks
+/// to (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
 #[utoipa::path(
     get,
     path = "/v1/accounts/{id}/storage",
@@ -1037,8 +1035,11 @@ pub(crate) async fn account_storage_handler(
 ) -> Result<Json<AccountStorageResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let reach = require_owner_or_self(&mut conn, &auth, target).await?;
-    let total_bytes = vault_imports::account_attachment_bytes(&mut conn, target).await?;
-    let attachment_count = vault_imports::account_attachment_count(&mut conn, target).await?;
+    let scope = Scope::Account(target);
+    let total_bytes = storage::attachment_bytes(&mut conn, scope).await?;
+    let attachment_count = storage::attachment_count(&mut conn, scope).await?;
+    let conversation_count = storage::conversation_count(&mut conn, scope).await?;
+    let contact_count = storage::contact_count(&mut conn, scope).await?;
     let mut top_attachments =
         vault_imports::top_attachments_by_size(&mut conn, target, 100).await?;
     if matches!(reach, Reach::Owner) {
@@ -1050,6 +1051,8 @@ pub(crate) async fn account_storage_handler(
     Ok(Json(AccountStorageResponse {
         total_bytes,
         attachment_count,
+        conversation_count,
+        contact_count,
         top_attachments,
     }))
 }

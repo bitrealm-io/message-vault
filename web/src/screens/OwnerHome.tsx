@@ -12,6 +12,7 @@ import { NAV_LEADING_ROW_CLASS } from "../components/navSectionLayout";
 import { useAuth } from "../lib/auth";
 import { parseSelectKey } from "../lib/selectKey";
 import { OwnerAccountsPanel } from "./owner/OwnerAccountsPanel";
+import { OwnerDashboardPanel } from "./owner/OwnerDashboardPanel";
 import { VaultSettingsPanel } from "./owner/VaultSettingsPanel";
 import SettingsScreen from "./SettingsScreen";
 
@@ -28,11 +29,7 @@ const SECTION_LABELS: Record<(typeof SECTIONS)[number], string> = {
 };
 
 /** Sections the side panel lists before anything is built behind them. */
-const EMPTY_SECTIONS: ReadonlySet<(typeof SECTIONS)[number]> = new Set([
-  "dashboard",
-  "activity",
-  "logs",
-]);
+const EMPTY_SECTIONS: ReadonlySet<(typeof SECTIONS)[number]> = new Set(["activity", "logs"]);
 
 function sectionLinkClass(active: boolean): string {
   return `${NAV_LEADING_ROW_CLASS} box-border w-full cursor-pointer rounded border-none px-2 py-1.5 text-left text-[0.875rem] text-text hover:bg-hover ${
@@ -49,8 +46,8 @@ function sectionLinkClass(active: boolean): string {
  * What fills it is the owner's own. The owner has no conversations, no
  * contacts, no import, no export and no trash, so the side panel lists
  * Dashboard, Settings, User Accounts, Activity and Logs, and the search bar
- * filters the accounts table. Dashboard, Activity and Logs show only their
- * name: nothing is built behind them yet.
+ * filters the accounts table. Dashboard shows what the whole vault holds.
+ * Activity and Logs show only their name: nothing is built behind them yet.
  *
  * `/owner/accounts/{id}` is one account's Settings, the screen its holder
  * sees, opened from the gear in the account's row. The owner's own row
@@ -147,6 +144,7 @@ export default function OwnerHome() {
               {EMPTY_SECTIONS.has(section) && (
                 <h3 className="m-0 text-text">{SECTION_LABELS[section]}</h3>
               )}
+              {section === "dashboard" && <OwnerDashboardPanel />}
               {section === "settings" && <VaultSettingsPanel />}
               {section === "accounts" && <OwnerAccountsPanel filter={accountSearch} />}
             </div>

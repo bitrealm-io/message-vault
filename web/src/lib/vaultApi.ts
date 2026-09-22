@@ -182,6 +182,17 @@ export function getVaultSettings(
   return apiClient.get<Schema["VaultSettingsResponse"]>("/v1/vault/settings", opts);
 }
 
+/**
+ * What the whole vault holds, summed over every account: message,
+ * conversation, contact and attachment counts, and attachment bytes. The
+ * owner's, and counts only (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
+ */
+export function getVaultStorage(
+  opts?: VaultRequestOptions,
+): Promise<Schema["VaultStorageResponse"]> {
+  return apiClient.get<Schema["VaultStorageResponse"]>("/v1/vault/storage", opts);
+}
+
 /** Change the vault's settings. Omitted fields are left alone. */
 export function updateVaultSettings(
   body: Schema["PatchVaultSettingsRequest"],

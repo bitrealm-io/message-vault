@@ -73,6 +73,8 @@ export const keys = {
       ["owner-accounts", accountId, "storage", "import", String(id)] as const,
   },
   vaultSettings: { all: ["vault-settings"] as const },
+  /** What the whole vault holds, from `GET /v1/vault/storage`. */
+  vaultStorage: { all: ["vault-storage"] as const },
   /** The vault's own Build and Schema Fingerprint, from `GET /v1/vault`. */
   vaultInfo: { all: ["vault-info"] as const },
   storage: {

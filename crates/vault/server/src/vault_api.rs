@@ -16,7 +16,7 @@
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
 
-use crate::db::{account_profile, vault_settings};
+use crate::db::{account_profile, storage, vault_settings};
 use crate::extract::Json;
 use crate::server::{ApiError, AppState, Owner};
 
@@ -217,6 +217,54 @@ pub async fn patch_vault_settings_handler(
     let settings = vault_settings::load(&mut conn).await?;
     Ok(Json(VaultSettingsResponse {
         public_registration: settings.public_registration,
+    }))
+}
+
+/// What the whole vault holds, summed over every account.
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct VaultStorageResponse {
+    /// Messages across every account.
+    pub message_count: i64,
+    /// Conversations across every account.
+    pub conversation_count: i64,
+    /// Contacts across every account.
+    pub contact_count: i64,
+    /// Attachment rows across every account.
+    pub attachment_count: i64,
+    /// Attachment bytes across every account, by original file size.
+    pub total_bytes: i64,
+}
+
+/// Read what the vault holds: the message, conversation, contact and
+/// attachment counts and the attachment bytes, summed over every account.
+/// Counts and totals only, never a name or a line of text
+/// (`docs/adr/0008-the-vault-owner-holds-no-messages.md`, "What the owner
+/// may see"). The owner's, because the owner administers the vault and
+/// nobody else holds more than their own account.
+#[utoipa::path(
+    get,
+    path = "/v1/vault/storage",
+    tag = "Vault",
+    operation_id = "vault_storage",
+    security(("session" = ["owner"])),
+    responses(
+        (status = 200, body = VaultStorageResponse),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem)
+    )
+)]
+pub async fn vault_storage_handler(
+    State(state): State<AppState>,
+    Owner(_auth): Owner,
+) -> Result<Json<VaultStorageResponse>, ApiError> {
+    let mut conn = state.db.acquire().await?;
+    let scope = storage::Scope::Vault;
+    Ok(Json(VaultStorageResponse {
+        message_count: storage::message_count(&mut conn, scope).await?,
+        conversation_count: storage::conversation_count(&mut conn, scope).await?,
+        contact_count: storage::contact_count(&mut conn, scope).await?,
+        attachment_count: storage::attachment_count(&mut conn, scope).await?,
+        total_bytes: storage::attachment_bytes(&mut conn, scope).await?,
     }))
 }
 

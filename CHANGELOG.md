@@ -31,6 +31,12 @@ of, and a search that reads the same everywhere.
   the account's open session and says which one it was, or that there was
   none. The refusal names the command, so you no longer need the desktop
   app's Import screen to get unstuck.
+- 2026-09-21: **The vault owner can see how much the vault holds.** Owner
+  Home's Dashboard now shows the vault's totals across every account: its
+  storage total and how many messages, attachments, conversations and
+  contacts it holds. An account's Storage tab shows its conversation and
+  contact counts beside its message and attachment counts. These are counts
+  only: no conversation, contact or message is named to the owner.
 - 2026-09-19: **The vault owner sees an account's Storage as its holder
   does.** Open an account from User Accounts and its Storage tab now shows its
   message count and storage total, every import and export it has run, and

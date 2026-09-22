@@ -69,6 +69,11 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(digits)} ${units[unit]}`;
 }
 
+/** A count with its noun, pluralised by adding `s`: "1 message", "1,234 messages". */
+export function countOf(n: number, noun: string): string {
+  return `${n.toLocaleString()} ${noun}${n === 1 ? "" : "s"}`;
+}
+
 /** Import start/finish time for table rows, or an em dash when missing. */
 export function formatImportDate(iso: string | null | undefined): string {
   if (!iso) return "—";

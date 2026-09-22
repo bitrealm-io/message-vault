@@ -24,6 +24,8 @@ export function StorageSection({ managedAccountId }: { managedAccountId?: number
     exports,
     totalBytes,
     attachmentCount,
+    conversationCount,
+    contactCount,
     topAttachments,
     page,
     setPage,
@@ -54,6 +56,8 @@ export function StorageSection({ managedAccountId }: { managedAccountId?: number
       <StorageUsageCard
         totalBytes={totalBytes}
         attachmentCount={attachmentCount}
+        conversationCount={conversationCount}
+        contactCount={contactCount}
         messageCount={profile?.message_count ?? 0}
       />
 

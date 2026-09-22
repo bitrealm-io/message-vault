@@ -293,7 +293,7 @@ describe("useImportJob wiring", () => {
   it("stops at the first gate instead of uploading", async () => {
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
-    expect(result.current.phase).toBe("staging_approval");
+    expect(result.current.phase).toBe("staging_review");
     expect(invokePushMock).not.toHaveBeenCalled();
     expect(invokeTranscodeStagingMock).not.toHaveBeenCalled();
   });
@@ -324,7 +324,7 @@ describe("useImportJob wiring", () => {
     await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
     await act(() => result.current.approve());
     expect(invokeTranscodeStagingMock).toHaveBeenCalled();
-    expect(result.current.phase).toBe("media_approval");
+    expect(result.current.phase).toBe("media_review");
     expect(invokePushMock).not.toHaveBeenCalled();
   });
 
@@ -343,7 +343,7 @@ describe("useImportJob wiring", () => {
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
 
-    expect(result.current.phase).toBe("staging_approval");
+    expect(result.current.phase).toBe("staging_review");
     // Writing the conversation files narrates the Staging row.
     expect(result.current.steps[0]?.detail).toBe("Preparing 50/200");
   });
@@ -389,7 +389,7 @@ describe("useImportJob wiring", () => {
     expect(result.current.steps[0]?.status).toBe("active");
     release();
     await act(() => started);
-    expect(result.current.phase).toBe("staging_approval");
+    expect(result.current.phase).toBe("staging_review");
   });
 
   it("uploads straight from the first gate under copy, because there is no second one", async () => {
@@ -484,7 +484,7 @@ describe("useImportJob wiring", () => {
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
     await act(() => result.current.approve());
-    expect(result.current.phase).toBe("media_approval");
+    expect(result.current.phase).toBe("media_review");
 
     await act(() => result.current.cancelRun());
 
@@ -509,7 +509,7 @@ describe("useImportJob wiring", () => {
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
     await act(() => result.current.approve()); // Gate 1 -> media pass -> Gate 2
-    expect(result.current.phase).toBe("media_approval");
+    expect(result.current.phase).toBe("media_review");
 
     await act(() => result.current.approve()); // Gate 2 -> pushing
 
@@ -543,7 +543,7 @@ describe("useImportJob wiring", () => {
     expect(result.current.mediaSummary).toBeNull();
     await act(() => result.current.approve());
 
-    expect(result.current.phase).toBe("media_approval");
+    expect(result.current.phase).toBe("media_review");
     expect(result.current.stagingSummary).toEqual(staged);
     expect(result.current.mediaSummary).toEqual(afterMedia);
     expect(result.current.mediaFailedCount).toBe(2);
@@ -559,7 +559,7 @@ describe("useImportJob wiring", () => {
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
     await act(() => result.current.approve());
-    expect(result.current.phase).toBe("media_approval");
+    expect(result.current.phase).toBe("media_review");
 
     await act(() => result.current.approve());
 
@@ -835,7 +835,7 @@ describe("useImportJob wiring", () => {
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport({ ...baseForm, attachmentMedia: "convert" }));
 
-    expect(result.current.phase).toBe("staging_approval");
+    expect(result.current.phase).toBe("staging_review");
     expect(result.current.steps.map((s) => s.label)).toEqual(["Staging", "Media", "Upload"]);
     expect(result.current.steps[1]?.status).toBe("pending");
     expect(result.current.steps[2]?.status).toBe("pending");
@@ -843,7 +843,7 @@ describe("useImportJob wiring", () => {
 
   it("continues the convert-mode step list through the media pass into Gate 2", async () => {
     // Task 7 pinned the media row sitting pending after extract; this
-    // continues the same run through approval: active while the pass runs,
+    // continues the same run through review: active while the pass runs,
     // done once it finishes.
     resolveImportStagingDirMock.mockResolvedValue("/tmp/staging");
     runMock.mockImplementationOnce(
@@ -854,7 +854,7 @@ describe("useImportJob wiring", () => {
     await act(() => result.current.startImport({ ...baseForm, attachmentMedia: "convert" }));
     await act(() => result.current.approve());
 
-    expect(result.current.phase).toBe("media_approval");
+    expect(result.current.phase).toBe("media_review");
     expect(result.current.steps[1]?.status).toBe("done");
   });
 
@@ -983,7 +983,7 @@ describe("useImportJob wiring", () => {
         });
       });
       expect(invokeImessageBackupIdentitiesMock).not.toHaveBeenCalled();
-      expect(result.current.phase).toBe("staging_approval");
+      expect(result.current.phase).toBe("staging_review");
       expect(result.current.sourceIdentities).toEqual(["+15550001111"]);
     });
 
@@ -1254,7 +1254,7 @@ describe("useImportJob resumeAtGate", () => {
     });
 
     expect(invokeSummarizeStagingMock).toHaveBeenCalledTimes(1);
-    expect(result.current.phase).toBe("staging_approval");
+    expect(result.current.phase).toBe("staging_review");
     expect(result.current.stagingSummary?.conversations).toBe(9);
     // Decision 39: landing on a gate to look at it again writes nothing.
     expect(setImportStageMock).not.toHaveBeenCalled();
@@ -1276,7 +1276,7 @@ describe("useImportJob resumeAtGate", () => {
       );
     });
 
-    expect(result.current.phase).toBe("staging_approval");
+    expect(result.current.phase).toBe("staging_review");
     expect(result.current.steps.map((s) => s.label)).toEqual(["Staging", "Media", "Upload"]);
     expect(result.current.steps.map((s) => s.status)).toEqual(["done", "pending", "pending"]);
   });
@@ -1313,7 +1313,7 @@ describe("useImportJob resumeAtGate", () => {
     });
 
     expect(invokeSummarizeStagingMock).toHaveBeenCalledTimes(1);
-    expect(result.current.phase).toBe("media_approval");
+    expect(result.current.phase).toBe("media_review");
     // The Staging row shows what was approved before Media; what the
     // person is deciding on is always recomputed from the folder. The two
     // genuinely differ here, so a bug that fed one value to both shows.
@@ -1345,7 +1345,7 @@ describe("useImportJob resumeAtGate", () => {
     });
 
     expect(invokeTranscodeStagingMock).toHaveBeenCalled();
-    expect(result.current.phase).toBe("media_approval");
+    expect(result.current.phase).toBe("media_review");
     // The stage write sequence matches the normal flow: "transcode" is
     // (idempotently) set again, then "awaiting_gate_2", both carrying the
     // plan stored at the last gate.
@@ -1387,7 +1387,7 @@ describe("useImportJob resumeAtGate", () => {
       resolveTranscode({ summary: "Transcode finished.", transcode: undefined });
       await resumed;
     });
-    expect(result.current.phase).toBe("media_approval");
+    expect(result.current.phase).toBe("media_review");
   });
 
   it("falls back to Gate 1 instead of running the pass when ffmpeg is missing on a transcode resume", async () => {
@@ -1408,7 +1408,7 @@ describe("useImportJob resumeAtGate", () => {
     });
 
     expect(invokeTranscodeStagingMock).not.toHaveBeenCalled();
-    expect(result.current.phase).toBe("staging_approval");
+    expect(result.current.phase).toBe("staging_review");
     expect(result.current.mediaToolsMissing).toBe(true);
     // The folder may hold a mix of originals and already-converted files --
     // Gate 1's "has not run yet" copy would be wrong here.
@@ -1446,9 +1446,9 @@ describe("useImportJob resumeAtGate", () => {
       );
     });
 
-    expect(result.current.phase).toBe("media_approval");
+    expect(result.current.phase).toBe("media_review");
     // No stored plan to show for Staging: the resume still lands on the
-    // approval with the recomputed folder, instead of blocking or throwing.
+    // review with the recomputed folder, instead of blocking or throwing.
     expect(result.current.stagingSummary).toBeNull();
     expect(result.current.mediaSummary).toEqual(actual);
   });
@@ -1505,7 +1505,7 @@ describe("useImportJob resumeAtGate", () => {
       );
     });
     expect(result.current.resumeError).toBeNull();
-    expect(result.current.phase).toBe("staging_approval");
+    expect(result.current.phase).toBe("staging_review");
   });
 });
 

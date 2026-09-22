@@ -124,7 +124,7 @@ describe("resumeDecisionFor", () => {
   });
 
   it("still offers discard only when the folder is gone at a gate", () => {
-    // Decision 36: after approval, discard only. There is nothing to
+    // Decision 36: after a review, discard only. There is nothing to
     // recompute a summary from.
     for (const stage of ["awaiting_gate_1", "awaiting_gate_2", "transcode"] as const) {
       expect(

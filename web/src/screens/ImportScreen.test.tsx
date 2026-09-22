@@ -17,8 +17,8 @@ const hookState = vi.hoisted(() => ({
   phase: "form" as
     | "form"
     | "running"
-    | "staging_approval"
-    | "media_approval"
+    | "staging_review"
+    | "media_review"
     | "done"
     | "identity_stop",
   stagingSummary: null as StagingSummary | null,
@@ -118,7 +118,7 @@ vi.mock("./import/ImportFormFields", () => ({
 
 vi.mock("./import/ImportRunView", () => ({
   default: (props: {
-    approvalWaiting: string | null;
+    reviewWaiting: string | null;
     unknownContacts: number | null;
     identityPanel?: unknown;
     onApprove: () => void;
@@ -126,7 +126,7 @@ vi.mock("./import/ImportRunView", () => ({
     onBack: () => void;
   }) => (
     <div data-testid="import-run">
-      <span data-testid="run-approval-waiting">{String(props.approvalWaiting)}</span>
+      <span data-testid="run-review-waiting">{String(props.reviewWaiting)}</span>
       <span data-testid="run-unknown-contacts">{String(props.unknownContacts)}</span>
       <span data-testid="run-has-identities">{String(props.identityPanel != null)}</span>
       <button type="button" onClick={props.onApprove}>
@@ -819,7 +819,7 @@ describe("ImportScreen gates", () => {
   });
 
   it("shows the Staging Review inside the run, with approve and cancel wired to the hook", async () => {
-    hookState.phase = "staging_approval";
+    hookState.phase = "staging_review";
     hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["+15551234567"] });
     hookState.sourceIdentities = ["+15550001111"];
     const user = userEvent.setup();
@@ -827,7 +827,7 @@ describe("ImportScreen gates", () => {
 
     expect(await screen.findByTestId("import-run")).toBeInTheDocument();
     expect(screen.queryByTestId("import-form")).not.toBeInTheDocument();
-    expect(screen.getByTestId("run-approval-waiting")).toHaveTextContent("staging");
+    expect(screen.getByTestId("run-review-waiting")).toHaveTextContent("staging");
     expect(screen.getByTestId("run-has-identities")).toHaveTextContent("true");
 
     await user.click(screen.getByText("run-approve"));
@@ -838,7 +838,7 @@ describe("ImportScreen gates", () => {
   });
 
   it("shows the Media Review inside the run, without the backup's identities", async () => {
-    hookState.phase = "media_approval";
+    hookState.phase = "media_review";
     hookState.stagingSummary = stagingSummary();
     hookState.mediaSummary = stagingSummary();
     hookState.sourceIdentities = ["+15550001111"];
@@ -846,7 +846,7 @@ describe("ImportScreen gates", () => {
     renderWithVault(<ImportScreen />);
 
     expect(await screen.findByTestId("import-run")).toBeInTheDocument();
-    expect(screen.getByTestId("run-approval-waiting")).toHaveTextContent("media");
+    expect(screen.getByTestId("run-review-waiting")).toHaveTextContent("media");
     expect(screen.getByTestId("run-has-identities")).toHaveTextContent("false");
 
     await user.click(screen.getByText("run-approve"));
@@ -866,7 +866,7 @@ describe("ImportScreen gates", () => {
   });
 
   it("looks up which of the staged contacts are unknown, in one batch under the server cap", async () => {
-    hookState.phase = "staging_approval";
+    hookState.phase = "staging_review";
     hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["a", "b", "c"] });
     apiPostMock.mockResolvedValue({ items: ["a", "c"], total: 2, limit: 500, offset: 0 });
     renderWithVault(<ImportScreen />);
@@ -882,7 +882,7 @@ describe("ImportScreen gates", () => {
   });
 
   it("batches the contact-match lookup at 500 identifiers per request and sums unknown across batches", async () => {
-    hookState.phase = "staging_approval";
+    hookState.phase = "staging_review";
     const identifiers = Array.from({ length: 620 }, (_, i) => `+1555000${i}`);
     hookState.stagingSummary = stagingSummary({ contactIdentifiers: identifiers });
     apiPostMock.mockResolvedValueOnce({
@@ -912,8 +912,8 @@ describe("ImportScreen gates", () => {
     expect(screen.getByTestId("run-unknown-contacts")).toHaveTextContent("430");
   });
 
-  it("renders the approval without the unknown-contact count when the lookup fails", async () => {
-    hookState.phase = "staging_approval";
+  it("renders the review without the unknown-contact count when the lookup fails", async () => {
+    hookState.phase = "staging_review";
     hookState.stagingSummary = stagingSummary({ contactIdentifiers: ["a"] });
     apiPostMock.mockRejectedValue(new Error("network down"));
     renderWithVault(<ImportScreen />);

@@ -40,7 +40,7 @@ export type ImportRunState = {
   /**
    * True only for a resume that landed at the Staging Review because
    * ffmpeg went missing mid Media, not for the genuine not-yet-run case:
-   * the approval's copy must not claim Media has not run when it partly has.
+   * the review's copy must not claim Media has not run when it partly has.
    */
   mediaPartiallyRan: boolean;
   /**
@@ -53,7 +53,7 @@ export type ImportRunState = {
   resumeError: string | null;
   /**
    * True only while a not-cancellable summarize call is in flight: the
-   * approval renders once the summary resolves, and until then the run
+   * review renders once the summary resolves, and until then the run
    * view stays up with Cancel disabled, since there is nothing to stop.
    */
   computingSummary: boolean;
@@ -114,7 +114,7 @@ export function useImportRunState(): ImportRunState {
   return useSyncExternalStore(importRunStore.subscribe, importRunStore.get, importRunStore.get);
 }
 
-/** True at either approval: the run is waiting for the person to decide. */
-export function isApprovalPhase(phase: ImportPhase): boolean {
-  return phase === "staging_approval" || phase === "media_approval";
+/** True at either review: the run is waiting for the person to decide. */
+export function isReviewPhase(phase: ImportPhase): boolean {
+  return phase === "staging_review" || phase === "media_review";
 }

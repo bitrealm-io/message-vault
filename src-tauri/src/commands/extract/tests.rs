@@ -87,7 +87,7 @@ fn imessage_compress_still_validates_media_fields_up_front() {
     // `Form`'s own compress validation no longer runs for it. Without the
     // explicit `parse_compress_options` call in `build_exporter_config`,
     // a malformed `media_min_size` would sail through here and only
-    // surface hours later, at the approval gate.
+    // surface hours later, at the review.
     let mut options = test_options(Vec::new());
     options.attachment_media = AttachmentMedia::Compress;
     options.media_min_size = "banana".into();

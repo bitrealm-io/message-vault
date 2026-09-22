@@ -1,4 +1,4 @@
-//! Recompute what a staged folder holds, for the approval gates.
+//! Recompute what a staged folder holds, for the reviews.
 //!
 //! Everything here is measured from the folder. The one estimate is what the
 //! media step will do to a file's size, and it is labelled as an estimate all
@@ -147,7 +147,7 @@ pub struct SummaryProgress {
 }
 
 /// Recompute a staged folder's summary: exact conversation/message/attachment
-/// counts plus a per-attachment size forecast, for the approval gates.
+/// counts plus a per-attachment size forecast, for the reviews.
 ///
 /// Walks the same `*.jsonl` list the media pass walks. For each attachment
 /// already carrying a `missing_reason` — settled, whether or not its `path`

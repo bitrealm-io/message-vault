@@ -1,6 +1,6 @@
 import { listImports } from "../../lib/vaultApi";
 import { useVaultQuery } from "../../lib/vaultQuery";
-import { isApprovalPhase, useImportRunState } from "./importRunStore";
+import { isReviewPhase, useImportRunState } from "./importRunStore";
 
 /** Why the Import sidebar entry carries a badge, or null when it does not. */
 export type ImportAttention = "waiting" | "failed";
@@ -9,7 +9,7 @@ export type ImportAttention = "waiting" | "failed";
 const WAITING_STAGES = new Set(["awaiting_gate_1", "awaiting_gate_2"]);
 
 /**
- * Whether the account's Import Run needs the person: waiting at an approval,
+ * Whether the account's Import Run needs the person: waiting at a review,
  * or finished by failing. Read by the sidebar so a run left on its own is
  * not forgotten on another screen.
  *
@@ -25,7 +25,7 @@ export function useImportAttention(enabled: boolean): ImportAttention | null {
     (signal) => listImports({ status: "running", limit: 1 }, { signal }),
     { enabled, staleTime: 30_000 },
   );
-  if (isApprovalPhase(run.phase)) return "waiting";
+  if (isReviewPhase(run.phase)) return "waiting";
   if (run.phase === "done" && run.summaryView?.status === "failed") return "failed";
   if (run.phase !== "form") return null;
   const stage = vault.data?.items[0]?.stage;

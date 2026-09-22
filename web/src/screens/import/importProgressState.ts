@@ -10,15 +10,15 @@ export type ImportStep = {
 
 /**
  * Where the Import screen is. The three stages of a run (CONTEXT.md,
- * "Stage") all show as `running`; the two approvals are phases of their
+ * "Stage") all show as `running`; the two reviews are phases of their
  * own, because the run is waiting for the person rather than working.
  */
 export type ImportPhase =
   | "form"
   | "identity_stop"
   | "running"
-  | "staging_approval"
-  | "media_approval"
+  | "staging_review"
+  | "media_review"
   | "done";
 
 export type AttachmentProgressCounts = {

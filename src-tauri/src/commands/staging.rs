@@ -10,7 +10,7 @@
 //! held.
 //!
 //! `summarize_staging` and `transcode_staging` both build a
-//! [`message_ir_format::TranscodeOptions`] from the same form fields
+//! [`message_staging::TranscodeOptions`] from the same form fields
 //! `extract` parses, reusing its parsing helpers rather than re-deriving
 //! them, so a summary and the pass it forecasts always agree on what
 //! `Convert`/`Compress` mean.
@@ -34,7 +34,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use message_ir_format::{EXPORT_SENTINEL, StagingSummary, TranscodeOptions, TranscodeReport};
+use message_ir_format::EXPORT_SENTINEL;
+use message_staging::{StagingSummary, TranscodeOptions, TranscodeReport};
 
 use super::events;
 use super::events::ExtractProgressEvent;
@@ -155,7 +156,7 @@ pub async fn summarize_staging(
 
     let progress_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        message_ir_format::summarize_staging(&staging_dir, &options, &mut |progress| {
+        message_staging::summarize_staging(&staging_dir, &options, &mut |progress| {
             events::emit(
                 &progress_app,
                 events::PROGRESS,
@@ -272,7 +273,7 @@ pub fn transcode_staging(
         // `&self`), so it borrows the one clone above rather than needing a
         // second — the same handle is still available by reference below,
         // once this borrow ends at the end of the `transcode_staged` call.
-        let outcome = message_ir_format::transcode_staged(
+        let outcome = message_staging::transcode_staged(
             &staging_dir,
             &options,
             Some(&cancel),

@@ -1,0 +1,23 @@
+[package]
+name = "message-staging"
+version = "0.1.0"
+edition = "2024"
+description = "The resumable write path: the write queue, the transcode pass, the staging summary, and the ExportWriter that drives them"
+license = "LicenseRef-FCL-1.0-ALv2"
+
+[dependencies]
+anyhow = { workspace = true }
+fs2 = "0.4.3"
+media = { path = "../media" }
+message-ir = { path = "../ir" }
+message-ir-format = { path = "../ir-format" }
+message-vault-io-core = { path = "../../core/message-vault-io-core" }
+serde = { workspace = true }
+
+[dev-dependencies]
+message-ir = { path = "../ir", features = ["testutil"] }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

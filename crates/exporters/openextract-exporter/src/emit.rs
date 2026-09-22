@@ -8,7 +8,7 @@ use message_ir::{
     ExportMeta, HandleType, IrParticipant, IrService, IrSource, PendingConversation,
     PendingMessage, ProjectionHooks, ensure_conversation,
 };
-use message_ir_format::{AttachmentSource, ExportWriter};
+use message_staging::{AttachmentSource, ExportWriter};
 use message_vault_io_core::{
     CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
 };

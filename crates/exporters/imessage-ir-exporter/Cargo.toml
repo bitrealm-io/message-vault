@@ -20,6 +20,7 @@ imessage-reader-protocol = { path = "../../helpers/imessage-reader-protocol" }
 message-vault-io-core = { path = "../../core/message-vault-io-core" }
 message-ir = { path = "../../libs/ir" }
 message-ir-format = { path = "../../libs/ir-format" }
+message-staging = { path = "../../libs/staging" }
 plist = "1.9.0"
 serde_json = { workspace = true }
 tempfile = { workspace = true }

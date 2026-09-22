@@ -25,9 +25,9 @@ use message_ir::{
     IrConversationType, IrDirection, IrImessage, IrMessage, IrMessageKind, IrParticipant,
     IrService, SCHEMA_VERSION, owner_sender,
 };
-use message_ir_format::{
-    AttachmentSource, ConversationUnit, ExportWriter, ExportWriterParts, FormatSink,
-    WriteQueueOptions,
+use message_ir_format::FormatSink;
+use message_staging::{
+    AttachmentSource, ConversationUnit, ExportWriter, ExportWriterParts, WriteQueueOptions,
 };
 use message_vault_io_core::{
     ExportReport, MediaConfig, OutputFormat, ProgressEvent, stage_conversation_attachments,
@@ -568,9 +568,9 @@ fn drain_conversations(
                 })?;
                 Ok((!bytes.is_empty()).then_some(bytes))
             }
-            other => message_ir_format::load_attachment_source(other),
+            other => message_staging::load_attachment_source(other),
         };
-        message_ir_format::drain_write_queue_with_loader(
+        message_staging::drain_write_queue_with_loader(
             &options.export_path,
             units,
             &queue,
@@ -580,7 +580,7 @@ fn drain_conversations(
             cancel,
         )
     } else {
-        message_ir_format::drain_write_queue(
+        message_staging::drain_write_queue(
             &options.export_path,
             units,
             &queue,

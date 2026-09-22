@@ -26,6 +26,7 @@ dirs = "7"
 open = "5"
 message-vault-io-core = { path = "../crates/core/message-vault-io-core" }
 message-ir-format = { path = "../crates/libs/ir-format" }
+message-staging = { path = "../crates/libs/staging" }
 media = { path = "../crates/libs/media" }
 message-ir = { path = "../crates/libs/ir" }
 sms-backup-restore-exporter = { path = "../crates/exporters/sms-backup-restore-exporter", default-features = false }

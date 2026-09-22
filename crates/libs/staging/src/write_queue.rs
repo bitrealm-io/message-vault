@@ -31,7 +31,7 @@ use message_vault_io_core::{
 };
 
 use crate::transcode::{TranscodeOptions, transcode_staged};
-use crate::write::write_format;
+use message_ir_format::write_format;
 
 /// Where a unit's attachment bytes come from at write time.
 #[derive(Debug, Default)]
@@ -731,7 +731,7 @@ fn write_one_unit(
         .count();
     drop(jobs);
 
-    crate::export_transforms::clear_attachments_when_disabled(&mut doc, options.media);
+    message_ir_format::clear_attachments_when_disabled(&mut doc, options.media);
     for msg in &mut doc.messages {
         for att in &mut msg.attachments {
             att.bytes = None;

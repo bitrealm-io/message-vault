@@ -5,6 +5,7 @@ members = [
     "crates/libs/csv",
     "crates/libs/ir",
     "crates/libs/ir-format",
+    "crates/libs/staging",
     "crates/libs/reexport",
     "crates/libs/mail",
     "crates/libs/sbr",

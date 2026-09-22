@@ -68,8 +68,8 @@ use media::{CompressOptions, MediaMode, TranscodeOutcome};
 use message_ir::{ConversationDocument, IrAttachment};
 use message_vault_io_core::{CancelFlag, check_cancel, mime_for_rel};
 
-use crate::read_json::read_conversation_jsonl;
-use crate::write::write_conversation_jsonl_to;
+use message_ir_format::read_conversation_jsonl;
+use message_ir_format::write_conversation_jsonl_to;
 
 /// Suffix on a derivative that is written but not yet committed.
 ///

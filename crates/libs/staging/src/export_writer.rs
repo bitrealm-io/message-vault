@@ -1,13 +1,13 @@
 //! The shared write tail every exporter used to copy: sink opening, the
 //! queue-or-sink decision, and both drain arms.
 
-use crate::format_sink::{FormatSink, MergedArchive, write_documents_through_sink};
 use crate::write_queue::{
     AttachmentSource, ConversationUnit, WriteQueueOptions, drain_units, load_attachment_source,
 };
 use anyhow::Result;
 use media::{CompressOptions, MediaMode};
 use message_ir::{ConversationDocument, IrAttachment};
+use message_ir_format::{FormatSink, MergedArchive, write_documents_through_sink};
 use message_vault_io_core::{
     CancelFlag, ExportReport, ExportTransforms, LogSink, OutputFormat, ProgressSink,
 };

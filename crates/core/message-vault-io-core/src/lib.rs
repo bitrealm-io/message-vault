@@ -14,9 +14,8 @@ mod progress;
 pub mod testutil;
 
 pub use attachment_jobs::{
-    AttachmentJob, AttachmentProgress, attachment_jobs, attachment_size_hint,
-    clear_attachment_bytes, mime_for_rel, report_attachment_progress, run_attachment_jobs,
-    stage_conversation_attachments,
+    AttachmentJob, AttachmentProgress, attachment_jobs, attachment_size_hint, document_messages,
+    mime_for_rel, report_attachment_progress, run_attachment_jobs, stage_conversation_attachments,
 };
 pub use attachments::{
     attachment_date_prefix, attachment_dest_name, copy_if_missing, digest_prefix, write_if_missing,

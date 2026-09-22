@@ -30,8 +30,7 @@ use message_ir_format::{
     FormatSinkResult, WriteQueueOptions,
 };
 use message_vault_io_core::{
-    AttachmentJob, MediaConfig, OutputFormat, ProgressEvent, report_attachment_progress,
-    run_attachment_jobs,
+    MediaConfig, OutputFormat, ProgressEvent, stage_conversation_attachments,
 };
 
 use crate::{
@@ -127,7 +126,7 @@ pub(crate) fn export(helper: &mut Helper, options: &ExportOptions) -> Result<For
         return drain_conversations(helper, options, collected);
     }
     if is_file_backed(format) {
-        stage_conversation_attachments(helper, options, &mut collected, &attachments_dir)?;
+        stage_attachments(helper, options, &mut collected, &attachments_dir)?;
     }
     write_conversations(options, &mut sink, collected.conversations)?;
     sink.finish()
@@ -309,12 +308,14 @@ fn imessage_to_ir(fields: ImessageRecord) -> IrImessage {
 /// One attachment's shared-structure record and how its bytes will arrive.
 ///
 /// With embedding off, nothing is loaded and the record says `not_copied`.
-/// When files are staged (CSV / JSON / JSON Lines / XML with attachment
-/// copying on), the runner loads and writes them under `attachments/` after
-/// the stream, so only the load key travels here. A mail archive embeds
-/// bytes in the document; those are loaded by [`embed_attachment_bytes`]
-/// once the stream ends. Any other run copies nothing, so the record carries
-/// the size the database knew and says `file_missing` when there is no file.
+/// Otherwise the record carries the size the database knew, which is the
+/// progress hint for the staging pass. When files are staged (CSV / JSON /
+/// JSON Lines / XML with attachment copying on), the runner loads and
+/// writes them under `attachments/` after the stream, so only the load key
+/// travels here and the runner says `file_missing` itself. A mail archive
+/// embeds bytes in the document; those are loaded by
+/// [`embed_attachment_bytes`] once the stream ends. Any other run copies
+/// nothing, so the record says `file_missing` when there is no file.
 fn attachment_to_ir(
     attachment: AttachmentRecord,
     embed: AttachmentEmbed,
@@ -341,13 +342,14 @@ fn attachment_to_ir(
         SourceRecord::Inline { text } => AttachmentLoad::Bytes(text.into_bytes()),
         SourceRecord::Missing => AttachmentLoad::Missing,
     };
-    if stages_files {
-        return (ir, load);
-    }
     match &load {
         AttachmentLoad::Path { size_hint, .. } => ir.size_bytes = *size_hint,
         AttachmentLoad::Bytes(bytes) => ir.size_bytes = Some(bytes.len() as u64),
-        AttachmentLoad::Missing => ir.missing_reason = Some("file_missing".to_string()),
+        // When files are staged the runner says `file_missing` itself.
+        AttachmentLoad::Missing if !stages_files => {
+            ir.missing_reason = Some("file_missing".to_string());
+        }
+        AttachmentLoad::Missing => {}
     }
     (ir, load)
 }
@@ -590,8 +592,11 @@ fn drain_conversations(
     })
 }
 
-/// Write staged attachment bytes after the stream and before conversation files.
-fn stage_conversation_attachments(
+/// Write staged attachment bytes after the stream and before conversation
+/// files, through the shared step every exporter uses. The loads travel in
+/// the same order as the flattened `messages[].attachments`, which is the
+/// order the step hands out indexes in.
+fn stage_attachments(
     helper: &mut Helper,
     options: &ExportOptions,
     collected: &mut Collected,
@@ -601,42 +606,27 @@ fn stage_conversation_attachments(
         mode: options.transforms.media,
         compress: options.transforms.compress.clone(),
     };
-    let cancel = options.cancel.as_ref().map(|flag| flag.as_ref());
     let encrypted = collected.encrypted;
-
     let mut loads = Vec::new();
-    let mut jobs = Vec::new();
     for convo in collected.conversations.values_mut() {
         loads.append(&mut convo.attachment_loads);
-        for msg in &mut convo.messages {
-            let ts = msg.timestamp_unix_ms;
-            for att in &mut msg.attachments {
-                let hint = match loads.get(jobs.len()) {
-                    Some(AttachmentLoad::Path { size_hint, .. }) => *size_hint,
-                    Some(AttachmentLoad::Bytes(bytes)) => Some(bytes.len() as u64),
-                    _ => att.size_bytes,
-                };
-                jobs.push(AttachmentJob {
-                    attachment: att,
-                    timestamp_unix_ms: ts,
-                    size_hint: hint,
-                });
-            }
-        }
     }
 
-    // `run_attachment_jobs` calls the loader from one thread, so the program
+    // The shared step calls the loader from one thread, so the program
     // handle can be borrowed by the closure for the whole pass.
     let helper = std::cell::RefCell::new(helper);
-    run_attachment_jobs(
-        &mut jobs,
+    let saved = stage_conversation_attachments(
+        collected
+            .conversations
+            .values_mut()
+            .flat_map(|convo| convo.messages.iter_mut()),
         attachments_dir,
         &media,
         |i| match loads.get(i) {
             Some(AttachmentLoad::Path { path, .. }) => {
                 let bytes = read_attachment(&mut helper.borrow_mut(), options, encrypted, path)
                     .map_err(|e| {
-                        // run_attachment_jobs turns any Err other than "canceled" into a
+                        // The shared step turns any Err other than "canceled" into a
                         // file_missing attachment and moves on. Log the real reason here
                         // first, or a systemic failure (a revoked Full Disk Access, a
                         // failing disk) degrades into a run's worth of unexplained chips.
@@ -651,19 +641,14 @@ fn stage_conversation_attachments(
             Some(AttachmentLoad::Bytes(bytes)) => Ok(Some(bytes.clone())),
             _ => Ok(None),
         },
-        report_attachment_progress(options.log.as_ref(), options.progress.as_ref()),
         options.log.as_ref(),
-        cancel,
+        options.progress.as_ref(),
+        options.cancel.as_ref(),
     )
     .map_err(|e| anyhow!(e))
     .context("stage attachments")?;
-
-    for convo in collected.conversations.values_mut() {
-        for msg in &mut convo.messages {
-            for att in &mut msg.attachments {
-                att.bytes = None;
-            }
-        }
+    if saved > 0 {
+        options.emit_log(format!("  saved {saved} attachments"));
     }
     Ok(())
 }
@@ -702,14 +687,14 @@ mod tests {
     }
 
     #[test]
-    fn staged_files_defer_everything_to_the_runner() {
+    fn staged_files_carry_the_size_hint_and_defer_the_rest_to_the_runner() {
         let (ir, load) = attachment_to_ir(
             record_with_attachment(path_source()),
             AttachmentEmbed::Embed,
             true,
         );
         assert_eq!(ir.missing_reason, None);
-        assert_eq!(ir.size_bytes, None);
+        assert_eq!(ir.size_bytes, Some(11));
         assert!(ir.bytes.is_none());
         match load {
             AttachmentLoad::Path { path, size_hint } => {

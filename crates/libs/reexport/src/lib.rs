@@ -10,7 +10,7 @@ use message_ir_format::{
 };
 pub use message_vault_io_core::RunResult;
 use message_vault_io_core::{
-    AttachmentJob, ExporterConfig, MediaConfig, OutputFormat, run_attachment_jobs,
+    ExporterConfig, MediaConfig, OutputFormat, document_messages, stage_conversation_attachments,
 };
 use std::collections::HashSet;
 use std::fs::{self, File};
@@ -43,6 +43,8 @@ struct DetectedExport {
 struct ReexportReport {
     detected_format: String,
     conversations: usize,
+    /// Distinct attachment files a convert or compress pass wrote.
+    attachments_saved: u64,
     sink: FormatSinkResult,
 }
 
@@ -53,6 +55,9 @@ impl ReexportReport {
             format!("Detected input format: {}", self.detected_format),
             format!("Conversations: {}", self.conversations),
         ];
+        if self.attachments_saved > 0 {
+            lines.push(format!("  saved {} attachments", self.attachments_saved));
+        }
         lines.extend(self.sink.log_lines());
         lines
     }
@@ -86,9 +91,12 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
     if documents.is_empty() {
         bail!("no conversations loaded from {}", input_dir.display());
     }
-    if matches!(transforms.media, MediaMode::Convert | MediaMode::Compress) {
-        apply_reexport_convert(&mut documents, &config.output, &transforms)?;
-    }
+    let attachments_saved = if matches!(transforms.media, MediaMode::Convert | MediaMode::Compress)
+    {
+        apply_reexport_convert(&mut documents, config, &transforms)?
+    } else {
+        0
+    };
 
     let conversations = documents.len();
     let mut sink = FormatSink::open(&config.output, config.output_format, transforms)?;
@@ -100,43 +108,33 @@ fn convert_export(input_dir: &Path, config: &ExporterConfig) -> Result<ReexportR
     Ok(ReexportReport {
         detected_format: detected.format.as_str().to_string(),
         conversations,
+        attachments_saved,
         sink,
     })
 }
 
-/// Transcode copied attachments and update document paths, hashes, and MIME.
+/// Stage the copied attachments again through the shared step, so a
+/// convert or compress pass rewrites each document's paths, hashes and MIME
+/// types. Returns how many distinct attachment files were written.
 fn apply_reexport_convert(
     documents: &mut [ConversationDocument],
-    output_dir: &Path,
+    config: &ExporterConfig,
     transforms: &ExportTransforms,
-) -> Result<()> {
-    let attachments_dir = output_dir.join("attachments");
-    let mut jobs = Vec::new();
-    for doc in documents.iter_mut() {
-        for msg in &mut doc.messages {
-            let ts = msg.timestamp_unix_ms;
-            for att in &mut msg.attachments {
-                let size_hint = att.size_bytes;
-                jobs.push(AttachmentJob {
-                    attachment: att,
-                    timestamp_unix_ms: ts,
-                    size_hint,
-                });
-            }
-        }
-    }
-    let sources: Vec<Option<PathBuf>> = jobs
+) -> Result<u64> {
+    let output_dir = &config.output;
+    let sources: Vec<Option<PathBuf>> = documents
         .iter()
-        .map(|job| {
-            job.attachment
-                .path
-                .as_ref()
+        .flat_map(|doc| doc.messages.iter())
+        .flat_map(|msg| msg.attachments.iter())
+        .map(|att| {
+            att.path
+                .as_deref()
                 .map(|rel| output_dir.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)))
         })
         .collect();
-    run_attachment_jobs(
-        &mut jobs,
-        &attachments_dir,
+    stage_conversation_attachments(
+        document_messages(documents),
+        &output_dir.join("attachments"),
         &MediaConfig {
             mode: transforms.media,
             compress: transforms.compress.clone(),
@@ -147,12 +145,11 @@ fn apply_reexport_convert(
             };
             fs::read(path).map(Some).or(Ok(None))
         },
-        |_| {},
-        None,
-        None,
+        config.log.as_ref(),
+        config.progress.as_ref(),
+        config.cancel.as_ref(),
     )
-    .map_err(anyhow::Error::msg)?;
-    Ok(())
+    .map_err(anyhow::Error::msg)
 }
 
 /// Load every conversation document from a detected export directory.
@@ -170,7 +167,6 @@ fn load_documents(
                 owner_phones: &[],
                 attachments_dir: Some(&attachments_dir),
                 copy_attachments,
-                keep_attachment_bytes: false,
                 stage_attachments: true,
                 media: if copy_attachments {
                     MediaMode::Clone

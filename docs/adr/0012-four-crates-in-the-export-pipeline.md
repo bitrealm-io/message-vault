@@ -148,7 +148,10 @@ case into Convert would have to be undone.
   not carried along with a file move. The SBR seam has to be inverted before the
   writer can move, and before `FormatSinkResult` travels to `io-core`.
 - Progress, by step: (1) the path check is `message_ir::safe_attachment_path`,
-  PR #638. Steps 2 to 6 have not started.
+  PR #638. (2) `stage_conversation_attachments` takes the messages and returns
+  the count of distinct files written; `message-reexport`, the SBR reader and
+  the iMessage exporter call it, and the copies are gone, PR #639. Steps 3 to
+  6 have not started.
 - Nothing here is kept for compatibility. Public items are renamed, moved between
   crates and removed wherever the result is simpler, and tests are rewritten to
   match rather than preserved.

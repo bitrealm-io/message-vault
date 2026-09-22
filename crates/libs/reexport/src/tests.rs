@@ -246,6 +246,7 @@ fn log_lines_name_the_detected_format_and_the_conversation_count() {
     let report = ReexportReport {
         detected_format: "mbox".to_string(),
         conversations: 3,
+        attachments_saved: 0,
         sink: FormatSinkResult::default(),
     };
 
@@ -263,6 +264,7 @@ fn log_lines_append_the_sink_lines_after_the_count() {
     let report = ReexportReport {
         detected_format: "json".to_string(),
         conversations: 1,
+        attachments_saved: 4,
         sink: FormatSinkResult {
             xml_path: Some(PathBuf::from("out/smses.xml")),
             obfuscated_docs: 2,
@@ -275,6 +277,7 @@ fn log_lines_append_the_sink_lines_after_the_count() {
         vec![
             "Detected input format: json".to_string(),
             "Conversations: 1".to_string(),
+            "  saved 4 attachments".to_string(),
             "Obfuscated 2 conversation(s)".to_string(),
             "Wrote out/smses.xml".to_string(),
         ]
@@ -459,12 +462,10 @@ fn apply_reexport_convert_restages_attachments_and_marks_missing_files() {
         ..ExportTransforms::none()
     };
 
-    apply_reexport_convert(
-        std::slice::from_mut(&mut document),
-        output.path(),
-        &transforms,
-    )
-    .unwrap();
+    let config = config(output.path(), output.path(), OutputFormat::Jsonl);
+    let saved =
+        apply_reexport_convert(std::slice::from_mut(&mut document), &config, &transforms).unwrap();
+    assert_eq!(saved, 1, "one file was on disk to stage");
 
     let staged = &document.messages[0].attachments[0];
     assert_eq!(

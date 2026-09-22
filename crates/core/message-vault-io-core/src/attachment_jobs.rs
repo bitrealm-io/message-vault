@@ -2,12 +2,12 @@
 
 use crate::attachments::attachment_dest_name;
 use crate::config::MediaConfig;
-use crate::pipeline::ExportReport;
 use crate::process::{CancelFlag, LogSink, emit_log};
 use crate::progress::{ProgressEvent, ProgressSink, emit_progress};
 use media::MediaMode;
-use message_ir::{ConversationDocument, IrAttachment};
+use message_ir::{ConversationDocument, IrAttachment, IrMessage};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -146,15 +146,16 @@ pub fn run_attachment_jobs(
 
 /// Write queued attachment bytes after parse and before conversation files.
 ///
-/// The shared non-queue staging step every exporter used to copy: assemble
-/// one [`AttachmentJob`] per attachment across `documents` (in document
-/// order), run [`run_attachment_jobs`] with the standard progress report
-/// (a log line for people and an [`ProgressEvent::Attachments`] for the
-/// progress bar), count staged files into `report.attachments_saved`, and
-/// clear any in-memory `bytes` left on the attachments.
+/// The one non-queue staging step: assemble one [`AttachmentJob`] per
+/// attachment across `messages` in the order given, run
+/// [`run_attachment_jobs`] with the standard progress report (a log line for
+/// people and a [`ProgressEvent::Attachments`] for the progress bar), drop
+/// any in-memory `bytes` left on the attachments, and return how many
+/// distinct files were written. Two attachments with the same bytes share
+/// one content-addressed file, so they count once.
 ///
 /// `load(i)` is the per-exporter payload hook: `i` is the flat attachment
-/// index in document order. `Ok(None)` (or a non-cancel `Err`) marks that
+/// index in message order. `Ok(None)` (or a non-cancel `Err`) marks that
 /// attachment `file_missing` and the run continues.
 ///
 /// Size hints for the progress totals come from each attachment's
@@ -166,20 +167,16 @@ pub fn run_attachment_jobs(
 ///
 /// Returns `"canceled"` when the user cancels, or an I/O / convert error
 /// string when the staging directory cannot be used.
-// Every argument is one of the run's hooks or one of its inputs; folding
-// them into a struct would only move the same eight names one level down.
-#[allow(clippy::too_many_arguments)]
-pub fn stage_conversation_attachments(
-    documents: &mut [ConversationDocument],
+pub fn stage_conversation_attachments<'a>(
+    messages: impl IntoIterator<Item = &'a mut IrMessage>,
     attachments_dir: &Path,
     media: &MediaConfig,
     load: impl FnMut(usize) -> Result<Option<Vec<u8>>, String>,
     log: Option<&LogSink>,
     progress: Option<&ProgressSink>,
     cancel: Option<&CancelFlag>,
-    report: &mut ExportReport,
-) -> Result<(), String> {
-    let mut jobs = attachment_jobs(documents);
+) -> Result<u64, String> {
+    let mut jobs = attachment_jobs(messages);
     run_attachment_jobs(
         &mut jobs,
         attachments_dir,
@@ -190,14 +187,23 @@ pub fn stage_conversation_attachments(
         cancel.map(|flag| flag.as_ref()),
     )?;
 
-    for job in &jobs {
-        if job.attachment.path.is_some() && job.attachment.digest_sha256.is_some() {
-            report.attachments_saved += 1;
+    let mut written = HashSet::new();
+    for job in &mut jobs {
+        job.attachment.bytes = None;
+        if let (Some(path), Some(_)) = (&job.attachment.path, &job.attachment.digest_sha256) {
+            written.insert(path.clone());
         }
     }
-    drop(jobs);
-    clear_attachment_bytes(documents);
-    Ok(())
+    Ok(written.len() as u64)
+}
+
+/// Every message of every document, in document order: the `messages`
+/// argument of [`stage_conversation_attachments`] for a caller that holds
+/// finished documents.
+pub fn document_messages(
+    documents: &mut [ConversationDocument],
+) -> impl Iterator<Item = &mut IrMessage> {
+    documents.iter_mut().flat_map(|doc| doc.messages.iter_mut())
 }
 
 /// The size to report for an attachment before its bytes are read: the
@@ -208,22 +214,22 @@ pub fn attachment_size_hint(att: &IrAttachment) -> Option<u64> {
         .or_else(|| att.bytes.as_ref().map(|b| b.len() as u64))
 }
 
-/// One job per attachment across every document, in document order. The
+/// One job per attachment across `messages`, in the order given. The
 /// position in the result is the flat attachment index a `load(i)` hook
 /// receives.
-pub fn attachment_jobs(documents: &mut [ConversationDocument]) -> Vec<AttachmentJob<'_>> {
+pub fn attachment_jobs<'a>(
+    messages: impl IntoIterator<Item = &'a mut IrMessage>,
+) -> Vec<AttachmentJob<'a>> {
     let mut jobs = Vec::new();
-    for doc in documents.iter_mut() {
-        for msg in &mut doc.messages {
-            let ts = msg.timestamp_unix_ms;
-            for att in &mut msg.attachments {
-                let hint = attachment_size_hint(att);
-                jobs.push(AttachmentJob {
-                    attachment: att,
-                    timestamp_unix_ms: ts,
-                    size_hint: hint,
-                });
-            }
+    for msg in messages {
+        let ts = msg.timestamp_unix_ms;
+        for att in &mut msg.attachments {
+            let hint = attachment_size_hint(att);
+            jobs.push(AttachmentJob {
+                attachment: att,
+                timestamp_unix_ms: ts,
+                size_hint: hint,
+            });
         }
     }
     jobs
@@ -245,18 +251,6 @@ pub fn report_attachment_progress<'a>(
                     counts.done, counts.total, counts.bytes_done, counts.bytes_total
                 ),
             );
-        }
-    }
-}
-
-/// Drop the bytes held in memory on every attachment, once they have been
-/// written or are no longer wanted.
-pub fn clear_attachment_bytes(documents: &mut [ConversationDocument]) {
-    for doc in documents.iter_mut() {
-        for msg in &mut doc.messages {
-            for att in &mut msg.attachments {
-                att.bytes = None;
-            }
         }
     }
 }

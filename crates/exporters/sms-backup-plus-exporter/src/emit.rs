@@ -652,15 +652,14 @@ mod tests {
             .iter()
             .flat_map(|msg| msg.attachments.iter().map(|att| att.bytes.clone()))
             .collect();
-        message_vault_io_core::stage_conversation_attachments(
-            std::slice::from_mut(&mut doc),
+        report.attachments_saved += message_vault_io_core::stage_conversation_attachments(
+            doc.messages.iter_mut(),
             &att_dir,
             &message_vault_io_core::MediaConfig::default(),
             |i| Ok(payloads.get(i).cloned().flatten()),
             None,
             None,
             None,
-            &mut report,
         )
         .unwrap();
         // The missing source stays on the message; the good one is staged.

@@ -16,16 +16,20 @@
 export const pageCenter =
   "min-h-screen box-border flex items-center justify-center bg-bg p-4 overflow-y-auto";
 /**
- * Every auth card is the same 576 × 608 box on every screen and in every
- * state — it never resizes and never scrolls, so nothing moves underneath the
- * user as they step through login and setup. The height is set by the
- * tallest card: Create Account, whose three fields sit above the pinned
+ * Every auth card is at least 576 × 608 and never scrolls, so nothing moves
+ * underneath the user as they step between Login and Create Account. The
+ * floor is set by Create Account, whose three fields sit above the pinned
  * action row with room for a two-line error above it. The width is set by
  * Profile Setup: a time zone row ("(UTC−10:00) Hawaii-Aleutian Time —
  * Honolulu, East Honolulu") reads on one line.
+ *
+ * A floor, not a fixed height: a card whose content runs taller grows to fit
+ * it. Create Vault Owner is the same three fields plus a line explaining what
+ * the owner is, and with a fixed height that line pushed the submit button
+ * out of the form and over the "or" rule below it.
  */
 export const authCard =
-  "box-border flex h-[38rem] w-full max-w-xl flex-col bg-panel border border-border rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.15)] p-8";
+  "box-border flex min-h-[38rem] w-full max-w-xl flex-col bg-panel border border-border rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.15)] p-8";
 
 /** Content region of an auth card: everything above the pinned action row. */
 export const authCardBody = "flex min-h-0 flex-1 flex-col";

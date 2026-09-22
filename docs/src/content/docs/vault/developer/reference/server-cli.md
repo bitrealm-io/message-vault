@@ -14,6 +14,8 @@ This document contains the help content for the `message-vault-server` command-l
 
 * [`message-vault-server`↴](#message-vault-server)
 * [`message-vault-server import`↴](#message-vault-server-import)
+* [`message-vault-server imports`↴](#message-vault-server-imports)
+* [`message-vault-server imports discard`↴](#message-vault-server-imports-discard)
 * [`message-vault-server dedupe-cross-source`↴](#message-vault-server-dedupe-cross-source)
 * [`message-vault-server import-contacts`↴](#message-vault-server-import-contacts)
 * [`message-vault-server reset-demo`↴](#message-vault-server-reset-demo)
@@ -34,6 +36,7 @@ Import and view messages in SQLite
 ###### **Subcommands:**
 
 * `import` — Import a message-ir JSONL folder (source from export.source unless --source)
+* `imports` — Work on an account's import sessions (`discard` clears a stranded one)
 * `dedupe-cross-source` — Soft-hide the same SMS when it appears under more than one import source
 * `import-contacts` — Import an address book (VCF or vCard CSV) into an existing database
 * `reset-demo` — Regenerate demo bundle, clear demo account data, import, and process assets
@@ -76,6 +79,35 @@ Import a message-ir JSONL folder (source from export.source unless --source)
 
   Default value: `2`
 * `--account <ACCOUNT>` — Account username or id (scopes import to this vault tenant)
+
+
+
+## `message-vault-server imports`
+
+Work on an account's import sessions (`discard` clears a stranded one)
+
+**Usage:** `message-vault-server imports <COMMAND>`
+
+###### **Subcommands:**
+
+* `discard` — Discard the account's active import session, if it has one. A killed `import` leaves its session open, and no later import can start until it is discarded
+
+
+
+## `message-vault-server imports discard`
+
+Discard the account's active import session, if it has one. A killed `import` leaves its session open, and no later import can start until it is discarded
+
+**Usage:** `message-vault-server imports discard [OPTIONS] --account <ACCOUNT>`
+
+###### **Options:**
+
+* `--config <CONFIG>` — Path to config.toml
+
+  Default value: `config/config.toml`
+* `--db <DB>` — Output SQLite database path (overrides config)
+* `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
+* `--account <ACCOUNT>` — Account username or id whose active session is discarded
 
 
 

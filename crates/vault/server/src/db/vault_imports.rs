@@ -287,10 +287,11 @@ pub enum StartImportError {
     /// rejected the insert, so this holds even against a racing client.
     ///
     /// Naming the way out matters: a killed CLI import leaves a session open
-    /// that blocks every later one, and the desktop app's Import screen is
-    /// where it can be resumed or discarded.
+    /// that blocks every later one. The desktop app's Import screen can
+    /// resume or discard it; `message-vault-server imports discard` can
+    /// discard it without the app.
     #[error(
-        "this account already has an active import session; open Import in the desktop app to resume or discard it"
+        "this account already has an active import session; open Import in the desktop app to resume or discard it, or run `message-vault-server imports discard --account <account>`"
     )]
     AlreadyActive,
     /// Anything else.
@@ -507,6 +508,41 @@ pub async fn discard_import(
     .execute(&mut *conn)
     .await?;
     Ok(())
+}
+
+/// Discard the account's live session, whichever it is, and return the row
+/// as it was before the discard; `None` when the account has no live
+/// session.
+///
+/// This is the way out for a command-line operator: a killed
+/// `message-vault-server import` leaves its session running, and the
+/// partial unique index then refuses every later import. The operator knows
+/// the account, not the session id, so the lookup happens here rather than
+/// making them find the id first.
+///
+/// # Errors
+///
+/// Returns the database error.
+pub async fn discard_running_import(
+    conn: &mut AnyConnection,
+    account_id: i64,
+) -> Result<Option<VaultImportRow>> {
+    let row = sqlx::query(&format!(
+        "SELECT {VAULT_IMPORT_COLUMNS}
+         FROM vault_imports
+         WHERE account_id = $1 AND status = 'running'"
+    ))
+    .bind(account_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let running = vault_import_from_row(&row)?;
+    discard_import(conn, account_id, running.id)
+        .await
+        .map_err(|err| anyhow::anyhow!(err))?;
+    Ok(Some(running))
 }
 
 /// Finish an import: prefer client counts, else derive from linked messages.

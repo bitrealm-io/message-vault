@@ -34,6 +34,9 @@ pub enum Commands {
     /// Import a message-ir JSONL folder (source from export.source unless --source)
     Import(ImportArgs),
 
+    /// Work on an account's import sessions (`discard` clears a stranded one)
+    Imports(ImportsArgs),
+
     /// Soft-hide the same SMS when it appears under more than one import source
     DedupeCrossSource(DedupeArgs),
 
@@ -157,6 +160,43 @@ pub struct ImportArgs {
     pub window_secs: i64,
 
     /// Account username or id (scopes import to this vault tenant)
+    #[arg(long)]
+    pub account: String,
+}
+
+/// The `imports` group: one subcommand per operation on import sessions.
+#[derive(Debug, Args)]
+pub struct ImportsArgs {
+    /// Which operation to run.
+    #[command(subcommand)]
+    pub command: ImportsCommand,
+}
+
+/// Operations on an account's import sessions.
+#[derive(Debug, Subcommand)]
+pub enum ImportsCommand {
+    /// Discard the account's active import session, if it has one. A killed
+    /// `import` leaves its session open, and no later import can start until
+    /// it is discarded.
+    Discard(ImportsDiscardArgs),
+}
+
+/// Options for `imports discard`.
+#[derive(Debug, Args)]
+pub struct ImportsDiscardArgs {
+    /// Path to config.toml
+    #[arg(long, default_value = "config/config.toml")]
+    pub config: PathBuf,
+
+    /// Output SQLite database path (overrides config)
+    #[arg(long)]
+    pub db: Option<PathBuf>,
+
+    /// Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
+    #[arg(long)]
+    pub db_url: Option<String>,
+
+    /// Account username or id whose active session is discarded
     #[arg(long)]
     pub account: String,
 }
@@ -296,6 +336,9 @@ pub fn clap_command() -> Command {
 pub async fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Commands::Import(args) => run_import(args).await,
+        Commands::Imports(args) => match args.command {
+            ImportsCommand::Discard(args) => run_imports_discard(args).await,
+        },
         Commands::DedupeCrossSource(args) => run_dedupe(args).await,
         Commands::ImportContacts(args) => run_import_contacts(args).await,
         Commands::ResetDemo(args) => run_reset_demo(args).await,
@@ -386,6 +429,42 @@ async fn run_import(args: ImportArgs) -> Result<()> {
     }
     vault.close().await;
     Ok(())
+}
+
+/// Discard the account's active import session and say which one it was,
+/// or that there was none.
+async fn run_imports_discard(args: ImportsDiscardArgs) -> Result<()> {
+    let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
+    let vault = OpenVault::open(cfg).await?;
+    let account = vault.account_id(&args.account).await?;
+    let mut conn = vault.conn().await?;
+    let discarded = crate::db::vault_imports::discard_running_import(&mut conn, account).await?;
+    drop(conn);
+    vault.close().await;
+    print!(
+        "{}",
+        format_discarded_import(&args.account, discarded.as_ref())
+    );
+    Ok(())
+}
+
+/// What `imports discard` prints: the session it discarded, or that the
+/// account had none.
+fn format_discarded_import(
+    account: &str,
+    discarded: Option<&crate::db::vault_imports::VaultImportRow>,
+) -> String {
+    match discarded {
+        Some(row) => format!(
+            "Discarded import session {} for account {account} (source {}, {} mode, started {}, stage {}).\n",
+            row.id,
+            row.source,
+            row.mode,
+            row.started_at,
+            row.stage.as_deref().unwrap_or("none"),
+        ),
+        None => format!("Account {account} has no active import session.\n"),
+    }
 }
 
 /// The counts from one import stage, one line each, ready to print.

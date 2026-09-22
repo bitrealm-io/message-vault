@@ -194,6 +194,147 @@ async fn import_records_the_conversation_then_dedupe_and_process_assets_run_on_i
     .unwrap();
 }
 
+fn imports_discard_args(config: &Path) -> Cli {
+    Cli {
+        command: Commands::Imports(ImportsArgs {
+            command: ImportsCommand::Discard(ImportsDiscardArgs {
+                config: config.to_path_buf(),
+                db: None,
+                db_url: None,
+                account: "alice".into(),
+            }),
+        }),
+    }
+}
+
+#[tokio::test]
+async fn imports_discard_clears_a_stranded_session_so_the_next_import_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = vault_config(dir.path()).await;
+    with_alice(&config).await;
+    let input = dir.path().join("export");
+    fs::create_dir_all(&input).unwrap();
+    fs::write(input.join("chat.jsonl"), CONVERSATION_JSONL).unwrap();
+
+    // A session the way a killed `import` leaves it: running, never finished.
+    let stranded = {
+        let vault = open(&config).await;
+        let mut conn = vault.conn().await.unwrap();
+        crate::db::vault_imports::start_import(
+            &mut conn,
+            &crate::db::vault_imports::StartImportArgs::new(
+                ALICE,
+                "imessage",
+                "replace",
+                Some("message-vault-server"),
+            ),
+        )
+        .await
+        .unwrap()
+    };
+
+    let blocked = run(Cli {
+        command: Commands::Import(import_args(&config, &input)),
+    })
+    .await
+    .unwrap_err();
+    assert!(
+        blocked
+            .to_string()
+            .contains("already has an active import session"),
+        "{blocked}"
+    );
+    assert!(
+        blocked
+            .to_string()
+            .contains("message-vault-server imports discard"),
+        "the error names the way out: {blocked}"
+    );
+
+    run(imports_discard_args(&config)).await.unwrap();
+
+    let status: String = {
+        let vault = open(&config).await;
+        let mut conn = vault.conn().await.unwrap();
+        sqlx::query_scalar("SELECT status FROM vault_imports WHERE id = $1")
+            .bind(stranded)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap()
+    };
+    assert_eq!(status, "cancelled");
+
+    run(Cli {
+        command: Commands::Import(import_args(&config, &input)),
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        count(&config, "SELECT COUNT(*) FROM conversations").await,
+        1
+    );
+    assert_eq!(
+        count(
+            &config,
+            "SELECT COUNT(*) FROM vault_imports WHERE status = 'running'"
+        )
+        .await,
+        0
+    );
+}
+
+#[tokio::test]
+async fn imports_discard_with_no_session_changes_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = vault_config(dir.path()).await;
+    with_alice(&config).await;
+
+    run(imports_discard_args(&config)).await.unwrap();
+
+    assert_eq!(
+        count(&config, "SELECT COUNT(*) FROM vault_imports").await,
+        0
+    );
+}
+
+#[test]
+fn imports_discard_prints_the_session_or_that_there_was_none() {
+    let row = crate::db::vault_imports::VaultImportRow {
+        id: 12,
+        account_id: ALICE,
+        source: "imessage".into(),
+        tool: Some("message-vault-server".into()),
+        mode: "replace".into(),
+        dedupe: false,
+        status: "running".into(),
+        started_at: "2026-09-21T10:00:00+00:00".into(),
+        finished_at: None,
+        message_count: 0,
+        attachment_count: 0,
+        bytes_uploaded: 0,
+        duration_ms: None,
+        parse_ms: None,
+        attachments_ms: None,
+        prepare_ms: None,
+        upload_ms: None,
+        summary_json: None,
+        stage: Some("parse".into()),
+        staging_dir: None,
+        device_id: None,
+        form_json: None,
+        source_fingerprint: None,
+        source_identities: None,
+    };
+    assert_eq!(
+        format_discarded_import("alice", Some(&row)),
+        "Discarded import session 12 for account alice (source imessage, replace mode, started 2026-09-21T10:00:00+00:00, stage parse).\n"
+    );
+    assert_eq!(
+        format_discarded_import("alice", None),
+        "Account alice has no active import session.\n"
+    );
+}
+
 #[tokio::test]
 async fn import_contacts_loads_the_address_book_for_the_account() {
     let dir = tempfile::tempdir().unwrap();

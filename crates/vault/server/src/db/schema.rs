@@ -103,8 +103,10 @@ async fn migrate_vault_schema(conn: &mut AnyConnection) -> Result<()> {
         return Ok(());
     }
     if has_user_tables(conn).await? {
-        eprintln!(
-            "warning: vault schema {stamped} differs from this server's {SCHEMA_FINGERPRINT}; rebuilding empty (re-import your data)"
+        tracing::warn!(
+            stamped = %stamped,
+            expected = %SCHEMA_FINGERPRINT,
+            "vault schema differs from this server's; rebuilding empty (re-import your data)"
         );
     }
     rebuild_vault_schema(conn).await?;
@@ -276,8 +278,9 @@ async fn apply_postgres_vault_ddl(conn: &mut AnyConnection) -> Result<()> {
         // present) is rebuilt empty — the same contract SQLite's
         // user_version gives. Re-importing is the migration.
         if table_exists(&mut tx, "vault_imports").await? {
-            eprintln!(
-                "warning: vault schema differs from this server's {SCHEMA_FINGERPRINT}; rebuilding empty (re-import your data)"
+            tracing::warn!(
+                expected = %SCHEMA_FINGERPRINT,
+                "vault schema differs from this server's; rebuilding empty (re-import your data)"
             );
             drop_pg_user_tables(&mut tx).await?;
         }

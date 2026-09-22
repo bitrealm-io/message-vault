@@ -13,6 +13,7 @@ message-ir = { path = "../ir" }
 message-ir-format = { path = "../ir-format" }
 media = { path = "../media" }
 serde_json = { workspace = true }
+sms-backup-restore-exporter = { path = "../../exporters/sms-backup-restore-exporter" }
 
 [dev-dependencies]
 message-ir = { path = "../ir", features = ["testutil"] }

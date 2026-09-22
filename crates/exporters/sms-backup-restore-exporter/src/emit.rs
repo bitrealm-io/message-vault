@@ -1,17 +1,16 @@
 //! Read SMS Backup & Restore XML into the shared conversation structure, then
 //! write the chosen output format via [`ExportWriter`].
 
+use crate::read::{ReadOptions, ReadReport, read_backup};
+use crate::write::SbrArchive;
 use anyhow::Result;
-use message_ir_format::{
-    AttachmentSource, ExportTransforms, ExportWriter, FormatSinkResult, SbrArchive, SbrReadOptions,
-    SbrReadReport, read_sbr_documents,
-};
+use message_ir_format::{AttachmentSource, ExportTransforms, ExportWriter, FormatSinkResult};
 use message_vault_io_core::{CancelFlag, ExportReport, OutputFormat};
 use std::path::Path;
 
 /// Map the ir-format read report onto the shared [`ExportReport`] shape,
 /// moving reader-specific counters into `extra`.
-fn to_core_report(report: SbrReadReport) -> ExportReport {
+fn to_core_report(report: ReadReport) -> ExportReport {
     let mut out = ExportReport {
         conversations: report.conversations,
         sent: report.sent,
@@ -82,9 +81,9 @@ pub(crate) fn convert_export(
         // `smses.xml` goes through its own archive writer.
         writer = writer.with_archive(Box::new(SbrArchive));
     }
-    let (documents, report) = read_sbr_documents(
+    let (documents, report) = read_backup(
         args.input,
-        SbrReadOptions {
+        ReadOptions {
             owner_phones: args.owner_phones,
             attachments_dir: Some(writer.attachments_dir()),
             copy_attachments: writer.copies_attachments(),

@@ -3,12 +3,10 @@
 use super::*;
 use mail::clean_previous_mail_output;
 use message_ir::{
-    ConversationDocument, ConversationMeta, ConversationStats, ExportMeta, HandleType,
-    IrConversationType, IrDirection, IrImessage, IrMessage, IrMessageKind, IrParticipant,
-    IrService, SCHEMA_VERSION,
+    ConversationDocument, IrDirection, IrImessage, IrMessage, IrMessageKind, IrService,
 };
 use message_vault_io_core::OutputFormat;
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use std::fs;
 
 #[test]
@@ -72,83 +70,10 @@ fn writes_json_csv_jsonl_and_eml() {
     assert!(eml_dir.is_dir());
 }
 
-fn sample_imessage_doc() -> ConversationDocument {
-    let mut doc = ConversationDocument {
-        schema_version: SCHEMA_VERSION,
-        export: ExportMeta {
-            source: "imessage".into(),
-            tool: "imessage-ir-exporter".into(),
-            tool_version: "0.1.0".into(),
-            owner_handle: Some("+15555550100".into()),
-            owner_display_name: Some("Me".into()),
-        },
-        conversation: ConversationMeta {
-            chat_identifier: "+15555550101".into(),
-            conversation_type: IrConversationType::Individual,
-            group_title: None,
-            participants: vec![IrParticipant {
-                handle: Some("+15555550101".into()),
-                display_name: Some("Sam".into()),
-                handle_type: Some(HandleType::Phone),
-            }],
-            stats: ConversationStats::default(),
-        },
-        messages: vec![
-            IrMessage {
-                guid: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE".into(),
-                timestamp_unix_ms: 1_400_773_261_000,
-                direction: IrDirection::Incoming,
-                service: IrService::IMessage,
-                message_kind: IrMessageKind::IMessage,
-                sender_handle: Some("+15555550101".into()),
-                sender_display_name: Some("Sam".into()),
-                subject: None,
-                text: "hello imessage".into(),
-                attachments: vec![],
-                imessage: Some(IrImessage {
-                    is_reply: true,
-                    in_reply_to_guid: Some("parent-guid-1111".into()),
-                    thread_originator_part: Some(0),
-                    num_replies: Some(2),
-                    send_effect: Some("Sent with Balloons".into()),
-                    tapbacks: Some(json!([{"part_index": 0, "kind": "loved"}])),
-                    parts: Some(json!([{"index": 0, "kind": "run", "text": "hello imessage"}])),
-                    ..IrImessage::default()
-                }),
-                source: None,
-            },
-            IrMessage {
-                guid: "TAPBACK-GUID-0001".into(),
-                timestamp_unix_ms: 1_400_773_262_000,
-                direction: IrDirection::Outgoing,
-                service: IrService::IMessage,
-                message_kind: IrMessageKind::Tapback,
-                sender_handle: Some("+15555550100".into()),
-                sender_display_name: Some("Me".into()),
-                subject: None,
-                text: "Loved a message".into(),
-                attachments: vec![],
-                imessage: Some(IrImessage {
-                    associated_guid: Some("parent-guid-1111".into()),
-                    associated_part: Some(0),
-                    tapback_kind: Some("loved".into()),
-                    tapback_action: Some("add".into()),
-                    in_reply_to_guid: Some("parent-guid-1111".into()),
-                    ..IrImessage::default()
-                }),
-                source: None,
-            },
-        ],
-        packaging_stem_suffix: None,
-    };
-    doc.finalize_stats();
-    doc
-}
-
 #[test]
 fn imessage_bag_restores_mail_extension_headers() {
     let tmp = tempfile::tempdir().unwrap();
-    let doc = sample_imessage_doc();
+    let doc = message_ir::testutil::sample_imessage_document();
     let mail_messages = document_to_mail_messages(&doc, tmp.path()).unwrap();
 
     let reply = &mail_messages[0];
@@ -198,7 +123,7 @@ fn imessage_bag_restores_mail_extension_headers() {
 #[test]
 fn unified_csv_headers_for_all_sources() {
     let tmp = tempfile::tempdir().unwrap();
-    let doc = sample_imessage_doc();
+    let doc = message_ir::testutil::sample_imessage_document();
 
     let csv_path = write_format(tmp.path(), OutputFormat::Csv, doc).unwrap();
     let csv = fs::read_to_string(&csv_path).unwrap();
@@ -255,7 +180,7 @@ fn assert_docs_equal_after_normalize(mut a: ConversationDocument, mut b: Convers
 fn roundtrip_csv_sms_and_imessage() {
     for doc in [
         message_ir::testutil::sample_document("hello ir"),
-        sample_imessage_doc(),
+        message_ir::testutil::sample_imessage_document(),
     ] {
         let tmp = tempfile::tempdir().unwrap();
         let csv_path = write_conversation_csv(tmp.path(), &doc).unwrap();
@@ -294,7 +219,7 @@ fn roundtrip_csv_sms_and_imessage() {
 #[test]
 fn csv_omits_trivial_parts_json_keeps_rich_parts() {
     let tmp = tempfile::tempdir().unwrap();
-    let mut doc = sample_imessage_doc();
+    let mut doc = message_ir::testutil::sample_imessage_document();
     // First message has a single run equal to text → omit parts_json.
     // Add a second body with multi-part parts that must be kept.
     doc.messages.push(IrMessage {
@@ -354,7 +279,7 @@ fn csv_omits_trivial_parts_json_keeps_rich_parts() {
 fn roundtrip_json_and_jsonl() {
     for doc in [
         message_ir::testutil::sample_document("hello ir"),
-        sample_imessage_doc(),
+        message_ir::testutil::sample_imessage_document(),
     ] {
         let tmp = tempfile::tempdir().unwrap();
         let json_path = write_format(tmp.path(), OutputFormat::Json, doc.clone()).unwrap();
@@ -414,7 +339,7 @@ fn csv_serializes_handle_type_in_cell_and_column() {
 fn roundtrip_eml_and_mbox() {
     for doc in [
         message_ir::testutil::sample_document("hello ir"),
-        sample_imessage_doc(),
+        message_ir::testutil::sample_imessage_document(),
     ] {
         let tmp = tempfile::tempdir().unwrap();
         let _ = clean_previous_mail_output(tmp.path());
@@ -449,63 +374,4 @@ fn roundtrip_eml_and_mbox() {
         let back_mbox = read_conversation_mbox(&mbox_path).unwrap();
         assert_docs_equal_after_normalize(doc, back_mbox);
     }
-}
-
-#[test]
-fn sbr_xml_session_writes_smses_backup() {
-    let tmp = tempfile::tempdir().unwrap();
-    let mut session = SbrBackupSession::create(tmp.path()).unwrap();
-    session
-        .append_document(&message_ir::testutil::sample_document("hello ir"))
-        .unwrap();
-    session.append_document(&sample_imessage_doc()).unwrap();
-    let path = session.finish().unwrap();
-    assert_eq!(path.file_name().unwrap(), "smses.xml");
-    let text = fs::read_to_string(&path).unwrap();
-    assert!(text.contains(r#"count="3""#)); // 1 SMS + 2 iMessage rows
-    assert!(text.contains("hello ir"));
-    assert!(text.contains(r#"type="1""#) || text.contains(r#"msg_box="1""#));
-    assert!(text.contains("hello imessage"));
-    // iMessage bags are not mirrored as Apple attrs.
-    assert!(!text.contains("X-ME-"));
-    assert!(!text.contains("Sent with Balloons"));
-    assert!(!text.contains("tapback_kind"));
-    // write_format(Xml) is intentionally unsupported for multi-chat.
-    assert!(
-        write_format(
-            tmp.path(),
-            OutputFormat::Xml,
-            message_ir::testutil::sample_document("hello ir")
-        )
-        .is_err()
-    );
-}
-
-#[test]
-fn sbr_xml_restores_source_fields_attrs() {
-    let mut doc = message_ir::testutil::sample_document("hello ir");
-    // SyncTech-shaped bag (same as sms-backup-restore-exporter XmlFields JSON).
-    if let Some(source) = doc.messages[0].source.as_mut() {
-        let mut attrs = Map::new();
-        attrs.insert("protocol".into(), json!("0"));
-        attrs.insert("address".into(), json!("+15555550101"));
-        attrs.insert("date".into(), json!("1400773261000"));
-        attrs.insert("type".into(), json!("1"));
-        attrs.insert("body".into(), json!("hello ir"));
-        attrs.insert("service_center".into(), json!("+15550009999"));
-        attrs.insert("contact_name".into(), json!("Sam"));
-        source.fields = {
-            let mut m = Map::new();
-            m.insert("kind".into(), json!("sms"));
-            m.insert("attrs".into(), Value::Object(attrs));
-            m
-        };
-    }
-    let tmp = tempfile::tempdir().unwrap();
-    let mut session = SbrBackupSession::create(tmp.path()).unwrap();
-    session.append_document(&doc).unwrap();
-    let path = session.finish().unwrap();
-    let text = fs::read_to_string(&path).unwrap();
-    assert!(text.contains(r#"service_center="+15550009999""#));
-    assert!(text.contains("hello ir"));
 }

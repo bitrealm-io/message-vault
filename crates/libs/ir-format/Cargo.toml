@@ -7,7 +7,6 @@ license = "LicenseRef-FCL-1.0-ALv2"
 
 [dependencies]
 anyhow = { workspace = true }
-contacts = { path = "../contacts" }
 csv = { workspace = true }
 fs2 = "0.4.3"
 message-csv = { path = "../csv" }
@@ -17,7 +16,6 @@ mail = { path = "../mail" }
 media = { path = "../media" }
 obfuscate = { path = "../obfuscate" }
 phone = { path = "../phone" }
-sbr = { path = "../sbr" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

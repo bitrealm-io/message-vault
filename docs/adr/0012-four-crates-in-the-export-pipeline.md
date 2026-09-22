@@ -154,8 +154,11 @@ case into Convert would have to be undone.
   seam is the `MergedArchive` trait in `ir-format`, handed to
   `FormatSink::with_archive` or `ExportWriter::with_archive` by the caller
   that wants a merged file; `is_sbr_xml()` and `xml_path` are gone, and the
-  SBR writer implements the trait as `SbrArchive`, PR #640. Steps 4 to 6
-  have not started.
+  SBR writer implements the trait as `SbrArchive`, PR #640. (4) The reader
+  and writer live in `sms-backup-restore-exporter` as `read_backup`,
+  `ReadOptions`, `ReadReport` and `SbrArchive`; `message-reexport` depends on
+  that crate for them, and `message-ir-format` no longer depends on `sbr` or
+  `contacts`, PR #641. Steps 5 and 6 have not started.
 - Nothing here is kept for compatibility. Public items are renamed, moved between
   crates and removed wherever the result is simpler, and tests are rewritten to
   match rather than preserved.

@@ -10,10 +10,14 @@ anyhow = { workspace = true }
 message-vault-io-core = { path = "../../core/message-vault-io-core" }
 message-ir = { path = "../../libs/ir" }
 message-ir-format = { path = "../../libs/ir-format" }
+message-csv = { path = "../../libs/csv" }
 media = { path = "../../libs/media" }
+phone = { path = "../../libs/phone" }
+sbr = { path = "../../libs/sbr" }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+message-ir = { path = "../../libs/ir", features = ["testutil"] }
 message-vault-io-core = { path = "../../core/message-vault-io-core", features = ["testutil"] }
 tempfile = { workspace = true }
 

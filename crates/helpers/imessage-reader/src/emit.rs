@@ -128,6 +128,17 @@ fn timestamp_unix_ms(message: &Message, offset: i64) -> i64 {
     (seconds_since_2001 + offset).saturating_mul(1000)
 }
 
+/// When the message was read, as RFC 3339, or `None` for a message never
+/// read. `chat.db` stores `date_read` as NULL for an unread row and the
+/// library reads that back as `0`; `Message::date_read` does not treat `0`
+/// as "no date", it returns Apple's epoch, so the raw stamp is checked first.
+fn read_receipt_rfc3339(message: &Message, offset: i64) -> Option<String> {
+    if message.date_read == 0 {
+        return None;
+    }
+    message.date_read(offset).ok().map(|d| d.to_rfc3339())
+}
+
 /// Raw handle string for a Messages `handle_id`, if the participant is known.
 fn raw_handle(session: &MailSession, handle_id: i32) -> Option<String> {
     session
@@ -613,10 +624,7 @@ fn imessage_fields(
         .as_ref()
         .map(|edited| build_edit_records(edited, &session.offset))
         .unwrap_or_default();
-    let read_receipt = message
-        .date_read(session.offset)
-        .ok()
-        .map(|d| d.to_rfc3339());
+    let read_receipt = read_receipt_rfc3339(message, session.offset);
     // A tapback has no tapbacks of its own.
     let tapbacks = if row.tapback.is_some() {
         None
@@ -864,6 +872,31 @@ mod tests {
         assert_eq!(handles, vec![FRIEND_PHONE, FRIEND_EMAIL]);
         assert_eq!(message.text, "Saturday works");
         assert_eq!(message.sender_display_name.as_deref(), Some("Robin"));
+    }
+
+    /// The fixture's photo message was read a minute after it arrived, so
+    /// it carries that stamp; the outgoing "Nice" row has `date_read` NULL
+    /// and must carry no receipt rather than Apple's epoch (issue #630).
+    #[test]
+    fn an_unread_message_has_no_read_receipt_and_a_read_one_has_the_stamp() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let messages = FixtureDb::messages(&session);
+
+        let (_, photo) = build_record(&session, &messages[0]).unwrap();
+        let fields = photo.imessage.expect("the photo row has Apple fields");
+        let receipt = fields
+            .read_receipt_rfc3339
+            .expect("a read message carries its receipt");
+        let read_at = chrono::DateTime::parse_from_rfc3339(&receipt).unwrap();
+        assert_eq!(
+            read_at.timestamp_millis(),
+            1_578_307_260_000,
+            "2001 + 600,000,060 s"
+        );
+
+        let (_, reply) = build_record(&session, &messages[1]).unwrap();
+        assert_eq!(reply.imessage.unwrap().read_receipt_rfc3339, None);
     }
 
     /// A row whose chat is gone lands in the orphaned conversation, and one

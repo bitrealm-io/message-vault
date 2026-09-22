@@ -48,8 +48,9 @@ pub fn apple_nanos(seconds_since_2001: i64) -> i64 {
 /// (`photo.jpg`) is written beside the database:
 ///
 /// - message 1: incoming from [`FRIEND_PHONE`] in the direct chat, no text,
-///   carrying the photo
-/// - message 2: outgoing "Nice" in the direct chat
+///   carrying the photo, read by the owner one minute later (`date_read` set)
+/// - message 2: outgoing "Nice" in the direct chat, never read (`date_read`
+///   NULL)
 /// - message 3: incoming "Saturday works" from [`FRIEND_EMAIL`] in the group
 ///   chat
 ///
@@ -93,8 +94,8 @@ pub fn write_chat_db(dir: &Path) -> PathBuf {
         INSERT INTO chat VALUES (2, '{group_chat}', 'iMessage', '{group_title}', 'P:{owner}');
         INSERT INTO chat_handle_join VALUES (1, 1), (2, 1), (2, 2);
 
-        INSERT INTO message (ROWID, guid, text, service, handle_id, destination_caller_id, date, is_from_me, item_type, associated_message_type)
-            VALUES (1, 'guid-1', NULL, 'iMessage', 1, '{owner}', {d1}, 0, 0, 0);
+        INSERT INTO message (ROWID, guid, text, service, handle_id, destination_caller_id, date, date_read, is_from_me, item_type, associated_message_type)
+            VALUES (1, 'guid-1', NULL, 'iMessage', 1, '{owner}', {d1}, {d1_read}, 0, 0, 0);
         INSERT INTO message (ROWID, guid, text, service, handle_id, destination_caller_id, date, is_from_me, item_type, associated_message_type)
             VALUES (2, 'guid-2', 'Nice', 'iMessage', 0, '{owner}', {d2}, 1, 0, 0);
         INSERT INTO message (ROWID, guid, text, service, handle_id, destination_caller_id, date, is_from_me, item_type, associated_message_type)
@@ -110,6 +111,7 @@ pub fn write_chat_db(dir: &Path) -> PathBuf {
         group_chat = GROUP_CHAT_IDENTIFIER,
         group_title = GROUP_TITLE,
         d1 = apple_nanos(600_000_000),
+        d1_read = apple_nanos(600_000_060),
         d2 = apple_nanos(600_000_060),
         d3 = apple_nanos(600_000_120),
         photo = photo.display(),

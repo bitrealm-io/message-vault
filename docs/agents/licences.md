@@ -69,6 +69,90 @@ own executable at run time (`imessage_ir_exporter::helper::locate`), then in
 one file outright. The Docker image is unaffected, because the server never
 links an exporter.
 
+## Why the boundary holds, and where it is thin
+
+The GPL reaches the whole of "the same program", so the question is whether
+the reader is part of Message Vault or a separate program Message Vault runs.
+The FSF's GPL FAQ says two programs that run as separate processes and exchange
+data over pipes are separate works, and GPL section 5 says placing separate
+works on one distribution medium is "mere aggregation" that does not extend
+the licence to the other work. That is this arrangement: a GPL executable, an
+FCL app that starts it and reads JSON lines from it, a permissive protocol
+crate so neither side links the other, and both shipped in one installer. It
+is the pattern under which commercial software ships ffmpeg and git.
+
+Where it is thin: the same FAQ says two processes exchanging complex internal
+data structures, or one that is meaningless without the other, may be one
+program. The reader exists for this app and its protocol was designed for it.
+The answer is to keep the reader a real program on its own: its README shows
+how to drive it from a shell, the protocol is a documented JSON shape rather
+than shared memory, and nothing on the FCL side is a modified copy of GPL
+source (the audit below). Should that ever feel too thin, the next steps are a
+separate repository and release for the reader, or a commercial exception from
+the library's author; neither has been needed.
+
+## What we ship and what we owe
+
+Every desktop installer conveys a GPL program, so its recipients are owed the
+licence text and the corresponding source (GPL sections 4 and 6). What meets
+that:
+
+- **A licence file beside the reader.** `src-tauri/build.rs` joins
+  `crates/helpers/imessage-reader/NOTICE.txt` (what the program is, what it
+  links, what it adapted, and where its source is, with the Product Version
+  filled in) and the crate's `LICENSE` (the GPL text) into
+  `src-tauri/resources/imessage-reader-LICENSE.txt`, which `tauri.conf.json`
+  lists under `bundle.resources`. The file is generated, not committed.
+- **A notice in the app.** Settings → About shows a "Third-party software"
+  block in the desktop app only (the website ships no reader), naming the
+  Apple Messages reader (imessage-reader), its licence, and two links built
+  from the app's own Build: the reader's folder at the release tag
+  (`.../tree/v<version>/crates/helpers/imessage-reader`) and the GPL text at
+  the same tag. The tag, not `main`, so an old install keeps pointing at the
+  source that matches its binary. `web/src/lib/thirdPartySoftware.ts`.
+- **Attribution inside the reader.** Files that adapt upstream GPL code say so
+  at the top (GPL section 5a), and `NOTICE.txt` and the README repeat it.
+- **No flags.** The reader stays a stdin program under ADR 0001; the notice is
+  the file and the About block, not a `--version` banner.
+
+## Audit of the FCL side (22 September 2026)
+
+Before commit `b9a24153` (PR #436, the split) the exporter crate linked
+`imessage-database` directly. This audit asked whether any code left on the
+FCL side is a modified copy of GPL source, as opposed to a caller of it.
+Compared: every file of `crates/exporters/imessage-ir-exporter/src/` at
+`b9a24153^` and at HEAD, and `imessage-reader-protocol`, against
+`imessage-database` 4.2.0, `crabapple` 0.4.7, and the `imessage-exporter`
+command-line tool in the same upstream repository.
+
+Found:
+
+- `convert.rs` and `helper.rs` were created by the split and adapt nothing:
+  no tapback classification, typedstream parsing, balloon parsing, Apple epoch
+  maths, or attachment path resolution; those live on the GPL side and arrive
+  as plain fields.
+- The protocol crate's types are an independent wire shape, not a copy of the
+  library's structs: different field sets, different doc comments, overlaps
+  only where Apple's own column names are used.
+- The pre-split `backup.rs` (iPhone backup decryption) and `error.rs`
+  (`RuntimeError`) were adapted from the `imessage-exporter` command-line
+  tool, GPL-3.0-or-later. The split moved both into the GPL reader, which is
+  the right home; what was missing was attribution, added in this pass to
+  the top of each file, to `NOTICE.txt`, and to the README.
+- Three user-facing sentences in the FCL `run.rs` were the tool's wording
+  (two "will have no effect" warnings and one "not a valid ... mode" error).
+  Reworded in this pass. `default_macos_db_path` and `detect_platform` there
+  restate two-line facts about where Apple keeps the database; they are not
+  copies.
+- `MESSAGES_DB_IN_IOS_BACKUP` and the contacts hash are Apple's fixed backup
+  paths, public knowledge, not upstream code.
+
+Verdict: after this pass the FCL side calls the reader and contains no
+adapted GPL code. Sign-off is the review of the pull request that closes
+issue #646. Do not repeat this audit; a future question is only about code
+added since, and the rule is the one above: adapted GPL code goes in the
+reader with a notice at the top of the file, never in an FCL crate.
+
 ## What checks it
 
 `cargo deny check licenses bans` runs in `.github/workflows/audit.yml` on the

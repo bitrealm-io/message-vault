@@ -15,6 +15,7 @@ import {
 } from "../../lib/system-settings";
 import { type FfmpegToolsProbe, probeFfmpegTools, setFfmpegToolsDir } from "../../lib/tauri";
 import { isTauri } from "../../lib/tauri-check";
+import { readerLicenseUrl, readerSourceUrl } from "../../lib/thirdPartySoftware";
 
 const sectionHeading = "m-0 mb-2 text-[12px] font-semibold uppercase tracking-[0.05em] text-muted";
 
@@ -80,6 +81,36 @@ function AppVersion() {
         <span className={settingsLabel}>Version</span>
         <span className="pl-2 font-mono text-[0.813rem] text-text">{APP_BUILD}</span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The notice the GPL asks for. The desktop installer ships the Apple Messages
+ * reader, a separate program under the GNU GPL v3, so whoever installed the
+ * desktop app received a copy and must be able to find its license and the
+ * source that matches it. The website ships no such program, so the browser
+ * build never shows this.
+ */
+function ThirdPartySoftware() {
+  const link = "text-accent";
+  return (
+    <div className="mt-8">
+      <h3 className={sectionHeading}>Third-party software</h3>
+      <p className="m-0 max-w-prose text-[0.875rem] text-text">
+        Apple Messages are read by the Apple Messages reader (imessage-reader), a separate program
+        installed beside this app. It is free software under the GNU General Public License, version
+        3 or later, and its source is published with each release.
+      </p>
+      <p className="m-0 mt-1 text-[0.875rem]">
+        <a href={readerSourceUrl(APP_BUILD)} target="_blank" rel="noopener" className={link}>
+          Source
+        </a>
+        <span className="text-muted"> · </span>
+        <a href={readerLicenseUrl(APP_BUILD)} target="_blank" rel="noopener" className={link}>
+          License
+        </a>
+      </p>
     </div>
   );
 }
@@ -261,6 +292,7 @@ export function SystemSection() {
 
       <div className="mt-8">
         <AppVersion />
+        <ThirdPartySoftware />
       </div>
     </div>
   );

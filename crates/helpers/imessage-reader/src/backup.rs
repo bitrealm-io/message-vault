@@ -1,5 +1,17 @@
 //! Decrypt encrypted iOS backup files (Messages DB, Contacts DB, attachments).
 //!
+//! Parts of this file are adapted from `imessage-exporter` by Christopher
+//! Sardegna (<https://github.com/ReagentX/imessage-exporter>, file
+//! `imessage-exporter/src/app/compatibility/backup.rs`), GPL-3.0-or-later:
+//! the shape of `decrypt_backup`, `get_decrypted_message_database`,
+//! `get_decrypted_contacts_database` and `decrypt_file`, and the
+//! `MAX_IN_MEMORY_DECRYPT` threshold. Changes here: the password comes from
+//! the app instead of a prompt, decrypted files get unique names under a
+//! scratch folder the app owns with owner-only permissions, and progress is
+//! reported as events rather than printed. Copyright for the adapted parts
+//! remains with the original author; this file is distributed under the same
+//! license.
+//!
 //! Every decrypted file lands in the scratch folder the app named, so a
 //! helper the app kills mid-run leaves nothing behind once the app removes
 //! that folder.

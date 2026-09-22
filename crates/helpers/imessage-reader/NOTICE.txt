@@ -1,0 +1,45 @@
+Apple Messages reader (imessage-reader)
+=======================================
+
+This program reads Apple Messages, from a Mac's Messages database or from an
+iPhone backup, for the Message Vault desktop app. The app starts it as a
+separate program and reads its answers over a pipe. Nothing else in Message
+Vault is part of this program.
+
+License
+-------
+
+This program is free software under the GNU General Public License, version 3
+or any later version (GPL-3.0-or-later). The full text follows this notice.
+You may run, study, share, and change it under those terms.
+
+It is a separate program from Message Vault, which is under the Fair Core
+License and is not covered by this notice.
+
+What it contains
+----------------
+
+Besides its own code, this program links these libraries, all by Christopher
+Sardegna and all under GPL-3.0-or-later:
+
+  imessage-database  https://github.com/ReagentX/imessage-exporter
+  crabstep           https://github.com/ReagentX/crabstep
+  crabapple          https://github.com/ReagentX/crabapple
+
+Parts of its own code, the decryption of encrypted iPhone backups and its
+error type, are adapted from imessage-exporter by the same author, also
+GPL-3.0-or-later. The source files say which parts. Copyright for the adapted
+parts remains with the original author.
+
+Source
+------
+
+This copy was built from Message Vault {version}. Its complete corresponding
+source is the folder crates/helpers/imessage-reader at that release:
+
+  https://github.com/bitrealm-io/message-vault/tree/v{version}/crates/helpers/imessage-reader
+
+Questions: vault@bitrealm.io
+
+----------------------------------------------------------------------
+

@@ -9,6 +9,11 @@
 //! except the vault server) still stands: an internal helper the app spawns
 //! is not a command line for people.
 //!
+//! Parts of `backup.rs` and `error.rs` are adapted from `imessage-exporter`
+//! by Christopher Sardegna, GPL-3.0-or-later; each file says which parts.
+//! That is the other reason this program is GPL: it is a modified version of
+//! GPL code, not only a user of GPL libraries.
+//!
 //! What it does: opens `chat.db` (or decrypts an iPhone backup), caches
 //! chats, handles, contacts and tapbacks, then streams every message as an
 //! already-classified record. Turning those records into the shared

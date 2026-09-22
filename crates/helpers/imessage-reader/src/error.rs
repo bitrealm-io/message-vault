@@ -1,4 +1,10 @@
 //! Errors while opening a Messages source or reading rows out of it.
+//!
+//! `RuntimeError` and its `FileNameError` message are adapted from
+//! `imessage-exporter` by Christopher Sardegna
+//! (<https://github.com/ReagentX/imessage-exporter>, file
+//! `imessage-exporter/src/app/error.rs`), GPL-3.0-or-later. Copyright for the
+//! adapted parts remains with the original author.
 
 use std::{
     error::Error,

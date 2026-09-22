@@ -27,6 +27,7 @@ fn main() {
     // The desktop app's Build, which it sends to the vault with every request.
     build_version::emit();
     build_sidecar();
+    write_reader_notice();
     tauri_build::build();
 }
 
@@ -100,6 +101,36 @@ fn build_sidecar() {
     fs::create_dir_all(&binaries).unwrap();
     let sidecar = binaries.join(format!("{HELPER}-{target_triple}{exe_suffix}"));
     copy_if_changed(&built, &sidecar);
+}
+
+/// Write the license file that ships beside the helper.
+///
+/// The helper is a GPL program, so whoever receives an installer must be able
+/// to find its license and the source that matches their copy. This joins the
+/// helper's `NOTICE.txt` (what the program is, what it contains, where its
+/// source is, with this Product Version filled in) and its `LICENSE` (the GPL
+/// text) into `resources/imessage-reader-LICENSE.txt`, which
+/// `tauri.conf.json` lists under `bundle.resources`.
+fn write_reader_notice() {
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let helper_dir = manifest_dir
+        .parent()
+        .unwrap()
+        .join("crates/helpers")
+        .join(HELPER);
+    let version = env::var("CARGO_PKG_VERSION").unwrap();
+    let notice = fs::read_to_string(helper_dir.join("NOTICE.txt"))
+        .expect("crates/helpers/imessage-reader/NOTICE.txt")
+        .replace("{version}", &version);
+    let license = fs::read_to_string(helper_dir.join("LICENSE"))
+        .expect("crates/helpers/imessage-reader/LICENSE");
+    let resources = manifest_dir.join("resources");
+    fs::create_dir_all(&resources).unwrap();
+    let out = resources.join(format!("{HELPER}-LICENSE.txt"));
+    let text = format!("{notice}{license}");
+    if fs::read_to_string(&out).ok().as_deref() != Some(text.as_str()) {
+        fs::write(&out, text).unwrap_or_else(|e| panic!("write {}: {e}", out.display()));
+    }
 }
 
 /// Copy `from` over `to` unless `to` already has the same bytes, so an

@@ -59,9 +59,7 @@ fn attachment_embed_from_copy_method(copy_method: &str) -> Result<AttachmentEmbe
     match copy_method.trim().to_ascii_lowercase().as_str() {
         "disabled" => Ok(AttachmentEmbed::Disabled),
         "clone" | "basic" | "full" => Ok(AttachmentEmbed::Embed),
-        other => bail!(
-            "{other} is not a valid attachment mode! Must be one of <clone, basic, full, disabled>"
-        ),
+        other => bail!("unknown attachment mode {other:?}; use clone, basic, full, or disabled"),
     }
 }
 
@@ -157,14 +155,14 @@ fn options_from_export_config(config: &ExporterConfig) -> Result<ExportOptions> 
         platform,
         source.attachment_root.as_deref().map(Path::new),
         ATTACHMENT_FOLDER_MISSING,
-        "Option attachment-root is enabled, but the platform is iOS, so the root will have no effect!",
+        "An attachment folder was given, but iPhone backups keep attachments inside the backup, so it will be ignored.",
     )?;
     check_macos_only_path(
         config,
         platform,
         source.apple_contacts.as_deref(),
         APPLE_CONTACTS_MISSING,
-        "Option contacts path is enabled, but the platform is iOS, so the path will have no effect!",
+        "An Apple Contacts file was given, but names for an iPhone backup come from the backup itself, so it will be ignored.",
     )?;
     check_db_path(platform, &db_path)?;
 

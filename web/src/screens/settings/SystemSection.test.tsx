@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { APP_BUILD } from "../../lib/build";
+import { readerLicenseUrl, readerSourceUrl } from "../../lib/thirdPartySoftware";
 import { SystemSection } from "./SystemSection";
 
 const tauriState = vi.hoisted(() => ({ isTauri: true }));
@@ -64,6 +65,23 @@ describe("SystemSection", () => {
     tauriState.isTauri = true;
     render(<SystemSection />);
     expect((await screen.findByText("Version")).nextElementSibling).toHaveTextContent(APP_BUILD);
+  });
+
+  it("names the Apple Messages reader and its GPL license in the desktop app only", async () => {
+    tauriState.isTauri = true;
+    render(<SystemSection />);
+    expect(await screen.findByText("Third-party software")).toBeTruthy();
+    expect(screen.getByText(/Apple Messages reader/)).toHaveTextContent("imessage-reader");
+    expect(screen.getByText(/GNU General Public License/)).toBeTruthy();
+    const source = screen.getByRole("link", { name: "Source" });
+    expect(source.getAttribute("href")).toBe(readerSourceUrl(APP_BUILD));
+    const license = screen.getByRole("link", { name: "License" });
+    expect(license.getAttribute("href")).toBe(readerLicenseUrl(APP_BUILD));
+    cleanup();
+
+    tauriState.isTauri = false;
+    render(<SystemSection />);
+    expect(screen.queryByText("Third-party software")).toBeNull();
   });
 
   it("shows the desktop-only stub when not in Tauri", () => {

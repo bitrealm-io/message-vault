@@ -271,6 +271,15 @@ journal with it; a failed import leaves it in place, since the staged files
 are what a retry reads.
 _Avoid_: Import Staging Directory, Temp Folder, Working Directory
 
+**Apple Messages Reader**:
+The separate program the desktop app runs to read Apple Messages from a Mac
+or an iPhone backup during Import. It is its own program, under the GNU GPL,
+because the library that understands Apple's message database is GPL and the
+rest of Message Vault is not; the app starts it, sends it one request, and
+reads its answers back over a pipe. Where a person sees it, it is named with
+its file name once: "the Apple Messages reader (imessage-reader)".
+_Avoid_: Helper, Sidecar, GPL helper, iMessage reader
+
 Extract is not a word for something a person does. It survives only as the
 internal name of the desktop command that reads a backup during Import.
 

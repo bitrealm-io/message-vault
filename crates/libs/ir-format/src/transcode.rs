@@ -16,7 +16,7 @@
 //! name on a later resume — both break the "an original on disk means work
 //! remains" invariant this pass depends on for resume. The `-mv` suffix
 //! cannot collide with a staged original's own name: staged names come from
-//! `attachment_dest_name` (`{local-date}-{digest16}{ext}`), whose stem is
+//! `attachment_dest_name` (`{utc-date}-{digest16}{ext}`), whose stem is
 //! hex, and hex digits never include `m` or `v`.
 //!
 //! An attachment is pending when its recorded path exists on disk,

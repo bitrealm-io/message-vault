@@ -8,8 +8,6 @@
 //! Collapsing whitespace in the text avoids two identities for tiny export
 //! differences.
 
-use chrono::{DateTime, Local, TimeZone, Utc};
-
 use crate::types::ParsedMessage;
 
 /// Who this chat is with, as a stable string (E.164 phone or `chat-…` for groups).
@@ -49,19 +47,6 @@ pub(crate) fn name_only_key(msg: &ParsedMessage) -> Option<String> {
 /// Message time as milliseconds since 1970 (for identity strings).
 pub(crate) fn timestamp_ms(timestamp_secs: f64) -> i64 {
     (timestamp_secs * 1000.0).round() as i64
-}
-
-/// Local wall-clock time for a Unix second, if representable.
-///
-/// Tries local interpretation, then UTC mapped to local. Returns `None` when
-/// the instant is out of range for chrono (callers that need a non-panicking
-/// filename prefix may fall back to the Unix epoch themselves).
-pub(crate) fn local_datetime_from_secs(secs: i64) -> Option<DateTime<Local>> {
-    Local.timestamp_opt(secs, 0).single().or_else(|| {
-        Utc.timestamp_opt(secs, 0)
-            .single()
-            .map(|utc| utc.with_timezone(&Local))
-    })
 }
 
 /// Clean the body text before fingerprinting.

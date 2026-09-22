@@ -2,7 +2,7 @@
 
 use crate::types::AttachmentBlob;
 use mailparse::{MailHeaderMap, ParsedMail};
-use message_vault_io_core::attachments::digest_prefix;
+use message_vault_io_core::attachments::{attachment_date_prefix, digest_prefix};
 use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -81,11 +81,8 @@ pub(crate) fn extract_attachments(
     timestamp_ms: f64,
     file_key: Option<&str>,
 ) -> Vec<AttachmentBlob> {
-    // Filename prefix only — fall back to epoch rather than panic on bad stamps.
-    let date_prefix = crate::identity::local_datetime_from_secs((timestamp_ms / 1000.0) as i64)
-        .unwrap_or_else(|| chrono::DateTime::UNIX_EPOCH.with_timezone(&chrono::Local))
-        .format("%Y%m%d_%H%M%S")
-        .to_string();
+    // UTC, so the name is the same on every machine that exports this mail.
+    let date_prefix = attachment_date_prefix((timestamp_ms / 1000.0) as i64);
     let name_prefix = file_key.map(|k| format!("{k}_")).unwrap_or_default();
 
     let mut parts = Vec::new();
@@ -171,5 +168,32 @@ mod tests {
     fn safe_basename_short_names_unchanged() {
         assert_eq!(safe_basename("photo.jpg"), "photo.jpg");
         assert_eq!(safe_basename("a b/c"), "a_b_c");
+    }
+
+    /// The date in the filename is the message's instant in UTC, not the
+    /// exporting machine's clock: 2024-03-15 23:59:59 UTC stays the 15th
+    /// even on a machine already into the 16th.
+    #[test]
+    fn attachment_filenames_carry_the_utc_date() {
+        let raw = concat!(
+            "Content-Type: multipart/mixed; boundary=\"b\"\r\n",
+            "\r\n",
+            "--b\r\n",
+            "Content-Type: image/jpeg\r\n",
+            "Content-Disposition: attachment; filename=\"photo.jpg\"\r\n",
+            "Content-Transfer-Encoding: base64\r\n",
+            "\r\n",
+            "/9j/4AAQ\r\n",
+            "--b--\r\n",
+        );
+        let mail = mailparse::parse_mail(raw.as_bytes()).expect("parse");
+        let blobs = extract_attachments(&mail, 1_710_547_199_000.0, Some("abc"));
+        assert_eq!(blobs.len(), 1);
+        assert!(
+            blobs[0].filename.starts_with("abc_20240315_235959_"),
+            "got {}",
+            blobs[0].filename
+        );
+        assert!(blobs[0].filename.ends_with("_photo.jpg"));
     }
 }

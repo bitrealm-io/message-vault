@@ -18,7 +18,9 @@ pub use attachment_jobs::{
     clear_attachment_bytes, mime_for_rel, report_attachment_progress, run_attachment_jobs,
     stage_conversation_attachments,
 };
-pub use attachments::{attachment_dest_name, copy_if_missing, digest_prefix, write_if_missing};
+pub use attachments::{
+    attachment_date_prefix, attachment_dest_name, copy_if_missing, digest_prefix, write_if_missing,
+};
 pub use config::{
     AppleConfig, ExporterConfig, FormatConfig, GoSmsProConfig, ImazingConfig, MediaConfig,
     ObfuscateConfig, OpenExtractConfig, OutputFormat, SmsBackupPlusConfig, SmsBackupRestoreConfig,

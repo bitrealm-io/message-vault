@@ -127,6 +127,10 @@ of, and a search that reads the same everywhere.
 
 ### Fixes
 
+- 2026-09-21: **An attachment gets the same filename on every computer.** The
+  date at the front of an attachment's filename is now the message's time in
+  UTC. It used to be the time zone of the computer running the export, so the
+  same backup exported on two computers named its attachments differently.
 - 2026-09-21: **Reloading the website while the vault is down no longer logs
   you out.** The Login screen shows Disconnected as before, and when the vault
   answers again you go straight back in without typing your password. A login

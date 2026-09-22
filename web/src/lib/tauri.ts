@@ -104,7 +104,7 @@ export interface OutgoingHandleCount {
   messages: number;
 }
 
-/** What a staged folder holds, recomputed for the first approval gate. */
+/** What a staged folder holds, recomputed for the first review. */
 export interface StagingSummary {
   conversations: number;
   messages: number;
@@ -119,7 +119,7 @@ export interface StagingSummary {
   assetMaxBytes: number;
 }
 
-/** Recompute what a staged folder holds, for the first approval gate. */
+/** Recompute what a staged folder holds, for the first review. */
 export async function invokeSummarizeStaging(config: StagingConfig): Promise<StagingSummary> {
   const stagingRoot = await resolveStagingRoot();
   return invoke("summarize_staging", {
@@ -155,7 +155,7 @@ export async function invokeTranscodeStaging(config: StagingConfig): Promise<voi
 
 /**
  * Delete a staging folder — the decline path's terminal action: closing an
- * approval gate without approving deletes the folder outright.
+ * review without approving deletes the folder outright.
  */
 export async function invokeDeleteStaging(config: { staging_dir: string }): Promise<void> {
   const stagingRoot = await resolveStagingRoot();

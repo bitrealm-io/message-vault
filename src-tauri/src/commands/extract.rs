@@ -399,8 +399,8 @@ fn build_exporter_config(
     // is `Compress` — and that field reads `Clone` for a real Convert/Compress
     // choice (see `exporter_attachment_media`'s docs), so it would otherwise
     // stay silent about a malformed `media_max_fps`/`media_min_size` until the
-    // desktop's own media pass parses the same fields again at the approval
-    // gate, hours later. Validate against the REAL chosen mode here so a bad
+    // desktop's own media pass parses the same fields again at the review,
+    // hours later. Validate against the REAL chosen mode here so a bad
     // value still fails immediately; the parsed value itself is unused here —
     // the exporter's own media step is a no-op under Clone.
     parse_compress_options(

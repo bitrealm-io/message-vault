@@ -21,9 +21,9 @@ import {
   UPLOAD_LABEL,
 } from "./importProgressState";
 import {
-  type ApprovalKind,
   attachmentsAsked,
   importGroupName,
+  type ReviewKind,
   runHeading,
   sourceDisplayName,
 } from "./importRunCopy";
@@ -80,7 +80,7 @@ function estimatedSize(file: AttachmentForecast): string {
   return `${formatBytes(file.sizeBytes)} → ${formatBytes(file.estimateBytes)}`;
 }
 
-function ApprovalActions({
+function ReviewActions({
   approveLabel,
   onApprove,
   onCancelRun,
@@ -164,7 +164,7 @@ function FinishedExits({ importId }: { importId: number }) {
 
 /**
  * The Import Run's one screen: the run's stages as a list, each holding what
- * it made, with each Approval as a row in that list where the run stops for
+ * it made, with each Review as a row in that list where the run stops for
  * the person. A finished run leads with where to go next; its errors, and
  * only its errors, sit in a table under the list.
  */
@@ -180,12 +180,12 @@ export default function ImportRunView({
   stagingDir,
   importSessionId,
   completionText,
-  approvalWaiting,
+  reviewWaiting,
   unknownContacts,
   mediaToolsMissing,
   mediaPartiallyRan,
   identityPanel,
-  approvalBusy,
+  reviewBusy,
   onApprove,
   onCancelRun,
   onCancel,
@@ -206,12 +206,12 @@ export default function ImportRunView({
   stagingDir: string | null;
   importSessionId: number | null;
   completionText?: string;
-  /** The approval the run is waiting at, when it is. */
-  approvalWaiting: ApprovalKind | null;
+  /** The review the run is waiting at, when it is. */
+  reviewWaiting: ReviewKind | null;
   /**
    * Null while the contact-match lookup is in flight or failed. The split
    * into existing and new is a nicety, not a blocker, so a failed lookup
-   * omits it rather than stalling the approval.
+   * omits it rather than stalling the review.
    */
   unknownContacts: number | null;
   /** Convert or compress is chosen and ffmpeg was not found: approving would only fail later. */
@@ -224,9 +224,9 @@ export default function ImportRunView({
   mediaPartiallyRan?: boolean;
   /** The backup's identities, composed by the caller (omit to hide). */
   identityPanel?: ReactNode;
-  approvalBusy?: boolean;
+  reviewBusy?: boolean;
   onApprove: () => void;
-  /** Cancel the run from an approval: the run ends and what was staged is deleted. */
+  /** Cancel the run from a review: the run ends and what was staged is deleted. */
   onCancelRun: () => void;
   /** Stop the stage that is running. */
   onCancel: () => void;
@@ -297,7 +297,7 @@ export default function ImportRunView({
     );
   }
 
-  function stagingApprovalContent(summary: StagingSummary): ReactNode {
+  function stagingReviewContent(summary: StagingSummary): ReactNode {
     const contacts = summary.contactIdentifiers.length;
     const heading = estimatesHeading(mode);
     const piles = heading && !mediaPartiallyRan ? estimatePiles(summary) : [];
@@ -352,11 +352,11 @@ export default function ImportRunView({
             Media needs ffmpeg. Set its folder in Settings, then come back to Import.
           </p>
         ) : null}
-        <ApprovalActions
+        <ReviewActions
           approveLabel={APPROVE_LABEL[mode]}
           onApprove={onApprove}
           onCancelRun={onCancelRun}
-          busy={approvalBusy}
+          busy={reviewBusy}
           approveDisabled={toolsBlocked}
         />
       </WaitingBody>
@@ -379,17 +379,17 @@ export default function ImportRunView({
     );
   }
 
-  function mediaApprovalContent(summary: StagingSummary): ReactNode {
+  function mediaReviewContent(summary: StagingSummary): ReactNode {
     return (
       <WaitingBody>
         <FactGroups>
           <AttachmentLimitGroup summary={summary} />
         </FactGroups>
-        <ApprovalActions
+        <ReviewActions
           approveLabel="Upload to vault"
           onApprove={onApprove}
           onCancelRun={onCancelRun}
-          busy={approvalBusy}
+          busy={reviewBusy}
         />
       </WaitingBody>
     );
@@ -436,10 +436,10 @@ export default function ImportRunView({
     );
   }
 
-  /** An approval's row: waiting, approved once the stage it guards has started, or still ahead. */
-  function approvalRow(kind: ApprovalKind, guarded: ImportStep | undefined): Step {
+  /** A review's row: waiting, approved once the stage it guards has started, or still ahead. */
+  function reviewRow(kind: ReviewKind, guarded: ImportStep | undefined): Step {
     const label = kind === "staging" ? STAGING_REVIEW_LABEL : MEDIA_REVIEW_LABEL;
-    if (approvalWaiting === kind) {
+    if (reviewWaiting === kind) {
       const summary = kind === "staging" ? stagingSummary : mediaSummary;
       return {
         label,
@@ -447,8 +447,8 @@ export default function ImportRunView({
         note: "Awaiting approval",
         content: summary
           ? kind === "staging"
-            ? stagingApprovalContent(summary)
-            : mediaApprovalContent(summary)
+            ? stagingReviewContent(summary)
+            : mediaReviewContent(summary)
           : null,
       };
     }
@@ -471,7 +471,7 @@ export default function ImportRunView({
           </>
         ),
       });
-      rows.push(approvalRow("staging", hasMedia ? mediaStep : uploadStep));
+      rows.push(reviewRow("staging", hasMedia ? mediaStep : uploadStep));
     } else if (step.label === MEDIA_LABEL) {
       rows.push({
         ...row,
@@ -482,7 +482,7 @@ export default function ImportRunView({
           </>
         ),
       });
-      rows.push(approvalRow("media", uploadStep));
+      rows.push(reviewRow("media", uploadStep));
     } else {
       rows.push({
         ...row,

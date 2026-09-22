@@ -135,7 +135,7 @@ function renderView(props: Partial<Parameters<typeof ImportRunView>[0]> = {}) {
           summaryView={null}
           stagingDir={null}
           importSessionId={null}
-          approvalWaiting={null}
+          reviewWaiting={null}
           unknownContacts={null}
           onApprove={() => {}}
           onCancelRun={() => {}}
@@ -204,7 +204,7 @@ describe("ImportRunView", () => {
     cleanup();
   });
 
-  it("lists every stage and approval of the run, in order", () => {
+  it("lists every stage and review of the run, in order", () => {
     renderView();
     const labels = screen
       .getAllByRole("listitem")
@@ -278,7 +278,7 @@ describe("ImportRunView", () => {
     const onCancelRun = vi.fn();
     const user = userEvent.setup();
     renderView({
-      phase: "staging_approval",
+      phase: "staging_review",
       running: false,
       form: form({ attachmentMedia: "copy" }),
       steps: stepsAt("copy", { Staging: "done" }),
@@ -289,7 +289,7 @@ describe("ImportRunView", () => {
           file("big.mov", 212, "probably_too_big"),
         ],
       }),
-      approvalWaiting: "staging",
+      reviewWaiting: "staging",
       unknownContacts: 1,
       onApprove,
       onCancelRun,
@@ -301,38 +301,38 @@ describe("ImportRunView", () => {
     expect(staging.getByText("6,118")).toBeInTheDocument();
     expect(staging.getByText("9.4 GB")).toBeInTheDocument();
 
-    const approval = within(stageRow(WAITING_STAGING));
-    expect(approval.getByText("Existing").nextSibling).toHaveTextContent("2");
-    expect(approval.getByText("New").nextSibling).toHaveTextContent("1");
-    expect(approval.getByText("Size limit per file").nextSibling).toHaveTextContent("50 MB");
-    expect(approval.queryByText(/estimates/)).not.toBeInTheDocument();
+    const review = within(stageRow(WAITING_STAGING));
+    expect(review.getByText("Existing").nextSibling).toHaveTextContent("2");
+    expect(review.getByText("New").nextSibling).toHaveTextContent("1");
+    expect(review.getByText("Size limit per file").nextSibling).toHaveTextContent("50 MB");
+    expect(review.queryByText(/estimates/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
 
     // The files are listed only once the count is opened, largest first.
-    expect(approval.queryByText("big.mov")).not.toBeInTheDocument();
-    await user.click(approval.getByRole("button", { name: /Files over the limit/ }));
-    const names = approval.getAllByText(/\.mov$/).map((node) => node.textContent);
+    expect(review.queryByText("big.mov")).not.toBeInTheDocument();
+    await user.click(review.getByRole("button", { name: /Files over the limit/ }));
+    const names = review.getAllByText(/\.mov$/).map((node) => node.textContent);
     expect(names).toEqual(["big.mov", "small.mov"]);
     // What becomes of them is said beside the label, not in a sentence above the list.
-    expect(approval.getByRole("button", { name: /Files over the limit/ })).toHaveTextContent(
+    expect(review.getByRole("button", { name: /Files over the limit/ })).toHaveTextContent(
       "Skip vault upload",
     );
-    expect(approval.queryByText(/stay out of the vault/)).not.toBeInTheDocument();
-    expect(approval.getByText("Awaiting approval")).toBeInTheDocument();
+    expect(review.queryByText(/stay out of the vault/)).not.toBeInTheDocument();
+    expect(review.getByText("Awaiting approval")).toBeInTheDocument();
 
-    await user.click(approval.getByRole("button", { name: "Upload to vault" }));
+    await user.click(review.getByRole("button", { name: "Upload to vault" }));
     expect(onApprove).toHaveBeenCalledTimes(1);
-    await user.click(approval.getByRole("button", { name: "Cancel this import" }));
+    await user.click(review.getByRole("button", { name: "Cancel this import" }));
     expect(onCancelRun).toHaveBeenCalledTimes(1);
   });
 
   it("leaves the contact split out when the lookup has no answer", () => {
     renderView({
-      phase: "staging_approval",
+      phase: "staging_review",
       running: false,
       steps: stepsAt("convert", { Staging: "done" }),
       stagingSummary: staged({ contactIdentifiers: ["+15550100"] }),
-      approvalWaiting: "staging",
+      reviewWaiting: "staging",
       unknownContacts: null,
     });
     expect(screen.getByText("Contacts")).toBeInTheDocument();
@@ -342,7 +342,7 @@ describe("ImportRunView", () => {
   it("sorts the estimates into three piles when a Media stage is coming", async () => {
     const user = userEvent.setup();
     renderView({
-      phase: "staging_approval",
+      phase: "staging_review",
       running: false,
       form: form({ attachmentMedia: "compress" }),
       steps: stepsAt("convert", { Staging: "done" }),
@@ -354,30 +354,30 @@ describe("ImportRunView", () => {
           file("scan.tiff", 71, "cannot_process"),
         ],
       }),
-      approvalWaiting: "staging",
+      reviewWaiting: "staging",
     });
-    const approval = within(stageRow(WAITING_STAGING));
-    expect(approval.getByText("Compression estimates")).toBeInTheDocument();
-    expect(approval.getByText("Media has not run yet")).toBeInTheDocument();
-    expect(approval.getByRole("button", { name: /Likely within limit/ })).toHaveTextContent("1");
-    expect(approval.getByRole("button", { name: /Not audio or video/ })).toHaveTextContent("1");
+    const review = within(stageRow(WAITING_STAGING));
+    expect(review.getByText("Compression estimates")).toBeInTheDocument();
+    expect(review.getByText("Media has not run yet")).toBeInTheDocument();
+    expect(review.getByRole("button", { name: /Likely within limit/ })).toHaveTextContent("1");
+    expect(review.getByRole("button", { name: /Not audio or video/ })).toHaveTextContent("1");
 
     // A file that may grow past the limit sits with the ones expected to stay over it.
-    const mayExceed = approval.getByRole("button", { name: /May exceed limit/ });
+    const mayExceed = review.getByRole("button", { name: /May exceed limit/ });
     expect(mayExceed).toHaveTextContent("2");
     await user.click(mayExceed);
-    expect(approval.getByText("212 MB → 84 MB")).toBeInTheDocument();
-    expect(approval.getByText("46 MB → 52 MB")).toBeInTheDocument();
-    expect(approval.getByRole("button", { name: "Compress media" })).toBeEnabled();
+    expect(review.getByText("212 MB → 84 MB")).toBeInTheDocument();
+    expect(review.getByText("46 MB → 52 MB")).toBeInTheDocument();
+    expect(review.getByRole("button", { name: "Compress media" })).toBeEnabled();
   });
 
   it("blocks approving when the Media tools are missing", () => {
     renderView({
-      phase: "staging_approval",
+      phase: "staging_review",
       running: false,
       steps: stepsAt("convert", { Staging: "done" }),
       stagingSummary: staged(),
-      approvalWaiting: "staging",
+      reviewWaiting: "staging",
       mediaToolsMissing: true,
     });
     expect(screen.getByRole("button", { name: "Convert media" })).toBeDisabled();
@@ -386,11 +386,11 @@ describe("ImportRunView", () => {
 
   it("drops the estimates when Media already ran partway", () => {
     renderView({
-      phase: "staging_approval",
+      phase: "staging_review",
       running: false,
       steps: stepsAt("convert", { Staging: "done" }),
       stagingSummary: staged({ forecasts: [file("fits.mov", 96, "likely_fits", 38)] }),
-      approvalWaiting: "staging",
+      reviewWaiting: "staging",
       mediaPartiallyRan: true,
     });
     expect(screen.queryByText("Conversion estimates")).not.toBeInTheDocument();
@@ -399,7 +399,7 @@ describe("ImportRunView", () => {
 
   it("waits at the Media Review with what is true now, and no comparison", () => {
     renderView({
-      phase: "media_approval",
+      phase: "media_review",
       running: false,
       steps: stepsAt("convert", { Staging: "done", Media: "done" }),
       stagingSummary: staged(),
@@ -408,7 +408,7 @@ describe("ImportRunView", () => {
         forecasts: [file("huge-mv.mp4", 84, "probably_too_big")],
       }),
       mediaFailedCount: 2,
-      approvalWaiting: "media",
+      reviewWaiting: "media",
     });
 
     expect(within(stageRow("Staging Review")).getByText("Approved")).toBeInTheDocument();
@@ -418,9 +418,9 @@ describe("ImportRunView", () => {
     expect(media.getByText("4.1 GB")).toBeInTheDocument();
     expect(media.getByText("Could not be converted").nextSibling).toHaveTextContent("2");
 
-    const approval = within(stageRow(WAITING_MEDIA));
-    expect(approval.getByRole("button", { name: /Files over the limit/ })).toHaveTextContent("1");
-    expect(approval.getByRole("button", { name: "Upload to vault" })).toBeInTheDocument();
+    const review = within(stageRow(WAITING_MEDIA));
+    expect(review.getByRole("button", { name: /Files over the limit/ })).toHaveTextContent("1");
+    expect(review.getByRole("button", { name: "Upload to vault" })).toBeInTheDocument();
     expect(screen.queryByText(/since you approved/)).not.toBeInTheDocument();
   });
 

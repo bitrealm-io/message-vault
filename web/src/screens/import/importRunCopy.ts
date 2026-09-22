@@ -6,8 +6,8 @@ import { ATTACHMENT_OPTIONS } from "./ImportFormUi";
 import type { ImportPhase } from "./importProgressState";
 import type { ImportJobFormValues } from "./useImportJob";
 
-/** Which of the run's two approvals (CONTEXT.md, "Approval"). */
-export type ApprovalKind = "staging" | "media";
+/** Which of the run's two reviews ((CONTEXT.md, "Review")). */
+export type ReviewKind = "staging" | "media";
 
 /** The person's name for the source, e.g. "iMessage · iPhone backup". */
 export function sourceDisplayName(source: string): string {

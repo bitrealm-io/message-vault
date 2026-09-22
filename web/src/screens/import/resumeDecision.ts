@@ -12,7 +12,7 @@ export type ResumeDecision = {
     // error is not evidence the folder is gone.
     | "folder_unknown"
     | "resume_push"
-    // A session waiting at either approval gate: the summary is recomputed
+    // A session waiting at either review: the summary is recomputed
     // fresh from the folder (decision 39) and shown again, nothing restored.
     | "resume_gate"
     // A session that died mid media pass: the pass re-runs over whatever

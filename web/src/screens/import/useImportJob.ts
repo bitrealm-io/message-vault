@@ -188,7 +188,7 @@ function initialSteps(
 }
 
 /**
- * Stage rows for a run resumed at an approval or mid Media: Staging is
+ * Stage rows for a run resumed at a review or mid Media: Staging is
  * already done (nothing here re-extracts), Upload is always still pending
  * (nothing here has uploaded yet), and Media (when this mode has it) is done
  * only when `mediaDone` says the pass already finished in an earlier run. A
@@ -385,7 +385,7 @@ type RunScratch = {
   extractMediaMode: AttachmentMediaMode;
   lastAttachmentProgress: AttachmentProgressCounts | null;
   /** Guards approve and cancel against a double click doing the work twice. */
-  approvalAction: boolean;
+  reviewAction: boolean;
   /**
    * Guards startImport the same way: the identity probe awaits two network
    * calls before runImport ever sets `running`, so a double-click on Import
@@ -407,7 +407,7 @@ function freshScratch(): RunScratch {
     attachmentMode: "copy",
     extractMediaMode: "copy",
     lastAttachmentProgress: null,
-    approvalAction: false,
+    reviewAction: false,
     startImport: false,
   };
 }
@@ -607,15 +607,15 @@ async function mediaToolsMissingFor(mode: AttachmentMediaMode): Promise<boolean>
   }
 }
 
-/** Stop at an approval: the run waits, and the approval takes the screen. */
-function waitAtApproval(phase: "staging_approval" | "media_approval"): void {
+/** Stop at a review: the run waits, and the review takes the screen. */
+function waitAtReview(phase: "staging_review" | "media_review"): void {
   store.set({ phase, running: false, computingSummary: false });
 }
 
 /**
  * Build the finished-import summary, record it, and (usually) post
  * `/complete`, the terminal step for every path except one: a failure
- * before either approval, a failed Media stage, or an Upload that ran to
+ * before either review, a failed Media stage, or an Upload that ran to
  * completion or failed all complete normally.
  *
  * `canceled` overrides `importOutcome`'s verdict outright: the person asked
@@ -623,7 +623,7 @@ function waitAtApproval(phase: "staging_approval" | "media_approval"): void {
  *
  * `skipComplete` is that one exception. A cancellation mid Media is routed
  * to the same recovery as a crash at that stage, and only an explicit
- * cancel from an approval ends a waiting run: `/complete` is what ends one.
+ * cancel from a review ends a waiting run: `/complete` is what ends one.
  * Posting it here would free the one-live-run slot and drop the run out of
  * `GET /v1/imports?status=running`, stranding the staged folder (and the
  * time already spent on it) with no run left to resume it through. The
@@ -640,9 +640,9 @@ async function finishImport(args: {
   uploadMs: number | null;
   skipComplete?: boolean;
   /**
-   * The plan the person approved at their last approval: the Media
-   * Approval's recomputed summary when there was a Media stage, the Staging
-   * Approval's otherwise. Only `runPush` has one to offer; every other call
+   * The plan the person approved at their last review: the Media
+   * Review's recomputed summary when there was a Media stage, the Staging
+   * Review's otherwise. Only `runPush` has one to offer; every other call
    * into this function ends in `pushReport: null`, which fails the outcome
    * regardless of `approved`, so leaving it undefined there is a no-op.
    */
@@ -879,10 +879,10 @@ async function runMediaPass(
     });
     store.set({ mediaSummary: actual, mediaFailedCount: transcodeReport?.failed ?? null });
     await moveStage(sessionId, "awaiting_gate_2", approvedSummary);
-    waitAtApproval("media_approval");
+    waitAtReview("media_review");
   } catch (e: unknown) {
     // The stage itself succeeded; only the recompute after it failed. Still
-    // a failed import, not an unhandled rejection on a frozen approval, and
+    // a failed import, not an unhandled rejection on a frozen review, and
     // still no later stage written, so the run stays at `transcode`.
     recordError("media", e instanceof Error ? e.message : String(e));
     store.set({ computingSummary: false });
@@ -965,7 +965,7 @@ async function runImport(
       // The staging folder is already complete, so there is nothing to
       // resolve, no new run to create (the account already has this one),
       // and no extract to run. resume_push is only ever offered after the
-      // last approval, so there IS a plan from it: it rides along as
+      // last review, so there IS a plan from it: it rides along as
       // `resume.approved` (parsed from the run's stored summary) when it
       // parses. Straight to Upload.
       const outputDir = resume.stagingDir;
@@ -1074,7 +1074,7 @@ async function runImport(
       });
       const toolsMissing = await mediaToolsMissingFor(form.attachmentMedia);
       store.set({ stagingSummary: summary, mediaToolsMissing: toolsMissing });
-      waitAtApproval("staging_approval");
+      waitAtReview("staging_review");
     } catch (e: unknown) {
       store.set({
         resumeError: e instanceof Error ? e.message : String(e),
@@ -1106,14 +1106,14 @@ async function runImport(
 }
 
 /**
- * Cancel the run from an approval: close the run on the vault and delete
+ * Cancel the run from a review: close the run on the vault and delete
  * the staging folder. Both halves run regardless of the other's outcome: a
  * live run with no folder blocks the next import, and a folder with no run
  * is litter nothing will ever clean up.
  */
 async function cancelRun(): Promise<void> {
-  if (scratch.approvalAction) return;
-  scratch.approvalAction = true;
+  if (scratch.reviewAction) return;
+  scratch.reviewAction = true;
   try {
     const { importSessionId: sessionId, stagingDir: outputDir } = store.get();
     await Promise.allSettled([
@@ -1121,7 +1121,7 @@ async function cancelRun(): Promise<void> {
       outputDir != null ? invokeDeleteStaging({ staging_dir: outputDir }) : Promise.resolve(),
     ]);
   } finally {
-    scratch.approvalAction = false;
+    scratch.reviewAction = false;
   }
   returnToForm();
 }
@@ -1132,7 +1132,7 @@ async function cancel(): Promise<void> {
 }
 
 /**
- * Run an import through its stages and approvals, and keep the run's
+ * Run an import through its stages and reviews, and keep the run's
  * state where the screen can read it (`importRunStore`).
  *
  * Every function here reads the run from the store at the moment it is
@@ -1207,10 +1207,10 @@ export function useImportJob() {
     returnToForm();
   }
 
-  /** Approve the waiting approval: Media after the Staging Review when there is one, Upload otherwise. */
+  /** Approve the waiting review: Media after the Staging Review when there is one, Upload otherwise. */
   async function approve(): Promise<void> {
     if (!isTauri()) return;
-    if (scratch.approvalAction) return;
+    if (scratch.reviewAction) return;
     const form = scratch.form;
     const {
       phase,
@@ -1221,23 +1221,23 @@ export function useImportJob() {
     } = store.get();
     // What the person is approving: the folder as Media left it at the
     // Media Review, as Staging left it at the Staging Review.
-    const approvedSummary = phase === "media_approval" ? mediaSummary : stagingSummary;
+    const approvedSummary = phase === "media_review" ? mediaSummary : stagingSummary;
     if (!form || sessionId == null || outputDir == null || approvedSummary == null) return;
 
-    scratch.approvalAction = true;
+    scratch.reviewAction = true;
     try {
-      if (phase === "staging_approval" && mediaJobVerb(form.attachmentMedia) !== null) {
+      if (phase === "staging_review" && mediaJobVerb(form.attachmentMedia) !== null) {
         await runMediaPass(form, sessionId, outputDir, approvedSummary);
       } else {
         await runPush(token, form, sessionId, outputDir, approvedSummary);
       }
     } finally {
-      scratch.approvalAction = false;
+      scratch.reviewAction = false;
     }
   }
 
   /**
-   * Resume a run the vault reports waiting at an approval (`awaiting_gate_1`
+   * Resume a run the vault reports waiting at a review (`awaiting_gate_1`
    * / `awaiting_gate_2`) or mid Media (`transcode`).
    *
    * `approve` can't do this itself: it depends on what the store holds
@@ -1295,13 +1295,13 @@ export function useImportJob() {
       sourceIdentities: parseSourceIdentities(session.source_identities),
     });
 
-    /** Recompute the summary from the folder, then land on the given approval. */
+    /** Recompute the summary from the folder, then land on the given review. */
     async function landOn(
-      approval: "staging_approval" | "media_approval",
+      review: "staging_review" | "media_review",
       partiallyRan: boolean,
     ): Promise<void> {
       store.set({
-        steps: resumeSteps(resumedForm.attachmentMedia, approval === "media_approval"),
+        steps: resumeSteps(resumedForm.attachmentMedia, review === "media_review"),
         computingSummary: true,
         phase: "running",
         running: true,
@@ -1311,7 +1311,7 @@ export function useImportJob() {
           staging_dir: outputDir,
           ...stagingMediaFields(resumedForm),
         });
-        if (approval === "staging_approval") {
+        if (review === "staging_review") {
           const missing = await mediaToolsMissingFor(resumedForm.attachmentMedia);
           store.set({
             stagingSummary: actual,
@@ -1329,7 +1329,7 @@ export function useImportJob() {
             mediaFailedCount: null,
           });
         }
-        waitAtApproval(approval);
+        waitAtReview(review);
       } catch (e: unknown) {
         store.set({
           resumeError: e instanceof Error ? e.message : String(e),
@@ -1341,11 +1341,11 @@ export function useImportJob() {
     }
 
     if (session.stage === "awaiting_gate_1") {
-      await landOn("staging_approval", false);
+      await landOn("staging_review", false);
       return;
     }
     if (session.stage === "awaiting_gate_2") {
-      await landOn("media_approval", false);
+      await landOn("media_review", false);
       return;
     }
 
@@ -1355,7 +1355,7 @@ export function useImportJob() {
     // summary instead of starting a job that can only fail, using the same
     // `mediaToolsMissing` gate the normal flow shows there.
     if (await mediaToolsMissingFor(resumedForm.attachmentMedia)) {
-      await landOn("staging_approval", true);
+      await landOn("staging_review", true);
       return;
     }
     store.set({ steps: resumeSteps(resumedForm.attachmentMedia, false) });

@@ -52,7 +52,7 @@ import BackupIdentityStopScreen from "./import/BackupIdentityStopScreen";
 import { restoreFormFromSnapshot } from "./import/formSnapshot";
 import ImportFormFields from "./import/ImportFormFields";
 import ImportRunView from "./import/ImportRunView";
-import { isApprovalPhase } from "./import/importRunStore";
+import { isReviewPhase } from "./import/importRunStore";
 import ResumeImportPanel from "./import/ResumeImportPanel";
 import {
   checkSourceFingerprint,
@@ -133,9 +133,9 @@ export default function ImportScreen() {
     continueAfterIdentityStop,
     cancelIdentityStop,
   } = useImportJob();
-  /** Which approval the run is waiting at, or null while it is not waiting. */
-  const approvalWaiting = isApprovalPhase(phase)
-    ? phase === "staging_approval"
+  /** Which review the run is waiting at, or null while it is not waiting. */
+  const reviewWaiting = isReviewPhase(phase)
+    ? phase === "staging_review"
       ? "staging"
       : "media"
     : null;
@@ -268,13 +268,13 @@ export default function ImportScreen() {
 
   /**
    * Ask the vault which of the staged contact identifiers this account
-   * already has, once per summary shown at an approval, batched at the
+   * already has, once per summary shown at a review, batched at the
    * server's own cap so a large import doesn't send an oversized request. A
-   * failed batch leaves the count unknown rather than blocking the approval:
+   * failed batch leaves the count unknown rather than blocking the review:
    * the "new to your vault" clause is a nicety, not a requirement.
    */
   useEffect(() => {
-    if (!isApprovalPhase(phase) || !stagingSummary) return;
+    if (!isReviewPhase(phase) || !stagingSummary) return;
     let cancelled = false;
     setUnknownContacts(null);
     void (async () => {
@@ -769,7 +769,7 @@ export default function ImportScreen() {
         />
       )}
 
-      {(phase === "running" || phase === "done" || approvalWaiting) && (
+      {(phase === "running" || phase === "done" || reviewWaiting) && (
         <ImportRunView
           phase={phase}
           steps={steps}
@@ -782,12 +782,12 @@ export default function ImportScreen() {
           stagingDir={stagingDir}
           importSessionId={importSessionId}
           completionText={completionText}
-          approvalWaiting={approvalWaiting}
+          reviewWaiting={reviewWaiting}
           unknownContacts={unknownContacts}
           mediaToolsMissing={mediaToolsMissing}
           mediaPartiallyRan={mediaPartiallyRan}
           identityPanel={
-            approvalWaiting === "staging" && sourceIdentities != null ? (
+            reviewWaiting === "staging" && sourceIdentities != null ? (
               <BackupIdentityList
                 identities={sourceIdentities}
                 profile={identityProfile}
@@ -798,7 +798,7 @@ export default function ImportScreen() {
               />
             ) : undefined
           }
-          approvalBusy={running}
+          reviewBusy={running}
           onApprove={() => void approve()}
           onCancelRun={() => void cancelRun()}
           onCancel={() => void cancel()}

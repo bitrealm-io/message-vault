@@ -1,10 +1,10 @@
 //! `summarize_staging`, `transcode_staging`, and `delete_staging` commands.
 //!
-//! These back the two approval gates a staged import stops at (Decision 16):
+//! These back the two reviews a staged import stops at (Decision 16):
 //! `summarize_staging` recomputes what a staged folder holds so the first
-//! gate can show it, `transcode_staging` runs the convert/compress pass the
+//! review can show it, `transcode_staging` runs the convert/compress pass the
 //! exporter deferred (see `extract::exporter_media_mode`), and
-//! `delete_staging` is the decline path — closing a gate without approving
+//! `delete_staging` is the decline path — closing a review without approving
 //! deletes the staging folder outright.
 //!
 //! `summarize_staging` and `transcode_staging` both build a
@@ -129,7 +129,7 @@ fn build_transcode_options(args: &StagingArgs) -> Result<TranscodeOptions, Strin
     })
 }
 
-/// Recompute what a staged folder holds, for the first approval gate.
+/// Recompute what a staged folder holds, for the first review.
 ///
 /// Reports progress on `extract:progress` with `step: "prepare"`, so a long
 /// summary of a huge folder shows movement on the step the user is already
@@ -212,7 +212,7 @@ fn transcode_summary(report: &TranscodeReport) -> String {
     format!("{}.", clauses.join("; "))
 }
 
-/// Run the convert/compress pass over a staged folder, after the first gate
+/// Run the convert/compress pass over a staged folder, after the first review
 /// approves it.
 ///
 /// Follows `extract`'s job shape: the cancel flag is reset through
@@ -332,7 +332,7 @@ pub struct DeleteStagingArgs {
 }
 
 /// Delete a staging folder — the decline path's terminal action (Decision
-/// 16): closing an approval gate without approving deletes the folder
+/// 16): closing a review without approving deletes the folder
 /// outright.
 ///
 /// Runs on the async task pool (`#[tauri::command(async)]`) rather than the

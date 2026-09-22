@@ -56,10 +56,10 @@ describe("StepProgress wide list", () => {
         ]}
       />,
     );
-    const [staging, approval, upload] = screen.getAllByRole("listitem");
+    const [staging, review, upload] = screen.getAllByRole("listitem");
     expect(staging).toHaveTextContent("46s");
     expect(staging).toHaveTextContent("681 conversations");
-    expect(approval).toHaveTextContent("Approved");
+    expect(review).toHaveTextContent("Approved");
     expect(upload).toHaveTextContent("3");
   });
 
@@ -73,8 +73,8 @@ describe("StepProgress wide list", () => {
         ]}
       />,
     );
-    const [staging, approval] = screen.getAllByRole("listitem");
+    const [staging, review] = screen.getAllByRole("listitem");
     expect(staging).not.toHaveAttribute("aria-current");
-    expect(approval).toHaveAttribute("aria-current", "step");
+    expect(review).toHaveAttribute("aria-current", "step");
   });
 });

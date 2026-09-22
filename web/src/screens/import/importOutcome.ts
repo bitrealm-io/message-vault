@@ -45,7 +45,7 @@ const OMITTABLE_VERDICTS: ReadonlySet<SizeVerdict> = new Set([
  * simple case. `item.endsWith(...)` catches the compound form without the
  * conversation-name prefix tripping it up. `stableStem` (Task 9's helper)
  * catches a file the media pass renamed with a `-mv` suffix between the
- * approval and the push — `stem.pop()` on the path already strips any
+ * review and the push — `stem.pop()` on the path already strips any
  * `{name}:` prefix, since it only looks at the last `/`-separated segment.
  */
 function issueNamesForecastRow(item: string, row: AttachmentForecast): boolean {

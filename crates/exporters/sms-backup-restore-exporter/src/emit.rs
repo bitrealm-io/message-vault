@@ -85,7 +85,6 @@ pub(crate) fn convert_export(
             copy_attachments: writer.copies_attachments(),
             // The bytes ride into the shared write tail, which stages them
             // itself (a conversation at a time on the queue arm).
-            keep_attachment_bytes: false,
             stage_attachments: false,
             media: writer.media_mode(),
             compress,

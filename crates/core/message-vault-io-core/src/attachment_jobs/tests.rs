@@ -424,16 +424,14 @@ fn staging_a_conversation_writes_the_files_counts_them_and_frees_the_bytes() {
         packaging_stem_suffix: None,
     }];
 
-    let mut report = ExportReport::default();
-    stage_conversation_attachments(
-        &mut documents,
+    let saved = stage_conversation_attachments(
+        document_messages(&mut documents),
         &attachments_dir,
         &media_cfg(MediaMode::Clone),
         load,
         None,
         None,
         None,
-        &mut report,
     )
     .expect("staging succeeds");
 
@@ -446,7 +444,7 @@ fn staging_a_conversation_writes_the_files_counts_them_and_frees_the_bytes() {
     assert_eq!(written.len(), 2, "two files written, got {written:?}");
 
     // Both are counted, which is what the export summary reports.
-    assert_eq!(report.attachments_saved, 2);
+    assert_eq!(saved, 2);
 
     // Each attachment record names its file and carries its digest, so a
     // reader can find the bytes again — and the file holds what the loader
@@ -614,7 +612,7 @@ fn an_empty_file_is_recorded_as_missing_rather_than_staged() {
 ///
 /// An exporter that carries attachment bytes on the document — the iMessage
 /// and WhatsApp readers both do — holds the whole backup in memory until this
-/// runs. `clear_attachment_bytes` could be replaced with `()` and nothing
+/// runs. The clearing loop could be replaced with `()` and nothing
 /// failed, which on a large backup is the difference between finishing and
 /// being killed by the kernel.
 #[test]
@@ -669,16 +667,14 @@ fn staging_frees_the_bytes_the_documents_were_carrying() {
         "the document starts out carrying its bytes"
     );
 
-    let mut report = ExportReport::default();
     stage_conversation_attachments(
-        &mut documents,
+        document_messages(&mut documents),
         &attachments_dir,
         &media_cfg(MediaMode::Clone),
         |_| Ok(Some(b"bytes held on the document".to_vec())),
         None,
         None,
         None,
-        &mut report,
     )
     .expect("staging succeeds");
 

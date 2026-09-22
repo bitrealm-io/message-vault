@@ -9,9 +9,8 @@ use message_ir::{
     IrService, IrSource, SCHEMA_VERSION, owner_sender,
 };
 use message_vault_io_core::{
-    CancelFlag, LogSink, MediaConfig, ProgressSink, attachment_jobs, check_cancel,
-    clear_attachment_bytes, discover_files, is_cancelled, report_attachment_progress,
-    run_attachment_jobs,
+    CancelFlag, LogSink, MediaConfig, ProgressSink, check_cancel, discover_files,
+    document_messages, is_cancelled, stage_conversation_attachments,
 };
 use phone::OwnerHandleSet;
 use sbr::{
@@ -68,8 +67,6 @@ pub struct SbrReadOptions<'a> {
     pub attachments_dir: Option<&'a Path>,
     /// Whether to write staged attachment files.
     pub copy_attachments: bool,
-    /// Whether to retain decoded bytes in memory on the records.
-    pub keep_attachment_bytes: bool,
     /// Whether to write the staged attachment files here. `false` leaves
     /// the bytes on the records for a caller that stages them itself —
     /// the write queue does, one conversation at a time.
@@ -180,39 +177,25 @@ fn stage_read_attachments(
                 .flat_map(|msg| msg.attachments.iter().map(|att| att.bytes.clone()))
         })
         .collect();
-
-    let mut jobs = attachment_jobs(documents);
     let mode = if options.copy_attachments {
         options.media
     } else {
         MediaMode::Disabled
     };
     let attachments_dir = options.attachments_dir.unwrap_or_else(|| Path::new(""));
-    run_attachment_jobs(
-        &mut jobs,
+    report.attachments_saved += stage_conversation_attachments(
+        document_messages(documents),
         attachments_dir,
         &MediaConfig {
             mode,
             compress: options.compress.clone(),
         },
         |i| Ok(payloads.get(i).cloned().flatten()),
-        report_attachment_progress(options.log, options.progress),
         options.log,
-        options.cancel.map(|flag| flag.as_ref()),
+        options.progress,
+        options.cancel,
     )
     .map_err(anyhow::Error::msg)?;
-
-    let mut seen = HashSet::new();
-    for job in &jobs {
-        if let (Some(path), Some(_)) = (&job.attachment.path, &job.attachment.digest_sha256)
-            && seen.insert(path.clone())
-        {
-            report.attachments_saved += 1;
-        }
-    }
-    if !options.keep_attachment_bytes {
-        clear_attachment_bytes(documents);
-    }
     Ok(())
 }
 
@@ -501,7 +484,6 @@ pub fn read_sbr_documents(
     };
     let mut report = SbrReadReport::default();
     let mut conversations = BTreeMap::new();
-    let keep_bytes = options.copy_attachments || options.keep_attachment_bytes;
     for path in paths {
         check_cancel(options.cancel)?;
         // Decode attachment bytes during parse; file writes wait until every
@@ -510,7 +492,7 @@ pub fn read_sbr_documents(
         let mut stats = ParseStats::default();
         let parse_result = parse_file_with(&path, &owners, &mut stats, |record| {
             check_cancel(options.cancel)?;
-            let attachments = queue_attachments(&record.attachments, keep_bytes);
+            let attachments = queue_attachments(&record.attachments, options.copy_attachments);
             match add_record(&mut conversations, record, attachments) {
                 Ok(()) => Ok(()),
                 Err(error) => {
@@ -567,13 +549,11 @@ mod tests {
         owner_phones: &'a [String],
         attachments_dir: Option<&'a Path>,
         copy_attachments: bool,
-        keep_attachment_bytes: bool,
     ) -> SbrReadOptions<'a> {
         SbrReadOptions {
             owner_phones,
             attachments_dir,
             copy_attachments,
-            keep_attachment_bytes,
             stage_attachments: true,
             media: if copy_attachments {
                 MediaMode::Clone
@@ -594,8 +574,7 @@ mod tests {
         fs::write(&input, r#"<smses><mms date="1400773400000" msg_box="2" address="+15555550101" extra="yes"><parts><part seq="0" ct="image/jpeg" name="pic.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550100" type="137" charset="106"/><addr address="+15555550101" type="151"/></addrs></mms></smses>"#).unwrap();
         let output = dir.path().join("output");
         let stage = output.join("attachments");
-        let (docs, report) =
-            read_sbr_documents(&input, opts(&[], Some(&stage), true, false)).unwrap();
+        let (docs, report) = read_sbr_documents(&input, opts(&[], Some(&stage), true)).unwrap();
         assert_eq!(report.attachments_saved, 1);
         let staged: Vec<_> = fs::read_dir(&stage)
             .unwrap()
@@ -634,8 +613,7 @@ mod tests {
         .unwrap();
         let output = dir.path().join("output");
         let stage = output.join("attachments");
-        let (docs, report) =
-            read_sbr_documents(&input, opts(&[], Some(&stage), true, false)).unwrap();
+        let (docs, report) = read_sbr_documents(&input, opts(&[], Some(&stage), true)).unwrap();
         assert_eq!(report.attachments_saved, 1);
         let mut writer = SbrBackupSession::create(&output).unwrap();
         writer.append_document(&docs[0]).unwrap();
@@ -655,7 +633,7 @@ mod tests {
         )
         .unwrap();
         fs::write(input.join("broken.xml"), "<smses><mms date=").unwrap();
-        let (docs, report) = read_sbr_documents(&input, opts(&[], None, false, false)).unwrap();
+        let (docs, report) = read_sbr_documents(&input, opts(&[], None, false)).unwrap();
         assert_eq!(docs[0].export.owner_handle.as_deref(), Some("+15555550100"));
         assert_eq!(report.errors.len(), 1);
     }
@@ -670,7 +648,7 @@ mod tests {
         )
         .unwrap();
         let owner = vec!["+15555550100".to_string()];
-        let (docs, report) = read_sbr_documents(&input, opts(&owner, None, false, false)).unwrap();
+        let (docs, report) = read_sbr_documents(&input, opts(&owner, None, false)).unwrap();
         assert_eq!(docs.len(), 1);
         assert_eq!(docs[0].messages.len(), 1);
         assert_eq!(docs[0].messages[0].text, "kept");
@@ -688,7 +666,7 @@ mod tests {
         fs::write(&input, r#"<smses><mms date="1400773400000" msg_box="2" address="+15555550101"><parts><part seq="0" ct="image/jpeg" name="pic.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550100" type="137" charset="106"/><addr address="+15555550101" type="151"/></addrs></mms></smses>"#).unwrap();
         let stage = dir.path().join("output").join("attachments");
 
-        let mut options = opts(&[], Some(&stage), true, true);
+        let mut options = opts(&[], Some(&stage), true);
         options.stage_attachments = false;
         let (docs, report) = read_sbr_documents(&input, options).unwrap();
 

@@ -5,12 +5,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[cfg(test)]
-#[cfg(test)]
-use message_ir::IrAttachment;
-#[cfg(test)]
-use message_vault_io_core::{AttachmentJob, ExportReport, MediaConfig, run_attachment_jobs};
-
 /// Maximum directory depth for attachment discovery. iMazing export trees are
 /// only a few levels deep; this bounds any pathological nesting.
 const MAX_WALK_DEPTH: usize = 64;
@@ -229,59 +223,11 @@ fn mime_hint(attachment_type: &str, filename: &str) -> Option<String> {
     }
 }
 
-/// Stage path-backed attachments after parse. Used by unit tests.
-#[cfg(test)]
-pub(crate) fn stage_path_attachments(
-    attachments: &mut [IrAttachment],
-    sources: &[Option<PathBuf>],
-    timestamps: &[i64],
-    attachments_dir: &Path,
-    media: &MediaConfig,
-    report: &mut ExportReport,
-) -> Result<(), String> {
-    if attachments.is_empty() {
-        return Ok(());
-    }
-    let mut jobs = Vec::new();
-    for (i, att) in attachments.iter_mut().enumerate() {
-        let hint = att.size_bytes.or_else(|| {
-            sources
-                .get(i)
-                .and_then(|p| p.as_ref())
-                .and_then(|p| fs::metadata(p).ok())
-                .map(|m| m.len())
-        });
-        jobs.push(AttachmentJob {
-            attachment: att,
-            timestamp_unix_ms: timestamps.get(i).copied().unwrap_or(0),
-            size_hint: hint,
-        });
-    }
-    run_attachment_jobs(
-        &mut jobs,
-        attachments_dir,
-        media,
-        |i| {
-            let Some(path) = sources.get(i).and_then(|p| p.as_ref()) else {
-                return Ok(None);
-            };
-            std::fs::read(path).map(Some).or(Ok(None))
-        },
-        |_| {},
-        None,
-        None,
-    )?;
-    for job in &jobs {
-        if job.attachment.path.is_some() && job.attachment.digest_sha256.is_some() {
-            report.attachments_saved += 1;
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use message_ir::IrAttachment;
+    use message_vault_io_core::{AttachmentJob, MediaConfig, run_attachment_jobs};
 
     #[test]
     fn attachment_name_matches_suffix_and_separators() {
@@ -334,17 +280,21 @@ mod tests {
             missing_reason: None,
             bytes: None,
         };
-        let mut report = ExportReport::default();
-        stage_path_attachments(
-            std::slice::from_mut(&mut att),
-            &[Some(source)],
-            &[1_600_000_000_000],
+        let mut jobs = [AttachmentJob {
+            attachment: &mut att,
+            timestamp_unix_ms: 1_600_000_000_000,
+            size_hint: None,
+        }];
+        run_attachment_jobs(
+            &mut jobs,
             &attachments,
             &MediaConfig::default(),
-            &mut report,
+            |_| fs::read(&source).map(Some).or(Ok(None)),
+            |_| {},
+            None,
+            None,
         )
         .unwrap();
-        assert_eq!(report.attachments_saved, 1);
         let digest = att.digest_sha256.expect("digest set after runner");
         assert_eq!(digest.len(), 64);
         assert!(att.path.as_deref().unwrap().starts_with("attachments/"));

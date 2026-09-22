@@ -219,8 +219,8 @@ impl ExportWriter {
                 }
             }
         }
-        message_vault_io_core::stage_conversation_attachments(
-            &mut documents,
+        report.attachments_saved += message_vault_io_core::stage_conversation_attachments(
+            message_vault_io_core::document_messages(&mut documents),
             &self.attachments_dir,
             &message_vault_io_core::MediaConfig {
                 mode: self.media_mode,
@@ -233,7 +233,6 @@ impl ExportWriter {
             self.log.as_ref(),
             self.progress.as_ref(),
             cancel,
-            report,
         )
         .map_err(anyhow::Error::msg)?;
 

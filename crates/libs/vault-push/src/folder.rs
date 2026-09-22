@@ -119,32 +119,15 @@ pub fn detect_source(input: &Path) -> Result<Option<String>> {
     Ok(Some(project::validate_header(&header)?))
 }
 
-/// Turn an attachment path from a JSON Lines file into a real file path under the export folder.
-pub(crate) fn resolve_attachment(export_root: &Path, rel: &str) -> Option<PathBuf> {
-    let candidate = Path::new(rel);
-    if candidate.is_absolute() {
-        return candidate.is_file().then(|| candidate.to_path_buf());
-    }
-    let under = export_root.join(candidate);
-    under.is_file().then_some(under)
-}
-
-/// Reject paths that could escape the export folder (absolute paths or `..`).
+/// Turn an attachment path from a JSON Lines file into a real file path under
+/// the export folder. `None` means the path is safe but no file is there.
 ///
 /// # Errors
 ///
-/// Returns an error when the path is absolute or contains `..`.
-pub(crate) fn safe_rel(rel: &str) -> Result<()> {
-    let path = Path::new(rel);
-    if path.is_absolute() {
-        bail!("attachment path must be relative: {rel}");
-    }
-    for comp in path.components() {
-        if matches!(comp, std::path::Component::ParentDir) {
-            bail!("unsafe attachment path: {rel}");
-        }
-    }
-    Ok(())
+/// Returns an error when the path could escape the export folder.
+pub(crate) fn resolve_attachment(export_root: &Path, rel: &str) -> Result<Option<PathBuf>> {
+    let under = message_ir::safe_attachment_path(export_root, rel)?;
+    Ok(under.is_file().then_some(under))
 }
 
 /// Name an attachment that has no path, for an Import Errors row.
@@ -177,12 +160,5 @@ mod tests {
         let files = list_jsonl_files(dir.path(), &[]).unwrap();
         let names: Vec<String> = files.iter().map(|p| file_label(p)).collect();
         assert_eq!(names, ["a.jsonl", "b.jsonl"]);
-    }
-
-    #[test]
-    fn safe_rel_rejects_escapes() {
-        assert!(safe_rel("attachments/a.jpg").is_ok());
-        assert!(safe_rel("../a.jpg").is_err());
-        assert!(safe_rel("/etc/passwd").is_err());
     }
 }

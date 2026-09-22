@@ -21,7 +21,7 @@ use message_ir::{ConversationDocument, ConversationHeader, IrAttachment, IrMessa
 use message_ir_format::read_conversation_jsonl;
 use message_vault_io_core::{check_cancel, parallel_for_each};
 
-use crate::folder::{attachment_label, resolve_attachment, safe_rel};
+use crate::folder::{attachment_label, resolve_attachment};
 use crate::http::{AssetPutResponse, AssetUpload};
 use crate::journal::{JournalMessage, RunJournal};
 use crate::progress::AttachmentSkip;
@@ -319,8 +319,7 @@ fn scan_one_attachment(
             size: att.size_bytes,
         });
     };
-    safe_rel(rel)?;
-    let Some(abs) = resolve_attachment(ctx.input, rel) else {
+    let Some(abs) = resolve_attachment(ctx.input, rel)? else {
         scan.skipped += 1;
         scan.skips.push(AttachmentSkip {
             item: format!("{name}:{rel}"),
@@ -704,7 +703,7 @@ fn claim_upload_jobs(
 ///
 /// Returns an error when the file is missing, cannot be stat'ed, or is too large.
 fn check_upload_file(ctx: &PrepareContext<'_>, name: &str, rel: &str) -> Result<(PathBuf, u64)> {
-    let Some(path) = resolve_attachment(ctx.input, rel) else {
+    let Some(path) = resolve_attachment(ctx.input, rel)? else {
         bail!("{name}: missing attachment {rel}");
     };
     let file_len = std::fs::metadata(&path)

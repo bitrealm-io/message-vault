@@ -56,7 +56,7 @@ fn try_store_converted(
     let Some(rel) = att.path.as_deref().and_then(trimmed) else {
         return Ok(None);
     };
-    let source = crate::config::resolve_under_root(export_dir, rel)?;
+    let source = message_ir::safe_attachment_path(export_dir, rel)?;
     if !source.is_file() {
         return Ok(None);
     }
@@ -93,7 +93,7 @@ fn store_claimed_or_path(
             }));
         }
         if let Some(rel) = att.path.as_deref().and_then(trimmed) {
-            let source = crate::config::resolve_under_root(export_dir, rel)?;
+            let source = message_ir::safe_attachment_path(export_dir, rel)?;
             return match assets::store_verified(
                 &source,
                 sha,
@@ -122,7 +122,7 @@ fn store_claimed_or_path(
     }
 
     if let Some(rel) = att.path.as_deref() {
-        let source = crate::config::resolve_under_root(export_dir, rel)?;
+        let source = message_ir::safe_attachment_path(export_dir, rel)?;
         return assets::hash_and_store(&source, assets_dir, att.mime_type.as_deref(), asset_stats);
     }
     asset_stats.missing += 1;

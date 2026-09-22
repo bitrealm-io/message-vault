@@ -39,7 +39,6 @@ pub use staging_summary::{
     AttachmentForecast, StagingSummary, SummaryProgress, VerdictCounts, summarize_staging,
 };
 pub use transcode::{TranscodeOptions, TranscodeProgress, TranscodeReport, transcode_staged};
-pub use util::UNSAFE_ATTACHMENT_PATH_PREFIX;
 pub use write::{
     CSV_HEADERS, document_to_mail_messages, write_conversation_jsonl, write_conversation_jsonl_to,
 };

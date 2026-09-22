@@ -34,7 +34,6 @@ use message_ir::IrDirection;
 
 use crate::read_json::read_conversation_jsonl;
 use crate::transcode::{COMMITTED_SUFFIX, TranscodeOptions, conversation_files};
-use crate::util::safe_attachment_path;
 
 /// How often [`summarize_staging`] reports progress, over attachments.
 ///
@@ -298,7 +297,7 @@ fn classify_one(
     has_media_step: bool,
     summary: &mut StagingSummary,
 ) {
-    let Ok(abs) = safe_attachment_path(staging_dir, rel) else {
+    let Ok(abs) = message_ir::safe_attachment_path(staging_dir, rel) else {
         return;
     };
     let Ok(meta) = std::fs::metadata(&abs) else {

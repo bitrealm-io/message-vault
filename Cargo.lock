@@ -1927,7 +1927,6 @@ dependencies = [
  "libc",
  "media",
  "message-ir",
- "message-ir-format",
  "phone",
  "rand 0.10.2",
  "rayon",

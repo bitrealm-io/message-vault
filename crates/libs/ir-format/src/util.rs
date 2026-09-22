@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use message_ir::{HandleType, IrAttachment};
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Guess the handle type of a raw handle string when no type is known.
 ///
@@ -58,36 +58,12 @@ pub(crate) fn load_attachment_bytes_strict(
     }
 }
 
-/// Shared message prefix for unsafe-attachment-path errors. The ir-format path
-/// check and the server's `safe_rel_path` both format their bail from this
-/// const, and the server's import tests match it — keep the exact text stable.
-pub const UNSAFE_ATTACHMENT_PATH_PREFIX: &str = "unsafe attachment path";
-
-/// Resolve `rel` (an attachment's recorded relative path) under `base_dir`,
-/// rejecting anything that could escape it (absolute paths, `..`).
-///
-/// This defends against malicious CSV/JSON input crafted to read arbitrary
-/// files during EML/MBOX/XML embedding, and against a staged conversation file
-/// pointing the transcode pass outside its staging folder.
-pub(crate) fn safe_attachment_path(base_dir: &Path, rel: &str) -> Result<PathBuf> {
-    let rel_path = Path::new(rel);
-    if rel_path.is_absolute() {
-        anyhow::bail!("{UNSAFE_ATTACHMENT_PATH_PREFIX}: {rel}");
-    }
-    for comp in rel_path.components() {
-        if matches!(comp, std::path::Component::ParentDir) {
-            anyhow::bail!("{UNSAFE_ATTACHMENT_PATH_PREFIX} (contains ..): {rel}");
-        }
-    }
-    Ok(base_dir.join(rel_path))
-}
-
 /// Read attachment bytes from disk when the relative path exists.
 ///
 /// Missing paths yield `Ok(None)`. IO failures return an error (strict) — callers
 /// that want lenient behavior map with `.ok().flatten()`.
 ///
-/// The relative path is validated via [`safe_attachment_path`].
+/// The relative path is validated via [`message_ir::safe_attachment_path`].
 pub(crate) fn read_attachment_file(
     att: &IrAttachment,
     output_dir: &Path,
@@ -95,7 +71,7 @@ pub(crate) fn read_attachment_file(
     let Some(rel) = att.path.as_deref() else {
         return Ok(None);
     };
-    let path = safe_attachment_path(output_dir, rel)?;
+    let path = message_ir::safe_attachment_path(output_dir, rel)?;
     if !path.is_file() {
         return Ok(None);
     }
@@ -199,52 +175,5 @@ mod tests {
         assert_eq!(infer_handle_type("1 (555) 555-0101"), HandleType::Phone);
         assert_eq!(infer_handle_type("alice"), HandleType::Other);
         assert_eq!(infer_handle_type(""), HandleType::Other);
-    }
-
-    /// The path check is a security boundary: a crafted `path` in a CSV or
-    /// JSON export is the input, and reading `/etc/passwd` into an EML
-    /// attachment is the outcome it prevents. Every rejected shape is named
-    /// here, because a check that quietly starts accepting one of them
-    /// breaks nothing else in the suite.
-    #[test]
-    fn safe_attachment_path_refuses_every_escape() {
-        let base = Path::new("/vault/staging");
-        for rel in [
-            "/etc/passwd",
-            "../secrets.txt",
-            "sub/../../secrets.txt",
-            "..",
-            "media/../../..//etc/passwd",
-        ] {
-            let err = safe_attachment_path(base, rel)
-                .expect_err("must refuse the escaping path {rel}")
-                .to_string();
-            assert!(
-                err.starts_with(UNSAFE_ATTACHMENT_PATH_PREFIX),
-                "{rel} was refused with an unexpected message: {err}"
-            );
-            assert!(err.contains(rel), "the message must name the path: {err}");
-        }
-    }
-
-    /// The other half of the boundary: an ordinary relative path must still
-    /// resolve, and resolve under the base directory rather than beside it.
-    #[test]
-    fn safe_attachment_path_joins_an_ordinary_relative_path() {
-        let base = Path::new("/vault/staging");
-        assert_eq!(
-            safe_attachment_path(base, "media/IMG_0001.jpg").unwrap(),
-            Path::new("/vault/staging/media/IMG_0001.jpg")
-        );
-        assert_eq!(
-            safe_attachment_path(base, "./media/a.png").unwrap(),
-            Path::new("/vault/staging/./media/a.png")
-        );
-        // A leading `..` in the *file name* is not a parent-directory
-        // component and must not be mistaken for one.
-        assert_eq!(
-            safe_attachment_path(base, "..hidden.jpg").unwrap(),
-            Path::new("/vault/staging/..hidden.jpg")
-        );
     }
 }

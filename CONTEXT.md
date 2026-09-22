@@ -233,6 +233,14 @@ messages and attachments into the vault. A run shows its stages as one list
 that fills in as it goes.
 _Avoid_: Step, Phase, Pass, Gate
 
+**Staging**:
+Writing messages and their attachments into the Staging Directory so a
+later step can read them back. It is one operation wherever it runs: the
+first Stage of an Import Run, and the write that gives Convert its input.
+A conversation is complete on disk or absent, never half written, so an
+interrupted Staging resumes by skipping what it already wrote.
+_Avoid_: Transcode, Write path, Write queue
+
 **Review**:
 A stop inside an Import Run where the run shows what it has staged and waits
 for the person to approve or cancel it before spending more time or touching

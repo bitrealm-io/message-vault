@@ -15,10 +15,12 @@ use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
+mod attachment_path;
 mod projection;
 #[cfg(feature = "testutil")]
 pub mod testutil;
 
+pub use attachment_path::{UNSAFE_ATTACHMENT_PATH, UnsafeAttachmentPath, safe_attachment_path};
 pub use projection::{
     ProjectedRole, ProjectionHooks, ProjectionTally, SortKeyUnit, default_participants,
     display_names_for_handles, ensure_conversation, pending_to_document, prepare_conversation,

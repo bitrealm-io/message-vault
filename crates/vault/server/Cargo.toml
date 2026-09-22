@@ -22,7 +22,6 @@ futures-util = { version = "0.3.31", default-features = false }
 libc = "0.2"
 media = { path = "../../libs/media" }
 message-ir = { workspace = true }
-message-ir-format = { path = "../../libs/ir-format" }
 phone = { workspace = true }
 rand = "0.10.2"
 rayon = "1.12.0"

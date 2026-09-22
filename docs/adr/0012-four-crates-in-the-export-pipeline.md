@@ -53,7 +53,10 @@ constant existed because the path-escape check was written twice — once in
 next reader to keep the two error strings identical. A defence against directory
 traversal held in step by a shared string is a defence waiting to diverge, so
 the check itself moves into `message-ir`, both call sites use it, and the server
-drops `message-ir-format` from its manifest entirely.
+drops `message-ir-format` from its manifest entirely. A third copy turned up
+while doing it — `vault-push`'s `safe_rel`, which accepted an absolute path in
+one function and refused it in the one called just before — and it went the
+same way.
 
 **A generic sink knew about one vendor's format.** `FormatSink::finish` branched
 on `is_sbr_xml()` and constructed an `SbrBackupSession` directly, and
@@ -144,6 +147,8 @@ case into Convert would have to be undone.
   extract `message-staging`. The first two change behaviour and are deliberately
   not carried along with a file move. The SBR seam has to be inverted before the
   writer can move, and before `FormatSinkResult` travels to `io-core`.
+- Progress, by step: (1) the path check is `message_ir::safe_attachment_path`,
+  PR #638. Steps 2 to 6 have not started.
 - Nothing here is kept for compatibility. Public items are renamed, moved between
   crates and removed wherever the result is simpler, and tests are rewritten to
   match rather than preserved.

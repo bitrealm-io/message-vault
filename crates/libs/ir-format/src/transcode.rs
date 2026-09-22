@@ -69,7 +69,6 @@ use message_ir::{ConversationDocument, IrAttachment};
 use message_vault_io_core::{CancelFlag, check_cancel, mime_for_rel};
 
 use crate::read_json::read_conversation_jsonl;
-use crate::util::safe_attachment_path;
 use crate::write::write_conversation_jsonl_to;
 
 /// Suffix on a derivative that is written but not yet committed.
@@ -301,7 +300,7 @@ fn pending_in(
                 // the same path in this document.
                 continue;
             }
-            let abs = safe_attachment_path(staging_dir, rel)?;
+            let abs = message_ir::safe_attachment_path(staging_dir, rel)?;
             let stem = abs.file_stem().and_then(|s| s.to_str()).unwrap_or("");
             let committed = stem.ends_with(COMMITTED_SUFFIX);
 

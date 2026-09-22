@@ -1185,8 +1185,7 @@ async fn rejects_attachment_path_traversal() {
     .await
     .unwrap_err();
     assert!(
-        err.to_string()
-            .contains(message_ir_format::UNSAFE_ATTACHMENT_PATH_PREFIX),
+        err.to_string().contains(message_ir::UNSAFE_ATTACHMENT_PATH),
         "expected path rejection, got: {err}"
     );
 }
@@ -1249,10 +1248,7 @@ async fn failed_replace_keeps_existing_messages() {
     )
     .await
     .unwrap_err();
-    assert!(
-        err.to_string()
-            .contains(message_ir_format::UNSAFE_ATTACHMENT_PATH_PREFIX)
-    );
+    assert!(err.to_string().contains(message_ir::UNSAFE_ATTACHMENT_PATH));
 
     let (_pool, mut conn) = open_verify(&db).await;
     let body: String =

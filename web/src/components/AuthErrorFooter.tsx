@@ -6,8 +6,8 @@ function sentenceCase(text: string): string {
 /**
  * Error line for an auth form. The band is a reserved, fixed height and is
  * transparent when empty, so the surrounding form does not shift when a
- * message appears — the card is a fixed height, and an unbounded message would
- * push what sits below it out through the bottom of the frame.
+ * message appears — an unbounded message would push what sits below it down
+ * the card, and the card with it.
  *
  * The message sits at the *foot* of that band, so a one-line message lands
  * directly above whatever closes the card and a message long enough to wrap

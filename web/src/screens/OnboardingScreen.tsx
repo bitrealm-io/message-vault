@@ -28,10 +28,10 @@ import { updateAccountProfile } from "../lib/vaultApi";
 const DEFAULT_TIME_ZONE = "UTC";
 
 /**
- * The card never scrolls and never resizes, so the list of accounts is bounded
- * by what fits inside the frame. Four rows fill the space the card has once
- * the Time Zone picker takes its line; anyone with more finishes the list in
- * Settings → Profile.
+ * The card never scrolls, and the list of accounts is capped at what fits its
+ * floor height so the card does not keep growing under the user as rows are
+ * added. Four rows fill that space once the Time Zone picker takes its line;
+ * anyone with more finishes the list in Settings → Profile.
  */
 const MAX_ACCOUNT_ROWS = 4;
 

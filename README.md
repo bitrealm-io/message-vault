@@ -1,5 +1,6 @@
 [![Issues][issues-shield]][issues-url]
 [![project_license][license-shield]][license-url]
+[![source_available][source-available-shield]][license-url]
 
 <a id="readme-top"></a>
 
@@ -92,7 +93,9 @@ Most documentation lives in the guidebook at [bitrealm.io](https://bitrealm.io):
 
 ## License
 
-Distributed under the Fair Core License. See [LICENSE.md](LICENSE.md) for more information.
+Message Vault is **source-available, not open source**. It is distributed under the [Fair Core License 1.0](LICENSE.md) (`FCL-1.0-ALv2`): you can read the code, change it, build it, and run it for yourself, but you may not offer it as a product that competes with Message Vault. Two years after each version is released, that version becomes available under the Apache License 2.0.
+
+See [LICENSE.md](LICENSE.md) for the full terms.
 
 ## Project Status
 
@@ -120,6 +123,7 @@ Matt Beisser - [vault@bitrealm.io](mailto:vault@bitrealm.io)
 [issues-shield]: https://img.shields.io/github/issues/bitrealm-io/message-vault.svg
 [issues-url]: https://github.com/bitrealm-io/message-vault/issues
 [license-shield]: https://img.shields.io/badge/license-FCL_1.0-blue
+[source-available-shield]: https://img.shields.io/badge/source--available-not_open_source-orange
 [license-url]: https://github.com/bitrealm-io/message-vault/blob/main/LICENSE.md
 
 [React.js]: https://img.shields.io/badge/React-%2320232a.svg?logo=react&logoColor=%2361DAFB

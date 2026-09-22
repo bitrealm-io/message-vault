@@ -116,7 +116,7 @@ async fn every_member_route_refuses_another_accounts_session() {
         StatusCode::FORBIDDEN,
         "GET /v1/accounts/{{id}}/storage"
     );
-    for history in ["imports", "imports/1", "exports"] {
+    for history in ["identities", "imports", "imports/1", "exports"] {
         assert_eq!(
             get_status(
                 &state,
@@ -1284,6 +1284,146 @@ async fn an_account_deletes_itself_with_its_password_and_the_demo_account_refuse
 // ---------------------------------------------------------------------------
 // Storage
 // ---------------------------------------------------------------------------
+
+/// The identities route lists each of the account's identities with how many
+/// messages sit in the direct and the group conversations it takes part in,
+/// trashed conversations and duplicates excluded. The owner reads the same.
+#[tokio::test]
+async fn the_identities_route_counts_direct_and_group_messages_per_identity() {
+    let vault = test_vault().await;
+    let owner = claim_vault_as_owner(&vault.state, "keeper", "hunter2hunter2").await;
+    let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let path = format!("{}/identities", member(account.account_id));
+    let empty: serde_json::Value = get_json(&vault.state, &path, &account.token).await;
+    assert_eq!(
+        empty,
+        serde_json::json!({ "items": [], "total": 0, "limit": 40, "offset": 0 })
+    );
+
+    let _: serde_json::Value = patch_json(
+        &vault.state,
+        &member(account.account_id),
+        &account.token,
+        serde_json::json!({
+            "handles": [
+                { "handle": "+15555550100", "service": "phone" },
+                { "handle": "Alice@Example.com", "service": "email" }
+            ]
+        }),
+    )
+    .await;
+
+    let two = [
+        SeedMessage {
+            source: "imessage",
+            timestamp: "2020-01-01T00:00:00Z",
+            is_from_me: true,
+            body: "a",
+        },
+        SeedMessage {
+            source: "imessage",
+            timestamp: "2020-01-02T00:00:00Z",
+            is_from_me: false,
+            body: "b",
+        },
+    ];
+    let direct = seed_conversation(
+        &vault.state,
+        &SeedConversation {
+            account_id: account.account_id,
+            handle: "+15555550200",
+            conversation_type: "individual",
+            group_title: None,
+            source_file: "seed.jsonl",
+            messages: &two,
+        },
+    )
+    .await;
+    let three = [
+        SeedMessage {
+            source: "imessage",
+            timestamp: "2020-02-01T00:00:00Z",
+            is_from_me: true,
+            body: "c",
+        },
+        SeedMessage {
+            source: "imessage",
+            timestamp: "2020-02-02T00:00:00Z",
+            is_from_me: false,
+            body: "d",
+        },
+        SeedMessage {
+            source: "imessage",
+            timestamp: "2020-02-03T00:00:00Z",
+            is_from_me: false,
+            body: "e",
+        },
+    ];
+    let group = seed_conversation(
+        &vault.state,
+        &SeedConversation {
+            account_id: account.account_id,
+            handle: "chat100",
+            conversation_type: "group",
+            group_title: Some("Trip"),
+            source_file: "seed.jsonl",
+            messages: &three,
+        },
+    )
+    .await;
+    // A third conversation the identity is in, but trashed, so it counts for nothing.
+    let trashed = seed_conversation(
+        &vault.state,
+        &SeedConversation {
+            account_id: account.account_id,
+            handle: "chat200",
+            conversation_type: "group",
+            group_title: Some("Old"),
+            source_file: "seed.jsonl",
+            messages: &three,
+        },
+    )
+    .await;
+    let mut conn = vault.conn().await;
+    let phone_id: i64 = sqlx::query_scalar(
+        "SELECT h.id FROM handles h JOIN account_handles ah ON ah.handle_id = h.id
+         WHERE ah.account_id = $1 AND h.handle_type = 'phone'",
+    )
+    .bind(account.account_id)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    for conversation_id in [direct, group, trashed] {
+        sqlx::query("INSERT INTO participants (conversation_id, handle_id) VALUES ($1, $2)")
+            .bind(conversation_id)
+            .bind(phone_id)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+    }
+    sqlx::query(
+        "INSERT INTO trashed_conversations (account_id, conversation_id, trashed_at)
+         VALUES ($1, $2, '2021-01-01T00:00:00Z')",
+    )
+    .bind(account.account_id)
+    .bind(trashed)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    drop(conn);
+
+    let page: serde_json::Value = get_json(&vault.state, &path, &account.token).await;
+    assert_eq!(page["total"], 2);
+    assert_eq!(
+        page["items"],
+        serde_json::json!([
+            { "handle": "+15555550100", "service": "phone", "direct_messages": 2, "group_messages": 3 },
+            { "handle": "alice@example.com", "service": "email", "direct_messages": 0, "group_messages": 0 }
+        ])
+    );
+    let by_owner: serde_json::Value = get_json(&vault.state, &path, &owner.token).await;
+    assert_eq!(by_owner["items"], page["items"]);
+}
 
 /// The storage route sums every attachment row's size and lists the
 /// largest ones; a row with no recorded size counts, but is not one of

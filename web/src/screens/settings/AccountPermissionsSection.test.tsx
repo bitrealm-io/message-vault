@@ -25,14 +25,13 @@ describe("AccountPermissionsSection", () => {
     render(<AccountPermissionsSection profile={profile} />);
 
     expect(screen.getByRole("heading", { name: "Status" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Permissions" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Message Permissions" })).toBeInTheDocument();
+    expect(screen.getByText("Messages and their attachments.")).toBeInTheDocument();
     // Status reads as text: a dropdown that never opens is not a thing to show.
     expect(screen.getByText("Active")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Status/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Import messages" })).toBeChecked();
-    expect(
-      screen.getByRole("checkbox", { name: "Delete messages & attachments" }),
-    ).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Import" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Delete" })).not.toBeChecked();
     for (const box of screen.getAllByRole("checkbox")) expect(box).toBeDisabled();
     expect(
       screen.getByText("The vault owner sets your status and permissions."),

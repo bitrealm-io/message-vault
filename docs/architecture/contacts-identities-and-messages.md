@@ -106,6 +106,19 @@ applies it for the conversation list, the message pane, and Export.
 **Deleting a contact keeps its conversations.** The name and details go. The
 identities stay in their conversations and the person becomes Unknown again.
 
+**An account's own identity is a label, and its message counts describe
+what it takes part in.** Linking an address to an account (`account_handles`)
+says "this address is me"; it changes no message, and neither does removing
+it. Whether a message reads as sent or received comes from the backup it was
+imported from. What the product shows beside an account's identity, and
+repeats before it is removed, is the number of messages in the direct and the
+group conversations that identity takes part in, counted the way a contact's
+identities are in the contact drawer. Why: one definition of "a message of an
+identity" for both tables, and a count the person can check by opening the
+conversations. Rejected: counting messages the identity sent. An account's
+own messages are marked sent by the backup and carry no sender identity, so
+that count would be zero for the identity that matters most.
+
 **An import replaces a trashed contact.** When an import meets an identity of
 a trashed contact, it discards that contact with every identity it had and
 makes a new one from the backup, as a first import would. See

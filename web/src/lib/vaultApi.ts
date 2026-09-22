@@ -242,6 +242,17 @@ function accountBase(accountId?: number): string {
   return accountId === undefined ? ownAccountPath() : accountPath(accountId);
 }
 
+/** An account's identities with the messages each takes part in: the logged-in one, or as the owner the one named. */
+export function listAccountIdentities(
+  opts?: VaultRequestOptions,
+  accountId?: number,
+): Promise<Schema["Page_AccountIdentity"]> {
+  return apiClient.get<Schema["Page_AccountIdentity"]>(
+    `${accountBase(accountId)}/identities`,
+    opts,
+  );
+}
+
 /** An account's Import Runs, newest first: the logged-in one, or as the owner the one named. */
 export function listAccountImports(
   opts?: VaultRequestOptions,

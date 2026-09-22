@@ -23,19 +23,42 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type RenderOptions, type RenderResult, render } from "@testing-library/react";
 import { type ReactElement, type ReactNode, useState } from "react";
 
-/** A query client with retries and background refetching off. */
-export function testQueryClient(): QueryClient {
+/**
+ * A query client with retries and background refetching off.
+ *
+ * Entries nothing on screen reads are dropped at once, so one test's leftovers
+ * never reach the next. A test about an entry written ahead of the screen that
+ * reads it (a seed from a mutation's answer) passes `keepUnread`, which holds
+ * such entries the way the app's client does.
+ */
+export function testQueryClient({
+  keepUnread = false,
+}: {
+  keepUnread?: boolean;
+} = {}): QueryClient {
   return new QueryClient({
     defaultOptions: {
-      queries: { retry: false, refetchOnWindowFocus: false, staleTime: 0, gcTime: 0 },
+      queries: {
+        retry: false,
+        refetchOnWindowFocus: false,
+        staleTime: 0,
+        gcTime: keepUnread ? Number.POSITIVE_INFINITY : 0,
+      },
       mutations: { retry: false },
     },
   });
 }
 
 /** Wrap children in a query client that lives as long as this mount. */
-export function VaultProviders({ children }: { children: ReactNode }) {
-  const [client] = useState(testQueryClient);
+export function VaultProviders({
+  children,
+  keepUnread = false,
+}: {
+  children: ReactNode;
+  /** Hold entries nothing on screen reads; see `testQueryClient`. */
+  keepUnread?: boolean;
+}) {
+  const [client] = useState(() => testQueryClient({ keepUnread }));
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 

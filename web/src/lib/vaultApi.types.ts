@@ -147,6 +147,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/accounts/{id}/identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * An account's identities, each with the messages it takes part in. The
+         *     owner reads any account's; an account reads its own.
+         */
+        get: operations["list_account_identities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/accounts/{id}/imports": {
         parameters: {
             query?: never;
@@ -1189,6 +1209,30 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * @description One of an account's identities and the messages it takes part in. The
+         *     Profile screen shows the counts beside each identity and repeats them when
+         *     one is about to be removed, so the person knows what the identity is tied
+         *     to before it goes.
+         */
+        AccountIdentity: {
+            /**
+             * Format: int64
+             * @description Messages in the one-to-one conversations the identity takes part in,
+             *     trashed conversations and duplicates excluded.
+             */
+            direct_messages: number;
+            /**
+             * Format: int64
+             * @description Messages in the group conversations the identity takes part in, on the
+             *     same terms.
+             */
+            group_messages: number;
+            /** @description The identity as the profile lists it: E.164 for a number, lower case for an address. */
+            handle: string;
+            /** @description `phone`, `email`, or `whatsapp`. */
+            service: string;
+        };
+        /**
          * @description One account: who it is, what it may do, and how much it holds. The owner
          *     and the account itself both read the whole struct; nothing in it is a
          *     message.
@@ -2225,6 +2269,37 @@ export interface components {
         /** @description A name to create, or the new name for an existing set. */
         NamedSetBody: {
             name: string;
+        };
+        /** @description One page of a list. */
+        Page_AccountIdentity: {
+            /** @description The rows on this page. */
+            items: {
+                /**
+                 * Format: int64
+                 * @description Messages in the one-to-one conversations the identity takes part in,
+                 *     trashed conversations and duplicates excluded.
+                 */
+                direct_messages: number;
+                /**
+                 * Format: int64
+                 * @description Messages in the group conversations the identity takes part in, on the
+                 *     same terms.
+                 */
+                group_messages: number;
+                /** @description The identity as the profile lists it: E.164 for a number, lower case for an address. */
+                handle: string;
+                /** @description `phone`, `email`, or `whatsapp`. */
+                service: string;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
         };
         /** @description One page of a list. */
         Page_AccountResponse: {
@@ -3708,6 +3783,65 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_ExportRun"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_account_identities: {
+        parameters: {
+            query?: {
+                /** @description Page size, default 40, at most 500 */
+                limit?: number;
+                /** @description Rows to skip */
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Account id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AccountIdentity"];
                 };
             };
             401: {

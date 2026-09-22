@@ -17,27 +17,27 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 Bullets under the version still in development carry the date they landed;
 released versions carry their date on the heading.
 
-## [0.9.0] — in development
+## [0.9.0] - 2026-09-22
 
 The release that gives a vault an owner, a trash you can take things back out
 of, and a search that reads the same everywhere.
 
 ### Features
 
-- 2026-09-21: **A command-line import that was killed can be cleared from
+- **A command-line import that was killed can be cleared from
   the command line.** An import stopped mid-run leaves its session open, and
   no later import for that account can start until it is discarded. The
   vault server now has `imports discard --account <account>`, which discards
   the account's open session and says which one it was, or that there was
   none. The refusal names the command, so you no longer need the desktop
   app's Import screen to get unstuck.
-- 2026-09-21: **The vault owner can see how much the vault holds.** Owner
+- **The vault owner can see how much the vault holds.** Owner
   Home's Dashboard now shows the vault's totals across every account: its
   storage total and how many messages, attachments, conversations and
   contacts it holds. An account's Storage tab shows its conversation and
   contact counts beside its message and attachment counts. These are counts
   only: no conversation, contact or message is named to the owner.
-- 2026-09-21: **The contact list shows when you last heard from each
+- **The contact list shows when you last heard from each
   contact, and can sort on it.** Every contact row now carries the date of
   the newest message that contact sent you, and the sort menu gains Last
   Heard From beside First Name and Last Name, newest first. A message you
@@ -46,7 +46,7 @@ of, and a search that reads the same everywhere.
   end whichever way the list runs. The vault's contact list takes the same
   key: `GET /v1/contacts?sort=-last_heard`, and each contact carries
   `last_heard_at`.
-- 2026-09-19: **The vault owner sees an account's Storage as its holder
+- **The vault owner sees an account's Storage as its holder
   does.** Open an account from User Accounts and its Storage tab now shows its
   message count and storage total, every import and export it has run, and
   its largest attachments by name and size. Opening an import shows its
@@ -54,7 +54,7 @@ of, and a search that reads the same everywhere.
   Who those contacts are, and which conversation a file is in, stay with the
   account. The account's Profile tab
   shows when it last logged in and which app it connects with.
-- 2026-09-19: **Every screen can tell you which version it is.** Settings →
+- **Every screen can tell you which version it is.** Settings →
   System shows the version of the app you are using, in the browser and in the
   desktop app. The vault owner's Settings shows the vault's version and
   its schema fingerprint, and an account's Profile tab shows the owner which app
@@ -65,17 +65,17 @@ of, and a search that reads the same everywhere.
   header, "This vault is 0.10.0. This app is 0.9.0.", and the owner sees it
   marked on that account's Profile. Nothing is blocked: the vault serves every app
   whatever its version.
-- 2026-09-17: **User Accounts shows when each account last logged in.** A
+- **User Accounts shows when each account last logged in.** A
   Last login column next to Status, in your own time zone, or "Never" for
   an account nobody has logged in to yet. Logging in, claiming the vault and
   registering all count; a password change does not.
-- 2026-09-21: **Export can write just the conversations a search finds.**
+- **Export can write just the conversations a search finds.**
   The Export screen opens with a scope: Everything, as before, or Search,
   which shows a box for a search in the same language as the search bar and
   exports only what it finds. `in:#19,#22` exports those two conversations
   and nothing else. Opening Export while browsing a list of conversations
   starts in Search with that list's search already filled in.
-- 2026-09-21: **The stop in an import run is a review, and it shows how many
+- **The stop in an import run is a review, and it shows how many
   messages each identity sent.** "Staging Approval" and "Media Approval" are
   now "Staging Review" and "Media Review", and a waiting one reads "Awaiting
   approval". Identities is a table: each address the backup sent from, how
@@ -85,7 +85,7 @@ of, and a search that reads the same everywhere.
   list. Each stage's title has a rule under it, "Cancel this import" looks
   like a button before the pointer reaches it, and the attachments'
   "Operation" is "Action".
-- 2026-09-20: **An import run and its approvals are one list.** The run
+- **An import run and its approvals are one list.** The run
   screen is the list of stages, and each approval is a row in that list where
   the run stops, with the decision inside it. There is no separate approval
   screen to open and come back from. Each stage's row holds what that stage
@@ -100,7 +100,7 @@ of, and a search that reads the same everywhere.
   appears once Upload starts, so it no longer opens onto a file that does
   not exist yet. A finished run offers "View imported conversations", "View
   modified contacts" and Back; errors are in one table under the list.
-- 2026-09-09: **Import is one screen that fills in as the run goes.** The
+- **Import is one screen that fills in as the run goes.** The
   form collapses into "what you asked for" once the run starts, each of the
   three stages (Staging, Media, Upload) adds its result underneath, and the
   finished run leads with where to go next: the conversations it added, the
@@ -109,7 +109,7 @@ of, and a search that reads the same everywhere.
   the run. A run keeps working, and keeps waiting at an approval, while you
   are on another screen, and the Import entry in the sidebar carries a badge
   while a run needs you. The two approval screens no longer say "gate".
-- 2026-09-05: **A vault has an owner.** A fresh vault now asks you to create
+- **A vault has an owner.** A fresh vault now asks you to create
   its owner before anything else, and that owner is the one account that
   manages the vault: create accounts, disable them, reset a password, delete
   someone's messages, and decide whether strangers may sign themselves up. The
@@ -118,138 +118,138 @@ of, and a search that reads the same everywhere.
   of what those messages say. There is exactly one owner and it cannot be
   deleted. If you forget its password, `create-owner` and
   `reset-owner-password` on the server put you back in.
-- 2026-09-05: **New accounts are closed by default.** A vault admits nobody the
+- **New accounts are closed by default.** A vault admits nobody the
   owner has not admitted, until the owner turns on public registration. An account
   the owner creates has to replace the owner's password the first time it
   logs in, so the owner never keeps knowing it.
-- 2026-09-05: **Permanent delete, from the trash only.** Deleting a trashed
+- **Permanent delete, from the trash only.** Deleting a trashed
   conversation removes it, its messages, and any attachment no other message
   still uses. Deleting a trashed contact does what a phone does: the name and
   edits go, the contact becomes Unknown, and its conversations stay, showing
   the number. **Empty Trash** does both for everything in it.
-- 2026-09-08: **Export history.** An export is recorded like an import: what it
+- **Export history.** An export is recorded like an import: what it
   covered — everything, a search, or conversations you picked — and how much it
   handed over. Settings → Storage lists Export history beside Import history.
-- 2026-09-05: **Convert**, a desktop tool under Settings that rewrites a folder
+- **Convert**, a desktop tool under Settings that rewrites a folder
   of already-exported files into another format without touching a backup or
   the vault.
-- 2026-09-05: **Times read in your zone.** Your account carries a time zone,
+- **Times read in your zone.** Your account carries a time zone,
   chosen at setup and changeable afterwards, and every message time, day and
   year is shown in it.
-- 2026-09-05: The vault server writes a proper log — one line per request, the
+- The vault server writes a proper log — one line per request, the
   full reason behind any internal failure, and a warning for work it could not
   finish.
-- 2026-09-05: **Find in conversation**, and years that page like every other
+- **Find in conversation**, and years that page like every other
   list.
-- 2026-09-05: Make a Contact Group straight from a group conversation.
-- 2026-09-05: Import accepts owner email addresses for SMS Backup+, and the two
+- Make a Contact Group straight from a group conversation.
+- Import accepts owner email addresses for SMS Backup+, and the two
   Android SMS sources share one form.
-- 2026-09-04: **A trash you can undo.** Conversations and contacts can be set
+- **A trash you can undo.** Conversations and contacts can be set
   aside and taken back. Nothing in the trash is deleted, a trashed conversation
   can still be opened and read, and lists leave the trash out unless asked.
   Trash has its own advanced search.
-- 2026-09-03: **An import names the contact.** When a backup knows someone's
+- **An import names the contact.** When a backup knows someone's
   name and the vault does not, the import puts that name on the contact. A name
   you type, or load from an address book, replaces one an import supplied; a
   later backup spelling it differently does not.
 
 ### Fixes
 
-- 2026-09-22: **An unread Apple Messages message no longer claims it was
+- **An unread Apple Messages message no longer claims it was
   read on 2001-01-01.** Messages stores no read time for a message nobody
   has read, and the reader turned that empty value into the earliest date
   Apple's clock can express, so every unread message imported from a Mac or
   an iPhone backup carried a read receipt from the start of 2001. An unread
   message now carries no read receipt; a read one keeps its real time.
-- 2026-09-21: **A finished import no longer leaves its staging folder
+- **A finished import no longer leaves its staging folder
   behind.** Every import wrote a copy of the backup's messages and
   attachments into the staging directory and left it there after the upload,
   so each import added gigabytes to the folder. An import that succeeds now
   deletes its staging folder, the import log with it; the run's record under
   Settings → Storage → Import history keeps its counts, timings and errors. A
   failed import still leaves the folder in place.
-- 2026-09-21: **An attachment gets the same filename on every computer.** The
+- **An attachment gets the same filename on every computer.** The
   date at the front of an attachment's filename is now the message's time in
   UTC. It used to be the time zone of the computer running the export, so the
   same backup exported on two computers named its attachments differently.
-- 2026-09-21: **Searching every conversation for a word answers at once.** A
+- **Searching every conversation for a word answers at once.** A
   word or phrase typed into Messages without an `in:` scope, and
   `messages:0` or `first-message:` on Contacts, took ten seconds to several
   minutes on a vault of 600,000 messages. Both now answer in well under a
   second with the same results.
-- 2026-09-21: **Loading an address book again keeps your Contact Groups.** A
+- **Loading an address book again keeps your Contact Groups.** A
   contact the book created and that is still in the file keeps its group
   memberships, its conversations and its place in Import History; only its
   name and phone numbers change to what the file now says. A contact the file
   dropped is removed as before. A conversation with a number the book had
   supplied also survives a reload, where it used to be deleted with the number.
-- 2026-09-21: **Reloading the website while the vault is down no longer logs
+- **Reloading the website while the vault is down no longer logs
   you out.** The Login screen shows Disconnected as before, and when the vault
   answers again you go straight back in without typing your password. A login
   the vault itself rejects still asks for the password.
-- 2026-09-19: **A contact with no name shows who it is.** The contact list,
+- **A contact with no name shows who it is.** The contact list,
   the contact's own panel and the Trash show its first identity, in italics,
   where they used to read "(unknown)" on every row. Its Contact Groups now
   say Unknown, and it no longer appears under No group as well.
-- 2026-09-05: Long-running vaults no longer grow in memory for every file ever
+- Long-running vaults no longer grow in memory for every file ever
   uploaded and every username ever tried.
-- 2026-09-05: A failure now says what actually went wrong — the step that
+- A failure now says what actually went wrong — the step that
   failed and the file or database error under it — rather than the outermost
   message alone.
-- 2026-09-05: The published Docker image is built with the compiler the project
+- The published Docker image is built with the compiler the project
   tests against, not whatever the base image happened to carry.
-- 2026-09-05: An obfuscated export no longer carries the original vendor data
+- An obfuscated export no longer carries the original vendor data
   alongside the substituted text.
-- 2026-09-05: A trashed contact is set aside rather than gone: an import that
+- A trashed contact is set aside rather than gone: an import that
   meets one of its numbers attaches to it and leaves it in the trash, and
   contact counts leave the trash out.
-- 2026-09-04: Only the newest connection check may speak for the login card,
+- Only the newest connection check may speak for the login card,
   so a slow answer for an old address cannot overwrite a newer one.
-- 2026-09-03: Importing a file the vault cannot read explains what is wrong —
+- Importing a file the vault cannot read explains what is wrong —
   which version the file is and which the vault reads, or which line is bad —
   instead of "internal server error".
-- 2026-08-30: Message Vault Settings no longer shows an address green when it
+- Message Vault Settings no longer shows an address green when it
   has not tried it. An address typed but not tested reads **Not tested**.
-- 2026-08-30: The login and profile-setup pages no longer show a scrollbar on
+- The login and profile-setup pages no longer show a scrollbar on
   a screen tall enough to hold the card, so opening a dropdown stops shifting
   the card sideways.
-- 2026-08-30: Profile setup refuses a phone number or address already in the
+- Profile setup refuses a phone number or address already in the
   list, marks the row that repeated it, and compares numbers regardless of how
   they are written. The same number on Text Message and on WhatsApp still
   counts as two.
-- 2026-08-27: Desktop import no longer fails partway through with a source
+- Desktop import no longer fails partway through with a source
   mismatch.
-- 2026-08-27: Import errors group identical problems into one row with a file
+- Import errors group identical problems into one row with a file
   count, instead of one row per file.
 
 ### Design
 
-- 2026-09-22: **The desktop app says what it ships from others.** Apple
+- **The desktop app says what it ships from others.** Apple
   Messages are read by a separate program, the Apple Messages reader, which is
   free software under the GNU General Public License. Settings → About now has
   a Third-party software note naming it, with links to its source and license
   for the exact version you are running, and every installer carries the
   license text beside the program.
-- 2026-09-19: **Owner Home has room to grow.** The side panel reads
+- **Owner Home has room to grow.** The side panel reads
   Dashboard, Settings, User Accounts, Activity and Logs. Settings is what was
   Vault Settings; Dashboard, Activity and Logs are named and empty for now.
   User Accounts is down to who, their status and their last login: the app, the
   message count and the storage total moved into the account's own Profile and
   Storage tabs.
-- 2026-09-19: **Settings, Account shows an account's status and
+- **Settings, Account shows an account's status and
   permissions.** Permissions lists Import messages, Export messages, and
   Delete messages and attachments. You can see what your account may do; the
   vault owner sets it. The owner changes an account's status and permissions
   from that account's Settings, and User Accounts now shows each status
   without the Import, Export and Delete columns.
-- 2026-09-19: **Changing the vault owner's password asks for the current
+- **Changing the vault owner's password asks for the current
   one.** The owner's account reaches every other account, so Settings,
   Account has a Current password field for the owner, and the vault checks
   it before it stores the new password. Every other account changes its
   password as before. The owner's Settings are now Account, Profile and
   Appearance: System and Convert work on messages, which the owner does not
   hold, and Profile no longer asks the owner for handles.
-- 2026-09-19: **A gear in each User Accounts row opens that account's
+- **A gear in each User Accounts row opens that account's
   Settings.** It appears at the left of the row while the pointer is in it.
   The column headings are bold with a line between them, and every other row
   is a shade lighter.
@@ -260,13 +260,13 @@ of, and a search that reads the same everywhere.
   is stored. Each account shows its preferred name under its username, and
   the search bar matches either. Your own account now leads the list, and its
   gear opens your own Settings.
-- 2026-09-19: **Owner Home looks like the screen every account sees.** The
+- **Owner Home looks like the screen every account sees.** The
   product name, a search bar and the account button now run across the top.
   The search bar narrows User Accounts by username. The side panel lists
   Vault Settings, then User Accounts. The owner's password and appearance
   moved to Settings, under the account button, which is also where Log out
   now is.
-- 2026-09-17: **The vault owner's screen is Owner Home, with a side panel.**
+- **The vault owner's screen is Owner Home, with a side panel.**
   The owner lands on it at login. Its side panel lists User Accounts first,
   then Vault, Password and Appearance, in place of the tabs across the top.
   In User Accounts, an account's status is a dropdown (Active or Disabled)
@@ -276,7 +276,7 @@ of, and a search that reads the same everywhere.
   carries on, and they keep the new password until they change it themselves.
   The vault no longer makes anyone replace a password the owner chose at
   their next login.
-- 2026-09-09: **An import brings back a contact you had trashed.** Until now
+- **An import brings back a contact you had trashed.** Until now
   an import that met the handle of a trashed contact attached to it and left
   it in Trash, so someone you set aside once never appeared in Contacts again
   however many newer backups you imported. A backup that still holds the
@@ -285,20 +285,20 @@ of, and a search that reads the same everywhere.
   contact from the backup, the way a first import would. The forecast of new
   contacts shown before an import counts them. To keep someone out for good,
   delete them from Trash. Why: `docs/adr/0013-an-import-replaces-a-trashed-contact.md`.
-- 2026-09-09: **An Import Run says what it did to each contact.** The run
+- **An Import Run says what it did to each contact.** The run
   records, as it goes, whether it created a contact, created one in place of
   a trashed contact, named one that had no name, or added a handle to one,
   and the run's record under Settings → Storage lists the contacts with that
   reason. The new and changed counts come from the same record instead of
   being guessed from timestamps afterwards.
-- 2026-09-09: **Importing SMS Backup+ mail reads one message per file, and
+- **Importing SMS Backup+ mail reads one message per file, and
   nothing else.** Message Vault briefly also read a second kind of `.eml` — a
   whole conversation written out as a dated transcript in one mail. That shape
   is not something SMS Backup+ produces, and every message in the only known
   collection of them was already present as ordinary SMS Backup+ mail, so
   reading it added a second copy of messages the vault already had. Support for
   it is gone. Importing a folder of SMS Backup+ mail is unchanged.
-- 2026-09-08: **The HTTP interface was rebuilt on one set of conventions.**
+- **The HTTP interface was rebuilt on one set of conventions.**
   Every list pages and sorts the same way — the browse lists and the ones you
   curate alike, with no list left answering a bare array — every failure comes
   back in the same shape with a link to a page explaining that kind of failure,
@@ -312,27 +312,27 @@ of, and a search that reads the same everywhere.
   already says it — and import history sorts the same way export history does.
   This matters if you wrote something against the interface yourself; nothing
   in the app or the desktop app changes.
-- 2026-09-05: The vault and the desktop app now convert media with the same
+- The vault and the desktop app now convert media with the same
   code, so a video converted on import and a preview generated later can no
   longer differ. Previews are better quality than before.
-- 2026-09-05: Import progress is reported by the exporters directly rather than
+- Import progress is reported by the exporters directly rather than
   read back out of their log text, so the progress bar can no longer be broken
   by a wording change. An encrypted iPhone backup now narrates its setup steps
   instead of sitting on "Reading backup…".
-- 2026-09-05: The desktop app reads Apple Messages through a small separate
+- The desktop app reads Apple Messages through a small separate
   program shipped beside it, because the library it uses carries a licence that
   cannot be combined with the app's. Nothing changes on screen.
-- 2026-09-05: Release builds of the server and the desktop app are optimised
+- Release builds of the server and the desktop app are optimised
   and stripped, so they are smaller and faster.
-- 2026-09-03: **One search language.** The search box, saved searches and the
+- **One search language.** The search box, saved searches and the
   export filter are compiled by the same code, so a query means the same thing
   everywhere it is typed.
-- 2026-08-30: The vault accepts the packaged desktop app without being
+- The vault accepts the packaged desktop app without being
   configured to. A vault built from source used to refuse it in a way that
   looked like an unreachable server.
-- 2026-08-27: Importing is substantially faster — messages, attachments and
+- Importing is substantially faster — messages, attachments and
   reactions are written in batches rather than one database call at a time.
-- 2026-08-26: Import lists one **iMessage** source with a choice of Mac
+- Import lists one **iMessage** source with a choice of Mac
   Messages, iPhone backup, or jailbroken iPhone, and one **WhatsApp** source
   with a choice of Android or iPhone. Encrypted iPhone backups ask for the
   password in the form. Required fields are marked; optional ones say so.

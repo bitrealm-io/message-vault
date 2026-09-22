@@ -216,8 +216,9 @@ scheme with its scopes, so every route says which it accepts.
 - A **Session** is one per logged-in account or owner, made by
   `POST /v1/session` and ended by `DELETE /v1/session`. It carries the
   account's own permissions: `import`, `export`, `delete`. The owner's session
-  carries none of those and reaches only the accounts collection and the vault
-  settings, because the owner holds no messages.
+  carries none of those and reaches only the accounts collection, the vault
+  settings and the vault's storage totals, because the owner holds no
+  messages.
 - An **API token** is a named credential an account makes for a program, with
   the scopes the person chose, capped by the account's own. A token never signs
   in and never browses.
@@ -251,7 +252,8 @@ What each reaches:
   Which contacts a run created is content, so `/v1/imports/{id}/contacts` has
   no twin under the account.
 - `GET /v1/vault` and `POST /v1/vault/claim` take no credential.
-  `/v1/vault/settings` is the owner's.
+  `/v1/vault/settings` and `GET /v1/vault/storage` are the owner's: the
+  storage totals sum every account, and no account holds more than its own.
 
 The credential names the account. No route takes an `account=` parameter.
 

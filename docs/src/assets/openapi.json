@@ -1342,7 +1342,7 @@
         "tags": [
           "Accounts"
         ],
-        "summary": "Attachment storage usage for an account: total bytes, count, and the 100\nlargest files. The owner reads any account's; an account reads its own.\nThe owner is told each file's name, type and size and not the conversation\nit is in, which says who the account talks to\n(`docs/adr/0008-the-vault-owner-holds-no-messages.md`).",
+        "summary": "What an account holds: attachment bytes, the attachment, conversation and\ncontact counts, and the 100 largest files. The owner reads any account's;\nan account reads its own. The owner is told each file's name, type and\nsize and not the conversation it is in, which says who the account talks\nto (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).",
         "operationId": "get_account_storage",
         "parameters": [
           {
@@ -6787,6 +6787,54 @@
           }
         ]
       }
+    },
+    "/v1/vault/storage": {
+      "get": {
+        "tags": [
+          "Vault"
+        ],
+        "summary": "Read what the vault holds: the message, conversation, contact and\nattachment counts and the attachment bytes, summed over every account.\nCounts and totals only, never a name or a line of text\n(`docs/adr/0008-the-vault-owner-holds-no-messages.md`, \"What the owner\nmay see\"). The owner's, because the owner administers the vault and\nnobody else holds more than their own account.",
+        "operationId": "vault_storage",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultStorageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "owner"
+            ]
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -6912,16 +6960,29 @@
       },
       "AccountStorageResponse": {
         "type": "object",
-        "description": "Attachment usage and the largest files.",
+        "description": "What an account holds: counts, attachment bytes and the largest files.",
         "required": [
           "total_bytes",
           "attachment_count",
+          "conversation_count",
+          "contact_count",
           "top_attachments"
         ],
         "properties": {
           "attachment_count": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Attachment rows."
+          },
+          "contact_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contacts, on the same terms as `conversation_count`."
+          },
+          "conversation_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Conversations. A count and never a title: how many an account has is\na measure of the vault, and who they are with is the holder's."
           },
           "top_attachments": {
             "type": "array",
@@ -6931,7 +6992,8 @@
           },
           "total_bytes": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Attachment bytes, by original file size."
           }
         }
       },
@@ -10878,6 +10940,44 @@
           "closed",
           "open"
         ]
+      },
+      "VaultStorageResponse": {
+        "type": "object",
+        "description": "What the whole vault holds, summed over every account.",
+        "required": [
+          "message_count",
+          "conversation_count",
+          "contact_count",
+          "attachment_count",
+          "total_bytes"
+        ],
+        "properties": {
+          "attachment_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Attachment rows across every account."
+          },
+          "contact_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contacts across every account."
+          },
+          "conversation_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Conversations across every account."
+          },
+          "message_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Messages across every account."
+          },
+          "total_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Attachment bytes across every account, by original file size."
+          }
+        }
       }
     },
     "securitySchemes": {

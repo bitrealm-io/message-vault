@@ -1300,6 +1300,8 @@ async fn the_storage_route_sums_attachment_bytes_and_lists_the_largest_first() {
         serde_json::json!({
             "total_bytes": 0,
             "attachment_count": 0,
+            "conversation_count": 0,
+            "contact_count": 0,
             "top_attachments": []
         })
     );
@@ -1343,11 +1345,21 @@ async fn the_storage_route_sums_attachment_bytes_and_lists_the_largest_first() {
         .await
         .unwrap();
     }
+    for name in ["Ada", "Pat"] {
+        sqlx::query("INSERT INTO contacts (account_id, preferred_name) VALUES ($1, $2)")
+            .bind(account.account_id)
+            .bind(name)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+    }
     drop(conn);
 
     let storage: serde_json::Value = get_json(&vault.state, &path, &account.token).await;
     assert_eq!(storage["total_bytes"], 4000);
     assert_eq!(storage["attachment_count"], 3);
+    assert_eq!(storage["conversation_count"], 1);
+    assert_eq!(storage["contact_count"], 2);
     let top = storage["top_attachments"].as_array().unwrap();
     assert_eq!(top.len(), 2);
     assert_eq!(top[0]["original_name"], "big.mov");
@@ -1364,6 +1376,27 @@ async fn the_storage_route_sums_attachment_bytes_and_lists_the_largest_first() {
     let by_owner: serde_json::Value = get_json(&vault.state, &path, &owner.token).await;
     assert_eq!(by_owner["total_bytes"], storage["total_bytes"]);
     assert_eq!(by_owner["attachment_count"], storage["attachment_count"]);
+    assert_eq!(by_owner["conversation_count"], 1);
+    assert_eq!(by_owner["contact_count"], 2);
+    // Counts and file metadata are the whole of it: no key on the owner's
+    // answer names a content column, a contact or a conversation.
+    let mut owner_keys: Vec<&str> = by_owner
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    owner_keys.sort_unstable();
+    assert_eq!(
+        owner_keys,
+        [
+            "attachment_count",
+            "contact_count",
+            "conversation_count",
+            "top_attachments",
+            "total_bytes"
+        ]
+    );
     let owner_top = by_owner["top_attachments"].as_array().unwrap();
     assert_eq!(owner_top.len(), 2);
     assert_eq!(owner_top[0]["original_name"], "big.mov");

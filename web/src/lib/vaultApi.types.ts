@@ -245,11 +245,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Attachment storage usage for an account: total bytes, count, and the 100
-         *     largest files. The owner reads any account's; an account reads its own.
-         *     The owner is told each file's name, type and size and not the conversation
-         *     it is in, which says who the account talks to
-         *     (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
+         * What an account holds: attachment bytes, the attachment, conversation and
+         *     contact counts, and the 100 largest files. The owner reads any account's;
+         *     an account reads its own. The owner is told each file's name, type and
+         *     size and not the conversation it is in, which says who the account talks
+         *     to (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
          */
         get: operations["get_account_storage"];
         put?: never;
@@ -1160,6 +1160,30 @@ export interface paths {
         patch: operations["patch_vault_settings"];
         trace?: never;
     };
+    "/v1/vault/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read what the vault holds: the message, conversation, contact and
+         *     attachment counts and the attachment bytes, summed over every account.
+         *     Counts and totals only, never a name or a line of text
+         *     (`docs/adr/0008-the-vault-owner-holds-no-messages.md`, "What the owner
+         *     may see"). The owner's, because the owner administers the vault and
+         *     nobody else holds more than their own account.
+         */
+        get: operations["vault_storage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1230,12 +1254,29 @@ export interface components {
             /** @description Login username. */
             username: string;
         };
-        /** @description Attachment usage and the largest files. */
+        /** @description What an account holds: counts, attachment bytes and the largest files. */
         AccountStorageResponse: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Attachment rows.
+             */
             attachment_count: number;
+            /**
+             * Format: int64
+             * @description Contacts, on the same terms as `conversation_count`.
+             */
+            contact_count: number;
+            /**
+             * Format: int64
+             * @description Conversations. A count and never a title: how many an account has is
+             *     a measure of the vault, and who they are with is the holder's.
+             */
+            conversation_count: number;
             top_attachments: components["schemas"]["TopAttachment"][];
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Attachment bytes, by original file size.
+             */
             total_bytes: number;
         };
         /** @description What loading an address book changed. */
@@ -3065,6 +3106,34 @@ export interface components {
          * @enum {string}
          */
         VaultState: "unclaimed" | "closed" | "open";
+        /** @description What the whole vault holds, summed over every account. */
+        VaultStorageResponse: {
+            /**
+             * Format: int64
+             * @description Attachment rows across every account.
+             */
+            attachment_count: number;
+            /**
+             * Format: int64
+             * @description Contacts across every account.
+             */
+            contact_count: number;
+            /**
+             * Format: int64
+             * @description Conversations across every account.
+             */
+            conversation_count: number;
+            /**
+             * Format: int64
+             * @description Messages across every account.
+             */
+            message_count: number;
+            /**
+             * Format: int64
+             * @description Attachment bytes across every account, by original file size.
+             */
+            total_bytes: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -7437,6 +7506,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VaultSettingsResponse"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    vault_storage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VaultStorageResponse"];
                 };
             };
             401: {

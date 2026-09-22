@@ -114,16 +114,20 @@ an account's message data without being able to look at it first, and so
 deletes on the strength of the counts, the import history and the account
 holder's word, not on inspection.
 
-Not all of this is built. An account's Storage tab shows the owner what it
-shows the account holder: the message count and the storage total, each import
-and export the account has run, and its largest attachments by name and size.
-The owner reads them at `/v1/accounts/{id}/storage`, `/imports` and `/exports`;
-`/v1/imports` and `/v1/exports` stay the pipelines' own and still refuse the
-owner. Two things on that screen say who the account talks to, and the owner
-gets neither: an import's detail gives the owner how many contacts it created
-and changed and not who they are, and a large attachment comes to the owner
-as a name, a type and a size, without the conversation it is in. Contact and conversation counts and vault-wide
-totals are deferred, not rejected.
+All of this is built. An account's Storage tab shows the owner what it shows
+the account holder: the message, attachment, conversation and contact counts
+and the storage total, each import and export the account has run, and its
+largest attachments by name and size. The owner reads them at
+`/v1/accounts/{id}/storage`, `/imports` and `/exports`; `/v1/imports` and
+`/v1/exports` stay the pipelines' own and still refuse the owner. Two things
+on that screen say who the account talks to, and the owner gets neither: an
+import's detail gives the owner how many contacts it created and changed and
+not who they are, and a large attachment comes to the owner as a name, a type
+and a size, without the conversation it is in. The vault-wide totals are
+`GET /v1/vault/storage`, the owner's alone, and Owner Home's Dashboard shows
+them. The per-account and vault-wide numbers come from the same queries
+(`crates/vault/server/src/db/storage.rs`), with and without an account
+filter, so the Dashboard cannot disagree with the sum of the Storage tabs.
 
 ## The three states of a vault
 

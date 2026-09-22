@@ -209,6 +209,7 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::assets::asset_upload_abort_handler))
         .routes(routes!(crate::vault_api::vault_settings_handler))
         .routes(routes!(crate::vault_api::patch_vault_settings_handler))
+        .routes(routes!(crate::vault_api::vault_storage_handler))
 }
 
 /// Pretty OpenAPI JSON. Same string the CLI writes and the stale-spec test compares.

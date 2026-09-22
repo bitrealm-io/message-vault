@@ -2,8 +2,9 @@ use axum::http::StatusCode;
 
 use super::*;
 use crate::test_support::{
-    claim_vault_as_owner, get_json, get_status, patch_status, post_json, post_status,
-    post_status_logged_out, register_via_api, test_vault,
+    SeedConversation, SeedMessage, claim_vault_as_owner, get_json, get_status, patch_status,
+    post_json, post_status, post_status_logged_out, register_via_api, seed_conversation,
+    test_vault,
 };
 
 /// Turn public registration off, the way a real vault ships.
@@ -296,4 +297,121 @@ async fn the_vault_owner_owes_no_profile_setup() {
         .unwrap()
         .unwrap();
     assert!(!auth.must_set_up_profile);
+}
+
+// ---------------------------------------------------------------------------
+// What the vault holds
+// ---------------------------------------------------------------------------
+
+/// The vault's totals sum every account, and the answer is counts and a
+/// byte total and nothing that names a person or a conversation.
+#[tokio::test]
+async fn the_owner_reads_the_vault_totals_summed_over_every_account() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
+    let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
+
+    let empty: serde_json::Value = get_json(&state, "/v1/vault/storage", &owner.token).await;
+    assert_eq!(
+        empty,
+        serde_json::json!({
+            "message_count": 0,
+            "conversation_count": 0,
+            "contact_count": 0,
+            "attachment_count": 0,
+            "total_bytes": 0
+        })
+    );
+
+    for (account_id, handle, bodies) in [
+        (alice.account_id, "+15555550100", &["hi", "there"][..]),
+        (bob.account_id, "+15555550200", &["yo"][..]),
+    ] {
+        let messages: Vec<SeedMessage> = bodies
+            .iter()
+            .map(|body| SeedMessage {
+                source: "imessage",
+                timestamp: "2020-01-01T00:00:00Z",
+                is_from_me: true,
+                body,
+            })
+            .collect();
+        seed_conversation(
+            &state,
+            &SeedConversation {
+                account_id,
+                handle,
+                conversation_type: "individual",
+                group_title: None,
+                source_file: "seed.jsonl",
+                messages: &messages,
+            },
+        )
+        .await;
+    }
+    let mut conn = vault.conn().await;
+    for (account_id, size) in [(alice.account_id, 3000_i64), (bob.account_id, 1000)] {
+        let message_id: i64 =
+            sqlx::query_scalar("SELECT MIN(id) FROM messages WHERE account_id = $1")
+                .bind(account_id)
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+        sqlx::query(
+            "INSERT INTO attachments (message_id, original_name, mime_type, size_bytes)
+             VALUES ($1, 'file.bin', 'application/octet-stream', $2)",
+        )
+        .bind(message_id)
+        .bind(size)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    }
+    for (account_id, name) in [
+        (alice.account_id, "Ada"),
+        (alice.account_id, "Pat"),
+        (bob.account_id, "Sam"),
+    ] {
+        sqlx::query("INSERT INTO contacts (account_id, preferred_name) VALUES ($1, $2)")
+            .bind(account_id)
+            .bind(name)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+    }
+    drop(conn);
+
+    let totals: serde_json::Value = get_json(&state, "/v1/vault/storage", &owner.token).await;
+    assert_eq!(
+        totals,
+        serde_json::json!({
+            "message_count": 3,
+            "conversation_count": 2,
+            "contact_count": 3,
+            "attachment_count": 2,
+            "total_bytes": 4000
+        })
+    );
+}
+
+/// An account holds only its own data, so the vault's totals are the owner's
+/// alone; a session that is not the owner's is refused, and no session is
+/// unauthorized.
+#[tokio::test]
+async fn only_the_owner_reaches_the_vault_totals() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let _owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let ordinary = register_via_api(&state, "bob", "hunter2hunter2").await;
+
+    assert_eq!(
+        get_status(&state, "/v1/vault/storage", &ordinary.token).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        get_status(&state, "/v1/vault/storage", "").await,
+        StatusCode::UNAUTHORIZED
+    );
 }

@@ -15,6 +15,8 @@ type StorageOverview = {
   exports: ExportRow[];
   totalBytes: number;
   attachmentCount: number;
+  conversationCount: number;
+  contactCount: number;
   topAttachments: TopAttachment[];
 };
 
@@ -29,6 +31,8 @@ async function fetchOverview(signal: AbortSignal, accountId?: number): Promise<S
     exports: exportsRes.items,
     totalBytes: usageRes.total_bytes ?? 0,
     attachmentCount: usageRes.attachment_count ?? 0,
+    conversationCount: usageRes.conversation_count ?? 0,
+    contactCount: usageRes.contact_count ?? 0,
     topAttachments: usageRes.top_attachments ?? [],
   };
 }
@@ -93,6 +97,8 @@ export function useStorageData(managedAccountId?: number) {
     exports: overview?.exports ?? [],
     totalBytes: overview?.totalBytes ?? 0,
     attachmentCount: overview?.attachmentCount ?? 0,
+    conversationCount: overview?.conversationCount ?? 0,
+    contactCount: overview?.contactCount ?? 0,
     topAttachments: overview?.topAttachments ?? [],
     page,
     setPage,

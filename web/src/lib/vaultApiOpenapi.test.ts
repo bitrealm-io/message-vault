@@ -91,6 +91,7 @@ const EXERCISED: Record<string, () => unknown> = {
   claimVault: () => vaultApi.claimVault({ username: "matt", password: "hunter2hunter2" }),
   getVaultSettings: () => vaultApi.getVaultSettings(),
   updateVaultSettings: () => vaultApi.updateVaultSettings({ public_registration: true }),
+  getVaultStorage: () => vaultApi.getVaultStorage(),
 
   // Accounts
   listAccounts: () => vaultApi.listAccounts(),

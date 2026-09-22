@@ -880,32 +880,6 @@ pub async fn has_messages(conn: &mut AnyConnection, import_id: i64) -> Result<bo
     Ok(row.is_some())
 }
 
-const ACCOUNT_ATTACHMENTS_FROM: &str = r"
-        FROM attachments a
-        JOIN messages m ON m.id = a.message_id
-        WHERE m.account_id = $1
-        ";
-
-/// Total attachment bytes for an account (original `size_bytes`).
-pub async fn account_attachment_bytes(conn: &mut AnyConnection, account_id: i64) -> Result<i64> {
-    let n: i64 = sqlx::query_scalar(&format!(
-        "SELECT COALESCE(SUM(a.size_bytes), 0) {ACCOUNT_ATTACHMENTS_FROM}"
-    ))
-    .bind(account_id)
-    .fetch_one(&mut *conn)
-    .await?;
-    Ok(n)
-}
-
-/// Attachment row count for an account.
-pub async fn account_attachment_count(conn: &mut AnyConnection, account_id: i64) -> Result<i64> {
-    let n: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) {ACCOUNT_ATTACHMENTS_FROM}"))
-        .bind(account_id)
-        .fetch_one(&mut *conn)
-        .await?;
-    Ok(n)
-}
-
 /// One of an account's largest attachments by byte size.
 #[derive(Debug, Clone, serde::Serialize, utoipa::ToSchema)]
 pub struct TopAttachment {

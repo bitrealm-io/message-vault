@@ -699,9 +699,12 @@ async fn promote_stamps_messages_with_import_id() {
     assert!(!listed[0].started_at.is_empty());
     assert!(listed[0].finished_at.is_some());
     assert_eq!(
-        crate::db::vault_imports::account_attachment_bytes(&mut conn, TEST_ACCOUNT)
-            .await
-            .unwrap(),
+        crate::db::storage::attachment_bytes(
+            &mut conn,
+            crate::db::storage::Scope::Account(TEST_ACCOUNT),
+        )
+        .await
+        .unwrap(),
         0
     );
     assert!(

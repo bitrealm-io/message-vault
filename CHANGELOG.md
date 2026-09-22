@@ -17,6 +17,18 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 Bullets under the version still in development carry the date they landed;
 released versions carry their date on the heading.
 
+## [0.9.1] — in development
+
+### Fixes
+
+- 2026-09-22 **Changing a password checks things in a sensible order and
+  says so in full sentences.** The vault now checks the current password
+  first, then that the new password was typed the same way twice, then that
+  it differs from the current one, and tells you only the first thing that
+  went wrong. The messages read as sentences ("Current password is
+  incorrect.") and the Change password button no longer sits tight against
+  the last field.
+
 ## [0.9.0] - 2026-09-22
 
 The release that gives a vault an owner, a trash you can take things back out

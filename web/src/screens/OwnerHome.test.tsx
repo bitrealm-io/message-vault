@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { VaultApiError } from "../lib/api";
 import { APP_BUILD } from "../lib/build";
 import { productVersionOf } from "../lib/buildFormat";
 import { ThemeProvider } from "../lib/ThemeProvider";
@@ -599,17 +600,26 @@ describe("OwnerHome", () => {
     const user = userEvent.setup({ delay: null });
     renderHome(["/owner/accounts/101"]);
 
+    // The vault judges the pair, so a differing one goes to it and its
+    // sentence comes back to the screen.
+    setAccountPassword.mockRejectedValueOnce(new Error("New passwords do not match."));
     await user.type(await screen.findByLabelText("New password"), "correct horse");
     await user.type(screen.getByLabelText("Confirm new password"), "correct hors");
     await user.click(screen.getByRole("button", { name: "Change password" }));
-    expect(await screen.findByText(/do not match/)).toBeInTheDocument();
-    expect(setAccountPassword).not.toHaveBeenCalled();
+    expect(await screen.findByText("New passwords do not match.")).toBeInTheDocument();
+    expect(setAccountPassword).toHaveBeenCalledWith(101, {
+      password: "correct horse",
+      password_confirmation: "correct hors",
+    });
 
     await user.type(screen.getByLabelText("Confirm new password"), "e");
     await user.click(screen.getByRole("button", { name: "Change password" }));
 
     await waitFor(() =>
-      expect(setAccountPassword).toHaveBeenCalledWith(101, { password: "correct horse" }),
+      expect(setAccountPassword).toHaveBeenCalledWith(101, {
+        password: "correct horse",
+        password_confirmation: "correct horse",
+      }),
     );
     // Nothing about a forced change: the person keeps this password.
     expect(screen.queryByText(/made to replace/)).not.toBeInTheDocument();
@@ -621,7 +631,12 @@ describe("OwnerHome", () => {
 
     await user.click(await screen.findByRole("button", { name: "Reset password" }));
 
-    await waitFor(() => expect(setAccountPassword).toHaveBeenCalledWith(101, { password: "" }));
+    await waitFor(() =>
+      expect(setAccountPassword).toHaveBeenCalledWith(101, {
+        password: "",
+        password_confirmation: "",
+      }),
+    );
   });
 
   it("offers the owner no way to reset their own password to none", async () => {
@@ -686,6 +701,35 @@ describe("OwnerHome", () => {
     expect(await screen.findByRole("tab", { name: "Storage" })).not.toHaveAttribute(
       "aria-disabled",
     );
+  });
+
+  it("says Invalid username when the username already belongs to an account", async () => {
+    const user = userEvent.setup({ delay: null });
+    createAccount.mockRejectedValue(
+      new VaultApiError(409, "username already taken: bob", {
+        type: "https://bitrealm.io/vault/errors/username-taken",
+        title: "Username taken",
+        status: 409,
+        detail: "username already taken: bob",
+      }),
+    );
+    renderHome(["/owner/accounts/new"]);
+
+    await user.type(await screen.findByLabelText("Username"), "bob");
+    await user.type(screen.getByLabelText("Password"), "hunter2hunter2");
+    await user.type(screen.getByLabelText("Confirm password"), "hunter2hunter2");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid username.");
+    expect(screen.queryByText(/already taken/)).not.toBeInTheDocument();
+  });
+
+  it("shows only the fields a new account needs", async () => {
+    renderHome(["/owner/accounts/new"]);
+
+    expect(await screen.findByRole("heading", { name: "Password (optional)" })).toBeInTheDocument();
+    expect(screen.queryByText(/Profile and Storage open/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Hand this password over/)).not.toBeInTheDocument();
   });
 
   it("opens the section named in the address", async () => {

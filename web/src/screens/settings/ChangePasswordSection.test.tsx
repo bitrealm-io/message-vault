@@ -42,11 +42,16 @@ describe("ChangePasswordSection", () => {
     await user.type(screen.getByLabelText("Confirm new password"), "a");
     await user.click(screen.getByRole("button", { name: "Change password" }));
 
-    await waitFor(() => expect(changePassword).toHaveBeenCalledWith({ password: "a" }));
+    await waitFor(() =>
+      expect(changePassword).toHaveBeenCalledWith({ password: "a", password_confirmation: "a" }),
+    );
     expect(updateToken).toHaveBeenCalledWith("mv-user-rotated");
   });
 
-  it("refuses a confirmation that differs", async () => {
+  it("sends a differing confirmation to the vault and shows its sentence", async () => {
+    // The vault checks the pair after the current password, so the screen
+    // never judges it: the order of what a user hears is the vault's.
+    changePassword.mockRejectedValue(new Error("New passwords do not match."));
     const user = userEvent.setup();
     render(<ChangePasswordSection />);
 
@@ -54,10 +59,12 @@ describe("ChangePasswordSection", () => {
     await user.type(screen.getByLabelText("Confirm new password"), "second");
     await user.click(screen.getByRole("button", { name: "Change password" }));
 
-    expect(
-      await screen.findByText("New password and confirmation do not match."),
-    ).toBeInTheDocument();
-    expect(changePassword).not.toHaveBeenCalled();
+    expect(await screen.findByText("New passwords do not match.")).toBeInTheDocument();
+    expect(changePassword).toHaveBeenCalledWith({
+      password: "first",
+      password_confirmation: "second",
+    });
+    expect(updateToken).not.toHaveBeenCalled();
   });
 
   it("resets the password to none", async () => {
@@ -66,7 +73,9 @@ describe("ChangePasswordSection", () => {
 
     await user.click(screen.getByRole("button", { name: "Reset password" }));
 
-    await waitFor(() => expect(changePassword).toHaveBeenCalledWith({ password: "" }));
+    await waitFor(() =>
+      expect(changePassword).toHaveBeenCalledWith({ password: "", password_confirmation: "" }),
+    );
     expect(
       await screen.findByText("Password reset. This account now has no password."),
     ).toBeInTheDocument();
@@ -93,6 +102,7 @@ describe("ChangePasswordSection", () => {
     await waitFor(() =>
       expect(changePassword).toHaveBeenCalledWith({
         password: "keeperschoice",
+        password_confirmation: "keeperschoice",
         current_password: "hunter2hunter2",
       }),
     );

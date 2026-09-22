@@ -3031,6 +3031,13 @@ export interface components {
              *     owner's must be one character or more.
              */
             password: string;
+            /**
+             * @description The new password typed a second time. The vault, not the screen,
+             *     refuses a pair that differs, so the checks run in one fixed order:
+             *     current password, then the pair, then that the new one differs from the
+             *     current one.
+             */
+            password_confirmation: string;
         };
         /** @description Fresh session token issued after an account changed its own password. */
         SetPasswordResponse: {

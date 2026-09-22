@@ -774,12 +774,12 @@ pub async fn delete_account_handler(
         if has_local_password {
             let Some(pw) = req.current_password.as_deref() else {
                 return Err(ApiError::validation(
-                    "current password is required to delete this account",
+                    "Current password is required to delete this account.",
                 ));
             };
             if !passwords_match(password_hash.as_deref(), pw) {
                 return Err(ApiError::InvalidCredentials(
-                    "current password is incorrect".into(),
+                    "Current password is incorrect.".into(),
                 ));
             }
         }
@@ -807,6 +807,11 @@ pub struct SetPasswordRequest {
     /// The new password. Empty clears a user account's password; the vault
     /// owner's must be one character or more.
     pub password: String,
+    /// The new password typed a second time. The vault, not the screen,
+    /// refuses a pair that differs, so the checks run in one fixed order:
+    /// current password, then the pair, then that the new one differs from the
+    /// current one.
+    pub password_confirmation: String,
     /// The password being replaced. Required when the vault owner changes its
     /// own; nobody else sends it.
     #[serde(default)]
@@ -854,6 +859,36 @@ pub async fn set_password_handler(
     LoggedIn(auth): LoggedIn,
     Json(req): Json<SetPasswordRequest>,
 ) -> Result<Response, ApiError> {
+    let mut conn = state.db.acquire().await?;
+    let reach = require_owner_or_self(&mut conn, &auth, target).await?;
+
+    // The checks run in a fixed order so the first thing a user is told is the
+    // first thing they typed wrong: the current password, then the pair, then
+    // that the new one is actually new.
+    if reach == Reach::Own && account_profile::is_vault_owner(target) {
+        let Some(current) = req.current_password.as_deref() else {
+            return Err(ApiError::validation(
+                "Current password is required to change the vault owner's password.",
+            ));
+        };
+        let password_hash = account_profile::load_password_hash(&mut conn, target).await?;
+        if !passwords_match(password_hash.as_deref(), current) {
+            return Err(ApiError::InvalidCredentials(
+                "Current password is incorrect.".into(),
+            ));
+        }
+        if req.password != req.password_confirmation {
+            return Err(ApiError::validation("New passwords do not match."));
+        }
+        if req.password == current {
+            return Err(ApiError::validation(
+                "New password must be different from the current password.",
+            ));
+        }
+    } else if req.password != req.password_confirmation {
+        return Err(ApiError::validation("New passwords do not match."));
+    }
+
     // The owner must have a password; a user account may have none.
     let new_hash = if account_profile::is_vault_owner(target) {
         Some(hash_owner_password(&req.password)?)
@@ -862,22 +897,8 @@ pub async fn set_password_handler(
     };
     let new_hash = new_hash.as_deref();
 
-    let mut conn = state.db.acquire().await?;
-    match require_owner_or_self(&mut conn, &auth, target).await? {
+    match reach {
         Reach::Own => {
-            if account_profile::is_vault_owner(target) {
-                let Some(current) = req.current_password.as_deref() else {
-                    return Err(ApiError::validation(
-                        "current password is required to change the vault owner's password",
-                    ));
-                };
-                let password_hash = account_profile::load_password_hash(&mut conn, target).await?;
-                if !passwords_match(password_hash.as_deref(), current) {
-                    return Err(ApiError::InvalidCredentials(
-                        "current password is incorrect".into(),
-                    ));
-                }
-            }
             let token = change_password_on_conn(&mut conn, target, new_hash).await?;
             Ok(Json(SetPasswordResponse { token }).into_response())
         }

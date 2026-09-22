@@ -268,8 +268,11 @@ describe("accounts are one collection", () => {
     expect(lastPath(get)).toBe("/v1/accounts/7");
     await updateAccountProfile({ preferred_name: "Ada" });
     expect(patch).toHaveBeenCalledWith("/v1/accounts/7", { preferred_name: "Ada" });
-    await changePassword({ password: "newer-one" });
-    expect(put).toHaveBeenCalledWith("/v1/accounts/7/password", { password: "newer-one" });
+    await changePassword({ password: "newer-one", password_confirmation: "newer-one" });
+    expect(put).toHaveBeenCalledWith("/v1/accounts/7/password", {
+      password: "newer-one",
+      password_confirmation: "newer-one",
+    });
     await deleteAccount({ confirm: true, current_password: "old" });
     expect(del).toHaveBeenCalledWith("/v1/accounts/7", { confirm: true, current_password: "old" });
     await deleteAllMessages({ confirm: true });
@@ -281,8 +284,14 @@ describe("accounts are one collection", () => {
   it("addresses another account by the id the owner names", async () => {
     await updateAccount(12, { disabled: true });
     expect(patch).toHaveBeenCalledWith("/v1/accounts/12", { disabled: true });
-    await setAccountPassword(12, { password: "resetbytheowner" });
-    expect(put).toHaveBeenCalledWith("/v1/accounts/12/password", { password: "resetbytheowner" });
+    await setAccountPassword(12, {
+      password: "resetbytheowner",
+      password_confirmation: "resetbytheowner",
+    });
+    expect(put).toHaveBeenCalledWith("/v1/accounts/12/password", {
+      password: "resetbytheowner",
+      password_confirmation: "resetbytheowner",
+    });
     await deleteAccountMessages(12);
     expect(del).toHaveBeenCalledWith("/v1/accounts/12/messages");
     await deleteAccountById(12);

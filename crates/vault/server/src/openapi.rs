@@ -113,6 +113,7 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::accounts_api::set_password_handler))
         .routes(routes!(crate::accounts_api::delete_messages_handler))
         .routes(routes!(crate::accounts_api::account_storage_handler))
+        .routes(routes!(crate::accounts_api::account_identities_handler))
         .routes(routes!(crate::accounts_api::account_imports_handler))
         .routes(routes!(crate::accounts_api::account_import_handler))
         .routes(routes!(crate::accounts_api::account_exports_handler))

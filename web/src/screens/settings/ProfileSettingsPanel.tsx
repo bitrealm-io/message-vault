@@ -65,7 +65,8 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
   return (
     <div>
       <h3 className={sectionTitleClass}>Display Name</h3>
-      <div className="mb-[0.35rem] flex gap-2">
+      {/* The same row as Identities' Add below it, so the two buttons match. */}
+      <div className="mb-[0.35rem] flex items-center gap-2">
         <input
           type="text"
           aria-label="Display name"
@@ -73,7 +74,7 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
           onChange={(e) => setName(e.target.value)}
           className={`${inputClassName} flex-1`}
         />
-        <Button variant="primary" onClick={handleSaveName} className="!px-4 !py-1">
+        <Button variant="primary" onClick={handleSaveName} className="!px-[0.85rem] !py-[0.35rem]">
           {nameSaved ? "Saved" : "Save"}
         </Button>
       </div>

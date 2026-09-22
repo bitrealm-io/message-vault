@@ -28,6 +28,8 @@ mod identities;
 mod log;
 mod options;
 mod session;
+#[cfg(test)]
+mod test_support;
 
 use std::io::BufRead;
 

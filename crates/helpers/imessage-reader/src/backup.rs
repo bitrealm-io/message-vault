@@ -239,8 +239,74 @@ pub(crate) fn decrypt_file(
 
 #[cfg(test)]
 mod tests {
-    use super::{password_for_encrypted_backup, reject_leftover_password};
-    use crate::error::{ENCRYPTED_BACKUP_PASSWORD_REQUIRED, UNENCRYPTED_BACKUP_CLEAR_PASSWORD};
+    use super::{
+        decrypt_backup, password_for_encrypted_backup, reject_leftover_password,
+        restrict_permissions, unique_suffix,
+    };
+    use crate::{
+        error::{
+            ENCRYPTED_BACKUP_PASSWORD_REQUIRED, RuntimeError, UNENCRYPTED_BACKUP_CLEAR_PASSWORD,
+        },
+        options::ReaderOptions,
+    };
+    use imessage_reader_protocol::{Platform, Source};
+    use std::fs::File;
+
+    /// Two temp files made by the same process in the same instant must not
+    /// share a name, because both hold decrypted data and one would
+    /// overwrite the other.
+    #[test]
+    fn a_suffix_is_never_repeated_within_a_process() {
+        let first = unique_suffix();
+        let second = unique_suffix();
+        assert_ne!(first, second);
+        assert!(
+            first.starts_with(&format!("{}-", std::process::id())),
+            "starts with the pid: {first}"
+        );
+        assert_eq!(first.split('-').count(), 3, "pid-nanos-counter: {first}");
+    }
+
+    /// A decrypted file in a shared temp folder is readable by its owner
+    /// only.
+    #[test]
+    fn a_temp_file_is_restricted_to_its_owner() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("decrypted.db");
+        let file = File::create(&path).unwrap();
+        restrict_permissions(&file).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "{mode:o}");
+        }
+    }
+
+    /// A Mac source is never decrypted, and an iOS folder without a
+    /// `Manifest.plist` is not a backup. The real decrypt path needs an
+    /// encrypted backup, and none is built from anyone's own.
+    #[test]
+    fn only_an_ios_backup_folder_is_opened() {
+        let dir = tempfile::tempdir().unwrap();
+        let mac = ReaderOptions::from_source(Source {
+            db_path: dir.path().join("chat.db"),
+            platform: Platform::MacOs,
+            backup_password: None,
+        });
+        assert!(decrypt_backup(&mac).unwrap().is_none());
+
+        let ios = ReaderOptions::from_source(Source {
+            db_path: dir.path().to_path_buf(),
+            platform: Platform::Ios,
+            backup_password: None,
+        });
+        let err = decrypt_backup(&ios).unwrap_err();
+        assert!(
+            !matches!(err, RuntimeError::InvalidOptions(_)),
+            "a missing manifest is a backup error, not a bad option: {err}"
+        );
+    }
 
     #[test]
     fn missing_password_does_not_prompt() {

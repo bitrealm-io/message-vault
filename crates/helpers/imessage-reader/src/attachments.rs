@@ -58,3 +58,47 @@ pub(crate) fn decrypt_for_app(session: &MailSession, source: &Path) -> Event {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::FixtureDb;
+
+    /// On a Mac the row's `filename` is the path; a row without one has no
+    /// file.
+    #[test]
+    fn a_mac_attachment_resolves_to_the_path_the_row_names() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let messages = FixtureDb::messages(&session);
+        let mut attachments =
+            Attachment::from_message(session.data_source.db(), &messages[0]).unwrap();
+        assert_eq!(attachments.len(), 1);
+
+        assert_eq!(
+            resolved_path(&session, &attachments[0]),
+            Some(fixture.dir.path().join("photo.jpg"))
+        );
+
+        attachments[0].filename = None;
+        assert_eq!(resolved_path(&session, &attachments[0]), None);
+    }
+
+    /// Without an encrypted backup there is nothing to decrypt: the answer
+    /// names the file when it exists and nothing when it does not.
+    #[test]
+    fn an_unencrypted_source_answers_with_the_path_itself() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let photo = fixture.dir.path().join("photo.jpg");
+
+        assert!(matches!(
+            decrypt_for_app(&session, &photo),
+            Event::Attachment { path: Some(p) } if p == photo
+        ));
+        assert!(matches!(
+            decrypt_for_app(&session, &fixture.dir.path().join("gone.jpg")),
+            Event::Attachment { path: None }
+        ));
+    }
+}

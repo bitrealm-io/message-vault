@@ -47,6 +47,13 @@ JSON object per line. Both sides link it, so it is `MIT OR Apache-2.0`; an FCL
 protocol crate would have pulled FCL terms into the GPL program, and a GPL
 one would have pulled GPL terms into the app.
 
+`crates/helpers/chat-db-fixture` writes the small `chat.db` both sides test
+against: the reader's own tests open it in process and the exporter's
+process-seam test spawns the built reader against it. It links rusqlite and
+nothing else, so it carries no GPL code into the exporter's test binary, and
+it is `MIT OR Apache-2.0` for the same reason the protocol crate is. It is a
+dev-dependency only; no shipped binary links it.
+
 `crates/exporters/imessage-ir-exporter` stays FCL. It validates the options,
 starts the reader, relays its progress lines and cancel, and turns the
 records it streams into the shared conversation structure the writers
@@ -85,7 +92,7 @@ Three settings in `deny.toml` carry the rule:
 
 `scripts/check-license.sh` (in CI on every pull request) checks the other
 direction: every tracked `Cargo.toml` declares `LicenseRef-FCL-1.0-ALv2`
-except the two crates in its `LICENCE_EXCEPTIONS` table, which must declare
+except the three crates in its `LICENCE_EXCEPTIONS` table, which must declare
 exactly the licence recorded there.
 
 `./scripts/check-all.sh` runs both `cargo deny` invocations locally when

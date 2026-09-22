@@ -688,6 +688,10 @@ fn json_if_any<T: serde::Serialize>(items: &[T]) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::FixtureDb;
+    use chat_db_fixture::{FRIEND_EMAIL, FRIEND_PHONE, GROUP_CHAT_IDENTIFIER, GROUP_TITLE, OWNER};
+    use imessage_reader_protocol::AttachmentSource;
+    use std::collections::HashMap;
 
     #[test]
     fn send_effect_is_appended_once() {
@@ -712,5 +716,312 @@ mod tests {
             ..ImessageRecord::default()
         };
         assert!(!is_empty(&fields));
+    }
+
+    #[test]
+    fn blank_strings_become_none() {
+        assert_eq!(trimmed(Some("  a  ".to_string())).as_deref(), Some("a"));
+        assert_eq!(trimmed(Some("   ".to_string())), None);
+        assert_eq!(trimmed(None), None);
+        assert_eq!(json_if_any::<u8>(&[]), None);
+        assert_eq!(json_if_any(&[1u8]), Some(serde_json::json!([1])));
+    }
+
+    #[test]
+    fn a_tapback_kind_is_its_name_and_an_emoji_keeps_the_emoji() {
+        assert_eq!(tapback_kind(Tapback::Loved), ("loved", None));
+        assert_eq!(tapback_kind(Tapback::Sticker), ("sticker", None));
+        assert_eq!(
+            tapback_kind(Tapback::Emoji(Some("🔥"))),
+            ("emoji", Some("🔥".to_string()))
+        );
+    }
+
+    #[test]
+    fn a_reply_points_at_its_originator_and_a_tapback_at_its_target() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let mut message = FixtureDb::messages(&session).remove(1);
+
+        let plain = thread_fields(&message, None);
+        assert!(!plain.is_reply);
+        assert_eq!(plain.in_reply_to_guid, None);
+
+        message.thread_originator_guid = Some("guid-1".to_string());
+        message.thread_originator_part = Some("0/1".to_string());
+        let reply = thread_fields(&message, None);
+        assert!(reply.is_reply);
+        assert_eq!(reply.in_reply_to_guid.as_deref(), Some("guid-1"));
+        assert_eq!(reply.thread_originator_part, Some(0));
+
+        let tapback = TapbackFields {
+            kind: "loved",
+            emoji: None,
+            action: "add",
+            associated_guid: Some("guid-1".to_string()),
+            associated_part: Some(0),
+        };
+        assert_eq!(tapback.message_kind(), "tapback");
+        assert_eq!(tapback.text(), "Loved a message");
+        let pointed = thread_fields(&message, Some(&tapback));
+        assert!(!pointed.is_reply, "a tapback is never a reply");
+        assert_eq!(pointed.in_reply_to_guid.as_deref(), Some("guid-1"));
+    }
+
+    /// A tapback row read off the message's own fields: reaction 2000 is a
+    /// heart added, 3000 a heart removed, and the target guid is the part
+    /// prefix stripped off `associated_message_guid`.
+    #[test]
+    fn a_tapback_row_is_read_off_the_message() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let mut message = FixtureDb::messages(&session).remove(1);
+        // Messages stores a target as `p:<part>/<36-character guid>`.
+        let target = "0F3A3C1E-9B7D-4E2A-8C6F-1D2E3F4A5B6C";
+        message.associated_message_type = Some(2000);
+        message.associated_message_guid = Some(format!("p:1/{target}"));
+        let Variant::Tapback(_, action, kind) = message.variant() else {
+            panic!("a heart tapback");
+        };
+        let tapback = TapbackFields::from_variant(&message, action, kind);
+        assert_eq!((tapback.kind, tapback.action), ("loved", "add"));
+        assert_eq!(tapback.associated_guid.as_deref(), Some(target));
+        assert_eq!(tapback.associated_part, Some(1));
+
+        message.associated_message_type = Some(1000);
+        let Variant::Tapback(_, action, kind) = message.variant() else {
+            panic!("a sticker tapback");
+        };
+        let sticker = TapbackFields::from_variant(&message, action, kind);
+        assert_eq!(sticker.message_kind(), "sticker_tapback");
+    }
+
+    /// Every fixture row becomes a record: the photo message is an iMessage
+    /// carrying one attachment on disk, the reply is outgoing and named by
+    /// the caller id, and the group message carries the group's roster and
+    /// title.
+    #[test]
+    fn every_fixture_row_builds_a_record() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session_with_contacts();
+        let messages = FixtureDb::messages(&session);
+
+        let (conversation, photo) = build_record(&session, &messages[0]).unwrap();
+        assert_eq!(conversation.chat_identifier, FRIEND_PHONE);
+        assert_eq!(conversation.conversation_type, "individual");
+        assert_eq!(conversation.group_title, None);
+        assert_eq!(conversation.participants.len(), 1);
+        assert_eq!(
+            conversation.participants[0].display_name.as_deref(),
+            Some("Sam Example")
+        );
+        assert_eq!(photo.guid, "guid-1");
+        assert!(!photo.outgoing);
+        assert_eq!(photo.message_kind, "imessage");
+        assert_eq!(photo.service, "iMessage");
+        assert_eq!(photo.sender_handle.as_deref(), Some(FRIEND_PHONE));
+        assert_eq!(photo.sender_display_name.as_deref(), Some("Sam Example"));
+        assert_eq!(photo.owner_handle, OWNER);
+        assert_eq!(photo.owner_display_name.as_deref(), Some(OWNER));
+        assert_eq!(photo.attachments.len(), 1);
+        assert_eq!(
+            photo.attachments[0].original_name.as_deref(),
+            Some("photo.jpg")
+        );
+        assert!(matches!(
+            &photo.attachments[0].source,
+            AttachmentSource::Path { path, size_hint: Some(17) } if path.ends_with("photo.jpg")
+        ));
+        assert_eq!(
+            photo.timestamp_unix_ms, 1_578_307_200_000,
+            "2001 + 600,000,000 s"
+        );
+
+        let (_, reply) = build_record(&session, &messages[1]).unwrap();
+        assert!(reply.outgoing);
+        assert_eq!(reply.text, "Nice");
+        assert_eq!(reply.sender_handle, None);
+        let fields = reply.imessage.expect("the parsed body is one part");
+        assert_eq!(
+            fields.parts,
+            Some(serde_json::json!([{ "index": 0, "kind": "run", "text": "Nice" }]))
+        );
+        assert!(!fields.is_reply);
+        assert_eq!(fields.tapback_kind, None);
+        assert_eq!(fields.app, None);
+        assert!(reply.attachments.is_empty());
+
+        let (group, message) = build_record(&session, &messages[2]).unwrap();
+        assert_eq!(group.chat_identifier, GROUP_CHAT_IDENTIFIER);
+        assert_eq!(group.conversation_type, "group");
+        assert_eq!(group.group_title.as_deref(), Some(GROUP_TITLE));
+        let mut handles: Vec<_> = group
+            .participants
+            .iter()
+            .map(|p| p.handle.as_str())
+            .collect();
+        handles.sort_unstable();
+        assert_eq!(handles, vec![FRIEND_PHONE, FRIEND_EMAIL]);
+        assert_eq!(message.text, "Saturday works");
+        assert_eq!(message.sender_display_name.as_deref(), Some("Robin"));
+    }
+
+    /// A row whose chat is gone lands in the orphaned conversation, and one
+    /// whose service is unknown is SMS or MMS by its attachments.
+    #[test]
+    fn an_orphaned_row_and_a_non_imessage_row_are_classified() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let mut message = FixtureDb::messages(&session).remove(1);
+        message.chat_id = Some(42);
+        message.service = Some("SMS".to_string());
+
+        let context = resolve_context(&session, &message);
+        assert_eq!(context.conversation.chat_identifier, ORPHANED);
+        assert!(context.conversation.participants.is_empty());
+        assert_eq!(context.service, "SMS");
+
+        assert_eq!(classify_row(&session, &message, "SMS", false).kind, "sms");
+        assert_eq!(classify_row(&session, &message, "SMS", true).kind, "mms");
+        assert_eq!(
+            classify_row(&session, &message, "iMessage", true).kind,
+            "imessage"
+        );
+    }
+
+    /// The classifier's other branches over a fixture row with its fields
+    /// changed: a rename announcement, a location share, a balloon and a
+    /// send effect.
+    #[test]
+    fn announcements_locations_balloons_and_effects_are_classified() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session_with_contacts();
+        let base = FixtureDb::messages(&session).remove(2);
+
+        let mut rename = FixtureDb::messages(&session).remove(2);
+        rename.item_type = 2;
+        rename.group_title = Some("New name".to_string());
+        assert!(rename.is_announcement());
+        let row = classify_row(&session, &rename, "iMessage", false);
+        assert_eq!(row.kind, "announcement");
+        assert_eq!(row.text, "Robin named the conversation New name");
+        assert_eq!(
+            announcement_text(&session, &rename).as_deref(),
+            Some("Robin named the conversation New name")
+        );
+
+        let mut added = FixtureDb::messages(&session).remove(2);
+        added.item_type = 1;
+        added.group_action_type = 0;
+        added.other_handle = Some(1);
+        added.is_from_me = true;
+        // The owner is named by the caller id when that option is on; only
+        // a bare `Me` becomes `You`.
+        assert_eq!(
+            announcement_text(&session, &added).as_deref(),
+            Some("+15550000001 added Sam Example to the conversation.")
+        );
+        added.destination_caller_id = None;
+        assert_eq!(
+            announcement_text(&session, &added).as_deref(),
+            Some("You added Sam Example to the conversation.")
+        );
+
+        let mut location = FixtureDb::messages(&session).remove(2);
+        location.item_type = 4;
+        location.share_status = false;
+        location.share_direction = Some(true);
+        location.text = None;
+        let row = classify_row(&session, &location, "iMessage", false);
+        assert_eq!(row.kind, "location_share");
+        assert!(row.text.starts_with("Shared location "), "{}", row.text);
+        assert!(row.shared_location.is_some());
+
+        let mut balloon = FixtureDb::messages(&session).remove(2);
+        balloon.balloon_bundle_id =
+            Some("com.apple.PassbookUIService.PeerPaymentMessagesExtension".to_string());
+        let row = classify_row(&session, &balloon, "iMessage", false);
+        assert_eq!(row.kind, "balloon");
+        assert_eq!(row.text, "Saturday works");
+        assert_eq!(
+            row.app.as_ref().and_then(balloon_kind_label).as_deref(),
+            Some("apple_pay")
+        );
+
+        let mut slam = base;
+        slam.expressive_send_style_id =
+            Some("com.apple.MobileSMS.expressivesend.impact".to_string());
+        let row = classify_row(&session, &slam, "iMessage", false);
+        assert_eq!(row.text, "Saturday works\n\nSent with Slam");
+        assert_eq!(row.send_effect.as_deref(), Some("Sent with Slam"));
+        let fields = imessage_fields(&session, &slam, row, &[]);
+        assert_eq!(fields.send_effect.as_deref(), Some("Sent with Slam"));
+        assert!(!is_empty(&fields));
+    }
+
+    /// Tapbacks on a parent are listed in part, date and rowid order, with
+    /// the reactor named; a removed tapback is left out.
+    #[test]
+    fn parent_tapbacks_are_listed_in_order_and_named() {
+        let fixture = FixtureDb::write();
+        let mut session = fixture.session_with_contacts();
+        let messages = FixtureDb::messages(&session);
+        let parent = &messages[1];
+
+        let mut heart = FixtureDb::messages(&session).remove(0);
+        heart.associated_message_type = Some(2000);
+        heart.associated_message_guid = Some(format!("p:0/{}", parent.guid));
+        heart.date = 20;
+        let mut fire = FixtureDb::messages(&session).remove(2);
+        fire.associated_message_type = Some(2006);
+        fire.associated_message_emoji = Some("🔥".to_string());
+        fire.associated_message_guid = Some(format!("p:0/{}", parent.guid));
+        fire.date = 10;
+        fire.is_from_me = true;
+        let mut removed = FixtureDb::messages(&session).remove(0);
+        removed.associated_message_type = Some(3000);
+        removed.associated_message_guid = Some(format!("p:0/{}", parent.guid));
+        session.tapbacks.insert(
+            parent.guid.clone(),
+            HashMap::from([(0usize, vec![heart, fire, removed])]),
+        );
+
+        let value = build_parent_tapbacks(&session, parent).expect("two tapbacks");
+        let cells = value.as_array().unwrap();
+        assert_eq!(cells.len(), 2, "{value}");
+        assert_eq!(cells[0]["kind"], "emoji");
+        assert_eq!(cells[0]["emoji"], "🔥");
+        assert_eq!(cells[0]["reactor_display_name"], OWNER);
+        assert_eq!(cells[1]["kind"], "loved");
+        assert_eq!(cells[1]["reactor_handle"], FRIEND_PHONE);
+        assert_eq!(cells[1]["reactor_display_name"], "Sam Example");
+
+        assert_eq!(build_parent_tapbacks(&session, &messages[0]), None);
+    }
+
+    /// The whole stream over the fixture: three rows seen, none skipped.
+    /// The events go to stdout, which the test harness captures.
+    #[test]
+    fn the_fixture_streams_without_a_failure() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        stream_export(&session).unwrap();
+    }
+
+    #[test]
+    fn a_timestamp_falls_back_to_the_raw_stamp_when_the_date_is_invalid() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let mut message = FixtureDb::messages(&session).remove(1);
+        assert_eq!(
+            timestamp_unix_ms(&message, session.offset),
+            1_578_307_260_000
+        );
+        message.date = 600_000_060;
+        assert_eq!(
+            timestamp_unix_ms(&message, session.offset),
+            1_578_307_260_000,
+            "a seconds stamp from an older database reads the same"
+        );
     }
 }

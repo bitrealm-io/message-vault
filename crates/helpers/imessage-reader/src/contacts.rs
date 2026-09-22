@@ -409,6 +409,7 @@ fn macos_sources_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{fill_ios_address_book, fill_macos_address_book};
 
     /// A handle is looked up by these keys, so a key the builder does not
     /// produce is a contact the reader never matches — the message arrives
@@ -517,5 +518,152 @@ mod tests {
             map["key"].last, "Example",
             "a sparser row must not overwrite a fuller one"
         );
+    }
+
+    #[test]
+    fn a_name_is_built_from_whichever_parts_exist() {
+        let both = Name::from_opt(Some("Sam".into()), Some("Example".into())).unwrap();
+        assert_eq!((both.full.as_str(), both.score()), ("Sam Example", 2));
+        assert_eq!(both.get_display_name(), "Sam Example");
+
+        let last_only = Name::from_opt(None, Some("Example".into())).unwrap();
+        assert_eq!((last_only.full.as_str(), last_only.score()), ("Example", 1));
+
+        assert_eq!(Name::from_opt(None, None), None);
+
+        // A name that is only a handle shows the handle.
+        let details = Name::from_details("+15551234567");
+        assert_eq!(details.score(), 0);
+        assert_eq!(details.get_display_name(), "+15551234567");
+    }
+
+    fn macos_address_book() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        fill_macos_address_book(&conn);
+        conn
+    }
+
+    fn ios_address_book() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        fill_ios_address_book(&conn);
+        conn
+    }
+
+    #[test]
+    fn a_table_exists_by_name_or_not_at_all() {
+        let conn = ios_address_book();
+        assert!(table_exists(&conn, "ABPersonFullTextSearch_content"));
+        assert!(!table_exists(&conn, "ZABCDRECORD"));
+        assert!(!table_exists(
+            &macos_address_book(),
+            "ABPersonFullTextSearch_content"
+        ));
+    }
+
+    /// A macOS book joins a record to its numbers and addresses; every
+    /// handle form of each reaches the same name, and a row with no name
+    /// indexes nothing even though it has a number.
+    #[test]
+    fn a_macos_address_book_is_indexed_by_phone_and_email() {
+        let index = ContactsIndex::build_from_macos(&macos_address_book()).unwrap();
+
+        let sam = index.lookup("+15550000002").expect("Sam by full number");
+        assert_eq!(sam.full, "Sam Example");
+        assert_eq!(
+            index.lookup("5550000002").map(|n| n.full),
+            Some("Sam Example".to_string()),
+            "the ten-digit form of a US number"
+        );
+        assert_eq!(
+            index.lookup("sam@example.com").map(|n| n.full),
+            Some("Sam Example".to_string()),
+            "brackets stripped and lower-cased"
+        );
+        assert_eq!(
+            index.lookup("friend@example.com").map(|n| n.full),
+            Some("Robin".to_string())
+        );
+        assert_eq!(
+            index.lookup("+15559990000"),
+            None,
+            "a record with no name is not a contact"
+        );
+        assert_eq!(index.lookup("nobody@example.com"), None);
+    }
+
+    /// The iOS table carries every form of a number in one column; each form
+    /// is indexed, and each address in the email column too.
+    #[test]
+    fn an_ios_address_book_is_indexed_by_every_phone_and_email_token() {
+        let index = ContactsIndex::build_from_ios(&ios_address_book()).unwrap();
+
+        for handle in [
+            "+15550000002",
+            "5550000002",
+            "sam@example.com",
+            "sam@work.example",
+        ] {
+            assert_eq!(
+                index.lookup(handle).map(|n| n.full),
+                Some("Sam Example".to_string()),
+                "{handle}"
+            );
+        }
+        assert_eq!(
+            index.lookup("friend@example.com").map(|n| n.full),
+            Some("Robin".to_string())
+        );
+        assert_eq!(index.lookup("+15559990000"), None);
+    }
+
+    /// `build` picks the query by the table it finds, so one path serves a
+    /// macOS book and an iOS one.
+    #[test]
+    fn build_tells_the_two_databases_apart_by_their_tables() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let ios_path = dir.path().join("AddressBook.sqlitedb");
+        fill_ios_address_book(&Connection::open(&ios_path).unwrap());
+        let index = ContactsIndex::build(Some(&ios_path)).unwrap();
+        assert_eq!(
+            index.lookup("sam@work.example").map(|n| n.full),
+            Some("Sam Example".to_string())
+        );
+
+        let macos_path = dir.path().join("AddressBook-v22.abcddb");
+        fill_macos_address_book(&Connection::open(&macos_path).unwrap());
+        let index = ContactsIndex::build(Some(&macos_path)).unwrap();
+        assert_eq!(
+            index.lookup("friend@example.com").map(|n| n.full),
+            Some("Robin".to_string())
+        );
+    }
+
+    /// Handles that dedupe to one person share one name, and the name keeps
+    /// every handle id that reached it.
+    #[test]
+    fn participants_are_named_by_their_deduped_handle() {
+        let index = ContactsIndex::build_from_ios(&ios_address_book()).unwrap();
+        let participants = HashMap::from([
+            (1, "+15550000002".to_string()),
+            (2, "sam@example.com".to_string()),
+            (3, "+15559990000".to_string()),
+            (4, "orphan".to_string()),
+        ]);
+        let deduped = HashMap::from([(1, 1), (2, 1), (3, 3)]);
+
+        let named = index.build_participants_map(&participants, &deduped);
+        assert_eq!(named.len(), 2, "{named:?}");
+        let sam = &named[&1];
+        assert_eq!(sam.full, "Sam Example");
+        assert_eq!(sam.handle_ids, HashSet::from([1, 2]));
+        assert!(
+            !sam.details.is_empty(),
+            "the details string is kept for fallback"
+        );
+
+        let unknown = &named[&3];
+        assert_eq!(unknown.full, "");
+        assert_eq!(unknown.get_display_name(), "+15559990000");
     }
 }

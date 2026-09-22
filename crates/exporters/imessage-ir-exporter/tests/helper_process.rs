@@ -1,9 +1,9 @@
 //! The exporter through the real `imessage-reader` process.
 //!
 //! These tests build the helper with cargo (a no-op once it is built), write
-//! a small `chat.db` with the tables `imessage-database` queries, and run the
-//! exporter against it. The exporter finds the program in `target/<profile>/`
-//! because this test binary runs from `target/<profile>/deps/`. The build
+//! the small `chat.db` from `chat-db-fixture`, and run the exporter against
+//! it. The exporter finds the program in `target/<profile>/` because this
+//! test binary runs from `target/<profile>/deps/`. The build
 //! is sent to the same target directory this test binary came from, so a run
 //! under another one (cargo-llvm-cov uses `target/llvm-cov-target/`) still
 //! puts the program where the exporter looks.
@@ -18,10 +18,10 @@ use std::{
     },
 };
 
+use chat_db_fixture::{PHOTO_BYTES, write_chat_db};
 use message_vault_io_core::{
     AppleConfig, ApplePlatform, ExporterConfig, MediaConfig, OutputFormat, SourceConfig,
 };
-use rusqlite::Connection;
 
 /// Build `imessage-reader` once per test binary and return its path.
 fn helper_binary() -> &'static Path {
@@ -66,70 +66,6 @@ fn helper_binary() -> &'static Path {
 fn target_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     exe.ancestors().nth(3).map(Path::to_path_buf)
-}
-
-/// Seconds since 2001-01-01 as the nanosecond stamp `chat.db` stores.
-fn apple_nanos(seconds_since_2001: i64) -> i64 {
-    seconds_since_2001 * 1_000_000_000
-}
-
-/// A Mac `chat.db` with two people, one direct chat, one named group chat,
-/// three messages, and one attachment on disk.
-///
-/// The photo message has no `text` and no `attributedBody`. A real row
-/// carries the attachment as a placeholder range inside `attributedBody`;
-/// without that blob the body parser would build a text-only part and the
-/// exporter would rightly drop an attachment the body never references.
-fn write_chat_db(dir: &Path) -> PathBuf {
-    let db_path = dir.join("chat.db");
-    let photo = dir.join("photo.jpg");
-    fs::write(&photo, b"not really a jpeg").unwrap();
-
-    let db = Connection::open(&db_path).unwrap();
-    db.execute_batch(&format!(
-        r#"
-        CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id TEXT, person_centric_id TEXT, service TEXT);
-        CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, chat_identifier TEXT, service_name TEXT, display_name TEXT, account_login TEXT);
-        CREATE TABLE chat_handle_join (chat_id INTEGER, handle_id INTEGER);
-        CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER, message_date INTEGER);
-        CREATE TABLE chat_recoverable_message_join (chat_id INTEGER, message_id INTEGER);
-        CREATE TABLE attachment (ROWID INTEGER PRIMARY KEY, guid TEXT, filename TEXT, uti TEXT, mime_type TEXT, transfer_name TEXT, total_bytes INTEGER, is_sticker INTEGER, hide_attachment INTEGER, emoji_image_short_description TEXT);
-        CREATE TABLE message_attachment_join (message_id INTEGER, attachment_id INTEGER);
-        CREATE TABLE message (
-            ROWID INTEGER PRIMARY KEY, guid TEXT, text TEXT, service TEXT, handle_id INTEGER,
-            destination_caller_id TEXT, subject TEXT, date INTEGER, date_read INTEGER, date_delivered INTEGER,
-            is_from_me INTEGER, is_read INTEGER, item_type INTEGER, other_handle INTEGER, share_status INTEGER,
-            share_direction INTEGER, group_title TEXT, group_action_type INTEGER, associated_message_guid TEXT,
-            associated_message_type INTEGER, balloon_bundle_id TEXT, expressive_send_style_id TEXT,
-            thread_originator_guid TEXT, thread_originator_part TEXT, date_edited INTEGER,
-            associated_message_emoji TEXT, attributedBody BLOB, payload_data BLOB, message_summary_info BLOB
-        );
-
-        INSERT INTO handle VALUES (1, '+15550000002', NULL, 'iMessage');
-        INSERT INTO handle VALUES (2, 'friend@example.com', NULL, 'iMessage');
-        INSERT INTO chat VALUES (1, '+15550000002', 'iMessage', NULL, 'P:+15550000001');
-        INSERT INTO chat VALUES (2, 'chat100', 'iMessage', 'Weekend plans', 'P:+15550000001');
-        INSERT INTO chat_handle_join VALUES (1, 1), (2, 1), (2, 2);
-
-        INSERT INTO message (ROWID, guid, text, service, handle_id, destination_caller_id, date, is_from_me, item_type, associated_message_type)
-            VALUES (1, 'guid-1', NULL, 'iMessage', 1, '+15550000001', {d1}, 0, 0, 0);
-        INSERT INTO message (ROWID, guid, text, service, handle_id, destination_caller_id, date, is_from_me, item_type, associated_message_type)
-            VALUES (2, 'guid-2', 'Nice', 'iMessage', 0, '+15550000001', {d2}, 1, 0, 0);
-        INSERT INTO message (ROWID, guid, text, service, handle_id, destination_caller_id, date, is_from_me, item_type, associated_message_type)
-            VALUES (3, 'guid-3', 'Saturday works', 'iMessage', 2, '+15550000001', {d3}, 0, 0, 0);
-        INSERT INTO chat_message_join VALUES (1, 1, {d1}), (1, 2, {d2}), (2, 3, {d3});
-
-        INSERT INTO attachment VALUES (1, 'att-1', '{photo}', 'public.jpeg', 'image/jpeg', 'photo.jpg', 17, 0, 0, NULL);
-        INSERT INTO message_attachment_join VALUES (1, 1);
-        "#,
-        d1 = apple_nanos(600_000_000),
-        d2 = apple_nanos(600_000_060),
-        d3 = apple_nanos(600_000_120),
-        photo = photo.display(),
-    ))
-    .unwrap();
-    drop(db);
-    db_path
 }
 
 fn config(db_path: &Path, output: &Path, cancel: Option<Arc<AtomicBool>>) -> ExporterConfig {
@@ -199,7 +135,7 @@ fn exports_a_mac_chat_db_through_the_helper_process() {
     // resolved, and the document points at it.
     let staged: Vec<PathBuf> = walk(&output.join("attachments"));
     assert_eq!(staged.len(), 1, "{staged:?}");
-    assert_eq!(fs::read(&staged[0]).unwrap(), b"not really a jpeg");
+    assert_eq!(fs::read(&staged[0]).unwrap(), PHOTO_BYTES);
     assert!(all.contains("\"attachments/"), "{all}");
 }
 

@@ -162,6 +162,12 @@ of, and a search that reads the same everywhere.
   `messages:0` or `first-message:` on Contacts, took ten seconds to several
   minutes on a vault of 600,000 messages. Both now answer in well under a
   second with the same results.
+- 2026-09-21: **Loading an address book again keeps your Contact Groups.** A
+  contact the book created and that is still in the file keeps its group
+  memberships, its conversations and its place in Import History; only its
+  name and phone numbers change to what the file now says. A contact the file
+  dropped is removed as before. A conversation with a number the book had
+  supplied also survives a reload, where it used to be deleted with the number.
 - 2026-09-21: **Reloading the website while the vault is down no longer logs
   you out.** The Login screen shows Disconnected as before, and when the vault
   answers again you go straight back in without typing your password. A login

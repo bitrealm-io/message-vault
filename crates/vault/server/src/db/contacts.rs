@@ -25,7 +25,7 @@ pub async fn touch_contact(
 
 /// Where a contact, identity, or link came from.
 ///
-/// Loading an address book replaces only the rows the address book owns, so
+/// Loading an address book touches only the rows the address book owns, so
 /// identities an import discovered and names a person typed both survive a
 /// refresh of the address book.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -404,8 +404,9 @@ fn phone_handles_only(handles: &[String]) -> Vec<(String, Option<String>)> {
 /// columns — a contacts app VCF exported as CSV).
 ///
 /// Pass `None` to skip address-book load (keep existing SQLite contacts).
-/// On overwrite, only the rows the address book owns are replaced.
-/// and reattached after reload (address-book files are phone-oriented).
+/// On overwrite, the book's own contacts are updated in place: a card that
+/// matches one keeps that row, and only the contacts the file dropped go. A
+/// file that does not exist counts as an empty book.
 pub async fn load_contacts_if_needed(
     conn: &mut AnyConnection,
     contacts_path: Option<&Path>,
@@ -435,70 +436,24 @@ pub async fn load_contacts_if_needed(
         });
     }
 
-    if !path.exists() {
+    let drafts = if path.exists() {
+        match contacts_file_format(path)? {
+            ContactsFormat::VcardCsv => drafts_from_vcard_csv(path)?,
+            ContactsFormat::Vcf => drafts_from_vcf(path)?,
+        }
+    } else {
         eprintln!(
             "warning: contacts file not found at {}; leaving contacts empty",
             path.display()
         );
-        if count > 0 && overwrite {
-            delete_address_book_contacts(conn, account_id).await?;
-        }
-        return Ok(ContactLoadStats::default());
-    }
-
-    delete_address_book_contacts(conn, account_id).await?;
-
-    let format = contacts_file_format(path)?;
-    let stats = match format {
-        ContactsFormat::VcardCsv => load_from_vcard_csv(conn, path, account_id).await?,
-        ContactsFormat::Vcf => load_from_vcf(conn, path, account_id).await?,
+        Vec::new()
     };
-    Ok(stats)
+
+    apply_address_book(conn, account_id, drafts).await
 }
 
-/// Remove only what the address book owns, so a reload refreshes the file's
-/// rows and leaves everything else standing.
-///
-/// Contact Groups are never touched: a person builds those by hand, and losing
-/// them because the phone's contacts were refreshed would be a bug. Identities
-/// an import discovered survive too, which is what makes the email-handle
-/// special case unnecessary — an address book is phone-only, so email
-/// identities simply carry a different origin and are not the book's to
-/// remove.
-async fn delete_address_book_contacts(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
-    let book = Origin::AddressBook.as_str();
-    sqlx::query(
-        "DELETE FROM contact_group_members
-         WHERE contact_id IN (SELECT id FROM contacts WHERE account_id = $1 AND origin = $2)",
-    )
-    .bind(account_id)
-    .bind(book)
-    .execute(&mut *conn)
-    .await?;
-    sqlx::query("DELETE FROM contact_handles WHERE account_id = $1 AND origin = $2")
-        .bind(account_id)
-        .bind(book)
-        .execute(&mut *conn)
-        .await?;
-    sqlx::query("DELETE FROM handles WHERE account_id = $1 AND origin = $2")
-        .bind(account_id)
-        .bind(book)
-        .execute(&mut *conn)
-        .await?;
-    sqlx::query("DELETE FROM contacts WHERE account_id = $1 AND origin = $2")
-        .bind(account_id)
-        .bind(book)
-        .execute(&mut *conn)
-        .await?;
-    Ok(())
-}
-
-/// Load contacts from a vCard CSV export (First Name, Last Name, Phone columns).
-async fn load_from_vcard_csv(
-    conn: &mut AnyConnection,
-    csv_path: &Path,
-    account_id: i64,
-) -> Result<ContactLoadStats> {
+/// Drafts from a vCard CSV export (First Name, Last Name, Phone columns).
+fn drafts_from_vcard_csv(csv_path: &Path) -> Result<Vec<ContactDraft>> {
     let rows = read_vcard_csv_rows(csv_path)
         .with_context(|| format!("failed to read contacts CSV {}", csv_path.display()))?;
     let mut drafts = Vec::new();
@@ -516,16 +471,11 @@ async fn load_from_vcard_csv(
             preferred_name,
         });
     }
-
-    insert_contact_drafts(conn, account_id, drafts).await
+    Ok(drafts)
 }
 
-/// Load contacts from a VCF file.
-async fn load_from_vcf(
-    conn: &mut AnyConnection,
-    vcf_path: &Path,
-    account_id: i64,
-) -> Result<ContactLoadStats> {
+/// Drafts from a VCF file.
+fn drafts_from_vcf(vcf_path: &Path) -> Result<Vec<ContactDraft>> {
     let cards = parse_vcf(vcf_path)?;
     let mut drafts = Vec::new();
     for card in cards {
@@ -584,8 +534,7 @@ async fn load_from_vcf(
             preferred_name,
         });
     }
-
-    insert_contact_drafts(conn, account_id, drafts).await
+    Ok(drafts)
 }
 
 /// Collapse runs of whitespace to one space.
@@ -593,8 +542,10 @@ fn collapse_inner_whitespace(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// The contact this account already has for one of the card's phones, with
-/// where that contact came from.
+/// The contact this account already has for one of the card's phones among
+/// the contacts of the given origins, with where that contact came from.
+/// Origins are tried in the order given, so the caller decides which kind of
+/// contact wins a phone.
 ///
 /// A card and an existing contact that share a phone are the same person, so
 /// the book joins that contact rather than standing a second one beside it.
@@ -604,42 +555,59 @@ fn collapse_inner_whitespace(s: &str) -> String {
 /// row. Whether the book gets to rename what it adopts is a separate question,
 /// which the returned origin answers.
 ///
-/// `address_book` rows are deliberately not matched: those are the book's own
-/// and are deleted and rebuilt on every load.
-///
 /// The identity stays the import's — `origin` is left alone — because the
 /// messages are what proved the person exists, and a later book that drops the
 /// card must not take them with it.
-async fn adoptable_contact_for_draft(
+async fn contact_for_draft(
     conn: &mut AnyConnection,
     account_id: i64,
     phones: &[(String, Option<String>)],
+    origins: &[Origin],
 ) -> Result<Option<(i64, String)>> {
-    for (phone, _note) in phones {
-        let found: Option<(i64, String)> = sqlx::query_as(
-            "SELECT ch.contact_id, c.origin
-             FROM contact_handles ch
-             JOIN handles h ON h.id = ch.handle_id
-             JOIN contacts c ON c.id = ch.contact_id
-             WHERE ch.account_id = $1
-               AND h.normalized = $2
-               AND h.handle_type = 'phone'
-               AND c.origin IN ('import', 'user')
-             LIMIT 1",
-        )
-        .bind(account_id)
-        .bind(phone)
-        .fetch_optional(&mut *conn)
-        .await?;
-        if found.is_some() {
-            return Ok(found);
+    for origin in origins {
+        for (phone, _note) in phones {
+            let found: Option<(i64, String)> = sqlx::query_as(
+                "SELECT ch.contact_id, c.origin
+                 FROM contact_handles ch
+                 JOIN handles h ON h.id = ch.handle_id
+                 JOIN contacts c ON c.id = ch.contact_id
+                 WHERE ch.account_id = $1
+                   AND h.normalized = $2
+                   AND h.handle_type = 'phone'
+                   AND c.origin = $3
+                 LIMIT 1",
+            )
+            .bind(account_id)
+            .bind(phone)
+            .bind(origin.as_str())
+            .fetch_optional(&mut *conn)
+            .await?;
+            if found.is_some() {
+                return Ok(found);
+            }
         }
     }
     Ok(None)
 }
 
-/// Insert the drafts as contacts, handles, and group links inside one transaction, merging drafts that share a phone.
-async fn insert_contact_drafts(
+/// Bring the account's address-book contacts in line with the cards in the
+/// file, inside one transaction.
+///
+/// Each card first looks for a contact an import discovered or the person
+/// typed, and joins it. Failing that it looks for the book's own contact on
+/// one of its phones and updates that row in place: the name and the phones
+/// change, the id does not, so the Contact Groups the person put the contact
+/// in, the conversations it takes part in, and the record of the import that
+/// met it all stay attached. Only a card that matches nothing makes a new
+/// contact, and only a book contact that no card matches is deleted. A card
+/// whose number changed between two loads therefore reads as one contact
+/// gone and one arrived, because nothing else ties the two together.
+///
+/// Contact Groups themselves are never touched: a person builds those by
+/// hand. Identities an import discovered are not the book's to remove, and
+/// the book's own identities stay when a conversation, a message, or the
+/// account's profile uses them; only a stale identity nothing uses goes.
+async fn apply_address_book(
     conn: &mut AnyConnection,
     account_id: i64,
     drafts: Vec<ContactDraft>,
@@ -648,13 +616,19 @@ async fn insert_contact_drafts(
     let drafts = merge_duplicate_phone_drafts(drafts);
     let mut tx = conn.begin().await?;
 
+    let mut kept: Vec<i64> = Vec::new();
     for draft in drafts {
         // A card with no name leaves the preferred name empty rather than
         // storing the literal word "Unknown" as someone's name; the contact is
         // then Unknown by the computed rule, which is the same thing said once.
         let preferred_name = draft.preferred_name.as_deref().unwrap_or("");
-        let contact_id = if let Some((existing, _origin)) =
-            adoptable_contact_for_draft(&mut tx, account_id, &draft.phones).await?
+        let contact_id = if let Some((existing, _origin)) = contact_for_draft(
+            &mut tx,
+            account_id,
+            &draft.phones,
+            &[Origin::Import, Origin::User],
+        )
+        .await?
         {
             // A card that lists a number without a name has nothing to
             // say about who that person is, and a name the person typed
@@ -668,6 +642,29 @@ async fn insert_contact_drafts(
             )
             .await?;
             existing
+        } else if let Some((own, _origin)) =
+            contact_for_draft(&mut tx, account_id, &draft.phones, &[Origin::AddressBook]).await?
+        {
+            // The book owns this row, so the card's name is the name, even
+            // an empty one.
+            let renamed = sqlx::query(
+                "UPDATE contacts SET preferred_name = $1
+                 WHERE account_id = $2 AND id = $3 AND preferred_name <> $1",
+            )
+            .bind(preferred_name)
+            .bind(account_id)
+            .bind(own)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected()
+                > 0;
+            let unlinked =
+                unlink_phones_the_card_dropped(&mut tx, account_id, own, &draft.phones).await?;
+            if renamed || unlinked {
+                touch_contact(&mut tx, account_id, own).await?;
+            }
+            kept.push(own);
+            own
         } else {
             let created: i64 = sqlx::query_scalar(
                 "INSERT INTO contacts (account_id, preferred_name, origin)
@@ -677,6 +674,7 @@ async fn insert_contact_drafts(
             .bind(preferred_name)
             .fetch_one(&mut *tx)
             .await?;
+            kept.push(created);
             created
         };
         stats.contacts += 1;
@@ -703,11 +701,15 @@ async fn insert_contact_drafts(
             .fetch_one(&mut *tx)
             .await?;
 
-            // Link contact to handle
+            // Link contact to handle. A phone another book contact still
+            // holds moves to this one, since the file now says it is this
+            // card's; a link an import or the person made is left alone.
             sqlx::query(
                 "INSERT INTO contact_handles (account_id, handle_id, contact_id, origin)
                  VALUES ($1, $2, $3, 'address_book')
-                 ON CONFLICT DO NOTHING",
+                 ON CONFLICT (account_id, handle_id) DO UPDATE
+                     SET contact_id = excluded.contact_id
+                     WHERE contact_handles.origin = 'address_book'",
             )
             .bind(account_id)
             .bind(handle_id)
@@ -721,8 +723,81 @@ async fn insert_contact_drafts(
         }
     }
 
+    // Book contacts no card matched: the person is out of the file, so the
+    // row goes, and with it this contact's memberships, participant links,
+    // and import records.
+    let own: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM contacts WHERE account_id = $1 AND origin = $2")
+            .bind(account_id)
+            .bind(Origin::AddressBook.as_str())
+            .fetch_all(&mut *tx)
+            .await?;
+    for id in own.into_iter().filter(|id| !kept.contains(id)) {
+        sqlx::query("DELETE FROM contacts WHERE account_id = $1 AND id = $2")
+            .bind(account_id)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    remove_unused_book_handles(&mut tx, account_id).await?;
+
     tx.commit().await?;
     Ok(stats)
+}
+
+/// Drop the book's links from `contact_id` to phones the card no longer
+/// lists. Returns whether anything changed.
+async fn unlink_phones_the_card_dropped(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    contact_id: i64,
+    phones: &[(String, Option<String>)],
+) -> Result<bool> {
+    let linked: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT ch.handle_id, h.normalized
+         FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id
+         WHERE ch.account_id = $1 AND ch.contact_id = $2 AND ch.origin = 'address_book'",
+    )
+    .bind(account_id)
+    .bind(contact_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut changed = false;
+    for (handle_id, normalized) in linked {
+        if phones.iter().any(|(phone, _)| *phone == normalized) {
+            continue;
+        }
+        sqlx::query("DELETE FROM contact_handles WHERE account_id = $1 AND handle_id = $2")
+            .bind(account_id)
+            .bind(handle_id)
+            .execute(&mut *conn)
+            .await?;
+        changed = true;
+    }
+    Ok(changed)
+}
+
+/// Remove the book's identities that no contact holds and nothing refers to.
+///
+/// An identity a conversation, a message, a reaction, or the account's own
+/// profile uses stays even when the book dropped it, the same way deleting a
+/// contact keeps its conversations: the messages are what proved the identity
+/// exists. Deleting it would take the conversation with it.
+async fn remove_unused_book_handles(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
+    sqlx::query(
+        "DELETE FROM handles
+         WHERE account_id = $1 AND origin = 'address_book'
+           AND NOT EXISTS (SELECT 1 FROM contact_handles ch WHERE ch.handle_id = handles.id)
+           AND NOT EXISTS (SELECT 1 FROM participants p WHERE p.handle_id = handles.id)
+           AND NOT EXISTS (SELECT 1 FROM conversations c WHERE c.chat_handle_id = handles.id)
+           AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.sender_handle_id = handles.id)
+           AND NOT EXISTS (SELECT 1 FROM tapbacks t WHERE t.sender_handle_id = handles.id)
+           AND NOT EXISTS (SELECT 1 FROM account_handles ah WHERE ah.handle_id = handles.id)",
+    )
+    .bind(account_id)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
 }
 
 /// Merge address-book rows that share any phone, including transitive overlaps.

@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS contacts (
     -- a contact with identities and no preferred name is Unknown.
     preferred_name TEXT NOT NULL,
     -- Where this row came from: 'address_book', 'import', or 'user'. Loading
-    -- an address book replaces only the rows the address book owns.
+    -- an address book updates the rows it owns in place, keeping their ids,
+    -- and deletes only the ones the file no longer lists.
     origin TEXT NOT NULL DEFAULT 'user',
     -- When the row was first recorded. Stored and queryable; not displayed.
     created_at TEXT NOT NULL DEFAULT (datetime('now')),

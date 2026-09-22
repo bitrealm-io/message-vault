@@ -43,11 +43,10 @@ pub(crate) fn packaging_suffix_from_stem(stem: &str) -> Option<String> {
 
 /// Load attachment bytes from in-memory data or from `output_dir` + relative path.
 ///
-/// Missing paths yield an empty buffer. IO failures return an error.
-pub(crate) fn load_attachment_bytes_strict(
-    att: &IrAttachment,
-    output_dir: &Path,
-) -> Result<Vec<u8>> {
+/// Missing paths yield an empty buffer. IO failures return an error. The
+/// loader every writer that embeds attachment bytes uses, including the
+/// merged archives other crates implement.
+pub fn load_attachment_bytes(att: &IrAttachment, output_dir: &Path) -> Result<Vec<u8>> {
     if let Some(b) = &att.bytes {
         return Ok(b.clone());
     }
@@ -140,7 +139,7 @@ mod tests {
         att.bytes = Some(vec![1, 2, 3]);
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(
-            load_attachment_bytes_strict(&att, dir.path()).unwrap(),
+            load_attachment_bytes(&att, dir.path()).unwrap(),
             vec![1, 2, 3]
         );
     }
@@ -154,10 +153,7 @@ mod tests {
         let mut f = fs::File::create(&path).unwrap();
         f.write_all(b"hello").unwrap();
         let att = att_with_path(rel);
-        assert_eq!(
-            load_attachment_bytes_strict(&att, dir.path()).unwrap(),
-            b"hello"
-        );
+        assert_eq!(load_attachment_bytes(&att, dir.path()).unwrap(), b"hello");
     }
 
     #[test]

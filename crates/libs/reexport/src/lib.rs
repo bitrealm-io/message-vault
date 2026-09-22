@@ -4,14 +4,15 @@ use anyhow::{Context, Result, bail};
 use media::{CompressOptions, MediaMode};
 use message_ir::ConversationDocument;
 use message_ir_format::{
-    CSV_HEADERS, ExportTransforms, FormatSink, FormatSinkResult, SbrArchive, SbrReadOptions,
-    clean_previous_ir_output, read_conversation_csv, read_conversation_eml_dir,
-    read_conversation_json, read_conversation_jsonl, read_conversation_mbox, read_sbr_documents,
+    CSV_HEADERS, ExportTransforms, FormatSink, FormatSinkResult, clean_previous_ir_output,
+    read_conversation_csv, read_conversation_eml_dir, read_conversation_json,
+    read_conversation_jsonl, read_conversation_mbox,
 };
 pub use message_vault_io_core::RunResult;
 use message_vault_io_core::{
     ExporterConfig, MediaConfig, OutputFormat, document_messages, stage_conversation_attachments,
 };
+use sms_backup_restore_exporter::{ReadOptions, SbrArchive, read_backup};
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -164,9 +165,9 @@ fn load_documents(
 ) -> Result<Vec<ConversationDocument>> {
     if detected.format == OutputFormat::Xml {
         let attachments_dir = config.output.join("attachments");
-        let (documents, report) = read_sbr_documents(
+        let (documents, report) = read_backup(
             input_dir,
-            SbrReadOptions {
+            ReadOptions {
                 owner_phones: &[],
                 attachments_dir: Some(&attachments_dir),
                 copy_attachments,

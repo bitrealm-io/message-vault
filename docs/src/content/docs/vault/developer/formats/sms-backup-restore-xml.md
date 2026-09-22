@@ -26,11 +26,11 @@ This is the same family of files that [SMS Backup & Restore](https://www.synctec
 | Piece | Crate / API |
 |-------|-------------|
 | XML codec (streaming read/write, SMIL, MMS media) | [`message-sbr`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/sbr/) |
-| SBR → common message | [`message_ir_format::read_sbr_documents`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/ir-format/src/read_sbr.rs) |
-| Common message → SBR + export sink | [`message_ir_format::FormatSink`](https://github.com/bitrealm-io/message-vault/tree/main/crates/libs/ir-format) (XML uses `SbrBackupSession` internally) |
-| CLI / GUI | `--format xml` / `OutputFormat::Xml` |
+| SBR → common message | [`sms_backup_restore_exporter::read_backup`](https://github.com/bitrealm-io/message-vault/blob/main/crates/exporters/sms-backup-restore-exporter/src/read.rs) |
+| Common message → SBR | [`sms_backup_restore_exporter::SbrArchive`](https://github.com/bitrealm-io/message-vault/blob/main/crates/exporters/sms-backup-restore-exporter/src/write.rs), a `MergedArchive` the caller hands to [`message_ir_format::FormatSink::with_archive`](https://github.com/bitrealm-io/message-vault/tree/main/crates/libs/ir-format) |
+| Desktop | `OutputFormat::Xml` |
 
-Exporters use `FormatSink::open` → `write_document` per conversation → `finish`. Do **not** call `write_format(..., Xml, …)` (returns an error — a single shared file cannot be safely rewritten per chat).
+The exporter crate owns the format in both directions; `message-ir-format` knows only that a merged archive exists. A caller that wants `smses.xml` opens a `FormatSink` (or `ExportWriter`), calls `with_archive(Box::new(SbrArchive))`, writes each conversation with `write_document`, and calls `finish`. Asking for XML without the archive is refused at `finish`, and `write_format(..., Xml, …)` returns an error, because a single shared file cannot be rewritten per chat.
 
 ## Mapping rules
 

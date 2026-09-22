@@ -454,7 +454,7 @@ pub fn document_to_mail_messages(
     for msg in &doc.messages {
         let mut attachments = Vec::with_capacity(msg.attachments.len());
         for a in &msg.attachments {
-            let bytes = util::load_attachment_bytes_strict(a, output_dir)?;
+            let bytes = util::load_attachment_bytes(a, output_dir)?;
             attachments.push(MailAttachment {
                 bytes,
                 meta: a.into(),

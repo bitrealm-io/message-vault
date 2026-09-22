@@ -26,7 +26,7 @@ const EXPORT_TOOL_VERSION: &str = "10.26.003";
 
 /// Counts from parsing SMS Backup & Restore XML into conversation documents.
 #[derive(Debug, Default)]
-pub struct SbrReadReport {
+pub struct ReadReport {
     /// Number of conversation documents produced.
     pub conversations: u64,
     /// SMS elements parsed.
@@ -57,9 +57,9 @@ pub struct SbrReadReport {
     pub errors: Vec<String>,
 }
 
-/// Options for [`read_sbr_documents`].
+/// Options for [`read_backup`].
 #[derive(Debug)]
-pub struct SbrReadOptions<'a> {
+pub struct ReadOptions<'a> {
     /// Known owner phone numbers (empty triggers inference).
     pub owner_phones: &'a [String],
     /// Date window messages must fall inside.
@@ -138,7 +138,7 @@ fn collect_xml_paths(input: &Path) -> Result<Vec<PathBuf>> {
 }
 
 /// Add one file's parse counts onto the report.
-fn merge_stats(report: &mut SbrReadReport, stats: ParseStats) {
+fn merge_stats(report: &mut ReadReport, stats: ParseStats) {
     report.sms_seen += stats.sms_seen;
     report.mms_seen += stats.mms_seen;
     report.skipped_invalid_date += stats.skipped_invalid_date;
@@ -166,8 +166,8 @@ fn queue_attachments(blobs: &[AttachmentBlob], keep_bytes: bool) -> Vec<PendingA
 /// Write queued attachment bytes after every conversation is built.
 fn stage_read_attachments(
     documents: &mut [ConversationDocument],
-    options: &SbrReadOptions<'_>,
-    report: &mut SbrReadReport,
+    options: &ReadOptions<'_>,
+    report: &mut ReadReport,
 ) -> Result<()> {
     let payloads: Vec<Option<Vec<u8>>> = documents
         .iter()
@@ -305,7 +305,7 @@ fn to_document(
     id: &str,
     conversation: &PendingConversation,
     owner_handle: Option<&str>,
-    report: &mut SbrReadReport,
+    report: &mut ReadReport,
 ) -> ConversationDocument {
     let export = ExportMeta {
         source: EXPORT_SOURCE.into(),
@@ -448,10 +448,10 @@ fn ir_participants(conversation: &PendingConversation) -> Vec<IrParticipant> {
 ///
 /// Returns an error when no XML files are found, owner phones cannot be
 /// inferred, or a file cannot be parsed.
-pub fn read_sbr_documents(
+pub fn read_backup(
     input: &Path,
-    options: SbrReadOptions<'_>,
-) -> Result<(Vec<ConversationDocument>, SbrReadReport)> {
+    options: ReadOptions<'_>,
+) -> Result<(Vec<ConversationDocument>, ReadReport)> {
     let paths = collect_xml_paths(input)?;
     let mut owner_phones = options.owner_phones.to_vec();
     if owner_phones.is_empty() {
@@ -482,7 +482,7 @@ pub fn read_sbr_documents(
         // from_phones guarantees at least one phone handle in the set.
         (owners.all_phone_digits(), owners.primary_owner_handle())
     };
-    let mut report = SbrReadReport::default();
+    let mut report = ReadReport::default();
     let mut conversations = BTreeMap::new();
     for path in paths {
         check_cancel(options.cancel)?;
@@ -542,15 +542,15 @@ pub fn read_sbr_documents(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SbrBackupSession;
+    use crate::write::SbrBackupSession;
     use std::fs;
 
     fn opts<'a>(
         owner_phones: &'a [String],
         attachments_dir: Option<&'a Path>,
         copy_attachments: bool,
-    ) -> SbrReadOptions<'a> {
-        SbrReadOptions {
+    ) -> ReadOptions<'a> {
+        ReadOptions {
             owner_phones,
             attachments_dir,
             copy_attachments,
@@ -574,7 +574,7 @@ mod tests {
         fs::write(&input, r#"<smses><mms date="1400773400000" msg_box="2" address="+15555550101" extra="yes"><parts><part seq="0" ct="image/jpeg" name="pic.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550100" type="137" charset="106"/><addr address="+15555550101" type="151"/></addrs></mms></smses>"#).unwrap();
         let output = dir.path().join("output");
         let stage = output.join("attachments");
-        let (docs, report) = read_sbr_documents(&input, opts(&[], Some(&stage), true)).unwrap();
+        let (docs, report) = read_backup(&input, opts(&[], Some(&stage), true)).unwrap();
         assert_eq!(report.attachments_saved, 1);
         let staged: Vec<_> = fs::read_dir(&stage)
             .unwrap()
@@ -613,7 +613,7 @@ mod tests {
         .unwrap();
         let output = dir.path().join("output");
         let stage = output.join("attachments");
-        let (docs, report) = read_sbr_documents(&input, opts(&[], Some(&stage), true)).unwrap();
+        let (docs, report) = read_backup(&input, opts(&[], Some(&stage), true)).unwrap();
         assert_eq!(report.attachments_saved, 1);
         let mut writer = SbrBackupSession::create(&output).unwrap();
         writer.append_document(&docs[0]).unwrap();
@@ -633,7 +633,7 @@ mod tests {
         )
         .unwrap();
         fs::write(input.join("broken.xml"), "<smses><mms date=").unwrap();
-        let (docs, report) = read_sbr_documents(&input, opts(&[], None, false)).unwrap();
+        let (docs, report) = read_backup(&input, opts(&[], None, false)).unwrap();
         assert_eq!(docs[0].export.owner_handle.as_deref(), Some("+15555550100"));
         assert_eq!(report.errors.len(), 1);
     }
@@ -648,7 +648,7 @@ mod tests {
         )
         .unwrap();
         let owner = vec!["+15555550100".to_string()];
-        let (docs, report) = read_sbr_documents(&input, opts(&owner, None, false)).unwrap();
+        let (docs, report) = read_backup(&input, opts(&owner, None, false)).unwrap();
         assert_eq!(docs.len(), 1);
         assert_eq!(docs[0].messages.len(), 1);
         assert_eq!(docs[0].messages[0].text, "kept");
@@ -668,7 +668,7 @@ mod tests {
 
         let mut options = opts(&[], Some(&stage), true);
         options.stage_attachments = false;
-        let (docs, report) = read_sbr_documents(&input, options).unwrap();
+        let (docs, report) = read_backup(&input, options).unwrap();
 
         let att = &docs[0].messages[0].attachments[0];
         assert_eq!(

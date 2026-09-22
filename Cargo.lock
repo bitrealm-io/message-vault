@@ -1862,7 +1862,6 @@ name = "message-ir-format"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "contacts",
  "csv",
  "fs2",
  "mail",
@@ -1872,7 +1871,6 @@ dependencies = [
  "message-vault-io-core",
  "obfuscate",
  "phone",
- "sbr",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -1890,6 +1888,7 @@ dependencies = [
  "message-ir-format",
  "message-vault-io-core",
  "serde_json",
+ "sms-backup-restore-exporter",
  "tempfile",
 ]
 
@@ -3028,9 +3027,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "media",
+ "message-csv",
  "message-ir",
  "message-ir-format",
  "message-vault-io-core",
+ "phone",
+ "sbr",
  "serde_json",
  "tempfile",
 ]

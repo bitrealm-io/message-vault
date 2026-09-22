@@ -695,10 +695,11 @@ async function finishImport(args: {
       return { ...step, durationMs: duration };
     }),
   );
+  const ok = outcome !== "failed" && outcome !== "canceled";
   if (sessionId && !skipComplete) {
     try {
       await completeImport(sessionId, {
-        ok: outcome !== "failed" && outcome !== "canceled",
+        ok,
         status: outcome,
         message_count: pushReport?.messages_inserted,
         attachment_count: pushReport?.assets_uploaded,
@@ -725,9 +726,33 @@ async function finishImport(args: {
       // Completing the run on the vault is optional. The summary still shows local results.
     }
   }
+  // Once the vault holds the import, the staging directory is a second,
+  // unprotected copy of the person's messages in a temp folder, so it goes:
+  // the push log, journal and report with it. The vault's own import record
+  // (counts, timings, issues) is what stays. A failed or cancelled run keeps
+  // its folder, since the staged files are what a retry would read.
+  const stagingDir = ok ? await deleteStagingAfterSuccess() : store.get().stagingDir;
   // The vault writes this run's saved search and Contact Group when the run
   // completes, so a window closed mid-import still gets them.
-  store.set({ summaryView: finalSummary, phase: "done", running: false });
+  store.set({ summaryView: finalSummary, phase: "done", running: false, stagingDir });
+}
+
+/**
+ * Delete the finished run's staging directory. Returns the directory the
+ * screen should still show: `null` once the folder is gone, or the path when
+ * deleting failed, so the person can still find what was left behind.
+ */
+async function deleteStagingAfterSuccess(): Promise<string | null> {
+  const { stagingDir } = store.get();
+  if (stagingDir == null) return null;
+  try {
+    await invokeDeleteStaging({ staging_dir: stagingDir });
+    return null;
+  } catch {
+    // The import itself succeeded; the folder link stays so the person can
+    // remove what is left by hand.
+    return stagingDir;
+  }
 }
 
 /**

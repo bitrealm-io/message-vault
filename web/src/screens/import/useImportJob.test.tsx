@@ -493,6 +493,54 @@ describe("useImportJob wiring", () => {
     expect(result.current.phase).toBe("form");
   });
 
+  it("a successful import deletes its staging directory once the vault has recorded it", async () => {
+    resolveImportStagingDirMock.mockResolvedValue("/staging/run-3");
+    runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+    await act(() => result.current.approve());
+
+    expect(result.current.phase).toBe("done");
+    expect(result.current.summaryView?.status).toBe("completed");
+    expect(invokeDeleteStagingMock).toHaveBeenCalledWith({ staging_dir: "/staging/run-3" });
+    // The vault's record is written first; the folder goes after it.
+    expect(completeImportMock.mock.invocationCallOrder[0]).toBeLessThan(
+      invokeDeleteStagingMock.mock.invocationCallOrder[0] ?? 0,
+    );
+    // Nothing on the finished screen points at a folder that no longer exists.
+    expect(result.current.stagingDir).toBeNull();
+    expect(discardImportSessionMock).not.toHaveBeenCalled();
+  });
+
+  it("a failed import keeps its staging directory", async () => {
+    resolveImportStagingDirMock.mockResolvedValue("/staging/run-4");
+    runMock.mockImplementationOnce(
+      runResult({ summary: "Push finished.", report: failedReport() }),
+    );
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+    await act(() => result.current.approve());
+
+    expect(result.current.phase).toBe("done");
+    expect(result.current.summaryView?.status).toBe("failed");
+    expect(invokeDeleteStagingMock).not.toHaveBeenCalled();
+    expect(result.current.stagingDir).toBe("/staging/run-4");
+  });
+
+  it("a successful import still finishes when deleting the staging directory fails", async () => {
+    resolveImportStagingDirMock.mockResolvedValue("/staging/run-5");
+    runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
+    invokeDeleteStagingMock.mockRejectedValueOnce(new Error("permission denied"));
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+    await act(() => result.current.approve());
+
+    expect(result.current.phase).toBe("done");
+    expect(result.current.summaryView?.status).toBe("completed");
+    // The folder is still there, so the screen keeps pointing at it.
+    expect(result.current.stagingDir).toBe("/staging/run-5");
+  });
+
   it("approving at Gate 2 writes pushing carrying the recomputed summary, not Gate 1's", async () => {
     // Decision 15: the diff at Gate 2 is against what was approved at Gate
     // 1, but what gets approved when Gate 2 itself is approved is the

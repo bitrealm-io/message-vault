@@ -4,8 +4,10 @@
 //! `summarize_staging` recomputes what a staged folder holds so the first
 //! review can show it, `transcode_staging` runs the convert/compress pass the
 //! exporter deferred (see `extract::exporter_media_mode`), and
-//! `delete_staging` is the decline path — closing a review without approving
-//! deletes the staging folder outright.
+//! `delete_staging` removes the staging folder — when a review is closed
+//! without approving, when a resumable run is discarded, and when an import
+//! finishes successfully, since the vault then holds everything the folder
+//! held.
 //!
 //! `summarize_staging` and `transcode_staging` both build a
 //! [`message_ir_format::TranscodeOptions`] from the same form fields
@@ -331,9 +333,9 @@ pub struct DeleteStagingArgs {
     pub staging_root: String,
 }
 
-/// Delete a staging folder — the decline path's terminal action (Decision
-/// 16): closing a review without approving deletes the folder
-/// outright.
+/// Delete a staging folder: the decline path's terminal action (Decision
+/// 16), and the last step of a successful import, whose staged copy of the
+/// messages, push log, journal and report the vault has no further use for.
 ///
 /// Runs on the async task pool (`#[tauri::command(async)]`) rather than the
 /// main thread: `remove_dir_all` over a large staging folder would otherwise

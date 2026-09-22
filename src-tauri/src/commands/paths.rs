@@ -132,7 +132,7 @@ pub fn home_dir() -> Result<HomeDirInfo, String> {
 ///
 /// Only paths under `staging_root` are allowed. That is the Staging
 /// Directory from Settings (default `{home}/message-vault`), where staging
-/// folders and `vault-push.log` live.
+/// folders live, each with its `vault-push.log` while the run lasts.
 ///
 /// # Errors
 ///
@@ -157,12 +157,6 @@ pub(crate) fn missing_path_error(resolved: &Path) -> Result<(), String> {
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("path");
-    if name == "vault-push.log" {
-        return Err(
-            "vault-push.log is not written until upload starts. Try again after Upload to vault begins."
-                .to_string(),
-        );
-    }
     Err(format!("Nothing exists at {name} yet"))
 }
 
@@ -366,10 +360,12 @@ mod tests {
     }
 
     #[test]
-    fn missing_log_explains_upload_timing() {
+    fn missing_log_is_reported_like_any_other_missing_path() {
+        // The log is deleted with the staging directory once an import
+        // succeeds, so a missing log has nothing special to explain.
         let log = PathBuf::from("/home/sam/message-vault/staging-x/vault-push.log");
         let err = missing_path_error(&log).unwrap_err();
-        assert!(err.contains("upload starts"));
+        assert_eq!(err, "Nothing exists at vault-push.log yet");
     }
 
     #[test]

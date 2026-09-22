@@ -134,6 +134,13 @@ of, and a search that reads the same everywhere.
 
 ### Fixes
 
+- 2026-09-21: **A finished import no longer leaves its staging folder
+  behind.** Every import wrote a copy of the backup's messages and
+  attachments into the staging directory and left it there after the upload,
+  so each import added gigabytes to the folder. An import that succeeds now
+  deletes its staging folder, the import log with it; the run's record under
+  Settings → Storage → Import history keeps its counts, timings and errors. A
+  failed import still leaves the folder in place.
 - 2026-09-21: **An attachment gets the same filename on every computer.** The
   date at the front of an attachment's filename is now the message's time in
   UTC. It used to be the time zone of the computer running the export, so the

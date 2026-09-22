@@ -242,11 +242,15 @@ Approving continues the run; cancelling ends it and deletes what was staged.
 A run left at a review keeps waiting, on another screen or after the app is
 closed, until the person decides. The stop is named for what the person does
 there; "approve" stays the word for the decision that continues the run.
-_Avoid_: Gate, Approval (for the stop), Checkpoint, Confirmation, Deny**Staging Directory**:
+_Avoid_: Gate, Approval (for the stop), Checkpoint, Confirmation, Deny
+
+**Staging Directory**:
 The folder where Message Vault writes intermediate files that neither the
 person nor the vault keeps — a backup being prepared for import, or JSON
-Lines waiting to be converted into the format an export asked for. Its
-contents are deleted when the job finishes.
+Lines waiting to be converted into the format an export asked for. It is
+deleted when the job succeeds or is cancelled, the import log and resume
+journal with it; a failed import leaves it in place, since the staged files
+are what a retry reads.
 _Avoid_: Import Staging Directory, Temp Folder, Working Directory
 
 Extract is not a word for something a person does. It survives only as the

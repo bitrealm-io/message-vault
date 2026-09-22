@@ -11,7 +11,7 @@ use message_ir::{
     ExportMeta, HandleType, IrAttachment, IrParticipant, IrService, IrSource, PendingAttachment,
     PendingConversation, PendingMessage, ProjectionHooks, SortKeyUnit,
 };
-use message_ir_format::{AttachmentSource, ExportWriter};
+use message_staging::{AttachmentSource, ExportWriter};
 use message_vault_io_core::{
     CancelFlag, ExportReport, ExportTransforms, OutputFormat, project_conversation,
 };

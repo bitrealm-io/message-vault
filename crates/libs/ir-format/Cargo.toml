@@ -8,20 +8,16 @@ license = "LicenseRef-FCL-1.0-ALv2"
 [dependencies]
 anyhow = { workspace = true }
 csv = { workspace = true }
-fs2 = "0.4.3"
 message-csv = { path = "../csv" }
 message-vault-io-core = { path = "../../core/message-vault-io-core" }
 message-ir = { path = "../ir" }
 mail = { path = "../mail" }
 media = { path = "../media" }
 obfuscate = { path = "../obfuscate" }
-phone = { path = "../phone" }
-serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
 message-ir = { path = "../ir", features = ["testutil"] }
-sha2 = { workspace = true }
 tempfile = { workspace = true }
 
 [lints]

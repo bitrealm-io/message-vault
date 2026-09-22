@@ -14,6 +14,7 @@ go-sms-mms = { path = "../../libs/go-sms-mms" }
 message-vault-io-core = { path = "../../core/message-vault-io-core" }
 message-ir = { path = "../../libs/ir" }
 message-ir-format = { path = "../../libs/ir-format" }
+message-staging = { path = "../../libs/staging" }
 media = { path = "../../libs/media" }
 phone = { path = "../../libs/phone" }
 quick-xml = { workspace = true, features = ["serialize"] }

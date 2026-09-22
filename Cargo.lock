@@ -1083,6 +1083,7 @@ dependencies = [
  "media",
  "message-ir",
  "message-ir-format",
+ "message-staging",
  "message-vault-io-core",
  "phone",
  "quick-xml 0.42.0",
@@ -1542,6 +1543,7 @@ dependencies = [
  "message-csv",
  "message-ir",
  "message-ir-format",
+ "message-staging",
  "message-vault-io-core",
  "phone",
  "serde_json",
@@ -1574,6 +1576,7 @@ dependencies = [
  "imessage-reader-protocol",
  "message-ir",
  "message-ir-format",
+ "message-staging",
  "message-vault-io-core",
  "plist",
  "serde_json",
@@ -1863,17 +1866,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "csv",
- "fs2",
  "mail",
  "media",
  "message-csv",
  "message-ir",
  "message-vault-io-core",
  "obfuscate",
- "phone",
- "serde",
  "serde_json",
- "sha2 0.11.0",
  "tempfile",
 ]
 
@@ -1889,6 +1888,21 @@ dependencies = [
  "message-vault-io-core",
  "serde_json",
  "sms-backup-restore-exporter",
+ "tempfile",
+]
+
+[[package]]
+name = "message-staging"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fs2",
+ "media",
+ "message-ir",
+ "message-ir-format",
+ "message-vault-io-core",
+ "serde",
+ "sha2 0.11.0",
  "tempfile",
 ]
 
@@ -2096,6 +2110,7 @@ dependencies = [
  "message-csv",
  "message-ir",
  "message-ir-format",
+ "message-staging",
  "message-vault-io-core",
  "phone",
  "serde_json",
@@ -3012,6 +3027,7 @@ dependencies = [
  "media",
  "message-ir",
  "message-ir-format",
+ "message-staging",
  "message-vault-io-core",
  "phone",
  "rayon",
@@ -3030,6 +3046,7 @@ dependencies = [
  "message-csv",
  "message-ir",
  "message-ir-format",
+ "message-staging",
  "message-vault-io-core",
  "phone",
  "sbr",
@@ -4067,6 +4084,7 @@ dependencies = [
  "message-csv",
  "message-ir",
  "message-ir-format",
+ "message-staging",
  "message-vault-io-core",
  "phone",
  "serde",

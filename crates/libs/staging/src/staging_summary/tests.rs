@@ -1,7 +1,7 @@
 use super::*;
-use crate::write::write_conversation_jsonl_to;
 use media::CompressOptions;
 use message_ir::{HandleType, IrAttachment, IrParticipant};
+use message_ir_format::write_conversation_jsonl_to;
 
 fn summary_options() -> TranscodeOptions {
     TranscodeOptions {

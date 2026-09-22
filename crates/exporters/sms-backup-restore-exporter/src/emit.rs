@@ -4,7 +4,7 @@
 use crate::read::{ReadOptions, ReadReport, read_backup};
 use crate::write::SbrArchive;
 use anyhow::Result;
-use message_ir_format::{AttachmentSource, ExportWriter};
+use message_staging::{AttachmentSource, ExportWriter};
 use message_vault_io_core::{CancelFlag, ExportReport, ExportTransforms, OutputFormat};
 use std::path::Path;
 

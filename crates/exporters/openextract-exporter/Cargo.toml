@@ -15,6 +15,7 @@ message-csv = { path = "../../libs/csv" }
 message-vault-io-core = { path = "../../core/message-vault-io-core", features = ["testutil"] }
 message-ir = { path = "../../libs/ir" }
 message-ir-format = { path = "../../libs/ir-format" }
+message-staging = { path = "../../libs/staging" }
 media = { path = "../../libs/media" }
 phone = { path = "../../libs/phone" }
 serde_json = { workspace = true }

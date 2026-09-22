@@ -73,7 +73,7 @@ pub const CSV_HEADERS: &[&str] = &[
 ///
 /// Returns an error when the directory cannot be created, a file cannot be
 /// written, or `format` is a merged archive.
-pub(crate) fn write_format(
+pub fn write_format(
     output_dir: &Path,
     format: OutputFormat,
     mut doc: ConversationDocument,

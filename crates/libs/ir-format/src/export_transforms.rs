@@ -25,7 +25,7 @@ pub(crate) fn reload_attachment_bytes(doc: &mut ConversationDocument, output_dir
 }
 
 /// Drop attachment paths and bytes when the media mode is disabled, keeping the metadata.
-pub(crate) fn clear_attachments_when_disabled(doc: &mut ConversationDocument, mode: MediaMode) {
+pub fn clear_attachments_when_disabled(doc: &mut ConversationDocument, mode: MediaMode) {
     if !matches!(mode, MediaMode::Disabled) {
         return;
     }

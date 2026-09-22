@@ -5,13 +5,16 @@ description: Shared ConversationDocument schema, JSON and JSONL layout, and form
 
 **Common message** is the shared per-conversation structure after source parse and before packaging (CSV / EML / MBOX / JSON / JSONL / XML). End-user overview: [Export structure](/vault/developer/reference/export-structure/).
 
-Three crates:
+Four crates:
 
 | Package | Path | Owns |
 |---------|------|------|
-| **`message-ir`** | [`crates/libs/ir/`](https://github.com/bitrealm-io/message-vault/tree/main/crates/libs/ir) | Schema types only (`ConversationDocument`, `Ir*` bags, helpers) |
-| **`message-ir-format`** | [`crates/libs/ir-format/`](https://github.com/bitrealm-io/message-vault/tree/main/crates/libs/ir-format) | `FormatSink`, readers/writers, transforms, `CSV_HEADERS` |
+| **`message-ir`** | [`crates/libs/ir/`](https://github.com/bitrealm-io/message-vault/tree/main/crates/libs/ir) | Schema types only (`ConversationDocument`, `Ir*` bags, helpers) and the attachment path check |
+| **`message-ir-format`** | [`crates/libs/ir-format/`](https://github.com/bitrealm-io/message-vault/tree/main/crates/libs/ir-format) | `FormatSink`, readers/writers for JSON, JSON Lines, CSV, EML and MBOX, transforms, `CSV_HEADERS` |
+| **`message-staging`** | [`crates/libs/staging/`](https://github.com/bitrealm-io/message-vault/tree/main/crates/libs/staging) | The resumable write path: `ExportWriter`, the write queue, the transcode pass, the staging summary |
 | **`message-reexport`** | [`crates/libs/reexport/`](https://github.com/bitrealm-io/message-vault/tree/main/crates/libs/reexport) | Directory convert |
+
+The run model (`ExporterConfig`, `ExportReport`, `ExportTransforms`, `run_pipeline`) is `message-vault-io-core`, below all four. Why the split: [ADR 0012](https://github.com/bitrealm-io/message-vault/blob/main/docs/adr/0012-four-crates-in-the-export-pipeline.md).
 
 On-disk forms:
 

@@ -161,8 +161,11 @@ case into Convert would have to be undone.
   `contacts`, PR #641. (5) `ExportTransforms`, `run_pipeline` and
   `finish_run` live in `io-core`, and `FormatSinkResult` is gone: its media
   report and obfuscated count are fields of `ExportReport`, so a run has one
-  report and every write tail folds into it, PR #642. Step 6 has not
-  started.
+  report and every write tail folds into it, PR #642. (6) `message-staging`
+  exists at `crates/libs/staging` with `ExportWriter`, the write queue, the
+  transcode pass and the staging summary; `message-ir-format` keeps the
+  format readers and writers, `FormatSink` and the transforms, and its
+  manifest names only what they use, PR #643. All six steps have landed.
 - Nothing here is kept for compatibility. Public items are renamed, moved between
   crates and removed wherever the result is simpler, and tests are rewritten to
   match rather than preserved.

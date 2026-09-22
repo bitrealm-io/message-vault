@@ -11,7 +11,7 @@ use message_ir::{
     ExportMeta, HandleType, IrAttachment, IrService, IrSource, PendingAttachment,
     PendingConversation, PendingMessage, ProjectionHooks, ensure_conversation, parse_android_type,
 };
-use message_ir_format::{AttachmentSource, ExportWriter};
+use message_staging::{AttachmentSource, ExportWriter};
 use message_vault_io_core::{
     CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
 };

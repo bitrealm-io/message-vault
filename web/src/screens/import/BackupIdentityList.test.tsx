@@ -12,7 +12,7 @@ afterEach(() => {
 const profile = { phones: ["+15550001111"], emails: [] };
 
 describe("BackupIdentityList", () => {
-  it("is a table inside a stage: messages per identity, and Add only where the answer is No", () => {
+  it("is a table inside a stage: sent and received per identity, and Add only where the answer is No", () => {
     render(
       <BackupIdentityList
         identities={["+15550001111", "owner@example.com"]}
@@ -20,15 +20,16 @@ describe("BackupIdentityList", () => {
         onAdd={vi.fn()}
         messageCounts={[
           // Two spellings of one number count under the same identity.
-          { handle: "+15550001111", messages: 1200 },
-          { handle: "(555) 000-1111", messages: 34 },
-          { handle: "owner@example.com", messages: 7 },
+          { handle: "+15550001111", sent: 1200, received: 900 },
+          { handle: "(555) 000-1111", sent: 34, received: 1 },
+          { handle: "owner@example.com", sent: 0, received: 7 },
         ]}
       />,
     );
     expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
       "Identity",
-      "Messages",
+      "Sent",
+      "Received",
       "On your profile",
       "Action",
     ]);
@@ -37,8 +38,12 @@ describe("BackupIdentityList", () => {
       within(phone)
         .getAllByRole("cell")
         .map((cell) => cell.textContent),
-    ).toEqual(["+15550001111", "1,234", "Yes", ""]);
-    expect(within(email).getByText("7")).toBeInTheDocument();
+    ).toEqual(["+15550001111", "1,234", "901", "Yes", ""]);
+    expect(
+      within(email)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["owner@example.com", "0", "7", "No", "Add to profile"]);
     expect(within(email).getByText("No")).toBeInTheDocument();
     expect(within(email).getByRole("button", { name: "Add to profile" })).toBeInTheDocument();
     expect(screen.getAllByRole("button")).toHaveLength(1);

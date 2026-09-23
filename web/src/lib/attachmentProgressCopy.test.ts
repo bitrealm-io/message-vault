@@ -26,7 +26,7 @@ describe("formatAttachmentProgress", () => {
         bytesDone: 0,
         bytesTotal: 0,
       }),
-    ).toMatch(/^Converted 1\/1 attachments/);
+    ).toMatch(/^Converted attachments: 1\/1 /);
     expect(
       formatAttachmentProgress({
         mode: "skip",
@@ -35,6 +35,6 @@ describe("formatAttachmentProgress", () => {
         bytesDone: 0,
         bytesTotal: 0,
       }),
-    ).toBe("Skipped 0/0 attachments (0 B / 0 B)");
+    ).toBe("Skipped attachments: 0/0 (0 B / 0 B)");
   });
 });

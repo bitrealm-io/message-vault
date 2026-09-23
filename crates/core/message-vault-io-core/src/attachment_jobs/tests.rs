@@ -64,6 +64,44 @@ fn clone_writes_file_and_fills_hash() {
 }
 
 #[test]
+fn the_byte_total_ends_at_the_bytes_actually_copied() {
+    let dir = tempfile::tempdir().unwrap();
+    let att_dir = dir.path().join("attachments");
+    let mut smaller = empty_att("smaller.jpg");
+    let mut missing = empty_att("missing.jpg");
+    let progress = Mutex::new(Vec::new());
+    {
+        // The source said 100 bytes for a 10-byte file, and 50 for a file
+        // that is not there.
+        let mut jobs = [
+            AttachmentJob {
+                attachment: &mut smaller,
+                timestamp_unix_ms: 1_609_459_200_000,
+                size_hint: Some(100),
+            },
+            AttachmentJob {
+                attachment: &mut missing,
+                timestamp_unix_ms: 1_609_459_200_000,
+                size_hint: Some(50),
+            },
+        ];
+        run_attachment_jobs(
+            &mut jobs,
+            &att_dir,
+            &media_cfg(MediaMode::Clone),
+            |i| Ok((i == 0).then(|| b"ten bytes!".to_vec())),
+            |p| progress.lock().unwrap().push(p),
+            None,
+            None,
+        )
+        .unwrap();
+    }
+    let last = progress.lock().unwrap().last().cloned().unwrap();
+    assert_eq!(last.bytes_done, 10);
+    assert_eq!(last.bytes_total, 10, "the hints give way to the real sizes");
+}
+
+#[test]
 fn disabled_skips_without_loading() {
     let dir = tempfile::tempdir().unwrap();
     let att_dir = dir.path().join("attachments");
@@ -415,6 +453,7 @@ fn staging_a_conversation_writes_the_files_counts_them_and_frees_the_bytes() {
             message_kind: IrMessageKind::Mms,
             sender_handle: Some("+15555550101".into()),
             sender_display_name: None,
+            owner_handle: None,
             subject: None,
             text: "two files".into(),
             attachments: vec![first, second],
@@ -653,6 +692,7 @@ fn staging_frees_the_bytes_the_documents_were_carrying() {
             message_kind: IrMessageKind::Mms,
             sender_handle: None,
             sender_display_name: None,
+            owner_handle: None,
             subject: None,
             text: "one file".into(),
             attachments: vec![carried],

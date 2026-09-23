@@ -639,6 +639,7 @@ mod tests {
                 message_kind: IrMessageKind::Mms,
                 sender_handle: None,
                 sender_display_name: None,
+                owner_handle: None,
                 subject: None,
                 text: "hi".into(),
                 attachments: std::mem::take(&mut atts),

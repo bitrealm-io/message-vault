@@ -23,7 +23,7 @@ use imessage_reader_protocol::{
 use message_ir::{
     ConversationDocument, ConversationMeta, ExportMeta, HandleType, IrAttachment,
     IrConversationType, IrDirection, IrImessage, IrMessage, IrMessageKind, IrParticipant,
-    IrService, SCHEMA_VERSION, owner_sender,
+    IrService, SCHEMA_VERSION, nonempty, owner_sender,
 };
 use message_ir_format::FormatSink;
 use message_staging::{
@@ -243,6 +243,7 @@ fn message_to_ir(
     } else {
         IrDirection::Incoming
     };
+    let owner_handle = nonempty(&record.owner_handle);
     let (sender_handle, sender_display_name) = match direction {
         IrDirection::Outgoing => owner_sender(&ExportMeta {
             source: EXPORT_SOURCE.into(),
@@ -273,6 +274,7 @@ fn message_to_ir(
         message_kind: IrMessageKind::parse(&record.message_kind),
         sender_handle,
         sender_display_name,
+        owner_handle,
         subject: record.subject,
         text: record.text,
         attachments,
@@ -481,10 +483,12 @@ fn pending_to_document(
             .owner_display_name
             .or_else(|| use_caller_id.then(|| "Me".to_string())),
     };
+    // Each message keeps the address it was sent from; the conversation's
+    // owner fills in only where the database recorded none.
     let (owner_handle, owner_display_name) = owner_sender(&export);
     let mut messages = convo.messages;
     for msg in &mut messages {
-        if msg.direction == IrDirection::Outgoing {
+        if msg.direction == IrDirection::Outgoing && msg.sender_handle.is_none() {
             msg.sender_handle.clone_from(&owner_handle);
             msg.sender_display_name.clone_from(&owner_display_name);
         }
@@ -764,6 +768,7 @@ mod tests {
         assert_eq!(incoming.sender_handle.as_deref(), Some("+15555550122"));
         assert_eq!(incoming.service, IrService::IMessage);
         assert_eq!(incoming.message_kind, IrMessageKind::IMessage);
+        assert_eq!(incoming.owner_handle.as_deref(), Some("+15555550100"));
 
         let (outgoing, _) = message_to_ir(
             message_record("+15555550122", "g2", true),
@@ -773,6 +778,52 @@ mod tests {
         assert_eq!(outgoing.direction, IrDirection::Outgoing);
         assert_eq!(outgoing.sender_handle.as_deref(), Some("+15555550100"));
         assert_eq!(outgoing.sender_display_name.as_deref(), Some("Me"));
+    }
+
+    #[test]
+    fn outgoing_rows_keep_the_address_each_was_sent_from() {
+        let from_email = {
+            let mut record = message_record("+15555550122", "g1", true);
+            record.owner_handle = "owner@example.com".into();
+            message_to_ir(record, AttachmentEmbed::Embed, true).0
+        };
+        let from_phone = message_to_ir(
+            message_record("+15555550122", "g2", true),
+            AttachmentEmbed::Embed,
+            true,
+        )
+        .0;
+        let unrecorded = {
+            let mut record = message_record("+15555550122", "g3", true);
+            record.owner_handle = String::new();
+            message_to_ir(record, AttachmentEmbed::Embed, true).0
+        };
+        let convo = PendingConversation {
+            conversation_type: IrConversationType::Individual,
+            group_title: None,
+            participants: Vec::new(),
+            owner_handle: "owner@example.com".into(),
+            owner_display_name: None,
+            messages: vec![from_email, from_phone, unrecorded],
+            attachment_loads: Vec::new(),
+        };
+
+        let doc = pending_to_document("+15555550122".into(), convo, false);
+
+        let senders: Vec<_> = doc
+            .messages
+            .iter()
+            .map(|m| m.sender_handle.as_deref())
+            .collect();
+        assert_eq!(
+            senders,
+            vec![
+                Some("owner@example.com"),
+                Some("+15555550100"),
+                Some("owner@example.com"),
+            ],
+            "only the message with no address takes the conversation's owner"
+        );
     }
 
     /// A bare message carrying `count` attachments, for pairing tests.
@@ -785,6 +836,7 @@ mod tests {
             message_kind: IrMessageKind::IMessage,
             sender_handle: Some("+15555550101".into()),
             sender_display_name: None,
+            owner_handle: None,
             subject: None,
             text: "hi".into(),
             attachments: (0..count)

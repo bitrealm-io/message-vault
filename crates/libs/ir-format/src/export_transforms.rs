@@ -57,6 +57,9 @@ pub(crate) fn obfuscate_document(doc: &mut ConversationDocument, anon: &mut Obfu
         if let Some(h) = msg.sender_handle.as_mut() {
             *h = anon.obfuscate_handle(h);
         }
+        if let Some(h) = msg.owner_handle.as_mut() {
+            *h = anon.obfuscate_handle(h);
+        }
         if let Some(n) = msg.sender_display_name.as_mut() {
             if msg.direction == IrDirection::Outgoing && n == "Me" {
                 // Keep the conventional outgoing label.
@@ -191,6 +194,7 @@ mod tests {
                 message_kind: IrMessageKind::Sms,
                 sender_handle: Some("+15555550101".into()),
                 sender_display_name: Some("Sam".into()),
+                owner_handle: None,
                 subject: None,
                 text: "hi".into(),
                 attachments: vec![IrAttachment {
@@ -221,6 +225,21 @@ mod tests {
         assert!(
             doc.messages[0].source.is_none(),
             "obfuscated output must not carry vendor fields"
+        );
+    }
+
+    #[test]
+    fn obfuscate_replaces_the_owner_address_on_each_message() {
+        let mut doc = message_ir::testutil::sample_document("secret");
+        doc.messages[0].owner_handle = Some("+15555550100".into());
+        let mut anon = Obfuscator::new([7u8; 32]);
+        obfuscate_document(&mut doc, &mut anon);
+        let owner = doc.messages[0].owner_handle.as_deref();
+        assert_ne!(owner, Some("+15555550100"));
+        assert_eq!(
+            owner,
+            doc.export.owner_handle.as_deref(),
+            "one address becomes one fake address wherever it appears"
         );
     }
 

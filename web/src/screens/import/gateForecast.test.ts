@@ -24,7 +24,7 @@ function summary(forecasts: AttachmentForecast[]): StagingSummary {
     conversations: 1,
     messages: 1,
     contactIdentifiers: [],
-    outgoingHandles: [],
+    ownerHandles: [],
     attachments: forecasts.length,
     attachmentBytes: 0,
     verdictCounts: { fitsAsIs: 0, likelyFits: 0, mayGrow: 0, probablyTooBig: 0, cannotProcess: 0 },

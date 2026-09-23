@@ -21,21 +21,27 @@ export function identityOnProfile(
 }
 
 /**
- * Outgoing messages staged under one backup identity. A handle is the same
- * address as the identity when it matches the way a profile entry would, so
- * two spellings of one phone number count together.
+ * Messages staged under one backup identity, sent and received. A handle is
+ * the same address as the identity when it matches the way a profile entry
+ * would, so two spellings of one phone number count together.
  */
-export function identityMessageCount(
+export function identityMessageCounts(
   identity: string,
-  outgoingHandles: { handle: string; messages: number }[],
-): number {
-  const sentFrom =
+  ownerHandles: { handle: string; sent: number; received: number }[],
+): { sent: number; received: number } {
+  const address =
     identityService(identity) === "email"
       ? { phones: [], emails: [identity] }
       : { phones: [identity], emails: [] };
-  return outgoingHandles
-    .filter(({ handle }) => identityOnProfile(handle, sentFrom))
-    .reduce((total, { messages }) => total + messages, 0);
+  return ownerHandles
+    .filter(({ handle }) => identityOnProfile(handle, address))
+    .reduce(
+      (total, { sent, received }) => ({
+        sent: total.sent + sent,
+        received: total.received + received,
+      }),
+      { sent: 0, received: 0 },
+    );
 }
 
 /**

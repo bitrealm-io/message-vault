@@ -24,7 +24,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
 use anyhow::{Context, Result};
 use media::{CompressOptions, MediaMode};
-use message_ir::{ConversationDocument, IrAttachment};
+use message_ir::{ConversationDocument, IrAttachment, give_each_document_its_own_file};
 use message_vault_io_core::{
     AttachmentJob, CancelFlag, LogSink, MediaConfig, OutputFormat, ProgressEvent, ProgressSink,
     attachment_size_hint, emit_log, emit_progress, run_attachment_jobs,
@@ -185,7 +185,9 @@ pub fn load_attachment_source(source: &mut AttachmentSource) -> Result<Option<Ve
 struct UnitProgress {
     done: usize,
     bytes_done: u64,
-    bytes_total: u64,
+    /// How far this attachment moved the byte total: up or down by the
+    /// difference between its file and its size hint.
+    bytes_total_change: i64,
 }
 
 /// What one unit did. Byte and file counts travel through the progress
@@ -193,6 +195,11 @@ struct UnitProgress {
 struct UnitOutcome {
     written: bool,
     attachments_saved: usize,
+}
+
+/// A byte count as a signed number, for the difference between two of them.
+fn signed(bytes: u64) -> i64 {
+    i64::try_from(bytes).unwrap_or(i64::MAX)
 }
 
 /// Loads one attachment's bytes by source; `Ok(None)` marks it missing.
@@ -211,13 +218,14 @@ pub type AttachmentLoader<'a> =
 /// `"canceled"`.
 pub fn drain_write_queue_with_loader(
     output_dir: &Path,
-    units: Vec<ConversationUnit>,
+    mut units: Vec<ConversationUnit>,
     options: &WriteQueueOptions,
     load: &mut AttachmentLoader<'_>,
     log: Option<&LogSink>,
     progress: Option<&ProgressSink>,
     cancel: Option<&CancelFlag>,
 ) -> Result<WriteQueueReport> {
+    give_each_unit_its_own_file(&mut units)?;
     check_headroom(output_dir, &units)?;
     let attachments_dir = output_dir.join("attachments");
     let mut report = WriteQueueReport::default();
@@ -238,7 +246,11 @@ pub fn drain_write_queue_with_loader(
     let report_progress = |p: UnitProgress| {
         done.set(done.get() + p.done);
         bytes_done.set(bytes_done.get() + p.bytes_done);
-        bytes_total.set(bytes_total.get() + p.bytes_total);
+        bytes_total.set(
+            bytes_total
+                .get()
+                .saturating_add_signed(p.bytes_total_change),
+        );
         report_attachments(
             log,
             progress,
@@ -279,6 +291,13 @@ pub fn drain_write_queue_with_loader(
     Ok(report)
 }
 
+/// Give every unit a file name no other unit in the run has; see
+/// [`give_each_document_its_own_file`].
+fn give_each_unit_its_own_file(units: &mut [ConversationUnit]) -> Result<()> {
+    let mut docs: Vec<&mut ConversationDocument> = units.iter_mut().map(|u| &mut u.doc).collect();
+    give_each_document_its_own_file(&mut docs).map_err(anyhow::Error::msg)
+}
+
 /// Writers scale with the machine: writing is IO and hashing, and past a
 /// handful of threads the disk, not the CPU, sets the pace.
 pub fn default_writer_count() -> usize {
@@ -315,12 +334,13 @@ pub fn drain_units(
 /// cannot hold what the backup needs. A cancel surfaces as `"canceled"`.
 pub fn drain_write_queue(
     output_dir: &Path,
-    units: Vec<ConversationUnit>,
+    mut units: Vec<ConversationUnit>,
     options: &WriteQueueOptions,
     log: Option<&LogSink>,
     progress: Option<&ProgressSink>,
     cancel: Option<&CancelFlag>,
 ) -> Result<WriteQueueReport> {
+    give_each_unit_its_own_file(&mut units)?;
     check_headroom(output_dir, &units)?;
 
     let attachments_dir = output_dir.join("attachments");
@@ -353,7 +373,14 @@ pub fn drain_write_queue(
     let report_progress = |p: UnitProgress| {
         let d = done.fetch_add(p.done, Ordering::Relaxed) + p.done;
         let bd = bytes_done.fetch_add(p.bytes_done, Ordering::Relaxed) + p.bytes_done;
-        let bt = bytes_total.fetch_add(p.bytes_total, Ordering::Relaxed) + p.bytes_total;
+        let change = p.bytes_total_change.unsigned_abs();
+        let bt = if p.bytes_total_change >= 0 {
+            bytes_total.fetch_add(change, Ordering::Relaxed) + change
+        } else {
+            bytes_total
+                .fetch_sub(change, Ordering::Relaxed)
+                .saturating_sub(change)
+        };
         report_attachments(log, progress, d, total, bd, bt);
     };
 
@@ -646,12 +673,12 @@ fn write_one_unit(
     let path = output_dir.join(format!("{}.jsonl", doc.filename_stem()));
     if options.resume && path.is_file() {
         // Already written by an earlier run, attachments and all. Count its
-        // attachments as done — progress describes the whole import, not just
-        // this run's share of it — and load nothing.
+        // attachments and their bytes as done — progress describes the whole
+        // import, not just this run's share of it — and load nothing.
         on_progress(UnitProgress {
             done: attachment_count,
-            bytes_done: 0,
-            bytes_total: 0,
+            bytes_done: hint_sum,
+            bytes_total_change: 0,
         });
         return Ok(UnitOutcome {
             written: false,
@@ -691,7 +718,7 @@ fn write_one_unit(
     }
 
     let mut unit_bytes_done = 0_u64;
-    let mut unit_bytes_extra = 0_u64;
+    let mut unit_total_change = 0_i64;
     let mut reported_done = 0_usize;
     {
         let sources = &mut sources;
@@ -708,16 +735,16 @@ fn write_one_unit(
             },
             |p| {
                 // run_attachment_jobs reports this unit's running totals; the
-                // drain wants what each attachment added.
-                let extra = p.bytes_total.saturating_sub(hint_sum);
+                // drain wants what each attachment changed.
+                let total_change = signed(p.bytes_total) - signed(hint_sum);
                 on_progress(UnitProgress {
                     done: p.done.saturating_sub(reported_done),
                     bytes_done: p.bytes_done.saturating_sub(unit_bytes_done),
-                    bytes_total: extra.saturating_sub(unit_bytes_extra),
+                    bytes_total_change: total_change - unit_total_change,
                 });
                 reported_done = p.done;
                 unit_bytes_done = p.bytes_done;
-                unit_bytes_extra = extra;
+                unit_total_change = total_change;
             },
             None,
             cancel.map(|flag| flag.as_ref()),

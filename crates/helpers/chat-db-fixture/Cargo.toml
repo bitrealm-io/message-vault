@@ -5,7 +5,8 @@ edition = "2024"
 # Permissive on purpose, like the protocol crate: the GPL helper
 # (`imessage-reader`) and the FCL exporter (`imessage-ir-exporter`) both use
 # this crate in their tests. It links rusqlite and nothing else, so it carries
-# no GPL code into the exporter's test binary. Why: docs/agents/licences.md.
+# no GPL code into the exporter's test binary.
+# Why: docs/adr/0014-gpl-code-only-behind-a-process-boundary.md.
 license = "MIT OR Apache-2.0"
 description = "A small Apple Messages chat.db written with rusqlite, for the tests of the imessage-reader helper and the exporter that spawns it"
 repository = "https://github.com/bitrealm-io/message-vault"

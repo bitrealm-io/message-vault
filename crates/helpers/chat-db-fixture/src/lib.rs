@@ -4,7 +4,8 @@
 //! to reach the session, the emitter and the attachment code without building
 //! the binary, and `imessage-ir-exporter`, whose process-seam test spawns the
 //! built binary against it. The file is written with rusqlite alone, so the
-//! exporter's test binary links no GPL code (`docs/agents/licences.md`).
+//! exporter's test binary links no GPL code
+//! (`docs/adr/0014-gpl-code-only-behind-a-process-boundary.md`).
 //!
 //! Nothing here comes from a real backup. Every row is made up.
 

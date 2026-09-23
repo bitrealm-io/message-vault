@@ -16,7 +16,7 @@ EXPECTED_CARGO_LICENSE="LicenseRef-FCL-1.0-ALv2"
 # carries. The helper program links GPL code, so it is GPL; the protocol crate
 # is linked by both the GPL helper and the FCL app, and the chat.db fixture by
 # the tests of both, so those two are permissive. Every other crate is FCL.
-# Why: docs/agents/licences.md.
+# Why: docs/adr/0014-gpl-code-only-behind-a-process-boundary.md.
 declare -A LICENCE_EXCEPTIONS=(
   ["crates/helpers/imessage-reader/Cargo.toml"]="GPL-3.0-or-later"
   ["crates/helpers/imessage-reader-protocol/Cargo.toml"]="MIT OR Apache-2.0"

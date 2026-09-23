@@ -6,7 +6,7 @@ The app starts this program, writes one JSON request on its stdin, and reads JSO
 
 ## Why a separate program
 
-This crate links [`imessage-database`](https://crates.io/crates/imessage-database) and [`crabapple`](https://crates.io/crates/crabapple), which are GPL-3.0-or-later. Message Vault is under the Fair Core License, and the GPL does not allow the two to be distributed as one binary. A process boundary keeps the GPL on this side of it. The decision is [ADR 0014](../../../docs/adr/0014-gpl-code-only-behind-a-process-boundary.md) and the rules are [`docs/agents/licences.md`](../../../docs/agents/licences.md); the reasoning against ADR 0001's rule of no command line is in that ADR's amendment.
+This crate links [`imessage-database`](https://crates.io/crates/imessage-database) and [`crabapple`](https://crates.io/crates/crabapple), which are GPL-3.0-or-later. Message Vault is under the Fair Core License, and the GPL does not allow the two to be distributed as one binary. A process boundary keeps the GPL on this side of it. The decision and the rules that follow from it are [ADR 0014](../../../docs/adr/0014-gpl-code-only-behind-a-process-boundary.md); the reasoning against ADR 0001's rule of no command line is in that ADR's amendment.
 
 What lives here is the reading: opening the database, decrypting a backup, caching chats, handles, contacts and tapbacks, and classifying each row. Turning the records into the shared conversation structure, writing files, and media handling stay in [`imessage-ir-exporter`](../../exporters/imessage-ir-exporter/), which is FCL.
 

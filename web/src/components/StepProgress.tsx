@@ -137,7 +137,9 @@ export default function StepProgress({ steps, completionText, wide }: StepProgre
                   ) : null}
                 </div>
                 {step.detail ? (
-                  <div className="mt-0.5 text-[0.75rem] text-muted">{step.detail}</div>
+                  <div className="mt-0.5 whitespace-pre-line text-[0.75rem] text-muted">
+                    {step.detail}
+                  </div>
                 ) : null}
                 {step.content}
               </div>
@@ -161,7 +163,9 @@ export default function StepProgress({ steps, completionText, wide }: StepProgre
             <div className="min-w-0 max-w-[min(36rem,70vw)]">
               <div className={`text-[0.875rem] ${stepLabelClass(step.status)}`}>{step.label}</div>
               {step.detail ? (
-                <div className="mt-0.5 text-[0.75rem] text-muted">{step.detail}</div>
+                <div className="mt-0.5 whitespace-pre-line text-[0.75rem] text-muted">
+                  {step.detail}
+                </div>
               ) : null}
             </div>
             {step.durationMs != null ? (

@@ -384,6 +384,12 @@ type RunScratch = {
    */
   extractMediaMode: AttachmentMediaMode;
   lastAttachmentProgress: AttachmentProgressCounts | null;
+  /**
+   * The Staging row's latest line for each stage that reports on it. Reading
+   * messages, copying attachments, and writing conversation files run at the
+   * same time, so one shared line would flip between them on every event.
+   */
+  stagingLines: Partial<Record<StagingProgressStep, string>>;
   /** Guards approve and cancel against a double click doing the work twice. */
   reviewAction: boolean;
   /**
@@ -407,6 +413,7 @@ function freshScratch(): RunScratch {
     attachmentMode: "copy",
     extractMediaMode: "copy",
     lastAttachmentProgress: null,
+    stagingLines: {},
     reviewAction: false,
     startImport: false,
   };
@@ -470,6 +477,7 @@ function beginRun(form: ImportJobFormValues, firstStep: ImportIssue["step"]): vo
   scratch.timing = { ...EMPTY_TIMING };
   scratch.durations = { ...EMPTY_DURATIONS };
   scratch.lastAttachmentProgress = null;
+  scratch.stagingLines = {};
   scratch.attachmentMode = form.attachmentMedia;
   scratch.extractMediaMode = extractAttachmentMedia(form.attachmentMedia);
   scratch.form = form;
@@ -509,7 +517,7 @@ function applyProgress(event: ImportProgressEvent): void {
   // what "parse" names in the Import Errors list.
   scratch.activeStep = event.step === "setup" ? "parse" : event.step;
 
-  const detail = progressDetail(event);
+  const detail = rowDetail(event);
   const done = isProgressStepComplete(event.step, event.done, event.total);
 
   updateSteps((current) =>
@@ -527,7 +535,38 @@ function applyProgress(event: ImportProgressEvent): void {
   );
 }
 
-/** The row's detail line for one progress event. */
+/** The progress steps that report on the Staging row. */
+type StagingProgressStep = Extract<
+  ImportProgressEvent["step"],
+  "setup" | "parse" | "attachments" | "prepare"
+>;
+
+/** The Staging row's steps in the order their lines show. */
+const STAGING_LINE_ORDER: readonly StagingProgressStep[] = [
+  "setup",
+  "parse",
+  "attachments",
+  "prepare",
+];
+
+function isStagingProgressStep(step: ImportProgressEvent["step"]): step is StagingProgressStep {
+  return (STAGING_LINE_ORDER as readonly string[]).includes(step);
+}
+
+/**
+ * The row's detail for one progress event. On the Staging row this event
+ * updates its own line and leaves the others in place; the setup line goes
+ * once messages are being read, since setup is over by then.
+ */
+function rowDetail(event: ImportProgressEvent): string {
+  const line = progressDetail(event);
+  if (!isStagingProgressStep(event.step)) return line;
+  scratch.stagingLines = { ...scratch.stagingLines, [event.step]: line };
+  if (event.step !== "setup") delete scratch.stagingLines.setup;
+  return STAGING_LINE_ORDER.flatMap((step) => scratch.stagingLines[step] ?? []).join("\n");
+}
+
+/** The detail line for one progress event. */
 function progressDetail(event: ImportProgressEvent): string {
   if (event.step === "setup") return setupDetail(event);
   if (event.step === "attachments") {

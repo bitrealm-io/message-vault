@@ -45,18 +45,6 @@ export function identityMessageCounts(
 }
 
 /**
- * The owner's addresses an import's form names, for a source that is not
- * read for them: the phones an Android SMS source requires. SMS Backup+'s
- * owner emails are left out: they name the Gmail account the backup was
- * stored in, not an address a text was sent from or received at. Every
- * other source names none.
- */
-export function formIdentities(form: { isAndroidSms: boolean; ownerPhones: string[] }): string[] {
-  if (!form.isAndroidSms) return [];
-  return form.ownerPhones.map((value) => value.trim()).filter(Boolean);
-}
-
-/**
  * Whether Import should stop before creating the session: identities were
  * read and none is on the profile. Fails open — no identities read, or no
  * profile loaded (fetch failed), never blocks an import.

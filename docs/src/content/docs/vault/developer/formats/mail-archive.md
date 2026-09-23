@@ -194,7 +194,8 @@ Media is transformed then embedded; FormatSink removes the staged `attachments/`
 
 ## Body text
 
-- Primary human body: `text/plain; charset=utf-8` (UTF-8).
+- Primary human body: `text/plain; charset=utf-8` (UTF-8), always `Content-Transfer-Encoding: quoted-printable`.
+- The body is the message text byte for byte. Every CR and LF of the text is encoded as `=0D` and `=0A` (RFC 2045 section 6.7, rule 1) rather than written as a line break, so the text's own line endings, trailing newlines and trailing whitespace survive a read; a text body left as bare lines would be canonicalised to CRLF and lose them (RFC 2049 section 4). The encoded body ends in a soft line break (`=` closing the last line, rule 5), which encodes nothing, so the line ending a `.eml` file or an mbox record adds after it is never read as text. A reader decodes the part and takes the result whole; it trims nothing.
 - For multipart messages: first body part is flattened readable text; media follows as attachments.
 - Placeholders such as `[attachment]` / `[app]` are acceptable when flattening iMessage parts.
 - Optional `text/html` is deferred.

@@ -384,7 +384,9 @@ fn escape_mboxrd_from_lines() {
 #[test]
 fn writes_conversation_mboxrd() {
     let mut a = base_sms();
-    a.message.text = "first\nFrom spoofed\nlast".into();
+    // The body is one quoted-printable line, so only a text that starts
+    // with `From ` puts a `From ` at the start of an mbox line.
+    a.message.text = "From spoofed\nfirst\nlast".into();
     a.message.timestamp_unix_ms = 1_400_773_261_000;
     let mut b = base_sms();
     b.message.guid = "bbccddeeff00112233445566778899aa".into();
@@ -405,4 +407,10 @@ fn writes_conversation_mboxrd() {
     assert_eq!(text.matches("\nFrom ").count(), 1); // one additional From_ between records
     assert!(text.contains("X-ME-Guid: aabbccddeeff00112233445566778899"));
     assert!(text.contains("X-ME-Guid: bbccddeeff00112233445566778899aa"));
+
+    // The escape comes back off on read and the text is whole.
+    let parsed = mail_messages_from_mbox(&path).unwrap();
+    assert_eq!(parsed.len(), 2);
+    assert_eq!(parsed[0].message.text, "From spoofed\nfirst\nlast");
+    assert_eq!(parsed[1].message.text, "second");
 }

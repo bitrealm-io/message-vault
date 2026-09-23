@@ -247,16 +247,20 @@ fn parse_participants(headers: &[MailHeader<'_>]) -> Vec<Participant> {
 }
 
 /// The message text: the body of a simple mail, or the first `text/plain` part.
+///
+/// The decoded body is the text exactly. The writer encodes every line
+/// ending of the text and closes the body with a soft line break, so nothing
+/// is trimmed here.
 fn extract_text_body(mail: &ParsedMail<'_>) -> Option<String> {
     if mail.subparts.is_empty() {
-        return mail.get_body().ok().map(|s| trim_body(&s));
+        return mail.get_body().ok();
     }
     for part in mail.parts() {
         let mime = part.ctype.mimetype.to_ascii_lowercase();
         if mime == "text/plain"
             && let Ok(body) = part.get_body()
         {
-            return Some(trim_body(&body));
+            return Some(body);
         }
     }
     // Fallback: first non-multipart body.
@@ -265,15 +269,10 @@ fn extract_text_body(mail: &ParsedMail<'_>) -> Option<String> {
             && part.ctype.mimetype.starts_with("text/")
             && let Ok(body) = part.get_body()
         {
-            return Some(trim_body(&body));
+            return Some(body);
         }
     }
     None
-}
-
-/// A body without trailing line endings.
-fn trim_body(s: &str) -> String {
-    s.trim_end_matches(['\r', '\n']).to_string()
 }
 
 /// Attachments from the MIME parts, matched to the metadata header by position.

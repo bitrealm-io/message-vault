@@ -27,5 +27,6 @@ export function formatAttachmentProgress(input: {
       : input.mode === "skip"
         ? "Skipped"
         : "Copied";
-  return `${verb} ${input.done}/${input.total} attachments (${formatBytes(input.bytesDone)} / ${formatBytes(input.bytesTotal)})`;
+  const counts = `${input.done.toLocaleString()}/${input.total.toLocaleString()}`;
+  return `${verb} attachments: ${counts} (${formatBytes(input.bytesDone)} / ${formatBytes(input.bytesTotal)})`;
 }

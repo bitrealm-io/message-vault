@@ -62,6 +62,7 @@ const STEP_ROW_INDEX: Record<ImportProgressEvent["step"], (mode: AttachmentMedia
   parse: () => 0,
   attachments: () => 0,
   prepare: () => 0,
+  check: () => 0,
   media: (mode) => (hasMediaStage(mode) ? 1 : -1),
   upload: (mode) => (hasMediaStage(mode) ? 2 : 1),
 };

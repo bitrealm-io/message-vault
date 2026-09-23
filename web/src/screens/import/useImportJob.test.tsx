@@ -330,22 +330,22 @@ describe("useImportJob wiring", () => {
 
   it("routes a progress event arriving during summarize to the staging row", async () => {
     // W6: `summarize_staging` (Rust) emits `extract:progress` with
-    // `step: "prepare"` while it walks a big folder, but nothing used to
+    // `step: "check"` while it walks a big folder, but nothing used to
     // subscribe, so those events had nowhere to go and a huge folder's gate
     // looked frozen. The mocked `invokeSummarizeStaging` fires one here,
     // mid-call, through the callbacks `onExtractEvents` was given — exactly
     // what the real Tauri event stream would do.
     invokeSummarizeStagingMock.mockReset();
     invokeSummarizeStagingMock.mockImplementationOnce(async () => {
-      lastExtractEventCallbacks?.onProgress?.({ step: "prepare", done: 50, total: 200 });
+      lastExtractEventCallbacks?.onProgress?.({ step: "check", done: 50, total: 200 });
       return stagingSummary();
     });
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
 
     expect(result.current.phase).toBe("staging_review");
-    // Writing the conversation files narrates the Staging row.
-    expect(result.current.steps[0]?.detail).toBe("Preparing 50/200");
+    // Checking the staged attachments narrates the Staging row.
+    expect(result.current.steps[0]?.detail).toBe("Checking attachments: 50/200");
   });
 
   it("narrates a setup step on the read row without marking it done", async () => {
@@ -436,7 +436,7 @@ describe("useImportJob wiring", () => {
     });
     await waitFor(() =>
       expect(result.current.steps[0]?.detail).toBe(
-        "Reading 10/40\nCopied 4/9 attachments (2.0 KB / 4.0 KB)\nPreparing 1/4",
+        "Preparing conversations: 1/4\nReading messages: 10/40\nCopied attachments: 4/9 (2.0 KB / 4.0 KB)",
       ),
     );
     release();

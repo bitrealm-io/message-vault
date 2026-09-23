@@ -149,29 +149,34 @@ function stagingMediaFields(
   });
 }
 
-/** Present-tense verb for every step but `media` (which needs the mode —
- * see `mediaVerb`) and `setup` (which carries its own label — see
- * `setupDetail`), keyed by step name so a step added to the wire union
- * without an entry here is a compile error rather than a silent fallback.
+/** What a step is doing and what it counts, for every step but `media`
+ * (which needs the mode — see `mediaVerb`), `setup` (which carries its own
+ * label — see `setupDetail`) and `attachments` (which adds bytes — see
+ * `formatAttachmentProgress`), keyed by step name so a step added to the
+ * wire union without an entry here is a compile error rather than a silent
+ * fallback.
  */
-const STEP_VERB: Record<Exclude<ImportProgressEvent["step"], "media" | "setup">, string> = {
-  parse: "Reading",
-  attachments: "Copied",
-  prepare: "Preparing",
-  upload: "Uploading",
+const STEP_LABEL: Record<
+  Exclude<ImportProgressEvent["step"], "media" | "setup" | "attachments">,
+  string
+> = {
+  parse: "Reading messages",
+  prepare: "Preparing conversations",
+  check: "Checking attachments",
+  upload: "Uploading conversations",
 };
 
 /**
- * Present-tense verb shown while a step is running. Falls back to a plain
- * verb for a step string this build doesn't recognise — the event comes
- * off the wire unvalidated.
+ * Label shown while a step is running. Falls back to a plain word for a
+ * step string this build doesn't recognise — the event comes off the wire
+ * unvalidated.
  */
-function progressVerb(
-  step: Exclude<ImportProgressEvent["step"], "setup">,
+function progressLabel(
+  step: Exclude<ImportProgressEvent["step"], "setup" | "attachments">,
   mode: AttachmentMediaMode,
 ): string {
-  if (step === "media") return mediaVerb(mode);
-  return STEP_VERB[step] ?? "Working";
+  if (step === "media") return `${mediaVerb(mode)} attachments`;
+  return STEP_LABEL[step] ?? "Working";
 }
 
 /** Stage rows for this mode, with Staging optionally marked active. */
@@ -540,15 +545,17 @@ function applyProgress(event: ImportProgressEvent): void {
 /** The progress steps that report on the Staging row. */
 type StagingProgressStep = Extract<
   ImportProgressEvent["step"],
-  "setup" | "parse" | "attachments" | "prepare"
+  "setup" | "parse" | "attachments" | "prepare" | "check"
 >;
 
-/** The Staging row's steps in the order their lines show. */
+/** The Staging row's steps in the order their lines show: conversations,
+ * then messages, then attachments. */
 const STAGING_LINE_ORDER: readonly StagingProgressStep[] = [
   "setup",
+  "prepare",
   "parse",
   "attachments",
-  "prepare",
+  "check",
 ];
 
 function isStagingProgressStep(step: ImportProgressEvent["step"]): step is StagingProgressStep {
@@ -581,10 +588,9 @@ function progressDetail(event: ImportProgressEvent): string {
       bytesTotal: event.bytes_total ?? last?.bytesTotal ?? 0,
     });
   }
-  const counts = event.status
-    ? `${event.done}/${event.total} (${event.status})`
-    : `${event.done}/${event.total}`;
-  return `${progressVerb(event.step, scratch.attachmentMode)} ${counts}`;
+  const numbers = `${event.done.toLocaleString()}/${event.total.toLocaleString()}`;
+  const counts = event.status ? `${numbers} (${event.status})` : numbers;
+  return `${progressLabel(event.step, scratch.attachmentMode)}: ${counts}`;
 }
 
 function recordIssue(issue: ImportIssueEvent): void {
@@ -603,7 +609,7 @@ function runJob(invokeFn: () => Promise<void>): Promise<TauriJobResult> {
 /**
  * `invokeSummarizeStaging`, with a listener on the same `extract:progress`
  * channel the extract and media passes use. `summarize_staging` (Rust)
- * emits progress on the `prepare` step while it walks a big folder, and
+ * emits progress on the `check` step while it walks a big folder, and
  * `applyProgress` already knows to draw that on the Staging row, so this
  * only has to make sure the event reaches it.
  */

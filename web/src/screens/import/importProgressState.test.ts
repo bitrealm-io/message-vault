@@ -44,13 +44,13 @@ describe("setupDetail", () => {
 
 describe("attachmentDoneDetail", () => {
   it("uses zero counts when no attachments event arrived", () => {
-    expect(attachmentDoneDetail("skip", null)).toBe("Skipped 0/0 attachments (0 B / 0 B)");
-    expect(attachmentDoneDetail("copy", null)).toBe("Copied 0/0 attachments (0 B / 0 B)");
+    expect(attachmentDoneDetail("skip", null)).toBe("Skipped attachments: 0/0 (0 B / 0 B)");
+    expect(attachmentDoneDetail("copy", null)).toBe("Copied attachments: 0/0 (0 B / 0 B)");
   });
 
   it("formats the last live counts when present", () => {
     expect(attachmentDoneDetail("copy", { done: 2, total: 4, bytesDone: 10, bytesTotal: 20 })).toBe(
-      "Copied 2/4 attachments (10 B / 20 B)",
+      "Copied attachments: 2/4 (10 B / 20 B)",
     );
   });
 });

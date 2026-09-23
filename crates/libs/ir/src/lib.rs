@@ -13,7 +13,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 mod attachment_path;
 mod projection;
@@ -585,6 +585,49 @@ impl ConversationDocument {
     pub fn finalize_stats(&mut self) {
         self.conversation.stats = compute_stats(&self.messages);
     }
+}
+
+/// Give every document a file name no other document in `docs` has.
+///
+/// Two conversations can reduce to one [`filename_stem`](ConversationDocument::filename_stem):
+/// two groups with the same title, two untitled groups with the same people,
+/// or two names that differ only in case on a disk that ignores case. Written
+/// as they are, the second file would replace the first and lose its
+/// messages. Each document in such a clash gets a short suffix taken from its
+/// chat identifier, so the names are the same on every run over the same
+/// backup and a resumed run finds its files.
+///
+/// # Errors
+///
+/// Names the file when two documents still share one after that (the same
+/// chat identifier twice), so the caller can refuse rather than write one
+/// over the other.
+pub fn give_each_document_its_own_file(
+    docs: &mut [&mut ConversationDocument],
+) -> Result<(), String> {
+    let mut by_name: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, doc) in docs.iter().enumerate() {
+        by_name
+            .entry(doc.filename_stem().to_lowercase())
+            .or_default()
+            .push(i);
+    }
+    for clash in by_name.values().filter(|indexes| indexes.len() > 1) {
+        for &i in clash {
+            let doc = &mut *docs[i];
+            let digest = hex::encode(Sha256::digest(doc.conversation.chat_identifier.as_bytes()));
+            let suffix = doc.packaging_stem_suffix.take().unwrap_or_default();
+            doc.packaging_stem_suffix = Some(format!("{suffix}__{}", &digest[..8]));
+        }
+    }
+    let mut names = HashSet::new();
+    for doc in docs.iter() {
+        let stem = doc.filename_stem();
+        if !names.insert(stem.to_lowercase()) {
+            return Err(format!("two conversations would both be written to {stem}"));
+        }
+    }
+    Ok(())
 }
 
 /// Max peer phones included in an untitled group filename stem.

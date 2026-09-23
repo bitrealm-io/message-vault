@@ -334,6 +334,60 @@ fn parallel_drain_stops_on_the_first_error() {
     );
 }
 
+/// The last attachment count a run reported, from both kinds of drain.
+fn last_attachment_bytes(writer_count: usize) -> (u64, u64) {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("out");
+    // Each source claims 100 bytes for a 5-byte file.
+    let units: Vec<_> = (1..=3)
+        .map(|i| {
+            ConversationUnit::from_doc(doc_with(&format!("+1555000000{i}"), 1), |_, _| {
+                (AttachmentSource::Bytes(b"xxxxx".to_vec()), Some(100))
+            })
+        })
+        .collect();
+    let mut options = options(MediaMode::Clone, false);
+    options.writer_count = writer_count;
+    let seen = Arc::new(Mutex::new(Vec::<ProgressEvent>::new()));
+    let sink_seen = Arc::clone(&seen);
+    let sink = ProgressSink::unpaced(move |event| sink_seen.lock().unwrap().push(event));
+
+    if writer_count == 1 {
+        drain_write_queue_with_loader(
+            &out,
+            units,
+            &options,
+            &mut load_attachment_source,
+            None,
+            Some(&sink),
+            None,
+        )
+        .unwrap();
+    } else {
+        drain_write_queue(&out, units, &options, None, Some(&sink), None).unwrap();
+    }
+
+    let seen = seen.lock().unwrap();
+    seen.iter()
+        .filter_map(|event| match event {
+            ProgressEvent::Attachments {
+                done: 3,
+                bytes_done,
+                bytes_total,
+                ..
+            } => Some((*bytes_done, *bytes_total)),
+            _ => None,
+        })
+        .max()
+        .unwrap()
+}
+
+#[test]
+fn the_byte_total_comes_down_to_the_files_when_hints_overstate_them() {
+    assert_eq!(last_attachment_bytes(1), (15, 15), "sequential drain");
+    assert_eq!(last_attachment_bytes(3), (15, 15), "parallel drain");
+}
+
 #[test]
 fn typed_progress_covers_prepare_and_attachments_across_units() {
     // The desktop's progress bar reads these events and nothing else, so
@@ -500,6 +554,104 @@ fn headroom_shortfall_speaks_when_space_is_short() {
 fn default_writer_count_is_bounded() {
     let n = default_writer_count();
     assert!((1..=8).contains(&n));
+}
+
+/// A group conversation with its own chat identifier, titled or not, whose
+/// only message says `text`.
+fn group(chat_id: &str, title: Option<&str>, text: &str) -> ConversationDocument {
+    let mut doc = message_ir::testutil::sample_document(text);
+    doc.conversation.chat_identifier = chat_id.into();
+    doc.conversation.conversation_type = message_ir::IrConversationType::Group;
+    doc.conversation.group_title = title.map(str::to_string);
+    doc
+}
+
+/// Each staged file's chat identifier and first message text, sorted.
+fn staged_texts(out: &Path) -> Vec<(String, String)> {
+    let mut texts: Vec<_> = fs::read_dir(out)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".jsonl"))
+        .map(|e| {
+            let doc = read_conversation_jsonl(&e.path()).unwrap();
+            (
+                doc.conversation.chat_identifier,
+                doc.messages[0].text.clone(),
+            )
+        })
+        .collect();
+    texts.sort();
+    texts
+}
+
+#[test]
+fn conversations_that_share_a_file_name_are_each_written() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("out");
+    fs::create_dir_all(&out).unwrap();
+    let units = vec![
+        // Two groups with one title, and two untitled groups with the same
+        // people: each pair reduces to one file name.
+        unit_from(group("chat1", Some("Family"), "first family"), vec![]),
+        unit_from(group("chat2", Some("Family"), "second family"), vec![]),
+        unit_from(group("chat3", None, "first untitled"), vec![]),
+        unit_from(group("chat4", None, "second untitled"), vec![]),
+        // Differs only in case, which is one file on macOS and Windows.
+        unit_from(group("chat5", Some("family"), "lower-case family"), vec![]),
+    ];
+
+    let report = drain(&out, units, &options(MediaMode::Clone, false)).unwrap();
+
+    assert_eq!(report.conversations_written, 5);
+    assert_eq!(
+        staged_texts(&out),
+        vec![
+            ("chat1".to_string(), "first family".to_string()),
+            ("chat2".to_string(), "second family".to_string()),
+            ("chat3".to_string(), "first untitled".to_string()),
+            ("chat4".to_string(), "second untitled".to_string()),
+            ("chat5".to_string(), "lower-case family".to_string()),
+        ],
+        "no conversation's file replaces another's"
+    );
+}
+
+#[test]
+fn a_resumed_run_finds_the_names_a_clash_was_given() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("out");
+    fs::create_dir_all(&out).unwrap();
+    let units = || {
+        vec![
+            unit_from(group("chat1", Some("Family"), "first"), vec![]),
+            unit_from(group("chat2", Some("Family"), "second"), vec![]),
+        ]
+    };
+    drain(&out, units(), &options(MediaMode::Clone, false)).unwrap();
+
+    let report = drain(&out, units(), &options(MediaMode::Clone, true)).unwrap();
+
+    assert_eq!(
+        report.conversations_skipped, 2,
+        "both files are found again"
+    );
+    assert_eq!(report.conversations_written, 0);
+}
+
+#[test]
+fn the_same_chat_twice_is_refused_rather_than_overwritten() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("out");
+    fs::create_dir_all(&out).unwrap();
+    let units = vec![
+        unit_from(group("chat1", Some("Family"), "first"), vec![]),
+        unit_from(group("chat1", Some("Family"), "second"), vec![]),
+    ];
+
+    let err = drain(&out, units, &options(MediaMode::Clone, false)).unwrap_err();
+
+    assert!(err.to_string().contains("would both be written"), "{err:#}");
+    assert_eq!(staged_texts(&out), vec![], "nothing was written");
 }
 /// A minimal valid 1x1 RGB PNG that ffmpeg reads cleanly.
 #[rustfmt::skip]

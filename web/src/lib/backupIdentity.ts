@@ -1,3 +1,4 @@
+import { needsOwnerEmails } from "./androidSmsSources";
 import { phonesMatch } from "./phoneTokens";
 
 /** Which kind of address a backup identity is, for display and for the profile endpoint. */
@@ -42,6 +43,22 @@ export function identityMessageCounts(
       }),
       { sent: 0, received: 0 },
     );
+}
+
+/**
+ * The owner's addresses an import's form names, for a source that is not
+ * read for them: the phones an Android SMS source requires, and the emails
+ * SMS Backup+ also reads. Every other source names none.
+ */
+export function formIdentities(form: {
+  source: string;
+  isAndroidSms: boolean;
+  ownerPhones: string[];
+  ownerEmails: string[];
+}): string[] {
+  if (!form.isAndroidSms) return [];
+  const emails = needsOwnerEmails(form.source) ? form.ownerEmails : [];
+  return [...form.ownerPhones, ...emails].map((value) => value.trim()).filter(Boolean);
 }
 
 /**

@@ -6,7 +6,7 @@ import {
 import { getBaseUrl } from "../../lib/api";
 import { formatAttachmentProgress } from "../../lib/attachmentProgressCopy";
 import { useAuth } from "../../lib/auth";
-import { needsIdentityStop, parseSourceIdentities } from "../../lib/backupIdentity";
+import { formIdentities, needsIdentityStop, parseSourceIdentities } from "../../lib/backupIdentity";
 import { getDeviceId } from "../../lib/deviceId";
 import { imessageExtractFields } from "../../lib/imessageExtractFields";
 import { isImessageMethod } from "../../lib/imessageImport";
@@ -1216,7 +1216,9 @@ export function useImportJob() {
    * profile; when nothing matches, it parks the form and stops at
    * `identity_stop`, before any run exists, so Cancel has nothing to clean
    * up. The probe fails open: a source it cannot read will fail in the
-   * extractor moments later with the proper error.
+   * extractor moments later with the proper error. Any other fresh start
+   * takes its identities from the form, with no stop: the person just typed
+   * them.
    */
   async function startImport(
     form: ImportJobFormValues,
@@ -1250,8 +1252,11 @@ export function useImportJob() {
         } finally {
           store.set({ running: false });
         }
-      } else {
+      } else if (resume || resumeWrite) {
         store.set({ sourceIdentities: resumeWrite ? (resumeWrite.identities ?? null) : null });
+      } else {
+        identities = formIdentities(form);
+        store.set({ sourceIdentities: identities });
       }
       await runImport(token, form, identities, resume, resumeWrite);
     } finally {

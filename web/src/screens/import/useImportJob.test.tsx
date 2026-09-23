@@ -1072,6 +1072,23 @@ describe("useImportJob wiring", () => {
       expect(invokeImessageBackupIdentitiesMock).not.toHaveBeenCalled();
     });
 
+    it("takes an Android SMS source's identities from its form, without a stop", async () => {
+      loadAccountProfileMock.mockResolvedValue({ phones: [], emails: [] });
+      const { result } = renderHook(() => useImportJob());
+      await act(async () => {
+        await result.current.startImport({
+          ...sbrForm(),
+          isAndroidSms: true,
+          ownerPhones: ["+15550001111"],
+        });
+      });
+      expect(result.current.phase).not.toBe("identity_stop");
+      expect(result.current.sourceIdentities).toEqual(["+15550001111"]);
+      expect(createImportMock).toHaveBeenCalledWith(
+        expect.objectContaining({ source_identities: ["+15550001111"] }),
+      );
+    });
+
     it("resume_write reaches Gate 1 with the session's stored identities, without re-probing", async () => {
       const { result } = renderHook(() => useImportJob());
       await act(async () => {

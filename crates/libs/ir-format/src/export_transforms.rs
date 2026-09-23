@@ -3,12 +3,13 @@
 use crate::util::read_attachment_file;
 use anyhow::Result;
 use media::MediaMode;
-use message_ir::{ConversationDocument, IrAttachment, IrDirection, IrParticipant};
+use message_ir::{ConversationDocument, IrAttachment, IrDirection, IrImessage, IrParticipant};
 use message_vault_io_core::{ExportTransforms, emit_log};
 use obfuscate::{
     Obfuscator, classify_attachment, materialize_placeholders, placeholder_rel_path,
     resolve_obfuscator_with_log,
 };
+use serde_json::{Map, Value};
 use std::path::Path;
 
 /// Load each attachment's bytes from the output folder into the document; unreadable
@@ -41,8 +42,10 @@ pub fn clear_attachments_when_disabled(doc: &mut ConversationDocument, mode: Med
 /// Replace every handle, name, and body in the document with stable fake values.
 pub(crate) fn obfuscate_document(doc: &mut ConversationDocument, anon: &mut Obfuscator) {
     doc.conversation.chat_identifier = anon.obfuscate_handle(&doc.conversation.chat_identifier);
+    // A group title is chosen by people and often names them, so every word
+    // goes, not only the addresses in it.
     if let Some(title) = doc.conversation.group_title.as_mut() {
-        *title = anon.obfuscate_mixed_field(title);
+        *title = anon.obfuscate_text(title);
     }
     for p in &mut doc.conversation.participants {
         obfuscate_participant(p, anon);
@@ -71,10 +74,8 @@ pub(crate) fn obfuscate_document(doc: &mut ConversationDocument, anon: &mut Obfu
             *s = anon.obfuscate_text(s);
         }
         msg.text = anon.obfuscate_text(&msg.text);
-        if let Some(im) = msg.imessage.as_mut()
-            && let Some(a) = im.announcement.as_mut()
-        {
-            *a = anon.obfuscate_text(a);
+        if let Some(im) = msg.imessage.as_mut() {
+            obfuscate_imessage(im, anon);
         }
         for att in &mut msg.attachments {
             obfuscate_attachment(att);
@@ -84,6 +85,52 @@ pub(crate) fn obfuscate_document(doc: &mut ConversationDocument, anon: &mut Obfu
         // goes with it: `direction` already says sent or received.
         msg.source = None;
     }
+}
+
+/// Obfuscate the iMessage extension's announcement and tapback reactors.
+///
+/// `parts` repeats the body, `edits` holds its earlier wording, `app` holds
+/// link previews, and `shared_location` holds a place. None of them is read
+/// on import, so obfuscated output drops them whole.
+fn obfuscate_imessage(im: &mut IrImessage, anon: &mut Obfuscator) {
+    if let Some(a) = im.announcement.as_mut() {
+        *a = anon.obfuscate_text(a);
+    }
+    im.parts = None;
+    im.edits = None;
+    im.app = None;
+    im.shared_location = None;
+    // Tapbacks are imported, so they stay with only the reactor rewritten.
+    // Anything that is not a tapback object goes.
+    match im.tapbacks.as_mut() {
+        Some(Value::Array(tapbacks)) => {
+            tapbacks.retain_mut(|tapback| match tapback {
+                Value::Object(fields) => {
+                    obfuscate_tapback(fields, anon);
+                    true
+                }
+                _ => false,
+            });
+        }
+        Some(Value::Object(fields)) => obfuscate_tapback(fields, anon),
+        _ => im.tapbacks = None,
+    }
+}
+
+/// Obfuscate who reacted, keep what the reaction was, and drop any other key.
+fn obfuscate_tapback(fields: &mut Map<String, Value>, anon: &mut Obfuscator) {
+    fields.retain(|key, value| {
+        match (key.as_str(), value) {
+            ("part_index" | "kind" | "emoji" | "is_from_me", _) => {}
+            ("reactor_handle" | "sender", Value::String(h)) => *h = anon.obfuscate_handle(h),
+            ("reactor_display_name", Value::String(n)) if n != "Me" => {
+                *n = anon.obfuscate_display_name(n);
+            }
+            ("reactor_display_name", Value::String(_)) => {}
+            _ => return false,
+        }
+        true
+    });
 }
 
 /// Obfuscate one participant's handle and display name.
@@ -156,160 +203,4 @@ pub(crate) fn apply_transforms(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use media::MediaMode;
-    use message_ir::{
-        ConversationMeta, ConversationStats, ExportMeta, IrConversationType, IrMessage,
-        IrMessageKind, IrParticipant, IrService, SCHEMA_VERSION,
-    };
-    use std::fs;
-
-    fn doc_with_image_attachment() -> ConversationDocument {
-        ConversationDocument {
-            schema_version: SCHEMA_VERSION,
-            export: ExportMeta {
-                source: "test".into(),
-                tool: "test".into(),
-                tool_version: "0".into(),
-                owner_handle: None,
-                owner_display_name: None,
-            },
-            conversation: ConversationMeta {
-                chat_identifier: "+15555550101".into(),
-                conversation_type: IrConversationType::Individual,
-                group_title: None,
-                participants: vec![IrParticipant {
-                    handle: Some("+15555550101".into()),
-                    display_name: Some("Sam".into()),
-                    handle_type: None,
-                }],
-                stats: ConversationStats::default(),
-            },
-            messages: vec![IrMessage {
-                guid: "guid-1".into(),
-                timestamp_unix_ms: 1_400_773_261_000,
-                direction: IrDirection::Incoming,
-                service: IrService::Sms,
-                message_kind: IrMessageKind::Sms,
-                sender_handle: Some("+15555550101".into()),
-                sender_display_name: Some("Sam".into()),
-                owner_handle: None,
-                subject: None,
-                text: "hi".into(),
-                attachments: vec![IrAttachment {
-                    path: Some("photo.jpg".into()),
-                    original_name: Some("photo.jpg".into()),
-                    mime_type: Some("image/jpeg".into()),
-                    digest_sha256: None,
-                    is_sticker: false,
-                    transcription: None,
-                    sticker_effect: None,
-                    size_bytes: None,
-                    missing_reason: None,
-                    bytes: None,
-                }],
-                imessage: None,
-                source: None,
-            }],
-            packaging_stem_suffix: None,
-        }
-    }
-
-    #[test]
-    fn obfuscate_drops_the_vendor_bag() {
-        let mut doc = message_ir::testutil::sample_document("secret");
-        assert!(doc.messages[0].source.is_some());
-        let mut anon = Obfuscator::new([7u8; 32]);
-        obfuscate_document(&mut doc, &mut anon);
-        assert!(
-            doc.messages[0].source.is_none(),
-            "obfuscated output must not carry vendor fields"
-        );
-    }
-
-    #[test]
-    fn obfuscate_replaces_the_owner_address_on_each_message() {
-        let mut doc = message_ir::testutil::sample_document("secret");
-        doc.messages[0].owner_handle = Some("+15555550100".into());
-        let mut anon = Obfuscator::new([7u8; 32]);
-        obfuscate_document(&mut doc, &mut anon);
-        let owner = doc.messages[0].owner_handle.as_deref();
-        assert_ne!(owner, Some("+15555550100"));
-        assert_eq!(
-            owner,
-            doc.export.owner_handle.as_deref(),
-            "one address becomes one fake address wherever it appears"
-        );
-    }
-
-    #[test]
-    fn obfuscate_skips_staged_media_and_writes_placeholders() {
-        let tmp = tempfile::tempdir().unwrap();
-        let att = tmp.path().join("attachments");
-        fs::create_dir_all(&att).unwrap();
-        // Pretend an exporter staged a real file (should be removed).
-        fs::write(att.join("real-photo.jpg"), b"REAL_JPEG_BYTES_SHOULD_GO").unwrap();
-
-        let mut docs = vec![doc_with_image_attachment()];
-        let transforms = ExportTransforms {
-            media: MediaMode::Convert,
-            obfuscate: true,
-            obfuscate_seed: Some(
-                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into(),
-            ),
-            ..ExportTransforms::none()
-        };
-        let outcome = apply_transforms(&mut docs, tmp.path(), &transforms, false).unwrap();
-        assert_eq!(outcome.obfuscated_docs, 1);
-
-        assert!(!att.join("real-photo.jpg").exists());
-        assert!(att.join("placeholder.jpg").is_file());
-        assert!(att.join("placeholder.mp4").is_file());
-        assert!(att.join("placeholder.bin").is_file());
-        assert_eq!(
-            docs[0].messages[0].attachments[0].path.as_deref(),
-            Some("attachments/placeholder.jpg")
-        );
-    }
-
-    #[test]
-    fn obfuscate_keeps_mime_when_media_disabled() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut docs = vec![doc_with_image_attachment()];
-        let transforms = ExportTransforms {
-            media: MediaMode::Disabled,
-            obfuscate: true,
-            obfuscate_seed: Some(
-                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into(),
-            ),
-            ..ExportTransforms::none()
-        };
-        apply_transforms(&mut docs, tmp.path(), &transforms, false).unwrap();
-        assert_eq!(
-            docs[0].messages[0].attachments[0].path.as_deref(),
-            Some("attachments/placeholder.jpg")
-        );
-    }
-
-    #[test]
-    fn convert_at_finish_leaves_cloned_file() {
-        let tmp = tempfile::tempdir().unwrap();
-        let att = tmp.path().join("attachments");
-        fs::create_dir_all(&att).unwrap();
-        fs::write(att.join("keep.bin"), b"already-cloned").unwrap();
-        let mut docs = vec![doc_with_image_attachment()];
-        docs[0].messages[0].attachments[0].path = Some("attachments/keep.bin".into());
-        let transforms = ExportTransforms {
-            media: MediaMode::Convert,
-            ..ExportTransforms::none()
-        };
-        let outcome = apply_transforms(&mut docs, tmp.path(), &transforms, false).unwrap();
-        assert_eq!(outcome.obfuscated_docs, 0);
-        assert_eq!(
-            docs[0].messages[0].attachments[0].path.as_deref(),
-            Some("attachments/keep.bin")
-        );
-        assert_eq!(fs::read(att.join("keep.bin")).unwrap(), b"already-cloned");
-    }
-}
+mod tests;

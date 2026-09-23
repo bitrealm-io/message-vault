@@ -84,6 +84,17 @@ pub(crate) fn tokenize(input: &str) -> Result<Vec<Token>, QueryError> {
             format!("The search is longer than {MAX_QUERY_BYTES} bytes."),
         ));
     }
+    // A NUL byte separates words like a space. Postgres refuses NUL in any
+    // text and SQLite's FTS5 reads it as the end of the query, so none may
+    // reach a bound value. One byte for one byte, so every span still points
+    // at the text the person typed.
+    let without_nul;
+    let input = if input.contains('\0') {
+        without_nul = input.replace('\0', " ");
+        without_nul.as_str()
+    } else {
+        input
+    };
     let mut lexer = Lexer {
         input,
         bytes: input.as_bytes(),

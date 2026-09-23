@@ -57,6 +57,12 @@ released versions carry their date on the heading.
 
 ### Fixes
 
+- 2026-09-23 **Searching for a word with punctuation in it works on every
+  vault.** A search such as `a&b`, `o'bri*`, or text pasted with a hidden
+  NUL character failed with an error, or on a Postgres vault found messages
+  that had the words in any order. Punctuation inside a word now always means
+  the words next to each other in that order, and a NUL is read as a space.
+
 - 2026-09-22 **Changing a password checks things in a sensible order and
   says so in full sentences.** The vault now checks the current password
   first, then that the new password was typed the same way twice, then that

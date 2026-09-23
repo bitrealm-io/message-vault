@@ -120,7 +120,7 @@ describe("stepIndexFor", () => {
 
 describe("stage timing", () => {
   function timeline(events: [ImportProgressEvent["step"], number][]): StageTiming {
-    return events.reduce((timing, [step, now]) => recordStageTime(timing, step, now), {
+    return events.reduce<StageTiming>((timing, [step, now]) => recordStageTime(timing, step, now), {
       ...EMPTY_TIMING,
       extractStartedAt: 0,
     });

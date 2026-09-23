@@ -7,18 +7,18 @@ use crate::db::engine::DbEngine;
 use super::bridge::Sql;
 use super::parse::TextTerm;
 
-/// Quote for FTS5 so operators and punctuation are literal text.
+/// Quote for FTS5 so operators and punctuation are literal text. The
+/// tokenizer then reads the quoted text as a phrase: `a&b` is `a` then `b`.
 fn fts5_literal(term: &str) -> String {
     format!("\"{}\"", term.replace('"', "\"\""))
 }
 
-/// `'term':*` for `to_tsquery`, or `None` when the term holds a quote or
-/// backslash, which tsquery literals cannot carry.
-fn pg_prefix(term: &str) -> Option<String> {
-    if term.is_empty() || term.contains(['\\', '\'']) {
-        return None;
-    }
-    Some(format!("'{term}':*"))
+/// `'term':*` for `to_tsquery`, with a quote doubled and a backslash
+/// escaped so the whole term is one quoted literal and nothing in it is a
+/// tsquery operator. Postgres parses the literal into its words and joins
+/// them with `<->`, each a prefix: `o'bri*` is `'o':* <-> 'bri':*`.
+fn pg_prefix(term: &str) -> String {
+    format!("'{}':*", term.replace('\\', "\\\\").replace('\'', "''"))
 }
 
 /// A `SELECT` of the ids of every message whose indexed text matches
@@ -41,16 +41,17 @@ pub(crate) fn matching_ids(out: &mut Sql, engine: DbEngine, term: &TextTerm) {
             out.bind_text(q);
         }
         DbEngine::Postgres => {
+            // A word is a phrase of the words Postgres parses out of it, as
+            // it is for FTS5 above: `a&b` needs `a` then `b`, never both
+            // anywhere in the message. Both functions read their argument
+            // as text, so no character in it is an operator.
             let (func, arg) = match term {
-                TextTerm::Term { text, prefix: true } => match pg_prefix(text) {
-                    Some(q) => ("to_tsquery", q),
-                    None => ("plainto_tsquery", text.clone()),
-                },
+                TextTerm::Term { text, prefix: true } => ("to_tsquery", pg_prefix(text)),
                 TextTerm::Term {
                     text,
                     prefix: false,
-                } => ("plainto_tsquery", text.clone()),
-                TextTerm::Phrase(text) => ("phraseto_tsquery", text.clone()),
+                }
+                | TextTerm::Phrase(text) => ("phraseto_tsquery", text.clone()),
             };
             out.push(&format!(
                 "SELECT fm.id FROM messages fm WHERE fm.search_tsv @@ {func}('simple', "

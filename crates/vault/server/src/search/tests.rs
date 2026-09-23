@@ -1264,6 +1264,194 @@ mod like_characters {
     }
 }
 
+/// Free text on Messages goes to the full-text index, where `&`, `|`, `!`,
+/// `:`, `<`, `>`, quotes, and backslashes are query operators on one engine
+/// or the other, and Postgres refuses a NUL byte in any text. None of that
+/// may reach the index: punctuation inside a word splits it into words that
+/// must appear in that order, a word that is only punctuation or emoji finds
+/// nothing, and a NUL separates words like a space. The same table runs on
+/// whichever engine the test pool uses, so a divergence fails on one of them.
+mod index_characters {
+    use super::*;
+    use crate::search::error::QueryErrorKind;
+
+    /// What a query must answer: these message indexes (into the seeded
+    /// bodies), or a refusal of this kind.
+    enum Want {
+        Ids(&'static [usize]),
+        Refused(QueryErrorKind),
+    }
+    use Want::{Ids, Refused};
+
+    const LONG: usize = 1_500;
+
+    fn bodies() -> Vec<String> {
+        vec![
+            "plain words here".into(),                 // 0
+            "tom & jerry: a&b x|y".into(),             // 1
+            "o'brien fixed the back\\slash".into(),    // 2
+            "party \u{1F389} tonight".into(),          // 3
+            "日本語 テキスト".into(),                  // 4
+            "café crème".into(),                       // 5
+            "negation !important note".into(),         // 6
+            "call me at 5:30 or (maybe) later".into(), // 7
+            format!("long {}", "z".repeat(LONG)),      // 8
+            "b then a".into(),                         // 9
+        ]
+    }
+
+    fn cases() -> Vec<(String, Want)> {
+        let z = "z".repeat(LONG);
+        let s = |q: &str| q.to_string();
+        vec![
+            (s("a&b"), Ids(&[1])),
+            (s("a&b*"), Ids(&[1])),
+            (s("\"a&b\""), Ids(&[1])),
+            (s("a<->b"), Ids(&[1])),
+            (s("x|y"), Ids(&[1])),
+            (s("tom&jerry"), Ids(&[1])),
+            (s("*a"), Ids(&[1, 9])),
+            (s("!important"), Ids(&[6])),
+            (s("!foo"), Ids(&[])),
+            (s("o'brien"), Ids(&[2])),
+            (s("o'brien*"), Ids(&[2])),
+            (s("o'bri*"), Ids(&[2])),
+            (s("'brien"), Ids(&[2])),
+            (s("'quote"), Ids(&[])),
+            (s("back\\slash"), Ids(&[2])),
+            (s("back\\sl*"), Ids(&[2])),
+            (s("5:30"), Ids(&[7])),
+            (s("(maybe)"), Ids(&[7])),
+            (s("\"(maybe)\""), Ids(&[7])),
+            (s("&"), Ids(&[])),
+            (s("&*"), Ids(&[])),
+            (s("!?&|<>"), Ids(&[])),
+            (s("\\"), Ids(&[])),
+            (s("'"), Ids(&[])),
+            (s("''*"), Ids(&[])),
+            (s("*"), Ids(&[])),
+            // Only a NUL is an empty search, which narrows nothing.
+            (s("\0"), Ids(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])),
+            (s("o'brien\0"), Ids(&[2])),
+            (s("plain\0words"), Ids(&[0])),
+            (s("\"plain\0words\""), Ids(&[0])),
+            (s("\u{1F389}"), Ids(&[])),
+            (s("\u{1F389}*"), Ids(&[])),
+            (s("party\u{1F389}tonight"), Ids(&[3])),
+            (s("日本語"), Ids(&[4])),
+            (s("日本*"), Ids(&[4])),
+            (s("café"), Ids(&[5])),
+            (s("crè*"), Ids(&[5])),
+            (z.clone(), Ids(&[8])),
+            (format!("{}*", &z[..LONG - 10]), Ids(&[8])),
+            ("y".repeat(2_040), Ids(&[])),
+            (format!("{}*", "y".repeat(2_040)), Ids(&[])),
+            (s("(unbalanced"), Refused(QueryErrorKind::Unbalanced)),
+            (s("\"unterminated"), Refused(QueryErrorKind::Unbalanced)),
+            (s("foo:*"), Refused(QueryErrorKind::UnknownWord)),
+        ]
+    }
+
+    #[tokio::test]
+    async fn operator_characters_are_never_operators() {
+        let (pool, _dir) = crate::db::engine::test_pool().await;
+        let mut conn = pool.acquire().await.unwrap();
+        crate::db::schema::ensure_vault_schema(&mut conn)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
+            .bind(ACCOUNT)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        let chat = handle(&mut conn, ACCOUNT, "+15550100", "imessage").await;
+        let conv = conversation(&mut conn, ACCOUNT, chat, "individual", None, &[chat]).await;
+        let mut ids = Vec::new();
+        for body in bodies() {
+            let m = msg(conv, "2024-06-01T10:00:00Z", false, Some(chat), &body);
+            ids.push(message(&mut conn, ACCOUNT, m).await);
+        }
+        let engine = engine_of(&conn);
+        let index_of = |got: &[i64]| -> Vec<Option<usize>> {
+            got.iter()
+                .map(|g| ids.iter().position(|i| i == g))
+                .collect()
+        };
+        let mut failures = Vec::new();
+        for (q, want) in cases() {
+            let shown: String = q.chars().take(40).collect();
+            let compiled = compile(CompileRequest {
+                list: ListKind::Messages,
+                query: &q,
+                account_id: ACCOUNT,
+                engine,
+                today: today(),
+                zone: chrono_tz::UTC,
+            });
+            match (want, compiled) {
+                (Refused(kind), Err(e)) if e.kind == kind => {}
+                (Refused(kind), other) => failures.push(format!(
+                    "{shown:?}: wanted a {kind:?} refusal, got {:?}",
+                    other.map(|_| "a query").map_err(|e| e.kind)
+                )),
+                (Ids(_), Err(e)) => failures.push(format!("{shown:?}: refused: {}", e.message)),
+                (Ids(want), Ok(_)) => {
+                    // Every list must run the text without an error: Contacts
+                    // and Conversations bind it into LIKE patterns.
+                    for list in [ListKind::Contacts, ListKind::Conversations] {
+                        if let Err(e) = try_run(&mut conn, list, &q).await {
+                            failures.push(format!("{shown:?} on {list:?}: {e}"));
+                        }
+                    }
+                    let want: Vec<i64> = want.iter().map(|&i| ids[i]).collect();
+                    match try_run(&mut conn, ListKind::Messages, &q).await {
+                        Ok(got) if got == want => {}
+                        Ok(got) => failures.push(format!(
+                            "{shown:?}: got messages {:?}, wanted {:?}",
+                            index_of(&got),
+                            index_of(&want),
+                        )),
+                        Err(e) => failures.push(format!("{shown:?}: {e}")),
+                    }
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{engine:?}:\n{}", failures.join("\n"));
+    }
+
+    /// [`run`], returning the database's error instead of panicking, so one
+    /// bad case does not hide the rest of the table.
+    async fn try_run(
+        conn: &mut AnyConnection,
+        list: ListKind,
+        q: &str,
+    ) -> Result<Vec<i64>, String> {
+        let f = compile(CompileRequest {
+            list,
+            query: q,
+            account_id: ACCOUNT,
+            engine: engine_of(conn),
+            today: today(),
+            zone: chrono_tz::UTC,
+        })
+        .map_err(|e| e.message)?;
+        let table = match list {
+            ListKind::Contacts => "contacts",
+            ListKind::Conversations => "conversations",
+            ListKind::Messages => "messages",
+        };
+        let alias = list.base_alias();
+        let sql = renumber_placeholders(&format!(
+            "SELECT {alias}.id FROM {table} {alias} WHERE {} ORDER BY {alias}.id",
+            f.where_sql()
+        ));
+        sqlx::query_scalar_with(&sql, bind_args(f.params()))
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| e.to_string())
+    }
+}
+
 mod people_words {
     use super::*;
 

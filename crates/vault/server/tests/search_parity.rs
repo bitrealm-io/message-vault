@@ -58,6 +58,11 @@ const CASES: &[(&str, &[i64])] = &[
     ("dinner", &[11]),         // subject
     ("dash-separated", &[14]), // punctuation tokenization
     ("alpha beta", &[15]),
+    // Punctuation inside a word is never a query operator: the word's parts
+    // must appear next to each other in that order, on both engines.
+    ("red&apple", &[6]),
+    ("apple&red", &[]),
+    ("red&app*", &[6]),
 ];
 // Diacritics: FTS5 strips them, Postgres 'simple' does not — the documented
 // exception. "cafe" matches k=9 and k=10 on SQLite, only k=9 on Postgres;

@@ -1367,6 +1367,66 @@ async fn a_batch_into_a_run_that_is_not_running_is_a_state_conflict() {
     );
 }
 
+/// One conversation with `chat`, holding one message per guid, as a
+/// replace run's batch.
+fn replace_run_batch(chat: &str, guids: &[&str]) -> String {
+    let mut lines = vec![format!(
+        concat!(
+            r#"{{"schema_version":4,"export":{{"source":"whatsapp","tool":"t","tool_version":"0","owner_handle":"+15550000001","owner_display_name":"Me"}},"#,
+            r#""conversation":{{"chat_identifier":"{chat}","conversation_type":"individual","group_title":null,"#,
+            r#""participants":[{{"handle":"{chat}","display_name":null}}],"#,
+            r#""stats":{{"message_count":{n},"attachment_count":0,"first_timestamp_unix_ms":1700000000000,"last_timestamp_unix_ms":1700000000000}}}}}}"#,
+        ),
+        chat = chat,
+        n = guids.len(),
+    )];
+    for guid in guids {
+        lines.push(format!(
+            r#"{{"guid":"{guid}","timestamp_unix_ms":1700000000000,"direction":"incoming","service":"whatsapp","message_kind":"sms","sender_handle":"{chat}","sender_display_name":null,"subject":null,"text":"{guid}","attachments":[],"imessage":null,"source":null}}"#
+        ));
+    }
+    lines.join("\n") + "\n"
+}
+
+/// A replace run wipes the source on its first batch only, and the push
+/// client posts a batch again when the first attempt times out. So the
+/// second batch must not wipe the first, and a retried batch must add
+/// nothing. This guards both against a change to how a batch picks wipe
+/// or append (today: whether the run has stamped a message yet).
+///
+/// Every message carries a guid, as every exporter writes one. A message
+/// with an empty guid would be inserted again by the retry, in a replace
+/// run or an append run alike, because append skips by guid only.
+#[tokio::test]
+async fn a_retried_batch_in_a_replace_run_keeps_every_message_once() {
+    let (state, _vault, token) = importer().await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &state,
+        "/v1/imports",
+        &token,
+        serde_json::json!({ "source": "whatsapp", "mode": "replace" }),
+    )
+    .await;
+    let path = format!("/v1/imports/{}/batches", created["id"].as_i64().unwrap());
+
+    let first = replace_run_batch("+15550000002", &["g-1a", "g-1b"]);
+    let second = replace_run_batch("+15550000003", &["g-2a", "g-2b"]);
+    for body in [&first, &second, &second] {
+        let (status, text) =
+            crate::test_support::post_raw(&state, &path, &token, "application/jsonl", body.clone())
+                .await;
+        assert_eq!(status, axum::http::StatusCode::OK, "{text}");
+    }
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let guids: Vec<String> =
+        sqlx::query_scalar("SELECT guid FROM messages WHERE source = 'whatsapp' ORDER BY guid")
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(guids, ["g-1a", "g-1b", "g-2a", "g-2b"]);
+}
+
 /// The import body is JSON Lines and nothing else. `multipart/form-data`
 /// used to be accepted (a `jsonl` field plus `file` parts) but nothing
 /// sent it: vault-push posts JSON Lines and uploads attachments through

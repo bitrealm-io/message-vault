@@ -48,7 +48,8 @@ pub fn error_sentence(body: &str) -> String {
 /// # Errors
 ///
 /// Returns an error for any non-2xx status, and for a 2xx body that is not the
-/// JSON `T` expects.
+/// JSON `T` expects. The second kind is never retried: the vault already did
+/// the work, and sending the request again would repeat it.
 pub fn ok_json<T: DeserializeOwned>(
     what: &str,
     status: reqwest::StatusCode,

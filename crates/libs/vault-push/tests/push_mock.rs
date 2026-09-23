@@ -1553,3 +1553,225 @@ fn reports_pathless_attachment_without_reason_as_no_path() {
         "expected skip issue for pathless attachment, got {issues:?}"
     );
 }
+
+/// The journal rows of one kind (`file_ok`, `message_batch_ok`, …).
+fn journal_events(dir: &Path, event: &str) -> Vec<serde_json::Value> {
+    fs::read_to_string(dir.join(".vault-import-state.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .filter(|row| row["event"] == event)
+        .collect()
+}
+
+/// Every guid the journal records as imported, once per row it appears in.
+fn journaled_guids(dir: &Path) -> Vec<String> {
+    journal_events(dir, "message_batch_ok")
+        .iter()
+        .flat_map(|row| row["messages"].as_array().unwrap().clone())
+        .map(|message| message["guid"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// A mock vault session that accepts the key.
+fn mock_session(server: &MockServer) -> httpmock::Mock<'_> {
+    server.mock(|when, then| {
+        when.method(GET).path("/v1/session");
+        then.status(200).json_body(json!({
+            "account_id": 1,
+            "username": "alice",
+        }));
+    })
+}
+
+/// A batch the vault answers 503 once and 200 on the retry is counted once:
+/// one journal entry for its file and message, and `attempted` equal to the
+/// messages the run sent, not the requests it made.
+///
+/// Guards `with_retries` around the batch POST, which no other test drives
+/// end to end (every other config sets `max_retries: 0`). A regression that
+/// counts each attempt, or journals the batch on the failed try, fails here.
+#[test]
+fn a_batch_retried_after_a_503_is_counted_and_journaled_once() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let mut busy = server.mock(|when, then| {
+        when.method(POST).path("/v1/imports/7/batches");
+        then.status(503).json_body(json!({
+            "type": "about:blank",
+            "title": "Service unavailable",
+            "status": 503,
+            "detail": "the vault is busy"
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    write_jsonl(dir.path(), &sample_doc());
+    let cfg = VaultPushConfig {
+        max_retries: 2,
+        ..text_only_config(dir.path(), server.base_url())
+    };
+
+    // The first retry waits at least 500 ms, so there is time to swap the
+    // 503 for a 200 once the first attempt has landed.
+    let (report, accepted_calls) = std::thread::scope(|scope| {
+        let pusher = scope.spawn(|| run(&cfg, None).unwrap());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while busy.calls() == 0 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the batch was never posted"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        busy.delete();
+        let accepted = server.mock(|when, then| {
+            when.method(POST).path("/v1/imports/7/batches");
+            then.status(200).json_body(json!({
+                "messages": 1,
+                "messages_appended": 1,
+                "conversations": 1
+            }));
+        });
+        let report = pusher.join().unwrap();
+        (report, accepted.calls())
+    });
+
+    assert_eq!(accepted_calls, 1, "the retry must reach the vault once");
+    assert!(report.ok, "{:?}", report.results);
+    assert_eq!(report.conversations_ok, 1);
+    assert_eq!(report.messages_attempted, 1);
+    assert_eq!(report.messages_inserted, 1);
+    assert_eq!(report.messages_failed, 0);
+    assert_eq!(
+        report.messages_attempted,
+        report.messages_inserted + report.messages_deduped + report.messages_failed
+    );
+    assert_eq!(journal_events(dir.path(), "file_ok").len(), 1);
+    assert_eq!(journaled_guids(dir.path()), vec!["guid-1".to_string()]);
+}
+
+/// After one batch fails, a second push on the same folder sends only the
+/// failed conversation's messages, and the journal then has every file ok.
+///
+/// Guards the resume path after a partial failure: a failed file wrongly
+/// journaled as ok would never be sent again, and a lost journal entry for a
+/// good file would send it twice.
+#[test]
+fn a_second_push_sends_only_the_conversation_whose_batch_failed() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let mut failing = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_includes("guid-2");
+        then.status(500).json_body(json!({
+            "type": "about:blank",
+            "title": "Internal server error",
+            "status": 500,
+            "detail": "intentional batch failure"
+        }));
+    });
+    let mut others = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_excludes("guid-2");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    write_jsonl(dir.path(), &sample_doc());
+    write_jsonl(dir.path(), &sample_doc_for("+15555550102", "guid-2"));
+    write_jsonl(dir.path(), &sample_doc_for("+15555550103", "guid-3"));
+    let mut cfg = text_only_config(dir.path(), server.base_url());
+    cfg.batch_size = 1;
+
+    let first = run(&cfg, None).unwrap();
+    assert!(!first.ok);
+    assert_eq!(first.conversations_ok, 2);
+    assert_eq!(first.conversations_failed, 1);
+    assert_eq!(failing.calls(), 1);
+    assert_eq!(others.calls(), 2);
+    assert_eq!(journal_events(dir.path(), "file_ok").len(), 2);
+    assert!(!journaled_guids(dir.path()).contains(&"guid-2".to_string()));
+
+    failing.delete();
+    others.delete();
+    let retried = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_includes("guid-2");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+    let resent = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_excludes("guid-2");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+
+    let second = run(&cfg, None).unwrap();
+
+    assert!(second.ok, "{:?}", second.results);
+    assert_eq!(second.conversations_ok, 1);
+    assert_eq!(second.conversations_skipped, 2);
+    assert_eq!(second.messages_attempted, 1);
+    assert_eq!(retried.calls(), 1, "the failed conversation is sent again");
+    assert_eq!(
+        resent.calls(),
+        0,
+        "a journaled conversation is not sent again"
+    );
+    assert_eq!(journal_events(dir.path(), "file_ok").len(), 3);
+    let mut guids = journaled_guids(dir.path());
+    guids.sort();
+    assert_eq!(guids, vec!["guid-1", "guid-2", "guid-3"]);
+}
+
+/// A 2xx means the vault did the work. When its body cannot be read, the
+/// batch is not posted again as if the request had failed in transit: the
+/// conversation fails once with a sentence saying the answer was unreadable,
+/// and the next push sends it again for the vault to dedupe.
+#[test]
+fn an_unreadable_2xx_answer_is_not_retried() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let import = server.mock(|when, then| {
+        when.method(POST).path("/v1/imports/7/batches");
+        then.status(200).body("<html>not the vault</html>");
+    });
+
+    let dir = tempdir().unwrap();
+    write_jsonl(dir.path(), &sample_doc());
+    let cfg = VaultPushConfig {
+        max_retries: 2,
+        ..text_only_config(dir.path(), server.base_url())
+    };
+
+    let report = run(&cfg, None).unwrap();
+
+    assert_eq!(import.calls(), 1, "a 2xx must not be posted again");
+    assert!(!report.ok);
+    assert_eq!(report.conversations_failed, 1);
+    let error = report.results[0].error.as_deref().unwrap_or_default();
+    assert!(
+        error.contains("could not read the vault's answer to import batch"),
+        "{error}"
+    );
+    assert!(journal_events(dir.path(), "file_ok").is_empty());
+}

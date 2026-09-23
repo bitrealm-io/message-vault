@@ -50,10 +50,20 @@ function visibleTabs(isDesktop: boolean, managed: boolean, isOwner: boolean): Se
   });
 }
 
-/** "User Settings: Bob Smith | bob", or without a preferred name "User Settings: bob". */
-function managedHeading(username: string, preferredName: string | null | undefined): string {
+/** "User Settings: bob (Bob Smith)", the name in plain weight, or without one "User Settings: bob". */
+function managedHeading(username: string, preferredName: string | null | undefined) {
   const name = preferredName?.trim() ?? "";
-  return `User Settings: ${name ? `${name} | ${username}` : username}`;
+  return (
+    <>
+      User Settings: {username}
+      {name ? (
+        <>
+          {" "}
+          <span className="font-normal">({name})</span>
+        </>
+      ) : null}
+    </>
+  );
 }
 
 function tabFromSearchParam(raw: string | null, allowed: readonly SettingsTab[]): SettingsTab {
@@ -116,17 +126,15 @@ export default function SettingsScreen({
         <h2 className="m-0 text-text">
           {creating
             ? "New account"
-            : managed && profile
-              ? managedHeading(profile.username, profile.preferred_name)
+            : managed
+              ? // Blank until the account is read, so the owner's wording never shows first.
+                profile
+                ? managedHeading(profile.username, profile.preferred_name)
+                : "\u00a0"
               : backToAccounts
                 ? "Settings for Vault Owner"
                 : "Settings"}
         </h2>
-        {creating ? (
-          <p className="mt-[0.35rem] text-[0.875rem] text-muted">
-            Profile and Storage open once the account is created.
-          </p>
-        ) : null}
       </header>
 
       <Tabs

@@ -61,7 +61,11 @@ export const keys = {
     all: ["search-fields"] as const,
     list: (list: string) => ["search-fields", list] as const,
   },
-  accountProfile: { all: ["account-profile"] as const },
+  accountProfile: {
+    all: ["account-profile"] as const,
+    /** The logged-in account's identities with their message counts. */
+    identities: ["account-profile", "identities"] as const,
+  },
   apiTokens: { all: ["api-tokens"] as const },
   /** The accounts the vault owner manages, and the vault's own settings. */
   ownerAccounts: {
@@ -69,6 +73,7 @@ export const keys = {
     /** One account the owner has opened. Under `all`, so a write to the list refreshes it too. */
     member: (accountId: number) => ["owner-accounts", accountId] as const,
     storage: (accountId: number) => ["owner-accounts", accountId, "storage"] as const,
+    identities: (accountId: number) => ["owner-accounts", accountId, "identities"] as const,
     importDetail: (accountId: number, id: number | null) =>
       ["owner-accounts", accountId, "storage", "import", String(id)] as const,
   },

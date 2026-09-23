@@ -1,7 +1,7 @@
 import Button from "../../components/Button";
 import {
   type IdentityService,
-  identityMessageCount,
+  identityMessageCounts,
   identityOnProfile,
   identityService,
 } from "../../lib/backupIdentity";
@@ -14,7 +14,8 @@ const BODY_CELL = "border-b border-border py-1 pr-4 align-middle";
  * The addresses a backup's device sent from, each marked as on the
  * account's profile or not, with an inline add for the ones that are not.
  * Renders as boxed rows on the identity stop, and as a table on the Staging
- * Review, where staging has counted the messages each address sent.
+ * Review, where staging has counted the messages each address sent and
+ * received.
  */
 export default function BackupIdentityList({
   identities,
@@ -36,10 +37,10 @@ export default function BackupIdentityList({
    * one row (the failing identity isn't tracked separately). */
   error?: string | null;
   /**
-   * Outgoing messages staged under each owner handle. Given, the identities
-   * are a table inside a stage of the run, with a Messages column.
+   * Messages staged under each owner handle. Given, the identities are a
+   * table inside a stage of the run, with Sent and Received columns.
    */
-  messageCounts?: { handle: string; messages: number }[];
+  messageCounts?: { handle: string; sent: number; received: number }[];
 }) {
   if (identities.length === 0) {
     return (
@@ -60,7 +61,10 @@ export default function BackupIdentityList({
                   Identity
                 </th>
                 <th scope="col" className={`${HEAD_CELL} text-right`}>
-                  Messages
+                  Sent
+                </th>
+                <th scope="col" className={`${HEAD_CELL} text-right`}>
+                  Received
                 </th>
                 <th scope="col" className={HEAD_CELL}>
                   On your profile
@@ -73,13 +77,17 @@ export default function BackupIdentityList({
             <tbody>
               {identities.map((identity) => {
                 const matched = profile != null ? identityOnProfile(identity, profile) : null;
+                const { sent, received } = identityMessageCounts(identity, messageCounts);
                 return (
                   <tr key={identity}>
                     <td className={`${BODY_CELL} text-text [overflow-wrap:anywhere]`}>
                       {identity}
                     </td>
                     <td className={`${BODY_CELL} text-right tabular-nums text-text`}>
-                      {identityMessageCount(identity, messageCounts).toLocaleString()}
+                      {sent.toLocaleString()}
+                    </td>
+                    <td className={`${BODY_CELL} text-right tabular-nums text-text`}>
+                      {received.toLocaleString()}
                     </td>
                     <td className={`${BODY_CELL} text-muted`}>
                       {matched == null ? "" : matched ? "Yes" : "No"}

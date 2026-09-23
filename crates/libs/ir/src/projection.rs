@@ -241,6 +241,7 @@ pub fn pending_to_document<H: ProjectionHooks + ?Sized>(
             message_kind: hooks.message_kind(msg),
             sender_handle,
             sender_display_name,
+            owner_handle: None,
             subject: hooks.subject(msg),
             text: msg.text.clone(),
             attachments,

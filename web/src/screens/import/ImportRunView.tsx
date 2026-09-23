@@ -336,7 +336,7 @@ export default function ImportRunView({
             </FactGroup>
           ) : null}
           {identityPanel ? (
-            <FactGroup title="Identities" caption="Taken from outgoing sent messages">
+            <FactGroup title="Identities" caption="Addresses this device used">
               {identityPanel}
             </FactGroup>
           ) : null}

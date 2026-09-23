@@ -139,7 +139,7 @@ describe("ContactDrawer", () => {
     expect(screen.getByText("Family")).toBeTruthy();
     expect(screen.getByText("+1555000b")).toBeTruthy();
 
-    const table = screen.getByRole("grid", { name: "Contact handles" });
+    const table = screen.getByRole("grid", { name: "Contact identities" });
     const dashes = table.textContent?.match(/—/g) ?? [];
     expect(dashes.length).toBeGreaterThanOrEqual(4);
 
@@ -282,7 +282,7 @@ describe("ContactDrawer", () => {
     expect(screen.getByText("+1555000b")).toBeTruthy();
     expect(screen.queryByText("1555000b")).toBeNull();
 
-    const table = screen.getByRole("grid", { name: "Contact handles" });
+    const table = screen.getByRole("grid", { name: "Contact identities" });
     // Header + one handle row + summary row.
     expect(table.querySelectorAll('[role="row"]').length).toBe(3);
 
@@ -335,7 +335,7 @@ describe("ContactDrawer", () => {
     expect(screen.queryByRole("heading", { name: "Loading…" })).toBeNull();
     expect(screen.getByText("+1555000b")).toBeTruthy();
 
-    const table = screen.getByRole("grid", { name: "Contact handles" });
+    const table = screen.getByRole("grid", { name: "Contact identities" });
     expect(table.querySelectorAll('[role="row"]').length).toBe(3);
 
     resolveDetail(
@@ -384,7 +384,7 @@ describe("ContactDrawer", () => {
     expect(screen.getByRole("heading", { name: "Mom" })).toBeTruthy();
     expect(screen.queryByText("Loading…")).toBeNull();
 
-    const table = screen.getByRole("grid", { name: "Contact handles" });
+    const table = screen.getByRole("grid", { name: "Contact identities" });
     expect(table.querySelectorAll('[role="row"]').length).toBe(3);
     expect(table.textContent).toContain("…");
 
@@ -420,7 +420,7 @@ describe("ContactDrawer", () => {
     expect(screen.getByText("+15550002")).toBeTruthy();
     expect(screen.queryByText("15550001")).toBeNull();
     expect(screen.queryByText("15550002")).toBeNull();
-    const table = screen.getByRole("grid", { name: "Contact handles" });
+    const table = screen.getByRole("grid", { name: "Contact identities" });
     expect(table.querySelectorAll('[role="row"]').length).toBe(4);
 
     resolveDetail(
@@ -572,7 +572,7 @@ describe("ContactDrawer", () => {
     });
   });
 
-  it("centers identity headers between column markers and keeps Group last", async () => {
+  it("aligns text headers left and number headers right, and keeps Remove last", async () => {
     get.mockResolvedValue(detail(1));
     render(
       <ContactDrawer
@@ -589,43 +589,37 @@ describe("ContactDrawer", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("grid", { name: "Contact handles" })).toBeTruthy();
+      expect(screen.getByRole("grid", { name: "Contact identities" })).toBeTruthy();
     });
 
-    const service = screen.getByRole("columnheader", { name: /Service/i });
-    expect(service.className).toMatch(/text-center/);
-    expect(service.className).not.toMatch(/text-left/);
+    for (const name of [/Service/i, /^Identity/i]) {
+      const header = screen.getByRole("columnheader", { name });
+      expect(header.className).toMatch(/text-left/);
+      expect(header.className).not.toMatch(/text-center|text-right/);
+    }
+    for (const name of [
+      /First seen/i,
+      /Last seen/i,
+      /Conversations/i,
+      /Direct messages/i,
+      /Group messages/i,
+    ]) {
+      const header = screen.getByRole("columnheader", { name });
+      expect(header.className).toMatch(/text-right/);
+      expect(header.className).not.toMatch(/text-center|text-left/);
+    }
+    expect(screen.queryByRole("columnheader", { name: /Threads/i })).toBeNull();
 
-    const firstSeen = screen.getByRole("columnheader", { name: /First Seen/i });
-    expect(firstSeen.querySelector(".whitespace-nowrap")).toBeTruthy();
-    expect(firstSeen.className).toMatch(/text-center/);
-    expect(firstSeen.className).not.toMatch(/text-left/);
-    const lastSeen = screen.getByRole("columnheader", { name: /Last Seen/i });
-    expect(lastSeen.querySelector(".whitespace-nowrap")).toBeTruthy();
-    expect(lastSeen.className).toMatch(/text-center/);
-    expect(lastSeen.className).not.toMatch(/text-left/);
-
-    const threads = screen.getByRole("columnheader", { name: /Threads/i });
-    expect(threads.className).toMatch(/text-center/);
-    expect(threads.className).not.toMatch(/text-right/);
-
-    const direct = screen.getByRole("columnheader", { name: /Direct Messages/i });
-    expect(direct.querySelector(".flex-col")).toBeTruthy();
-    expect(direct.querySelector(".items-center")).toBeTruthy();
-    expect(direct.className).toMatch(/text-center/);
-    expect(direct.className).not.toMatch(/text-right/);
-    const group = screen.getByRole("columnheader", { name: /Group Messages/i });
-    expect(group.querySelector(".flex-col")).toBeTruthy();
-    expect(group.querySelector(".items-center")).toBeTruthy();
-    expect(group.className).toMatch(/text-center/);
-    expect(group.className).not.toMatch(/text-right/);
-
-    const table = screen.getByRole("grid", { name: "Contact handles" });
-    expect(table.querySelectorAll(".cursor-col-resize").length).toBeGreaterThanOrEqual(7);
+    const table = screen.getByRole("grid", { name: "Contact identities" });
+    expect(table.querySelectorAll(".cursor-col-resize").length).toBe(0);
 
     const headers = screen.getAllByRole("columnheader");
-    const groupIndex = headers.findIndex((h) => /Group Messages/i.test(h.textContent ?? ""));
-    expect(groupIndex).toBe(headers.length - 1);
+    expect(headers[headers.length - 1].textContent).toBe("");
+    // Once the detail is in, the row carries its service and counts.
+    await waitFor(() => expect(screen.getAllByText("42").length).toBeGreaterThan(0));
+    const remove = screen.getByRole("button", { name: "Remove +15550001 (Text message)" });
+    expect(remove.closest("[role=row]")?.lastElementChild).toContainElement(remove);
+    expect(screen.getByText("Summary")).toBeTruthy();
   });
 
   it("moves the contact to trash and closes the drawer", async () => {

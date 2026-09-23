@@ -230,6 +230,7 @@ fn csv_omits_trivial_parts_json_keeps_rich_parts() {
         message_kind: IrMessageKind::IMessage,
         sender_handle: Some("+15555550101".into()),
         sender_display_name: Some("Sam".into()),
+        owner_handle: None,
         subject: None,
         text: "hello".into(),
         attachments: vec![],

@@ -20,7 +20,6 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
   const updateProfile = useUpdateSettingsProfile(managedAccountId);
   const managed = managedAccountId !== undefined;
   const [name, setName] = useState("");
-  const [nameSaved, setNameSaved] = useState(false);
   const [nameError, setNameError] = useState("");
   const [zoneError, setZoneError] = useState("");
 
@@ -43,8 +42,6 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
         preferred_name: name.trim() || null,
       });
       setName(updated.preferred_name ?? "");
-      setNameSaved(true);
-      setTimeout(() => setNameSaved(false), 2000);
     } catch (e) {
       setNameError(e instanceof Error ? e.message : String(e));
     }
@@ -65,7 +62,7 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
   return (
     <div>
       <h3 className={sectionTitleClass}>Display Name</h3>
-      <div className="mb-[0.35rem] flex gap-2">
+      <div className="mb-[0.35rem] flex items-center gap-2">
         <input
           type="text"
           aria-label="Display name"
@@ -73,8 +70,8 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
           onChange={(e) => setName(e.target.value)}
           className={`${inputClassName} flex-1`}
         />
-        <Button variant="primary" onClick={handleSaveName} className="!px-4 !py-1">
-          {nameSaved ? "Saved" : "Save"}
+        <Button variant="primary" onClick={handleSaveName} className="!px-[0.85rem] !py-[0.35rem]">
+          Save
         </Button>
       </div>
       {nameError && <div className="mb-6 text-[0.813rem] text-danger">{nameError}</div>}

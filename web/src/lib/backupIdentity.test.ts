@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  identityMessageCounts,
   identityOnProfile,
   identityService,
   needsIdentityStop,
@@ -49,5 +50,17 @@ describe("parseSourceIdentities", () => {
     expect(parseSourceIdentities(["a", 5])).toBeNull();
     expect(parseSourceIdentities(null)).toBeNull();
     expect(parseSourceIdentities("a")).toBeNull();
+  });
+});
+
+describe("identityMessageCounts", () => {
+  it("adds up sent and received across spellings of one address", () => {
+    expect(
+      identityMessageCounts("+15550001111", [
+        { handle: "+1 (555) 000-1111", sent: 3, received: 4 },
+        { handle: "5550001111", sent: 1, received: 0 },
+        { handle: "owner@example.com", sent: 9, received: 9 },
+      ]),
+    ).toEqual({ sent: 4, received: 4 });
   });
 });

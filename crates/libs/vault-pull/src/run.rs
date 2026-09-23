@@ -538,18 +538,25 @@ impl<'a> Pull<'a> {
         &self,
         by_conv: BTreeMap<String, (Message, Vec<message_ir::IrMessage>)>,
     ) -> Result<u64> {
-        let mut conversations = 0u64;
-        for (_key, (seed, messages)) in by_conv {
-            let mut doc = build_document(&seed.source, &seed, messages);
-            // Disambiguate same chat across sources.
-            if !doc.export.source.trim().is_empty() {
-                doc.packaging_stem_suffix =
-                    Some(format!("__{}", sanitize_source_suffix(&doc.export.source)));
-            }
-            message_ir_format::write_conversation_jsonl(&self.cfg.out_dir, &doc)?;
-            conversations += 1;
+        let mut docs: Vec<message_ir::ConversationDocument> = by_conv
+            .into_values()
+            .map(|(seed, messages)| {
+                let mut doc = build_document(&seed.source, &seed, messages);
+                // Disambiguate same chat across sources.
+                if !doc.export.source.trim().is_empty() {
+                    doc.packaging_stem_suffix =
+                        Some(format!("__{}", sanitize_source_suffix(&doc.export.source)));
+                }
+                doc
+            })
+            .collect();
+        // Two groups from one source can still share a title or their people.
+        let mut names: Vec<&mut message_ir::ConversationDocument> = docs.iter_mut().collect();
+        message_ir::give_each_document_its_own_file(&mut names).map_err(anyhow::Error::msg)?;
+        for doc in &docs {
+            message_ir_format::write_conversation_jsonl(&self.cfg.out_dir, doc)?;
         }
-        Ok(conversations)
+        Ok(docs.len() as u64)
     }
 
     /// Record that this download finished, then rewrite the journal in its

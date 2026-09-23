@@ -34,6 +34,11 @@ export function NewAccountPanel() {
     submit,
   } = useCreateAccountForm({
     onCreated: async (created) => {
+      // The vault answers with the whole account row, so the account's
+      // Settings draw from it at once instead of showing a loading state and
+      // redrawing when the fetch lands. The session token is not the row's.
+      const { token: _token, ...account } = created;
+      cache.set(keys.ownerAccounts.member(account.account_id), account);
       await cache.invalidate(keys.ownerAccounts.all);
       // `replace`, so Back from the account's Settings is User Accounts, not this form.
       navigate(`/owner/accounts/${created.account_id}`, { replace: true });
@@ -61,7 +66,7 @@ export function NewAccountPanel() {
         />
       </div>
 
-      <h3 className={sectionTitleClass}>Password</h3>
+      <h3 className={sectionTitleClass}>Password (optional)</h3>
       <div className="mb-6 max-w-[360px]">
         <label className="mb-2 block">
           <span className="mb-1 block text-[0.813rem] font-medium">Password</span>
@@ -85,10 +90,6 @@ export function NewAccountPanel() {
             className={inputClassName}
           />
         </label>
-        <p className="mb-3 text-[0.75rem] text-muted">
-          Hand this password over yourself. The person keeps it until they change it under their own
-          Settings.
-        </p>
         <Button variant="primary" type="submit" disabled={busy} size="sm">
           {busy ? "Creating…" : "Create"}
         </Button>

@@ -663,22 +663,24 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
         open={props.processingOpen}
         onToggle={props.onToggleProcessing}
       >
-        <Checkbox
-          labelClassName="mb-3 flex text-[0.875rem]"
-          checked={props.force}
-          onChange={props.onForceChange}
-        >
-          Force reprocessing
-        </Checkbox>
-        {isIos || isAndroidSms ? (
+        <div className="mb-2 flex flex-col items-start gap-3">
           <Checkbox
-            labelClassName="mb-2 flex text-[0.875rem]"
-            checked={props.obfuscate}
-            onChange={props.onObfuscateChange}
+            labelClassName="text-[0.875rem]"
+            checked={props.force}
+            onChange={props.onForceChange}
           >
-            Obfuscate - All message data is anonymized.
+            Force reprocessing
           </Checkbox>
-        ) : null}
+          {isIos || isAndroidSms ? (
+            <Checkbox
+              labelClassName="text-[0.875rem]"
+              checked={props.obfuscate}
+              onChange={props.onObfuscateChange}
+            >
+              Obfuscate - All message data is anonymized.
+            </Checkbox>
+          ) : null}
+        </div>
       </CollapsibleSection>
 
       <div className="mt-2 flex gap-3">

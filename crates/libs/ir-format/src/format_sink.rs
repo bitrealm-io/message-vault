@@ -182,6 +182,8 @@ impl FormatSink {
         if let Some(archive) = &self.archive {
             archive.write(&self.output_dir, &self.docs)?;
         } else {
+            let mut docs: Vec<&mut ConversationDocument> = self.docs.iter_mut().collect();
+            message_ir::give_each_document_its_own_file(&mut docs).map_err(anyhow::Error::msg)?;
             for doc in self.docs {
                 write_format(&self.output_dir, self.format, doc)?;
             }
@@ -278,6 +280,29 @@ mod tests {
                 ProgressEvent::Prepare { done: 1, total: 1 },
             ]
         );
+    }
+
+    #[test]
+    fn two_groups_with_one_title_are_both_written() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut sink =
+            FormatSink::open(tmp.path(), OutputFormat::Json, ExportTransforms::none()).unwrap();
+        for chat in ["chat1", "chat2"] {
+            let mut doc = message_ir::testutil::sample_document(chat);
+            doc.conversation.chat_identifier = chat.into();
+            doc.conversation.conversation_type = message_ir::IrConversationType::Group;
+            doc.conversation.group_title = Some("Family".into());
+            sink.write_document(doc).unwrap();
+        }
+
+        sink.finish(&mut ExportReport::default()).unwrap();
+
+        let written = fs::read_dir(tmp.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".json"))
+            .count();
+        assert_eq!(written, 2, "neither group's file replaces the other's");
     }
 
     #[test]

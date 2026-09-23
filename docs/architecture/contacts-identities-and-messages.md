@@ -15,6 +15,7 @@ identity and gives the code name where it helps.
 
 ```mermaid
 erDiagram
+    Account ||--o{ Identity : "owns"
     Contact ||--o{ Identity : "is reached at"
     Contact }o--o{ ContactGroup : "is a member of"
     Conversation ||--o{ Participant : "includes"
@@ -30,6 +31,7 @@ allowed, and a crow's foot means many.
 
 | Relationship | What it means |
 |---|---|
+| Account owns Identity | An account's identity is one of the account holder's own addresses: the messages from it belong to the holder (`account_handles`). This is ownership, where a contact's identity is participation; the rule below says how Import applies it. |
 | Contact is reached at Identity | A contact is one person and gathers any number of identities under one name. An identity belongs to at most one contact (`contact_handles`, keyed on the handle). |
 | Conversation includes Participant | A participant is one person's seat in one conversation, and keeps what that backup called them there (`participants.name_alias`). |
 | Participant takes part as Identity | Normally the address the person used. It is empty when the source named a person and recorded no address for them. |
@@ -105,6 +107,22 @@ applies it for the conversation list, the message pane, and Export.
 
 **Deleting a contact keeps its conversations.** The name and details go. The
 identities stay in their conversations and the person becomes Unknown again.
+
+**An account's own identity means ownership, and its message counts
+describe what it takes part in.** A contact's identity says the person took
+part; an account's identity (`account_handles`) says the messages from that
+address are the account holder's own. Import is where that decision is made:
+the reader takes the holder's addresses from the backup when the backup names
+its owner, and from this list when it does not, and marks each message sent
+or received accordingly. Linking or removing an identity afterwards changes
+no message already imported. What the product shows beside an account's identity, and
+repeats before it is removed, is the number of messages in the direct and the
+group conversations that identity takes part in, counted the way a contact's
+identities are in the contact drawer. Why: one definition of "a message of an
+identity" for both tables, and a count the person can check by opening the
+conversations. Rejected: counting messages the identity sent. An account's
+own messages are marked sent by the backup and carry no sender identity, so
+that count would be zero for the identity that matters most.
 
 **An import replaces a trashed contact.** When an import meets an identity of
 a trashed contact, it discards that contact with every identity it had and

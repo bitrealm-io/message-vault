@@ -56,7 +56,7 @@ export default function ClaimVaultForm({
   return (
     <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
       <p className="mb-5 text-[0.875rem] leading-relaxed text-muted">
-        This vault has no owner yet. The vault owner manages who may use it and reads no messages.
+        A vault owner is required to create and manage users.
       </p>
 
       <TextField

@@ -2,17 +2,8 @@ import type { ContactDetail, ContactHandle } from "../../lib/contactDetail";
 import { formatIsoDateOnly } from "../../lib/formatDate";
 import type { ConversationKind } from "../../lib/searchQuery";
 
-export type {
-  ContactIdentityService,
-  HandleService,
-} from "../../lib/handleService";
-export {
-  CONTACT_IDENTITY_SERVICE_OPTIONS as HANDLE_SERVICE_OPTIONS,
-  CONTACT_IDENTITY_SERVICES,
-  formatHandleServiceLabel,
-  handleServiceSelectValue,
-  inferService,
-} from "../../lib/handleService";
+export type { HandleService } from "../../lib/handleService";
+export { formatHandleServiceLabel, inferService } from "../../lib/handleService";
 
 /** Lightweight row data so the drawer can paint before the detail API returns. */
 export type ContactPreview = {

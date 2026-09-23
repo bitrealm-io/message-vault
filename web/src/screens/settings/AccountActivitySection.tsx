@@ -41,7 +41,7 @@ export function AccountActivitySection({ profile }: { profile: AccountProfile })
             ) : null}
           </>
         ) : (
-          <span className="text-muted">Has not connected yet.</span>
+          <span className="text-muted">Never connected.</span>
         )}
       </div>
     </>

@@ -115,6 +115,7 @@ const EXERCISED: Record<string, () => unknown> = {
   deleteAccount: () =>
     vaultApi.deleteAccount({ confirm: true, current_password: "hunter2hunter2" }),
   getAccountStorage: () => vaultApi.getAccountStorage(),
+  listAccountIdentities: () => vaultApi.listAccountIdentities(undefined, 3),
   listAccountImports: () => vaultApi.listAccountImports(undefined, 3),
   getAccountImport: () => vaultApi.getAccountImport(2, undefined, 3),
   listAccountExports: () => vaultApi.listAccountExports(),

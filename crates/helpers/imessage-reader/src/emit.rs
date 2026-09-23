@@ -102,6 +102,13 @@ pub(crate) fn stream_export(session: &MailSession) -> Result<(), RuntimeError> {
         }
     }
 
+    // The count above only reports every MESSAGE_PROGRESS_EVERY rows; say
+    // the reading is finished, or the line stops short of its total.
+    let read = seen.max(u64::try_from(total).unwrap_or(u64::MAX));
+    emit(&Event::Progress(Progress::Parse {
+        done: read,
+        total: read,
+    }));
     if failures > 0 {
         session.options.emit_log(format!(
             "{failures} messages skipped due to formatting errors."

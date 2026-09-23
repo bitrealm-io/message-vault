@@ -28,7 +28,7 @@ use crate::credentials::{
 use crate::db::storage::{self, Scope};
 use crate::db::{account_profile, session_tokens, vault_imports, vault_settings};
 use crate::extract::{Json, Path, Query};
-use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_params};
+use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
 use crate::server::{ApiError, AppState, AuthIdentity, Created, LoggedIn, Owner};
 
 // ---------------------------------------------------------------------------
@@ -1076,6 +1076,135 @@ pub(crate) async fn account_storage_handler(
         contact_count,
         top_attachments,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// Identities and what they take part in
+// ---------------------------------------------------------------------------
+
+/// One of an account's identities and the messages it takes part in. The
+/// Profile screen shows the counts beside each identity and repeats them when
+/// one is about to be removed, so the person knows what the identity is tied
+/// to before it goes.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct AccountIdentity {
+    /// The identity as the profile lists it: E.164 for a number, lower case for an address.
+    pub handle: String,
+    /// `phone`, `email`, or `whatsapp`.
+    pub service: String,
+    /// When the oldest message in a conversation the identity takes part in
+    /// was sent, or null when there is none.
+    pub start_date: Option<String>,
+    /// When the newest such message was sent, or null when there is none.
+    pub end_date: Option<String>,
+    /// Direct and group conversations the identity takes part in, trashed
+    /// conversations excluded.
+    pub conversations: u64,
+    /// Messages in the one-to-one conversations the identity takes part in,
+    /// trashed conversations and duplicates excluded.
+    pub direct_messages: u64,
+    /// Messages in the group conversations the identity takes part in, on the
+    /// same terms.
+    pub group_messages: u64,
+}
+
+/// One row of [`account_identities`]: handle, service, first and last
+/// timestamp, conversation count, direct and group message counts.
+type AccountIdentityRow = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    i64,
+    i64,
+    i64,
+);
+
+/// The account's identities with their message counts, phones before emails
+/// and each in order. Counted the way a contact's identities are in the
+/// contact drawer, so the two tables agree on what a message "of" an identity is.
+async fn account_identities(
+    conn: &mut AnyConnection,
+    account_id: i64,
+) -> Result<Vec<AccountIdentity>, ApiError> {
+    let rows: Vec<AccountIdentityRow> = sqlx::query_as(&format!(
+        "SELECT h.normalized,
+                CASE WHEN h.handle_type = 'email' THEN 'email'
+                     WHEN h.service = 'whatsapp' THEN 'whatsapp'
+                     ELSE 'phone' END AS service,
+                MIN(m.timestamp),
+                MAX(m.timestamp),
+                COUNT(DISTINCT c.id),
+                COUNT(DISTINCT CASE WHEN c.conversation_type = 'individual' THEN m.id END),
+                COUNT(DISTINCT CASE WHEN c.conversation_type = 'group' THEN m.id END)
+         FROM account_handles ah
+         JOIN handles h ON h.id = ah.handle_id
+         LEFT JOIN conversations c ON c.account_id = ah.account_id
+           AND (c.chat_handle_id = ah.handle_id
+                OR EXISTS (
+                  SELECT 1 FROM participants p
+                  WHERE p.conversation_id = c.id AND p.handle_id = ah.handle_id
+                ))
+           AND {NOT_TRASHED_CONVERSATION}
+         LEFT JOIN messages m ON m.conversation_id = c.id AND m.duplicate_of IS NULL
+         WHERE ah.account_id = $1
+         GROUP BY ah.handle_id, h.normalized, h.handle_type, h.service
+         ORDER BY CASE WHEN h.handle_type = 'email' THEN 1 ELSE 0 END, h.normalized",
+        NOT_TRASHED_CONVERSATION = crate::search::emit::NOT_TRASHED_CONVERSATION,
+    ))
+    .bind(account_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(
+            |(handle, service, start_date, end_date, conversations, direct, group)| {
+                AccountIdentity {
+                    handle,
+                    service,
+                    start_date,
+                    end_date,
+                    conversations: conversations.max(0) as u64,
+                    direct_messages: direct.max(0) as u64,
+                    group_messages: group.max(0) as u64,
+                }
+            },
+        )
+        .collect())
+}
+
+/// An account's identities, each with the messages it takes part in. The
+/// owner reads any account's; an account reads its own.
+#[utoipa::path(
+    get,
+    path = "/v1/accounts/{id}/identities",
+    tag = "Accounts",
+    operation_id = "list_account_identities",
+    security(("session" = [])),
+    params(
+        ("id" = i64, Path, description = "Account id"),
+        ("limit" = Option<usize>, Query, description = "Page size, default 40, at most 500"),
+        ("offset" = Option<usize>, Query, description = "Rows to skip")
+    ),
+    responses(
+        (status = 200, body = Page<AccountIdentity>),
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, body = crate::problem::Problem),
+        (status = 404, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem)
+    )
+)]
+pub(crate) async fn account_identities_handler(
+    State(state): State<AppState>,
+    Path(target): Path<i64>,
+    LoggedIn(auth): LoggedIn,
+    Query(query): Query<PageQuery>,
+) -> Result<Json<Page<AccountIdentity>>, ApiError> {
+    let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
+    let mut conn = state.db.acquire().await?;
+    require_owner_or_self(&mut conn, &auth, target).await?;
+    let rows = account_identities(&mut conn, target).await?;
+    Ok(Json(page_of(rows, params)))
 }
 
 // ---------------------------------------------------------------------------

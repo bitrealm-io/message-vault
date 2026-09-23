@@ -7,10 +7,12 @@ import { sectionTitleClass } from "./profileStyles";
 
 const STATUSES = ["active", "disabled"] as const;
 
+// Every permission covers messages and their attachments alike, so the
+// heading says so once and each row is the bare verb.
 const PERMISSIONS = [
-  { flag: "can_import", label: "Import messages" },
-  { flag: "can_export", label: "Export messages" },
-  { flag: "can_delete", label: "Delete messages & attachments" },
+  { flag: "can_import", label: "Import" },
+  { flag: "can_export", label: "Export" },
+  { flag: "can_delete", label: "Delete" },
 ] as const;
 
 /**
@@ -65,7 +67,8 @@ export function AccountPermissionsSection({
         )}
       </div>
 
-      <h3 className={sectionTitleClass}>Permissions</h3>
+      <h3 className={sectionTitleClass}>Message Permissions</h3>
+      <p className="mb-2 mt-0 text-[0.813rem] text-muted">Messages and their attachments.</p>
       <div className="mb-6 flex flex-col gap-2">
         {PERMISSIONS.map(({ flag, label }) => (
           <Checkbox

@@ -30,7 +30,7 @@ import {
   invokePush,
   invokeSummarizeStaging,
   invokeTranscodeStaging,
-  type OutgoingHandleCount,
+  type OwnerHandleCount,
   onExtractEvents,
   type PushFinishedReport,
   probeFfmpegTools,
@@ -149,29 +149,34 @@ function stagingMediaFields(
   });
 }
 
-/** Present-tense verb for every step but `media` (which needs the mode —
- * see `mediaVerb`) and `setup` (which carries its own label — see
- * `setupDetail`), keyed by step name so a step added to the wire union
- * without an entry here is a compile error rather than a silent fallback.
+/** What a step is doing and what it counts, for every step but `media`
+ * (which needs the mode — see `mediaVerb`), `setup` (which carries its own
+ * label — see `setupDetail`) and `attachments` (which adds bytes — see
+ * `formatAttachmentProgress`), keyed by step name so a step added to the
+ * wire union without an entry here is a compile error rather than a silent
+ * fallback.
  */
-const STEP_VERB: Record<Exclude<ImportProgressEvent["step"], "media" | "setup">, string> = {
-  parse: "Reading",
-  attachments: "Copied",
-  prepare: "Preparing",
-  upload: "Uploading",
+const STEP_LABEL: Record<
+  Exclude<ImportProgressEvent["step"], "media" | "setup" | "attachments">,
+  string
+> = {
+  parse: "Reading messages",
+  prepare: "Preparing conversations",
+  check: "Checking attachments",
+  upload: "Uploading conversations",
 };
 
 /**
- * Present-tense verb shown while a step is running. Falls back to a plain
- * verb for a step string this build doesn't recognise — the event comes
- * off the wire unvalidated.
+ * Label shown while a step is running. Falls back to a plain word for a
+ * step string this build doesn't recognise — the event comes off the wire
+ * unvalidated.
  */
-function progressVerb(
-  step: Exclude<ImportProgressEvent["step"], "setup">,
+function progressLabel(
+  step: Exclude<ImportProgressEvent["step"], "setup" | "attachments">,
   mode: AttachmentMediaMode,
 ): string {
-  if (step === "media") return mediaVerb(mode);
-  return STEP_VERB[step] ?? "Working";
+  if (step === "media") return `${mediaVerb(mode)} attachments`;
+  return STEP_LABEL[step] ?? "Working";
 }
 
 /** Stage rows for this mode, with Staging optionally marked active. */
@@ -296,10 +301,12 @@ function isAttachmentForecast(value: unknown): value is AttachmentForecast {
   );
 }
 
-function isOutgoingHandleCount(value: unknown): value is OutgoingHandleCount {
+function isOwnerHandleCount(value: unknown): value is OwnerHandleCount {
   if (typeof value !== "object" || value === null) return false;
   const r = value as Record<string, unknown>;
-  return typeof r.handle === "string" && typeof r.messages === "number";
+  return (
+    typeof r.handle === "string" && typeof r.sent === "number" && typeof r.received === "number"
+  );
 }
 
 /**
@@ -321,7 +328,7 @@ export function parseStoredStagingSummary(raw: unknown): StagingSummary | undefi
   if (typeof r.conversations !== "number") return undefined;
   if (typeof r.messages !== "number") return undefined;
   if (!isStringArray(r.contactIdentifiers)) return undefined;
-  if (!Array.isArray(r.outgoingHandles) || !r.outgoingHandles.every(isOutgoingHandleCount)) {
+  if (!Array.isArray(r.ownerHandles) || !r.ownerHandles.every(isOwnerHandleCount)) {
     return undefined;
   }
   if (typeof r.attachments !== "number") return undefined;
@@ -344,7 +351,7 @@ export function parseStoredStagingSummary(raw: unknown): StagingSummary | undefi
     conversations: r.conversations,
     messages: r.messages,
     contactIdentifiers: r.contactIdentifiers,
-    outgoingHandles: r.outgoingHandles,
+    ownerHandles: r.ownerHandles,
     attachments: r.attachments,
     attachmentBytes: r.attachmentBytes,
     verdictCounts: {
@@ -384,6 +391,12 @@ type RunScratch = {
    */
   extractMediaMode: AttachmentMediaMode;
   lastAttachmentProgress: AttachmentProgressCounts | null;
+  /**
+   * The Staging row's latest line for each stage that reports on it. Reading
+   * messages, copying attachments, and writing conversation files run at the
+   * same time, so one shared line would flip between them on every event.
+   */
+  stagingLines: Partial<Record<StagingProgressStep, string>>;
   /** Guards approve and cancel against a double click doing the work twice. */
   reviewAction: boolean;
   /**
@@ -407,6 +420,7 @@ function freshScratch(): RunScratch {
     attachmentMode: "copy",
     extractMediaMode: "copy",
     lastAttachmentProgress: null,
+    stagingLines: {},
     reviewAction: false,
     startImport: false,
   };
@@ -470,6 +484,7 @@ function beginRun(form: ImportJobFormValues, firstStep: ImportIssue["step"]): vo
   scratch.timing = { ...EMPTY_TIMING };
   scratch.durations = { ...EMPTY_DURATIONS };
   scratch.lastAttachmentProgress = null;
+  scratch.stagingLines = {};
   scratch.attachmentMode = form.attachmentMedia;
   scratch.extractMediaMode = extractAttachmentMedia(form.attachmentMedia);
   scratch.form = form;
@@ -509,7 +524,7 @@ function applyProgress(event: ImportProgressEvent): void {
   // what "parse" names in the Import Errors list.
   scratch.activeStep = event.step === "setup" ? "parse" : event.step;
 
-  const detail = progressDetail(event);
+  const detail = rowDetail(event);
   const done = isProgressStepComplete(event.step, event.done, event.total);
 
   updateSteps((current) =>
@@ -527,7 +542,40 @@ function applyProgress(event: ImportProgressEvent): void {
   );
 }
 
-/** The row's detail line for one progress event. */
+/** The progress steps that report on the Staging row. */
+type StagingProgressStep = Extract<
+  ImportProgressEvent["step"],
+  "setup" | "parse" | "attachments" | "prepare" | "check"
+>;
+
+/** The Staging row's steps in the order their lines show: conversations,
+ * then messages, then attachments. */
+const STAGING_LINE_ORDER: readonly StagingProgressStep[] = [
+  "setup",
+  "prepare",
+  "parse",
+  "attachments",
+  "check",
+];
+
+function isStagingProgressStep(step: ImportProgressEvent["step"]): step is StagingProgressStep {
+  return (STAGING_LINE_ORDER as readonly string[]).includes(step);
+}
+
+/**
+ * The row's detail for one progress event. On the Staging row this event
+ * updates its own line and leaves the others in place; the setup line goes
+ * once messages are being read, since setup is over by then.
+ */
+function rowDetail(event: ImportProgressEvent): string {
+  const line = progressDetail(event);
+  if (!isStagingProgressStep(event.step)) return line;
+  scratch.stagingLines = { ...scratch.stagingLines, [event.step]: line };
+  if (event.step !== "setup") delete scratch.stagingLines.setup;
+  return STAGING_LINE_ORDER.flatMap((step) => scratch.stagingLines[step] ?? []).join("\n");
+}
+
+/** The detail line for one progress event. */
 function progressDetail(event: ImportProgressEvent): string {
   if (event.step === "setup") return setupDetail(event);
   if (event.step === "attachments") {
@@ -540,10 +588,9 @@ function progressDetail(event: ImportProgressEvent): string {
       bytesTotal: event.bytes_total ?? last?.bytesTotal ?? 0,
     });
   }
-  const counts = event.status
-    ? `${event.done}/${event.total} (${event.status})`
-    : `${event.done}/${event.total}`;
-  return `${progressVerb(event.step, scratch.attachmentMode)} ${counts}`;
+  const numbers = `${event.done.toLocaleString()}/${event.total.toLocaleString()}`;
+  const counts = event.status ? `${numbers} (${event.status})` : numbers;
+  return `${progressLabel(event.step, scratch.attachmentMode)}: ${counts}`;
 }
 
 function recordIssue(issue: ImportIssueEvent): void {
@@ -562,7 +609,7 @@ function runJob(invokeFn: () => Promise<void>): Promise<TauriJobResult> {
 /**
  * `invokeSummarizeStaging`, with a listener on the same `extract:progress`
  * channel the extract and media passes use. `summarize_staging` (Rust)
- * emits progress on the `prepare` step while it walks a big folder, and
+ * emits progress on the `check` step while it walks a big folder, and
  * `applyProgress` already knows to draw that on the Staging row, so this
  * only has to make sure the event reaches it.
  */

@@ -191,7 +191,7 @@ function stagingSummary(overrides: Partial<StagingSummary> = {}): StagingSummary
     conversations: 1,
     messages: 10,
     contactIdentifiers: [],
-    outgoingHandles: [],
+    ownerHandles: [],
     attachments: 0,
     attachmentBytes: 0,
     verdictCounts: {
@@ -330,22 +330,22 @@ describe("useImportJob wiring", () => {
 
   it("routes a progress event arriving during summarize to the staging row", async () => {
     // W6: `summarize_staging` (Rust) emits `extract:progress` with
-    // `step: "prepare"` while it walks a big folder, but nothing used to
+    // `step: "check"` while it walks a big folder, but nothing used to
     // subscribe, so those events had nowhere to go and a huge folder's gate
     // looked frozen. The mocked `invokeSummarizeStaging` fires one here,
     // mid-call, through the callbacks `onExtractEvents` was given — exactly
     // what the real Tauri event stream would do.
     invokeSummarizeStagingMock.mockReset();
     invokeSummarizeStagingMock.mockImplementationOnce(async () => {
-      lastExtractEventCallbacks?.onProgress?.({ step: "prepare", done: 50, total: 200 });
+      lastExtractEventCallbacks?.onProgress?.({ step: "check", done: 50, total: 200 });
       return stagingSummary();
     });
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
 
     expect(result.current.phase).toBe("staging_review");
-    // Writing the conversation files narrates the Staging row.
-    expect(result.current.steps[0]?.detail).toBe("Preparing 50/200");
+    // Checking the staged attachments narrates the Staging row.
+    expect(result.current.steps[0]?.detail).toBe("Checking attachments: 50/200");
   });
 
   it("narrates a setup step on the read row without marking it done", async () => {
@@ -390,6 +390,57 @@ describe("useImportJob wiring", () => {
     release();
     await act(() => started);
     expect(result.current.phase).toBe("staging_review");
+  });
+
+  it("keeps a line per stage on the Staging row while they run together", async () => {
+    // Reading messages, copying attachments, and writing conversation files
+    // report at the same time. With one shared line, each event replaced the
+    // last, so the row flipped between them.
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    runMock.mockReset();
+    runMock.mockImplementationOnce(
+      async (
+        fn: () => Promise<unknown>,
+        _onLog?: (line: string) => void,
+        onProgress?: (event: ImportProgressEvent) => void,
+      ) => {
+        await fn();
+        onProgress?.({ step: "setup", done: 5, total: 5, status: "Decrypting" });
+        onProgress?.({ step: "parse", done: 10, total: 40 });
+        onProgress?.({
+          step: "attachments",
+          done: 3,
+          total: 9,
+          bytes_done: 1024,
+          bytes_total: 4096,
+        });
+        onProgress?.({ step: "prepare", done: 1, total: 4 });
+        onProgress?.({
+          step: "attachments",
+          done: 4,
+          total: 9,
+          bytes_done: 2048,
+          bytes_total: 4096,
+        });
+        await held;
+        return EXTRACT_RESULT;
+      },
+    );
+    const { result } = renderHook(() => useImportJob());
+    let started: Promise<void> = Promise.resolve();
+    act(() => {
+      started = result.current.startImport(form({ attachmentMedia: "copy" }));
+    });
+    await waitFor(() =>
+      expect(result.current.steps[0]?.detail).toBe(
+        "Preparing conversations: 1/4\nReading messages: 10/40\nCopied attachments: 4/9 (2.0 KB / 4.0 KB)",
+      ),
+    );
+    release();
+    await act(() => started);
   });
 
   it("uploads straight from the first gate under copy, because there is no second one", async () => {

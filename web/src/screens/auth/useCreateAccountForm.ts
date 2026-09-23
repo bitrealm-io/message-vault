@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { VaultApiError } from "../../lib/api";
 import { useAsyncAction } from "../../lib/useAsyncAction";
 import { createAccount } from "../../lib/vaultApi";
 import type { components } from "../../lib/vaultApi.types";
@@ -43,12 +44,22 @@ export function useCreateAccountForm({
         throw new Error("Passwords do not match.");
       }
       onBeforeCreate?.();
-      const created = await createAccount({
-        username: username.trim(),
-        password,
-        preferred_name: null,
-        phone: null,
-      });
+      let created: CreatedAccount;
+      try {
+        created = await createAccount({
+          username: username.trim(),
+          password,
+          preferred_name: null,
+          phone: null,
+        });
+      } catch (e: unknown) {
+        // A taken username is the vault's answer, worded for the log. The
+        // form says the one thing the person can act on.
+        if (e instanceof VaultApiError && e.type === "username-taken") {
+          throw new Error("Invalid username.");
+        }
+        throw e;
+      }
       await onCreated(created);
     });
   };

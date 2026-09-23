@@ -81,38 +81,44 @@ _Avoid_: Server time, Local time, Offset
 ### People
 
 **Contact**:
-One person the vault knows: a name, and the handles that reach them. A
+One person the vault knows: a name, and the identities that reach them. A
 contact is made for every person an import meets, and named from the backup
 when the backup knew the name; a name the person types or loads from an
 address book replaces one an import supplied. Deleting a contact removes the
-name and details, not the conversations: the person's handles stay in their
+name and details, not the conversations: the person's identities stay in their
 conversations and the contact becomes Unknown again, the way deleting a card
 from a phone's address book leaves its text threads in place.
 _Avoid_: Card, Identity, Person record
 
-**Handle**:
+**Identity**:
 One address a person can be reached at: a phone number, an email address,
-or a username on a service. A handle belongs to at most one contact. The id
-a source gives a group conversation (`chat1000000005`) reaches no person: the
-vault keeps it to key the conversation, and it never belongs to a contact.
-Only the people in the group do. Handle is the word in the code and the
-database; the app and the published documentation call the same thing an
-**Identity**.
-_Avoid_: Address, Number
+or a username on a service. An identity belongs to at most one contact. The
+id a source gives a group conversation (`chat1000000005`) reaches no person:
+the vault keeps it to key the conversation, and it never belongs to a contact.
+Only the people in the group do.
+
+An identity means one of two things depending on whose it is. A contact's
+identity means participation: this person took part in these messages. An
+account identity means ownership: the messages from this address belong to
+the account holder, and Import uses the account's identities to decide which
+messages are the holder's own rather than someone else's.
+
+Handle is the word in the code and the database for the same thing.
+_Avoid_: Handle, Address, Number
 
 **Last heard from**:
 When a contact last sent a message: the newest message any of the contact's
-handles was the sender of, shown on the contact list and one of the two ways
+identities was the sender of, shown on the contact list and one of the two ways
 the list can be ordered. It is not the contact's last activity. A message the
 account owner sent to the contact, or one another member of a group chat
 sent, does not move it, because neither is hearing from the contact. A
-contact none of whose handles ever sent a message has no date and sorts last
+contact none of whose identities ever sent a message has no date and sorts last
 whichever way the list runs.
 _Avoid_: Last seen, Last active, Last message
 
 **Unknown**:
 The Contact Group the vault computes from contacts that have no name or no
-handle. It has no members of its own and empties as a person names people.
+identity. It has no members of its own and empties as a person names people.
 _Avoid_: Unnamed, Unresolved, Uncategorised
 
 **Trash**:
@@ -120,8 +126,8 @@ Where a person sets aside conversations and contacts they do not want to
 see. Membership is explicit, nothing in it is deleted, and a trashed
 conversation can still be opened and read. Lists leave the trash out unless
 asked to show it. A trashed contact stays set aside until an import meets
-one of its handles: the import then discards the trashed contact together
-with every handle it had and makes a new contact from the backup, as a first
+one of its identities: the import then discards the trashed contact together
+with every identity it had and makes a new contact from the backup, as a first
 import would. The trash is the only door to permanent
 deletion; something must be trashed before it can be deleted, one item at a
 time or all at once with Empty Trash.
@@ -131,7 +137,7 @@ _Avoid_: Deleted, Archive, Hidden, Bin
 
 **Account**:
 One person's store inside a vault: the login they log in with, and the
-conversations, contacts, and handles that store holds. A vault holds many
+conversations, contacts, and identities that store holds. A vault holds many
 accounts and keeps each one's data isolated from the others, so nothing an
 account holds is visible to another. An account is not finished until
 profile setup finishes.
@@ -146,7 +152,7 @@ an account. The owner monitors the vault through metadata: counts and totals of
 messages, contacts and attachments, each account's imports and exports, when
 it last logged in, and attachment file names and sizes. The owner never reads
 content: a message's text, an attachment's bytes, or a contact's name and
-handles. The full line is in `docs/adr/0008`. There is exactly one, it cannot
+identities. The full line is in `docs/adr/0008`. There is exactly one, it cannot
 be deleted, and no other account can be given its powers.
 _Avoid_ as its name: Admin, Administrator, Superuser, Root. The role is an
 administrator's; the account is called the vault owner, because exactly one

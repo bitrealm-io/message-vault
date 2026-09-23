@@ -21,7 +21,9 @@ pub struct AttachmentProgress {
     pub total: usize,
     /// Bytes written (or measured) so far.
     pub bytes_done: u64,
-    /// Known or measured byte total. Grows when a file had no `size_hint`.
+    /// Byte total: the size hints, corrected to each file's real size as it
+    /// is read (and less a missing file's hint), so it ends equal to
+    /// `bytes_done`.
     pub bytes_total: u64,
 }
 
@@ -104,6 +106,7 @@ pub fn run_attachment_jobs(
             Some(bytes) if !bytes.is_empty() => bytes,
             _ => {
                 job.attachment.missing_reason = Some("file_missing".into());
+                bytes_total = bytes_total.saturating_sub(job.size_hint.unwrap_or(0));
                 on_progress(AttachmentProgress {
                     done: i + 1,
                     total,
@@ -114,9 +117,9 @@ pub fn run_attachment_jobs(
             }
         };
 
-        if job.size_hint.is_none() {
-            bytes_total += bytes.len() as u64;
-        }
+        // A hint is the source's own record of the size, which can differ
+        // from the file (Apple's `total_bytes` often does): count the file.
+        bytes_total = bytes_total.saturating_sub(job.size_hint.unwrap_or(0)) + bytes.len() as u64;
 
         persist_clone(job, attachments_dir, &bytes)?;
         bytes_done += bytes.len() as u64;

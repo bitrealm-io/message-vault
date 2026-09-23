@@ -21,7 +21,7 @@ On-disk forms:
 - **JSON** (CLI/GUI default) — one pretty-printed `<conversation-stem>.json` per chat
 - **JSONL** — one `<conversation-stem>.jsonl` per chat: header line, then one `IrMessage` per line
 
-Stem rules match CSV filenames. Packaging-only suffixes (e.g. `__whatsapp`) affect the on-disk stem but are **not** serialized in the JSON body.
+Stem rules match CSV filenames. Packaging-only suffixes (e.g. `__whatsapp`) affect the on-disk stem but are **not** serialized in the JSON body. When two conversations in one run reduce to the same stem, ignoring case (two groups with one title, or two untitled groups with the same people), each gets `__` and the first 8 hex digits of the SHA-256 of its `chat_identifier` appended, so neither file replaces the other. Two conversations with the same `chat_identifier` and stem stop the run instead.
 
 Pipeline: `backup → common message → FormatSink → user-picked format`.
 
@@ -87,6 +87,7 @@ Pipeline: `backup → common message → FormatSink → user-picked format`.
 
 - Outgoing rows set `sender_handle` / `sender_display_name` from `export.owner_*` (display defaults to `"Me"` when a handle is known).
 - Incoming rows use the peer identity.
+- `owner_handle` on a message is the owner's own address on it: the one it was sent from, or the one it was received at. Only sources that record the owner per message write it (iMessage, from `destination_caller_id`); everywhere else it is omitted and `export.owner_handle` stands for every message. An iMessage outgoing row keeps the address it was sent from, and takes `export.owner_handle` only when the database recorded none.
 - Display names are not duplicated under `source`.
 
 ### Attachments

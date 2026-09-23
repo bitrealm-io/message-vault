@@ -82,15 +82,88 @@ describe("OnboardingScreen", () => {
     expect(screen.getByRole("combobox", { name: "Time Zone" })).not.toHaveValue("");
   });
 
+  it("puts each identity the owner added in its own row, for the holder to change", () => {
+    profile = { ...blankProfile, phones: ["+15555550100"], emails: ["bob@example.com"] };
+    render(<OnboardingScreen />);
+
+    expect(rowValue(1)).toHaveValue("+15555550100");
+    expect(rowValue(2)).toHaveValue("bob@example.com");
+    expect(screen.getByRole("button", { name: "Email Account 2 type" })).toBeInTheDocument();
+    expect(screen.queryByText(/Already on this account/)).not.toBeInTheDocument();
+  });
+
   it("counts an identity the owner added, so another is not required", async () => {
     profile = { ...blankProfile, phones: ["+15555550100"] };
     render(<OnboardingScreen />);
 
-    expect(screen.getByText("Already on this account: +15555550100")).toBeInTheDocument();
     const go = screen.getByRole("button", { name: "Continue to vault" });
     expect(go).toBeDisabled();
     await setupUser().type(screen.getByRole("textbox", { name: "Display Name" }), "Bob");
     expect(go).toBeEnabled();
+  });
+
+  it("sends only what changed: an edited identity is unlinked and its new value linked", async () => {
+    profile = {
+      ...blankProfile,
+      preferred_name: "Bob",
+      phones: ["+15555550100", "+15555550101"],
+    };
+    const user = setupUser();
+    render(<OnboardingScreen />);
+
+    await user.clear(rowValue(1));
+    await user.paste("+1 555-555-0199");
+    await user.click(screen.getByRole("button", { name: "Continue to vault" }));
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalled());
+    expect(apiPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        handles: [{ handle: "+1 555-555-0199", service: "phone" }],
+        remove_handles: [{ handle: "+15555550100", service: "phone" }],
+      }),
+    );
+  });
+
+  it("unlinks an identity whose row is removed", async () => {
+    profile = {
+      ...blankProfile,
+      preferred_name: "Bob",
+      phones: ["+15555550100", "+15555550101"],
+    };
+    const user = setupUser();
+    render(<OnboardingScreen />);
+
+    await user.click(screen.getByRole("button", { name: "Remove account 2" }));
+    await user.click(screen.getByRole("button", { name: "Continue to vault" }));
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalled());
+    expect(apiPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        handles: [],
+        remove_handles: [{ handle: "+15555550101", service: "phone" }],
+      }),
+    );
+  });
+
+  it("shows no more identities than the card has rows for, and leaves the rest alone", async () => {
+    profile = {
+      ...blankProfile,
+      preferred_name: "Bob",
+      phones: ["+15555550100", "+15555550101", "+15555550102", "+15555550103"],
+      emails: ["bob@example.com", "b@example.com"],
+    };
+    const user = setupUser();
+    render(<OnboardingScreen />);
+
+    expect(rowValue(4)).toHaveValue("+15555550103");
+    expect(screen.queryByRole("textbox", { name: "Account 5 value" })).not.toBeInTheDocument();
+    expect(screen.getByText("2 more are in Settings.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Continue to vault" }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalled());
+    expect(apiPost).toHaveBeenCalledWith(
+      expect.objectContaining({ handles: [], remove_handles: [] }),
+    );
   });
 
   it("shows an example in the empty value field", () => {

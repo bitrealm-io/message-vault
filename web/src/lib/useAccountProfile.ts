@@ -48,6 +48,8 @@ export function useUpdateAccountProfile(): UseMutationResult<
     mutationFn: (body) => updateAccountProfile(body),
     onSuccess: (profile) => {
       cache.set(keys.accountProfile.all, profile);
+      // An identity added or removed changes the identities list and its counts.
+      void cache.invalidate(keys.accountProfile.identities);
     },
   });
 }

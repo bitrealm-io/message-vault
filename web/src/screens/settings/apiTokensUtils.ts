@@ -16,15 +16,10 @@ export function formatTokenDate(secs: string | null | undefined): string {
 }
 
 /** What an API token is allowed to do, as a readable list. */
-export function permissionsLabel(token: {
-  can_import: boolean;
-  can_export: boolean;
-  can_delete: boolean;
-}): string {
+export function permissionsLabel(token: { can_import: boolean; can_export: boolean }): string {
   const parts: string[] = [];
   if (token.can_import) parts.push("Import");
   if (token.can_export) parts.push("Export");
-  if (token.can_delete) parts.push("Delete");
   return parts.length > 0 ? parts.join(" / ") : "None";
 }
 
@@ -33,7 +28,6 @@ export type ApiTokenItem = {
   label: string;
   can_import: boolean;
   can_export: boolean;
-  can_delete: boolean;
   /** Masked secret, e.g. `mv-api-Sd..mE`. */
   token_hint: string;
   created_at: string;

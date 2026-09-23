@@ -686,15 +686,12 @@ pub(crate) struct CreateImportResponse {
     pub(crate) id: i64,
 }
 
-/// Final stats and issues for a finished import session.
+/// Final stats and issues for a running Import Run. The outcome is stated
+/// once, as `status`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct CompleteImportBody {
-    #[serde(default = "default_true")]
-    pub(crate) ok: bool,
-    /// Explicit session outcome; overrides `ok` when present.
-    /// One of `completed`, `completed_with_issues`, `failed`.
-    #[serde(default)]
-    pub(crate) status: Option<String>,
+    /// How the run ended: `completed`, `completed_with_issues` or `failed`.
+    pub(crate) status: String,
     #[serde(default)]
     pub(crate) message_count: Option<i64>,
     #[serde(default)]
@@ -715,10 +712,6 @@ pub(crate) struct CompleteImportBody {
     pub(crate) summary: Option<serde_json::Value>,
     #[serde(default)]
     pub(crate) issues: Vec<CompleteImportIssueBody>,
-}
-
-fn default_true() -> bool {
-    true
 }
 
 /// One parse/convert/upload issue from the import.
@@ -744,10 +737,10 @@ fn validate_complete_import_issues(issues: &[CompleteImportIssueBody]) -> Result
     Ok(())
 }
 
-fn validate_import_status(status: Option<&str>) -> Result<(), ApiError> {
+fn validate_import_status(status: &str) -> Result<(), ApiError> {
     match status {
-        None | Some("completed" | "completed_with_issues" | "failed") => Ok(()),
-        Some(other) => Err(ApiError::validation(format!(
+        "completed" | "completed_with_issues" | "failed" => Ok(()),
+        other => Err(ApiError::validation(format!(
             "invalid import status '{other}'; expected 'completed', 'completed_with_issues', or 'failed'"
         ))),
     }
@@ -1065,7 +1058,7 @@ pub(crate) async fn imports_complete_handler(
 ) -> Result<Json<CompleteImportResponse>, ApiError> {
     let account = resolve_import_account(&auth);
     validate_complete_import_issues(&body.issues)?;
-    validate_import_status(body.status.as_deref())?;
+    validate_import_status(&body.status)?;
     let summary_json =
         match body.summary {
             Some(summary) => Some(serde_json::to_string(&summary).map_err(|e| {
@@ -1074,7 +1067,6 @@ pub(crate) async fn imports_complete_handler(
             None => None,
         };
     let args = crate::db::vault_imports::CompleteImportArgs {
-        ok: body.ok,
         status: body.status,
         message_count: body.message_count,
         attachment_count: body.attachment_count,

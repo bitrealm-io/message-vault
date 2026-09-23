@@ -128,7 +128,6 @@ const EXERCISED: Record<string, () => unknown> = {
       label: "backup client",
       can_import: true,
       can_export: true,
-      can_delete: false,
     }),
   renameApiToken: () => vaultApi.renameApiToken(3, { label: "renamed" }),
   deleteApiToken: () => vaultApi.deleteApiToken(3),
@@ -189,7 +188,7 @@ const EXERCISED: Record<string, () => unknown> = {
   getImport: () => vaultApi.getImport(4),
   createImport: () => vaultApi.createImport({ source: "iPhone" }),
   setImportStage: () => vaultApi.setImportStage(4, { stage: "staged" }),
-  completeImport: () => vaultApi.completeImport(4, {}),
+  completeImport: () => vaultApi.completeImport(4, { status: "completed" }),
   discardImport: () => vaultApi.discardImport(4),
   getImportContacts: () => vaultApi.getImportContacts(4),
 };

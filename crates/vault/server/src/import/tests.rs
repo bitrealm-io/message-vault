@@ -739,7 +739,7 @@ async fn promote_stamps_messages_with_import_id() {
         TEST_ACCOUNT,
         import_id,
         &crate::db::vault_imports::CompleteImportArgs {
-            ok: true,
+            status: "completed".into(),
             message_count: Some(stats.messages as i64),
             attachment_count: Some(0),
             bytes_uploaded: Some(0),

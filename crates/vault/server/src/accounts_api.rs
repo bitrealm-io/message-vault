@@ -964,8 +964,9 @@ fn remove_account_asset_trees(
 /// account itself, its contacts, and its login survive.
 ///
 /// The vault owner may, on any account. The account itself may with a
-/// credential that carries the `delete` scope, session or API token, and
-/// confirms in the body.
+/// session that carries the `delete` permission, and confirms in the body.
+/// An API token is refused whatever its scopes: permanent deletion is a
+/// person's act (`docs/architecture/http-api.md`, "Credentials and reach").
 #[utoipa::path(
     delete,
     path = "/v1/accounts/{id}/messages",
@@ -973,8 +974,7 @@ fn remove_account_asset_trees(
     operation_id = "delete_account_messages",
     security(
         ("session" = ["owner"]),
-        ("session" = ["delete"]),
-        ("api-token" = ["delete"])
+        ("session" = ["delete"])
     ),
     params(("id" = i64, Path, description = "Account whose messages are destroyed")),
     request_body(content = Option<DeleteMessagesRequest>, description = "Sent by an account deleting its own messages; the owner sends no body"),
@@ -990,7 +990,7 @@ fn remove_account_asset_trees(
 pub async fn delete_messages_handler(
     State(state): State<AppState>,
     Path(target): Path<i64>,
-    auth: AuthIdentity,
+    LoggedIn(auth): LoggedIn,
     body: Option<Json<DeleteMessagesRequest>>,
 ) -> Result<Json<DeleteMessagesResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;

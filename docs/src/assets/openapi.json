@@ -1221,7 +1221,7 @@
           "Accounts"
         ],
         "summary": "Destroy one account's conversations, messages, and attachments. The\naccount itself, its contacts, and its login survive.",
-        "description": "The vault owner may, on any account. The account itself may with a\ncredential that carries the `delete` scope, session or API token, and\nconfirms in the body.",
+        "description": "The vault owner may, on any account. The account itself may with a\nsession that carries the `delete` permission, and confirms in the body.\nAn API token is refused whatever its scopes: permanent deletion is a\nperson's act (`docs/architecture/http-api.md`, \"Credentials and reach\").",
         "operationId": "delete_account_messages",
         "parameters": [
           {
@@ -1322,11 +1322,6 @@
           },
           {
             "session": [
-              "delete"
-            ]
-          },
-          {
-            "api-token": [
               "delete"
             ]
           }
@@ -7231,16 +7226,11 @@
           "label",
           "can_import",
           "can_export",
-          "can_delete",
           "token_hint",
           "created_at",
           "disabled"
         ],
         "properties": {
-          "can_delete": {
-            "type": "boolean",
-            "description": "May destroy message data."
-          },
           "can_export": {
             "type": "boolean",
             "description": "May call the export endpoints."
@@ -7460,7 +7450,10 @@
       },
       "CompleteImportBody": {
         "type": "object",
-        "description": "Final stats and issues for a finished import session.",
+        "description": "Final stats and issues for a running Import Run. The outcome is stated\nonce, as `status`.",
+        "required": [
+          "status"
+        ],
         "properties": {
           "attachment_count": {
             "type": [
@@ -7503,9 +7496,6 @@
             ],
             "format": "int64"
           },
-          "ok": {
-            "type": "boolean"
-          },
           "parse_ms": {
             "type": [
               "integer",
@@ -7521,11 +7511,8 @@
             "format": "int64"
           },
           "status": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Explicit session outcome; overrides `ok` when present.\nOne of `completed`, `completed_with_issues`, `failed`."
+            "type": "string",
+            "description": "How the run ended: `completed`, `completed_with_issues` or `failed`."
           },
           "summary": {},
           "upload_ms": {
@@ -8115,15 +8102,11 @@
       },
       "CreateApiTokenRequest": {
         "type": "object",
-        "description": "Body for creating a token: label, permissions, optional expiry.",
+        "description": "Body for creating a token: label, permissions, optional expiry. A token\ncarries `import` and `export` only, so a body naming `can_delete` is\nrefused rather than ignored.",
         "required": [
           "label"
         ],
         "properties": {
-          "can_delete": {
-            "type": "boolean",
-            "description": "May destroy message data. Default false — asked for, never inherited."
-          },
           "can_export": {
             "type": "boolean",
             "description": "May call the export endpoints. Default true."
@@ -8145,7 +8128,8 @@
             "type": "string",
             "description": "User-chosen label shown in Settings."
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CreateApiTokenResponse": {
         "type": "object",
@@ -8155,16 +8139,11 @@
           "label",
           "can_import",
           "can_export",
-          "can_delete",
           "created_at",
           "token",
           "token_hint"
         ],
         "properties": {
-          "can_delete": {
-            "type": "boolean",
-            "description": "May destroy message data."
-          },
           "can_export": {
             "type": "boolean",
             "description": "May call the export endpoints."
@@ -9551,16 +9530,11 @@
                 "label",
                 "can_import",
                 "can_export",
-                "can_delete",
                 "token_hint",
                 "created_at",
                 "disabled"
               ],
               "properties": {
-                "can_delete": {
-                  "type": "boolean",
-                  "description": "May destroy message data."
-                },
                 "can_export": {
                   "type": "boolean",
                   "description": "May call the export endpoints."
@@ -11311,7 +11285,7 @@
       "api-token": {
         "type": "http",
         "scheme": "bearer",
-        "description": "A named API token: the `mv-api-` secret `POST /v1/accounts/{id}/api-tokens` returns once, carrying the import, export and delete scopes it was created with. Only the routes listing it accept one; every other route answers 403."
+        "description": "A named API token: the `mv-api-` secret `POST /v1/accounts/{id}/api-tokens` returns once, carrying the import and export scopes it was created with; a token never carries delete. Only the routes listing it accept one; every other route answers 403."
       },
       "session": {
         "type": "http",

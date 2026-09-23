@@ -47,11 +47,8 @@ export function ApiTokenCreateForm({
   onCanImportChange,
   canExport,
   onCanExportChange,
-  canDelete,
-  onCanDeleteChange,
   accountCanImport,
   accountCanExport,
-  accountCanDelete,
   onSave,
   onCancel,
 }: {
@@ -62,12 +59,9 @@ export function ApiTokenCreateForm({
   onCanImportChange: (value: boolean) => void;
   canExport: boolean;
   onCanExportChange: (value: boolean) => void;
-  canDelete: boolean;
-  onCanDeleteChange: (value: boolean) => void;
   /** The logged-in account's own permissions — a token can never exceed them. */
   accountCanImport: boolean;
   accountCanExport: boolean;
-  accountCanDelete: boolean;
   onSave: () => void;
   onCancel: () => void;
 }) {
@@ -125,14 +119,6 @@ export function ApiTokenCreateForm({
           allowed={accountCanExport}
         >
           Export
-        </PermissionCheckbox>
-        <PermissionCheckbox
-          checked={canDelete}
-          onChange={onCanDeleteChange}
-          disabled={busy}
-          allowed={accountCanDelete}
-        >
-          Delete messages and attachments
         </PermissionCheckbox>
       </div>
     </div>

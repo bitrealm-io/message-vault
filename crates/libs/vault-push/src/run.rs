@@ -582,7 +582,6 @@ fn complete_import_session(
     let completed = session.complete_import(
         import_id,
         &ImportOutcome {
-            ok: report.ok,
             status: outcome_status(report, aborted),
             message_count: report.messages,
             attachment_count,

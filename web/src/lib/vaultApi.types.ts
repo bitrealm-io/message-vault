@@ -221,8 +221,9 @@ export interface paths {
          * Destroy one account's conversations, messages, and attachments. The
          *     account itself, its contacts, and its login survive.
          * @description The vault owner may, on any account. The account itself may with a
-         *     credential that carries the `delete` scope, session or API token, and
-         *     confirms in the body.
+         *     session that carries the `delete` permission, and confirms in the body.
+         *     An API token is refused whatever its scopes: permanent deletion is a
+         *     person's act (`docs/architecture/http-api.md`, "Credentials and reach").
          */
         delete: operations["delete_account_messages"];
         options?: never;
@@ -1388,8 +1389,6 @@ export interface components {
         };
         /** @description One named API token as shown in Settings: label, permissions, and masked secret. */
         ApiTokenItem: {
-            /** @description May destroy message data. */
-            can_delete: boolean;
             /** @description May call the export endpoints. */
             can_export: boolean;
             /** @description May call the import endpoints. */
@@ -1470,7 +1469,10 @@ export interface components {
             /** @description Login username for the vault owner. */
             username: string;
         };
-        /** @description Final stats and issues for a finished import session. */
+        /**
+         * @description Final stats and issues for a running Import Run. The outcome is stated
+         *     once, as `status`.
+         */
         CompleteImportBody: {
             /** Format: int64 */
             attachment_count?: number | null;
@@ -1483,16 +1485,12 @@ export interface components {
             issues?: components["schemas"]["CompleteImportIssueBody"][];
             /** Format: int64 */
             message_count?: number | null;
-            ok?: boolean;
             /** Format: int64 */
             parse_ms?: number | null;
             /** Format: int64 */
             prepare_ms?: number | null;
-            /**
-             * @description Explicit session outcome; overrides `ok` when present.
-             *     One of `completed`, `completed_with_issues`, `failed`.
-             */
-            status?: string | null;
+            /** @description How the run ended: `completed`, `completed_with_issues` or `failed`. */
+            status: string;
             summary?: unknown;
             /** Format: int64 */
             upload_ms?: number | null;
@@ -1759,10 +1757,12 @@ export interface components {
             /** @description Login username. */
             username: string;
         };
-        /** @description Body for creating a token: label, permissions, optional expiry. */
+        /**
+         * @description Body for creating a token: label, permissions, optional expiry. A token
+         *     carries `import` and `export` only, so a body naming `can_delete` is
+         *     refused rather than ignored.
+         */
         CreateApiTokenRequest: {
-            /** @description May destroy message data. Default false — asked for, never inherited. */
-            can_delete?: boolean;
             /** @description May call the export endpoints. Default true. */
             can_export?: boolean;
             /** @description May call the import endpoints. Default true. */
@@ -1777,8 +1777,6 @@ export interface components {
         };
         /** @description The created token, including its plaintext secret (returned once). */
         CreateApiTokenResponse: {
-            /** @description May destroy message data. */
-            can_delete: boolean;
             /** @description May call the export endpoints. */
             can_export: boolean;
             /** @description May call the import endpoints. */
@@ -2439,8 +2437,6 @@ export interface components {
         Page_ApiTokenItem: {
             /** @description The rows on this page. */
             items: {
-                /** @description May destroy message data. */
-                can_delete: boolean;
                 /** @description May call the export endpoints. */
                 can_export: boolean;
                 /** @description May call the import endpoints. */

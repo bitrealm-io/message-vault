@@ -74,9 +74,9 @@ from `100` up.
     disabled account stops working immediately.
   - `can_import`, `can_export`, `can_delete` — may call the import endpoints,
     the export endpoints, and the endpoints that destroy message data,
-    respectively. New accounts default to all three; a named API token
-    defaults to import and export but not delete, since destruction is
-    asked for rather than inherited.
+    respectively. New accounts default to all three. A named API token
+    carries import and export only, never delete: permanent deletion is a
+    person's act, so it always needs a logged-in session.
   The vault owner sets another account's flags from Owner Home
   (`PATCH /v1/accounts/{id}`), resets a password
   (`PUT /v1/accounts/{id}/password`), deletes an account's messages

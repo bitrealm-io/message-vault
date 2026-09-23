@@ -37,8 +37,6 @@ pub struct ApiTokenItem {
     pub can_import: bool,
     /// May call the export endpoints.
     pub can_export: bool,
-    /// May destroy message data.
-    pub can_delete: bool,
     /// Masked secret for Settings (e.g. `mv-api-Sd..mE`).
     pub token_hint: String,
     /// Creation time as a Unix-seconds string.
@@ -60,7 +58,6 @@ impl From<api_tokens::ApiTokenRow> for ApiTokenItem {
             label: row.label,
             can_import: row.permissions.import,
             can_export: row.permissions.export,
-            can_delete: row.permissions.delete,
             token_hint: row.token_hint,
             created_at: row.created_at,
             last_accessed_at: row.last_accessed_at,
@@ -79,8 +76,11 @@ fn map_label_error(e: crate::db::api_tokens::ApiTokenMutationError) -> ApiError 
     }
 }
 
-/// Body for creating a token: label, permissions, optional expiry.
+/// Body for creating a token: label, permissions, optional expiry. A token
+/// carries `import` and `export` only, so a body naming `can_delete` is
+/// refused rather than ignored.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CreateApiTokenRequest {
     /// User-chosen label shown in Settings.
     pub label: String,
@@ -90,9 +90,6 @@ pub struct CreateApiTokenRequest {
     /// May call the export endpoints. Default true.
     #[serde(default = "default_true")]
     pub can_export: bool,
-    /// May destroy message data. Default false — asked for, never inherited.
-    #[serde(default)]
-    pub can_delete: bool,
     /// Days until expiry. Omit for the default (365 days). Pass `0` for no expiry.
     #[serde(default)]
     pub expires_in_days: Option<u64>,
@@ -113,8 +110,6 @@ pub struct CreateApiTokenResponse {
     pub can_import: bool,
     /// May call the export endpoints.
     pub can_export: bool,
-    /// May destroy message data.
-    pub can_delete: bool,
     /// Creation time as a Unix-seconds string.
     pub created_at: String,
     /// Unix-seconds expiry; absent means no expiry.
@@ -207,11 +202,7 @@ pub async fn create_api_token_handler(
 ) -> Result<Created<CreateApiTokenResponse>, ApiError> {
     require_own_tokens(&auth, account_id)?;
     let label = req.label;
-    let permissions = Permissions {
-        import: req.can_import,
-        export: req.can_export,
-        delete: req.can_delete,
-    };
+    let permissions = Permissions::token(req.can_import, req.can_export);
     let expires_in_days = req.expires_in_days;
 
     let mut conn = state.db.acquire().await?;
@@ -228,7 +219,6 @@ pub async fn create_api_token_handler(
             label: created.label,
             can_import: created.permissions.import,
             can_export: created.permissions.export,
-            can_delete: created.permissions.delete,
             created_at: created.created_at,
             expires_at: created.expires_at,
             token_hint: api_tokens::mask_api_token(&created.token),
@@ -350,51 +340,39 @@ mod tests {
         }
     }
 
-    /// A create-token body that omits `can_delete` entirely (as a CLI or
-    /// script caller might) must default to `false` — delete is opt-in, not
-    /// inherited. This exercises the real JSON deserialization path (a bare
-    /// `#[serde(default)]`), which a struct built in Rust would not catch if
-    /// the attribute regressed to `default_true`.
+    /// A token never carries `delete`, so a create-token body asking for it
+    /// is refused, not quietly stripped: a caller that believes it holds a
+    /// delete token would otherwise find out only when a delete fails.
     #[tokio::test]
-    async fn create_token_without_can_delete_field_defaults_to_false() {
+    async fn create_token_asking_for_delete_is_refused() {
         let vault = crate::test_support::test_vault().await;
         let state = vault.state.clone();
         let account =
             crate::test_support::register_via_api(&state, "token-owner", "hunter2hunter2").await;
 
         let collection = format!("/v1/accounts/{}/api-tokens", account.account_id);
-        let (location, body): (String, serde_json::Value) = crate::test_support::post_created_json(
+        let (status, text) = crate::test_support::post_raw(
             &state,
             &collection,
             &account.token,
-            serde_json::json!({ "label": "cli token" }),
+            "application/json",
+            r#"{"label": "cli token", "can_delete": true}"#,
         )
         .await;
-        assert_eq!(
-            location,
-            format!("{collection}/{}", body["id"].as_i64().unwrap())
+        crate::test_support::expect_problem(
+            status,
+            &text,
+            crate::problem::ProblemType::ValidationFailed,
         );
 
-        assert_eq!(
-            body["can_delete"],
-            serde_json::json!(false),
-            "a create-token body omitting can_delete must not grant delete"
-        );
-
-        // Confirm the stored row agrees, not just the immediate response.
         let mut conn = state.db.acquire().await.unwrap();
-        let can_delete: i64 = sqlx::query_scalar(
-            "SELECT can_delete FROM account_api_tokens WHERE account_id = $1 AND label = $2",
-        )
-        .bind(account.account_id)
-        .bind("cli token")
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-        assert_eq!(
-            can_delete, 0,
-            "stored token row must not have can_delete set"
-        );
+        let rows: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM account_api_tokens WHERE account_id = $1")
+                .bind(account.account_id)
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+        assert_eq!(rows, 0, "a refused create stores no token");
     }
 
     /// Tokens belong to the account that holds them: another account is

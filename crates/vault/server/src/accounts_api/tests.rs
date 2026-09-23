@@ -1235,13 +1235,15 @@ async fn deleting_own_messages_needs_the_delete_permission_and_a_confirmation() 
     );
 }
 
-/// A token with the delete scope may destroy its account's messages, and may
-/// not close the account: that stays a person's act, session only.
+/// A token never destroys data: deleting an account's messages and closing
+/// the account are a person's acts, session only, whatever the token was
+/// asked to carry.
 #[tokio::test]
-async fn a_token_with_delete_may_delete_messages_but_may_not_close_the_account() {
+async fn a_token_may_not_delete_messages_or_close_the_account() {
     let vault = test_vault().await;
     let state = vault.state.clone();
     let created = register_via_api(&state, "alice", "hunter2hunter2").await;
+    seed_one_message(&state, created.account_id).await;
     let mut conn = state.db.acquire().await.unwrap();
     let token = api_tokens::create_api_token(
         &mut conn,
@@ -1262,7 +1264,7 @@ async fn a_token_with_delete_may_delete_messages_but_may_not_close_the_account()
         serde_json::json!({ "confirm": true }),
     )
     .await;
-    assert_eq!(deleted, StatusCode::OK);
+    assert_eq!(deleted, StatusCode::FORBIDDEN);
 
     let closed = delete_status_with_body(
         &state,
@@ -1271,11 +1273,15 @@ async fn a_token_with_delete_may_delete_messages_but_may_not_close_the_account()
         serde_json::json!({ "confirm": true, "current_password": "hunter2hunter2" }),
     )
     .await;
-    assert_eq!(
-        closed,
-        StatusCode::FORBIDDEN,
-        "closing the account stays session-only"
-    );
+    assert_eq!(closed, StatusCode::FORBIDDEN);
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let messages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE account_id = $1")
+        .bind(created.account_id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(messages, 1, "a refused delete leaves the messages");
 }
 
 /// The owner deletes an account outright, with no body; the demo account is

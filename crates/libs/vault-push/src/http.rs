@@ -51,7 +51,6 @@ pub(crate) struct AssetUpload<'a> {
 
 /// How an Import Run ended, for `/v1/imports/{id}/complete`.
 pub(crate) struct ImportOutcome<'a> {
-    pub ok: bool,
     /// `completed`, `completed_with_issues`, or `failed`.
     pub status: &'a str,
     pub message_count: u64,
@@ -332,7 +331,6 @@ impl Session {
         outcome: &ImportOutcome<'_>,
     ) -> Result<()> {
         let body = serde_json::json!({
-            "ok": outcome.ok,
             "status": outcome.status,
             "message_count": outcome.message_count,
             "attachment_count": outcome.attachment_count,

@@ -91,9 +91,8 @@ impl Credential {
     /// The scope names this credential carries, as the document spells them.
     fn scopes(self) -> &'static [&'static str] {
         match self {
-            Self::TokenAllScopes | Self::Session | Self::OtherAccount => {
-                &["import", "export", "delete"]
-            }
+            Self::Session | Self::OtherAccount => &["import", "export", "delete"],
+            Self::TokenAllScopes => &["import", "export"],
             Self::TokenNoScopes => &[],
             Self::TokenImportOnly => &["import"],
             Self::TokenExportOnly => &["export"],
@@ -378,13 +377,8 @@ impl<'a> World<'a> {
         let session = async |conn: &mut sqlx::AnyConnection, id| {
             insert_account_session_token(conn, id).await.unwrap()
         };
-        let token = async |conn: &mut sqlx::AnyConnection, label, import, export, delete| {
-            let permissions = Permissions {
-                import,
-                export,
-                delete,
-            };
-            create_api_token(conn, alice, label, permissions, None)
+        let token = async |conn: &mut sqlx::AnyConnection, label, import, export| {
+            create_api_token(conn, alice, label, Permissions::token(import, export), None)
                 .await
                 .unwrap()
         };
@@ -392,12 +386,12 @@ impl<'a> World<'a> {
             owner: shared.owner_session.clone(),
             alice: session(&mut conn, alice).await,
             bob: session(&mut conn, bob).await,
-            all_scopes: token(&mut conn, "all", true, true, true).await.token,
-            no_scopes: token(&mut conn, "none", false, false, false).await.token,
-            import_only: token(&mut conn, "import", true, false, false).await.token,
-            export_only: token(&mut conn, "export", false, true, false).await.token,
+            all_scopes: token(&mut conn, "all", true, true).await.token,
+            no_scopes: token(&mut conn, "none", false, false).await.token,
+            import_only: token(&mut conn, "import", true, false).await.token,
+            export_only: token(&mut conn, "export", false, true).await.token,
         };
-        let spare_token_id = token(&mut conn, "spare", false, false, false).await.id;
+        let spare_token_id = token(&mut conn, "spare", false, false).await.id;
 
         let contact_id: i64 = sqlx::query_scalar(
             "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Sam') RETURNING id",
@@ -646,7 +640,7 @@ fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8>)> {
         ("post", "/v1/imports") => json(json!({ "source": "imessage" })),
         ("patch", "/v1/imports/{id}") => json(json!({ "stage": "parse" })),
         ("post", "/v1/imports/{id}/batches") => Some(("application/x-ndjson", Vec::new())),
-        ("post", "/v1/imports/{id}/complete") => json(json!({ "ok": true })),
+        ("post", "/v1/imports/{id}/complete") => json(json!({ "status": "completed" })),
         ("post", "/v1/saved-searches") => json(json!({ "name": "Theirs", "query": "from:me" })),
         ("patch", "/v1/saved-searches/{id}") => {
             json(json!({ "name": "Renamed", "query": "from:me" }))

@@ -347,8 +347,7 @@ async fn openapi_ui_on_serves_spec_without_token() {
 async fn imports_complete_and_detail_surface_timings_and_issues() {
     let (_dir, state, token, import_id) = test_state().await;
     let body = CompleteImportBody {
-        ok: true,
-        status: None,
+        status: "completed".into(),
         message_count: Some(10),
         attachment_count: Some(2),
         bytes_uploaded: Some(100),
@@ -416,8 +415,7 @@ async fn imports_complete_and_detail_surface_timings_and_issues() {
 async fn imports_complete_stores_completed_with_issues_status() {
     let (_dir, state, token, import_id) = test_state().await;
     let body = CompleteImportBody {
-        ok: true,
-        status: Some("completed_with_issues".into()),
+        status: "completed_with_issues".into(),
         message_count: Some(10),
         attachment_count: Some(2),
         bytes_uploaded: Some(100),
@@ -444,8 +442,7 @@ async fn imports_complete_stores_completed_with_issues_status() {
 async fn imports_complete_rejects_unknown_status() {
     let (_dir, state, token, import_id) = test_state().await;
     let body = CompleteImportBody {
-        ok: true,
-        status: Some("victorious".into()),
+        status: "victorious".into(),
         message_count: None,
         attachment_count: None,
         bytes_uploaded: None,
@@ -481,8 +478,7 @@ async fn imports_complete_rejects_unknown_status() {
 async fn imports_complete_rejects_invalid_issue_kind_before_db_write() {
     let (_dir, state, token, import_id) = test_state().await;
     let body = CompleteImportBody {
-        ok: true,
-        status: None,
+        status: "completed".into(),
         message_count: Some(10),
         attachment_count: Some(2),
         bytes_uploaded: Some(100),

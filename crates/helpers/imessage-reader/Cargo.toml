@@ -6,7 +6,7 @@ edition = "2024"
 # This is the only crate in the repository under a copyleft licence, and the
 # desktop app never links it: it runs the built binary as a separate process
 # and talks to it over pipes (see crates/helpers/imessage-reader-protocol).
-# Why: docs/agents/licences.md.
+# Why: docs/adr/0014-gpl-code-only-behind-a-process-boundary.md.
 license = "GPL-3.0-or-later"
 description = "Reads Apple Messages (chat.db or an iPhone backup) for the Message Vault desktop app, as a separate process"
 repository = "https://github.com/bitrealm-io/message-vault"

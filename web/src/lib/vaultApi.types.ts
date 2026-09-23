@@ -830,7 +830,7 @@ export interface paths {
          * Move a live import session to another stage.
          * @description The stage is a field of the run, so moving it is a `PATCH` of the run
          *     rather than a `POST` to a `stage` sub-resource: a path segment names a
-         *     resource, and `stage` is not one (`docs/agents/http-api-rules.md`,
+         *     resource, and `stage` is not one (`docs/architecture/http-api.md`,
          *     "Naming a route"). The answer is the run itself, the same shape
          *     `GET /v1/imports/{id}` returns, so a caller reads one record wherever it
          *     asks.
@@ -1001,7 +1001,7 @@ export interface paths {
          *     directly.
          * @description Read-only. A message is never written through this route: an import
          *     writes messages, and trashing is a conversation operation
-         *     (`docs/agents/http-api-rules.md`, "Methods"). The lookup carries the
+         *     (`docs/architecture/http-api.md`, "Methods"). The lookup carries the
          *     list's own defaults — the caller's account, no trashed conversation, no
          *     duplicate — so a row the list hides is `404` here too, and a link out of
          *     a search result never reaches further than the search did.
@@ -1954,7 +1954,7 @@ export interface components {
             total_bytes: number;
         };
         /**
-         * @description What an Export Run asked for, stored as given (`docs/agents/http-api-rules.md`,
+         * @description What an Export Run asked for, stored as given (`docs/architecture/http-api.md`,
          *     "Runs"). One of three forms: everything the account holds, a query in the
          *     search language, or conversations and messages picked by hand.
          */
@@ -3026,7 +3026,7 @@ export interface components {
         };
         /**
          * @description An RFC 7807 problem document: the body of every failure the vault answers,
-         *     served as `application/problem+json` (`docs/agents/http-api-rules.md`).
+         *     served as `application/problem+json` (`docs/architecture/http-api.md`).
          *
          *     `type` is the URL of the page describing this kind of failure, one page per
          *     type, or `about:blank` for an internal error. A validation failure carries

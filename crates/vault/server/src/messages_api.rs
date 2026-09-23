@@ -134,7 +134,7 @@ pub(crate) async fn messages_list_handler(
 ///
 /// Read-only. A message is never written through this route: an import
 /// writes messages, and trashing is a conversation operation
-/// (`docs/agents/http-api-rules.md`, "Methods"). The lookup carries the
+/// (`docs/architecture/http-api.md`, "Methods"). The lookup carries the
 /// list's own defaults — the caller's account, no trashed conversation, no
 /// duplicate — so a row the list hides is `404` here too, and a link out of
 /// a search result never reaches further than the search did.

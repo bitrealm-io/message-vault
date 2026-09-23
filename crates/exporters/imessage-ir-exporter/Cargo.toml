@@ -13,7 +13,8 @@ path = "src/lib.rs"
 # No GPL code here. Reading chat.db is the job of the `imessage-reader`
 # program (crates/helpers/imessage-reader, GPL-3.0-or-later), which this crate
 # starts as a separate process. The two share only the wire types in
-# `imessage-reader-protocol` (MIT OR Apache-2.0). Why: docs/agents/licences.md.
+# `imessage-reader-protocol` (MIT OR Apache-2.0).
+# Why: docs/adr/0014-gpl-code-only-behind-a-process-boundary.md.
 [dependencies]
 anyhow = { workspace = true }
 imessage-reader-protocol = { path = "../../helpers/imessage-reader-protocol" }

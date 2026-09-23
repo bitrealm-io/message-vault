@@ -15,7 +15,7 @@ Route schemas, status codes, and JSON fields live in the generated [HTTP API ref
 - A route with nothing to say on success answers `204 No Content`.
 - Every id is an integer, except an asset's, which is the SHA-256 of its contents.
 
-The full set of rules, with the reason behind each: [HTTP interface rules](https://github.com/bitrealm-io/message-vault/blob/main/docs/agents/http-api-rules.md).
+The full set of rules, with the reason behind each: [HTTP interface rules](https://github.com/bitrealm-io/message-vault/blob/main/docs/architecture/http-api.md).
 
 ## Trash is the only door to deletion
 

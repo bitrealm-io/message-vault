@@ -4875,7 +4875,7 @@
           "Import"
         ],
         "summary": "Move a live import session to another stage.",
-        "description": "The stage is a field of the run, so moving it is a `PATCH` of the run\nrather than a `POST` to a `stage` sub-resource: a path segment names a\nresource, and `stage` is not one (`docs/agents/http-api-rules.md`,\n\"Naming a route\"). The answer is the run itself, the same shape\n`GET /v1/imports/{id}` returns, so a caller reads one record wherever it\nasks.",
+        "description": "The stage is a field of the run, so moving it is a `PATCH` of the run\nrather than a `POST` to a `stage` sub-resource: a path segment names a\nresource, and `stage` is not one (`docs/architecture/http-api.md`,\n\"Naming a route\"). The answer is the run itself, the same shape\n`GET /v1/imports/{id}` returns, so a caller reads one record wherever it\nasks.",
         "operationId": "imports_patch_handler",
         "parameters": [
           {
@@ -6006,7 +6006,7 @@
           "Messages"
         ],
         "summary": "One message by id: the row the Messages list would show, looked up\ndirectly.",
-        "description": "Read-only. A message is never written through this route: an import\nwrites messages, and trashing is a conversation operation\n(`docs/agents/http-api-rules.md`, \"Methods\"). The lookup carries the\nlist's own defaults — the caller's account, no trashed conversation, no\nduplicate — so a row the list hides is `404` here too, and a link out of\na search result never reaches further than the search did.",
+        "description": "Read-only. A message is never written through this route: an import\nwrites messages, and trashing is a conversation operation\n(`docs/architecture/http-api.md`, \"Methods\"). The lookup carries the\nlist's own defaults — the caller's account, no trashed conversation, no\nduplicate — so a row the list hides is `404` here too, and a link out of\na search result never reaches further than the search did.",
         "operationId": "message_handler",
         "parameters": [
           {
@@ -8554,7 +8554,7 @@
             }
           }
         ],
-        "description": "What an Export Run asked for, stored as given (`docs/agents/http-api-rules.md`,\n\"Runs\"). One of three forms: everything the account holds, a query in the\nsearch language, or conversations and messages picked by hand."
+        "description": "What an Export Run asked for, stored as given (`docs/architecture/http-api.md`,\n\"Runs\"). One of three forms: everything the account holds, a query in the\nsearch language, or conversations and messages picked by hand."
       },
       "FieldDoc": {
         "type": "object",
@@ -10776,7 +10776,7 @@
       },
       "Problem": {
         "type": "object",
-        "description": "An RFC 7807 problem document: the body of every failure the vault answers,\nserved as `application/problem+json` (`docs/agents/http-api-rules.md`).\n\n`type` is the URL of the page describing this kind of failure, one page per\ntype, or `about:blank` for an internal error. A validation failure carries\n`errors`, every field that failed, in place of `detail`. Every problem\nrepeats the response's `x-request-id` as `request_id`, so the person\nreading the failure and the operator reading the log are looking at the\nsame request.\n\nThe extension members belong to one type each: `word` and `did_you_mean`\nto `search-query-invalid`, `retry_after` to `rate-limited`.",
+        "description": "An RFC 7807 problem document: the body of every failure the vault answers,\nserved as `application/problem+json` (`docs/architecture/http-api.md`).\n\n`type` is the URL of the page describing this kind of failure, one page per\ntype, or `about:blank` for an internal error. A validation failure carries\n`errors`, every field that failed, in place of `detail`. Every problem\nrepeats the response's `x-request-id` as `request_id`, so the person\nreading the failure and the operator reading the log are looking at the\nsame request.\n\nThe extension members belong to one type each: `word` and `did_you_mean`\nto `search-query-invalid`, `retry_after` to `rate-limited`.",
         "required": [
           "type",
           "title",

@@ -3,7 +3,7 @@
 #
 #   ./scripts/mutants.sh                                        # the whole workspace, as .cargo/mutants.toml sets it
 #   ./scripts/mutants.sh --file crates/libs/phone/src/lib.rs    # one file
-#   ./scripts/mutants.sh --shard 0/24 --sharding round-robin    # one slice, as the workflow runs it
+#   ./scripts/mutants.sh --shard 0/40 --sharding round-robin    # one slice, as the workflow runs it
 #
 # cargo-mutants changes the code one small way at a time and runs the tests
 # for the package that holds it. A mutant every test still passes is
@@ -15,10 +15,10 @@
 #
 # What is left out is set in .cargo/mutants.toml, and why. Other arguments
 # go to `cargo mutants` as they are; `--file` mutates only that file. A full
-# run is about 8,700 mutants: seconds each in the library crates, about 15 s
-# each in the server crate (about 3,450 of them), so well over a day on one
-# machine. Point it at the file you changed; the Mutants workflow, started
-# by hand, splits the full run across 24 parallel shards.
+# run is about 8,750 mutants: seconds each in most library crates, about 75 s
+# each on a CI runner in the server crate (about 3,450 of them), so about 100
+# hours on one machine. Point it at the file you changed; the Mutants
+# workflow, started by hand, splits the full run across 40 parallel shards.
 #
 # The server tests run on SQLite, so a mutant in a Postgres-only branch
 # shows as missed. ffmpeg on PATH matters: without it the transcode and

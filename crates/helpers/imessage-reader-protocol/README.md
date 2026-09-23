@@ -6,7 +6,7 @@ The session order, the tag on every enum, and the meaning of each field are docu
 
 ## Why permissive
 
-Both sides link this crate: the program is GPL-3.0-or-later and the app is under the Fair Core License. An FCL protocol crate would pull FCL terms into the GPL program and a GPL one would pull GPL terms into the app, so this crate is `MIT OR Apache-2.0`. Why the two sides are separate programs at all: [`docs/agents/licences.md`](../../../docs/agents/licences.md).
+Both sides link this crate: the program is GPL-3.0-or-later and the app is under the Fair Core License. An FCL protocol crate would pull FCL terms into the GPL program and a GPL one would pull GPL terms into the app, so this crate is `MIT OR Apache-2.0`. Why the two sides are separate programs at all: [ADR 0014](../../../docs/adr/0014-gpl-code-only-behind-a-process-boundary.md).
 
 ## Build and test
 

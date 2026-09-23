@@ -65,6 +65,12 @@ released versions carry their date on the heading.
   incorrect.") and the Change password button no longer sits tight against
   the last field.
 
+- 2026-09-22 **International phone numbers keep their country.** A number
+  written with a country code, such as `+65 9123 4567` in an address book or
+  `+44 7700 900123` as your own number, is now matched as that number. Before,
+  some were read as a US number with the same digits and named the wrong
+  person, and some matched nobody.
+
 ## [0.9.0] - 2026-09-22
 
 The release that gives a vault an owner, a trash you can take things back out

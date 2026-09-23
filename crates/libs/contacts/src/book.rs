@@ -51,11 +51,7 @@ impl ContactsBook {
         let cards = vcf::parse_vcf(path)?;
         let mut book = Self::empty();
         for card in cards {
-            let phones: Vec<String> = card
-                .phones
-                .iter()
-                .filter_map(|p| sanitize_number(p))
-                .collect();
+            let phones: Vec<String> = card.phones.iter().filter_map(|p| phone_key(p)).collect();
             if phones.is_empty() {
                 continue;
             }
@@ -112,6 +108,9 @@ impl ContactsBook {
     }
 
     /// Add one name with its phones, merging into an existing entry with the same normalized name.
+    ///
+    /// Each phone is filed under [`phone_key`], the key the vault gives the
+    /// same number as a handle.
     fn insert_entry(&mut self, display: &str, phones: &[String]) {
         let display = collapse_inner_whitespace(display);
         if display.is_empty() || phones.is_empty() {
@@ -121,11 +120,7 @@ impl ContactsBook {
         // All entries from VCF/vCard CSV are phone type
         let handle_type = HandleType::Phone;
         for phone in phones {
-            // Keep digits as-is when the value is ambiguous for the US-centric
-            // book. A trunk-zero `020 7946 0000` must never become the invalid
-            // `+02079460000`. The vault server records a review note on the
-            // handles table for those cases.
-            let Some(normalized) = phone::normalize_digits_us(phone) else {
+            let Some(normalized) = phone_key(phone) else {
                 continue;
             };
             if !key.is_empty() {
@@ -187,6 +182,18 @@ fn normalize_handle(raw: &str, handle_type: HandleType) -> String {
     phone::normalize_typed_handle(raw, handle_type).0
 }
 
+/// The vault's handle key for a written phone number, or `None` when it has
+/// too few digits to be one.
+///
+/// The `+` is what says a number is international, so the key is taken from
+/// the number as written, never from digits it was stripped to. Stripping it
+/// first turned `+65 9123 4567` into ten digits that US rules read as
+/// `+16591234567`, a different person.
+fn phone_key(written: &str) -> Option<String> {
+    sanitize_number(written)?;
+    Some(normalize_handle(written, HandleType::Phone))
+}
+
 /// Load contacts from at most one of `--contacts` or `--vcf`.
 ///
 /// `--contacts` accepts either shape (VCF or vCard
@@ -224,7 +231,7 @@ pub fn resolve_contacts_cli(
     }
 }
 
-/// Collect handles from a field that is known to hold phone numbers.
+/// Collect handle keys from a field that is known to hold phone numbers.
 ///
 /// One field may hold several, separated by `;`, `,`, `|` or `/`. Each part has to
 /// be written as a number: [`phone::sanitize_phone_shaped`] rejects a part
@@ -233,10 +240,11 @@ pub fn resolve_contacts_cli(
 /// numbers from it instead.
 fn push_phones_from_field(raw: &str, out: &mut Vec<String>) {
     for part in raw.split([';', ',', '|', '/']) {
-        if let Some(digits) = phone::sanitize_phone_shaped(part)
-            && !out.contains(&digits)
+        if phone::sanitize_phone_shaped(part).is_some()
+            && let Some(key) = phone_key(part)
+            && !out.contains(&key)
         {
-            out.push(digits);
+            out.push(key);
         }
     }
     push_plus_runs(raw, out);
@@ -260,10 +268,10 @@ fn push_plus_runs(raw: &str, out: &mut Vec<String>) {
                 i += 1;
             }
             if i > start + 1
-                && let Some(digits) = sanitize_number(&raw[start..i])
-                && !out.contains(&digits)
+                && let Some(key) = phone_key(&raw[start..i])
+                && !out.contains(&key)
             {
-                out.push(digits);
+                out.push(key);
             }
         } else {
             i += 1;
@@ -331,6 +339,112 @@ TEL;TYPE=CELL:+1-555-555-0100\nEND:VCARD\n",
             book.lookup_name_by_handle("+15555550100", HandleType::Phone),
             Some("Ada Lovelace")
         );
+    }
+
+    /// One number, written any common way, has one key: the key the vault
+    /// gives the handle, the key the book files the card under, and the key
+    /// an owner phone is matched on must be the same string. The book once
+    /// dropped the `+` and applied US rules, so `+65 9123 4567` was filed as
+    /// the US number `+16591234567`, and an owner `+44 7700 900123` became
+    /// `447700900123`.
+    #[test]
+    fn one_number_has_one_key_in_the_book_the_owner_set_and_the_vault() {
+        let rows: [(&str, &str); 11] = [
+            ("+44 20 7946 0000", "+442079460000"),
+            ("+442079460000", "+442079460000"),
+            ("+65 9123 4567", "+6591234567"),
+            ("+47 912 34 567", "+4791234567"),
+            ("+45 12 34 56 78", "+4512345678"),
+            ("(555) 555-0122", "+15555550122"),
+            ("+1 555 555 0122", "+15555550122"),
+            ("5555550122", "+15555550122"),
+            // No country is written, so nothing can make it E.164 with
+            // certainty. It stays digits, never the invented `+02079460000`.
+            ("020 7946 0000", "02079460000"),
+            // A short code has no country either, and stays as written.
+            ("72345", "72345"),
+            ("+1 (555) 555-0199", "+15555550199"),
+        ];
+        let dir = tempfile::tempdir().unwrap();
+        let mut wrong = Vec::new();
+        for (written, expected) in rows {
+            let (handle_key, _) = phone::normalize_typed_handle(written, HandleType::Phone);
+
+            let owners = phone::OwnerHandleSet::from_phones(&[written.to_string()]).unwrap();
+            let owner_key = owners.primary_owner_handle().unwrap_or_default();
+            let owner_matches_handle = owners.is_owner(&handle_key, HandleType::Phone);
+
+            let vcf = write_file(
+                &dir,
+                "row.vcf",
+                &format!("BEGIN:VCARD\nVERSION:3.0\nFN:Row Person\nTEL:{written}\nEND:VCARD\n"),
+            );
+            let vcf_key = ContactsBook::load_vcf(&vcf)
+                .unwrap()
+                .lookup_handle_by_name("Row Person")
+                .map(|(key, _)| key)
+                .unwrap_or_default();
+
+            let csv = write_file(
+                &dir,
+                "row.csv",
+                &format!("First Name,Last Name,Mobile Phone\nRow,Person,{written}\n"),
+            );
+            let csv_key = ContactsBook::load_vcard_csv(&csv)
+                .unwrap()
+                .lookup_handle_by_name("Row Person")
+                .map(|(key, _)| key)
+                .unwrap_or_default();
+
+            if [&handle_key, &owner_key, &vcf_key, &csv_key]
+                .iter()
+                .any(|key| key.as_str() != expected)
+                || !owner_matches_handle
+            {
+                wrong.push(format!(
+                    "{written}: expected {expected}, handle {handle_key}, owner {owner_key} \
+                     (is_owner {owner_matches_handle}), vcf {vcf_key}, csv {csv_key}"
+                ));
+            }
+        }
+        assert!(wrong.is_empty(), "keys disagree:\n{}", wrong.join("\n"));
+
+        // Agreement is not enough if two numbers share one key: the
+        // Singapore owner is not the US subscriber with the same digits.
+        let owners = phone::OwnerHandleSet::from_phones(&["+65 9123 4567".into()]).unwrap();
+        assert!(!owners.is_owner("+16591234567", HandleType::Phone));
+    }
+
+    /// A card with a Singapore and a UK number names those two handles and
+    /// no US number that shares their digits.
+    #[test]
+    fn a_card_with_international_numbers_names_only_those_handles() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_file(
+            &dir,
+            "contacts.vcf",
+            "BEGIN:VCARD\nVERSION:3.0\nN:Tan;Mei;;;\nFN:Mei Tan\n\
+TEL;TYPE=CELL:+65 9123 4567\nTEL;TYPE=WORK:+44 20 7946 0000\nEND:VCARD\n",
+        );
+        let book = ContactsBook::load_vcf(&path).unwrap();
+        assert_eq!(
+            book.lookup_name_by_handle("+6591234567", HandleType::Phone),
+            Some("Mei Tan")
+        );
+        assert_eq!(
+            book.lookup_name_by_handle("+442079460000", HandleType::Phone),
+            Some("Mei Tan")
+        );
+        assert_eq!(
+            book.lookup_name_by_handle("+16591234567", HandleType::Phone),
+            None,
+            "+16591234567 is a different person, in the US"
+        );
+        assert_eq!(
+            book.enrich_display_name("+16591234567", HandleType::Phone, ""),
+            None
+        );
+        assert_eq!(book.len(), 2);
     }
 
     #[test]
@@ -422,23 +536,22 @@ NoPhone,,Person,,,,\n",
         push_phones_from_field("+15551234567; +15557654321, +15550000000", &mut out);
         assert_eq!(
             out,
-            // A leading US country digit is dropped by `sanitize_number`,
-            // so the stored form is the ten-digit number.
-            ["5551234567", "5557654321", "5550000000"],
+            // Each is stored under the vault's handle key, `+` included.
+            ["+15551234567", "+15557654321", "+15550000000"],
             "each separator splits a field"
         );
 
         // The same number twice in one field must be stored once.
         let mut out = Vec::new();
         push_phones_from_field("+15551234567; +15551234567", &mut out);
-        assert_eq!(out, ["5551234567"], "a repeat must not be stored twice");
+        assert_eq!(out, ["+15551234567"], "a repeat must not be stored twice");
 
         // Written formatting is not prose, and `/` separates two numbers.
         let mut out = Vec::new();
         push_phones_from_field("(555) 123-4567 / 555.765.4321", &mut out);
         assert_eq!(
             out,
-            ["5551234567", "5557654321"],
+            ["+15551234567", "+15557654321"],
             "punctuation is part of how a number is written; `/` is not"
         );
 
@@ -448,7 +561,7 @@ NoPhone,,Person,,,,\n",
         // both numbers from it.
         let mut out = Vec::new();
         push_phones_from_field("+15551234567 (see also +15557654321)", &mut out);
-        assert_eq!(out, ["5551234567", "5557654321"]);
+        assert_eq!(out, ["+15551234567", "+15557654321"]);
 
         // Same defect without any prose to catch it: the digits are inside
         // permitted punctuation, so the E.164 ceiling is what rejects them.
@@ -456,7 +569,7 @@ NoPhone,,Person,,,,\n",
         push_phones_from_field("+15551234567 +15557654321", &mut out);
         assert_eq!(
             out,
-            ["5551234567", "5557654321"],
+            ["+15551234567", "+15557654321"],
             "20 digits is not a phone number"
         );
 
@@ -477,7 +590,7 @@ NoPhone,,Person,,,,\n",
         // A bare run inside prose, with no separator around it.
         let mut out = Vec::new();
         push_plus_runs("ring me on +442071838750 after six", &mut out);
-        assert_eq!(out, ["442071838750"]);
+        assert_eq!(out, ["+442071838750"]);
 
         // Two runs in one blob, and a repeat stored once.
         let mut out = Vec::new();
@@ -485,7 +598,7 @@ NoPhone,,Person,,,,\n",
             "PROP-ID: +15551234567 / alt +15557654321 (+15551234567)",
             &mut out,
         );
-        assert_eq!(out, ["5551234567", "5557654321"]);
+        assert_eq!(out, ["+15551234567", "+15557654321"]);
 
         // A lone `+` is not a number, and neither is `+` followed by one digit:
         // the guard is `i > start + 1`, and dropping it produces junk handles.

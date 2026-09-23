@@ -1,4 +1,7 @@
-//! Shared US-centric phone-number parsing for message converters.
+//! Shared phone-number parsing for message converters.
+//!
+//! [`normalize_typed_handle`] is the one key a handle is stored and matched
+//! under: by the vault, by the contacts book, and by [`OwnerHandleSet`].
 
 use std::collections::HashSet;
 use std::fmt;
@@ -234,7 +237,11 @@ pub fn normalize_typed_handle(raw: &str, handle_type: HandleType) -> (String, Op
     }
 }
 
-/// All configured owner handles (normalized, typed).
+/// All configured owner handles, each stored under its vault handle key.
+///
+/// The key is [`normalize_typed_handle`], the same function the vault uses
+/// for its `handles` rows and the contacts book uses for its entries, so an
+/// owner phone written `+44 7700 900123` is `+447700900123` here too.
 #[derive(Debug, Clone)]
 pub struct OwnerHandleSet {
     handles: HashSet<(String, HandleType)>,
@@ -254,37 +261,43 @@ impl OwnerHandleSet {
         }
         let mut set = HashSet::new();
         for (raw, handle_type) in handles {
-            let normalized = match handle_type {
-                HandleType::Phone => {
-                    let d = sanitize_number(raw)
-                        .with_context(|| format!("owner phone has no usable digits: {raw}"))?;
-                    // Guarded policy on the sanitized digits (same shape both
-                    // sides), so matching stays consistent and trunk-zero
-                    // values are never fabricated into `+0…`.
-                    normalize_guarded(&d, PhoneRegion::Usa).normalized
-                }
-                HandleType::Email => raw.trim().to_lowercase(),
-                HandleType::Username | HandleType::Other => raw.trim().to_string(),
-            };
-            set.insert((normalized, *handle_type));
+            if *handle_type == HandleType::Phone {
+                sanitize_number(raw)
+                    .with_context(|| format!("owner phone has no usable digits: {raw}"))?;
+            }
+            set.insert((normalize_typed_handle(raw, *handle_type).0, *handle_type));
         }
         Ok(Self { handles: set })
     }
 
-    /// Whether a raw handle value plus type matches an owner in the set after
-    /// the same normalization.
+    /// Whether a raw handle value plus type is one of the owner's, compared
+    /// by vault handle key.
+    ///
+    /// A value whose `+` has already been stripped is a different key: use
+    /// [`OwnerHandleSet::is_owner_digits`] for those.
     pub fn is_owner(&self, raw: &str, handle_type: HandleType) -> bool {
-        let normalized = match handle_type {
-            HandleType::Phone => {
-                let Some(d) = sanitize_number(raw) else {
-                    return false;
-                };
-                normalize_guarded(&d, PhoneRegion::Usa).normalized
-            }
-            HandleType::Email => raw.trim().to_lowercase(),
-            HandleType::Username | HandleType::Other => raw.trim().to_string(),
+        if handle_type == HandleType::Phone && sanitize_number(raw).is_none() {
+            return false;
+        }
+        self.handles
+            .contains(&(normalize_typed_handle(raw, handle_type).0, handle_type))
+    }
+
+    /// Whether a digit string is one of the owner's phones, compared by
+    /// [`sanitize_number`] digits.
+    ///
+    /// For sources that record numbers as bare digits with the `+` already
+    /// gone, such as the addresses in a Go SMS Pro MMS PDU. The comparison is
+    /// weaker than [`OwnerHandleSet::is_owner`], because without the `+`
+    /// `6591234567` could be Singapore or the US; the source has already
+    /// thrown that information away.
+    pub fn is_owner_digits(&self, digits: &str) -> bool {
+        let Some(digits) = sanitize_number(digits) else {
+            return false;
         };
-        self.handles.contains(&(normalized, handle_type))
+        self.handles
+            .iter()
+            .any(|(v, t)| phone_digits_if_phone(v, *t).is_some_and(|d| d == digits))
     }
 
     /// Convenience for exporters that only know about phone numbers.
@@ -308,24 +321,17 @@ impl OwnerHandleSet {
             .collect()
     }
 
-    /// First sanitized phone digit, for callers that need a single
-    /// representative owner phone (e.g. guarded E.164 normalization).
-    pub fn primary_phone_digit(&self) -> Option<&str> {
-        self.handles
-            .iter()
-            .find(|(_, t)| *t == HandleType::Phone)
-            .map(|(v, _)| v.as_str())
-    }
-
-    /// The guarded-normalized primary owner phone, for callers that need one
+    /// One owner phone's handle key, for callers that need a single
     /// representative owner value (e.g. `owner_handle` in export metadata).
     ///
     /// `None` only when the set holds no phone-typed handles. A set built
     /// with [`OwnerHandleSet::from_phones`] always returns `Some`: that
     /// constructor rejects an empty list and types every entry as a phone.
     pub fn primary_owner_handle(&self) -> Option<String> {
-        self.primary_phone_digit()
-            .map(|d| normalize_guarded(d, PhoneRegion::Usa).normalized)
+        self.handles
+            .iter()
+            .find(|(_, t)| *t == HandleType::Phone)
+            .map(|(v, _)| v.clone())
     }
 }
 
@@ -683,6 +689,22 @@ mod tests {
             !digits.contains("+15555550100"),
             "must be digits-only, not E.164"
         );
+    }
+
+    #[test]
+    fn an_international_owner_keeps_its_country() {
+        let owners = OwnerHandleSet::from_phones(&["+44 7700 900123".into()]).unwrap();
+        assert_eq!(
+            owners.primary_owner_handle().as_deref(),
+            Some("+447700900123")
+        );
+        assert!(owners.is_owner("+447700900123", HandleType::Phone));
+        // Without the `+` the vault keys it as different digits.
+        assert!(!owners.is_owner("447700900123", HandleType::Phone));
+        // A source that has already dropped the `+` compares digits instead.
+        assert!(owners.is_owner_digits("447700900123"));
+        assert!(!owners.is_owner_digits("447700900999"));
+        assert!(!owners.is_owner_digits("06"));
     }
 
     #[test]

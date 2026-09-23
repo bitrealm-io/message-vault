@@ -78,6 +78,17 @@ one of them is on a contact, the other joins the same contact
 (`contact_id_of_sibling_handle`). Why: the rows differ only by transport, and
 splitting them would show one person twice.
 
+**A phone number has one key everywhere.** `phone::normalize_typed_handle`
+gives a number its key, and the same key is used by the `handles` row, by the
+entry the contacts book files it under, and by the owner's own numbers
+(`OwnerHandleSet`). A number written with `+` keeps its country:
+`+65 9123 4567` is `+6591234567`. A number without `+` is read as a US
+number when it has ten digits, or eleven starting with `1`. Anything else keeps
+its digits as written, so `020 7946 0000` is `02079460000` and never the
+invented `+02079460000`. Why: a book or owner key that differs from the handle
+key names nobody, or names the wrong person. Stripping the `+` first once filed
+`+65 9123 4567` under the US number `+16591234567`.
+
 **An import names only a nameless contact.** When the backup knows a name and
 the contact has none, the import sets it and marks it as imported. A name a
 person types or loads from an address book replaces an imported one. A later

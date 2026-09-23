@@ -7,6 +7,7 @@ license = "LicenseRef-FCL-1.0-ALv2"
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
+chrono-tz = { workspace = true }
 csv = { workspace = true }
 message-ir = { path = "../ir" }
 serde = { workspace = true }

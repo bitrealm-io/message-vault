@@ -9,7 +9,7 @@ use chrono::FixedOffset;
 /// - `UTC` → +00:00
 /// - `UTC+00:00`, `UTC-05:00`, `UTC+05:30`, `UTC+05:45`
 ///
-/// IANA names are rejected.
+/// IANA names are rejected here; [`crate::Zone::parse`] accepts both.
 pub fn parse_utc_offset(raw: &str) -> Result<FixedOffset> {
     let s = raw.trim();
     if s.is_empty() {

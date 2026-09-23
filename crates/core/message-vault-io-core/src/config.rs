@@ -88,7 +88,8 @@ pub struct ExporterConfig {
     pub inputs: Vec<PathBuf>,
     /// Output directory the export is written to (packaging plus `attachments/`).
     pub output: PathBuf,
-    /// Optional fixed UTC offset for naive timestamps, e.g. `UTC-05:00`.
+    /// Optional zone for timestamps that carry none: a fixed UTC offset
+    /// (`UTC-05:00`) or an IANA name (`America/New_York`).
     /// When `None`, dates are interpreted in host-local time.
     pub timezone: Option<String>,
     /// Fake-name rewrite settings; `None`-equivalent when disabled.

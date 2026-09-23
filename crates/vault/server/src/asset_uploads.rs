@@ -21,7 +21,7 @@ pub const DEFAULT_MAX_BYTES: u64 = 512 * 1024 * 1024;
 /// Drop abandoned `.incoming` sessions older than this (24h).
 const STALE_INCOMING_SECS: u64 = 24 * 60 * 60;
 
-/// Limits for multipart sessions (from `[server]` config; optional env override).
+/// Limits for multipart sessions, from `[server]` config. Tests build their own.
 #[derive(Debug, Clone, Copy)]
 pub struct UploadLimits {
     /// Multipart part size advertised to clients.
@@ -40,14 +40,10 @@ impl Default for UploadLimits {
 }
 
 impl UploadLimits {
-    /// Build limits from config. `VAULT_ASSET_PART_SIZE` overrides part size when set
-    /// to a value in `1..=part_size` (tests / smoke).
-    pub fn resolve(part_size: usize, max_bytes: u64) -> Self {
-        let part_size = std::env::var("VAULT_ASSET_PART_SIZE")
-            .ok()
-            .and_then(|s| s.parse::<usize>().ok())
-            .filter(|&n| n >= 1 && n <= part_size.max(1))
-            .unwrap_or(part_size.max(1));
+    /// Build limits from the `[server]` config values. Part size is at least 1
+    /// byte, and the max size is at least one part.
+    pub fn new(part_size: usize, max_bytes: u64) -> Self {
+        let part_size = part_size.max(1);
         let max_bytes = max_bytes.max(part_size as u64);
         Self {
             part_size,
@@ -533,12 +529,8 @@ mod tests {
         let root = dir.path();
         let data = b"abcdefghijklmnopqrstuvwxyz";
         let sha = hash_bytes(data);
-        // Force tiny parts for this process.
-        // SAFETY: single-threaded test process; no concurrent env readers.
-        unsafe {
-            std::env::set_var("VAULT_ASSET_PART_SIZE", "10");
-        }
-        let limits = UploadLimits::resolve(DEFAULT_PART_SIZE, DEFAULT_MAX_BYTES);
+        // Tiny parts, set on this test's own limits so no other test sees them.
+        let limits = UploadLimits::new(10, DEFAULT_MAX_BYTES);
         let (existing, start) =
             start_upload(root, &sha, data.len() as u64, Some("text/plain"), limits).unwrap();
         assert!(existing.is_none());
@@ -556,9 +548,6 @@ mod tests {
         let (stored, already) = complete_upload(root, &sha, &start.upload_id).unwrap();
         assert!(!already);
         assert_eq!(stored.sha256, sha);
-        unsafe {
-            std::env::remove_var("VAULT_ASSET_PART_SIZE");
-        }
     }
 
     #[test]

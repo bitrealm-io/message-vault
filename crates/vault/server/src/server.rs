@@ -897,7 +897,7 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
     };
     let _operation_lock = crate::operation_lock::acquire_for_serve(&lock_path)?;
     let upload_limits =
-        asset_uploads::UploadLimits::resolve(server.asset_part_size, server.asset_max_bytes);
+        asset_uploads::UploadLimits::new(server.asset_part_size, server.asset_max_bytes);
 
     let vault = OpenVault::open(cfg).await?;
     if engine == DbEngine::Sqlite {

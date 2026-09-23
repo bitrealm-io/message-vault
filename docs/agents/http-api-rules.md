@@ -221,7 +221,9 @@ scheme with its scopes, so every route says which it accepts.
   messages.
 - An **API token** is a named credential an account makes for a program, with
   the scopes the person chose, capped by the account's own. A token never signs
-  in and never browses.
+  in and never browses. It never signs out either: `DELETE /v1/session` refuses
+  a token with `403`, because a token is not a Session and a `204` would say
+  something ended when nothing did.
 
 What each reaches:
 

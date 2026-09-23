@@ -1094,7 +1094,12 @@ export interface paths {
          *     `201 Created` whose `Location` is the singleton itself.
          */
         post: operations["create_session_handler"];
-        /** Log out: revoke the presented session token, ending the Session. */
+        /**
+         * Log out: revoke the presented session token, ending the Session.
+         * @description It takes the bearer token itself rather than a guard, so a disabled
+         *     account can still end its own Session. An API token is not a Session and
+         *     is refused; a token that names nothing is a `401`.
+         */
         delete: operations["delete_session_handler"];
         options?: never;
         head?: never;
@@ -7568,6 +7573,15 @@ export interface operations {
                 content?: never;
             };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The token is an API token, which is not a Session */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

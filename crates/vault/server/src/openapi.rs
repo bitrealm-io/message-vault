@@ -239,6 +239,9 @@ pub fn write_openapi(path: Option<&Path>) -> anyhow::Result<()> {
 }
 
 #[cfg(test)]
+mod credential_matrix;
+
+#[cfg(test)]
 mod tests {
     use super::dump_openapi_json;
 

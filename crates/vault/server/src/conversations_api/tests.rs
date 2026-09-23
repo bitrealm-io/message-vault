@@ -2256,3 +2256,103 @@ async fn conversation_messages_bad_limit_is_refused_like_other_paged_routes() {
         );
     }
 }
+
+/// Alice's conversation holding two iMessage messages and two SMS messages,
+/// one of the SMS messages a duplicate of an iMessage one.
+async fn sources_fixture() -> (TestVault, RegisteredAccount, i64) {
+    use crate::test_support::{SeedConversation, SeedMessage, seed_conversation};
+    let vault = test_vault().await;
+    let alice = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let message = |source, timestamp, body| SeedMessage {
+        source,
+        timestamp,
+        is_from_me: true,
+        body,
+    };
+    let conversation_id = seed_conversation(
+        &vault.state,
+        &SeedConversation {
+            account_id: alice.account_id,
+            handle: "+15555550100",
+            conversation_type: "individual",
+            group_title: None,
+            source_file: "seed.jsonl",
+            messages: &[
+                message("imessage", "2020-01-01T00:00:00Z", "first"),
+                message("imessage", "2020-01-02T00:00:00Z", "second"),
+                message("sms", "2020-01-01T00:00:00Z", "first"),
+                message("sms", "2020-01-03T00:00:00Z", "third"),
+            ],
+        },
+    )
+    .await;
+    let mut conn = vault.conn().await;
+    let original: i64 = sqlx::query_scalar(
+        "SELECT id FROM messages WHERE conversation_id = $1 AND source = 'imessage' AND body = 'first'",
+    )
+    .bind(conversation_id)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE messages SET duplicate_of = $1
+         WHERE conversation_id = $2 AND source = 'sms' AND body = 'first'",
+    )
+    .bind(original)
+    .bind(conversation_id)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    drop(conn);
+    (vault, alice, conversation_id)
+}
+
+#[tokio::test]
+async fn conversation_sources_count_each_backup_and_its_share_of_unique_messages() {
+    let (vault, alice, conversation_id) = sources_fixture().await;
+
+    let page: serde_json::Value = crate::test_support::get_json(
+        &vault.state,
+        &format!("/v1/conversations/{conversation_id}/sources"),
+        &alice.token,
+    )
+    .await;
+
+    assert_eq!(page["total"], 2, "{page}");
+    assert_eq!(
+        page["items"],
+        serde_json::json!([
+            { "backup_name": "imessage", "message_count": 2, "unique_count": 2, "percentage": 66.7 },
+            { "backup_name": "sms", "message_count": 2, "unique_count": 1, "percentage": 33.3 },
+        ]),
+        "sources come A to Z, and a duplicate counts toward its source's messages but not its unique share"
+    );
+}
+
+#[tokio::test]
+async fn conversation_sources_404s_for_another_accounts_conversation_and_an_unknown_id() {
+    let (vault, alice, conversation_id) = sources_fixture().await;
+    let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
+    seed_one_message(&vault.state, bob.account_id).await;
+
+    // A 403 would confirm the id exists in someone else's vault.
+    let (status, text) = crate::test_support::get_raw(
+        &vault.state,
+        &format!("/v1/conversations/{conversation_id}/sources"),
+        &bob.token,
+    )
+    .await;
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
+    assert!(
+        !text.contains("imessage"),
+        "the refusal says nothing about Alice's backups: {text}"
+    );
+
+    let (status, text) = crate::test_support::get_raw(
+        &vault.state,
+        "/v1/conversations/999999/sources",
+        &alice.token,
+    )
+    .await;
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
+}

@@ -6625,6 +6625,7 @@
           "Session"
         ],
         "summary": "Log out: revoke the presented session token, ending the Session.",
+        "description": "It takes the bearer token itself rather than a guard, so a disabled\naccount can still end its own Session. An API token is not a Session and\nis refused; a token that names nothing is a `401`.",
         "operationId": "delete_session_handler",
         "responses": {
           "204": {
@@ -6632,6 +6633,16 @@
           },
           "401": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The token is an API token, which is not a Session",
             "content": {
               "application/json": {
                 "schema": {

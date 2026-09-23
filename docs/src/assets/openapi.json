@@ -928,7 +928,7 @@
         "tags": [
           "Accounts"
         ],
-        "summary": "An account's identities, each with the messages it takes part in. The\nowner reads any account's; an account reads its own.",
+        "summary": "An account's identities, each with the messages held at it. The\nowner reads any account's; an account reads its own.",
         "operationId": "list_account_identities",
         "parameters": [
           {
@@ -6945,7 +6945,7 @@
     "schemas": {
       "AccountIdentity": {
         "type": "object",
-        "description": "One of an account's identities and the messages it takes part in. The\nProfile screen shows the counts beside each identity and repeats them when\none is about to be removed, so the person knows what the identity is tied\nto before it goes.",
+        "description": "One of an account's identities and the messages held at it. The\nProfile screen shows the counts beside each identity and repeats them when\none is about to be removed, so the person knows what the identity is tied\nto before it goes.",
         "required": [
           "handle",
           "service",
@@ -6957,13 +6957,13 @@
           "conversations": {
             "type": "integer",
             "format": "int64",
-            "description": "Direct and group conversations the identity takes part in, trashed\nconversations excluded.",
+            "description": "Direct and group conversations holding at least one message held at\nthe identity, trashed conversations excluded.",
             "minimum": 0
           },
           "direct_messages": {
             "type": "integer",
             "format": "int64",
-            "description": "Messages in the one-to-one conversations the identity takes part in,\ntrashed conversations and duplicates excluded.",
+            "description": "Messages held at the identity in one-to-one conversations, trashed\nconversations and duplicates excluded.",
             "minimum": 0
           },
           "end_date": {
@@ -6976,7 +6976,7 @@
           "group_messages": {
             "type": "integer",
             "format": "int64",
-            "description": "Messages in the group conversations the identity takes part in, on the\nsame terms.",
+            "description": "Messages held at the identity in group conversations, on the same\nterms.",
             "minimum": 0
           },
           "handle": {
@@ -6992,7 +6992,7 @@
               "string",
               "null"
             ],
-            "description": "When the oldest message in a conversation the identity takes part in\nwas sent, or null when there is none."
+            "description": "When the oldest message held at the identity was sent, or null when\nthere is none."
           }
         }
       },
@@ -9288,7 +9288,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "description": "One of an account's identities and the messages it takes part in. The\nProfile screen shows the counts beside each identity and repeats them when\none is about to be removed, so the person knows what the identity is tied\nto before it goes.",
+              "description": "One of an account's identities and the messages held at it. The\nProfile screen shows the counts beside each identity and repeats them when\none is about to be removed, so the person knows what the identity is tied\nto before it goes.",
               "required": [
                 "handle",
                 "service",
@@ -9300,13 +9300,13 @@
                 "conversations": {
                   "type": "integer",
                   "format": "int64",
-                  "description": "Direct and group conversations the identity takes part in, trashed\nconversations excluded.",
+                  "description": "Direct and group conversations holding at least one message held at\nthe identity, trashed conversations excluded.",
                   "minimum": 0
                 },
                 "direct_messages": {
                   "type": "integer",
                   "format": "int64",
-                  "description": "Messages in the one-to-one conversations the identity takes part in,\ntrashed conversations and duplicates excluded.",
+                  "description": "Messages held at the identity in one-to-one conversations, trashed\nconversations and duplicates excluded.",
                   "minimum": 0
                 },
                 "end_date": {
@@ -9319,7 +9319,7 @@
                 "group_messages": {
                   "type": "integer",
                   "format": "int64",
-                  "description": "Messages in the group conversations the identity takes part in, on the\nsame terms.",
+                  "description": "Messages held at the identity in group conversations, on the same\nterms.",
                   "minimum": 0
                 },
                 "handle": {
@@ -9335,7 +9335,7 @@
                     "string",
                     "null"
                   ],
-                  "description": "When the oldest message in a conversation the identity takes part in\nwas sent, or null when there is none."
+                  "description": "When the oldest message held at the identity was sent, or null when\nthere is none."
                 }
               }
             },

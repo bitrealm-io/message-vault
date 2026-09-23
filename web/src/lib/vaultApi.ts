@@ -242,7 +242,7 @@ function accountBase(accountId?: number): string {
   return accountId === undefined ? ownAccountPath() : accountPath(accountId);
 }
 
-/** An account's identities with the messages each takes part in: the logged-in one, or as the owner the one named. */
+/** An account's identities with the messages held at each: the logged-in one, or as the owner the one named. */
 export function listAccountIdentities(
   opts?: VaultRequestOptions,
   accountId?: number,

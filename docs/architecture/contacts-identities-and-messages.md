@@ -23,6 +23,7 @@ erDiagram
     Participant }o--o| Contact : "is this person"
     Conversation ||--o{ Message : "holds"
     Message }o--o| Identity : "was sent from"
+    Message }o--o| Identity : "is held at"
     Conversation |o--o| Identity : "one-to-one only: is with"
 ```
 
@@ -33,10 +34,11 @@ allowed, and a crow's foot means many.
 |---|---|
 | Account owns Identity | An account's identity is one of the account holder's own addresses: the messages from it belong to the holder (`account_handles`). This is ownership, where a contact's identity is participation; the rule below says how Import applies it. |
 | Contact is reached at Identity | A contact is one person and gathers any number of identities under one name. An identity belongs to at most one contact (`contact_handles`, keyed on the handle). |
-| Conversation includes Participant | A participant is one person's seat in one conversation, and keeps what that backup called them there (`participants.name_alias`). |
+| Conversation includes Participant | A participant is one other person's seat in one conversation, and keeps what that backup called them there (`participants.name_alias`). The account holder is never a participant; the rule below says why. |
 | Participant takes part as Identity | Normally the address the person used. It is empty when the source named a person and recorded no address for them. |
 | Participant is this person | Every participant has a contact (`participants.contact_id`). For a participant with no identity, this link is the only tie to a contact. |
 | Conversation holds Message | A message lives in exactly one conversation. |
+| Message is held at Identity | The account holder's own address on this message: the one it was sent from, or the one it was received at (`messages.owner_handle_id`). Set from the backup, sent or received. Empty when the backup names no owner. The identity need not be one of the account's. |
 | Message was sent from Identity | Set for a received message. Empty for a message the account owner sent, and for one whose source recorded no sender (`messages.sender_handle_id`). A message never points at a contact; it reaches one through its sender's identity. |
 | Conversation is with Identity | Only a one-to-one conversation is with an identity, and an identity has at most one such conversation. A group is with nobody; its people are its participants. |
 | Contact is a member of Contact Group | Many to many. Unknown is a Contact Group the vault computes; nothing is added to it by hand. |
@@ -132,21 +134,43 @@ applies it for the conversation list, the message pane, and Export.
 **Deleting a contact keeps its conversations.** The name and details go. The
 identities stay in their conversations and the person becomes Unknown again.
 
+**The account holder is never a participant.** The vault is always read from
+the account holder's side: every conversation in an account is the holder's
+own, so the vault knows they are in it without listing them. Participants are
+the other people. Which of the holder's identities a message used is recorded
+on the message itself, as the identity it is held at, taken from the message
+when the backup records it per message (iMessage) and from the backup's header
+when the backup has one owner. See
+[ADR 0015](../adr/0015-the-owner-is-recorded-on-the-message.md). Why: a
+participant row for the holder would need a contact, a name, and a place in
+every participant count and conversation title, and each reader would then have
+to leave it out again.
+
 **An account's own identity means ownership, and its message counts
-describe what it takes part in.** A contact's identity says the person took
-part; an account's identity (`account_handles`) says the messages from that
-address are the account holder's own. Import is where that decision is made:
-the reader takes the holder's addresses from the backup when the backup names
-its owner, and from this list when it does not, and marks each message sent
-or received accordingly. Linking or removing an identity afterwards changes
-no message already imported. What the product shows beside an account's identity, and
-repeats before it is removed, is the number of messages in the direct and the
-group conversations that identity takes part in, counted the way a contact's
-identities are in the contact drawer. Why: one definition of "a message of an
-identity" for both tables, and a count the person can check by opening the
-conversations. Rejected: counting messages the identity sent. An account's
-own messages are marked sent by the backup and carry no sender identity, so
-that count would be zero for the identity that matters most.
+describe the messages it holds.** A contact's identity says the person took
+part; an account's identity (`account_handles`) says the messages sent from or
+received at that address are the account holder's own. Import is where that
+decision is made: the reader takes the holder's addresses from the backup when
+the backup names its owner, and from this list when it does not, and marks each
+message sent or received accordingly. Linking or removing an identity afterwards
+changes no message already imported. What the product shows beside an account's
+identity, and repeats before it is removed, is the number of messages held at
+that identity, split by direct and group conversation, and the number of
+conversations holding at least one of them. Why: the count says what the person
+did at that address, and one conversation that used two of the holder's
+identities counts each message once, under the identity it used. Rejected:
+counting messages the identity sent, because received messages are the holder's
+too; and counting every message in a conversation the identity appears in,
+because a conversation that used two identities would count all its messages
+twice.
+
+**An import never adds an account identity.** A backup that names an owner
+address the account does not have records it on the messages and leaves the
+account's identities as they are. Why: the person adds identities themselves,
+and an address they have not added is one they chose not to claim; a backup's
+owner field can also name something that is not a messaging address, such as
+the mail account a backup was stored in. Because the address is already on the
+messages, linking it later shows its counts without a re-import.
 
 **An import replaces a trashed contact.** When an import meets an identity of
 a trashed contact, it discards that contact with every identity it had and

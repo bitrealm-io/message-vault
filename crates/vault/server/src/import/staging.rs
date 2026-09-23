@@ -13,7 +13,8 @@ use crate::assets::{self, AssetStats, StoredAsset};
 use crate::config::validate_source_id;
 use crate::db::dialect;
 use crate::db::handles::{
-    HandleIdCache, infer_handle_type_from_shape as infer_handle_type, upsert_handle_row_cached,
+    HandleIdCache, infer_handle_type_from_shape as infer_handle_type, upsert_handle_row,
+    upsert_handle_row_cached,
 };
 use crate::db::sql::{max_rows_for_bind_limit, values_tuples};
 use crate::import_media;
@@ -170,6 +171,10 @@ pub(super) struct StagingInserts {
     account_id: i64,
     import_id: Option<i64>,
     handles: HandleIdCache,
+    /// Handle ids of the account holder's own addresses met in this run, by
+    /// address and platform. Apart from `handles`, whose entries each have a
+    /// contact: an owner's handle never gets one (ADR-0015).
+    owners: HashMap<(String, String), i64>,
 }
 
 const INSERT_CONVERSATION: &str = r"
@@ -187,13 +192,13 @@ VALUES ($1, $2, $3, $4)
 const INSERT_MESSAGE_PREFIX: &str = r"
 INSERT INTO staging_messages (
     conversation_id, account_id, source, guid, timestamp, is_from_me,
-    sender_handle_id, service, subject, body, is_announcement, is_reply,
+    sender_handle_id, owner_handle_id, service, subject, body, is_announcement, is_reply,
     thread_originator_guid, thread_originator_part, num_replies, sort_order, import_id
 ) VALUES
 ";
 
 /// Bind counts must stay in lockstep with the `INSERT` column lists above.
-const MESSAGE_BIND_COLUMNS: usize = 17;
+const MESSAGE_BIND_COLUMNS: usize = 18;
 const ATTACHMENT_BIND_COLUMNS: usize = 10;
 const TAPBACK_BIND_COLUMNS: usize = 6;
 
@@ -222,6 +227,7 @@ impl StagingInserts {
             account_id,
             import_id,
             handles: HandleIdCache::new(),
+            owners: HashMap::new(),
         }
     }
 }
@@ -684,10 +690,13 @@ async fn resolve_message_rows(
             stats,
         )
         .await?;
+        let owner_handle_id =
+            resolve_owner_handle(tx, stmts, msg.owner.as_deref(), sender_platform.as_str()).await?;
         rows.push(PendingStagingMessage {
             msg,
             attachments,
             sender_handle_id,
+            owner_handle_id,
             sender_platform: sender_platform.as_str().to_string(),
             body,
             sort_order: sort_order as i64,
@@ -696,10 +705,44 @@ async fn resolve_message_rows(
     Ok(rows)
 }
 
+/// The `handles` row for the account holder's own address on a message,
+/// creating it when this run is the first to meet it. It gets no contact: the
+/// holder is not a person the import met (ADR-0015). `None` when the backup
+/// names no owner.
+///
+/// # Errors
+///
+/// Returns an error when the handle cannot be written.
+async fn resolve_owner_handle(
+    tx: &mut AnyConnection,
+    stmts: &mut StagingInserts,
+    address: Option<&str>,
+    platform: &str,
+) -> Result<Option<i64>> {
+    let Some(address) = address else {
+        return Ok(None);
+    };
+    let key = (address.to_string(), platform.to_string());
+    if let Some(&id) = stmts.owners.get(&key) {
+        return Ok(Some(id));
+    }
+    let (id, _) = upsert_handle_row(
+        tx,
+        stmts.account_id,
+        address,
+        infer_handle_type(address),
+        Some(platform),
+    )
+    .await?;
+    stmts.owners.insert(key, id);
+    Ok(Some(id))
+}
+
 struct PendingStagingMessage {
     msg: MessageRecord,
     attachments: Vec<PreparedAttachment>,
     sender_handle_id: Option<i64>,
+    owner_handle_id: Option<i64>,
     sender_platform: String,
     body: Option<String>,
     sort_order: i64,
@@ -790,6 +833,7 @@ async fn insert_message_rows(
             .bind(&row.msg.timestamp)
             .bind(row.msg.is_from_me as i64)
             .bind(row.sender_handle_id)
+            .bind(row.owner_handle_id)
             .bind(row.msg.service.as_deref())
             .bind(row.msg.subject.as_deref())
             .bind(row.body.as_deref())

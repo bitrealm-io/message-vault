@@ -1393,11 +1393,11 @@ async fn an_account_deletes_itself_with_its_password_and_the_demo_account_refuse
 // ---------------------------------------------------------------------------
 
 /// The identities route lists each of the account's identities with the
-/// conversations it takes part in, the first and last message among them, and
-/// how many messages sit in the direct and the group ones, trashed
+/// messages held at it: the first and last, how many sit in direct and in
+/// group conversations, and how many conversations hold them, trashed
 /// conversations and duplicates excluded. The owner reads the same.
 #[tokio::test]
-async fn the_identities_route_counts_direct_and_group_messages_per_identity() {
+async fn the_identities_route_counts_the_direct_and_group_messages_held_at_each_identity() {
     let vault = test_vault().await;
     let owner = claim_vault_as_owner(&vault.state, "keeper", "hunter2hunter2").await;
     let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
@@ -1493,21 +1493,38 @@ async fn the_identities_route_counts_direct_and_group_messages_per_identity() {
     )
     .await;
     let mut conn = vault.conn().await;
-    let phone_id: i64 = sqlx::query_scalar(
-        "SELECT h.id FROM handles h JOIN account_handles ah ON ah.handle_id = h.id
-         WHERE ah.account_id = $1 AND h.handle_type = 'phone'",
-    )
-    .bind(account.account_id)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    for conversation_id in [direct, group, trashed] {
-        sqlx::query("INSERT INTO participants (conversation_id, handle_id) VALUES ($1, $2)")
-            .bind(conversation_id)
-            .bind(phone_id)
-            .execute(&mut *conn)
-            .await
-            .unwrap();
+    let identity_id = |handle_type: &'static str| {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT h.id FROM handles h JOIN account_handles ah ON ah.handle_id = h.id
+             WHERE ah.account_id = $1 AND h.handle_type = $2",
+        )
+        .bind(account.account_id)
+        .bind(handle_type)
+    };
+    let phone_id = identity_id("phone").fetch_one(&mut *conn).await.unwrap();
+    let email_id = identity_id("email").fetch_one(&mut *conn).await.unwrap();
+    // The group used both of the holder's addresses: "e" was received at the
+    // email, everything else at the phone. Each message counts once, under
+    // the address it used.
+    for (conversation_id, body, owner) in [
+        (direct, "a", phone_id),
+        (direct, "b", phone_id),
+        (group, "c", phone_id),
+        (group, "d", phone_id),
+        (group, "e", email_id),
+        (trashed, "c", phone_id),
+        (trashed, "d", phone_id),
+        (trashed, "e", phone_id),
+    ] {
+        sqlx::query(
+            "UPDATE messages SET owner_handle_id = $1 WHERE conversation_id = $2 AND body = $3",
+        )
+        .bind(owner)
+        .bind(conversation_id)
+        .bind(body)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
     }
     sqlx::query(
         "INSERT INTO trashed_conversations (account_id, conversation_id, trashed_at)
@@ -1529,19 +1546,19 @@ async fn the_identities_route_counts_direct_and_group_messages_per_identity() {
                 "handle": "+15555550100",
                 "service": "phone",
                 "start_date": "2020-01-01T00:00:00Z",
-                "end_date": "2020-02-03T00:00:00Z",
+                "end_date": "2020-02-02T00:00:00Z",
                 "conversations": 2,
                 "direct_messages": 2,
-                "group_messages": 3
+                "group_messages": 2
             },
             {
                 "handle": "alice@example.com",
                 "service": "email",
-                "start_date": null,
-                "end_date": null,
-                "conversations": 0,
+                "start_date": "2020-02-03T00:00:00Z",
+                "end_date": "2020-02-03T00:00:00Z",
+                "conversations": 1,
                 "direct_messages": 0,
-                "group_messages": 0
+                "group_messages": 1
             }
         ])
     );

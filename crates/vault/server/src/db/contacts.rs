@@ -791,6 +791,7 @@ async fn remove_unused_book_handles(conn: &mut AnyConnection, account_id: i64) -
            AND NOT EXISTS (SELECT 1 FROM participants p WHERE p.handle_id = handles.id)
            AND NOT EXISTS (SELECT 1 FROM conversations c WHERE c.chat_handle_id = handles.id)
            AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.sender_handle_id = handles.id)
+           AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.owner_handle_id = handles.id)
            AND NOT EXISTS (SELECT 1 FROM tapbacks t WHERE t.sender_handle_id = handles.id)
            AND NOT EXISTS (SELECT 1 FROM account_handles ah WHERE ah.handle_id = handles.id)",
     )

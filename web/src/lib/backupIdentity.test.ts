@@ -67,11 +67,13 @@ describe("formIdentities", () => {
   });
 
   it("leaves out SMS Backup+'s emails, which name the Gmail account the backup is in", () => {
-    expect(formIdentities({ ...sms, source: "sms-backup-plus" })).toEqual(["+15550001111"]);
+    const smsBackupPlus = { ...sms, source: "sms-backup-plus" };
+    expect(formIdentities(smsBackupPlus)).toEqual(["+15550001111"]);
   });
 
   it("names none for a source that asks for no address", () => {
-    expect(formIdentities({ ...sms, source: "whatsapp-android", isAndroidSms: false })).toEqual([]);
+    const whatsapp = { ...sms, source: "whatsapp-android", isAndroidSms: false };
+    expect(formIdentities(whatsapp)).toEqual([]);
   });
 });
 

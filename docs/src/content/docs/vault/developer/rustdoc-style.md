@@ -9,7 +9,7 @@ This page is the standard for `///` and `//!` comments and utoipa annotations in
 
 Open every doc comment with a single sentence stating what the item is or does. Put examples, rationale, and error notes in later sentences.
 
-- `crates/vault/server/src/api_tokens_api.rs:112` — "`GET /v1/account/api-tokens`" — Bad: the route echo as the opening summary adds nothing; the first sentence should describe the operation.
+- `crates/vault/server/src/server.rs`, `is_asset_download` — "`GET /v1/assets/{sha256}`: the asset's own bytes, in its own media type." — Bad: the function answers whether a request is an asset download, and the opening names the route and what it serves instead.
 - `crates/vault/server/src/assets.rs:27–29` — "SHA-256 fingerprint of `data` as 64 lowercase hex digits. SHA-256 is a short fingerprint of the file contents." — Bad: the second sentence restates the first; later sentences must add information.
 - `crates/libs/ir/src/lib.rs:469` — "Intermediate message before conversion to [`IrMessage`]." — Good: one sentence states what the type is.
 
@@ -42,16 +42,15 @@ Never write self-contradictory filler, invented terms, or unexplained jargon in 
 
 Write each HTTP handler's doc comment as plain prose. The summary says what the route does; the description says when and why. Never echo the route path: it adds nothing over the OpenAPI path itself.
 
-- `crates/vault/server/src/profile.rs:47` — "`GET /v1/account/profile`" — Bad: the entire doc comment is the route path; zero information added. The same pattern repeats at `crates/vault/server/src/profile.rs:202`.
-- `crates/vault/server/src/auth.rs:338` — "`POST /v1/auth/register` — create an account and return an API token." — Bad: repeats the route verbatim before the one-line hint.
-- `crates/vault/server/src/api_tokens_api.rs:112` — "`GET /v1/account/api-tokens`" — Bad: route echo flagged ECHOED-ROUTE-SUMMARY by the audit; describe what the endpoint does instead.
+- `crates/vault/server/src/api_tokens_api.rs`, the `GET /v1/accounts/{id}/api-tokens` handler — "List the account's named API tokens with their permissions and masked secrets." — Good: the summary says what comes back, and the path appears only once, in the OpenAPI path.
+- `crates/vault/server/src/accounts_api.rs`, the `PATCH /v1/accounts/{id}` handler — "Change an account. Its display name, time zone and handles are set by the account itself or by the vault owner; only the vault owner sets an account's disabled flag and its import, export and delete permissions." — Good: the summary names the operation, and the description says who may change what.
 
 ## No `# Errors` sections in OpenAPI descriptions
 
 Keep `# Errors` rustdoc sections out of handler docs that become OpenAPI descriptions. Fold failure cases into the description prose.
 
-- `crates/vault/server/src/api_tokens_api.rs:112` — "`GET /v1/account/api-tokens` … `# Errors` … Returns an API error when the caller is not a logged-in session or the list cannot be loaded." — Bad: the heading leaks rustdoc boilerplate into the OpenAPI description (flagged ERRORS-SECTION-IN-DESCRIPTION).
-- `crates/vault/server/src/profile.rs:202` — "`PATCH /v1/account/profile` … `# Errors` … Returns an API error when the caller is not a logged-in session, a handle service is unsupported, or the update fails." — Bad: same boilerplate; describe the error cases as prose instead.
+- `crates/vault/server/src/conversations_api.rs`, the `DELETE /v1/conversations/{id}` handler — "Trash is the only door to deletion, so a conversation that is not in the trash answers 409 rather than being deleted from wherever it was." — Good: the failure case and its reason are description prose, so the reference reads correctly.
+- `crates/vault/server/src/trash_api.rs`, `remove_orphaned_files` — "# Errors … `Internal` when a file exists and cannot be removed, or when a stored path would escape the directory it belongs under." — Good: a `# Errors` section belongs on a function that is not a handler, because rustdoc is the only place it appears.
 
 ## Cover every public item
 

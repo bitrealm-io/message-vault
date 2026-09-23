@@ -41,8 +41,6 @@ cors_origins = [
 | `asset_max_bytes` | `536870912` (512 MiB) | Maximum size for one attachment — a single `PUT /v1/assets/{sha256}` body or the total declared bytes for a multipart upload. Must be greater than 0. |
 | `asset_part_size` | `67108864` (64 MiB) | Chunk size advertised to clients for multipart uploads. Must not exceed `asset_max_bytes`. Keep under ~100 MiB for Cloudflare-proxied setups. |
 
-The environment variable `VAULT_ASSET_PART_SIZE` can override the advertised part size at runtime (clamped to `1..=asset_part_size`). Set it before starting the server. This is a test and operations knob — use `config.toml` for normal configuration.
-
 Web env overrides (optional): `VAULT_DB`, `VAULT_DATA_DIR`.
 
 ### Logging

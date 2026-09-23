@@ -700,9 +700,10 @@ export interface paths {
         get: operations["exports_list_handler"];
         put?: never;
         /**
-         * Start an Export Run: compile the scope, count what it matches, and
-         *     record the run as `running`. Read its messages at
-         *     `GET /v1/exports/{id}/messages`, then close it with `complete` or `cancel`.
+         * Start an Export Run: compile the scope, list and count the messages it
+         *     matches now, and record the run as `running`. Read that list at
+         *     `GET /v1/exports/{id}/messages`, then close the run with `complete` or
+         *     `cancel`.
          */
         post: operations["exports_create_handler"];
         delete?: never;
@@ -770,9 +771,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The messages a running Export Run's scope selects, a page at a time,
-         *     oldest first unless `sort` says otherwise. Each page read raises the
-         *     run's `messages_delivered` to the rows handed over so far.
+         * The messages a running Export Run matched when it was created, a page at
+         *     a time, oldest first unless `sort` says otherwise. An import, a trash or
+         *     a new day since creation changes nothing here. A message deleted since
+         *     leaves its place empty: `total` stays `message_count`, a page can hold
+         *     fewer than `limit` items, and a client steps `offset` by `limit`. Each
+         *     page read raises the run's `messages_delivered` to the places reached.
          */
         get: operations["export_messages_handler"];
         put?: never;
@@ -1921,13 +1925,15 @@ export interface components {
             id: number;
             /**
              * Format: int64
-             * @description Messages the scope matched when the run was created.
+             * @description Messages the scope matched when the run was created: the places in
+             *     the list `GET /v1/exports/{id}/messages` pages, and every page's
+             *     `total`.
              */
             message_count: number;
             /**
              * Format: int64
-             * @description Rows handed over so far through `GET /v1/exports/{id}/messages`,
-             *     so an abandoned run shows how far it got.
+             * @description How far `GET /v1/exports/{id}/messages` has read into the run's
+             *     list, in places, so an abandoned run shows how far it got.
              */
             messages_delivered: number;
             /** @description What the run asked for, as given. */
@@ -2649,13 +2655,15 @@ export interface components {
                 id: number;
                 /**
                  * Format: int64
-                 * @description Messages the scope matched when the run was created.
+                 * @description Messages the scope matched when the run was created: the places in
+                 *     the list `GET /v1/exports/{id}/messages` pages, and every page's
+                 *     `total`.
                  */
                 message_count: number;
                 /**
                  * Format: int64
-                 * @description Rows handed over so far through `GET /v1/exports/{id}/messages`,
-                 *     so an abandoned run shows how far it got.
+                 * @description How far `GET /v1/exports/{id}/messages` has read into the run's
+                 *     list, in places, so an abandoned run shows how far it got.
                  */
                 messages_delivered: number;
                 /** @description What the run asked for, as given. */
@@ -6174,7 +6182,7 @@ export interface operations {
             query?: {
                 /** @description Page size, default 100, max 500 */
                 limit?: number;
-                /** @description Page offset; no cap, an offset past the end is an empty page */
+                /** @description Places to skip in the run's list; a client steps it by `limit`. No cap, an offset past the end is an empty page */
                 offset?: number;
                 /** @description `date` or `-date`. Default `date`, oldest first. */
                 sort?: string;

@@ -199,3 +199,22 @@ CREATE TABLE IF NOT EXISTS message_tag_members (
     tag_id INTEGER NOT NULL REFERENCES message_tags(id) ON DELETE CASCADE,
     PRIMARY KEY (conversation_id, tag_id)
 );
+
+-- One message a running Export Run matched when it was created. The run's
+-- pages read these rows rather than its scope, so an import, a trash, or a
+-- new day between pages cannot move what the run hands over. The rows are
+-- deleted when the run completes or is cancelled.
+CREATE TABLE IF NOT EXISTS vault_export_messages (
+    -- Export Run (`vault_exports.id`).
+    export_id INTEGER NOT NULL REFERENCES vault_exports(id) ON DELETE CASCADE,
+    -- The message's place in the run, from 1: oldest first by timestamp,
+    -- then sort_order, then id, as they stood at creation.
+    row_order INTEGER NOT NULL,
+    -- Matched message (`messages.id`). NULL once the message is deleted: its
+    -- place stays, empty, so the places after it do not move.
+    message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+    PRIMARY KEY (export_id, row_order)
+);
+
+CREATE INDEX IF NOT EXISTS ix_vault_export_messages_message
+    ON vault_export_messages (message_id);

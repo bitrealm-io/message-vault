@@ -13,7 +13,7 @@
 
 use message_vault_server::{
     ExportPageOpts, ExportScope, ensure_vault_schema, export_messages, pg_test_schema_pool,
-    sqlite_test_pool,
+    sqlite_test_pool, start_export_run,
 };
 use serde::Deserialize;
 use sqlx::AnyConnection;
@@ -148,35 +148,43 @@ async fn setup_vault(conn: &mut AnyConnection) {
     }
 }
 
-/// Run the committed query list through the same search entry point the API
-/// uses ([`export_messages`], the `query` scope of an Export Run). Returns
-/// (query, id set) pairs in `CASES` order.
+/// Start an Export Run with the `query` scope `q` and read its first page, the
+/// same entry points the API uses ([`start_export_run`], [`export_messages`]).
+/// Returns the sorted ids.
+async fn export_ids(conn: &mut AnyConnection, q: &str) -> Vec<i64> {
+    let scope = ExportScope::Query { q: q.into() };
+    let clock = (
+        chrono_tz::UTC,
+        chrono::NaiveDate::from_ymd_opt(2026, 9, 2).unwrap(),
+    );
+    let run = start_export_run(conn, ACCOUNT_ID, &scope, None, clock)
+        .await
+        .unwrap_or_else(|e| panic!("query {q:?} starts a run: {e:?}"));
+    let resp = export_messages(
+        conn,
+        ExportPageOpts {
+            export_id: run.id,
+            total: u64::try_from(run.message_count).unwrap(),
+            limit: 100,
+            offset: 0,
+            order: message_vault_server::DEFAULT_MESSAGE_SORT.to_vec(),
+        },
+    )
+    .await
+    .unwrap_or_else(|e| panic!("query {q:?} pages: {e:?}"));
+    let mut ids: Vec<i64> = resp.items.iter().map(|m| m.id).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}
+
+/// Run the committed query list through [`export_ids`]. Returns (query, id
+/// set) pairs in `CASES` order.
 async fn run_against(conn: &mut AnyConnection) -> Vec<(&'static str, Vec<i64>)> {
     setup_vault(conn).await;
     let mut results = Vec::with_capacity(CASES.len());
     for &(query, _expected) in CASES {
-        let scope = ExportScope::Query { q: query.into() };
-        let resp = export_messages(
-            conn,
-            ExportPageOpts {
-                account_id: ACCOUNT_ID,
-                scope: &scope,
-                limit: 100,
-                offset: 0,
-                clock: (
-                    chrono_tz::UTC,
-                    chrono::NaiveDate::from_ymd_opt(2026, 9, 2).unwrap(),
-                ),
-
-                order: message_vault_server::DEFAULT_MESSAGE_SORT.to_vec(),
-            },
-        )
-        .await
-        .expect("committed parity query executes");
-        let mut ids: Vec<i64> = resp.items.iter().map(|m| m.id).collect();
-        ids.sort_unstable();
-        ids.dedup();
-        results.push((query, ids));
+        results.push((query, export_ids(conn, query).await));
     }
     results
 }
@@ -200,26 +208,7 @@ async fn assert_diacritics_exception(conn: &mut AnyConnection, engine: Engine) {
         Engine::Sqlite => vec![9, 10],
         Engine::Postgres => vec![9],
     };
-    let scope = ExportScope::Query { q: "cafe".into() };
-    let resp = export_messages(
-        conn,
-        ExportPageOpts {
-            account_id: ACCOUNT_ID,
-            scope: &scope,
-            limit: 100,
-            offset: 0,
-            clock: (
-                chrono_tz::UTC,
-                chrono::NaiveDate::from_ymd_opt(2026, 9, 2).unwrap(),
-            ),
-
-            order: message_vault_server::DEFAULT_MESSAGE_SORT.to_vec(),
-        },
-    )
-    .await
-    .expect("diacritics query executes");
-    let mut ids: Vec<i64> = resp.items.iter().map(|m| m.id).collect();
-    ids.sort_unstable();
+    let ids = export_ids(conn, "cafe").await;
     assert_eq!(
         ids,
         expected,

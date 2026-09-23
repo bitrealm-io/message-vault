@@ -1,7 +1,7 @@
-//! Export Runs: `POST /v1/exports` records what was asked for and how much
-//! matched, `GET /v1/exports/{id}/messages` pages the rows the scope selects,
-//! and `complete` or `cancel` closes the run (`docs/agents/http-api-rules.md`,
-//! "Runs").
+//! Export Runs: `POST /v1/exports` records what was asked for, lists the
+//! messages it matches and counts them, `GET /v1/exports/{id}/messages` pages
+//! that list, and `complete` or `cancel` closes the run and drops the list
+//! (`docs/agents/http-api-rules.md`, "Runs").
 //!
 //! Every route here takes the `export` scope on a session or an API token.
 //! A program with an export token reads messages only through a run it
@@ -10,23 +10,23 @@
 use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::State;
 use serde::Deserialize;
-use sqlx::AnyConnection;
+use sqlx::{AnyConnection, Connection};
 use sqlx::{Executor, Row};
 use vault_api_types::{ExportRun, ExportScope};
 
 use crate::db::conversation_messages::{
     DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, MessageSort, conversation_join_sql,
-    load_messages, messages_from_sql,
+    load_messages_from, messages_from_sql,
 };
-use crate::db::dialect::engine_of;
+use crate::db::dialect::{begin_immediate_sql, engine_of};
 use crate::db::sql::{SqlParam, bind_all, renumber_placeholders};
 use crate::db::vault_exports::{
     self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, EXPORT_STATUSES, ExportCounts, StartExportArgs,
 };
-use crate::messages_api::{count_matching_messages, message_filter};
+use crate::messages_api::message_filter;
 use crate::paging::{
-    DEFAULT_EXPORT_LIMIT, DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, SortKey, page_params,
-    parse_sort,
+    DEFAULT_EXPORT_LIMIT, DEFAULT_LIST_LIMIT, Direction, MAX_LIST_OFFSET, Page, SortKey,
+    page_params, parse_sort,
 };
 use crate::server::{ApiError, AppState, Created, ExportAccess};
 
@@ -35,22 +35,74 @@ use crate::server::{ApiError, AppState, Created, ExportAccess};
 /// uses.
 pub const MAX_SELECTION_IDS: usize = 500;
 
-/// Options for one exported page of messages.
+/// Options for one page of a running Export Run's messages.
 #[derive(Debug, Clone)]
-pub struct ExportPageOpts<'a> {
-    /// Vault account to export from.
-    pub account_id: i64,
-    /// What to export.
-    pub scope: &'a ExportScope,
-    /// Max messages on the page. Already validated by the handler: `1..=MAX_LIST_LIMIT`.
+pub struct ExportPageOpts {
+    /// The run to read, already checked to be the caller's and running.
+    pub export_id: i64,
+    /// How many places the run listed at creation: its `message_count`.
+    pub total: u64,
+    /// Places on the page. Already validated by the handler: `1..=MAX_LIST_LIMIT`.
     pub limit: usize,
-    /// Row offset.
+    /// Places to skip in the run's list.
     pub offset: usize,
-    /// The account's time zone and today's date in it: the zone anchors the
-    /// date words' boundaries, the day anchors relative dates in a query.
-    pub clock: (chrono_tz::Tz, chrono::NaiveDate),
     /// The parsed `sort`; [`DEFAULT_MESSAGE_SORT`] when the caller has none.
     pub order: Vec<SortKey<MessageSort>>,
+}
+
+/// Start an Export Run over `scope`: compile the scope, list the ids of the
+/// messages it matches now, count them, and record the run as `running`, all
+/// in one transaction. The run's pages read that list, never the scope again,
+/// so what a run hands over is fixed when it is created.
+///
+/// # Errors
+///
+/// The scope's own failures ([`scope_filter`]), or an internal error when a
+/// database statement fails. On any error nothing is recorded.
+pub async fn start_export_run(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    scope: &ExportScope,
+    tool: Option<&str>,
+    clock: (chrono_tz::Tz, chrono::NaiveDate),
+) -> Result<ExportRun, ApiError> {
+    let engine = engine_of(conn);
+    let mut tx = conn.begin_with(begin_immediate_sql(engine)).await?;
+    let filter = scope_filter(&mut tx, account_id, scope, clock).await?;
+    crate::db::account_profile::ensure_account_row(&mut tx, account_id).await?;
+    let export_id = vault_exports::start_export(
+        &mut tx,
+        &StartExportArgs {
+            account_id,
+            scope,
+            tool,
+        },
+    )
+    .await?;
+
+    // Each matched message gets its place in the run, oldest first, so a
+    // page is a range of places whatever happens to the vault meanwhile.
+    let list_sql = format!(
+        "INSERT INTO vault_export_messages (export_id, row_order, message_id)
+         SELECT ?, ROW_NUMBER() OVER (ORDER BY m.timestamp, m.sort_order, m.id), m.id
+         {messages_from_sql}
+         WHERE {where_sql}",
+        messages_from_sql = messages_from_sql(),
+        where_sql = filter.where_sql(),
+    );
+    let mut params = vec![SqlParam::Int(export_id)];
+    params.extend_from_slice(filter.params());
+    (&mut *tx)
+        .execute(bind_all(&renumber_placeholders(&list_sql), &params))
+        .await?;
+
+    let counts = export_counts(&mut tx, export_id).await?;
+    vault_exports::record_counts(&mut tx, export_id, counts).await?;
+    let run = vault_exports::get_export(&mut tx, account_id, export_id)
+        .await?
+        .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("export run vanished before commit")))?;
+    tx.commit().await?;
+    Ok(run)
 }
 
 /// Compile an Export Run's scope to the filter every read of it uses.
@@ -183,89 +235,112 @@ async fn missing_ids(
     Ok(missing)
 }
 
-/// One page of the messages a scope selects.
+/// The first and last place (exclusive, inclusive) a page covers in a run's
+/// list of `total` places, for `offset` and `limit` read in `direction`.
+/// Newest first counts places from the end of the list.
+fn page_places(total: u64, offset: usize, limit: usize, direction: Direction) -> (i64, i64) {
+    let total = i64::try_from(total).unwrap_or(i64::MAX);
+    let offset = i64::try_from(offset).unwrap_or(i64::MAX);
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+    match direction {
+        Direction::Asc => (offset, offset.saturating_add(limit)),
+        Direction::Desc => {
+            let last = total.saturating_sub(offset);
+            (last.saturating_sub(limit), last)
+        }
+    }
+}
+
+/// One page of a running Export Run's messages: the places `offset` to
+/// `offset + limit` of the list the run made at creation.
 ///
-/// An offset past the end returns an empty page carrying the true `total`.
+/// `total` is always the number of places the run listed. A message deleted
+/// since creation leaves its place empty, so that page carries fewer items
+/// than `limit`; a caller steps `offset` by `limit`, not by the items it got.
+/// An offset past the end returns an empty page.
 ///
 /// # Errors
 ///
-/// The scope's own failures ([`scope_filter`]), or an internal error when a
-/// database statement fails.
+/// Returns an internal error when a database statement fails.
 pub async fn export_messages(
     conn: &mut AnyConnection,
-    opts: ExportPageOpts<'_>,
+    opts: ExportPageOpts,
 ) -> Result<Page<Message>, ApiError> {
-    let filter = scope_filter(conn, opts.account_id, opts.scope, opts.clock).await?;
-    let total = count_matching_messages(conn, &filter).await?;
-
-    let messages = load_messages(
+    let direction = opts
+        .order
+        .iter()
+        .find(|k| k.key == MessageSort::Date)
+        .map_or(Direction::Asc, |k| k.direction);
+    let (after, through) = page_places(opts.total, opts.offset, opts.limit, direction);
+    let from_sql = format!(
+        "FROM vault_export_messages e
+         JOIN messages m ON m.id = e.message_id
+         {conversation_join_sql}",
+        conversation_join_sql = conversation_join_sql(),
+    );
+    let messages = load_messages_from(
         conn,
-        filter.where_sql(),
-        filter.params(),
-        &opts.order,
+        &from_sql,
+        "e.export_id = ? AND e.row_order > ? AND e.row_order <= ?",
+        &[
+            SqlParam::Int(opts.export_id),
+            SqlParam::Int(after),
+            SqlParam::Int(through),
+        ],
+        &format!("e.row_order {}", direction.sql()),
         opts.limit as u32,
-        opts.offset as u32,
+        0,
     )
     .await?;
 
     Ok(Page {
         items: messages,
-        total,
+        total: opts.total,
         limit: opts.limit,
         offset: opts.offset,
     })
 }
 
-/// The four counts a run records at creation, for a compiled scope.
+/// The four counts a run records at creation, over the messages it listed.
 ///
-/// Attachment count is unique non-empty SHA-256 fingerprints on matching
+/// Attachment count is unique non-empty SHA-256 fingerprints on those
 /// messages; `total_bytes` sums the known `attachments.size_bytes` for those
 /// fingerprints.
 ///
 /// # Errors
 ///
 /// Returns an internal error when a database statement fails.
-pub async fn export_counts(
-    conn: &mut AnyConnection,
-    filter: &crate::search::Filter,
-) -> Result<ExportCounts, ApiError> {
-    let params = filter.params();
-    let messages = count_matching_messages(conn, filter).await?;
+async fn export_counts(conn: &mut AnyConnection, export_id: i64) -> Result<ExportCounts, ApiError> {
+    let row = sqlx::query(
+        "SELECT COUNT(*), COUNT(DISTINCT m.conversation_id)
+         FROM vault_export_messages e
+         JOIN messages m ON m.id = e.message_id
+         WHERE e.export_id = $1",
+    )
+    .bind(export_id)
+    .fetch_one(&mut *conn)
+    .await?;
+    let (messages, conversations): (i64, i64) = (row.try_get(0)?, row.try_get(1)?);
 
-    let conv_sql = format!(
-        "SELECT COUNT(DISTINCT c.id)
-         {messages_from_sql}
-         WHERE {where_sql}",
-        messages_from_sql = messages_from_sql(),
-        where_sql = filter.where_sql(),
-    );
-    let conversations: i64 = (&mut *conn)
-        .fetch_one(bind_all(&renumber_placeholders(&conv_sql), params))
-        .await?
-        .try_get(0)?;
-
-    let att_sql = format!(
+    let row = sqlx::query(
         "SELECT COUNT(*), COALESCE(SUM(sz), 0)
          FROM (
            SELECT MAX(a.size_bytes) AS sz
-           FROM attachments a
-           JOIN messages m ON m.id = a.message_id
-           {conversation_join_sql}
-           WHERE {where_sql}
+           FROM vault_export_messages e
+           JOIN attachments a ON a.message_id = e.message_id
+           WHERE e.export_id = $1
              AND a.sha256 IS NOT NULL
              AND length(trim(a.sha256)) > 0
            GROUP BY lower(trim(a.sha256))
-         )",
-        conversation_join_sql = conversation_join_sql(),
-        where_sql = filter.where_sql(),
-    );
-    let row = (&mut *conn)
-        .fetch_one(bind_all(&renumber_placeholders(&att_sql), params))
-        .await?;
+         ) fingerprints",
+    )
+    .bind(export_id)
+    .fetch_one(&mut *conn)
+    .await?;
     let (attachments, total_bytes): (i64, i64) = (row.try_get(0)?, row.try_get(1)?);
 
     Ok(ExportCounts {
-        messages: i64::try_from(messages).unwrap_or(i64::MAX),
+        messages: messages.max(0),
         conversations: conversations.max(0),
         attachments: attachments.max(0),
         total_bytes: total_bytes.max(0),
@@ -354,9 +429,10 @@ async fn close_export(
     Ok(Json(owned_export(&mut conn, account_id, export_id).await?))
 }
 
-/// Start an Export Run: compile the scope, count what it matches, and
-/// record the run as `running`. Read its messages at
-/// `GET /v1/exports/{id}/messages`, then close it with `complete` or `cancel`.
+/// Start an Export Run: compile the scope, list and count the messages it
+/// matches now, and record the run as `running`. Read that list at
+/// `GET /v1/exports/{id}/messages`, then close the run with `complete` or
+/// `cancel`.
 #[utoipa::path(
     post,
     path = "/v1/exports",
@@ -384,19 +460,7 @@ pub(crate) async fn exports_create_handler(
     let tool = body.tool.as_deref().and_then(message_ir::trimmed);
     let mut conn = state.db.acquire().await?;
     let clock = crate::db::account_profile::account_clock(&mut conn, account).await?;
-    let filter = scope_filter(&mut conn, account, &body.scope, clock).await?;
-    let counts = export_counts(&mut conn, &filter).await?;
-    crate::db::account_profile::ensure_account_row(&mut conn, account).await?;
-    let run = vault_exports::start_export(
-        &mut conn,
-        &StartExportArgs {
-            account_id: account,
-            scope: &body.scope,
-            tool,
-            counts,
-        },
-    )
-    .await?;
+    let run = start_export_run(&mut conn, account, &body.scope, tool, clock).await?;
     Ok(Created {
         location: format!("/v1/exports/{}", run.id),
         body: run,
@@ -507,9 +571,12 @@ pub(crate) async fn exports_get_handler(
     ))
 }
 
-/// The messages a running Export Run's scope selects, a page at a time,
-/// oldest first unless `sort` says otherwise. Each page read raises the
-/// run's `messages_delivered` to the rows handed over so far.
+/// The messages a running Export Run matched when it was created, a page at
+/// a time, oldest first unless `sort` says otherwise. An import, a trash or
+/// a new day since creation changes nothing here. A message deleted since
+/// leaves its place empty: `total` stays `message_count`, a page can hold
+/// fewer than `limit` items, and a client steps `offset` by `limit`. Each
+/// page read raises the run's `messages_delivered` to the places reached.
 #[utoipa::path(
     get,
     path = "/v1/exports/{id}/messages",
@@ -518,7 +585,7 @@ pub(crate) async fn exports_get_handler(
     params(
         ("id" = i64, Path, description = "Export Run id"),
         ("limit" = Option<usize>, Query, description = "Page size, default 100, max 500"),
-        ("offset" = Option<usize>, Query, description = "Page offset; no cap, an offset past the end is an empty page"),
+        ("offset" = Option<usize>, Query, description = "Places to skip in the run's list; a client steps it by `limit`. No cap, an offset past the end is an empty page"),
         ("sort" = Option<String>, Query, description = "`date` or `-date`. Default `date`, oldest first.")
     ),
     responses(
@@ -547,23 +614,23 @@ pub(crate) async fn export_messages_handler(
 
     let mut conn = state.db.acquire().await?;
     let run = running_export(&mut conn, account, export_id).await?;
-    let clock = crate::db::account_profile::account_clock(&mut conn, account).await?;
+    let total = u64::try_from(run.message_count).unwrap_or(0);
     let body = export_messages(
         &mut conn,
         ExportPageOpts {
-            account_id: account,
-            scope: &run.scope,
+            export_id,
+            total,
             limit: page.limit,
             offset: page.offset,
-            clock,
             order,
         },
     )
     .await?;
-    // An empty page past the end handed nothing over, so it moves nothing.
-    if !body.items.is_empty() {
-        let delivered = i64::try_from(page.offset + body.items.len()).unwrap_or(i64::MAX);
-        vault_exports::record_delivered(&mut conn, account, export_id, delivered).await?;
+    // A page past the end reached nothing, so it moves nothing.
+    if (page.offset as u64) < total {
+        let reached = (page.offset as u64 + page.limit as u64).min(total);
+        let reached = i64::try_from(reached).unwrap_or(i64::MAX);
+        vault_exports::record_delivered(&mut conn, account, export_id, reached).await?;
     }
     Ok(Json(body))
 }

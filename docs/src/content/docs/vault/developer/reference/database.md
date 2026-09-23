@@ -190,6 +190,7 @@ SQLite, so it is reported once for the vault and never per account.
 | Soft-deleted items | `trashed_*` |
 | Import scratch space | `staging_*` |
 | One import attempt, or one export attempt | `vault_imports`, `vault_exports` |
+| The messages a running export matched when it started | `vault_export_messages` |
 | What an import did to each contact | `vault_import_contacts` |
 
 Baseline table definitions live in

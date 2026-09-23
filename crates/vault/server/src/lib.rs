@@ -61,7 +61,7 @@ pub use db::engine::{pg_test_schema_pool, sqlite_test_pool};
 #[doc(hidden)]
 pub use db::schema::ensure_vault_schema;
 #[doc(hidden)]
-pub use export_api::{ExportPageOpts, export_messages};
+pub use export_api::{ExportPageOpts, export_messages, start_export_run};
 pub use vault_api_types::ExportScope;
 
 use clap::Command;

@@ -271,10 +271,28 @@ There is no sessionless import and no unrecorded export.
 
 An Export Run's scope is one of three forms, stored as given: everything the
 account holds; a query in the search language; or picked `conversation_ids`
-and `message_ids`. The run records the four counts the vault computed at
-creation (messages, conversations, distinct attachments, bytes), and
-`GET /v1/exports/{id}/messages` pages the rows the scope selects. The record
-holds what was asked for and how much matched, never what the messages said.
+and `message_ids`. The record holds what was asked for and how much matched,
+never what the messages said.
+
+An Export Run is a snapshot taken when it is created. In the transaction that
+records the run, the vault lists the ids of the messages the scope matches,
+each at a numbered place (oldest first), and computes the four counts
+(messages, conversations, distinct attachments, bytes) from that list.
+`GET /v1/exports/{id}/messages` pages the list, never the scope again, and
+`complete` or `cancel` deletes it.
+Why: re-running the scope for every page let an import, a trash or a new day
+between pages move the offsets, so pages skipped or repeated messages and
+`import:last` or a relative date could mean something else by the last page.
+
+- A page's `total` is always the run's `message_count`. `offset` and `limit`
+  address places in the list, and `sort=-date` counts them from the end.
+- A message that matched at creation is handed over even if its conversation
+  is trashed afterwards, because the run asked for it when it could still be
+  read. A message imported afterwards is not handed over.
+- A message deleted permanently afterwards leaves its place empty: its page
+  holds fewer than `limit` items, and the places after it do not move. A
+  client steps `offset` by `limit` until it reaches `total`, never by the
+  items it got, and never stops on a short or empty page.
 
 ## Versioning and change
 

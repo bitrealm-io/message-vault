@@ -107,13 +107,18 @@ fn emit(on_progress: &mut Option<&mut ProgressFn<'_>>, event: ProgressEvent) {
     }
 }
 
-/// Where the next page starts, or `None` when the walk is over: the vault said
-/// this was the last of `total`, or it sent nothing (a stale total must not spin).
-fn next_offset(offset: usize, fetched: usize, total: u64) -> Option<usize> {
-    if fetched == 0 {
+/// Where the next page starts, or `None` when the walk is over.
+///
+/// A run's pages are fixed ranges of the list it made at creation, and a
+/// message deleted since leaves its place empty, so a page can hold fewer
+/// items than `limit`, or none, before the end. The walk steps by the
+/// `limit` it asked for and ends at the run's `total`, never on a short or
+/// empty page.
+fn next_offset(offset: usize, limit: usize, total: u64) -> Option<usize> {
+    if limit == 0 {
         return None;
     }
-    let next = offset + fetched;
+    let next = offset.saturating_add(limit);
     (u64::try_from(next).unwrap_or(u64::MAX) < total).then_some(next)
 }
 
@@ -406,6 +411,7 @@ impl<'a> Pull<'a> {
             assets: HashMap::new(),
             total_messages: 0,
         };
+        let limit = cfg.page_limit.clamp(1, MAX_PAGE_LIMIT);
         let mut offset = 0usize;
         loop {
             check_cancel(cfg.cancel.as_ref())?;
@@ -416,7 +422,7 @@ impl<'a> Pull<'a> {
                         base_url: &cfg.base_url,
                         key: &cfg.key,
                         export_id: export.id,
-                        limit: cfg.page_limit.clamp(1, MAX_PAGE_LIMIT),
+                        limit,
                         offset,
                     },
                 )
@@ -443,7 +449,7 @@ impl<'a> Pull<'a> {
                     .1
                     .push(ir);
             }
-            match next_offset(offset, count, page.total) {
+            match next_offset(offset, limit, page.total) {
                 Some(next) => offset = next,
                 None => break,
             }
@@ -765,14 +771,11 @@ mod paging_tests {
     use super::next_offset;
 
     #[test]
-    fn paging_stops_at_the_total_or_on_an_empty_page() {
+    fn paging_steps_by_the_limit_and_stops_at_the_total() {
         assert_eq!(next_offset(0, 500, 1200), Some(500));
-        assert_eq!(next_offset(1000, 200, 1200), None);
-        assert_eq!(
-            next_offset(1000, 0, 1200),
-            None,
-            "an empty page ends the walk even under total"
-        );
+        assert_eq!(next_offset(500, 500, 1200), Some(1000));
+        assert_eq!(next_offset(1000, 500, 1200), None);
+        assert_eq!(next_offset(0, 0, 1200), None, "a zero limit cannot spin");
     }
 }
 

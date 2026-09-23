@@ -239,8 +239,8 @@ CREATE TABLE IF NOT EXISTS vault_exports (
     attachment_count INTEGER NOT NULL,
     -- Sum of the known sizes of those distinct attachments, at creation.
     total_bytes INTEGER NOT NULL,
-    -- Rows handed over so far through the run's message pages, so an
-    -- abandoned run shows how far it got.
+    -- How far the run's message pages have read into its list, in places,
+    -- so an abandoned run shows how far it got.
     messages_delivered INTEGER NOT NULL DEFAULT 0
 );
 

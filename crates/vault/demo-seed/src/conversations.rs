@@ -51,6 +51,10 @@ pub struct GenStats {
     pub attachment_refs: usize,
     /// Group conversations written.
     pub groups: usize,
+    /// Messages written to both the iMessage and the Android backup, one copy
+    /// each. Every one is counted twice in `messages`, and a vault that
+    /// imports the bundle hides exactly this many as duplicates.
+    pub shared_messages: usize,
 }
 
 const TAPBACK_KINDS: &[&str] = &[
@@ -426,6 +430,7 @@ impl<R: Rng> Seeder<'_, R> {
                 text: format!("Shared demo message {i} with {chat_id}"),
             })
             .collect();
+        self.stats.shared_messages += shared.len();
         let overlap = Overlap {
             chat_id,
             display_name: optional_display_name(contact.display_hint()),

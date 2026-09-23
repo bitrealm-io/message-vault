@@ -12,6 +12,11 @@ path = "src/lib.rs"
 name = "demo-seed"
 path = "src/main.rs"
 
+[features]
+# The small seed (`demo_seed::testutil`) for a test in another crate that
+# generates a bundle.
+testutil = []
+
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }

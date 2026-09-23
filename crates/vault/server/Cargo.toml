@@ -44,6 +44,8 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 [dev-dependencies]
+# The small seed, so a test can generate a demo bundle and import it.
+demo-seed = { path = "../demo-seed", features = ["testutil"] }
 reqwest = { workspace = true }
 
 [lints]

@@ -3,90 +3,7 @@ use message_ir::{
 };
 
 use super::*;
-
-/// `demo_seed.toml` shrunk to a dozen contacts. Every section keeps the shape
-/// of the checked-in file, so every writer still runs: iMessage-only,
-/// Android-only, overlap, WhatsApp, groups, unassigned handles, orphans, and
-/// both empty threads. Conversations stay long enough (about a hundred
-/// messages) to reach the photo, other-attachment, tapback, and reply strides.
-const SMALL_SEED_TOML: &str = r#"
-seed = 7
-out = "replaced by the test"
-reference_time = "2026-08-01T12:00:00Z"
-
-[contacts]
-count = 12
-no_name = 0.1
-first_last = 0.6
-first_middle_last = 0.2
-first_only = 0.2
-us_phones = 0.8
-inactive_fraction = 0.1
-no_messages_fraction = 0.1
-multi_phone_fraction = 0.2
-
-[labels]
-names = ["Family", "Work", "College", "Inactive"]
-family = 0.3
-work = 0.3
-college = 0.3
-
-[one_to_one]
-typical_min = 40
-typical_max = 60
-min_per_year = 10
-max_per_year = 120
-low_tail = 0.1
-high_tail = 0.1
-span_mean_years = 2.0
-span_mean_jitter = 0.5
-span_max_years = 4.0
-newest_days = 7
-one_to_one_fraction = 0.9
-
-[groups]
-per_contact_mean = 2.0
-per_contact_min = 0
-per_contact_max = 4
-participants_mean = 3.0
-participants_min = 2
-participants_max = 6
-large_min_count = 1
-large_participants_min = 4
-large_participants_max = 6
-typical_min = 40
-typical_max = 80
-min_per_year = 10
-max_per_year = 200
-low_tail = 0.1
-high_tail = 0.1
-span_mean_years = 1.5
-span_max_years = 3.0
-phone_only_fraction = 0.25
-
-[messages]
-emoji_probability = 0.05
-jpg_base_stride = 5
-other_base_stride = 7
-tapback_stride = 6
-reply_stride = 8
-apple_fallback_transport_fraction = 0.2
-
-[edge_cases]
-unassigned_phones = 2
-unassigned_emails = 1
-orphaned_messages = 3
-empty_individual = true
-empty_group = true
-
-[sources]
-android_only_fraction = 0.25
-overlap_count = 2
-overlap_shared_fraction = 0.5
-overlap_android_extra_min = 3
-overlap_android_extra_max = 6
-whatsapp_contact_fraction = 0.5
-"#;
+use crate::testutil::{small_config, write_small_seed_toml};
 
 /// Assert the stats against what the seed file asks for, rather than against
 /// numbers copied out of a previous run.
@@ -148,24 +65,20 @@ fn assert_stats_match_the_seed(stats: &GenStats, cfg: &SeedConfig) {
         stats.attachment_refs < stats.messages,
         "attachments are strided, so there are fewer than there are messages"
     );
-}
 
-/// Write [`SMALL_SEED_TOML`] into `dir` and return its path.
-fn write_small_seed_toml(dir: &Path) -> PathBuf {
-    let path = dir.join("demo_seed.toml");
-    fs::write(&path, SMALL_SEED_TOML).expect("write the small seed file");
-    path
-}
-
-/// Load the small seed file from `dir` with `out` pointed at `dir/demo`.
-fn small_config(dir: &Path) -> SeedConfig {
-    let mut cfg = SeedConfig::load(&write_small_seed_toml(dir)).expect("load the small seed file");
-    cfg.out = dir
-        .join("demo")
-        .to_str()
-        .expect("UTF-8 test path")
-        .to_string();
-    cfg
+    // Each overlap contact's conversation is written to both the iMessage and
+    // the Android backup, sharing `overlap_shared_fraction` of its messages,
+    // so the shared count is bounded by the seed on both sides.
+    assert!(
+        stats.shared_messages >= cfg.sources.overlap_count,
+        "each of the {} overlap conversations shares at least one message",
+        cfg.sources.overlap_count
+    );
+    assert!(
+        stats.shared_messages * 2 < stats.messages,
+        "{} shared messages is more than the bundle holds twice",
+        stats.shared_messages
+    );
 }
 
 /// Read one demo conversation file: a header line, then one message per line.
@@ -322,23 +235,40 @@ fn every_conversation_file_is_a_current_schema_document_and_the_counts_match_the
         .filter(|(_, doc)| doc.messages.is_empty())
         .count();
     assert_eq!(empty_threads, 2, "one empty individual and one empty group");
-    let replies = documents
-        .iter()
-        .flat_map(|(_, doc)| &doc.messages)
-        .filter(|message| message.imessage.as_ref().is_some_and(|im| im.is_reply))
-        .count();
-    assert_eq!(replies, 167);
-    let tapbacks = documents
-        .iter()
-        .flat_map(|(_, doc)| &doc.messages)
-        .filter(|message| {
-            message
-                .imessage
-                .as_ref()
-                .is_some_and(|im| im.tapbacks.is_some())
-        })
-        .count();
-    assert_eq!(tapbacks, 241);
+    // Replies and tapbacks are placed on a stride, so how many there are
+    // says nothing a pinned number could check. What has to hold is that
+    // every reply names a message written earlier in the same conversation:
+    // a reply whose target is missing is a thread the vault cannot show.
+    let mut replies = 0;
+    let mut tapbacks = 0;
+    for (source, doc) in &documents {
+        let mut written = std::collections::HashSet::new();
+        for message in &doc.messages {
+            let Some(im) = message.imessage.as_ref() else {
+                written.insert(message.guid.as_str());
+                continue;
+            };
+            if im.is_reply {
+                replies += 1;
+                let target = im.in_reply_to_guid.as_deref().unwrap_or("");
+                assert!(
+                    written.contains(target),
+                    "{source}/{}: reply {} names {target:?}, which was not written before it",
+                    doc.conversation.chat_identifier,
+                    message.guid
+                );
+            }
+            if let Some(serde_json::Value::Array(items)) = &im.tapbacks {
+                tapbacks += items.len();
+            }
+            written.insert(message.guid.as_str());
+        }
+    }
+    assert!(replies > 0, "the reply stride puts replies in the bundle");
+    assert!(
+        tapbacks > 0,
+        "the tapback stride puts tapbacks in the bundle"
+    );
 }
 
 #[test]

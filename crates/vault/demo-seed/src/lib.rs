@@ -12,6 +12,8 @@ mod corpus;
 mod names;
 mod personas;
 mod phones;
+#[cfg(any(test, feature = "testutil"))]
+pub mod testutil;
 
 use std::fs;
 use std::io;

@@ -72,8 +72,9 @@ jobs:
           {
             echo '## Coverage (Rust workspace)'
             echo
-            echo 'Function coverage is the number to chase. The full list of'
-            echo 'uncovered functions is in the artifact.'
+            echo 'Functions no test calls are gaps worth a look, not a target to'
+            echo 'chase; the Mutants workflow measures whether tests catch a change.'
+            echo 'The full list of uncovered functions is in the artifact.'
             echo
             echo '```'
             cat target/llvm-cov/functions.txt

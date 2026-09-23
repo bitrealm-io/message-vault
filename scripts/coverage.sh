@@ -4,9 +4,11 @@
 #   ./scripts/coverage.sh          # summary table on stdout, reports under target/llvm-cov/
 #   ./scripts/coverage.sh --open   # the same, then open the HTML report in a browser
 #
-# Function coverage is the number worth chasing here, so the last thing
-# printed is the count of functions no test calls and the files with the
-# most of them; target/llvm-cov/uncovered-functions.txt names every one
+# A function no test calls is the gap worth looking at, so the last thing
+# printed is the count of those functions and the files with the most of
+# them. Coverage says nothing about whether a test would catch a change;
+# scripts/mutants.sh measures that. Don't write tests to raise the count.
+# target/llvm-cov/uncovered-functions.txt names every uncovered function
 # with its line. Line coverage is in the table and the HTML report but is
 # not a target. Also written: target/llvm-cov/html/index.html (per-file,
 # per-line view), target/llvm-cov/lcov.info (for editor plugins),

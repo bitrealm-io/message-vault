@@ -13,7 +13,8 @@ use crate::AuthError;
 pub enum RetryKind {
     /// Worth retrying: network, timeout, 5xx, or anything unrecognized.
     Transient,
-    /// Will fail the same way again: auth, 4xx, missing local files.
+    /// Will fail the same way again, or already succeeded: auth, 4xx, a 2xx
+    /// whose body could not be read, missing local files.
     Permanent,
 }
 
@@ -40,13 +41,17 @@ impl VaultHttpError {
 
 /// Classify an error for [`with_retries`].
 ///
-/// Checks, in order: [`VaultHttpError`] (4xx permanent), [`AuthError`] (auth
-/// and 4xx permanent, transport transient), `reqwest::Error` status (4xx
+/// Checks, in order: [`VaultHttpError`] (2xx and 4xx permanent), [`AuthError`]
+/// (auth and 4xx permanent, transport transient), `reqwest::Error` status (4xx
 /// permanent), `std::io::Error` kind (`NotFound` permanent). Anything
 /// unrecognized is transient, matching the historical default.
+///
+/// A [`VaultHttpError`] with a 2xx status is an answer the client could not
+/// read. The vault has already done the work, so sending the request again
+/// would repeat a write it committed.
 pub fn classify_retry(error: &anyhow::Error) -> RetryKind {
     if let Some(http) = error.downcast_ref::<VaultHttpError>() {
-        return if (400..500).contains(&http.status) {
+        return if (200..300).contains(&http.status) || (400..500).contains(&http.status) {
             RetryKind::Permanent
         } else {
             RetryKind::Transient
@@ -136,6 +141,15 @@ mod tests {
         let e = anyhow::Error::from(VaultHttpError::new(413, "import rejected: HTTP 413"));
         assert!(classified(classify_retry(&e)));
         let e = anyhow::Error::from(VaultHttpError::new(401, "invalid vault key"));
+        assert!(classified(classify_retry(&e)));
+    }
+
+    #[test]
+    fn an_unreadable_2xx_is_permanent_because_the_vault_did_the_work() {
+        let e = anyhow::Error::from(VaultHttpError::new(
+            200,
+            "could not read the vault's answer to import batch",
+        ));
         assert!(classified(classify_retry(&e)));
     }
 

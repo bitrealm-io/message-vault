@@ -755,23 +755,32 @@ pub fn parse_pdu_file(
     primary_digits: &str,
 ) -> Result<Option<ParsedPdu>> {
     let data = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    if data.len() < 10 {
-        return Ok(None);
-    }
-    let Some(filename_ts) =
-        timestamp_from_filename(path.file_name().and_then(|s| s.to_str()).unwrap_or(""))
-    else {
-        return Ok(None);
-    };
+    Ok(parse_pdu_bytes(path, &data, owners, primary_digits))
+}
 
-    let structured = decode_mms_best_effort(&data);
-    let smil = parse_smil_refs(&data);
+/// Parse the bytes of one PDU file read from `path`. Returns `None` when the
+/// bytes are too short or the file name carries no timestamp. Never panics,
+/// whatever the bytes are: backups hold truncated and corrupted PDUs.
+fn parse_pdu_bytes(
+    path: &Path,
+    data: &[u8],
+    owners: &HashSet<String>,
+    primary_digits: &str,
+) -> Option<ParsedPdu> {
+    if data.len() < 10 {
+        return None;
+    }
+    let filename_ts =
+        timestamp_from_filename(path.file_name().and_then(|s| s.to_str()).unwrap_or(""))?;
+
+    let structured = decode_mms_best_effort(data);
+    let smil = parse_smil_refs(data);
     let (timestamp, ts_src) = resolve_timestamp(filename_ts, &structured);
     let pdu_fields = pdu_fields_from_structured(&structured);
-    let (body, body_src) = pdu_body(&structured, &smil, &data);
-    let (attachments, atts_src) = pdu_attachments(&structured, &smil, &data);
+    let (body, body_src) = pdu_body(&structured, &smil, data);
+    let (attachments, atts_src) = pdu_attachments(&structured, &smil, data);
 
-    let unique_parts = unique_participants(&pdu_participants(&structured, &data));
+    let unique_parts = unique_participants(&pdu_participants(&structured, data));
     let is_group = unique_parts.len() >= 3;
     let has_roles = structured.from.is_some()
         || !structured.to.is_empty()
@@ -787,7 +796,7 @@ pub fn parse_pdu_file(
 
     let decode_quality = score_decode_quality(body_src, atts_src, dir_src, ts_src);
 
-    Ok(Some(ParsedPdu {
+    Some(ParsedPdu {
         path: path.to_path_buf(),
         timestamp,
         participants: unique_parts,
@@ -800,7 +809,7 @@ pub fn parse_pdu_file(
         has_to: !structured.to.is_empty(),
         pdu_fields,
         decode_quality,
-    }))
+    })
 }
 
 /// Sanitized participant numbers: the address headers, plus any

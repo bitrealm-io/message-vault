@@ -392,6 +392,57 @@ describe("useImportJob wiring", () => {
     expect(result.current.phase).toBe("staging_review");
   });
 
+  it("keeps a line per stage on the Staging row while they run together", async () => {
+    // Reading messages, copying attachments, and writing conversation files
+    // report at the same time. With one shared line, each event replaced the
+    // last, so the row flipped between them.
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    runMock.mockReset();
+    runMock.mockImplementationOnce(
+      async (
+        fn: () => Promise<unknown>,
+        _onLog?: (line: string) => void,
+        onProgress?: (event: ImportProgressEvent) => void,
+      ) => {
+        await fn();
+        onProgress?.({ step: "setup", done: 5, total: 5, status: "Decrypting" });
+        onProgress?.({ step: "parse", done: 10, total: 40 });
+        onProgress?.({
+          step: "attachments",
+          done: 3,
+          total: 9,
+          bytes_done: 1024,
+          bytes_total: 4096,
+        });
+        onProgress?.({ step: "prepare", done: 1, total: 4 });
+        onProgress?.({
+          step: "attachments",
+          done: 4,
+          total: 9,
+          bytes_done: 2048,
+          bytes_total: 4096,
+        });
+        await held;
+        return EXTRACT_RESULT;
+      },
+    );
+    const { result } = renderHook(() => useImportJob());
+    let started: Promise<void> = Promise.resolve();
+    act(() => {
+      started = result.current.startImport(form({ attachmentMedia: "copy" }));
+    });
+    await waitFor(() =>
+      expect(result.current.steps[0]?.detail).toBe(
+        "Reading 10/40\nCopied 4/9 attachments (2.0 KB / 4.0 KB)\nPreparing 1/4",
+      ),
+    );
+    release();
+    await act(() => started);
+  });
+
   it("uploads straight from the first gate under copy, because there is no second one", async () => {
     runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
     const { result } = renderHook(() => useImportJob());

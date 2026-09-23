@@ -337,39 +337,10 @@ pub(crate) fn probe_video(path: &std::path::Path) -> Result<Probe> {
     })
 }
 
-/// Serialize every test that reads or changes the process-global tools
-/// directory. The tests in this module point it at empty and mock
-/// directories; a test elsewhere in the crate that needs the real ffmpeg
-/// must hold this lock too, or it can observe a directory with no tools
-/// in it for the instant between a set and its restore.
-#[cfg(test)]
-pub(crate) fn tools_test_lock() -> std::sync::MutexGuard<'static, ()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
-/// Hold the tools lock for a test that needs the real ffmpeg, and say whether
-/// it is there. `None` means it is not, and the test should return.
-///
-/// Taking the lock and asking whether ffmpeg is available are one call because
-/// doing either without the other is the bug this exists to prevent. A test
-/// that asks first can be answered by whatever directory another test has the
-/// override pointed at for that instant: an empty one makes it skip silently
-/// and report a pass it never earned, and a mock one leaves a tool that exits
-/// 0 and writes nothing cached process-wide, so the real work later fails on
-/// an output file that was never produced. Both were seen on CI (#308).
-#[cfg(test)]
-#[must_use]
-pub(crate) fn real_ffmpeg_test_guard() -> Option<std::sync::MutexGuard<'static, ()>> {
-    let guard = tools_test_lock();
-    ffmpeg_available().then_some(guard)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testutil::tools_test_lock;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
@@ -483,7 +454,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         write_mock_tool(&dir.path().join("ffmpeg"));
 
-        // SAFETY: test-only env mutation; this test holds tools_state_lock so no
+        // SAFETY: test-only env mutation; this test holds tools_test_lock so no
         // concurrent resolve_tool calls run. In production, set_tools_dir override
         // is checked before MESSAGE_VAULT_IO_BIN; job threads share the same override.
         unsafe {

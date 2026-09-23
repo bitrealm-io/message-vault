@@ -206,17 +206,17 @@ mod tests {
 
     #[test]
     fn mini_caf_is_readable_by_ffprobe() {
-        let Ok(status) = Command::new("ffprobe").arg("-version").status() else {
+        let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
             return;
         };
-        if !status.success() {
-            return;
-        }
+        let ffprobe = media::probe_ffmpeg_tools(None)
+            .ffprobe_path
+            .expect("the guard found ffprobe");
 
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().join("voice.caf");
         std::fs::write(&path, mini_caf()).expect("write caf");
-        let probed = Command::new("ffprobe")
+        let probed = Command::new(ffprobe)
             .args([
                 "-v",
                 "error",

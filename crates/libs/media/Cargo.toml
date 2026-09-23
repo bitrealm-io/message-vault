@@ -14,5 +14,9 @@ serde = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 
+[features]
+# Test helpers for crates whose tests run ffmpeg (`media::testutil`).
+testutil = []
+
 [lints]
 workspace = true

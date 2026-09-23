@@ -14,6 +14,8 @@ mod mime;
 mod probe;
 mod process;
 mod size;
+#[cfg(any(test, feature = "testutil"))]
+pub mod testutil;
 mod tools;
 
 pub use estimate::{SizeVerdict, classify_probed, estimate_bytes, needs_probe};

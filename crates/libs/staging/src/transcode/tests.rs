@@ -1,5 +1,4 @@
 use super::*;
-use media::ffmpeg_available;
 use std::sync::atomic::Ordering;
 
 /// A staging folder holding one conversation and one attachment.
@@ -69,9 +68,9 @@ fn hex_sha256(bytes: &[u8]) -> String {
 
 #[test]
 fn a_converted_attachment_is_patched_before_its_final_name_exists() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     let (dir, jsonl, original) = staged_one("photo.png", &test_png_bytes());
     let report = transcode_staged(
         dir.path(),
@@ -101,9 +100,9 @@ fn a_converted_attachment_is_patched_before_its_final_name_exists() {
 
 #[test]
 fn the_digest_and_size_are_recomputed_from_the_derivative() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     // Decision 29: ffmpeg output is not byte-identical across runs, so a
     // replayed digest would be a silent corruption — the vault dedupes
     // assets by sha256.
@@ -130,9 +129,9 @@ fn the_digest_and_size_are_recomputed_from_the_derivative() {
 
 #[test]
 fn an_interrupted_file_is_re_transcoded_not_adopted() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     // Decision 28: nothing distinguishes a complete .in_progress from a
     // truncated one without hashing it, so the marker's bytes are never used.
     let (dir, jsonl, _) = staged_one("photo.png", &test_png_bytes());
@@ -162,9 +161,9 @@ fn an_interrupted_file_is_re_transcoded_not_adopted() {
 
 #[test]
 fn an_already_converted_attachment_is_left_alone_on_a_second_run() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     let (dir, jsonl, _) = staged_one("photo.png", &test_png_bytes());
     transcode_staged(
         dir.path(),
@@ -197,9 +196,9 @@ fn an_already_converted_attachment_is_left_alone_on_a_second_run() {
 
 #[test]
 fn a_derivative_over_the_limit_becomes_too_large_and_keeps_the_message() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     // Decision 45: skipped, not reverted. Falling back to the original
     // would store the format the user asked to be rid of.
     let (dir, jsonl, original) = staged_one("photo.png", &test_png_bytes());
@@ -229,9 +228,9 @@ fn a_conversion_failure_becomes_a_per_item_reason_carrying_the_detail() {
     // ffmpeg preflight check, an *absent* ffmpeg now fails the whole
     // pass (see ffmpeg_unavailable_fails_the_whole_pass_up_front) rather
     // than reaching this per-item path.
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     let (dir, jsonl, original) = staged_one("broken.png", b"not a png at all");
     let report = transcode_staged(
         dir.path(),
@@ -264,9 +263,9 @@ fn a_conversion_failure_becomes_a_per_item_reason_carrying_the_detail() {
 
 #[test]
 fn a_convert_failed_attachment_keeps_its_path_and_is_retried_on_resume() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     // The original is still on disk after a transient ffmpeg failure;
     // clearing `path` would sever the only reference to bytes that still
     // exist and stop `pending_in` from ever retrying it.
@@ -335,9 +334,9 @@ fn progress_counts_the_work_it_actually_has() {
     // Convert mode still probes for ffmpeg up front (parity with
     // process_attachments_dir) even though a PDF alone needs no
     // transcode, so this needs the tools present to reach that far.
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     let (dir, _, _) = staged_one("notes.pdf", b"%PDF-1.4");
     let mut seen = Vec::new();
     let report = transcode_staged(
@@ -354,9 +353,9 @@ fn progress_counts_the_work_it_actually_has() {
 
 #[test]
 fn a_crash_between_the_patch_and_the_rename_heals_by_re_transcoding_the_original() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     // Hand-simulate the crash window between decision 28's steps 4-5
     // (patch committed, conversation file written) and step 6 (marker
     // renamed into its final name): the doc already points at the -mv
@@ -413,9 +412,9 @@ fn a_crash_between_the_patch_and_the_rename_heals_by_re_transcoding_the_original
 
 #[test]
 fn a_heal_that_fails_to_transcode_repoints_at_the_original_before_recording_the_failure() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     // Same crash-window simulation as the other heal tests, but this
     // time the recovered original is garbage ffmpeg will fail on. The
     // Err arm must not simply "keep the path" the way a non-heal
@@ -471,9 +470,9 @@ fn a_heal_that_fails_to_transcode_repoints_at_the_original_before_recording_the_
 
 #[test]
 fn a_heal_that_the_media_step_skips_repoints_at_the_original_deterministically() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     // A small mp4 under compress's min_size_bytes returns
     // TranscodeOutcome::Skipped without looking at the video's content
     // at all — compress_video's `ext == "mp4"` branch short-circuits
@@ -527,9 +526,9 @@ fn a_crash_that_lost_both_the_marker_and_the_original_is_unrecoverable() {
     // The whole pass still needs ffmpeg present up front (the preflight
     // check runs before any per-attachment classification), even though
     // no transcode is ever attempted for this particular attachment.
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     let (dir, jsonl, original) = staged_one("photo.png", &test_png_bytes());
     let mut doc = read_conversation_jsonl(&jsonl).unwrap();
     {
@@ -563,9 +562,9 @@ fn a_crash_that_lost_both_the_marker_and_the_original_is_unrecoverable() {
 
 #[test]
 fn two_attachments_in_one_document_sharing_a_path_are_patched_together() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     let (dir, jsonl, original) = staged_one("photo.png", &test_png_bytes());
     // A second message in the same document, carrying an attachment
     // recorded at the exact same content-addressed path — a legitimate
@@ -606,9 +605,9 @@ fn two_attachments_in_one_document_sharing_a_path_are_patched_together() {
 
 #[test]
 fn two_documents_sharing_one_original_both_end_pointing_at_the_committed_derivative() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     let (dir, jsonl_a, original) = staged_one("shared.png", &test_png_bytes());
 
     // A second, independent conversation staged in the same folder whose
@@ -664,9 +663,9 @@ fn two_documents_sharing_one_original_both_end_pointing_at_the_committed_derivat
 #[cfg(unix)]
 #[test]
 fn a_write_failure_leaves_the_final_name_uncommitted_and_the_original_untouched() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     // The headline "patched before the final name exists" test only
     // checks terminal state, which would pass even if the patch and the
     // rename were swapped. This makes the ordering falsifiable: force
@@ -745,9 +744,9 @@ fn jpeg_over_compress_floor_bytes() -> Vec<u8> {
 
 #[test]
 fn two_documents_sharing_one_compressed_original_both_end_pointing_at_the_committed_derivative() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     // The compress-mode variant of the convert-mode test above: this is
     // the exact bug the final review caught. `final_derivative_name`
     // used to stat the (already-deleted) shared original for the
@@ -813,9 +812,9 @@ fn two_documents_sharing_one_compressed_original_both_end_pointing_at_the_commit
 
 #[test]
 fn a_missing_original_with_no_committed_derivative_becomes_file_missing() {
-    if !ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     // Covers the other half of the same bug: a recorded path that is
     // gone for good (nothing shares it, and no committed derivative
     // exists either — the shared-original-deleted-by-too_large case, or
@@ -862,4 +861,88 @@ fn the_committed_suffix_guard_excludes_an_already_final_video_from_pending() {
         work.is_empty(),
         "a committed -mv name must never re-enter the pending list"
     );
+}
+
+/// Every file under `dir`, keyed by its path relative to `dir`, with its bytes.
+fn snapshot_tree(dir: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+    let mut files = std::collections::BTreeMap::new();
+    let mut folders = vec![dir.to_path_buf()];
+    while let Some(folder) = folders.pop() {
+        for entry in std::fs::read_dir(&folder).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                folders.push(path);
+            } else {
+                let rel = path.strip_prefix(dir).unwrap().to_path_buf();
+                files.insert(rel, std::fs::read(&path).unwrap());
+            }
+        }
+    }
+    files
+}
+
+#[test]
+fn without_ffmpeg_the_whole_pass_fails_and_touches_nothing() {
+    // The module's contract: when ffmpeg/ffprobe are missing, the pass fails
+    // before any document is touched and never brands an attachment
+    // `convert_failed`. The folder holds work for both modes: an image, a
+    // video, and an audio file, across two conversation files.
+    let (dir, jsonl, _) = staged_one("photo.png", &test_png_bytes());
+    let mut doc = read_conversation_jsonl(&jsonl).unwrap();
+    let image = doc.messages[0].attachments[0].clone();
+    for (name, bytes) in [
+        ("clip.mp4", b"not really a video".as_slice()),
+        ("voice.m4a", b"not really audio".as_slice()),
+    ] {
+        let rel = format!("attachments/{name}");
+        std::fs::write(dir.path().join(&rel), bytes).unwrap();
+        doc.messages[0].attachments.push(IrAttachment {
+            path: Some(rel),
+            original_name: Some(name.to_string()),
+            size_bytes: Some(bytes.len() as u64),
+            ..image.clone()
+        });
+    }
+    write_conversation_jsonl_to(&jsonl, &doc).unwrap();
+    write_conversation_jsonl_to(&dir.path().join("second.jsonl"), &doc).unwrap();
+    let before = snapshot_tree(dir.path());
+    assert_eq!(
+        before.len(),
+        5,
+        "two conversation files and three originals"
+    );
+
+    let _hidden = media::testutil::hide_ffmpeg();
+    for mode in [MediaMode::Convert, MediaMode::Compress] {
+        let mut progress_calls = 0usize;
+        let err = transcode_staged(dir.path(), &options(mode, u64::MAX), None, &mut |_| {
+            progress_calls += 1;
+        })
+        .expect_err("a missing ffmpeg fails the whole pass");
+
+        let message = err.to_string();
+        assert!(
+            message.starts_with("ffmpeg/ffprobe are required to convert or compress attachments"),
+            "{mode:?}: {message}"
+        );
+        assert!(message.contains("ffmpeg not found"), "{mode:?}: {message}");
+        assert!(message.contains("ffprobe not found"), "{mode:?}: {message}");
+        assert_eq!(progress_calls, 0, "{mode:?}: the pass reported progress");
+        assert_eq!(
+            snapshot_tree(dir.path()),
+            before,
+            "{mode:?}: a conversation file or an original changed"
+        );
+        for file in conversation_files(dir.path()).unwrap() {
+            let doc = read_conversation_jsonl(&file).unwrap();
+            for attachment in doc.messages.iter().flat_map(|m| &m.attachments) {
+                assert_eq!(
+                    attachment.missing_reason,
+                    None,
+                    "{mode:?}: {} marked an attachment",
+                    file.display()
+                );
+            }
+        }
+    }
 }

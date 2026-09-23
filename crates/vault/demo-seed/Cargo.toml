@@ -28,5 +28,8 @@ toml = "1.1"
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 tempfile = { workspace = true }
 
+[dev-dependencies]
+media = { path = "../../libs/media", features = ["testutil"] }
+
 [lints]
 workspace = true

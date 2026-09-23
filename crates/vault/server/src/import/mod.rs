@@ -411,14 +411,28 @@ pub async fn import_jsonl_files_on_conn(
         ..Default::default()
     };
     let started = Instant::now();
-    let asset_stats = stage_all_files(conn, paths, opts, &mut stats, started).await?;
+    // Stats on already-committed rows so promote's guid join can use the
+    // indexes. Outside the transaction, because a failed ANALYZE is only a
+    // warning and on Postgres it would abort the transaction around it.
+    dialect::analyze_import_tables(conn).await;
+
+    // Staging and promote share one transaction. Staging makes contacts and,
+    // by ADR-0013, discards trashed ones; none of that may outlive a promote
+    // that fails. The write lock is taken up front on SQLite (IMMEDIATE) so two
+    // imports for different accounts cannot race into SQLITE_BUSY at the
+    // first INSERT; Postgres has no statement-level equivalent.
+    let mut tx = conn
+        .begin_with(dialect::begin_immediate_sql(dialect::engine_of(conn)))
+        .await?;
+    let asset_stats = stage_all_files(&mut tx, paths, opts, &mut stats, started).await?;
 
     say(&format!(
         "  import:   promoting staging → production ({:.0}s so far)…",
         started.elapsed().as_secs_f64()
     ));
-    promote_step(conn, opts, &wipe_sources, &mut stats).await?;
-    schema::reset_staging_for_account(conn, opts.account_id).await?;
+    promote_step(&mut tx, opts, &wipe_sources, &mut stats).await?;
+    schema::reset_staging_for_account(&mut tx, opts.account_id).await?;
+    tx.commit().await?;
 
     stats.assets_copied = asset_stats.copied;
     stats.assets_deduped = asset_stats.deduped;
@@ -494,19 +508,14 @@ fn sources_to_wipe(opts: &ImportOptions<'_>) -> Result<Vec<String>> {
     Ok(wipe_sources)
 }
 
-/// How many files to stage per transaction before committing and starting a
-/// new one, so a long import is not one giant transaction.
-const STAGING_COMMIT_EVERY: usize = 50;
-
-/// Stage every file into the staging tables, committing every
-/// [`STAGING_COMMIT_EVERY`] files, and print progress along the way.
+/// Stage every file into the staging tables inside the import's transaction
+/// `tx`, and print progress along the way.
 ///
 /// # Errors
 ///
-/// Returns an error when a file cannot be read, a row cannot be written, or
-/// a transaction cannot be committed.
+/// Returns an error when a file cannot be read or a row cannot be written.
 async fn stage_all_files(
-    conn: &mut AnyConnection,
+    tx: &mut AnyConnection,
     paths: &[PathBuf],
     opts: &ImportOptions<'_>,
     stats: &mut ImportStats,
@@ -520,20 +529,11 @@ async fn stage_all_files(
     };
     let media_work = TempDir::new().context("temp dir for import-time media rewrite")?;
     let mut asset_stats = AssetStats::default();
-
-    // Staging writes need the write lock up front on SQLite (IMMEDIATE) so
-    // two imports for different accounts cannot race into SQLITE_BUSY at the
-    // first INSERT; Postgres has no statement-level equivalent and uses a
-    // plain BEGIN.
-    let engine = dialect::engine_of(conn);
-    let mut tx = conn
-        .begin_with(dialect::begin_immediate_sql(engine))
-        .await?;
     let mut stmts = StagingInserts::new(opts.account_id, opts.import_id);
 
     for (idx, path) in paths.iter().enumerate() {
         let file_stats = staging::import_file_to_staging(
-            &mut tx,
+            tx,
             &mut stmts,
             opts,
             path,
@@ -556,15 +556,7 @@ async fn stage_all_files(
                 started.elapsed().as_secs_f64()
             ));
         }
-        if n % STAGING_COMMIT_EVERY == 0 && n < total_files {
-            tx.commit().await?;
-            tx = conn
-                .begin_with(dialect::begin_immediate_sql(engine))
-                .await?;
-        }
     }
-    drop(stmts);
-    tx.commit().await?;
     Ok(asset_stats)
 }
 
@@ -575,15 +567,15 @@ async fn stage_all_files(
 ///
 /// # Errors
 ///
-/// Returns an error when the promote transaction fails.
+/// Returns an error when a promote statement fails.
 async fn promote_step(
-    conn: &mut AnyConnection,
+    tx: &mut AnyConnection,
     opts: &ImportOptions<'_>,
     wipe_sources: &[String],
     stats: &mut ImportStats,
 ) -> Result<()> {
     let promote_stats = promote::promote_append(
-        conn,
+        tx,
         opts.mode,
         opts.account_id,
         opts.fill_content_keys,

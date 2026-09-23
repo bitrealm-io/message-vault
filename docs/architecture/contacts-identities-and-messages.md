@@ -151,6 +151,13 @@ a trashed contact, it discards that contact with every identity it had and
 makes a new one from the backup, as a first import would. See
 [ADR 0013](../adr/0013-an-import-replaces-a-trashed-contact.md).
 
+**A failed import changes no contact.** Staging meets every identity first,
+so it is where the import makes contacts and discards trashed ones. Staging
+and promote run in one transaction, and a failure in either rolls both back.
+Why: a trashed contact's name and Contact Groups are gone for good once
+discarded, and a contact made for an import that brought no messages is
+clutter the person never asked for.
+
 ## One group chat, drawn out
 
 A group called Trip with two other people. Ada has a phone number and an

@@ -1267,6 +1267,155 @@ async fn failed_replace_keeps_existing_messages() {
     assert_eq!(n, 1);
 }
 
+/// One individual conversation with `handle`, holding one incoming message.
+fn one_message_conversation(guid: &str, handle: &str) -> String {
+    format!(
+        r#"{{"schema_version":4,"export":{{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null}},"conversation":{{"chat_identifier":"{handle}","conversation_type":"individual","group_title":null,"participants":[{{"handle":"{handle}","display_name":null}}],"stats":{{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}}}}
+{{"guid":"{guid}","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"{handle}","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}}
+"#
+    )
+}
+
+/// Make every later INSERT INTO messages fail, so an import gets through
+/// staging and fails inside promote.
+async fn fail_every_message_insert(conn: &mut AnyConnection) {
+    let statements: &[&str] = match dialect::engine_of(conn) {
+        engine::DbEngine::Sqlite => &["CREATE TRIGGER fail_promote BEFORE INSERT ON messages
+             BEGIN SELECT RAISE(ABORT, 'promote fails on purpose'); END"],
+        engine::DbEngine::Postgres => &[
+            "CREATE FUNCTION fail_promote() RETURNS trigger LANGUAGE plpgsql AS
+             $$ BEGIN RAISE EXCEPTION 'promote fails on purpose'; END $$",
+            "CREATE TRIGGER fail_promote BEFORE INSERT ON messages
+             FOR EACH ROW EXECUTE FUNCTION fail_promote()",
+        ],
+    };
+    for sql in statements {
+        sqlx::raw_sql(sql).execute(&mut *conn).await.unwrap();
+    }
+}
+
+/// An import that fails in promote imports nothing, and that includes its
+/// contacts. Staging meets every handle first and, by ADR-0013, discards a
+/// trashed contact whose handle the backup holds, and makes contacts for
+/// people new to the vault. Those writes must not outlive a promote that
+/// rolled back: the person keeps the trashed contact's name and groups, and
+/// the vault gains no contacts with no messages.
+#[tokio::test]
+async fn failed_promote_keeps_the_trashed_contact_and_adds_no_contacts() {
+    let (pool, dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let assets = dir.path().join("assets");
+    let export_dir = dir.path().join("export");
+    fs::create_dir_all(&export_dir).unwrap();
+    let opts = ImportOptions::fixed(FixedImportArgs {
+        assets_dir: &assets,
+        asset_root: &export_dir,
+        contacts: None,
+        overwrite_contacts: false,
+        mode: ImportMode::Append,
+        source: "sms-backup-restore",
+        account_id: TEST_ACCOUNT,
+        fill_content_keys: false,
+        import_id: None,
+    });
+
+    // A first import makes Ada's contact; the person names it, puts it in a
+    // group, and moves it to the Trash.
+    let first = write_jsonl(
+        &export_dir,
+        "ada.jsonl",
+        &one_message_conversation("g-ada-1", "+15555550960"),
+    );
+    import_jsonl_files_on_conn(&mut conn, &[first], &opts, ImportSchemaMode::Ensure)
+        .await
+        .unwrap();
+    let ada: i64 = sqlx::query_scalar("SELECT id FROM contacts WHERE account_id = $1")
+        .bind(TEST_ACCOUNT)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE contacts SET preferred_name = 'Ada (work)', origin = 'user' WHERE id = $1")
+        .bind(ada)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let group_id: i64 = sqlx::query_scalar(
+        "INSERT INTO contact_groups (account_id, name) VALUES ($1, 'Colleagues') RETURNING id",
+    )
+    .bind(TEST_ACCOUNT)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO contact_group_members (contact_id, group_id) VALUES ($1, $2)")
+        .bind(ada)
+        .bind(group_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    assert!(
+        crate::db::trash::move_to_trash(
+            &mut conn,
+            TEST_ACCOUNT,
+            crate::db::trash::Trashable::Contact(ada)
+        )
+        .await
+        .unwrap()
+    );
+
+    // A second backup holds Ada again and someone new; its promote fails.
+    fail_every_message_insert(&mut conn).await;
+    let again = write_jsonl(
+        &export_dir,
+        "ada-again.jsonl",
+        &one_message_conversation("g-ada-2", "+15555550960"),
+    );
+    let newcomer = write_jsonl(
+        &export_dir,
+        "newcomer.jsonl",
+        &one_message_conversation("g-new-1", "+15555550961"),
+    );
+    let err = import_jsonl_files_on_conn(
+        &mut conn,
+        &[again, newcomer],
+        &opts,
+        ImportSchemaMode::AssumeReady,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        format!("{err:#}").contains("promote fails on purpose"),
+        "expected the promote failure, got: {err:#}"
+    );
+
+    let contacts: Vec<(i64, String)> =
+        sqlx::query_as("SELECT id, preferred_name FROM contacts WHERE account_id = $1")
+            .bind(TEST_ACCOUNT)
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(
+        contacts,
+        vec![(ada, "Ada (work)".to_string())],
+        "Ada keeps her name and the failed import leaves no new contact"
+    );
+    let trashed: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM trashed_contacts WHERE account_id = $1 AND contact_id = $2",
+    )
+    .bind(TEST_ACCOUNT)
+    .bind(ada)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(trashed, 1, "Ada is still in the Trash");
+    let groups: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM contact_group_members WHERE contact_id = $1")
+            .bind(ada)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(groups, 1, "Ada is still in her group");
+}
+
 /// A registered account may import with its session token: `can_import`
 /// is on by default, which `server.rs`'s `can_import = 0` test relies on
 /// to prove the opposite case.

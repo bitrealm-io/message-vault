@@ -8,9 +8,12 @@ name: Mutants
 # fails a pull request, so it lives outside ci.yml, whose every job the
 # ruleset on main requires. Why: docs/adr/0007-ci-is-the-only-gate.md.
 #
-# About 8,700 mutants take well over a day on one runner, so the run is
-# split into 24 shards that each take a slice. It runs only when started by
-# hand from the Actions tab: never on a schedule, never on a pull request.
+# About 8,750 mutants take about 100 runner-hours: a server mutant is
+# about 75 s (its package's tests run in full each time) and there are about
+# 3,450 of them. The run is split into 40 shards of about 2.5 hours each, well
+# inside the job timeout; the free plan runs 20 at a time, so a run takes
+# about five hours. It runs only when started by hand from the Actions tab:
+# never on a schedule, never on a pull request.
 # The summary job joins the shards into one table on the run's summary page
 # and keeps every missed mutant, with its log and diff, as a workflow
 # artifact.
@@ -23,13 +26,14 @@ permissions:
 
 jobs:
   mutants:
-    name: Mutants (shard ${{ matrix.shard }} of 24)
+    name: Mutants (shard ${{ matrix.shard }} of 40)
     runs-on: ubuntu-latest
     timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39]
     steps:
       - uses: actions/checkout@v7
 
@@ -61,7 +65,7 @@ jobs:
       - name: Run mutants
         run: >-
           ./scripts/mutants.sh
-          --shard ${{ matrix.shard }}/24
+          --shard ${{ matrix.shard }}/40
           --sharding round-robin
           --in-place
 

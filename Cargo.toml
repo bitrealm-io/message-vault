@@ -77,5 +77,15 @@ lto = "fat"
 codegen-units = 1
 strip = true
 
+# Argon2 is built to be slow, and unoptimised it is slower still: every test
+# that sets or checks a password pays for it. Optimising the two crates that
+# do the hashing cuts the server's unit tests from about 52 s to 22 s, and a
+# mutation-testing run pays that once per server mutant.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
 [patch.crates-io]
 sqlx-sqlite = { path = "vendor/sqlx-sqlite" }

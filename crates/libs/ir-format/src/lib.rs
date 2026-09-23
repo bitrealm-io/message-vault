@@ -24,7 +24,7 @@ pub use format_sink::{FormatSink, MergedArchive, write_documents_through_sink};
 pub use read_csv::read_conversation_csv;
 pub use read_json::{read_conversation_json, read_conversation_jsonl};
 pub use read_mail::{read_conversation_eml_dir, read_conversation_mbox};
-pub use util::load_attachment_bytes;
+pub use util::{is_complete_file, load_attachment_bytes};
 pub use write::{
     CSV_HEADERS, document_to_mail_messages, write_conversation_jsonl, write_conversation_jsonl_to,
     write_format,

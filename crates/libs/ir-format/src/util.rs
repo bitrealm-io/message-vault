@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use message_ir::{HandleType, IrAttachment};
 use std::fs::{self, File};
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 /// Guess the handle type of a raw handle string when no type is known.
@@ -78,14 +78,42 @@ pub(crate) fn read_attachment_file(
     Ok(Some(bytes))
 }
 
+/// Whether `path` is a line-oriented file that was written to the end: it
+/// exists, holds at least one byte, and its last byte is a newline.
+///
+/// Every writer here ends each record with `\n`, so a file that stops
+/// anywhere else was cut off. A resumed run uses this instead of a bare
+/// existence check: after a power loss the rename may have landed while the
+/// bytes behind it did not, leaving an empty or truncated file under the
+/// right name, and a file that merely exists would otherwise be skipped for
+/// good.
+#[must_use]
+pub fn is_complete_file(path: &Path) -> bool {
+    let Ok(mut file) = File::open(path) else {
+        return false;
+    };
+    let Ok(meta) = file.metadata() else {
+        return false;
+    };
+    if !meta.is_file() || meta.len() == 0 {
+        return false;
+    }
+    let mut last = [0_u8; 1];
+    file.seek(SeekFrom::End(-1)).is_ok() && file.read_exact(&mut last).is_ok() && last[0] == b'\n'
+}
+
 /// Write a file atomically: create the parent directory, write everything to
-/// a `.tmp` sibling (`<file name>.tmp`), and rename it over `path`, so a
-/// reader never sees a half-written file.
+/// a `.tmp` sibling (`<file name>.tmp`), sync it to disk, and rename it over
+/// `path`, so a reader never sees a half-written file.
+///
+/// The sync comes before the rename because a rename can reach the disk
+/// ahead of the data it points at; without it a power loss can leave an
+/// empty or cut-off file under the final name.
 ///
 /// # Errors
 ///
 /// Returns an error when the parent cannot be created, the temp file cannot
-/// be created or written, or the rename fails.
+/// be created, written, or synced, or the rename fails.
 pub(crate) fn write_atomic(
     path: &Path,
     write: impl FnOnce(&mut dyn Write) -> Result<()>,
@@ -105,6 +133,9 @@ pub(crate) fn write_atomic(
         write(&mut out)?;
         out.flush()
             .with_context(|| format!("flush {}", tmp.display()))?;
+        out.get_ref()
+            .sync_all()
+            .with_context(|| format!("sync {}", tmp.display()))?;
     }
     fs::rename(&tmp, path)
         .with_context(|| format!("rename {} → {}", tmp.display(), path.display()))?;
@@ -131,6 +162,42 @@ mod tests {
             missing_reason: None,
             bytes: None,
         }
+    }
+
+    #[test]
+    fn a_complete_file_exists_and_ends_with_a_newline() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("c.jsonl");
+        fs::write(&path, b"{}\n{}\n").unwrap();
+        assert!(is_complete_file(&path));
+    }
+
+    #[test]
+    fn a_missing_empty_or_cut_off_file_is_not_complete() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!is_complete_file(&dir.path().join("missing.jsonl")));
+        assert!(!is_complete_file(dir.path()), "a directory is not a file");
+
+        let empty = dir.path().join("empty.jsonl");
+        fs::write(&empty, b"").unwrap();
+        assert!(!is_complete_file(&empty));
+
+        let cut_off = dir.path().join("cut.jsonl");
+        fs::write(&cut_off, b"{}\n{\"half").unwrap();
+        assert!(!is_complete_file(&cut_off));
+    }
+
+    #[test]
+    fn write_atomic_leaves_a_complete_file_and_no_temp_sibling() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("out.jsonl");
+        write_atomic(&path, |out| {
+            out.write_all(b"{}\n")?;
+            Ok(())
+        })
+        .unwrap();
+        assert!(is_complete_file(&path));
+        assert!(!path.with_file_name("out.jsonl.tmp").exists());
     }
 
     #[test]

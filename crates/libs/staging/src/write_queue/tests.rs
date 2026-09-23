@@ -184,6 +184,58 @@ fn resume_rewrites_a_unit_whose_conversation_file_is_missing() {
 }
 
 #[test]
+fn resume_rewrites_a_conversation_file_that_is_empty_or_cut_off() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("out");
+    fs::create_dir_all(&out).unwrap();
+    let build = || {
+        vec![
+            unit_from(
+                doc_with("+15550000001", 1),
+                vec![AttachmentSource::Bytes(b"a".to_vec())],
+            ),
+            unit_from(
+                doc_with("+15550000002", 1),
+                vec![AttachmentSource::Bytes(b"b".to_vec())],
+            ),
+            unit_from(
+                doc_with("+15550000003", 1),
+                vec![AttachmentSource::Bytes(b"c".to_vec())],
+            ),
+        ]
+    };
+    drain(&out, build(), &options(MediaMode::Clone, false)).unwrap();
+
+    let file_for = |who: &str| out.join(format!("{}.jsonl", doc_with(who, 0).filename_stem()));
+    let intact = file_for("+15550000001");
+    let cut_off = file_for("+15550000002");
+    let empty = file_for("+15550000003");
+    let intact_bytes = fs::read(&intact).unwrap();
+    let full = fs::read(&cut_off).unwrap();
+    // A power loss mid-write leaves the bytes that made it to disk: no
+    // final newline, and possibly nothing at all.
+    fs::write(&cut_off, &full[..full.len() / 2]).unwrap();
+    fs::write(&empty, b"").unwrap();
+
+    let report = drain(&out, build(), &options(MediaMode::Clone, true)).unwrap();
+    assert_eq!(report.conversations_written, 2);
+    assert_eq!(report.conversations_skipped, 1);
+
+    assert_eq!(
+        fs::read(&intact).unwrap(),
+        intact_bytes,
+        "the intact file is left alone"
+    );
+    assert_eq!(
+        fs::read(&cut_off).unwrap(),
+        full,
+        "the cut-off file is whole again"
+    );
+    let doc = read_conversation_jsonl(&empty).unwrap();
+    assert_eq!(doc.messages.len(), 1, "the empty file is written in full");
+}
+
+#[test]
 fn disabled_mode_marks_not_copied_and_clears_paths() {
     let tmp = tempfile::tempdir().unwrap();
     let out = tmp.path().join("out");

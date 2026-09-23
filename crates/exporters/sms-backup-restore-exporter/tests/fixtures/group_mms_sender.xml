@@ -1,0 +1,59 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<!--
+  Synthetic group MMS between the owner (+15555550100) and three peers
+  (+15555550101, +15555550102, +15555550103). The shape follows what
+  SMS Backup & Restore writes: the `address` attribute lists every party
+  joined by `~`, one `<addr type="137">` names the sender, and the rest are
+  `type="151"` recipients. Real backups mix bare ten-digit and `+1` forms of
+  the same number inside one element; the last message does that on purpose.
+-->
+<smses count="4">
+  <!-- Received; the sender is the third peer, not the first address listed. -->
+  <mms date="1400773400000" msg_box="1" address="+15555550101~+15555550102~+15555550103~+15555550100">
+    <parts>
+      <part seq="0" ct="text/plain" name="text_0.txt" chset="106" text="from lee" />
+    </parts>
+    <addrs>
+      <addr address="+15555550103" type="137" charset="106" />
+      <addr address="+15555550101" type="151" charset="106" />
+      <addr address="+15555550102" type="151" charset="106" />
+      <addr address="+15555550100" type="151" charset="106" />
+    </addrs>
+  </mms>
+  <!-- Received with no type="137" addr: the backup names no sender. -->
+  <mms date="1400773460000" msg_box="1" address="+15555550101~+15555550102~+15555550103~+15555550100">
+    <parts>
+      <part seq="0" ct="text/plain" name="text_0.txt" chset="106" text="no from" />
+    </parts>
+    <addrs>
+      <addr address="+15555550101" type="151" charset="106" />
+      <addr address="+15555550102" type="151" charset="106" />
+      <addr address="+15555550103" type="151" charset="106" />
+      <addr address="+15555550100" type="151" charset="106" />
+    </addrs>
+  </mms>
+  <!-- Sent by the owner; owner inference reads this element's FROM. -->
+  <mms date="1400773520000" msg_box="2" address="+15555550101~+15555550102~+15555550103">
+    <parts>
+      <part seq="0" ct="text/plain" name="text_0.txt" chset="106" text="sent by me" />
+    </parts>
+    <addrs>
+      <addr address="+15555550100" type="137" charset="106" />
+      <addr address="+15555550101" type="151" charset="106" />
+      <addr address="+15555550102" type="151" charset="106" />
+      <addr address="+15555550103" type="151" charset="106" />
+    </addrs>
+  </mms>
+  <!-- Received; the owner's number is written without +1 in `address` and with punctuation in its addr. -->
+  <mms date="1400773580000" msg_box="1" address="5555550100~+15555550101~+15555550102~+15555550103">
+    <parts>
+      <part seq="0" ct="text/plain" name="text_0.txt" chset="106" text="from ana" />
+    </parts>
+    <addrs>
+      <addr address="+15555550102" type="137" charset="106" />
+      <addr address="+15555550101" type="151" charset="106" />
+      <addr address="+15555550103" type="151" charset="106" />
+      <addr address="(555) 555-0100" type="151" charset="106" />
+    </addrs>
+  </mms>
+</smses>

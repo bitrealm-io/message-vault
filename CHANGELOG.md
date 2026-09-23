@@ -57,6 +57,13 @@ released versions carry their date on the heading.
 
 ### Fixes
 
+- 2026-09-23 **A group text from an SMS Backup & Restore backup is no longer
+  credited to the wrong person when the backup names no sender.** A group
+  MMS without a sender address was shown as sent by whichever member the
+  backup happened to list first. Such a message now shows no sender, as a
+  message with no recorded sender does from any other source. A message that
+  does name its sender was already credited correctly, whichever position the
+  sender holds in the group.
 - 2026-09-23 **Searching for a word with punctuation in it works on every
   vault.** A search such as `a&b`, `o'bri*`, or text pasted with a hidden
   NUL character failed with an error, or on a Postgres vault found messages

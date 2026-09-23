@@ -51,7 +51,7 @@ Example: `<sms address="+15555550101" date="1400773261000" type="1" body="hello 
 ## How the exporter uses MMS fields
 
 - `date` → `timestamp*` / `timestamp_unix_ms` (bad dates skipped)
-- `msg_box` `2` → outgoing; `1` → incoming (From addr `type="137"` sets the sender when present); raw `msg_box` in `android_type`
+- `msg_box` `2` → outgoing; `1` → incoming. The From addr (`type="137"`) is the sender, wherever that number sits in the `address` list. Without one, a 1:1 message is from its one peer and a group message has no sender: the app writes a From addr on every MMS, and guessing a group's sender from the address order would be wrong more often than right. Raw `msg_box` in `android_type`
 - `msg_box` `3` (draft) and `4` (outbox) are skipped and counted as `skipped_draft_or_outbox` (not `skipped_unknown_type`, which is for unknown SMS `type` only)
 - `sub` → `subject`
 - `address` plus `<addr>` list → participants; one other person is a 1:1 chat, more than one is a group

@@ -30,6 +30,14 @@ exclude_re = [
     "impl .*Debug for",
 ]
 
+# Run each mutant's tests with cargo-nextest, which stops at the first
+# failing test. A caught mutant (most of them) then takes about half the test
+# time it takes under `cargo test`, which runs the rest of the test binary
+# anyway: 25 s instead of 50 s for a server mutant on four cores. A missed
+# mutant runs every test either way. nextest does not run doctests, so a
+# mutant only a doctest would catch shows as missed.
+test_tool = "nextest"
+
 # A mutant that turns a loop infinite is stopped at this multiple of the
 # unmutated test time and counted as a timeout, not a miss.
 timeout_multiplier = 3.0

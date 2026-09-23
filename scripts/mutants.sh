@@ -25,7 +25,8 @@
 # media tests skip locally (and fail when CI is set), so every mutant they
 # would have caught shows as missed.
 #
-# Needs cargo-mutants (`cargo install cargo-mutants --locked`) and python3
+# Needs cargo-mutants and cargo-nextest (`cargo install cargo-mutants
+# cargo-nextest --locked`; .cargo/mutants.toml says why nextest) and python3
 # for scripts/mutants-summary.py. Missed mutants do not fail this script:
 # mutation testing is a report, never a gate
 # (docs/adr/0007-ci-is-the-only-gate.md). It fails only when cargo-mutants
@@ -40,6 +41,10 @@ if ! cargo mutants --version >/dev/null 2>&1; then
   echo "cargo-mutants is not installed: cargo install cargo-mutants --locked" >&2
   exit 1
 fi
+if ! cargo nextest --version >/dev/null 2>&1; then
+  echo "cargo-nextest is not installed: cargo install cargo-nextest --locked" >&2
+  exit 1
+fi
 
 OUT="target/mutants"
 mkdir -p "${OUT}"
@@ -49,7 +54,7 @@ mkdir -p "${OUT}"
 CONFIG=()
 for arg in "$@"; do
   if [[ "${arg}" == "--file" || "${arg}" == -f || "${arg}" == --file=* ]]; then
-    CONFIG=(--no-config --gitignore true --timeout-multiplier 3)
+    CONFIG=(--no-config --gitignore true --timeout-multiplier 3 --test-tool nextest)
   fi
 done
 

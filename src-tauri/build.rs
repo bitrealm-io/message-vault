@@ -2,7 +2,8 @@
 //!
 //! The desktop app reads Apple Messages through a separate program because
 //! that program links GPL code and the app is under the Fair Core License
-//! (`docs/agents/licences.md`). Tauri ships such a program as an
+//! (`docs/adr/0014-gpl-code-only-behind-a-process-boundary.md`). Tauri ships
+//! such a program as an
 //! `externalBin`: it expects `binaries/imessage-reader-<target triple>` to
 //! exist when this script runs, copies it beside the app binary for `cargo
 //! tauri dev`, and bundles it beside the app in every installer. This script

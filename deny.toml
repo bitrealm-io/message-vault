@@ -1,7 +1,8 @@
 # cargo-deny configuration. The Audit workflow (.github/workflows/audit.yml)
 # runs `cargo deny check advisories licenses bans` on the workspace and
 # `licenses bans` on src-tauri whenever a lockfile or this file changes, and
-# weekly. The policy these sections enforce is docs/agents/licences.md.
+# weekly. The policy these sections enforce is
+# docs/adr/0014-gpl-code-only-behind-a-process-boundary.md.
 
 [graph]
 # The desktop app and the workspace are checked for the host only; the

@@ -7,7 +7,8 @@ name: Audit
 # catches newly published advisories on main. These checks are deliberately
 # not in the ruleset's required list. Why: docs/adr/0007-ci-is-the-only-gate.md.
 #
-# The same trigger runs the licence policy (docs/agents/licences.md): every
+# The same trigger runs the licence policy
+# (docs/adr/0014-gpl-code-only-behind-a-process-boundary.md): every
 # crate in the workspace and in the desktop app must carry a permissive
 # licence, and the two GPL readers of Apple Messages may appear only under
 # the imessage-reader helper program. A new dependency is a lockfile change,

@@ -1,44 +1,13 @@
 # Domain Docs
 
-How the engineering skills should consume this repo's domain documentation when exploring the codebase.
+How the engineering skills should consume this repo's domain documentation when exploring the codebase. The repo has one context: one `CONTEXT.md` at the root and one `docs/adr/`.
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root, or
-- **`CONTEXT-MAP.md`** at the repo root if it exists: it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
-- **`docs/adr/`**: read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
+- **`CONTEXT.md`** at the repo root: the glossary.
+- **`docs/adr/`**: read ADRs that touch the area you're about to work in.
 - **`docs/architecture/http-api.md`** when the work touches a `/v1` route. The HTTP interface has no ADRs; that one file holds every rule, its reason, and what was rejected. A rule is written there when it is decided, and a route that breaks it is a bug with an open issue (`docs/adr/0011-the-http-interface-has-one-rules-document.md`).
 - **`docs/architecture/`** when the work touches the model it covers. `contacts-identities-and-messages.md` holds the relationships and rules for contacts, handles, participants, conversations and messages. A rule is written there when it is decided; where the code does not follow it yet, an open issue says so.
-
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
-
-## File structure
-
-Single-context repo (most repos):
-
-```
-/
-├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
-└── src/
-```
-
-Multi-context repo (presence of `CONTEXT-MAP.md` at the root):
-
-```
-/
-├── CONTEXT-MAP.md
-├── docs/adr/                          ← system-wide decisions
-└── src/
-    ├── ordering/
-    │   ├── CONTEXT.md
-    │   └── docs/adr/                  ← context-specific decisions
-    └── billing/
-        ├── CONTEXT.md
-        └── docs/adr/
-```
 
 ## Use the glossary's vocabulary
 
@@ -50,4 +19,4 @@ If the concept you need isn't in the glossary yet, that's a signal: either you'r
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
-> _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+> _Contradicts ADR-0007 (CI is the only gate), but worth reopening because…_

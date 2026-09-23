@@ -3,11 +3,12 @@ use axum::http::StatusCode;
 use super::*;
 use crate::db::api_tokens;
 use crate::db::permissions::Permissions;
+use crate::problem::ProblemType;
 use crate::test_support::{
     SeedConversation, SeedMessage, claim_vault_as_owner, delete_json, delete_json_with_body,
-    delete_status, delete_status_with_body, get_json, get_raw, get_status, log_in, login_status,
-    patch_failure, patch_json, patch_status, post_created_json, post_status,
-    post_status_logged_out, put_json, put_status, register_via_api, seed_conversation,
+    delete_status, delete_status_with_body, expect_problem, get_json, get_raw, get_status, log_in,
+    login_status, patch_failure, patch_json, patch_status, post_created_json, post_status,
+    post_status_logged_out, put_json, put_raw, put_status, register_via_api, seed_conversation,
     seed_one_message, test_vault,
 };
 
@@ -94,7 +95,7 @@ async fn every_member_route_refuses_another_accounts_session() {
             &state,
             &format!("{}/password", member(target)),
             &alice.token,
-            serde_json::json!({ "password": "irrelevant123" }),
+            serde_json::json!({ "password": "irrelevant123", "password_confirmation": "irrelevant123" }),
         )
         .await,
         StatusCode::FORBIDDEN,
@@ -759,7 +760,7 @@ async fn owner_routes_on_a_missing_account_are_404() {
             &state,
             &format!("{missing}/password"),
             &owner.token,
-            serde_json::json!({ "password": "hunter2hunter2" }),
+            serde_json::json!({ "password": "hunter2hunter2", "password_confirmation": "hunter2hunter2" }),
         )
         .await,
         StatusCode::NOT_FOUND
@@ -818,7 +819,7 @@ async fn last_login_follows_sessions_being_opened() {
         &state,
         &format!("{}/password", member(carol)),
         &owner.token,
-        serde_json::json!({ "password": "resetbytheowner" }),
+        serde_json::json!({ "password": "resetbytheowner", "password_confirmation": "resetbytheowner" }),
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
@@ -858,7 +859,7 @@ async fn the_owner_sets_a_password_and_nothing_else_changes() {
         &state,
         &format!("{path}/password"),
         &owner.token,
-        serde_json::json!({ "password": "resetbytheowner" }),
+        serde_json::json!({ "password": "resetbytheowner", "password_confirmation": "resetbytheowner" }),
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
@@ -903,7 +904,7 @@ async fn an_account_changes_its_own_password() {
         &state,
         &path,
         token,
-        serde_json::json!({ "password": "chosen4herself" }),
+        serde_json::json!({ "password": "chosen4herself", "password_confirmation": "chosen4herself" }),
     )
     .await;
     assert_ne!(changed.token, token, "the session token rotates");
@@ -932,7 +933,7 @@ async fn the_owner_changes_their_own_password_with_the_current_one() {
             &state,
             &path,
             &owner.token,
-            serde_json::json!({ "password": "keeperschoice" }),
+            serde_json::json!({ "password": "keeperschoice", "password_confirmation": "keeperschoice" }),
         )
         .await,
         StatusCode::UNPROCESSABLE_ENTITY,
@@ -943,7 +944,7 @@ async fn the_owner_changes_their_own_password_with_the_current_one() {
             &state,
             &path,
             &owner.token,
-            serde_json::json!({ "password": "keeperschoice", "current_password": "notthisone" }),
+            serde_json::json!({ "password": "keeperschoice", "password_confirmation": "keeperschoice", "current_password": "notthisone" }),
         )
         .await,
         StatusCode::UNAUTHORIZED
@@ -956,7 +957,7 @@ async fn the_owner_changes_their_own_password_with_the_current_one() {
         &state,
         &path,
         login["token"].as_str().unwrap(),
-        serde_json::json!({ "password": "keeperschoice", "current_password": "hunter2hunter2" }),
+        serde_json::json!({ "password": "keeperschoice", "password_confirmation": "keeperschoice", "current_password": "hunter2hunter2" }),
     )
     .await;
 
@@ -967,6 +968,102 @@ async fn the_owner_changes_their_own_password_with_the_current_one() {
     assert_eq!(
         login_status(&state, "keeper", "hunter2hunter2").await,
         StatusCode::UNAUTHORIZED
+    );
+}
+
+/// The checks run in one order, and the first that fails is the only one
+/// reported: the current password, then the two new ones agreeing, then the
+/// new one differing from the current. Each sentence is one a screen shows
+/// as it is.
+#[tokio::test]
+async fn a_password_change_is_checked_in_a_fixed_order() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let path = format!("{}/password", member(owner.account_id));
+
+    // Wrong current password: the mismatched pair is not mentioned.
+    let (status, text) = put_raw(
+        &state,
+        &path,
+        &owner.token,
+        "application/json",
+        serde_json::json!({
+            "password": "one",
+            "password_confirmation": "two",
+            "current_password": "notthisone",
+        })
+        .to_string(),
+    )
+    .await;
+    let problem = expect_problem(status, &text, ProblemType::InvalidCredentials);
+    assert_eq!(
+        problem.detail.as_deref(),
+        Some("Current password is incorrect.")
+    );
+
+    // Right current password, pair differs.
+    let (status, text) = put_raw(
+        &state,
+        &path,
+        &owner.token,
+        "application/json",
+        serde_json::json!({
+            "password": "hunter2hunter2",
+            "password_confirmation": "two",
+            "current_password": "hunter2hunter2",
+        })
+        .to_string(),
+    )
+    .await;
+    let problem = expect_problem(status, &text, ProblemType::ValidationFailed);
+    assert_eq!(
+        problem.errors,
+        Some(vec!["New passwords do not match.".to_string()])
+    );
+
+    // Pair agrees, but it is the password already in place.
+    let (status, text) = put_raw(
+        &state,
+        &path,
+        &owner.token,
+        "application/json",
+        serde_json::json!({
+            "password": "hunter2hunter2",
+            "password_confirmation": "hunter2hunter2",
+            "current_password": "hunter2hunter2",
+        })
+        .to_string(),
+    )
+    .await;
+    let problem = expect_problem(status, &text, ProblemType::ValidationFailed);
+    assert_eq!(
+        problem.errors,
+        Some(vec![
+            "New password must be different from the current password.".to_string()
+        ])
+    );
+
+    // Nothing above changed anything.
+    assert_eq!(
+        login_status(&state, "keeper", "hunter2hunter2").await,
+        StatusCode::CREATED
+    );
+
+    // A user account sends no current password, but its pair must still agree.
+    let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
+    let (status, text) = put_raw(
+        &state,
+        &format!("{}/password", member(bob.account_id)),
+        &bob.token,
+        "application/json",
+        serde_json::json!({ "password": "one", "password_confirmation": "two" }).to_string(),
+    )
+    .await;
+    let problem = expect_problem(status, &text, ProblemType::ValidationFailed);
+    assert_eq!(
+        problem.errors,
+        Some(vec!["New passwords do not match.".to_string()])
     );
 }
 
@@ -984,7 +1081,11 @@ async fn the_owner_cannot_clear_their_own_password() {
             &state,
             &path,
             &owner.token,
-            serde_json::json!({ "password": "" })
+            serde_json::json!({
+                "password": "",
+                "password_confirmation": "",
+                "current_password": "hunter2hunter2",
+            })
         )
         .await,
         StatusCode::UNPROCESSABLE_ENTITY
@@ -997,7 +1098,7 @@ async fn the_owner_cannot_clear_their_own_password() {
         &state,
         &path,
         login["token"].as_str().unwrap(),
-        serde_json::json!({ "password": "k", "current_password": "hunter2hunter2" }),
+        serde_json::json!({ "password": "k", "password_confirmation": "k", "current_password": "hunter2hunter2" }),
     )
     .await;
     assert_eq!(
@@ -1021,7 +1122,7 @@ async fn a_user_password_can_be_cleared_by_the_account_or_the_owner() {
         &state,
         &path,
         &bob.token,
-        serde_json::json!({ "password": "" }),
+        serde_json::json!({ "password": "", "password_confirmation": "" }),
     )
     .await;
     assert_eq!(
@@ -1036,7 +1137,7 @@ async fn a_user_password_can_be_cleared_by_the_account_or_the_owner() {
         &state,
         &path,
         login["token"].as_str().unwrap(),
-        serde_json::json!({ "password": "b" }),
+        serde_json::json!({ "password": "b", "password_confirmation": "b" }),
     )
     .await;
     assert_eq!(login_status(&state, "bob", "b").await, StatusCode::CREATED);
@@ -1046,7 +1147,7 @@ async fn a_user_password_can_be_cleared_by_the_account_or_the_owner() {
         &state,
         &path,
         owner["token"].as_str().unwrap(),
-        serde_json::json!({ "password": "" }),
+        serde_json::json!({ "password": "", "password_confirmation": "" }),
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);

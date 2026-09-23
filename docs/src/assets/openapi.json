@@ -10992,7 +10992,8 @@
         "type": "object",
         "description": "The new password.",
         "required": [
-          "password"
+          "password",
+          "password_confirmation"
         ],
         "properties": {
           "current_password": {
@@ -11005,6 +11006,10 @@
           "password": {
             "type": "string",
             "description": "The new password. Empty clears a user account's password; the vault\nowner's must be one character or more."
+          },
+          "password_confirmation": {
+            "type": "string",
+            "description": "The new password typed a second time. The vault, not the screen,\nrefuses a pair that differs, so the checks run in one fixed order:\ncurrent password, then the pair, then that the new one differs from the\ncurrent one."
           }
         }
       },

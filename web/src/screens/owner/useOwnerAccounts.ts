@@ -4,7 +4,6 @@ import {
   deleteAccountById,
   deleteAccountMessages,
   listAccounts,
-  setAccountPassword as setVaultAccountPassword,
   updateAccount,
 } from "../../lib/vaultApi";
 import type { components } from "../../lib/vaultApi.types";
@@ -25,12 +24,11 @@ const fetchAccounts = (signal: AbortSignal) =>
 /** Every write but a password change shows on the account list. */
 function useOwnerWrite<V>(
   write: (vars: V) => Promise<unknown>,
-  refreshesTheList = true,
 ): UseMutationResult<unknown, Error, V> {
   const cache = useVaultCache();
   return useMutation<unknown, Error, V>({
     mutationFn: write,
-    onSettled: refreshesTheList ? () => cache.invalidate(keys.ownerAccounts.all) : undefined,
+    onSettled: () => cache.invalidate(keys.ownerAccounts.all),
   });
 }
 
@@ -60,15 +58,6 @@ export function useDeleteAccount(): UseMutationResult<unknown, Error, number> {
 
 export function useDeleteAccountMessages(): UseMutationResult<unknown, Error, number> {
   return useOwnerWrite((id: number) => deleteAccountMessages(id));
-}
-
-/** Setting a password changes nothing the list shows, so it does not refresh it. */
-export function useSetAccountPassword(): UseMutationResult<
-  unknown,
-  Error,
-  { id: number; password: string }
-> {
-  return useOwnerWrite(({ id, password }) => setVaultAccountPassword(id, { password }), false);
 }
 
 /**

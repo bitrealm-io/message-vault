@@ -46,6 +46,16 @@ released versions carry their date on the heading.
   opens with "A vault owner is required to create and manage users.", and
   the Display Name button in Settings reads Save without changing to Saved.
 
+### Fixes
+
+- 2026-09-22 **Changing a password checks things in a sensible order and
+  says so in full sentences.** The vault now checks the current password
+  first, then that the new password was typed the same way twice, then that
+  it differs from the current one, and tells you only the first thing that
+  went wrong. The messages read as sentences ("Current password is
+  incorrect.") and the Change password button no longer sits tight against
+  the last field.
+
 ## [0.9.0] - 2026-09-22
 
 The release that gives a vault an owner, a trash you can take things back out

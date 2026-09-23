@@ -4,7 +4,7 @@
 //! header. Each later line is one message.
 
 use anyhow::{Context, Result, bail};
-use message_ir::{ConversationDocument, ConversationHeader, IrMessage, SCHEMA_VERSION};
+use message_ir::{ConversationDocument, ConversationHeader, IrMessage, check_schema_version};
 
 /// Return the backup source name from a conversation header, or an error if the
 /// schema version or source field is unusable.
@@ -14,13 +14,7 @@ use message_ir::{ConversationDocument, ConversationHeader, IrMessage, SCHEMA_VER
 /// Returns an error when `schema_version` is not the current version, or when
 /// `export.source` is empty.
 pub fn validate_header(header: &ConversationHeader) -> Result<String> {
-    if header.schema_version != SCHEMA_VERSION {
-        bail!(
-            "unsupported schema_version {} (expected {})",
-            header.schema_version,
-            SCHEMA_VERSION
-        );
-    }
+    check_schema_version(header.schema_version)?;
     let source = header.export.source.trim();
     if source.is_empty() {
         bail!("export.source is empty");
@@ -143,7 +137,7 @@ mod tests {
     use super::*;
     use message_ir::{
         ConversationMeta, ConversationStats, ExportMeta, IrAttachment, IrConversationType,
-        IrDirection, IrMessageKind, IrParticipant, IrService,
+        IrDirection, IrMessageKind, IrParticipant, IrService, SCHEMA_VERSION,
     };
 
     #[test]

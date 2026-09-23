@@ -4,6 +4,7 @@
 //! cannot fix it by changing the file, so the HTTP interface reports it as a
 //! 500 and keeps the cause on stderr.
 
+use message_ir::UnsupportedSchemaVersion;
 use std::fmt;
 
 /// A reason an import stopped that the sender can fix by changing the file.
@@ -12,8 +13,7 @@ pub enum ImportFailure {
     /// The conversation header's `schema_version` is not the one this vault
     /// reads. Nothing is upgraded: the sender re-exports with current tools.
     SchemaVersion {
-        found: u32,
-        expected: u32,
+        refusal: UnsupportedSchemaVersion,
         line: usize,
     },
     /// A line is not the message-ir JSON the vault expects: not JSON at all,
@@ -25,14 +25,7 @@ pub enum ImportFailure {
 impl fmt::Display for ImportFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::SchemaVersion {
-                found,
-                expected,
-                line,
-            } => write!(
-                f,
-                "This file is schema version {found}; the vault reads version {expected} (line {line})."
-            ),
+            Self::SchemaVersion { refusal, line } => write!(f, "{refusal} (line {line})."),
             Self::Parse { line, detail } => {
                 write!(f, "Could not read line {line} of the file: {detail}.")
             }
@@ -56,13 +49,12 @@ impl ImportFailure {
 
 #[cfg(test)]
 mod tests {
-    use super::ImportFailure;
+    use super::{ImportFailure, UnsupportedSchemaVersion};
 
     #[test]
     fn schema_version_names_both_versions_and_the_line() {
         let f = ImportFailure::SchemaVersion {
-            found: 3,
-            expected: 4,
+            refusal: UnsupportedSchemaVersion { found: 3 },
             line: 1,
         };
         assert_eq!(

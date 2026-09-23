@@ -376,3 +376,43 @@ fn roundtrip_eml_and_mbox() {
         assert_docs_equal_after_normalize(doc, back_mbox);
     }
 }
+
+/// A version-3 file is refused by its version, not by whichever field fails
+/// to parse first: the reader peeks at `schema_version` before parsing the
+/// rest, so the fields below are deliberately not a valid version-4 shape.
+#[test]
+fn json_refuses_a_version_3_file_by_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("old.json");
+    fs::write(
+        &path,
+        r#"{"schema_version":3,"export":{},"conversation":{},"messages":[]}"#,
+    )
+    .unwrap();
+    let err = read_conversation_json(&path).unwrap_err();
+    let refusal = err
+        .downcast_ref::<message_ir::UnsupportedSchemaVersion>()
+        .expect("typed refusal");
+    assert_eq!(refusal.found, 3);
+    assert_eq!(
+        refusal.to_string(),
+        "This file is schema version 3; the vault reads version 4"
+    );
+}
+
+#[test]
+fn jsonl_refuses_a_version_3_file_by_name() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("old.jsonl");
+    fs::write(
+        &path,
+        "{\"schema_version\":3,\"export\":{},\"conversation\":{}}\n{\"not\":\"a message\"}\n",
+    )
+    .unwrap();
+    let err = read_conversation_jsonl(&path).unwrap_err();
+    let refusal = err
+        .downcast_ref::<message_ir::UnsupportedSchemaVersion>()
+        .expect("typed refusal");
+    assert_eq!(refusal.found, 3);
+    assert!(format!("{err:#}").contains("schema version 3"), "{err:#}");
+}

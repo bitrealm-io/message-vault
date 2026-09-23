@@ -1,21 +1,21 @@
 name: Mutants
 
-# Mutation testing for the high-risk Rust files listed in
-# .cargo/mutants.toml, run by cargo-mutants through scripts/mutants.sh. A
+# Mutation testing for the Rust workspace (every crate but the few that
+# .cargo/mutants.toml leaves out), run by cargo-mutants through
+# scripts/mutants.sh. A
 # mutant the tests still pass is a change in behaviour no test notices; the
 # list of those is the report. It is a report, not a gate: nothing here
 # fails a pull request, so it lives outside ci.yml, whose every job the
 # ruleset on main requires. Why: docs/adr/0007-ci-is-the-only-gate.md.
 #
-# About 1,100 mutants take a few hours on one runner, so the run is split
-# into shards that each take a slice, and it runs weekly and on demand
-# rather than on every push. The summary job joins the shards into one
-# table on the run's summary page and keeps every missed mutant, with its
-# log and diff, as a workflow artifact.
+# About 8,700 mutants take well over a day on one runner, so the run is
+# split into 24 shards that each take a slice. It runs only when started by
+# hand from the Actions tab: never on a schedule, never on a pull request.
+# The summary job joins the shards into one table on the run's summary page
+# and keeps every missed mutant, with its log and diff, as a workflow
+# artifact.
 
 on:
-  schedule:
-    - cron: "41 3 * * 0"
   workflow_dispatch:
 
 permissions:
@@ -23,13 +23,13 @@ permissions:
 
 jobs:
   mutants:
-    name: Mutants (shard ${{ matrix.shard }} of 8)
+    name: Mutants (shard ${{ matrix.shard }} of 24)
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 300
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
     steps:
       - uses: actions/checkout@v7
 
@@ -61,7 +61,7 @@ jobs:
       - name: Run mutants
         run: >-
           ./scripts/mutants.sh
-          --shard ${{ matrix.shard }}/8
+          --shard ${{ matrix.shard }}/24
           --sharding round-robin
           --in-place
 
@@ -91,7 +91,7 @@ jobs:
         run: |
           python3 scripts/mutants-summary.py shards/mutants-shard-* > summary.md
           {
-            echo '## Mutants (high-risk Rust files)'
+            echo '## Mutants (Rust workspace)'
             echo
             echo 'A missed mutant is a change to the code that every test still'
             echo 'passes. Each shard artifact holds the log and diff for its mutants.'

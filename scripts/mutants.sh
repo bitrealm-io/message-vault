@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Mutation testing for the high-risk Rust files, run by cargo-mutants.
+# Mutation testing for the Rust workspace, run by cargo-mutants.
 #
-#   ./scripts/mutants.sh                                        # every file in .cargo/mutants.toml
-#   ./scripts/mutants.sh --file crates/libs/phone/src/lib.rs    # one file, instead of the list
-#   ./scripts/mutants.sh --shard 0/8 --sharding round-robin     # one slice, as the workflow runs it
+#   ./scripts/mutants.sh                                        # the whole workspace, as .cargo/mutants.toml sets it
+#   ./scripts/mutants.sh --file crates/libs/phone/src/lib.rs    # one file
+#   ./scripts/mutants.sh --shard 0/24 --sharding round-robin    # one slice, as the workflow runs it
 #
 # cargo-mutants changes the code one small way at a time and runs the tests
 # for the package that holds it. A mutant every test still passes is
@@ -13,16 +13,17 @@
 # cargo-mutants' own output (a log and a diff per mutant) is under
 # target/mutants/mutants.out/.
 #
-# Which files are mutated is set in .cargo/mutants.toml, and why. Other
-# arguments go to `cargo mutants` as they are; `--file` replaces the list
-# rather than adding to it. A full run is about 1,100 mutants: seconds each
-# in the library crates, about 15 s each in the server crate, which is most
-# of them, so expect a few hours on one machine. The Mutants workflow splits
-# it across parallel shards.
+# What is left out is set in .cargo/mutants.toml, and why. Other arguments
+# go to `cargo mutants` as they are; `--file` mutates only that file. A full
+# run is about 8,700 mutants: seconds each in the library crates, about 15 s
+# each in the server crate (about 3,450 of them), so well over a day on one
+# machine. Point it at the file you changed; the Mutants workflow, started
+# by hand, splits the full run across 24 parallel shards.
 #
 # The server tests run on SQLite, so a mutant in a Postgres-only branch
-# shows as missed. ffmpeg on PATH matters: the transcode and media tests skip
-# themselves without it, and every mutant they would have caught is missed.
+# shows as missed. ffmpeg on PATH matters: without it the transcode and
+# media tests skip locally (and fail when CI is set), so every mutant they
+# would have caught shows as missed.
 #
 # Needs cargo-mutants (`cargo install cargo-mutants --locked`) and python3
 # for scripts/mutants-summary.py. Missed mutants do not fail this script:

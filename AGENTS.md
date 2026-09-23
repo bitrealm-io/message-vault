@@ -254,16 +254,17 @@ MV_TEST_POSTGRES_URL=postgres://vault:vault@127.0.0.1:5432/vault cargo test -p m
 # target/llvm-cov/html/index.html; --open shows it.
 ./scripts/coverage.sh
 
-# Mutation testing for the high-risk files in .cargo/mutants.toml
-# (cargo-mutants). Ends with a per-file table of caught and missed mutants;
-# every missed one is named in target/mutants/summary.md. A few hours for
-# every file, so point it at the one you changed.
+# Mutation testing (cargo-mutants) over the workspace, less what
+# .cargo/mutants.toml leaves out. Ends with a per-file table of caught and
+# missed mutants; every missed one is named in target/mutants/summary.md.
+# A full run is well over a day on one machine, so point it at the file
+# you changed.
 ./scripts/mutants.sh --file crates/libs/phone/src/lib.rs
 ```
 
-Coverage is a report, not a gate, and function coverage is the number worth chasing: a function no test calls is the finding, while uncovered lines inside a called function are not a target. `scripts/coverage.sh` needs `cargo-llvm-cov`, the `llvm-tools` component that `rust-toolchain.toml` installs, and `python3`; it leaves test code out of the numbers and does not measure `src-tauri`. The `Coverage` workflow (`coverage.yml`) runs the same script on every push to `main`, puts the function headline on the run's summary page, and keeps the reports and the uncovered-functions list as a workflow artifact for 30 days.
+Coverage is a report, not a gate, and it points at gaps rather than measuring test quality: a function no test calls is worth a look, while uncovered lines inside a called function are not a target. Coverage cannot say whether the tests that do call a function would notice it breaking; mutation testing (below) measures that. Never write a test to raise the coverage number. Write one only when it would fail for a bug that matters, and name that bug. `scripts/coverage.sh` needs `cargo-llvm-cov`, the `llvm-tools` component that `rust-toolchain.toml` installs, and `python3`; it leaves test code out of the numbers and does not measure `src-tauri`. The `Coverage` workflow (`coverage.yml`) runs the same script on every push to `main`, puts the function headline on the run's summary page, and keeps the reports and the uncovered-functions list as a workflow artifact for 30 days.
 
-Mutation testing is a report too, and it answers what coverage cannot: whether a test that calls a function would fail if the function were wrong. cargo-mutants changes the code one small way at a time (`<` to `<=`, `&&` to `||`, a function returning `Default::default()`) and runs that package's tests. A mutant every test still passes is "missed", and that list is the finding. `.cargo/mutants.toml` limits it to the files where a wrong comparison loses, duplicates, leaks, or mis-attributes messages, and says why; add a file there when it holds a rule like that. `scripts/mutants.sh` needs `cargo-mutants` and `python3`; other arguments go to `cargo mutants`, and `--file` replaces the list instead of adding to it. The server tests run on SQLite, so a mutant in a Postgres-only branch shows as missed. The `Mutants` workflow (`mutants.yml`) runs every listed file weekly and on demand across 8 shards, puts the joined table and every missed mutant on the run's summary page, and keeps each shard's logs and diffs as a workflow artifact for 30 days.
+Mutation testing is a report too, and it answers what coverage cannot: whether a test that calls a function would fail if the function were wrong. cargo-mutants changes the code one small way at a time (`<` to `<=`, `&&` to `||`, a function returning `Default::default()`) and runs that package's tests. A mutant every test still passes is "missed", and that list is the finding. Every workspace crate is mutated except the few `.cargo/mutants.toml` leaves out (test-data generators, the build stamp, serde-only types), along with `Display` and `Debug` text; it says why for each. `scripts/mutants.sh` needs `cargo-mutants` and `python3`; other arguments go to `cargo mutants`, and `--file` mutates only that file. The server tests run on SQLite, so a mutant in a Postgres-only branch shows as missed. The `Mutants` workflow (`mutants.yml`) runs only when started by hand from the Actions tab, never on a schedule or a pull request. It splits the run across 24 shards, puts the joined table and every missed mutant on the run's summary page, and keeps each shard's logs and diffs as a workflow artifact for 30 days.
 
 #### Frontend
 

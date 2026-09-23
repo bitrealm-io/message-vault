@@ -6,9 +6,9 @@
 
 scripts/coverage.sh runs this; it is not meant to be run on its own.
 
-Function coverage is the number worth chasing in this repository, and what
-somebody acts on is the list of functions that no test reaches, grouped by
-file. cargo-llvm-cov's summary table gives a functions column per file but
+A function no test reaches is the gap coverage can point at, so what
+somebody acts on is that list, grouped by file. (Whether the tests that do
+reach a function would catch it breaking is for scripts/mutants.sh.) cargo-llvm-cov's summary table gives a functions column per file but
 never names the functions, and its JSON and lcov outputs carry mangled
 symbol names. The Cobertura output is the one format it demangles, so this
 reads that.

@@ -17,6 +17,7 @@ use std::collections::{HashMap, HashSet};
 
 mod attachment_path;
 mod projection;
+mod schema_version;
 #[cfg(feature = "testutil")]
 pub mod testutil;
 
@@ -25,8 +26,11 @@ pub use projection::{
     ProjectedRole, ProjectionHooks, ProjectionTally, SortKeyUnit, default_participants,
     display_names_for_handles, ensure_conversation, pending_to_document, prepare_conversation,
 };
+pub use schema_version::{
+    UnsupportedSchemaVersion, check_schema_version, check_schema_version_in_json,
+};
 
-/// Schema version written into every [`ConversationDocument`] (currently 3).
+/// Schema version written into every [`ConversationDocument`] (currently 4).
 pub const SCHEMA_VERSION: u32 = 4;
 
 /// `PendingConversation::extra` key marking a chat keyed by a person's name
@@ -44,7 +48,7 @@ pub const CHAT_ID_IS_NAME: &str = "chat_id_is_name";
 /// parses. See the [common message](https://bitrealm.io/vault/developer/architecture/common-message/) page.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConversationDocument {
-    /// Schema version written into this document (currently 3).
+    /// Schema version written into this document (currently 4).
     pub schema_version: u32,
     /// Where and how this export was produced.
     pub export: ExportMeta,
@@ -875,7 +879,7 @@ pub fn parse_json_value(s: &str) -> Value {
 /// and CSV header row).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConversationHeader {
-    /// Schema version written into this header (currently 3).
+    /// Schema version written into this header (currently 4).
     pub schema_version: u32,
     /// Where and how this export was produced.
     pub export: ExportMeta,

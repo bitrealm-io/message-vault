@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use chrono::{TimeZone, Utc};
 use message_ir::{
     ConversationHeader, HandleService, HandleType, IrAttachment, IrDirection, IrImessage,
-    IrMessage, IrMessageKind, IrService, SCHEMA_VERSION,
+    IrMessage, IrMessageKind, IrService, check_schema_version_in_json,
 };
 use phone::sanitize_number;
 use serde::Deserialize;
@@ -151,22 +151,13 @@ pub fn parse_ir_lines(
             detail: e.to_string(),
         })?;
         if is_ir_header(&value) {
-            // Check the version straight off the raw JSON before trying to
-            // deserialize into the current header shape: a file from a
-            // different schema version is not expected to match the current
-            // struct's required fields, and we want the version mismatch
-            // reported rather than a field-shape parse error.
-            if let Some(found) = value.get("schema_version").and_then(Value::as_u64) {
-                let found = found as u32;
-                if found != SCHEMA_VERSION {
-                    return Err(ImportFailure::SchemaVersion {
-                        found,
-                        expected: SCHEMA_VERSION,
-                        line: line_no,
-                    }
-                    .into());
-                }
-            }
+            // The version is checked before the header is deserialized, so a
+            // file from another schema version is refused by its version and
+            // not by whichever current field it lacks.
+            check_schema_version_in_json(line).map_err(|refusal| ImportFailure::SchemaVersion {
+                refusal,
+                line: line_no,
+            })?;
             let header: ConversationHeader =
                 serde_json::from_value(value).map_err(|e| ImportFailure::Parse {
                     line: line_no,
@@ -500,8 +491,7 @@ mod tests {
         assert_eq!(
             *failure,
             crate::import::ImportFailure::SchemaVersion {
-                found: 3,
-                expected: message_ir::SCHEMA_VERSION,
+                refusal: message_ir::UnsupportedSchemaVersion { found: 3 },
                 line: 1
             }
         );

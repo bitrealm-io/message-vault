@@ -1,5 +1,6 @@
 //! Shared scaffolding for exporter `convert_smoke` tests (behind `testutil`).
 
+use crate::ExportReport;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -165,4 +166,82 @@ pub fn assert_csv_row(path: &Path, expected: &[(&str, &str)]) {
         expected,
         rows
     );
+}
+
+/// Sorted names of the `.jsonl` files directly under `dir`.
+fn jsonl_names(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .expect("read output")
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .filter(|n| n.ends_with(".jsonl"))
+        .collect();
+    names.sort();
+    names
+}
+
+/// Run a JSONL export into `out` twice, the second time with `resume` set, and
+/// assert that the second run resumed the first instead of rewriting it.
+///
+/// `run` calls the exporter's own entry point with `OutputFormat::Jsonl`, the
+/// output folder `out`, and the `resume` flag it is given. The first run must
+/// write at least one conversation, one `.jsonl` file per conversation, and
+/// skip nothing. The second must skip every conversation the first wrote,
+/// still count them all, and leave the same files with the same bytes.
+///
+/// The file bytes alone prove nothing: the writer is deterministic, so a
+/// resumed run that quietly rewrote every conversation would produce the same
+/// bytes. `conversations_skipped` is the only observable difference between
+/// resuming and starting over, so that is the assertion that matters.
+///
+/// Returns the first run's report, for assertions about the fixture's own
+/// conversation count.
+///
+/// # Panics
+///
+/// Panics when either run fails or any of the above does not hold.
+pub fn assert_jsonl_resumes(
+    out: &Path,
+    run: impl Fn(bool) -> anyhow::Result<ExportReport>,
+) -> ExportReport {
+    let report = run(false).expect("convert");
+    assert!(
+        report.conversations >= 1,
+        "the fixture must produce at least one conversation"
+    );
+    assert_eq!(
+        report.conversations_skipped, 0,
+        "a first run into an empty folder skips nothing"
+    );
+
+    let first = jsonl_names(out);
+    assert_eq!(
+        first.len() as u64,
+        report.conversations,
+        "the queue wrote a file per conversation: {first:?}"
+    );
+    let bodies: Vec<String> = first
+        .iter()
+        .map(|n| fs::read_to_string(out.join(n)).expect("read jsonl"))
+        .collect();
+
+    let resumed = run(true).expect("resume convert");
+    assert_eq!(
+        resumed.conversations, report.conversations,
+        "a resumed run still counts every conversation"
+    );
+    assert_eq!(
+        resumed.conversations_skipped, report.conversations,
+        "a resumed run must skip every conversation the first run wrote"
+    );
+
+    assert_eq!(jsonl_names(out), first, "same file set after a resume");
+    for (name, before) in first.iter().zip(bodies) {
+        assert_eq!(
+            fs::read_to_string(out.join(name)).expect("reread"),
+            before,
+            "a resumed run must not rewrite {name}"
+        );
+    }
+    report
 }

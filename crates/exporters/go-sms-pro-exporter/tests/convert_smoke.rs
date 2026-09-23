@@ -1,6 +1,8 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
-use message_vault_io_core::testutil::{assert_csv_export, assert_csv_row, csv_files};
+use message_vault_io_core::testutil::{
+    assert_csv_export, assert_csv_row, assert_jsonl_resumes, csv_files,
+};
 use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
 use std::path::{Path, PathBuf};
 
@@ -86,65 +88,15 @@ fn output_equals_input_bails_before_cleaning() {
 fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
     let input = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample_export");
     let tmp = tempfile::tempdir().expect("tempdir");
-    let out = tmp.path().join("out");
-    std::fs::create_dir_all(&out).expect("out dir");
-
-    let run = |resume: bool| {
+    assert_jsonl_resumes(tmp.path(), |resume| {
         convert_export(ConvertExportArgs {
             input_dir: input.as_path(),
-            output_dir: &out,
+            output_dir: tmp.path(),
             owner_phones: &["+15555550100".into()],
             transforms: ExportTransforms::none(),
             output_format: OutputFormat::Jsonl,
             cancel: None,
             resume,
         })
-    };
-
-    let report = run(false).expect("convert");
-    assert!(report.conversations >= 1);
-    assert_eq!(
-        report.conversations_skipped, 0,
-        "a first run into an empty folder skips nothing"
-    );
-
-    let jsonl_files = |dir: &Path| -> Vec<String> {
-        let mut names: Vec<String> = std::fs::read_dir(dir)
-            .expect("read output")
-            .filter_map(|e| e.ok())
-            .map(|e| e.file_name().to_string_lossy().to_string())
-            .filter(|n| n.ends_with(".jsonl"))
-            .collect();
-        names.sort();
-        names
-    };
-    let first = jsonl_files(&out);
-    assert!(!first.is_empty(), "the queue wrote conversation files");
-    let bodies: Vec<String> = first
-        .iter()
-        .map(|n| std::fs::read_to_string(out.join(n)).expect("read jsonl"))
-        .collect();
-
-    // The file bytes alone prove nothing here: the writer is deterministic, so
-    // a resumed run that quietly rewrote every conversation would produce the
-    // same bytes and this test would still pass. `conversations_skipped` is
-    // the only observable difference between resuming and starting over.
-    let resumed = run(true).expect("resume convert");
-    assert_eq!(
-        resumed.conversations_skipped, report.conversations,
-        "a resumed run must skip every conversation the first run wrote"
-    );
-    assert!(
-        resumed.conversations_skipped > 0,
-        "the fixture must produce at least one conversation to skip"
-    );
-
-    assert_eq!(jsonl_files(&out), first, "same file set after a resume");
-    for (name, before) in first.iter().zip(bodies) {
-        assert_eq!(
-            std::fs::read_to_string(out.join(name)).expect("reread"),
-            before,
-            "a resumed run must not rewrite {name}"
-        );
-    }
+    });
 }

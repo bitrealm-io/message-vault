@@ -2,7 +2,7 @@
 //! on failure.
 //!
 //! Every route the vault serves answers a failure with an RFC 7807 problem
-//! document (`docs/agents/http-api-rules.md`), and its `detail` is written for the person to read.
+//! document (`docs/architecture/http-api.md`), and its `detail` is written for the person to read.
 //! Both client crates were reading it themselves — `vault-push` with an
 //! `ok_json` helper, `vault-pull` with an `error_sentence` one — over two
 //! private copies of the same struct. One copy of the reading lives here, over

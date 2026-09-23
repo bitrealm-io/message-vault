@@ -50,7 +50,7 @@ Every command is in AGENTS.md, and nothing is repeated here. Claude Code does no
   users to protect — only developers, who rebuild. Never add a compatibility
   alias, a deprecation window, a version handshake, or a migration path for an
   old client, and never argue against a change on the grounds that something
-  already calls it. `docs/agents/http-api-rules.md` says this for the HTTP interface; it holds for every
+  already calls it. `docs/architecture/http-api.md` says this for the HTTP interface; it holds for every
   interface. Do not raise this as an open question.
 - **Version lockstep** (current `0.9.0`): `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `web/package.json`, `crates/vault/server/Cargo.toml` all carry the product version. Leave other crates at `0.1.0`; never bump `web-next` (`0.3.0`).
 - **Pushing a `v*` tag ships a release** — CI builds the Docker image and desktop installers, creates a GitHub Release, and publishes the docs site to bitrealm.io. A merge to `main` publishes nothing. Never create or push tags unless asked.
@@ -81,8 +81,8 @@ Single-context: one `CONTEXT.md` at the repo root plus `docs/adr/`. See `docs/ag
 
 ### Architecture
 
-`docs/architecture/` holds the model of the system itself, for people and AI alike: what the entities are, how they relate, and the rules between them, each with its reason. Read `docs/architecture/contacts-identities-and-messages.md` before touching contacts, handles, participants, or what an import creates. A change to a rule lands there in the same PR as the code.
+`docs/architecture/` holds the model of the system itself, for people and AI alike: what the entities are, how they relate, and the rules between them, each with its reason. Read `docs/architecture/contacts-identities-and-messages.md` before touching contacts, handles, participants, or what an import creates, and `docs/architecture/http-api.md` before touching a `/v1` route. A rule is written there when it is decided; where the code does not follow it yet, an open issue says so.
 
 ### HTTP interface rules
 
-Every rule for `/v1` routes is in `docs/agents/http-api-rules.md`, with its reason. The HTTP interface has no ADRs (`docs/adr/0011`); a change to a rule lands in that file in the same PR as the code.
+Every rule for `/v1` routes is in `docs/architecture/http-api.md`, with its reason: route shape, status codes, lists, credentials, how the OpenAPI reference is built, and how the server code is named and layered. Read it before designing or changing a route. The HTTP interface has no ADRs (`docs/adr/0011`). A rule is written there when it is decided, not when the code catches up; a route that breaks it is a bug, and an open issue names the routes still to change.

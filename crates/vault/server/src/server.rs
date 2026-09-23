@@ -355,7 +355,7 @@ impl AppState {
 /// The answer to a request that made one new resource: `201 Created`, a
 /// `Location` header naming it, and the JSON body the route documents.
 ///
-/// A create that takes a batch is the exception `docs/agents/http-api-rules.md` records: it makes no
+/// A create that takes a batch is the exception `docs/architecture/http-api.md` records: it makes no
 /// single resource, names no URL, and answers `200 OK` with a summary.
 #[derive(Debug)]
 pub struct Created<T> {
@@ -375,7 +375,7 @@ impl<T: Serialize> IntoResponse for Created<T> {
     }
 }
 
-/// A failure, as one of the registered problem types (`docs/agents/http-api-rules.md`).
+/// A failure, as one of the registered problem types (`docs/architecture/http-api.md`).
 ///
 /// A variant names what went wrong, never a status: the status, the `type`
 /// URL and the title come from the type's declaration in [`crate::problem`],
@@ -760,7 +760,7 @@ async fn json_body_limit_response(response: Response) -> Response {
 }
 
 /// Refuse a request whose `Accept` names nothing this route can produce
-/// (`docs/agents/http-api-rules.md`). Narrow on purpose: only when the header is present and none of
+/// (`docs/architecture/http-api.md`). Narrow on purpose: only when the header is present and none of
 /// its members is `application/json`, `application/problem+json`,
 /// `application/*` or `*/*`. A missing `Accept` is a request for JSON, which
 /// is what every one of the vault's own clients sends.
@@ -1078,7 +1078,7 @@ pub async fn resolve_auth_on_conn(
 /// A route never takes an `account=` parameter. A session or an API token
 /// belongs to exactly one account, so a parameter could only repeat it or
 /// contradict it, and the rules document says the credential names the
-/// account (`docs/agents/http-api-rules.md`, "Credentials and reach").
+/// account (`docs/architecture/http-api.md`, "Credentials and reach").
 pub(crate) fn resolve_import_account(auth: &AuthIdentity) -> i64 {
     auth.account_id
 }

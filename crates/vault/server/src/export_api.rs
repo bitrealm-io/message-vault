@@ -1,7 +1,7 @@
 //! Export Runs: `POST /v1/exports` records what was asked for, lists the
 //! messages it matches and counts them, `GET /v1/exports/{id}/messages` pages
 //! that list, and `complete` or `cancel` closes the run and drops the list
-//! (`docs/agents/http-api-rules.md`, "Runs").
+//! (`docs/architecture/http-api.md`, "Runs").
 //!
 //! Every route here takes the `export` scope on a session or an API token.
 //! A program with an export token reads messages only through a run it

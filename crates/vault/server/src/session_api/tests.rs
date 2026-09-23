@@ -38,6 +38,94 @@ async fn a_session_is_created_read_and_deleted_at_one_path() {
     );
 }
 
+/// Logging out ends a Session and nothing else. An API token is not a
+/// Session: `DELETE /v1/session` with one is refused, and the token keeps
+/// working. It used to answer `204` and do nothing, which told a program it
+/// had ended something it had not.
+#[tokio::test]
+async fn logging_out_with_an_api_token_is_refused_and_leaves_the_token_working() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
+    let mut conn = vault.conn().await;
+    let token = crate::db::api_tokens::create_api_token(
+        &mut conn,
+        alice.account_id,
+        "push",
+        crate::db::permissions::Permissions::all(),
+        None,
+    )
+    .await
+    .unwrap()
+    .token;
+    drop(conn);
+
+    let (status, text) = crate::test_support::delete_raw(&state, "/v1/session", &token).await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::InsufficientScope,
+    );
+    assert_eq!(
+        crate::test_support::get_status(&state, "/v1/imports", &token).await,
+        StatusCode::OK,
+        "the token still works"
+    );
+}
+
+/// A token that names no Session is a failed credential, `401`, like on
+/// every other route.
+#[tokio::test]
+async fn logging_out_with_a_token_that_names_nothing_is_a_401() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
+
+    let (status, text) =
+        crate::test_support::delete_raw(&state, "/v1/session", "mv-user-not-a-session").await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::AuthenticationRequired,
+    );
+
+    let status = crate::test_support::delete_status(&state, "/v1/session", &alice.token).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, text) = crate::test_support::delete_raw(&state, "/v1/session", &alice.token).await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::AuthenticationRequired,
+    );
+}
+
+/// A disabled account can still log out: its Session is ended even though
+/// every other route refuses it.
+#[tokio::test]
+async fn a_disabled_account_can_still_log_out() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
+    let mut conn = vault.conn().await;
+    sqlx::query("UPDATE accounts SET disabled = 1 WHERE id = $1")
+        .bind(alice.account_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        crate::test_support::delete_status(&state, "/v1/session", &alice.token).await,
+        StatusCode::NO_CONTENT
+    );
+    let sessions: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM account_session_tokens WHERE account_id = $1")
+            .bind(alice.account_id)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(sessions, 0, "the Session row is gone");
+}
+
 /// The credential names the account. There is no `account=` parameter on the
 /// singleton, so a query string naming someone else is not a refusal: it is
 /// nothing, and the reply is still the token's own account.

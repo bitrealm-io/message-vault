@@ -13,7 +13,7 @@ use crate::credentials::{
     MAX_PASSWORD_BYTES, check_auth_rate_limit, dummy_password_hash, normalize_username,
     verify_login_password, verify_password,
 };
-use crate::db::{account_profile, schema, session_tokens};
+use crate::db::{account_profile, api_tokens, schema, session_tokens};
 use crate::dedupe;
 use crate::extract::Json;
 use crate::server::{ApiError, AppState, AuthIdentity, Created};
@@ -177,13 +177,16 @@ pub async fn create_session_handler(
     })
 }
 
-/// Revoke the session token.
-async fn logout_on_conn(conn: &mut AnyConnection, token: &str) -> anyhow::Result<()> {
-    let _ = session_tokens::revoke_session_token(conn, token).await?;
-    Ok(())
+/// Revoke the session token. Returns whether it named a Session.
+async fn logout_on_conn(conn: &mut AnyConnection, token: &str) -> anyhow::Result<bool> {
+    session_tokens::revoke_session_token(conn, token).await
 }
 
 /// Log out: revoke the presented session token, ending the Session.
+///
+/// It takes the bearer token itself rather than a guard, so a disabled
+/// account can still end its own Session. An API token is not a Session and
+/// is refused; a token that names nothing is a `401`.
 #[utoipa::path(
     delete,
     path = "/v1/session",
@@ -191,7 +194,8 @@ async fn logout_on_conn(conn: &mut AnyConnection, token: &str) -> anyhow::Result
     security(("session" = [])),
     responses(
         (status = 204, description = "Logged out"),
-        (status = 401, body = crate::problem::Problem)
+        (status = 401, body = crate::problem::Problem),
+        (status = 403, description = "The token is an API token, which is not a Session", body = crate::problem::Problem)
     )
 )]
 pub async fn delete_session_handler(
@@ -201,8 +205,21 @@ pub async fn delete_session_handler(
     let token = crate::server::bearer_token(&headers)?;
     let mut conn = state.db.acquire().await?;
     schema::ensure_accounts_schema(&mut conn).await?;
-    logout_on_conn(&mut conn, &token).await?;
-    Ok(axum::http::StatusCode::NO_CONTENT)
+    if logout_on_conn(&mut conn, &token).await? {
+        return Ok(axum::http::StatusCode::NO_CONTENT);
+    }
+    if api_tokens::lookup_account_for_api_token(&mut conn, &token)
+        .await?
+        .is_some()
+    {
+        return Err(ApiError::InsufficientScope(
+            "an API token is not a session and cannot log out; delete it under Settings instead"
+                .into(),
+        ));
+    }
+    Err(ApiError::AuthenticationRequired(
+        "this token names no session".into(),
+    ))
 }
 
 #[cfg(test)]

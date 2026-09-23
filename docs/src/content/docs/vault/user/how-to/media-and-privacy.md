@@ -33,6 +33,7 @@ When obfuscation is on:
 
 - Real attachment files are not copied — the output uses three shared placeholder files (`placeholder.jpg`, `placeholder.mp4`, `placeholder.bin`) based on each attachment's type
 - Attachment modes like Copy or Convert are ignored
+- Group titles are replaced in full, and edit history, link previews, and shared locations are left out
 - You can enter a seed (64 hex characters) to make the same input produce repeatable results every run
 
 Obfuscation changes the output copy, not the source backup.

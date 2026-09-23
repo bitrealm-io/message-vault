@@ -275,10 +275,15 @@ pub async fn revoke_session_token(conn: &mut AnyConnection, token: &str) -> Resu
     Ok(n > 0)
 }
 
-/// Revoke every session token belonging to `account_id` (normally at most
-/// one row). Used when an administrator resets someone else's password, so
-/// the reset actually ends their existing login rather than merely
-/// changing what a future one would need.
+/// Revoke every session token belonging to `account_id` (at most one row).
+/// Used by `reset-owner-password`, the shell command for an owner who has
+/// lost their password, so the old password's login ends with it. The owner
+/// setting another account's password through `/v1` does not call this: that
+/// sets the password and nothing more, and the account's session carries on.
+///
+/// # Errors
+///
+/// Returns an error when the delete fails.
 pub async fn revoke_account_sessions(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
     sqlx::query("DELETE FROM account_session_tokens WHERE account_id = $1")
         .bind(account_id)

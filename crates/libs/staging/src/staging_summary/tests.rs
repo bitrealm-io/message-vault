@@ -454,24 +454,40 @@ fn progress_cadence_is_pinned_at_every_hundred_plus_a_final_call() {
 }
 
 #[test]
-fn outgoing_messages_are_counted_under_the_owner_handle_that_sent_them() {
+fn messages_are_counted_under_the_owner_handle_that_sent_or_received_them() {
     let dir = tempfile::tempdir().unwrap();
-    let mut doc = message_ir::testutil::sample_document("incoming, never counted");
+    // The one incoming message has no address of its own, so it counts as
+    // received at the export's owner, +15555550100.
+    let mut doc = message_ir::testutil::sample_document("received at the export's owner");
     let template = doc.messages[0].clone();
-    let outgoing = |guid: &str, from: Option<&str>| {
+    let message = |guid: &str,
+                   direction: message_ir::IrDirection,
+                   sender: Option<&str>,
+                   owner: Option<&str>| {
         let mut msg = template.clone();
         msg.guid = guid.into();
-        msg.direction = message_ir::IrDirection::Outgoing;
-        msg.sender_handle = from.map(str::to_string);
+        msg.direction = direction;
+        if direction == message_ir::IrDirection::Outgoing {
+            msg.sender_handle = sender.map(str::to_string);
+        }
+        msg.owner_handle = owner.map(str::to_string);
         msg
     };
+    use message_ir::IrDirection::{Incoming, Outgoing};
     doc.messages.extend([
-        outgoing("out-1", Some("owner@example.com")),
-        outgoing("out-2", Some("+15555550100")),
-        outgoing("out-3", Some("owner@example.com")),
-        // An outgoing message with no recorded sender belongs to no handle.
-        outgoing("out-4", None),
-        outgoing("out-5", Some("")),
+        message("out-1", Outgoing, Some("owner@example.com"), None),
+        message("out-2", Outgoing, Some("+15555550100"), None),
+        message(
+            "out-3",
+            Outgoing,
+            Some("owner@example.com"),
+            Some("owner@example.com"),
+        ),
+        // No sender recorded: the export's owner sent it.
+        message("out-4", Outgoing, None, None),
+        message("out-5", Outgoing, Some(""), None),
+        message("in-1", Incoming, None, Some("owner@example.com")),
+        message("in-2", Incoming, None, Some("other@example.com")),
     ]);
     doc.finalize_stats();
     let jsonl = dir.path().join(format!("{}.jsonl", doc.filename_stem()));
@@ -480,17 +496,24 @@ fn outgoing_messages_are_counted_under_the_owner_handle_that_sent_them() {
     let summary = summarize_staging(dir.path(), &summary_options(), &mut |_| {}).unwrap();
 
     assert_eq!(
-        summary.outgoing_handles,
+        summary.owner_handles,
         vec![
-            OutgoingHandleCount {
+            OwnerHandleCount {
                 handle: "+15555550100".into(),
-                messages: 1
+                sent: 3,
+                received: 1,
             },
-            OutgoingHandleCount {
+            OwnerHandleCount {
+                handle: "other@example.com".into(),
+                sent: 0,
+                received: 1,
+            },
+            OwnerHandleCount {
                 handle: "owner@example.com".into(),
-                messages: 2
+                sent: 2,
+                received: 1,
             },
         ],
-        "sorted by handle; the incoming sender is not an owner handle"
+        "sorted by handle; a message's own address wins over the export's owner"
     );
 }

@@ -124,6 +124,7 @@ pub fn to_ir_message(msg: &Message, skip_attachments: bool) -> Result<IrMessage>
         message_kind,
         sender_handle: msg.sender.clone(),
         sender_display_name: None,
+        owner_handle: None,
         subject: msg.subject.clone(),
         text: msg.text.clone().unwrap_or_default(),
         attachments,

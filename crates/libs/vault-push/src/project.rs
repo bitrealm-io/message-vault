@@ -184,6 +184,7 @@ mod tests {
             message_kind: IrMessageKind::Sms,
             sender_handle: Some("+15555550101".into()),
             sender_display_name: Some("Sam".into()),
+            owner_handle: None,
             subject: None,
             text: "hello".into(),
             attachments: vec![],
@@ -207,6 +208,7 @@ mod tests {
             message_kind: IrMessageKind::Sms,
             sender_handle: None,
             sender_display_name: None,
+            owner_handle: None,
             subject: None,
             text: "x".into(),
             attachments: vec![],
@@ -229,6 +231,7 @@ mod tests {
             message_kind: IrMessageKind::Sms,
             sender_handle: None,
             sender_display_name: None,
+            owner_handle: None,
             subject: None,
             text: "with attachment".into(),
             attachments: vec![IrAttachment {

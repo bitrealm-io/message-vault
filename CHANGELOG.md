@@ -17,11 +17,20 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 Bullets under the version still in development carry the date they landed;
 released versions carry their date on the heading.
 
-## [Unreleased]
+## [0.10.0] — in development
 
 ### Features
 
-- 2026-09-22: **The Dashboard shows where the vault's disk space goes.**
+- 2026-09-22 **One identity table, on the contact drawer and on an account's
+  Profile.** An account's identities now show what a contact's do: the
+  service, the address, when it was first and last seen, and how many
+  conversations, direct messages and group messages it takes part in. The
+  columns line up under their headers, the sort arrow sits next to the
+  label, and every row ends with a visible Remove. Adding an identity opens
+  a small dialog instead of a permanent row under the table, and the dialog
+  offers Email everywhere, so a contact can be given an email address by
+  hand.
+- 2026-09-22 **The Dashboard shows where the vault's disk space goes.**
   Owner Home's Dashboard is now three sections. Vault contents is the card it
   had. Database shows the size of the database on disk, how much of it the
   messages take and how much the full-text search index adds, all measured
@@ -30,6 +39,21 @@ released versions carry their date on the heading.
   figure by each account's share of text, with a totals row so the split
   visibly adds up. Attachment files are counted under Vault contents, not in
   the database size.
+
+### Design
+
+- 2026-09-22 **An account identity means ownership.** The Profile tab now
+  says what the identities are for: your phone numbers and emails, which
+  Import uses to determine which messages belong to you. The glossary and
+  the architecture notes record the same distinction: a contact's identity
+  means the person took part, an account's means the messages are theirs.
+- 2026-09-22 **Profile Setup shows the identities already on your account
+  in their own fields.** Phone numbers and emails the vault owner added
+  now fill the rows, where you can change or remove them before going on,
+  instead of sitting in a line of text above them.
+- 2026-09-22 **Shorter wording on two screens.** Create Vault Owner now
+  opens with "A vault owner is required to create and manage users.", and
+  the Display Name button in Settings reads Save without changing to Saved.
 
 ## [0.9.0] - 2026-09-22
 

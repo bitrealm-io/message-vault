@@ -308,6 +308,7 @@ impl SharedMessage {
                 Some(chat_id.into())
             },
             sender_display_name: None,
+            owner_handle: None,
             subject: None,
             text: self.text.clone(),
             attachments: vec![],
@@ -983,6 +984,7 @@ impl<R: Rng> Seeder<'_, R> {
             message_kind,
             sender_handle: if from_me { None } else { Some(peer.into()) },
             sender_display_name: None,
+            owner_handle: None,
             subject: None,
             text,
             attachments: vec![],

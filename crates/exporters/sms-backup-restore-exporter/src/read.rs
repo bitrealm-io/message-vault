@@ -394,6 +394,7 @@ fn ir_message(
         message_kind: IrMessageKind::parse(message.message_kind),
         sender_handle,
         sender_display_name,
+        owner_handle: None,
         subject: (!message.subject.is_empty()).then(|| message.subject.clone()),
         text: message.text.clone(),
         attachments: message.attachments.iter().map(ir_attachment).collect(),

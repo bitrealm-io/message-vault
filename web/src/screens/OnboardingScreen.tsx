@@ -63,8 +63,13 @@ interface HandleInput {
   service: HandleService;
 }
 
-function newHandleRow(): HandleInput {
-  return { id: crypto.randomUUID(), handle: "", service: "phone" };
+function newHandleRow(handle = "", service: HandleService = "phone"): HandleInput {
+  return { id: crypto.randomUUID(), handle, service };
+}
+
+/** Whether `row` still holds `original` exactly, so there is nothing to send for it. */
+function sameIdentity(row: HandleInput, original: HandleInput): boolean {
+  return row.handle.trim() === original.handle && row.service === original.service;
 }
 
 /**
@@ -121,16 +126,28 @@ export default function OnboardingScreen() {
   // What the owner set is shown for the holder to check and correct, once, and
   // never over something the holder has already typed. A new account's zone is
   // UTC until someone chooses one, so only another zone is the owner's choice.
+  // Identities the owner added go into the rows themselves, as many as the card
+  // has room for; any beyond that are left as they are, for Settings.
   const { profile } = useAccountProfile();
   const seeded = useRef(false);
+  const [seededRows, setSeededRows] = useState<HandleInput[]>([]);
+  const [hiddenIdentities, setHiddenIdentities] = useState(0);
   useEffect(() => {
     if (!profile || seeded.current) return;
     seeded.current = true;
     if (profile.preferred_name) setDisplayName((typed) => typed || (profile.preferred_name ?? ""));
     if (profile.time_zone !== DEFAULT_TIME_ZONE) setTimeZone(profile.time_zone);
+
+    const existing = [
+      ...profile.phones.map((phone) => newHandleRow(phone, "phone")),
+      ...profile.emails.map((email) => newHandleRow(email, "email")),
+    ];
+    if (existing.length === 0) return;
+    const shown = existing.slice(0, MAX_ACCOUNT_ROWS);
+    setHiddenIdentities(existing.length - shown.length);
+    setSeededRows(shown);
+    setHandles((rows) => (rows.some((row) => row.handle.trim()) ? rows : shown));
   }, [profile]);
-  // Identities the owner already added count: the holder is not made to add another.
-  const existingIdentities = profile ? [...profile.phones, ...profile.emails] : [];
 
   const blinkTimer = useRef<number | null>(null);
   const lastAsked = useRef<{ message: string; at: number }>({ message: "", at: 0 });
@@ -229,21 +246,28 @@ export default function OnboardingScreen() {
       if (!token || !accountId) {
         throw new Error("Not logged in");
       }
+      // An identity the owner added that is no longer in its row, edited or
+      // removed, is unlinked; the vault unlinks before it links, so an edit is
+      // the old value out and the new one in. Rows left as they were send nothing.
+      const filled = handles.filter((h) => h.handle.trim());
       await updateAccountProfile({
         preferred_name: displayName.trim(),
         time_zone: timeZone,
-        handles: handles
-          .filter((h) => h.handle.trim())
+        handles: filled
+          .filter((h) => !seededRows.some((original) => sameIdentity(h, original)))
           .map((h) => ({ handle: h.handle.trim(), service: h.service })),
+        remove_handles: seededRows
+          .filter((original) => !filled.some((h) => sameIdentity(h, original)))
+          .map(({ handle, service }) => ({ handle, service })),
       });
       // Log in again so "needs setup" is recomputed from the saved profile.
       await login(serverUrl, token, accountId);
     });
   };
 
+  // Identities beyond the rows shown stay on the account, so they count too.
   const canSubmit =
-    Boolean(displayName.trim()) &&
-    (existingIdentities.length > 0 || handles.some((h) => h.handle.trim()));
+    Boolean(displayName.trim()) && (hiddenIdentities > 0 || handles.some((h) => h.handle.trim()));
 
   // The empty row at the bottom of the list is already the place to put the
   // next account, so adding another one on top of it would only produce a
@@ -274,11 +298,6 @@ export default function OnboardingScreen() {
           />
 
           <div className="mt-4 mb-2 block text-[0.875rem] font-medium text-text">Your Accounts</div>
-          {existingIdentities.length > 0 && (
-            <div className="mb-2 truncate text-[0.813rem] text-muted">
-              Already on this account: {existingIdentities.join(", ")}
-            </div>
-          )}
 
           {handles.map((h, i) => {
             const invalid = invalidIds.includes(h.id);
@@ -332,7 +351,9 @@ export default function OnboardingScreen() {
             </div>
           ) : (
             <p className="mt-1.5 text-right text-[0.75rem] text-muted">
-              Add the rest in Settings after setup.
+              {hiddenIdentities > 0
+                ? `${hiddenIdentities} more ${hiddenIdentities === 1 ? "is" : "are"} in Settings.`
+                : "Add the rest in Settings after setup."}
             </p>
           )}
         </div>

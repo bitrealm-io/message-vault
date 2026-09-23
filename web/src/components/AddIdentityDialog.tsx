@@ -1,15 +1,18 @@
 import { useEffect, useId, useState } from "react";
 import {
-  CONTACT_IDENTITY_SERVICE_OPTIONS,
-  CONTACT_IDENTITY_SERVICES,
-  type ContactIdentityService,
-  handleServiceSelectValue,
-} from "../../lib/handleService";
-import { parseSelectKey } from "../../lib/selectKey";
-import { Z_POPOVER_IN_MODAL } from "../../lib/zLayers";
-import Button from "../Button";
-import ModalShell, { DialogError, DialogFooter } from "../ModalShell";
-import Select, { ListBoxItem, selectItemClassName } from "../Select";
+  HANDLE_SERVICE_OPTIONS,
+  HANDLE_SERVICES,
+  type HandleService,
+  handleDuplicateKey,
+  handlePlaceholder,
+  handleValidationError,
+  inferService,
+} from "../lib/handleService";
+import { parseSelectKey } from "../lib/selectKey";
+import { Z_POPOVER_IN_MODAL } from "../lib/zLayers";
+import Button from "./Button";
+import ModalShell, { DialogError, DialogFooter } from "./ModalShell";
+import Select, { ListBoxItem, selectItemClassName } from "./Select";
 
 const fieldLabelClass = "mb-1 block text-[0.813rem] font-medium text-text";
 const inputClass =
@@ -18,26 +21,38 @@ const selectTriggerClass =
   "!box-border !h-9 !min-h-9 !w-full !rounded !px-3 !py-0 !text-[0.875rem] !font-normal !leading-none !bg-elevated";
 const selectValueClass = "!text-[0.875rem] !font-normal !leading-none";
 
-function identityAlreadyExists(
-  existing: { handle: string; service?: string | null }[],
+const DUPLICATE_MESSAGE = "This identity is already in the list.";
+
+/** Whether `existing` already holds `handle` on `service`, however it was typed. */
+function alreadyListed(
+  existing: readonly { handle: string; service?: string | null }[],
   handle: string,
-  service: string,
+  service: HandleService,
 ): boolean {
-  const needle = handle.trim().toLowerCase();
-  if (!needle) return false;
-  const platform = handleServiceSelectValue(handle, service);
-  return existing.some(
-    (row) =>
-      row.handle.trim().toLowerCase() === needle &&
-      handleServiceSelectValue(row.handle, row.service) === platform,
-  );
+  const key = handleDuplicateKey(service, handle);
+  if (!key) return false;
+  return existing.some((row) => {
+    const rowService = inferService(row.handle, row.service);
+    const known = HANDLE_SERVICES.find((s) => s === rowService) ?? "phone";
+    return handleDuplicateKey(known, row.handle) === key;
+  });
 }
 
+/**
+ * Adding one identity to a contact or to an account: the service it is on
+ * and the address. The contact drawer and the Profile tab open the same
+ * dialog, so an identity is added the same way wherever it is added.
+ *
+ * A value that is not a number or an address, or one already in `existing`
+ * on the same service, is refused here before anyone is asked. The same
+ * number on Text message and on WhatsApp is two identities, so it is not a
+ * duplicate.
+ */
 export default function AddIdentityDialog({
   open,
   busy = false,
   error = "",
-  existingHandles = [],
+  existing = [],
   onClose,
   onConfirm,
 }: {
@@ -45,27 +60,36 @@ export default function AddIdentityDialog({
   busy?: boolean;
   /** Why the last submit failed. The dialog stays open so it can be retried. */
   error?: string;
-  existingHandles?: { handle: string; service?: string | null }[];
+  existing?: readonly { handle: string; service?: string | null }[];
   onClose: () => void;
-  onConfirm: (args: { handle: string; service: string }) => void;
+  onConfirm: (args: { handle: string; service: HandleService }) => void;
 }) {
-  const [service, setService] = useState<ContactIdentityService>("phone");
+  const [service, setService] = useState<HandleService>("phone");
   const [handle, setHandle] = useState("");
+  const [invalid, setInvalid] = useState("");
   const serviceId = useId();
+  const problemId = useId();
 
   useEffect(() => {
     if (open) {
       setService("phone");
       setHandle("");
+      setInvalid("");
     }
   }, [open]);
 
   const trimmed = handle.trim();
-  const duplicate = identityAlreadyExists(existingHandles, handle, service);
+  const duplicate = alreadyListed(existing, handle, service);
+  const problem = duplicate ? DUPLICATE_MESSAGE : invalid;
   const canSubmit = trimmed.length > 0 && !duplicate && !busy;
 
   const submit = () => {
     if (!canSubmit) return;
+    const why = handleValidationError(service, trimmed);
+    if (why) {
+      setInvalid(why);
+      return;
+    }
     onConfirm({ handle: trimmed, service });
   };
 
@@ -90,8 +114,11 @@ export default function AddIdentityDialog({
           id={serviceId}
           selectedKey={service}
           onSelectionChange={(k) => {
-            const next = parseSelectKey(k, CONTACT_IDENTITY_SERVICES);
-            if (next) setService(next);
+            const next = parseSelectKey(k, HANDLE_SERVICES);
+            if (next) {
+              setService(next);
+              setInvalid("");
+            }
           }}
           aria-label="Service"
           isDisabled={busy}
@@ -100,7 +127,7 @@ export default function AddIdentityDialog({
           popoverClassName={Z_POPOVER_IN_MODAL}
           className="block w-full min-w-0"
         >
-          {CONTACT_IDENTITY_SERVICE_OPTIONS.map((s) => (
+          {HANDLE_SERVICE_OPTIONS.map((s) => (
             <ListBoxItem key={s.value} id={s.value} className={selectItemClassName}>
               {s.label}
             </ListBoxItem>
@@ -113,7 +140,10 @@ export default function AddIdentityDialog({
         <input
           type="text"
           value={handle}
-          onChange={(e) => setHandle(e.target.value)}
+          onChange={(e) => {
+            setHandle(e.target.value);
+            setInvalid("");
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -123,15 +153,15 @@ export default function AddIdentityDialog({
           disabled={busy}
           autoComplete="off"
           spellCheck={false}
-          placeholder="Enter a user id, phone number, or similar"
-          aria-invalid={duplicate || undefined}
-          aria-describedby={duplicate ? "add-identity-duplicate" : undefined}
+          placeholder={handlePlaceholder(service)}
+          aria-invalid={problem ? true : undefined}
+          aria-describedby={problem ? problemId : undefined}
           className={inputClass}
         />
       </label>
-      {duplicate ? (
-        <p id="add-identity-duplicate" className="mt-2 text-[0.813rem] text-danger" role="alert">
-          Identity already exists
+      {problem ? (
+        <p id={problemId} className="mt-2 text-[0.813rem] text-danger" role="alert">
+          {problem}
         </p>
       ) : null}
 
@@ -142,7 +172,7 @@ export default function AddIdentityDialog({
           Cancel
         </Button>
         <Button variant="primary" onPress={submit} isDisabled={!canSubmit}>
-          {busy ? "Working…" : "OK"}
+          {busy ? "Working…" : "Add"}
         </Button>
       </DialogFooter>
     </ModalShell>

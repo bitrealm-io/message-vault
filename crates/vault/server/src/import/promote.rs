@@ -5,8 +5,7 @@ use std::io::{self, Write};
 use std::time::Instant;
 
 use anyhow::{Result, bail};
-use sqlx::Connection;
-use sqlx::{Any, AnyConnection, Transaction};
+use sqlx::AnyConnection;
 
 use crate::db::dialect;
 use crate::db::engine::DbEngine;
@@ -29,23 +28,17 @@ pub(super) struct PromoteStats {
 /// Move the account's staged rows into the production tables, wiping `wipe_sources` first
 /// in replace mode. Returns the promoted counts.
 ///
-/// Everything runs in one transaction, taken with the write lock up front on
-/// SQLite (IMMEDIATE) so two imports for different accounts cannot race into
-/// `SQLITE_BUSY` at the first write; Postgres has no statement-level equivalent.
+/// `tx` is the import's one transaction, the one staging wrote into, so what
+/// staging did to contacts becomes visible only when promote succeeds too.
+/// The caller commits it.
 pub(super) async fn promote_append(
-    conn: &mut AnyConnection,
+    tx: &mut AnyConnection,
     mode: ImportMode,
     account_id: i64,
     fill_content_keys: bool,
     wipe_sources: &[String],
 ) -> Result<PromoteStats> {
-    // Stats on already-committed rows so this promote's guid join can use
-    // the indexes. Failure is a warning; the import still runs.
-    dialect::analyze_import_tables(conn).await;
-    let engine = dialect::engine_of(conn);
-    let tx = conn
-        .begin_with(dialect::begin_immediate_sql(engine))
-        .await?;
+    let engine = dialect::engine_of(tx);
     let mut promote = Promote {
         tx,
         account_id,
@@ -66,7 +59,7 @@ pub(super) async fn promote_append(
     if fill_content_keys {
         promote.fill_content_keys().await?;
     }
-    promote.commit().await
+    Ok(promote.finish())
 }
 
 /// One promotion in progress: the transaction it runs in, the account, and
@@ -74,7 +67,7 @@ pub(super) async fn promote_append(
 /// [`promote_append`] calls them because later phases read the temp id maps
 /// earlier ones write.
 struct Promote<'a> {
-    tx: Transaction<'a, Any>,
+    tx: &'a mut AnyConnection,
     account_id: i64,
     mode: ImportMode,
     engine: DbEngine,
@@ -162,7 +155,7 @@ impl Promote<'_> {
         for source in sources {
             println!("  sql:      deleting existing messages for source '{source}'…");
             let _ = io::stdout().flush();
-            schema::delete_messages_for_source(&mut self.tx, self.account_id, source).await?;
+            schema::delete_messages_for_source(self.tx, self.account_id, source).await?;
         }
         if !sources.is_empty() {
             println!("  sql:      wipe complete (inside promote transaction)");
@@ -297,7 +290,7 @@ impl Promote<'_> {
             let phase = Self::begin(format_args!(
                 "dropping secondary message indexes (staging={total} existing={existing})…"
             ));
-            schema::drop_messages_secondary_indexes(&mut self.tx).await?;
+            schema::drop_messages_secondary_indexes(self.tx).await?;
             self.done(phase, "secondary indexes dropped");
         } else {
             promote_log(format_args!(
@@ -310,7 +303,7 @@ impl Promote<'_> {
 
         if rebuild_indexes {
             let phase = Self::begin("rebuilding secondary message indexes…");
-            schema::create_messages_secondary_indexes(&mut self.tx).await?;
+            schema::create_messages_secondary_indexes(self.tx).await?;
             self.done(
                 phase,
                 format!(
@@ -343,9 +336,9 @@ impl Promote<'_> {
     async fn pause_fts_triggers(&mut self) -> Result<()> {
         let phase = Self::begin("pausing FTS triggers…");
         if self.engine == DbEngine::Postgres {
-            schema::disable_fts_triggers_pg(&mut self.tx).await?;
+            schema::disable_fts_triggers_pg(self.tx).await?;
         } else {
-            schema::drop_messages_fts_triggers(&mut self.tx).await?;
+            schema::drop_messages_fts_triggers(self.tx).await?;
         }
         self.done(phase, "FTS triggers paused");
         Ok(())
@@ -697,12 +690,11 @@ impl Promote<'_> {
     /// search in one pass, then put the per-row triggers back.
     async fn index_fts(&mut self, messages_before: i64) -> Result<()> {
         let phase = Self::begin("bulk-indexing FTS for new messages…");
-        let indexed =
-            schema::index_messages_fts_from_promote_map(&mut self.tx, messages_before).await?;
+        let indexed = schema::index_messages_fts_from_promote_map(self.tx, messages_before).await?;
         if self.engine == DbEngine::Postgres {
-            schema::enable_fts_triggers_pg(&mut self.tx).await?;
+            schema::enable_fts_triggers_pg(self.tx).await?;
         } else {
-            schema::install_messages_fts_triggers(&mut self.tx).await?;
+            schema::install_messages_fts_triggers(self.tx).await?;
         }
         self.done(phase, format!("FTS indexed={indexed} (triggers restored)"));
         Ok(())
@@ -711,31 +703,24 @@ impl Promote<'_> {
     /// Fill the dedupe content keys the new rows are missing.
     async fn fill_content_keys(&mut self) -> Result<()> {
         let phase = Self::begin("filling content keys…");
-        let keys = crate::dedupe::fill_missing_content_keys(&mut self.tx, self.account_id).await?;
+        let keys = crate::dedupe::fill_missing_content_keys(self.tx, self.account_id).await?;
         self.done(phase, format!("content keys filled={keys}"));
         Ok(())
     }
 
-    /// Commit and return the counts.
-    async fn commit(self) -> Result<PromoteStats> {
-        let phase = Self::begin("committing transaction…");
-        let Promote {
-            tx, stats, started, ..
-        } = self;
-        tx.commit().await?;
-        promote_phase_done(
-            started,
-            phase,
-            format!(
-                "committed  convs={} parts={} msgs={} atts={} taps={}",
-                stats.conversations,
-                stats.participants,
-                stats.messages,
-                stats.attachments,
-                stats.tapbacks
-            ),
-        );
-        Ok(stats)
+    /// Log the counts and return them. The caller commits.
+    fn finish(self) -> PromoteStats {
+        let Promote { stats, started, .. } = self;
+        promote_log(format_args!(
+            "promoted  convs={} parts={} msgs={} atts={} taps={}  (total {:.1}s)",
+            stats.conversations,
+            stats.participants,
+            stats.messages,
+            stats.attachments,
+            stats.tapbacks,
+            started.elapsed().as_secs_f64()
+        ));
+        stats
     }
 }
 

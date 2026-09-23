@@ -228,20 +228,12 @@ async fn promote_fts_cycle_pg() {
     .execute(&mut *conn)
     .await
     .unwrap();
-    let (analyze_before, last_analyze_before) = pg_messages_analyze_stat(&mut conn).await;
+    // ANALYZE belongs to the import, before its transaction opens;
+    // an_import_analyzes_import_tables_before_begin_pg covers it.
     let stats = promote_append(&mut conn, ImportMode::Append, TEST_ACCOUNT, false, &[])
         .await
         .unwrap();
     assert_eq!(stats.messages, 1, "one staged message must promote");
-    let (analyze_after, last_analyze) = pg_messages_analyze_stat(&mut conn).await;
-    assert!(
-        analyze_after > analyze_before,
-        "ANALYZE before BEGIN must increment analyze_count on messages (before={analyze_before}, after={analyze_after}, last_analyze_before={last_analyze_before:?})"
-    );
-    assert!(
-        last_analyze.is_some(),
-        "ANALYZE before BEGIN must set last_analyze on messages"
-    );
     assert_eq!(
         pg_fts_hits(&mut conn, "stagedbody").await,
         1,
@@ -269,58 +261,51 @@ async fn promote_fts_cycle_pg() {
     );
 }
 
+/// Import one individual conversation holding one message, `guid`, through
+/// the whole pipeline: staging, then promote, in the import's transaction.
+async fn import_one_message(conn: &mut AnyConnection, dir: &std::path::Path, guid: &str) {
+    let path = dir.join(format!("{guid}.jsonl"));
+    std::fs::write(
+        &path,
+        format!(
+            r#"{{"schema_version":4,"export":{{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null}},"conversation":{{"chat_identifier":"+15555550300","conversation_type":"individual","group_title":null,"participants":[{{"handle":"+15555550300","display_name":null}}],"stats":{{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}}}}
+{{"guid":"{guid}","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+15555550300","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}}
+"#
+        ),
+    )
+    .unwrap();
+    let assets = dir.join("assets");
+    let stats = super::super::import_jsonl_files_on_conn(
+        conn,
+        &[path],
+        &super::super::ImportOptions::fixed(super::super::FixedImportArgs {
+            assets_dir: &assets,
+            asset_root: dir,
+            contacts: None,
+            overwrite_contacts: false,
+            mode: ImportMode::Append,
+            source: "sms-backup-restore",
+            account_id: TEST_ACCOUNT,
+            fill_content_keys: false,
+            import_id: None,
+        }),
+        super::super::ImportSchemaMode::Ensure,
+    )
+    .await
+    .unwrap();
+    assert_eq!(stats.messages, 1, "the import must insert its message");
+}
+
+/// The import runs ANALYZE before it opens its transaction, so promote's
+/// guid join has statistics to plan with.
 #[tokio::test]
-async fn promote_analyzes_import_tables_before_begin() {
+async fn an_import_analyzes_import_tables_before_begin() {
     if crate::test_support::on_postgres() {
-        return; // SQLite-only: reads sqlite_stat1; promote_analyzes_import_tables_before_begin_pg is the twin
+        return; // SQLite-only: reads sqlite_stat1; an_import_analyzes_import_tables_before_begin_pg is the twin
     }
-    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
-    sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'promote-analyze')")
-        .bind(TEST_ACCOUNT)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    let handle_id: i64 = sqlx::query_scalar(
-        "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES ($1, '+15555550300', '+15555550300', 'phone', 'phone')
-         RETURNING id",
-    )
-    .bind(TEST_ACCOUNT)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    let staging_conv_id: i64 = sqlx::query_scalar(
-        r"
-        INSERT INTO staging_conversations (
-            account_id, chat_handle_id, conversation_type, source_file
-        ) VALUES ($1, $2, 'individual', 'analyze.json')
-        RETURNING id
-        ",
-    )
-    .bind(TEST_ACCOUNT)
-    .bind(handle_id)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    sqlx::query(
-        r"
-        INSERT INTO staging_messages (
-            conversation_id, account_id, source, guid, timestamp,
-            is_from_me, sort_order, body
-        ) VALUES ($1, $2, 'sms', 'analyze-guid-1', '2020-01-01T00:00:00Z', 0, 0, 'analyzebody')
-        ",
-    )
-    .bind(staging_conv_id)
-    .bind(TEST_ACCOUNT)
-    .execute(&mut *conn)
-    .await
-    .unwrap();
-    let first = promote_append(&mut conn, ImportMode::Append, TEST_ACCOUNT, false, &[])
-        .await
-        .unwrap();
-    assert_eq!(first.messages, 1);
+    import_one_message(&mut conn, dir.path(), "analyze-guid-1").await;
     let stat_rows: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_stat1 WHERE tbl IN ('messages', 'attachments', 'tapbacks')",
     )
@@ -331,84 +316,24 @@ async fn promote_analyzes_import_tables_before_begin() {
         stat_rows >= 1,
         "ANALYZE before BEGIN must write sqlite_stat1 for import tables"
     );
-
-    sqlx::query(
-        r"
-        INSERT INTO staging_messages (
-            conversation_id, account_id, source, guid, timestamp,
-            is_from_me, sort_order, body
-        ) VALUES ($1, $2, 'sms', 'analyze-guid-2', '2020-01-01T00:00:01Z', 0, 1, 'second')
-        ",
-    )
-    .bind(staging_conv_id)
-    .bind(TEST_ACCOUNT)
-    .execute(&mut *conn)
-    .await
-    .unwrap();
-    let second = promote_append(&mut conn, ImportMode::Append, TEST_ACCOUNT, false, &[])
-        .await
-        .unwrap();
-    assert_eq!(second.messages, 1, "second promote must still insert");
+    import_one_message(&mut conn, dir.path(), "analyze-guid-2").await;
 }
 
 /// Postgres-gated: ANALYZE on the shared database must change
-/// last_analyze before a second promote begins (stop/restart in miniature).
+/// last_analyze before a second import begins (stop/restart in miniature).
 #[tokio::test]
-async fn promote_analyzes_import_tables_before_begin_pg() {
+async fn an_import_analyzes_import_tables_before_begin_pg() {
     if crate::pg_test_url().is_none() {
         return;
     }
     // A schema of this test's own (db::engine::test_pool on Postgres), so
     // nothing an earlier run left in staging can make this one promote the
     // wrong rows (#394).
-    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
     schema::ensure_vault_schema(&mut conn).await.unwrap();
-    sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'promote-analyze-pg')")
-        .bind(TEST_ACCOUNT)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    let handle_id: i64 = sqlx::query_scalar(
-        "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES ($1, '+15555550400', '+15555550400', 'phone', 'phone')
-         RETURNING id",
-    )
-    .bind(TEST_ACCOUNT)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    let staging_conv_id: i64 = sqlx::query_scalar(
-        r"
-        INSERT INTO staging_conversations (
-            account_id, chat_handle_id, conversation_type, source_file
-        ) VALUES ($1, $2, 'individual', 'analyze-pg.json')
-        RETURNING id
-        ",
-    )
-    .bind(TEST_ACCOUNT)
-    .bind(handle_id)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    sqlx::query(
-        r"
-        INSERT INTO staging_messages (
-            conversation_id, account_id, source, guid, timestamp,
-            is_from_me, sort_order, body
-        ) VALUES ($1, $2, 'sms', 'analyze-pg-guid-1', '2020-01-01T00:00:00Z', 0, 0, 'analyzebody')
-        ",
-    )
-    .bind(staging_conv_id)
-    .bind(TEST_ACCOUNT)
-    .execute(&mut *conn)
-    .await
-    .unwrap();
     let (analyze_before, last_analyze_before) = pg_messages_analyze_stat(&mut conn).await;
-    let first = promote_append(&mut conn, ImportMode::Append, TEST_ACCOUNT, false, &[])
-        .await
-        .unwrap();
-    assert_eq!(first.messages, 1);
+    import_one_message(&mut conn, dir.path(), "analyze-pg-guid-1").await;
     // Since Postgres 15 the cumulative statistics live in shared memory and
     // a backend's pending counters reach them at transaction end or after
     // PGSTAT_MIN_INTERVAL (one second), read by others through a snapshot.
@@ -429,26 +354,9 @@ async fn promote_analyzes_import_tables_before_begin_pg() {
     );
     assert!(
         last_analyze.is_some(),
-        "ANALYZE before BEGIN must set last_analyze on messages before a second promote"
+        "ANALYZE before BEGIN must set last_analyze on messages before a second import"
     );
-
-    sqlx::query(
-        r"
-        INSERT INTO staging_messages (
-            conversation_id, account_id, source, guid, timestamp,
-            is_from_me, sort_order, body
-        ) VALUES ($1, $2, 'sms', 'analyze-pg-guid-2', '2020-01-01T00:00:01Z', 0, 1, 'second')
-        ",
-    )
-    .bind(staging_conv_id)
-    .bind(TEST_ACCOUNT)
-    .execute(&mut *conn)
-    .await
-    .unwrap();
-    let second = promote_append(&mut conn, ImportMode::Append, TEST_ACCOUNT, false, &[])
-        .await
-        .unwrap();
-    assert_eq!(second.messages, 1, "second promote must still insert");
+    import_one_message(&mut conn, dir.path(), "analyze-pg-guid-2").await;
 }
 
 #[tokio::test]
@@ -465,7 +373,7 @@ async fn promote_message_map_ignores_other_accounts() {
     }
     let engine = crate::db::dialect::engine_of(&conn);
     let mut promote = Promote {
-        tx: conn.begin().await.unwrap(),
+        tx: &mut conn,
         account_id: TEST_ACCOUNT,
         mode: ImportMode::Append,
         engine,

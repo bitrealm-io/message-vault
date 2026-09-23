@@ -87,6 +87,7 @@ Pipeline: `backup → common message → FormatSink → user-picked format`.
 
 - Outgoing rows set `sender_handle` / `sender_display_name` from `export.owner_*` (display defaults to `"Me"` when a handle is known).
 - Incoming rows use the peer identity.
+- `owner_handle` on a message is the owner's own address on it: the one it was sent from, or the one it was received at. Only sources that record the owner per message write it (iMessage, from `destination_caller_id`); everywhere else it is omitted and `export.owner_handle` stands for every message. An iMessage outgoing row keeps the address it was sent from, and takes `export.owner_handle` only when the database recorded none.
 - Display names are not duplicated under `source`.
 
 ### Attachments

@@ -30,7 +30,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use media::{MediaMode, SizeVerdict, classify_probed, estimate_bytes, needs_probe, probe_media};
-use message_ir::IrDirection;
+use message_ir::{IrDirection, IrMessage};
 
 use crate::transcode::{COMMITTED_SUFFIX, TranscodeOptions, conversation_files};
 use message_ir_format::read_conversation_jsonl;
@@ -91,14 +91,16 @@ impl VerdictCounts {
     }
 }
 
-/// How many outgoing messages one of the owner's handles sent.
+/// How many messages one of the owner's handles sent and received.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OutgoingHandleCount {
+pub struct OwnerHandleCount {
     /// The handle as the staged messages record it.
     pub handle: String,
-    /// Outgoing messages whose sender is this handle.
-    pub messages: u64,
+    /// Outgoing messages sent from this handle.
+    pub sent: u64,
+    /// Incoming messages received at this handle.
+    pub received: u64,
 }
 
 /// What a staged folder holds.
@@ -112,10 +114,11 @@ pub struct StagingSummary {
     /// Distinct participant identifiers, sorted. The vault decides which of
     /// these it already knows.
     pub contact_identifiers: Vec<String>,
-    /// Outgoing messages counted under the owner handle each was sent from,
-    /// sorted by handle. The screen sets these beside the backup's
-    /// identities, so a person sees how much of the backup each one carries.
-    pub outgoing_handles: Vec<OutgoingHandleCount>,
+    /// Messages counted under the owner handle each was sent from or
+    /// received at, sorted by handle. The screen sets these beside the
+    /// backup's identities, so a person sees how much of the backup each one
+    /// carries.
+    pub owner_handles: Vec<OwnerHandleCount>,
     /// Attachments referenced by the documents, including ones already marked
     /// missing and every reference to a shared, content-addressed file.
     pub attachments: usize,
@@ -202,7 +205,7 @@ pub fn summarize_staging(
         ..StagingSummary::default()
     };
     let mut contacts = BTreeSet::new();
-    let mut outgoing: BTreeMap<String, u64> = BTreeMap::new();
+    let mut owner: BTreeMap<String, (u64, u64)> = BTreeMap::new();
     // Gathered while walking the documents for their conversation/message/
     // contact counts, so the classification pass below can run over a flat
     // list with a known total up front, matching `on_progress`'s contract.
@@ -218,11 +221,12 @@ pub fn summarize_staging(
             }
         }
         for msg in &doc.messages {
-            if msg.direction == IrDirection::Outgoing
-                && let Some(handle) = msg.sender_handle.as_deref()
-                && !handle.is_empty()
-            {
-                *outgoing.entry(handle.to_string()).or_insert(0) += 1;
+            if let Some(handle) = owner_handle_of(msg, doc.export.owner_handle.as_deref()) {
+                let (sent, received) = owner.entry(handle.to_string()).or_insert((0, 0));
+                match msg.direction {
+                    IrDirection::Outgoing => *sent += 1,
+                    IrDirection::Incoming => *received += 1,
+                }
             }
             for att in &msg.attachments {
                 attachments.push(AttachmentRef {
@@ -234,9 +238,13 @@ pub fn summarize_staging(
         }
     }
     summary.contact_identifiers = contacts.into_iter().collect();
-    summary.outgoing_handles = outgoing
+    summary.owner_handles = owner
         .into_iter()
-        .map(|(handle, messages)| OutgoingHandleCount { handle, messages })
+        .map(|(handle, (sent, received))| OwnerHandleCount {
+            handle,
+            sent,
+            received,
+        })
         .collect();
 
     let total = attachments.len();
@@ -278,6 +286,21 @@ struct AttachmentRef {
     path: Option<String>,
     missing_reason: Option<String>,
     original_name: Option<String>,
+}
+
+/// The owner's address on `msg`: its own record, then the sender of an
+/// outgoing message, then the export's one owner address. `None` when all
+/// are blank.
+fn owner_handle_of<'a>(msg: &'a IrMessage, export_owner: Option<&'a str>) -> Option<&'a str> {
+    let outgoing_sender = match msg.direction {
+        IrDirection::Outgoing => msg.sender_handle.as_deref(),
+        IrDirection::Incoming => None,
+    };
+    [msg.owner_handle.as_deref(), outgoing_sender, export_owner]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .find(|handle| !handle.is_empty())
 }
 
 /// Measure and classify one physical file, folding its bytes and verdict

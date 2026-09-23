@@ -1,6 +1,6 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
-use message_vault_io_core::testutil::{assert_csv_row, csv_rows};
+use message_vault_io_core::testutil::{assert_csv_row, assert_jsonl_resumes, csv_rows};
 use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -150,11 +150,9 @@ fn convert_export_root_recursively_keeps_services_separate() {
 
 #[test]
 fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
-    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    let messages = fixture.join("messages.csv");
+    let messages = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/messages.csv");
     let tmp = tempfile::tempdir().expect("tempdir");
-
-    let convert_jsonl = |resume: bool| {
+    let report = assert_jsonl_resumes(tmp.path(), |resume| {
         convert_export(ConvertExportArgs {
             input: &messages,
             output: tmp.path(),
@@ -164,39 +162,6 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
             cancel: None,
             resume,
         })
-    };
-
-    let report = convert_jsonl(false).expect("convert");
+    });
     assert_eq!(report.conversations, 1);
-
-    let jsonl_files = |dir: &Path| -> Vec<String> {
-        let mut names: Vec<String> = fs::read_dir(dir)
-            .expect("read output")
-            .filter_map(|e| e.ok())
-            .map(|e| e.file_name().to_string_lossy().to_string())
-            .filter(|n| n.ends_with(".jsonl"))
-            .collect();
-        names.sort();
-        names
-    };
-    let first = jsonl_files(tmp.path());
-    assert_eq!(first.len(), 1, "the queue wrote a file per conversation");
-    let before = fs::read_to_string(tmp.path().join(&first[0])).expect("read jsonl");
-
-    // The file bytes alone prove nothing here: the writer is deterministic, so
-    // a resumed run that quietly rewrote every conversation would produce the
-    // same bytes and this test would still pass. `conversations_skipped` is
-    // the only observable difference between resuming and starting over.
-    let resumed = convert_jsonl(true).expect("resume convert");
-    assert_eq!(resumed.conversations, 1, "resume still accounts for it");
-    assert_eq!(
-        resumed.conversations_skipped, 1,
-        "the one conversation was already written, so the resume skipped it"
-    );
-    assert_eq!(jsonl_files(tmp.path()), first, "same file set");
-    assert_eq!(
-        fs::read_to_string(tmp.path().join(&first[0])).expect("reread"),
-        before,
-        "a resumed run must not rewrite a conversation it already has"
-    );
 }

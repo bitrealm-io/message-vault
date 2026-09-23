@@ -12,7 +12,7 @@ chrono = { workspace = true }
 csv = { workspace = true }
 contacts = { path = "../../libs/contacts" }
 message-csv = { path = "../../libs/csv" }
-message-vault-io-core = { path = "../../core/message-vault-io-core", features = ["testutil"] }
+message-vault-io-core = { path = "../../core/message-vault-io-core" }
 message-ir = { path = "../../libs/ir" }
 message-ir-format = { path = "../../libs/ir-format" }
 message-staging = { path = "../../libs/staging" }
@@ -21,6 +21,7 @@ phone = { path = "../../libs/phone" }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+message-vault-io-core = { path = "../../core/message-vault-io-core", features = ["testutil"] }
 tempfile = { workspace = true }
 
 [lints]

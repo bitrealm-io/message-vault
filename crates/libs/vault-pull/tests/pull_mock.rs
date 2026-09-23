@@ -459,6 +459,69 @@ fn a_source_name_with_spaces_and_brackets_becomes_a_file_safe_suffix() {
 }
 
 #[test]
+fn two_groups_with_one_title_are_both_written() {
+    let server = MockServer::start();
+    let _auth = mock_auth(&server);
+    let _run = mock_run(&server);
+    // One message in each of two "Family" groups from the same source.
+    let group_message = |id: i64, conversation_id: i64, chat: &str, text: &str| {
+        let mut message = message(
+            id,
+            "imessage",
+            &format!("guid-{id}"),
+            "2015-03-12T18:05:01Z",
+            text,
+            json!([]),
+        );
+        message["conversation"]["id"] = json!(conversation_id);
+        message["conversation"]["chat_identifier"] = json!(chat);
+        message["conversation"]["conversation_type"] = json!("group");
+        message["conversation"]["group_title"] = json!("Family");
+        message
+    };
+    let _page = server.mock(|when, then| {
+        when.method(GET)
+            .path(format!("/v1/exports/{EXPORT_ID}/messages"))
+            .query_param("offset", "0");
+        then.status(200).json_body(json!({
+            "items": [
+                group_message(1, 9, "chat-one", "first family"),
+                group_message(2, 10, "chat-two", "second family")
+            ],
+            "total": 2,
+            "limit": 2,
+            "offset": 0
+        }));
+    });
+    let dir = tempdir().unwrap();
+    let out = dir.path().join("pulled");
+
+    run(&config(&out, server.base_url()), None).unwrap();
+
+    let mut chats: Vec<String> = fs::read_dir(&out)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            // The pull's own journal is a hidden JSONL file beside them.
+            let name = e.file_name().to_string_lossy().to_string();
+            name.ends_with(".jsonl") && !name.starts_with('.')
+        })
+        .map(|e| {
+            read_conversation_jsonl(&e.path())
+                .unwrap()
+                .conversation
+                .chat_identifier
+        })
+        .collect();
+    chats.sort();
+    assert_eq!(
+        chats,
+        ["chat-one", "chat-two"],
+        "neither group's file replaces the other's"
+    );
+}
+
+#[test]
 fn skipping_attachments_writes_messages_without_files_or_downloads() {
     let server = MockServer::start();
     let _auth = mock_auth(&server);

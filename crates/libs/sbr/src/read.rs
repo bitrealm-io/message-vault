@@ -505,17 +505,28 @@ fn parse_sms(attrs: &HashMap<String, String>, stats: &mut ParseStats) -> Option<
     })
 }
 
+/// The last millisecond of the year 9999, the latest `date` read as real.
+const MAX_DATE_MS: i64 = 253_402_300_799_999;
+
 /// Unix seconds from an element's millisecond `date` attribute, with the raw
-/// value. Counts and drops an unreadable date.
+/// value. Counts and drops an unreadable date: anything but a whole number of
+/// milliseconds from 0 to [`MAX_DATE_MS`], so `NaN`, `inf`, and out-of-range
+/// values never become a timestamp.
 fn timestamp_from_date(
     attrs: &HashMap<String, String>,
     stats: &mut ParseStats,
 ) -> Option<(String, f64)> {
     let date_ms = get(attrs, "date").to_string();
-    let Ok(millis) = date_ms.parse::<f64>() else {
+    let Some(millis) = date_ms
+        .parse::<i64>()
+        .ok()
+        .filter(|ms| (0..=MAX_DATE_MS).contains(ms))
+    else {
         stats.skipped_invalid_date += 1;
         return None;
     };
+    // Exact: every value up to MAX_DATE_MS fits in an f64 mantissa.
+    let millis = millis as f64;
     Some((date_ms, millis / 1000.0))
 }
 
@@ -997,5 +1008,52 @@ mod tests {
         assert_eq!(stats.mms_seen, 1);
         assert_eq!(records[0].attachments.len(), 1);
         assert_eq!(records[0].attachments[0].data.as_ref(), b"hello");
+    }
+
+    fn sms_with_date(date: &str) -> (Vec<Record>, ParseStats) {
+        let xml = format!(
+            r#"<smses><sms protocol="0" address="+15555550101" date="{date}" type="1" body="hi"/></smses>"#
+        );
+        parse_reader(xml.as_bytes(), &HashSet::new()).unwrap()
+    }
+
+    #[test]
+    fn unreadable_dates_are_skipped() {
+        for date in [
+            "NaN",
+            "nan",
+            "inf",
+            "-inf",
+            "infinity",
+            "1e400",
+            "1.4e12",
+            "1400773261000.5",
+            "",
+            " 1400773261000",
+            "-1",
+            "abc",
+            "99999999999999999999999",
+            "9223372036854775807",
+        ] {
+            let (records, stats) = sms_with_date(date);
+            assert!(records.is_empty(), "date {date:?} was accepted");
+            assert_eq!(stats.skipped_invalid_date, 1, "date {date:?}");
+        }
+    }
+
+    #[test]
+    fn millisecond_dates_parse_exactly() {
+        for (date, secs) in [
+            ("0", 0.0),
+            ("1", 0.001),
+            ("1400773261000", 1_400_773_261.0),
+            ("1400773261123", 1_400_773_261_123.0 / 1000.0),
+            ("253402300799999", 253_402_300_799_999.0 / 1000.0),
+        ] {
+            let (records, stats) = sms_with_date(date);
+            assert_eq!(stats.skipped_invalid_date, 0, "date {date:?}");
+            assert_eq!(records[0].timestamp_secs, secs, "date {date:?}");
+            assert_eq!(records[0].date_ms, date);
+        }
     }
 }

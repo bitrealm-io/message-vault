@@ -400,3 +400,5 @@ fn mms_date_overrides_filename_timestamp() {
     assert_eq!(parsed.timestamp, 1700000000);
     assert_eq!(parsed.body, "Dated body");
 }
+
+mod robustness;

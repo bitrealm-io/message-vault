@@ -29,10 +29,14 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// Bumped when a change to these types would make an older helper and a newer
-/// app (or the reverse) misread each other. Both sides compare it in
-/// [`Event::Source`].
-pub const PROTOCOL_VERSION: u32 = 1;
+/// Bumped when a change to these types or to the order of a session would
+/// make an older helper and a newer app (or the reverse) misread each other.
+/// The helper sends it in [`Event::Source`] and the app refuses any other
+/// number, and any answer that comes before it.
+///
+/// 2: the identities request answers [`Event::Source`] first, as an export
+/// does.
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// The file name of the helper executable, without the `.exe` Windows adds.
 pub const HELPER_NAME: &str = "imessage-reader";

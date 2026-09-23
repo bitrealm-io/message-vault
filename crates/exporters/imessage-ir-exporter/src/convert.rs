@@ -41,6 +41,9 @@ use crate::{
 const EXPORT_SOURCE: &str = "imessage";
 const EXPORT_TOOL: &str = "imessage-ir-exporter";
 const CONVERSATION_PROGRESS_EVERY: usize = 100;
+/// The run result's count of rows the program read but could not convert,
+/// named like the other exporters' `skipped_*` counts.
+pub(crate) const SKIPPED_UNREADABLE_MESSAGE: &str = "skipped_unreadable_message";
 
 /// Messages accumulated for one Apple `chat_identifier` before projection.
 struct PendingConversation {
@@ -75,6 +78,9 @@ struct Collected {
     conversations: BTreeMap<String, PendingConversation>,
     /// Attachment paths need the program to decrypt them.
     encrypted: bool,
+    /// Rows the program read but could not convert, from its
+    /// `export_done` event.
+    failures: u64,
 }
 
 /// Stream the program's records into conversations, then write the chosen
@@ -114,6 +120,7 @@ pub(crate) fn export(helper: &mut Helper, options: &ExportOptions) -> Result<Exp
 
     let mut collected = collect(helper, options)?;
     options.check_cancel()?;
+    let failures = collected.failures;
 
     if format.is_mail_archive() && options.attachment_embed == AttachmentEmbed::Embed {
         embed_attachment_bytes(helper, options, &mut collected)?;
@@ -122,17 +129,24 @@ pub(crate) fn export(helper: &mut Helper, options: &ExportOptions) -> Result<Exp
     // The queue-or-sink decision came from `ExportWriter::open`: JSONL
     // without obfuscation is the import path and drains the write queue;
     // everything else keeps the sink path.
-    if use_queue {
-        return drain_conversations(helper, options, collected);
+    let mut report = if use_queue {
+        drain_conversations(helper, options, collected)?
+    } else {
+        let mut report = ExportReport::default();
+        if is_file_backed(format) {
+            report.attachments_saved +=
+                stage_attachments(helper, options, &mut collected, &attachments_dir)?;
+        }
+        report.conversations += write_conversations(options, &mut sink, collected.conversations)?;
+        sink.finish(&mut report)
+            .map_err(|e| anyhow!("finish export sink: {e:#}"))?;
+        report
+    };
+    // The program logs each row it skips as it goes; the count belongs in
+    // the result too, beside the other exporters' skipped rows.
+    if failures > 0 {
+        report.bump(SKIPPED_UNREADABLE_MESSAGE, failures);
     }
-    let mut report = ExportReport::default();
-    if is_file_backed(format) {
-        report.attachments_saved +=
-            stage_attachments(helper, options, &mut collected, &attachments_dir)?;
-    }
-    report.conversations += write_conversations(options, &mut sink, collected.conversations)?;
-    sink.finish(&mut report)
-        .map_err(|e| anyhow!("finish export sink: {e:#}"))?;
     Ok(report)
 }
 
@@ -157,6 +171,7 @@ fn stages_attachment_files(options: &ExportOptions) -> bool {
 fn collect(helper: &mut Helper, options: &ExportOptions) -> Result<Collected> {
     let mut conversations: BTreeMap<String, PendingConversation> = BTreeMap::new();
     let mut encrypted = false;
+    let failures;
     let stages_files = stages_attachment_files(options);
     let embed = options.attachment_embed;
     loop {
@@ -191,13 +206,19 @@ fn collect(helper: &mut Helper, options: &ExportOptions) -> Result<Collected> {
                 convo.attachment_loads.extend(loads);
                 convo.messages.push(message);
             }
-            Event::ExportDone { .. } => break,
+            Event::ExportDone {
+                failures: skipped, ..
+            } => {
+                failures = skipped;
+                break;
+            }
             other => bail!("imessage-reader sent {other:?} in the middle of an export"),
         }
     }
     Ok(Collected {
         conversations,
         encrypted,
+        failures,
     })
 }
 

@@ -62,10 +62,16 @@ fn main() {
         .unwrap_or_else(|e| fail(format!("the request is not valid JSON: {e}")));
 
     match request {
-        Request::Identities(source) => match identities::raw_identities(source) {
-            Ok(values) => emit(&Event::Identities { values }),
-            Err(e) => fail(e),
-        },
+        Request::Identities(source) => {
+            let found = identities::raw_identities(source).unwrap_or_else(|e| fail(e));
+            emit(&Event::Source {
+                protocol_version: PROTOCOL_VERSION,
+                encrypted: found.encrypted,
+            });
+            emit(&Event::Identities {
+                values: found.values,
+            });
+        }
         Request::Export(request) => {
             let options = ReaderOptions::from_export(request);
             let session = MailSession::new(options).unwrap_or_else(|e| fail(e));

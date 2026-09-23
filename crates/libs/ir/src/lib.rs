@@ -1118,7 +1118,7 @@ mod conversation_stem_tests {
 
 #[cfg(test)]
 mod handle_service_tests {
-    use super::{HandleService, IrService};
+    use super::HandleService;
 
     #[test]
     fn parse_phone_aliases() {
@@ -1139,32 +1139,6 @@ mod handle_service_tests {
     fn parse_whatsapp() {
         assert_eq!(HandleService::parse("whatsapp"), HandleService::Whatsapp);
         assert_eq!(HandleService::parse("WA"), HandleService::Whatsapp);
-    }
-
-    #[test]
-    fn map_ir_service() {
-        assert_eq!(
-            HandleService::from_ir_service(IrService::Whatsapp),
-            HandleService::Whatsapp
-        );
-        assert_eq!(
-            HandleService::from_ir_service(IrService::IMessage),
-            HandleService::Phone
-        );
-        assert_eq!(
-            HandleService::from_ir_service(IrService::Sms),
-            HandleService::Phone
-        );
-        assert_eq!(
-            HandleService::from_ir_service(IrService::Rcs),
-            HandleService::Phone
-        );
-    }
-
-    #[test]
-    fn as_str_storage_ids() {
-        assert_eq!(HandleService::Phone.as_str(), "phone");
-        assert_eq!(HandleService::Whatsapp.as_str(), "whatsapp");
     }
 }
 

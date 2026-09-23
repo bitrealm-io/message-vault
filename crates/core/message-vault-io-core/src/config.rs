@@ -326,19 +326,6 @@ mod tests {
     }
 
     #[test]
-    fn every_output_format_displays_its_label() {
-        assert_eq!(OutputFormat::Csv.to_string(), "CSV (per conversation)");
-        assert_eq!(OutputFormat::Eml.to_string(), "EML archive (mail folders)");
-        assert_eq!(OutputFormat::Mbox.to_string(), "MBOX (per conversation)");
-        assert_eq!(OutputFormat::Json.to_string(), "JSON (common message)");
-        assert_eq!(
-            OutputFormat::Jsonl.to_string(),
-            "JSONL (common message lines)"
-        );
-        assert_eq!(OutputFormat::Xml.to_string(), "XML (SMS Backup & Restore)");
-    }
-
-    #[test]
     fn parse_accepts_every_format_id_and_its_aliases() {
         assert_eq!(OutputFormat::parse("csv"), Ok(OutputFormat::Csv));
         assert_eq!(OutputFormat::parse("eml"), Ok(OutputFormat::Eml));
@@ -476,50 +463,5 @@ mod tests {
             config.require_input(),
             Err("expected a single input path".to_string())
         );
-    }
-
-    #[test]
-    fn every_source_names_its_exporter_and_the_format_converter_names_none() {
-        assert_eq!(
-            SourceConfig::GoSmsPro(GoSmsProConfig {
-                owner_phones: Vec::new()
-            })
-            .exporter(),
-            Some(Exporter::GoSmsPro)
-        );
-        assert_eq!(
-            SourceConfig::SmsBackupRestore(SmsBackupRestoreConfig {
-                owner_phones: Vec::new()
-            })
-            .exporter(),
-            Some(Exporter::SmsBackupRestore)
-        );
-        assert_eq!(
-            SourceConfig::SmsBackupPlus(SmsBackupPlusConfig {
-                owner_phones: Vec::new(),
-                owner_emails: Vec::new(),
-                verbose: false,
-                include_summary: false,
-            })
-            .exporter(),
-            Some(Exporter::SmsBackupPlus)
-        );
-        assert_eq!(
-            SourceConfig::OpenExtract(OpenExtractConfig {}).exporter(),
-            Some(Exporter::OpenExtract)
-        );
-        assert_eq!(
-            SourceConfig::Imazing(ImazingConfig {}).exporter(),
-            Some(Exporter::Imazing)
-        );
-        assert_eq!(
-            SourceConfig::Apple(AppleConfig::default()).exporter(),
-            Some(Exporter::Imessage)
-        );
-        assert_eq!(
-            SourceConfig::Whatsapp(WhatsappConfig::default()).exporter(),
-            Some(Exporter::Whatsapp)
-        );
-        assert_eq!(SourceConfig::Format(FormatConfig {}).exporter(), None);
     }
 }

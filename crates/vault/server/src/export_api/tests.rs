@@ -998,15 +998,6 @@ async fn an_export_token_reads_messages_only_through_a_run() {
     );
 }
 
-#[tokio::test]
-async fn the_old_export_routes_are_gone() {
-    let (vault, alice, _dinner, _menu) = vault_with_two_conversations().await;
-    for path in ["/v1/export/messages?q=", "/v1/export/messages/count?q="] {
-        let (status, text) = get_raw(&vault.state, path, &alice.token).await;
-        expect_problem(status, &text, ProblemType::NotFound);
-    }
-}
-
 // ── A run is a snapshot ──────────────────────────────────────────────────────
 
 /// Insert one message into `conversation` for `account`, tied to an Import

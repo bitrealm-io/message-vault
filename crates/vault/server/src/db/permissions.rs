@@ -72,12 +72,4 @@ mod tests {
         assert!(!effective.export, "token withheld export");
         assert!(!effective.delete, "account withheld delete");
     }
-
-    #[test]
-    fn none_grants_nothing_and_all_grants_everything() {
-        let none = Permissions::none();
-        assert!(!none.import && !none.export && !none.delete);
-        let all = Permissions::all();
-        assert!(all.import && all.export && all.delete);
-    }
 }

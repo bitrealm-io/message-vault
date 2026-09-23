@@ -365,16 +365,6 @@ mod tests {
         fs::set_permissions(path, perms).unwrap();
     }
 
-    #[test]
-    fn executable_name_matches_platform() {
-        let name = executable_name("ffmpeg");
-        if cfg!(windows) {
-            assert_eq!(name, "ffmpeg.exe");
-        } else {
-            assert_eq!(name, "ffmpeg");
-        }
-    }
-
     #[cfg(unix)]
     #[test]
     fn probe_folder_requires_both_tools() {

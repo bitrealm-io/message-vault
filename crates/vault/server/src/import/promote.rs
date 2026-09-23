@@ -577,10 +577,42 @@ impl Promote<'_> {
         Ok(())
     }
 
-    /// Insert the staged attachments under their production messages,
-    /// skipping any row production already has field for field.
+    /// Insert the staged attachments under their production messages.
+    ///
+    /// An attachment with a path is the same attachment when its message, path,
+    /// original name, and sticker flag match; one without a path is the same only
+    /// when every field matches. A production row stored without its file takes
+    /// the file from a staged row that has one, so importing again after the file
+    /// turns up fills the row in instead of adding a second one.
     async fn promote_attachments(&mut self) -> Result<()> {
         let phase = Self::begin("bulk-inserting attachments…");
+        let found = sqlx::query(
+            r"
+            UPDATE attachments AS a
+            SET sha256 = f.sha256,
+                assets_path = f.assets_path,
+                size_bytes = f.size_bytes,
+                mime_type = COALESCE(f.mime_type, a.mime_type),
+                missing_reason = NULL
+            FROM (
+                SELECT
+                    mm.prod_id AS message_id, sa.path, sa.original_name, sa.is_sticker,
+                    sa.sha256, sa.assets_path, sa.size_bytes, sa.mime_type
+                FROM staging_attachments sa
+                JOIN _promote_msg_map mm ON mm.staging_id = sa.message_id
+                WHERE sa.path IS NOT NULL
+                  AND sa.sha256 IS NOT NULL
+            ) AS f
+            WHERE a.message_id = f.message_id
+              AND a.path = f.path
+              AND a.original_name IS NOT DISTINCT FROM f.original_name
+              AND a.is_sticker = f.is_sticker
+              AND a.sha256 IS NULL
+            ",
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected();
         self.stats.attachments = sqlx::query(
             r"
             INSERT INTO attachments (
@@ -598,13 +630,18 @@ impl Promote<'_> {
                 WHERE a.message_id = mm.prod_id
                   AND a.path IS NOT DISTINCT FROM sa.path
                   AND a.original_name IS NOT DISTINCT FROM sa.original_name
-                  AND a.mime_type IS NOT DISTINCT FROM sa.mime_type
                   AND a.is_sticker = sa.is_sticker
-                  AND a.transcription IS NOT DISTINCT FROM sa.transcription
-                  AND a.sha256 IS NOT DISTINCT FROM sa.sha256
-                  AND a.assets_path IS NOT DISTINCT FROM sa.assets_path
-                  AND a.size_bytes IS NOT DISTINCT FROM sa.size_bytes
-                  AND a.missing_reason IS NOT DISTINCT FROM sa.missing_reason
+                  AND (
+                      sa.path IS NOT NULL
+                      OR (
+                          a.mime_type IS NOT DISTINCT FROM sa.mime_type
+                          AND a.transcription IS NOT DISTINCT FROM sa.transcription
+                          AND a.sha256 IS NOT DISTINCT FROM sa.sha256
+                          AND a.assets_path IS NOT DISTINCT FROM sa.assets_path
+                          AND a.size_bytes IS NOT DISTINCT FROM sa.size_bytes
+                          AND a.missing_reason IS NOT DISTINCT FROM sa.missing_reason
+                      )
+                  )
             )
             ",
         )
@@ -613,7 +650,10 @@ impl Promote<'_> {
         .rows_affected();
         self.done(
             phase,
-            format!("attachments done (inserted={})", self.stats.attachments),
+            format!(
+                "attachments done (inserted={} found={found})",
+                self.stats.attachments
+            ),
         );
         Ok(())
     }

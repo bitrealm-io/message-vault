@@ -543,17 +543,17 @@ fn parse_mms(
         stats.skipped_empty_participants += 1;
         return None;
     }
-    let is_from_me = msg_box == MMS_BOX_SENT;
-    let sender_digits = if is_from_me {
-        None
-    } else {
-        mms_sender(addrs, &participants, owners)
-    };
     let peers = mms_peers(&participants, owners);
     if peers.is_empty() {
         stats.skipped_unknown_address += 1;
         return None;
     }
+    let is_from_me = msg_box == MMS_BOX_SENT;
+    let sender_digits = if is_from_me {
+        None
+    } else {
+        mms_sender(addrs, &peers, owners)
+    };
     let decoded: Vec<DecodedPartData> = parts.iter().map(|p| decode_part_data(&p.data)).collect();
     let (text_refs, image_refs) = smil_refs(parts, &decoded);
     let hint = name_alias(attrs);
@@ -598,24 +598,25 @@ fn mms_participants(attrs: &HashMap<String, String>, addrs: &[MmsAddr]) -> Vec<S
         .collect()
 }
 
-/// The sender of an incoming MMS: the `FROM` address when it is a number
-/// other than the owner's, else the first participant number that is not
-/// the owner's.
-fn mms_sender(
-    addrs: &[MmsAddr],
-    participants: &[String],
-    owners: &HashSet<String>,
-) -> Option<String> {
+/// The sender of an incoming MMS: the `FROM` (`type="137"`) address when it
+/// is a number other than the owner's; without one, the peer of a direct
+/// conversation, since nobody else could have sent it; in a group, nobody.
+///
+/// A group message without a `FROM` is left without a sender rather than
+/// credited to a guess. SMS Backup & Restore writes exactly one `FROM` on
+/// every MMS (6,464 of 6,464 in the 2021 reference backup), and where the
+/// sender sits in the `address` list is arbitrary: in that backup it is the
+/// first entry on 1,192 of 5,367 received group MMS, so "the first peer"
+/// would be wrong four times out of five.
+fn mms_sender(addrs: &[MmsAddr], peers: &[String], owners: &HashSet<String>) -> Option<String> {
     addrs
         .iter()
         .find(|a| a.addr_type == MMS_ADDR_FROM)
         .and_then(|a| sanitize_number(&a.address))
         .filter(|d| !owners.contains(d))
-        .or_else(|| {
-            participants
-                .iter()
-                .filter_map(|p| sanitize_number(p))
-                .find(|d| !owners.contains(d))
+        .or_else(|| match peers {
+            [peer] => Some(peer.clone()),
+            _ => None,
         })
 }
 
@@ -894,6 +895,25 @@ mod tests {
         let path = dir.path().join("smses.xml");
         std::fs::write(&path, r#"<smses><mms msg_box="2"><parts/><addrs><addr address="+15555550100" type="137"/></addrs></mms></smses>"#).unwrap();
         assert_eq!(infer_owner_phones(&path).unwrap(), vec!["+15555550100"]);
+    }
+
+    #[test]
+    fn group_mms_without_from_has_no_sender() {
+        let owners = HashSet::from(["5555550100".to_string()]);
+        let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101~+15555550102~+15555550100"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+15555550101" type="151"/><addr address="+15555550102" type="151"/><addr address="+15555550100" type="151"/></addrs></mms></smses>"#;
+        let (records, _) = parse_reader(xml.as_slice(), &owners).unwrap();
+        assert_eq!(records[0].conversation_kind, ConversationKind::Group);
+        assert!(!records[0].is_from_me);
+        assert_eq!(records[0].sender_digits, None);
+    }
+
+    #[test]
+    fn direct_mms_without_from_is_from_the_peer() {
+        let owners = HashSet::from(["5555550100".to_string()]);
+        let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101~+15555550100"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+15555550101" type="151"/><addr address="+15555550100" type="151"/></addrs></mms></smses>"#;
+        let (records, _) = parse_reader(xml.as_slice(), &owners).unwrap();
+        assert_eq!(records[0].conversation_kind, ConversationKind::Individual);
+        assert_eq!(records[0].sender_digits.as_deref(), Some("5555550101"));
     }
 
     #[test]

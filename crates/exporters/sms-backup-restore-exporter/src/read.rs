@@ -623,6 +623,51 @@ mod tests {
         assert_eq!(xml.match_indices(r#"data="aGVsbG8=""#).count(), 2);
     }
 
+    /// A group MMS is credited to the `type="137"` addr, whichever position
+    /// that number holds in the `address` list, and to nobody when the
+    /// backup names no sender. Every form of the owner's number counts as
+    /// the owner, so all four messages share one conversation.
+    #[test]
+    fn group_mms_sender_direction_and_conversation() {
+        let fixture =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/group_mms_sender.xml");
+        let (docs, report) = read_backup(&fixture, opts(&[], None, false)).unwrap();
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        assert_eq!(docs.len(), 1, "every message lands in the same group");
+        let doc = &docs[0];
+        assert_eq!(
+            doc.conversation.chat_identifier,
+            "chat-group-5555550101_5555550102_5555550103"
+        );
+        assert_eq!(doc.export.owner_handle.as_deref(), Some("+15555550100"));
+        let mut participants: Vec<_> = doc
+            .conversation
+            .participants
+            .iter()
+            .filter_map(|p| p.handle.as_deref())
+            .collect();
+        participants.sort_unstable();
+        assert_eq!(
+            participants,
+            ["+15555550101", "+15555550102", "+15555550103"],
+            "the owner is not a participant, in any spelling"
+        );
+        let seen: Vec<(&str, IrDirection, Option<&str>)> = doc
+            .messages
+            .iter()
+            .map(|m| (m.text.as_str(), m.direction, m.sender_handle.as_deref()))
+            .collect();
+        assert_eq!(
+            seen,
+            [
+                ("from lee", IrDirection::Incoming, Some("+15555550103")),
+                ("no from", IrDirection::Incoming, None),
+                ("sent by me", IrDirection::Outgoing, Some("+15555550100")),
+                ("from ana", IrDirection::Incoming, Some("+15555550102")),
+            ]
+        );
+    }
+
     #[test]
     fn owner_inference_tolerates_malformed_files() {
         let dir = tempfile::tempdir().unwrap();

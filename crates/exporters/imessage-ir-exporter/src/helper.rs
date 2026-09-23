@@ -14,6 +14,7 @@
 
 use std::{
     env,
+    ffi::OsString,
     io::{BufRead, BufReader, Lines, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
@@ -45,10 +46,33 @@ fn executable_name() -> String {
 ///
 /// Returns an error naming every path tried when no file is found.
 pub(crate) fn locate() -> Result<PathBuf> {
-    if let Some(explicit) = env::var_os(HELPER_PATH_ENV) {
-        let path = PathBuf::from(explicit);
+    let current = env::current_exe().ok();
+    locate_in(&Places {
+        explicit: env::var_os(HELPER_PATH_ENV).map(PathBuf::from),
+        exe_dir: current.as_deref().and_then(Path::parent),
+        io_bin: env::var_os("MESSAGE_VAULT_IO_BIN").map(PathBuf::from),
+        path: env::var_os("PATH"),
+    })
+}
+
+/// Where [`locate`] looks, read from the environment once so the search
+/// itself can be tested without changing the environment.
+struct Places<'a> {
+    /// `MESSAGE_VAULT_IMESSAGE_READER`.
+    explicit: Option<PathBuf>,
+    /// The folder of the running executable.
+    exe_dir: Option<&'a Path>,
+    /// `MESSAGE_VAULT_IO_BIN`.
+    io_bin: Option<PathBuf>,
+    /// `PATH`.
+    path: Option<OsString>,
+}
+
+/// The search [`locate`] runs, over the places given.
+fn locate_in(places: &Places<'_>) -> Result<PathBuf> {
+    if let Some(path) = &places.explicit {
         if path.is_file() {
-            return Ok(path);
+            return Ok(path.clone());
         }
         bail!(
             "{HELPER_PATH_ENV} is set but not a file: {}",
@@ -59,19 +83,10 @@ pub(crate) fn locate() -> Result<PathBuf> {
     let executable = executable_name();
     let mut tried = Vec::new();
 
-    if let Ok(current) = env::current_exe()
-        && let Some(dir) = current.parent()
-    {
-        let candidates = [
-            dir.join(&executable),
-            dir.parent()
-                .map(|p| p.join(&executable))
-                .unwrap_or_default(),
-        ];
-        for candidate in candidates {
-            if candidate.as_os_str().is_empty() {
-                continue;
-            }
+    if let Some(dir) = places.exe_dir {
+        let beside = dir.join(&executable);
+        let above = dir.parent().map(|p| p.join(&executable));
+        for candidate in std::iter::once(beside).chain(above) {
             if candidate.is_file() {
                 return Ok(candidate);
             }
@@ -79,16 +94,16 @@ pub(crate) fn locate() -> Result<PathBuf> {
         }
     }
 
-    if let Some(extra) = env::var_os("MESSAGE_VAULT_IO_BIN") {
-        let candidate = PathBuf::from(extra).join(&executable);
+    if let Some(extra) = &places.io_bin {
+        let candidate = extra.join(&executable);
         if candidate.is_file() {
             return Ok(candidate);
         }
         tried.push(candidate);
     }
 
-    if let Some(paths) = env::var_os("PATH") {
-        for directory in env::split_paths(&paths) {
+    if let Some(paths) = &places.path {
+        for directory in env::split_paths(paths) {
             let candidate = directory.join(&executable);
             if candidate.is_file() {
                 return Ok(candidate);
@@ -116,6 +131,10 @@ pub(crate) struct Helper {
     stderr: Option<JoinHandle<String>>,
     log: Option<LogSink>,
     progress: Option<ProgressSink>,
+    /// The request was an export or an identities read, and the program has
+    /// not yet sent the [`Event::Source`] that says which protocol version it
+    /// speaks.
+    awaiting_source: bool,
 }
 
 impl Helper {
@@ -177,6 +196,7 @@ impl Helper {
             stderr: Some(stderr),
             log,
             progress,
+            awaiting_source: !matches!(request, Request::Attachment { .. }),
         })
     }
 
@@ -209,6 +229,15 @@ impl Helper {
                          this app speaks {PROTOCOL_VERSION}; the two were not built together"
                     );
                 }
+                source @ Event::Source { .. } => {
+                    self.awaiting_source = false;
+                    return Ok(source);
+                }
+                other if self.awaiting_source => bail!(
+                    "imessage-reader answered without saying which protocol version it speaks \
+                     (this app speaks {PROTOCOL_VERSION}), so the two were not built together. \
+                     It sent {other:?}"
+                ),
                 other => return Ok(other),
             }
         }
@@ -318,3 +347,6 @@ fn tail(stderr: &str) -> String {
     let keep = lines.len().saturating_sub(8);
     format!(": {}", lines[keep..].join(" | "))
 }
+
+#[cfg(test)]
+pub(crate) mod tests;

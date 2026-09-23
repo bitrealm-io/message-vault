@@ -112,6 +112,14 @@ impl ExportOptions {
 /// cannot be found or the database cannot be opened, conversion fails, media
 /// processing fails for every candidate file, or the user cancels.
 pub fn run(config: &ExporterConfig) -> Result<RunResult> {
+    run_with(config, Helper::spawn)
+}
+
+/// [`run`], starting the program with `spawn`. Tests pass a fake program.
+fn run_with(
+    config: &ExporterConfig,
+    spawn: impl FnOnce(&Request, Option<LogSink>, Option<ProgressSink>) -> Result<Helper>,
+) -> Result<RunResult> {
     let mut options = options_from_export_config(config)?;
     options.check_cancel()?;
 
@@ -122,7 +130,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
         .tempdir()?;
     options.request.scratch_dir = Some(scratch.path().to_path_buf());
 
-    let mut helper = Helper::spawn(
+    let mut helper = spawn(
         &Request::Export(options.request.clone()),
         options.log.clone(),
         options.progress.clone(),
@@ -412,5 +420,71 @@ mod tests {
         assert!(options.request.scratch_dir.is_none());
         assert_eq!(options.attachment_embed, AttachmentEmbed::Disabled);
         assert!(options.export_path.ends_with("chat.export_out"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rows_the_program_skipped_are_counted_in_the_run_result() {
+        use crate::helper::tests::{fake_helper, source_line, spawn_fake};
+        use imessage_reader_protocol::PROTOCOL_VERSION;
+
+        let dir = tempfile::tempdir().unwrap();
+        let chat = dir.path().join("chat.db");
+        fs::write(&chat, b"sqlite").unwrap();
+        let body = format!(
+            "{}\necho '{{\"event\":\"export_done\",\"messages_seen\":5,\"failures\":2}}'",
+            source_line(PROTOCOL_VERSION)
+        );
+        let program = fake_helper(dir.path(), &body);
+        let config = apple_cfg(
+            &chat,
+            AppleConfig {
+                platform: Some(ApplePlatform::MacOs),
+                ..AppleConfig::default()
+            },
+        );
+
+        let result = run_with(&config, |request, _, _| Ok(spawn_fake(&program, request))).unwrap();
+        assert!(
+            result
+                .messages
+                .iter()
+                .any(|line| line == &format!("  {}: 2", convert::SKIPPED_UNREADABLE_MESSAGE)),
+            "{:#?}",
+            result.messages
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_run_with_no_skipped_rows_says_nothing_about_them() {
+        use crate::helper::tests::{fake_helper, source_line, spawn_fake};
+        use imessage_reader_protocol::PROTOCOL_VERSION;
+
+        let dir = tempfile::tempdir().unwrap();
+        let chat = dir.path().join("chat.db");
+        fs::write(&chat, b"sqlite").unwrap();
+        let body = format!(
+            "{}\necho '{{\"event\":\"export_done\",\"messages_seen\":5,\"failures\":0}}'",
+            source_line(PROTOCOL_VERSION)
+        );
+        let program = fake_helper(dir.path(), &body);
+        let config = apple_cfg(
+            &chat,
+            AppleConfig {
+                platform: Some(ApplePlatform::MacOs),
+                ..AppleConfig::default()
+            },
+        );
+
+        let result = run_with(&config, |request, _, _| Ok(spawn_fake(&program, request))).unwrap();
+        assert!(
+            !result
+                .messages
+                .iter()
+                .any(|line| line.contains(convert::SKIPPED_UNREADABLE_MESSAGE)),
+            "{:#?}",
+            result.messages
+        );
     }
 }

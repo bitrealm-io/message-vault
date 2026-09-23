@@ -8,8 +8,16 @@ use rusqlite::Connection;
 
 use crate::{data_source::DataSource, error::RuntimeError, options::ReaderOptions};
 
-/// The union of `chat.account_login` and `message.destination_caller_id`,
-/// as stored.
+/// What the identities request found.
+pub(crate) struct RawIdentities {
+    /// Whether the source is an encrypted backup, for the `source` event.
+    pub encrypted: bool,
+    /// The union of `chat.account_login` and `message.destination_caller_id`,
+    /// as stored.
+    pub values: Vec<String>,
+}
+
+/// Open the source and read the addresses its device sent from.
 ///
 /// Each per-column query falls back to an empty list when the table or
 /// column is missing, so an unusual schema degrades to fewer signals rather
@@ -19,15 +27,18 @@ use crate::{data_source::DataSource, error::RuntimeError, options::ReaderOptions
 ///
 /// Returns an error when the source cannot be opened: missing database,
 /// missing or wrong backup password, not an iPhone backup.
-pub(crate) fn raw_identities(source: Source) -> Result<Vec<String>, RuntimeError> {
+pub(crate) fn raw_identities(source: Source) -> Result<RawIdentities, RuntimeError> {
     let options = ReaderOptions::from_source(source);
     let data_source = DataSource::from(&options)?;
-    let mut raw = distinct_texts(data_source.db(), "SELECT DISTINCT account_login FROM chat");
-    raw.extend(distinct_texts(
+    let mut values = distinct_texts(data_source.db(), "SELECT DISTINCT account_login FROM chat");
+    values.extend(distinct_texts(
         data_source.db(),
         "SELECT DISTINCT destination_caller_id FROM message",
     ));
-    Ok(raw)
+    Ok(RawIdentities {
+        encrypted: data_source.is_encrypted(),
+        values,
+    })
 }
 
 /// One column's distinct values; empty on any query error (older schemas).
@@ -69,7 +80,9 @@ mod tests {
         .unwrap();
         drop(db);
 
-        let mut values = raw_identities(source(&db_path)).unwrap();
+        let found = raw_identities(source(&db_path)).unwrap();
+        assert!(!found.encrypted);
+        let mut values = found.values;
         values.sort();
         assert_eq!(values, vec!["E:", "P:+15550001111", "owner@example.com"]);
     }
@@ -83,6 +96,6 @@ mod tests {
             .unwrap();
         drop(db);
 
-        assert!(raw_identities(source(&db_path)).unwrap().is_empty());
+        assert!(raw_identities(source(&db_path)).unwrap().values.is_empty());
     }
 }

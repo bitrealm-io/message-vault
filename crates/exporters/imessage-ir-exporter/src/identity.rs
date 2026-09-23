@@ -47,16 +47,27 @@ pub fn backup_identities(
         platform: if ios { Platform::Ios } else { Platform::MacOs },
         backup_password: backup_password.map(str::to_string),
     });
-    let mut helper = Helper::spawn(&request, None, None)?;
-    let mut raw = match helper.next_event()? {
-        Event::Identities { values } => values,
-        other => bail!("expected the identities answer, got {other:?}"),
-    };
-    helper.finish()?;
+    let helper = Helper::spawn(&request, None, None)?;
+    let mut raw = read_identities(helper)?;
     if ios {
         raw.extend(ios_backup_phone_number(db_path));
     }
     Ok(clean_and_dedupe(raw))
+}
+
+/// The raw values a started program answers the identities request with.
+/// [`Helper::next_event`] refuses a program on another protocol version, and
+/// one that answers before its [`Event::Source`] line.
+fn read_identities(mut helper: Helper) -> anyhow::Result<Vec<String>> {
+    let raw = loop {
+        match helper.next_event()? {
+            Event::Source { .. } => {}
+            Event::Identities { values } => break values,
+            other => bail!("expected the identities answer, got {other:?}"),
+        }
+    };
+    helper.finish()?;
+    Ok(raw)
 }
 
 /// Strip prefixes, drop blanks, and keep the first spelling of each address.
@@ -176,5 +187,63 @@ mod tests {
 
         let missing = tempfile::tempdir().unwrap();
         assert_eq!(ios_backup_phone_number(missing.path()), None);
+    }
+
+    #[cfg(unix)]
+    mod through_a_fake_helper {
+        use imessage_reader_protocol::{PROTOCOL_VERSION, Platform, Request, Source};
+
+        use super::super::read_identities;
+        use crate::helper::tests::{fake_helper, source_line, spawn_fake};
+
+        fn request() -> Request {
+            Request::Identities(Source {
+                db_path: "/nowhere/chat.db".into(),
+                platform: Platform::MacOs,
+                backup_password: None,
+            })
+        }
+
+        const ANSWER: &str = r#"echo '{"event":"identities","values":["P:+15550001111"]}'"#;
+
+        #[test]
+        fn the_answer_follows_the_source_event() {
+            let dir = tempfile::tempdir().unwrap();
+            let body = format!("{}\n{ANSWER}", source_line(PROTOCOL_VERSION));
+            let helper = spawn_fake(&fake_helper(dir.path(), &body), &request());
+
+            assert_eq!(read_identities(helper).unwrap(), vec!["P:+15550001111"]);
+        }
+
+        #[test]
+        fn a_helper_on_another_protocol_version_is_refused() {
+            let dir = tempfile::tempdir().unwrap();
+            let body = format!("{}\n{ANSWER}", source_line(PROTOCOL_VERSION + 1));
+            let helper = spawn_fake(&fake_helper(dir.path(), &body), &request());
+
+            let err = read_identities(helper).unwrap_err().to_string();
+            assert_eq!(
+                err,
+                format!(
+                    "imessage-reader speaks protocol version {}, this app speaks \
+                     {PROTOCOL_VERSION}; the two were not built together",
+                    PROTOCOL_VERSION + 1
+                )
+            );
+        }
+
+        #[test]
+        fn a_helper_that_skips_the_source_event_is_refused() {
+            let dir = tempfile::tempdir().unwrap();
+            let helper = spawn_fake(&fake_helper(dir.path(), ANSWER), &request());
+
+            let err = read_identities(helper).unwrap_err().to_string();
+            assert!(
+                err.starts_with(
+                    "imessage-reader answered without saying which protocol version it speaks"
+                ),
+                "{err}"
+            );
+        }
     }
 }

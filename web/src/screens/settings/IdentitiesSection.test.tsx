@@ -26,7 +26,7 @@ const profile = {
   emails: ["bob@example.com", "archer@example.com"],
 } as AccountProfile;
 
-/** What the vault lists for `profile`, with what each identity takes part in. */
+/** What the vault lists for `profile`, with the messages held at each identity. */
 const identities: Identity[] = [
   {
     handle: "+15555550100",
@@ -208,9 +208,9 @@ describe("removeBody", () => {
     );
   });
 
-  it("says so when the identity takes part in no messages", () => {
+  it("says so when the identity has no messages", () => {
     expect(removeBody(identities[2])).toBe(
-      "archer@example.com takes part in no messages. It will no longer count as this account's own.",
+      "archer@example.com has no messages. It will no longer count as this account's own.",
     );
   });
 });

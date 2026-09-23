@@ -1200,6 +1200,24 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
     )
     .await;
     assert_eq!(owner_handles, 1);
+    // Every demo header names that number as the owner, so every message is
+    // held at it and the identity's counts are not zero (#690). WhatsApp's
+    // are held at the same number as a WhatsApp address, which the demo
+    // account has not added, so they count toward no identity.
+    let not_held = count(
+        &mut conn,
+        "SELECT COUNT(*) FROM messages m
+         WHERE m.account_id = $1 AND m.source != 'whatsapp'
+           AND NOT EXISTS (
+             SELECT 1 FROM account_handles ah
+             WHERE ah.account_id = m.account_id AND ah.handle_id = m.owner_handle_id
+           )",
+    )
+    .await;
+    assert_eq!(
+        not_held, 0,
+        "every demo message is held at the owner's number"
+    );
     conn.close().await.expect("close");
     pool.close().await;
 }

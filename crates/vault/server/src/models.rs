@@ -63,6 +63,9 @@ pub struct MessageRecord {
     pub sender: Option<String>,
     /// Sender handle type (phone, email, or username).
     pub sender_handle_type: Option<HandleType>,
+    /// The account holder's own address on this message, sent from or
+    /// received at: the message's owner handle, else the header's.
+    pub owner: Option<String>,
     /// Per-message transport (`sms` / `imessage` / `rcs` / `whatsapp` / …).
     pub service: Option<String>,
     /// Subject line, when set.
@@ -140,6 +143,9 @@ pub fn parse_ir_lines(
 
     let mut out = Vec::new();
     let mut saw_header = false;
+    // The owner the current conversation's header names, for messages that
+    // do not name their own.
+    let mut header_owner: Option<String> = None;
     for (i, line) in lines.into_iter().enumerate() {
         let line = line.as_ref().trim();
         if line.is_empty() {
@@ -164,6 +170,11 @@ pub fn parse_ir_lines(
                     detail: format!("the conversation header is not valid: {e}"),
                 })?;
             out.push(ExportRecord::Conversation(conversation_from_ir(&header)));
+            header_owner = header
+                .export
+                .owner_handle
+                .as_deref()
+                .and_then(message_ir::nonempty);
             saw_header = true;
         } else {
             if !saw_header {
@@ -178,9 +189,11 @@ pub fn parse_ir_lines(
                     line: line_no,
                     detail: format!("the message is not valid: {e}"),
                 })?;
-            let record = message_from_ir(&msg).map_err(|e| ImportFailure::Parse {
-                line: line_no,
-                detail: format!("{e:#}"),
+            let record = message_from_ir(&msg, header_owner.as_deref()).map_err(|e| {
+                ImportFailure::Parse {
+                    line: line_no,
+                    detail: format!("{e:#}"),
+                }
             })?;
             out.push(ExportRecord::Message(record));
         }
@@ -240,8 +253,9 @@ fn conversation_from_ir(header: &ConversationHeader) -> ConversationRecord {
     }
 }
 
-/// Map one IR message onto the server's message record.
-fn message_from_ir(msg: &IrMessage) -> Result<MessageRecord> {
+/// Map one IR message onto the server's message record. `header_owner` is the
+/// owner the conversation header names, used when the message names none.
+fn message_from_ir(msg: &IrMessage, header_owner: Option<&str>) -> Result<MessageRecord> {
     let secs = msg.timestamp_unix_ms.div_euclid(1000);
     let timestamp = format_utc_timestamp(secs).with_context(|| {
         format!(
@@ -296,6 +310,11 @@ fn message_from_ir(msg: &IrMessage) -> Result<MessageRecord> {
         } else {
             infer_sender_handle_type(msg.sender_handle.as_deref(), msg.service)
         },
+        owner: msg
+            .owner_handle
+            .as_deref()
+            .and_then(message_ir::nonempty)
+            .or_else(|| header_owner.map(str::to_string)),
         service: Some(msg.service.as_str().to_string()),
         subject: msg.subject.clone().filter(|s| !s.is_empty()),
         text,

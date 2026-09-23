@@ -52,6 +52,9 @@ CREATE TABLE IF NOT EXISTS staging_messages (
     is_from_me INTEGER NOT NULL,
     -- Sender identity handle id; NULL when unknown.
     sender_handle_id INTEGER,
+    -- The account holder's own address on this message (handle id); NULL when
+    -- the backup names no owner.
+    owner_handle_id INTEGER,
     -- Per-message transport: sms / imessage / rcs / whatsapp / …
     service TEXT,
     -- Optional subject line.

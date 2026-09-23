@@ -88,12 +88,12 @@ const PROMOTE_INDEX_DROP_MIN_STAGING: i64 = 5_000;
 const INSERT_MESSAGES_FROM_STAGING: &str = r"
         INSERT INTO messages (
             conversation_id, account_id, source, guid, timestamp, is_from_me,
-            sender_handle_id, service, subject, body, is_announcement, is_reply,
+            sender_handle_id, owner_handle_id, service, subject, body, is_announcement, is_reply,
             thread_originator_guid, thread_originator_part, num_replies, sort_order, import_id
         )
         SELECT
             cm.prod_id, sm.account_id, sm.source, sm.guid, sm.timestamp, sm.is_from_me,
-            sm.sender_handle_id, sm.service, sm.subject, sm.body, sm.is_announcement, sm.is_reply,
+            sm.sender_handle_id, sm.owner_handle_id, sm.service, sm.subject, sm.body, sm.is_announcement, sm.is_reply,
             sm.thread_originator_guid, sm.thread_originator_part, sm.num_replies, sm.sort_order,
             sm.import_id
         FROM staging_messages sm

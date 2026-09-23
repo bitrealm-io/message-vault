@@ -73,6 +73,10 @@ CREATE TABLE IF NOT EXISTS messages (
     is_from_me INTEGER NOT NULL,
     -- Sender identity (`handles.id`); NULL when unknown.
     sender_handle_id INTEGER REFERENCES handles(id) ON DELETE SET NULL,
+    -- The account holder's own address on this message (`handles.id`): the one
+    -- it was sent from or received at, from the backup. NULL when the backup
+    -- names no owner. Not necessarily one of the account's identities (ADR-0015).
+    owner_handle_id INTEGER REFERENCES handles(id) ON DELETE SET NULL,
     -- Per-message transport: sms / imessage / rcs / whatsapp / …
     service TEXT,
     -- Optional subject line (for example MMS subject).
@@ -122,6 +126,8 @@ CREATE INDEX IF NOT EXISTS ix_messages_content_key
 CREATE INDEX IF NOT EXISTS ix_messages_duplicate_of
     ON messages (duplicate_of)
     WHERE duplicate_of IS NOT NULL;
+-- An account identity's counts read the messages held at it (ADR-0015).
+CREATE INDEX IF NOT EXISTS ix_messages_owner_handle_id ON messages (owner_handle_id);
 CREATE INDEX IF NOT EXISTS ix_messages_import_id
     ON messages (import_id)
     WHERE import_id IS NOT NULL;

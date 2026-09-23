@@ -155,7 +155,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * An account's identities, each with the messages it takes part in. The
+         * An account's identities, each with the messages held at it. The
          *     owner reads any account's; an account reads its own.
          */
         get: operations["list_account_identities"];
@@ -1220,7 +1220,7 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
-         * @description One of an account's identities and the messages it takes part in. The
+         * @description One of an account's identities and the messages held at it. The
          *     Profile screen shows the counts beside each identity and repeats them when
          *     one is about to be removed, so the person knows what the identity is tied
          *     to before it goes.
@@ -1228,22 +1228,22 @@ export interface components {
         AccountIdentity: {
             /**
              * Format: int64
-             * @description Direct and group conversations the identity takes part in, trashed
-             *     conversations excluded.
+             * @description Direct and group conversations holding at least one message held at
+             *     the identity, trashed conversations excluded.
              */
             conversations: number;
             /**
              * Format: int64
-             * @description Messages in the one-to-one conversations the identity takes part in,
-             *     trashed conversations and duplicates excluded.
+             * @description Messages held at the identity in one-to-one conversations, trashed
+             *     conversations and duplicates excluded.
              */
             direct_messages: number;
             /** @description When the newest such message was sent, or null when there is none. */
             end_date?: string | null;
             /**
              * Format: int64
-             * @description Messages in the group conversations the identity takes part in, on the
-             *     same terms.
+             * @description Messages held at the identity in group conversations, on the same
+             *     terms.
              */
             group_messages: number;
             /** @description The identity as the profile lists it: E.164 for a number, lower case for an address. */
@@ -1251,8 +1251,8 @@ export interface components {
             /** @description `phone`, `email`, or `whatsapp`. */
             service: string;
             /**
-             * @description When the oldest message in a conversation the identity takes part in
-             *     was sent, or null when there is none.
+             * @description When the oldest message held at the identity was sent, or null when
+             *     there is none.
              */
             start_date?: string | null;
         };
@@ -2321,22 +2321,22 @@ export interface components {
             items: {
                 /**
                  * Format: int64
-                 * @description Direct and group conversations the identity takes part in, trashed
-                 *     conversations excluded.
+                 * @description Direct and group conversations holding at least one message held at
+                 *     the identity, trashed conversations excluded.
                  */
                 conversations: number;
                 /**
                  * Format: int64
-                 * @description Messages in the one-to-one conversations the identity takes part in,
-                 *     trashed conversations and duplicates excluded.
+                 * @description Messages held at the identity in one-to-one conversations, trashed
+                 *     conversations and duplicates excluded.
                  */
                 direct_messages: number;
                 /** @description When the newest such message was sent, or null when there is none. */
                 end_date?: string | null;
                 /**
                  * Format: int64
-                 * @description Messages in the group conversations the identity takes part in, on the
-                 *     same terms.
+                 * @description Messages held at the identity in group conversations, on the same
+                 *     terms.
                  */
                 group_messages: number;
                 /** @description The identity as the profile lists it: E.164 for a number, lower case for an address. */
@@ -2344,8 +2344,8 @@ export interface components {
                 /** @description `phone`, `email`, or `whatsapp`. */
                 service: string;
                 /**
-                 * @description When the oldest message in a conversation the identity takes part in
-                 *     was sent, or null when there is none.
+                 * @description When the oldest message held at the identity was sent, or null when
+                 *     there is none.
                  */
                 start_date?: string | null;
             }[];

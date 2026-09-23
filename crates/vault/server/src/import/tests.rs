@@ -1847,3 +1847,62 @@ async fn reimporting_after_trashing_a_contact_lists_the_person_once() {
         .collect();
     assert_eq!(names, ["Ada"], "the conversation lists Ada once");
 }
+
+/// Each message records the account holder's address it was held at: its
+/// own owner handle when the backup names one per message, the header's
+/// otherwise. The holder is never a participant and never gets a contact
+/// (ADR-0015), so neither owner address reaches Contacts.
+#[tokio::test]
+async fn a_message_is_held_at_its_own_owner_else_the_headers_and_the_owner_gets_no_contact() {
+    let tmp = TempDir::new().unwrap();
+    let db = tmp.path().join("vault.db");
+    let assets = tmp.path().join("assets");
+    let file = write_jsonl(
+        tmp.path(),
+        "owner.jsonl",
+        r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":"+14155550100","owner_display_name":null},"conversation":{"chat_identifier":"+14075551234","conversation_type":"individual","group_title":null,"participants":[{"handle":"+14075551234","display_name":null}],"stats":{"message_count":3,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183582000}}}
+{"guid":"g-out","timestamp_unix_ms":1426183462000,"direction":"outgoing","service":"imessage","message_kind":"imessage","sender_handle":"+14155550100","sender_display_name":null,"subject":null,"text":"sent from the phone","attachments":[],"imessage":null,"source":null}
+{"guid":"g-email","timestamp_unix_ms":1426183522000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+14075551234","sender_display_name":null,"owner_handle":"me@icloud.com","subject":null,"text":"received at the email","attachments":[],"imessage":null,"source":null}
+{"guid":"g-in","timestamp_unix_ms":1426183582000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+14075551234","sender_display_name":null,"subject":null,"text":"received at the phone","attachments":[],"imessage":null,"source":null}
+"#,
+    );
+    import_jsonl_files(&db, &[file], &replace_opts(&assets, tmp.path(), "imessage"))
+        .await
+        .unwrap();
+
+    let (_pool, mut conn) = open_verify(&db).await;
+    let held: Vec<(String, Option<String>)> = sqlx::query_as(
+        "SELECT m.guid, h.normalized FROM messages m
+         LEFT JOIN handles h ON h.id = m.owner_handle_id
+         ORDER BY m.timestamp",
+    )
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(
+        held,
+        vec![
+            ("g-out".to_string(), Some("+14155550100".to_string())),
+            ("g-email".to_string(), Some("me@icloud.com".to_string())),
+            ("g-in".to_string(), Some("+14155550100".to_string())),
+        ]
+    );
+    let owner_contacts: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM contact_handles ch
+         JOIN handles h ON h.id = ch.handle_id
+         WHERE h.normalized IN ('+14155550100', 'me@icloud.com')",
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(owner_contacts, 0, "the holder's addresses get no contact");
+    let owner_participants: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM participants p
+         JOIN handles h ON h.id = p.handle_id
+         WHERE h.normalized IN ('+14155550100', 'me@icloud.com')",
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(owner_participants, 0, "the holder is never a participant");
+}

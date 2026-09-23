@@ -1,6 +1,6 @@
 import type { components } from "../../lib/vaultApi.types";
 
-/** One identity as the vault lists it, with the messages it takes part in. */
+/** One identity as the vault lists it, with the messages held at it. */
 export type Identity = components["schemas"]["AccountIdentity"];
 
 /** "12 direct messages and 30 group messages", "1 direct message", or null when there are none. */
@@ -18,5 +18,5 @@ export function removeBody(identity: Identity): string {
   const phrase = messagesPhrase(identity);
   return phrase
     ? `${phrase} will no longer be associated with this account.`
-    : `${identity.handle} takes part in no messages. It will no longer count as this account's own.`;
+    : `${identity.handle} has no messages. It will no longer count as this account's own.`;
 }

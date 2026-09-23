@@ -36,6 +36,7 @@ One language works on all three lists: **Contacts**, **Conversations**, and **Me
 - A comma inside a value means either: `service:imessage,sms`. Repeating a word means both: `tag:Work tag:Urgent`.
 - `-` in front of anything means not: `-tag:Work`, `-avocado`. `or` and parentheses work as you would expect: `(toast or guacamole) avocado`.
 - `avoc*` matches words starting with avoc; `"exact phrase"` matches the phrase.
+- A trailing `*` is the only wildcard. `%`, `_`, and `\` are ordinary characters, so `filename:IMG_0001` finds IMG_0001.jpg and not IMGX0001.jpg.
 
 A word the list does not have is refused with a message that says so, and offers the nearest word when there is one.
 

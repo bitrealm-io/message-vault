@@ -126,8 +126,9 @@ pub(super) struct IncomingSender<'a> {
 }
 
 /// The `handles` row for an incoming message's sender, creating it when this
-/// import is the first to meet that address. `None` for a message the account
-/// owner sent, and for one whose source recorded no sender address.
+/// import is the first to meet that address, and the contact that owns it.
+/// `None` for a message the account owner sent, and for one whose source
+/// recorded no sender address.
 pub(super) async fn resolve_incoming_sender_handle(
     tx: &mut AnyConnection,
     cache: &mut HandleIdCache,
@@ -157,8 +158,15 @@ pub(super) async fn resolve_incoming_sender_handle(
     if flagged {
         stats.phones_needing_review += 1;
     }
+    // A sender is a person the import met, whether or not a conversation
+    // header named them: `orphaned.jsonl` names nobody, and a group header
+    // can leave out someone who wrote in it. So the sender gets a contact
+    // the same way a participant does, which also replaces a trashed one
+    // (ADR-0013). A handle already in the cache went through here, or
+    // through a participant or a one-to-one chat, earlier in this run, and
+    // each of those gave it a contact.
     if !cached {
-        let _ = ensure_sibling_contact_link(tx, account_id, import_id, handle_id).await?;
+        ensure_contact_for_handle(tx, account_id, import_id, handle_id, None, stats).await?;
     }
     Ok(Some(handle_id))
 }
@@ -167,7 +175,7 @@ pub(super) async fn resolve_incoming_sender_handle(
 /// and type, different platform service) is already linked, attach this handle
 /// to that contact, and record against `import_id` that the run gave the
 /// contact a handle.
-pub(super) async fn ensure_sibling_contact_link(
+async fn ensure_sibling_contact_link(
     conn: &mut AnyConnection,
     account_id: i64,
     import_id: Option<i64>,

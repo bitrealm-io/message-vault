@@ -264,6 +264,236 @@ async fn a_fresh_contact_takes_the_number_on_every_service() {
     );
 }
 
+/// A conversation header line. `participants` is the JSON array body.
+fn header(chat: &str, kind: &str, participants: &str) -> String {
+    format!(
+        r#"{{"schema_version":4,"export":{{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null}},"conversation":{{"chat_identifier":"{chat}","conversation_type":"{kind}","group_title":null,"participants":[{participants}],"stats":{{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}}}}"#
+    )
+}
+
+/// An incoming message line from `sender`.
+fn incoming(guid: &str, sender: &str) -> String {
+    format!(
+        r#"{{"guid":"{guid}","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"{sender}","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}}"#
+    )
+}
+
+/// `orphaned.jsonl` as an exporter writes it: messages with no conversation
+/// of their own, under a header that names nobody.
+fn orphaned(message: &str) -> String {
+    header("orphaned", "individual", "") + "\n" + message + "\n"
+}
+
+/// Run one import of `files` (name, body) through the real entry point, on
+/// the shared test pool so it runs on Postgres too.
+async fn import_files(conn: &mut sqlx::AnyConnection, files: &[(&str, String)]) {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let paths: Vec<std::path::PathBuf> = files
+        .iter()
+        .map(|(name, body)| {
+            let path = tmp.path().join(name);
+            std::fs::write(&path, body).unwrap();
+            path
+        })
+        .collect();
+    let assets = tmp.path().join("assets");
+    let opts = crate::import::ImportOptions::fixed(crate::import::FixedImportArgs {
+        assets_dir: &assets,
+        asset_root: tmp.path(),
+        contacts: None,
+        overwrite_contacts: false,
+        mode: crate::import::ImportMode::Append,
+        source: "imessage",
+        account_id: TEST_ACCOUNT,
+        fill_content_keys: false,
+        import_id: None,
+    });
+    crate::import::import_jsonl_files_on_conn(
+        conn,
+        &paths,
+        &opts,
+        crate::import::ImportSchemaMode::Ensure,
+    )
+    .await
+    .unwrap();
+}
+
+/// The rule "an import makes a contact for every person it meets": every
+/// handle a message was sent from, a participant takes part as, or a
+/// one-to-one conversation is with belongs to a contact that is not in the
+/// Trash. `contact_handles` is keyed on the handle, so "a contact" is "one".
+async fn assert_every_met_handle_has_a_live_contact(conn: &mut sqlx::AnyConnection) {
+    let orphans: Vec<String> = sqlx::query_scalar(
+        "SELECT h.raw FROM handles h
+         WHERE h.account_id = $1
+           AND (h.id IN (SELECT sender_handle_id FROM messages WHERE account_id = $1)
+             OR h.id IN (SELECT p.handle_id FROM participants p
+                         JOIN conversations c ON c.id = p.conversation_id
+                         WHERE c.account_id = $1)
+             OR h.id IN (SELECT chat_handle_id FROM conversations
+                         WHERE account_id = $1 AND conversation_type = 'individual'
+                           AND source_file <> 'orphaned.jsonl'))
+           AND h.id NOT IN (
+             SELECT ch.handle_id FROM contact_handles ch
+             WHERE ch.account_id = $1
+               AND ch.contact_id NOT IN (SELECT contact_id FROM trashed_contacts
+                                         WHERE account_id = $1))
+         ORDER BY h.raw",
+    )
+    .bind(TEST_ACCOUNT)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert!(
+        orphans.is_empty(),
+        "handles the import met with no live contact: {orphans:?}"
+    );
+}
+
+/// Report (a): a sender with no conversation header to name them (the
+/// messages in `orphaned.jsonl`) and a group sender the group's header left
+/// out both used to get a handle and no contact, because the sender path only
+/// joined an existing sibling's contact.
+#[tokio::test]
+async fn a_sender_no_header_names_still_gets_a_contact() {
+    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    import_files(
+        &mut conn,
+        &[
+            (
+                "orphaned.jsonl",
+                orphaned(&incoming("g-orphan", "+15555550701")),
+            ),
+            (
+                "group.jsonl",
+                header(
+                    "chat1000000701",
+                    "group",
+                    r#"{"handle":"+15555550123","display_name":null}"#,
+                ) + "\n"
+                    + &incoming("g-group", "+15555550702")
+                    + "\n",
+            ),
+        ],
+    )
+    .await;
+    assert_every_met_handle_has_a_live_contact(&mut conn).await;
+}
+
+/// `orphaned.jsonl` arrives under an `individual` header whose chat id is
+/// `orphaned`. That id names the file's conversation, not a person, so it
+/// gets no contact; it used to get a nameless one.
+#[tokio::test]
+async fn the_orphaned_conversation_is_not_a_person() {
+    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    import_files(
+        &mut conn,
+        &[(
+            "orphaned.jsonl",
+            orphaned(&incoming("g-orphan", "+15555550705")),
+        )],
+    )
+    .await;
+    let linked: Vec<String> = sqlx::query_scalar(
+        "SELECT h.raw FROM contact_handles ch
+         JOIN handles h ON h.id = ch.handle_id
+         WHERE ch.account_id = $1
+         ORDER BY h.raw",
+    )
+    .bind(TEST_ACCOUNT)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(linked, ["+15555550705"], "only the sender is a person");
+}
+
+/// Report (b): a sender whose number is on a trashed contact under another
+/// service used to be linked to that trashed contact. ADR-0013: the import
+/// replaces the trashed contact instead.
+#[tokio::test]
+async fn a_sender_is_never_linked_to_a_trashed_contact() {
+    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
+        .await
+        .unwrap();
+    let on_whatsapp = insert_handle(&mut conn, "+15555550703", "whatsapp").await;
+    let mut stats = ImportStats::default();
+    let trashed = ensure_contact_for_handle(
+        &mut conn,
+        TEST_ACCOUNT,
+        None,
+        on_whatsapp,
+        Some("Ada"),
+        &mut stats,
+    )
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO trashed_contacts (account_id, contact_id) VALUES ($1, $2)")
+        .bind(TEST_ACCOUNT)
+        .bind(trashed)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+    import_files(
+        &mut conn,
+        &[(
+            "orphaned.jsonl",
+            orphaned(&incoming("g-trashed", "+15555550703")),
+        )],
+    )
+    .await;
+
+    assert_every_met_handle_has_a_live_contact(&mut conn).await;
+    assert_eq!(
+        count(
+            &mut conn,
+            "SELECT COUNT(*) FROM trashed_contacts WHERE account_id = $1",
+            TEST_ACCOUNT
+        )
+        .await,
+        0,
+        "the trashed contact was replaced, not joined"
+    );
+}
+
+/// Report (c): a one-to-one chat whose handle this run first met as a sender
+/// used to skip contact creation, because the handle cache said "seen" and
+/// the chat path read that as "has a contact". The sender fix alone makes
+/// this pass; it stays to guard the chat path against leaning on the cache
+/// again, which would break the moment any path caches a handle without
+/// giving it a contact.
+#[tokio::test]
+async fn a_one_to_one_chat_first_met_as_a_sender_gets_a_contact() {
+    let (pool, _dir) = crate::db::engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    import_files(
+        &mut conn,
+        &[
+            (
+                "group.jsonl",
+                header(
+                    "chat1000000704",
+                    "group",
+                    r#"{"handle":"+15555550123","display_name":null}"#,
+                ) + "\n"
+                    + &incoming("g-group", "+15555550704")
+                    + "\n",
+            ),
+            (
+                "direct.jsonl",
+                header("+15555550704", "individual", "") + "\n",
+            ),
+        ],
+    )
+    .await;
+    assert_every_met_handle_has_a_live_contact(&mut conn).await;
+}
+
 async fn insert_handle(conn: &mut sqlx::AnyConnection, raw: &str, service: &str) -> i64 {
     sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)

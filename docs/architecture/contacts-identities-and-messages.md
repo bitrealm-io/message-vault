@@ -45,7 +45,9 @@ allowed, and a crow's foot means many.
 
 **An import makes a contact for every person it meets.** An unmatched phone
 number becomes a contact with that identity and no name. A person named with
-no address becomes a contact with a name and no identity. Why: an identity on
+no address becomes a contact with a name and no identity. A message's sender
+counts as met even when no conversation header names them, as in
+`orphaned.jsonl` or a group header that leaves someone out. Why: an identity on
 no contact appears in no list in the product, so it could never be found,
 named, or merged. Junk contacts cost one delete.
 

@@ -445,7 +445,7 @@ impl FileStaging<'_> {
 
         // Conversation identity: the chat handle, typed from its shape (Phone for
         // SMS/iMessage/WhatsApp numbers, Email for `@`, Other for group ids).
-        let (chat_handle_id, flagged, cached) = upsert_handle_row_cached(
+        let (chat_handle_id, flagged, _cached) = upsert_handle_row_cached(
             self.tx,
             &mut self.stmts.handles,
             self.stmts.account_id,
@@ -459,11 +459,16 @@ impl FileStaging<'_> {
         }
         // Only a one-to-one chat's identifier is a person. A group's id (or
         // `orphaned`) names the conversation, so it gets a handle row and no
-        // contact; the people in it get theirs as participants.
+        // contact; the people in it get theirs as participants. Exporters
+        // write `orphaned.jsonl` under an `individual` header, so the file
+        // name, not the type, says it is the orphaned conversation. The handle
+        // cache is no guide here: it says this run has seen the handle, not
+        // that anything gave it a contact.
         let chat_is_a_person = conversation
             .conversation_type
-            .eq_ignore_ascii_case("individual");
-        if chat_is_a_person && !cached {
+            .eq_ignore_ascii_case("individual")
+            && !is_orphaned_export(Path::new(&self.source_file));
+        if chat_is_a_person {
             let _ = ensure_contact_for_handle(
                 self.tx,
                 self.stmts.account_id,

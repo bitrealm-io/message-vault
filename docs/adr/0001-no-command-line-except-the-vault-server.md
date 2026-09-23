@@ -57,7 +57,7 @@ a single binary combine with. The desktop app therefore starts the reader as
 a separate process, writes one request on its stdin, and reads the messages
 back off its stdout (`crates/helpers/imessage-reader-protocol`). A process
 boundary is what keeps the GPL on its own side; a library boundary would not.
-The policy is `docs/agents/licences.md`.
+The decision is ADR 0014 (`docs/adr/0014-gpl-code-only-behind-a-process-boundary.md`).
 
 That program is not a command line in this decision's sense. Nobody types it:
 it takes one JSON line on stdin and speaks only to the app, the installer puts

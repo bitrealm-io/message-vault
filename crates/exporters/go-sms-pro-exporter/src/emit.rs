@@ -8,8 +8,8 @@ use crate::xml::{SkippedBadAddrDetail, XmlMessage, parse_xml_file};
 use anyhow::{Context, Result, bail};
 use go_sms_mms::{ParsedPdu, parse_pdu_file};
 use message_ir::{
-    ExportMeta, HandleType, IrAttachment, IrService, IrSource, PendingAttachment,
-    PendingConversation, PendingMessage, ProjectionHooks, ensure_conversation, parse_android_type,
+    ExportMeta, IrAttachment, IrService, IrSource, PendingAttachment, PendingConversation,
+    PendingMessage, ProjectionHooks, ensure_conversation, parse_android_type,
 };
 use message_staging::{AttachmentSource, ExportWriter};
 use message_vault_io_core::{
@@ -182,7 +182,7 @@ fn pdu_target(
     let others: Vec<_> = parsed
         .participants
         .iter()
-        .filter(|p| !p.is_empty() && !owners.is_owner(p, HandleType::Phone))
+        .filter(|p| !p.is_empty() && !owners.is_owner_digits(p))
         .cloned()
         .collect();
     if others.is_empty() {
@@ -558,11 +558,8 @@ impl Ingest<'_> {
     /// the first twenty unparseable ones are named in the report.
     fn ingest_pdu(&mut self, pdu_path: &Path) {
         let all_digits = self.owners.all_phone_digits();
-        let parsed = parse_pdu_file(
-            pdu_path,
-            &all_digits,
-            self.owners.primary_phone_digit().unwrap_or(""),
-        );
+        let primary = self.owners.primary_owner_handle().unwrap_or_default();
+        let parsed = parse_pdu_file(pdu_path, &all_digits, &primary);
         let parsed = match parsed {
             Ok(Some(parsed)) => parsed,
             Ok(None) => {

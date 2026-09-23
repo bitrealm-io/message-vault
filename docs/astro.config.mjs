@@ -53,6 +53,7 @@ const userGuideItems = [
       'vault/user/how-to/saved-searches',
       'vault/user/how-to/trash',
       'vault/user/how-to/settings',
+      'vault/user/how-to/owner-home',
       'vault/user/how-to/export-from-the-vault',
       'vault/user/how-to/convert-formats',
       'vault/user/how-to/media-and-privacy',

@@ -151,6 +151,32 @@ beforeEach(() => {
     contact_count: 120,
     attachment_count: 21,
     total_bytes: 3 * 1024 * 1024,
+    database_bytes: 581 * 1024 * 1024,
+    messages_bytes: 400 * 1024 * 1024,
+    fts_bytes: 149 * 1024 * 1024,
+    accounts: [
+      {
+        account_id: 1,
+        username: "root",
+        message_count: 0,
+        text_bytes: 0,
+        estimated_message_bytes: 0,
+      },
+      {
+        account_id: 101,
+        username: "alice",
+        message_count: 5000,
+        text_bytes: 6 * 1024 * 1024,
+        estimated_message_bytes: 300 * 1024 * 1024,
+      },
+      {
+        account_id: 102,
+        username: "bob",
+        message_count: 678,
+        text_bytes: 2 * 1024 * 1024,
+        estimated_message_bytes: 100 * 1024 * 1024,
+      },
+    ],
   });
   // The vault and this app are the same release unless a test says otherwise.
   getVaultState.mockResolvedValue({
@@ -244,11 +270,48 @@ describe("OwnerHome", () => {
 
     expect(selectedSection()).toBe("Dashboard");
     expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
-    expect(await screen.findByText("3.0 MB")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Vault contents" })).toBeInTheDocument();
+    expect(screen.getByText("3.0 MB")).toBeInTheDocument();
     expect(screen.getByText(/5,678 messages, 21 attachments/)).toBeInTheDocument();
     expect(screen.getByText(/90 conversations, 120 contacts/)).toBeInTheDocument();
     expect(listAccounts).not.toHaveBeenCalled();
     expect(getVaultSettings).not.toHaveBeenCalled();
+  });
+
+  it("shows the database's size, the messages' share of it and the search index on the Dashboard", async () => {
+    renderHome(["/owner/dashboard"]);
+
+    const heading = await screen.findByRole("heading", { name: "Database" });
+    // The section is the heading's parent; the messages figure repeats in the
+    // totals row further down, so the checks stay inside it.
+    const section = within(heading.closest("section") as HTMLElement);
+    expect(section.getByText(/excludes attachment files/)).toBeInTheDocument();
+    expect(section.getByText("581 MB")).toBeInTheDocument();
+    expect(section.getByText("Database size")).toBeInTheDocument();
+    expect(section.getByText("400 MB")).toBeInTheDocument();
+    expect(section.getByText("Messages on disk")).toBeInTheDocument();
+    expect(section.getByText("149 MB")).toBeInTheDocument();
+    expect(section.getByText("Full-text search index")).toBeInTheDocument();
+  });
+
+  it("lists every account's messages, text and estimated size on disk, with a totals row", async () => {
+    renderHome(["/owner/dashboard"]);
+
+    expect(await screen.findByRole("heading", { name: "Messages by account" })).toBeInTheDocument();
+    expect(screen.getByText(/split by each account's share of text/)).toBeInTheDocument();
+
+    const table = screen.getByRole("table", { name: "Messages by account" });
+    const rows = within(table).getAllByRole("row");
+    const cells = (row: HTMLElement) =>
+      within(row)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent);
+    // A heading row, one row per account in the vault's order, and the totals.
+    expect(rows).toHaveLength(5);
+    expect(cells(rows[1])).toEqual(["root", "0", "0 B", "0 B"]);
+    expect(cells(rows[2])).toEqual(["alice", "5,000", "6.0 MB", "300 MB"]);
+    expect(cells(rows[3])).toEqual(["bob", "678", "2.0 MB", "100 MB"]);
+    expect(cells(rows[4])).toEqual(["Whole vault", "5,678", "8.0 MB", "400 MB"]);
   });
 
   it.each([

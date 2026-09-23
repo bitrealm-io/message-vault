@@ -1188,12 +1188,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read what the vault holds: the message, conversation, contact and
-         *     attachment counts and the attachment bytes, summed over every account.
-         *     Counts and totals only, never a name or a line of text
-         *     (`docs/adr/0008-the-vault-owner-holds-no-messages.md`, "What the owner
-         *     may see"). The owner's, because the owner administers the vault and
-         *     nobody else holds more than their own account.
+         * Read what the vault holds. The counts and the attachment bytes are summed
+         *     over every account. The database, messages and full-text search sizes
+         *     are measured on disk. Each account's share of message storage is an
+         *     estimate from its share of text. Counts and totals only, never a name or
+         *     a line of text (`docs/adr/0008-the-vault-owner-holds-no-messages.md`,
+         *     "What the owner may see"). The owner's, because the owner administers the
+         *     vault and nobody else holds more than their own account.
          */
         get: operations["vault_storage"];
         put?: never;
@@ -1244,6 +1245,28 @@ export interface components {
              *     was sent, or null when there is none.
              */
             start_date?: string | null;
+        };
+        /** @description One account's share of the messages held: an id, a username and numbers. */
+        AccountMessagesResponse: {
+            /** Format: int64 */
+            account_id: number;
+            /**
+             * Format: int64
+             * @description The account's estimated share of `messages_bytes`, split by its share
+             *     of all text. The shares add up to `messages_bytes` exactly.
+             */
+            estimated_message_bytes: number;
+            /**
+             * Format: int64
+             * @description Messages the account holds.
+             */
+            message_count: number;
+            /**
+             * Format: int64
+             * @description Bytes of message text the account holds: every body and subject, added up.
+             */
+            text_bytes: number;
+            username: string;
         };
         /**
          * @description One account: who it is, what it may do, and how much it holds. The owner
@@ -3231,6 +3254,11 @@ export interface components {
         /** @description What the whole vault holds, summed over every account. */
         VaultStorageResponse: {
             /**
+             * @description Every account, including ones with no messages: the owner first, then
+             *     by username, as the User Accounts table lists them.
+             */
+            accounts: components["schemas"]["AccountMessagesResponse"][];
+            /**
              * Format: int64
              * @description Attachment rows across every account.
              */
@@ -3247,9 +3275,27 @@ export interface components {
             conversation_count: number;
             /**
              * Format: int64
+             * @description Bytes the database takes on disk, measured. Attachment files are not
+             *     in it; `total_bytes` has those.
+             */
+            database_bytes: number;
+            /**
+             * Format: int64
+             * @description Bytes the full-text search index takes, measured, for the whole
+             *     vault. It is one shared structure, so there is no per-account figure.
+             */
+            fts_bytes: number;
+            /**
+             * Format: int64
              * @description Messages across every account.
              */
             message_count: number;
+            /**
+             * Format: int64
+             * @description Bytes the messages table and its indexes take, measured, without the
+             *     full-text search index.
+             */
+            messages_bytes: number;
             /**
              * Format: int64
              * @description Attachment bytes across every account, by original file size.

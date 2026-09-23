@@ -28,7 +28,7 @@ estimate is the per-account split, and it is labeled as one.
 | Database size | `page_count * page_size` | `pg_database_size(current_database())` |
 | Messages on disk | `dbstat` pages of `messages` plus every index on it | `pg_total_relation_size('messages')` minus the FTS figure |
 | FTS size | `dbstat` pages of the four `messages_fts_*` shadow tables | `sum(pg_column_size(search_tsv))` plus `pg_relation_size('ix_messages_search_tsv')` |
-| Text bytes per account | `sum(length(body) + length(subject))` grouped by `account_id` | same |
+| Text bytes per account | `sum(length(cast(body as blob)) + length(cast(subject as blob)))` grouped by `account_id` | `sum(octet_length(body) + octet_length(subject))` grouped by `account_id` |
 
 Notes:
 
@@ -42,7 +42,7 @@ Notes:
   the same thing as the SQLite one.
 - Estimated message bytes per account are the messages-on-disk figure times
   that account's share of all text bytes. The shares are computed so they add
-  up to the messages-on-disk figure exactly; the last account absorbs any
+  up to the messages-on-disk figure exactly; the last account with any text absorbs the
   rounding. An account with no messages reports zero. When no account has any
   text, every estimate is zero.
 

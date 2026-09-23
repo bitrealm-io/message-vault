@@ -233,14 +233,41 @@ pub struct VaultStorageResponse {
     pub attachment_count: i64,
     /// Attachment bytes across every account, by original file size.
     pub total_bytes: i64,
+    /// Bytes the database takes on disk, measured. Attachment files are not
+    /// in it; `total_bytes` has those.
+    pub database_bytes: i64,
+    /// Bytes the messages table and its indexes take, measured, without the
+    /// full-text search index.
+    pub messages_bytes: i64,
+    /// Bytes the full-text search index takes, measured, for the whole
+    /// vault. It is one shared structure, so there is no per-account figure.
+    pub fts_bytes: i64,
+    /// Every account, including ones with no messages: the owner first, then
+    /// by username, as the User Accounts table lists them.
+    pub accounts: Vec<AccountMessagesResponse>,
 }
 
-/// Read what the vault holds: the message, conversation, contact and
-/// attachment counts and the attachment bytes, summed over every account.
-/// Counts and totals only, never a name or a line of text
-/// (`docs/adr/0008-the-vault-owner-holds-no-messages.md`, "What the owner
-/// may see"). The owner's, because the owner administers the vault and
-/// nobody else holds more than their own account.
+/// One account's share of the messages held: an id, a username and numbers.
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct AccountMessagesResponse {
+    pub account_id: i64,
+    pub username: String,
+    /// Messages the account holds.
+    pub message_count: i64,
+    /// Bytes of message text the account holds: every body and subject, added up.
+    pub text_bytes: i64,
+    /// The account's estimated share of `messages_bytes`, split by its share
+    /// of all text. The shares add up to `messages_bytes` exactly.
+    pub estimated_message_bytes: i64,
+}
+
+/// Read what the vault holds. The counts and the attachment bytes are summed
+/// over every account. The database, messages and full-text search sizes
+/// are measured on disk. Each account's share of message storage is an
+/// estimate from its share of text. Counts and totals only, never a name or
+/// a line of text (`docs/adr/0008-the-vault-owner-holds-no-messages.md`,
+/// "What the owner may see"). The owner's, because the owner administers the
+/// vault and nobody else holds more than their own account.
 #[utoipa::path(
     get,
     path = "/v1/vault/storage",
@@ -259,12 +286,33 @@ pub async fn vault_storage_handler(
 ) -> Result<Json<VaultStorageResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let scope = storage::Scope::Vault;
+    let fts_bytes = storage::fts_bytes(&mut conn).await?;
+    let messages_bytes = storage::messages_bytes(&mut conn, fts_bytes).await?;
+    let by_account = storage::text_by_account(&mut conn).await?;
+    let shares = storage::split_by_text(messages_bytes, &by_account);
+    let accounts = by_account
+        .into_iter()
+        .zip(shares)
+        .map(
+            |(account, estimated_message_bytes)| AccountMessagesResponse {
+                account_id: account.account_id,
+                username: account.username,
+                message_count: account.message_count,
+                text_bytes: account.text_bytes,
+                estimated_message_bytes,
+            },
+        )
+        .collect();
     Ok(Json(VaultStorageResponse {
         message_count: storage::message_count(&mut conn, scope).await?,
         conversation_count: storage::conversation_count(&mut conn, scope).await?,
         contact_count: storage::contact_count(&mut conn, scope).await?,
         attachment_count: storage::attachment_count(&mut conn, scope).await?,
         total_bytes: storage::attachment_bytes(&mut conn, scope).await?,
+        database_bytes: storage::database_bytes(&mut conn).await?,
+        messages_bytes,
+        fts_bytes,
+        accounts,
     }))
 }
 

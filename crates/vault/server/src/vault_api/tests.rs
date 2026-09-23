@@ -303,8 +303,11 @@ async fn the_vault_owner_owes_no_profile_setup() {
 // What the vault holds
 // ---------------------------------------------------------------------------
 
-/// The vault's totals sum every account, and the answer is counts and a
-/// byte total and nothing that names a person or a conversation.
+/// The vault's totals sum every account, and the answer is counts and byte
+/// totals and nothing that names a person or a conversation. The database
+/// figures are measured, so they are only checked for sign; the split of
+/// message storage across accounts is checked exactly, because it is arithmetic
+/// over the measured total.
 #[tokio::test]
 async fn the_owner_reads_the_vault_totals_summed_over_every_account() {
     let vault = test_vault().await;
@@ -313,20 +316,47 @@ async fn the_owner_reads_the_vault_totals_summed_over_every_account() {
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
-    let empty: serde_json::Value = get_json(&state, "/v1/vault/storage", &owner.token).await;
+    let empty: VaultStorageResponse = get_json(&state, "/v1/vault/storage", &owner.token).await;
     assert_eq!(
-        empty,
-        serde_json::json!({
-            "message_count": 0,
-            "conversation_count": 0,
-            "contact_count": 0,
-            "attachment_count": 0,
-            "total_bytes": 0
-        })
+        (
+            empty.message_count,
+            empty.conversation_count,
+            empty.contact_count,
+            empty.attachment_count,
+            empty.total_bytes
+        ),
+        (0, 0, 0, 0, 0)
+    );
+    // An empty database still has pages, and it lists every account, the
+    // owner first, each holding nothing.
+    assert!(
+        empty.database_bytes > 0,
+        "database_bytes {}",
+        empty.database_bytes
+    );
+    assert_eq!(
+        empty
+            .accounts
+            .iter()
+            .map(|a| {
+                (
+                    a.account_id,
+                    a.username.as_str(),
+                    a.message_count,
+                    a.text_bytes,
+                    a.estimated_message_bytes,
+                )
+            })
+            .collect::<Vec<_>>(),
+        vec![
+            (owner.account_id, "keeper", 0, 0, 0),
+            (alice.account_id, "alice", 0, 0, 0),
+            (bob.account_id, "bob", 0, 0, 0)
+        ]
     );
 
     for (account_id, handle, bodies) in [
-        (alice.account_id, "+15555550100", &["hi", "there"][..]),
+        (alice.account_id, "+15555550100", &["hi", "thérè"][..]),
         (bob.account_id, "+15555550200", &["yo"][..]),
     ] {
         let messages: Vec<SeedMessage> = bodies
@@ -383,17 +413,71 @@ async fn the_owner_reads_the_vault_totals_summed_over_every_account() {
     }
     drop(conn);
 
-    let totals: serde_json::Value = get_json(&state, "/v1/vault/storage", &owner.token).await;
+    let totals: VaultStorageResponse = get_json(&state, "/v1/vault/storage", &owner.token).await;
     assert_eq!(
-        totals,
-        serde_json::json!({
-            "message_count": 3,
-            "conversation_count": 2,
-            "contact_count": 3,
-            "attachment_count": 2,
-            "total_bytes": 4000
-        })
+        (
+            totals.message_count,
+            totals.conversation_count,
+            totals.contact_count,
+            totals.attachment_count,
+            totals.total_bytes
+        ),
+        (3, 2, 3, 2, 4000)
     );
+    assert!(
+        totals.database_bytes > 0,
+        "database_bytes {}",
+        totals.database_bytes
+    );
+    assert!(
+        totals.messages_bytes > 0,
+        "messages_bytes {}",
+        totals.messages_bytes
+    );
+    assert!(totals.fts_bytes > 0, "fts_bytes {}", totals.fts_bytes);
+    assert!(
+        totals.database_bytes >= totals.messages_bytes,
+        "messages {} cannot exceed the database {}",
+        totals.messages_bytes,
+        totals.database_bytes
+    );
+
+    // Alice wrote "hi" and "thérè", which is 9 bytes: text is counted in
+    // bytes, not characters, and each accented letter is two. Bob wrote "yo"
+    // (2 bytes), and the owner wrote nothing. The estimates split
+    // messages_bytes by those shares and add up to it exactly, the last
+    // account with text taking the rounding.
+    let by_account: Vec<_> = totals
+        .accounts
+        .iter()
+        .map(|a| {
+            (
+                a.account_id,
+                a.username.as_str(),
+                a.message_count,
+                a.text_bytes,
+            )
+        })
+        .collect();
+    assert_eq!(
+        by_account,
+        vec![
+            (owner.account_id, "keeper", 0, 0),
+            (alice.account_id, "alice", 2, 9),
+            (bob.account_id, "bob", 1, 2)
+        ]
+    );
+    let estimates: Vec<i64> = totals
+        .accounts
+        .iter()
+        .map(|a| a.estimated_message_bytes)
+        .collect();
+    let alice_share = totals.messages_bytes * 9 / 11;
+    assert_eq!(
+        estimates,
+        vec![0, alice_share, totals.messages_bytes - alice_share]
+    );
+    assert_eq!(estimates.iter().sum::<i64>(), totals.messages_bytes);
 }
 
 /// An account holds only its own data, so the vault's totals are the owner's

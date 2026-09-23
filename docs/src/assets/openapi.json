@@ -6891,7 +6891,7 @@
         "tags": [
           "Vault"
         ],
-        "summary": "Read what the vault holds: the message, conversation, contact and\nattachment counts and the attachment bytes, summed over every account.\nCounts and totals only, never a name or a line of text\n(`docs/adr/0008-the-vault-owner-holds-no-messages.md`, \"What the owner\nmay see\"). The owner's, because the owner administers the vault and\nnobody else holds more than their own account.",
+        "summary": "Read what the vault holds. The counts and the attachment bytes are summed\nover every account. The database, messages and full-text search sizes\nare measured on disk. Each account's share of message storage is an\nestimate from its share of text. Counts and totals only, never a name or\na line of text (`docs/adr/0008-the-vault-owner-holds-no-messages.md`,\n\"What the owner may see\"). The owner's, because the owner administers the\nvault and nobody else holds more than their own account.",
         "operationId": "vault_storage",
         "responses": {
           "200": {
@@ -6987,6 +6987,41 @@
               "null"
             ],
             "description": "When the oldest message in a conversation the identity takes part in\nwas sent, or null when there is none."
+          }
+        }
+      },
+      "AccountMessagesResponse": {
+        "type": "object",
+        "description": "One account's share of the messages held: an id, a username and numbers.",
+        "required": [
+          "account_id",
+          "username",
+          "message_count",
+          "text_bytes",
+          "estimated_message_bytes"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "estimated_message_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The account's estimated share of `messages_bytes`, split by its share\nof all text. The shares add up to `messages_bytes` exactly."
+          },
+          "message_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Messages the account holds."
+          },
+          "text_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes of message text the account holds: every body and subject, added up."
+          },
+          "username": {
+            "type": "string"
           }
         }
       },
@@ -11204,9 +11239,20 @@
           "conversation_count",
           "contact_count",
           "attachment_count",
-          "total_bytes"
+          "total_bytes",
+          "database_bytes",
+          "messages_bytes",
+          "fts_bytes",
+          "accounts"
         ],
         "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountMessagesResponse"
+            },
+            "description": "Every account, including ones with no messages: the owner first, then\nby username, as the User Accounts table lists them."
+          },
           "attachment_count": {
             "type": "integer",
             "format": "int64",
@@ -11222,10 +11268,25 @@
             "format": "int64",
             "description": "Conversations across every account."
           },
+          "database_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes the database takes on disk, measured. Attachment files are not\nin it; `total_bytes` has those."
+          },
+          "fts_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes the full-text search index takes, measured, for the whole\nvault. It is one shared structure, so there is no per-account figure."
+          },
           "message_count": {
             "type": "integer",
             "format": "int64",
             "description": "Messages across every account."
+          },
+          "messages_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes the messages table and its indexes take, measured, without the\nfull-text search index."
           },
           "total_bytes": {
             "type": "integer",

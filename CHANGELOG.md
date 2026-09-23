@@ -30,6 +30,15 @@ released versions carry their date on the heading.
   a small dialog instead of a permanent row under the table, and the dialog
   offers Email everywhere, so a contact can be given an email address by
   hand.
+- 2026-09-22 **The Dashboard shows where the vault's disk space goes.**
+  Owner Home's Dashboard is now three sections. Vault contents is the card it
+  had. Database shows the size of the database on disk, how much of it the
+  messages take and how much the full-text search index adds, all measured
+  by the vault. Messages by account lists every account with its message
+  count, its text and an estimated size on disk, split from the messages
+  figure by each account's share of text, with a totals row so the split
+  visibly adds up. Attachment files are counted under Vault contents, not in
+  the database size.
 
 ### Design
 

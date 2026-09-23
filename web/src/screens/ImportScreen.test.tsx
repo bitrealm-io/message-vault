@@ -169,7 +169,7 @@ function stagingSummary(overrides: Partial<StagingSummary> = {}): StagingSummary
     conversations: 1,
     messages: 1,
     contactIdentifiers: [],
-    outgoingHandles: [],
+    ownerHandles: [],
     attachments: 0,
     attachmentBytes: 0,
     verdictCounts: {

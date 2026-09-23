@@ -24,6 +24,7 @@ fn base_sms() -> MailMessage {
             message_kind: message_ir::IrMessageKind::Sms,
             sender_handle: Some("+15555550101".into()),
             sender_display_name: Some("Sam".into()),
+            owner_handle: None,
             subject: None,
             text: "hello from sms".into(),
             attachments: Vec::new(),

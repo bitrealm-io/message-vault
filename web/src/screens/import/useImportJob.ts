@@ -30,7 +30,7 @@ import {
   invokePush,
   invokeSummarizeStaging,
   invokeTranscodeStaging,
-  type OutgoingHandleCount,
+  type OwnerHandleCount,
   onExtractEvents,
   type PushFinishedReport,
   probeFfmpegTools,
@@ -296,10 +296,12 @@ function isAttachmentForecast(value: unknown): value is AttachmentForecast {
   );
 }
 
-function isOutgoingHandleCount(value: unknown): value is OutgoingHandleCount {
+function isOwnerHandleCount(value: unknown): value is OwnerHandleCount {
   if (typeof value !== "object" || value === null) return false;
   const r = value as Record<string, unknown>;
-  return typeof r.handle === "string" && typeof r.messages === "number";
+  return (
+    typeof r.handle === "string" && typeof r.sent === "number" && typeof r.received === "number"
+  );
 }
 
 /**
@@ -321,7 +323,7 @@ export function parseStoredStagingSummary(raw: unknown): StagingSummary | undefi
   if (typeof r.conversations !== "number") return undefined;
   if (typeof r.messages !== "number") return undefined;
   if (!isStringArray(r.contactIdentifiers)) return undefined;
-  if (!Array.isArray(r.outgoingHandles) || !r.outgoingHandles.every(isOutgoingHandleCount)) {
+  if (!Array.isArray(r.ownerHandles) || !r.ownerHandles.every(isOwnerHandleCount)) {
     return undefined;
   }
   if (typeof r.attachments !== "number") return undefined;
@@ -344,7 +346,7 @@ export function parseStoredStagingSummary(raw: unknown): StagingSummary | undefi
     conversations: r.conversations,
     messages: r.messages,
     contactIdentifiers: r.contactIdentifiers,
-    outgoingHandles: r.outgoingHandles,
+    ownerHandles: r.ownerHandles,
     attachments: r.attachments,
     attachmentBytes: r.attachmentBytes,
     verdictCounts: {

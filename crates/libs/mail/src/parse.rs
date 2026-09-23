@@ -121,6 +121,7 @@ pub fn mail_message_from_eml_bytes(bytes: &[u8]) -> Result<MailMessage> {
             message_kind,
             sender_handle,
             sender_display_name,
+            owner_handle: None,
             subject,
             text,
             // Attachment payloads live in `MailMessage::attachments`; readers
@@ -371,6 +372,7 @@ mod tests {
                 message_kind: IrMessageKind::Sms,
                 sender_handle: Some("+15555550100".into()),
                 sender_display_name: Some("Me".into()),
+                owner_handle: None,
                 subject: None,
                 text: "hello roundtrip".into(),
                 attachments: Vec::new(),
@@ -456,6 +458,7 @@ mod tests {
                 message_kind: IrMessageKind::IMessage,
                 sender_handle: Some("+15555550101".into()),
                 sender_display_name: Some("Sam".into()),
+                owner_handle: None,
                 subject: Some("MMS subject".into()),
                 text: "full bag".into(),
                 attachments: Vec::new(),

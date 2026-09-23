@@ -365,6 +365,11 @@ pub struct IrMessage {
     pub sender_handle: Option<String>,
     /// Display name of the actual sender.
     pub sender_display_name: Option<String>,
+    /// The owner's own address on this message: the one it was sent from
+    /// (outgoing) or received at (incoming). `None` when the source knows
+    /// only one owner address, which is then `export.owner_handle`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_handle: Option<String>,
     /// Message subject line (rare).
     pub subject: Option<String>,
     /// Plain-text body; never includes attachment data.

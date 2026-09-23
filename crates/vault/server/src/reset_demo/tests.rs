@@ -1023,3 +1023,183 @@ async fn a_failed_install_that_left_previous_state_in_the_work_directories_keeps
         "the account work directory is kept alongside the database one"
     );
 }
+
+/// What a generated bundle holds, read back from its files rather than taken
+/// from the generator's own counts, so the import is checked against what
+/// was on disk.
+#[derive(Debug, Default)]
+struct BundleContents {
+    files: usize,
+    messages: usize,
+    replies: usize,
+    tapbacks: usize,
+}
+
+fn read_generated_bundle(bundle: &Path) -> BundleContents {
+    let mut contents = BundleContents::default();
+    for source in [IMESSAGE_SOURCE, SBR_SOURCE, WHATSAPP_SOURCE] {
+        let staging = bundle.join("staging").join(source);
+        for path in crate::import_cli::list_jsonl_files(&staging).expect("list staging files") {
+            contents.files += 1;
+            let text = fs::read_to_string(&path).expect("read conversation file");
+            for line in text.lines().skip(1) {
+                let message: message_ir::IrMessage = serde_json::from_str(line)
+                    .unwrap_or_else(|error| panic!("parse {}: {error}", path.display()));
+                contents.messages += 1;
+                let Some(im) = message.imessage.as_ref() else {
+                    continue;
+                };
+                if im.is_reply {
+                    contents.replies += 1;
+                }
+                if let Some(serde_json::Value::Array(items)) = &im.tapbacks {
+                    contents.tapbacks += items.len();
+                }
+            }
+        }
+    }
+    contents
+}
+
+async fn count(conn: &mut AnyConnection, sql: &str) -> i64 {
+    sqlx::query_scalar(sql)
+        .bind(DEMO_ACCOUNT_ID)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap_or_else(|error| panic!("{sql}: {error}"))
+}
+
+/// The reset imports a bundle the generator wrote, three sources in turn,
+/// and dedupes what the overlap conversations carry twice. Until now only a
+/// three-line hand-written bundle went through this path in a test, so a
+/// generator change that the import could not read, or a stride the import
+/// dropped, showed up first in the demo vault.
+///
+/// Runs on SQLite by file path, and on Postgres by schema URL when
+/// `MV_TEST_POSTGRES_URL` is set, the two transports `reset-demo` takes.
+#[tokio::test]
+async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let seed_cfg = demo_seed::testutil::small_config(temp.path());
+    let generated = demo_seed::generate(&seed_cfg).expect("generate the small bundle");
+    let bundle = Path::new(&seed_cfg.out);
+    let contents = read_generated_bundle(bundle);
+    assert_eq!(contents.messages, generated.messages);
+    assert!(
+        contents.replies > 0 && contents.tapbacks > 0,
+        "{contents:?}"
+    );
+
+    let db_path = temp.path().join("vault.db");
+    let pg_url = match crate::pg_test_url() {
+        Some(url) => Some(crate::db::engine::pg_test_schema_url(&url).await),
+        None => None,
+    };
+    let target = match pg_url.as_deref() {
+        Some(url) => DbTarget::Url(url),
+        None => DbTarget::Path(&db_path),
+    };
+    let cfg = Config {
+        paths: PathsConfig {
+            db: db_path.clone(),
+            data_dir: temp.path().join("data"),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: None,
+        database: crate::config::DatabaseConfig::default(),
+    };
+
+    let prepared = validate_prepared_bundle(bundle).expect("the generator wrote a complete bundle");
+    seed_demo_account(target, DEMO_ACCOUNT_ID, &prepared.seed)
+        .await
+        .expect("seed the demo account");
+    // The import stops at the first row it cannot read, so an `Ok` here is
+    // the "no failed rows" of the whole bundle; the counts below say that
+    // nothing was skipped on the way in either.
+    let import = import_demo_sources(&cfg, &prepared, DEMO_ACCOUNT_ID, target)
+        .await
+        .expect("import every source of the generated bundle");
+    assert_eq!(import.files as usize, contents.files, "every file imported");
+    assert_eq!(
+        import.messages as usize, contents.messages,
+        "every message row imported"
+    );
+    assert_eq!(
+        import.attachments as usize, generated.attachment_refs,
+        "every attachment reference imported"
+    );
+    assert_eq!(import.assets_missing, 0, "every attachment file was found");
+    assert_eq!(
+        import.tapbacks as usize, contents.tapbacks,
+        "every tapback imported"
+    );
+
+    let pool = target.open().await.expect("open the imported vault");
+    let mut conn = pool.acquire().await.expect("acquire");
+    let dedupe = dedupe::dedupe_cross_source(&mut conn, DEMO_ACCOUNT_ID, None, 2)
+        .await
+        .expect("dedupe across sources");
+
+    // The overlap conversations are the only messages written to two
+    // backups, so they are the only duplicates the dedupe may find.
+    let hidden = count(
+        &mut conn,
+        "SELECT COUNT(*) FROM messages WHERE account_id = $1 AND duplicate_of IS NOT NULL",
+    )
+    .await;
+    assert_eq!(
+        hidden as usize, generated.shared_messages,
+        "exactly the shared overlap rows are hidden as duplicates ({dedupe:?})"
+    );
+    assert_eq!(
+        dedupe.exact_flagged as usize, generated.shared_messages,
+        "the dedupe found them as exact duplicates ({dedupe:?})"
+    );
+    assert_eq!(
+        dedupe.near_flagged, 0,
+        "and nothing else as near duplicates"
+    );
+
+    // Every reply names a message the import holds in the same conversation,
+    // so every thread the generator wrote can be shown.
+    let replies = count(
+        &mut conn,
+        "SELECT COUNT(*) FROM messages WHERE account_id = $1 AND is_reply = 1",
+    )
+    .await;
+    assert_eq!(replies as usize, contents.replies);
+    let unresolved = count(
+        &mut conn,
+        "SELECT COUNT(*) FROM messages r
+         WHERE r.account_id = $1 AND r.is_reply = 1
+           AND NOT EXISTS (
+             SELECT 1 FROM messages o
+             WHERE o.conversation_id = r.conversation_id
+               AND o.guid = r.thread_originator_guid
+           )",
+    )
+    .await;
+    assert_eq!(unresolved, 0, "every reply target is an imported message");
+
+    // Tapbacks ride on the message they react to, so each row here is one
+    // the import attached to its target.
+    let tapbacks = count(
+        &mut conn,
+        "SELECT COUNT(*) FROM tapbacks t JOIN messages m ON m.id = t.message_id
+         WHERE m.account_id = $1",
+    )
+    .await;
+    assert_eq!(tapbacks as usize, contents.tapbacks);
+
+    // The seed linked the owner's number as the demo account's identity.
+    let owner_handles = count(
+        &mut conn,
+        "SELECT COUNT(*) FROM account_handles ah JOIN handles h ON h.id = ah.handle_id
+         WHERE ah.account_id = $1 AND h.normalized = '+14155559000'",
+    )
+    .await;
+    assert_eq!(owner_handles, 1);
+    conn.close().await.expect("close");
+    pool.close().await;
+}

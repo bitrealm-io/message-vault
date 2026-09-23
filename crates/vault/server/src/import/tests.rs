@@ -468,6 +468,73 @@ async fn append_existing_guid_adds_missing_children() {
 }
 
 #[tokio::test]
+async fn append_with_a_found_file_fills_in_the_missing_attachment() {
+    let tmp = TempDir::new().unwrap();
+    let db = tmp.path().join("vault.db");
+    let assets = tmp.path().join("assets");
+    let path = write_jsonl(
+        tmp.path(),
+        "found.jsonl",
+        &format!(
+            "{}\n{}\n",
+            r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null}],"stats":{"message_count":1,"attachment_count":1,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#,
+            format_args!(
+                r#"{{"guid":"g-found","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"see attached","attachments":{},"imessage":null,"source":null}}"#,
+                missing_attachment_json("found.bin")
+            )
+        ),
+    );
+    let options = ImportOptions::fixed(FixedImportArgs {
+        assets_dir: &assets,
+        asset_root: tmp.path(),
+        contacts: None,
+        overwrite_contacts: false,
+        mode: ImportMode::Append,
+        source: "imessage",
+        account_id: TEST_ACCOUNT,
+        fill_content_keys: false,
+        import_id: None,
+    });
+
+    // The first import has no file on disk, so the attachment is stored as missing.
+    import_jsonl_files(&db, std::slice::from_ref(&path), &options)
+        .await
+        .unwrap();
+
+    // The person uploads the file and imports the same conversation again.
+    fs::create_dir_all(tmp.path().join("attachments")).unwrap();
+    fs::write(tmp.path().join("attachments/found.bin"), b"found-bytes").unwrap();
+    import_jsonl_files(&db, std::slice::from_ref(&path), &options)
+        .await
+        .unwrap();
+
+    let (_pool, mut conn) = open_verify(&db).await;
+    let rows: Vec<(Option<String>, Option<String>, Option<String>)> = sqlx::query_as(
+        r"
+        SELECT a.sha256, a.assets_path, a.missing_reason
+        FROM attachments a
+        JOIN messages m ON m.id = a.message_id
+        WHERE m.guid = 'g-found'
+        ",
+    )
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(
+        rows.len(),
+        1,
+        "one attachment row, not a second one: {rows:?}"
+    );
+    let (sha256, assets_path, missing_reason) = &rows[0];
+    assert_eq!(
+        sha256.as_deref(),
+        Some(assets::sha256_hex(b"found-bytes").as_str())
+    );
+    assert!(assets_path.is_some());
+    assert_eq!(missing_reason, &None);
+}
+
+#[tokio::test]
 async fn repeated_append_keeps_one_fts_posting_per_message() {
     let tmp = TempDir::new().unwrap();
     let db = tmp.path().join("vault.db");

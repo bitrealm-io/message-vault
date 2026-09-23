@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS conversations (
 
 CREATE INDEX IF NOT EXISTS ix_conversations_account_id ON conversations (account_id);
 
--- One handle listed in a conversation (including the owner when present).
+-- One other person listed in a conversation. The account holder is never a
+-- participant (ADR-0015); a message records which of the holder's addresses it
+-- used in `messages.owner_handle_id`.
 CREATE TABLE IF NOT EXISTS participants (
     -- Surrogate primary key for this participant row.
     id INTEGER PRIMARY KEY,

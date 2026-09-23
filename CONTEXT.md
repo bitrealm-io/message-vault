@@ -99,12 +99,21 @@ Only the people in the group do.
 
 An identity means one of two things depending on whose it is. A contact's
 identity means participation: this person took part in these messages. An
-account identity means ownership: the messages from this address belong to
-the account holder, and Import uses the account's identities to decide which
-messages are the holder's own rather than someone else's.
+account identity means ownership: the messages sent from or received at this
+address belong to the account holder, and Import uses the account's identities
+to decide which messages are the holder's own rather than someone else's. A
+backup's owner address becomes an account identity only when the person adds it;
+an import never adds one.
 
 Handle is the word in the code and the database for the same thing.
 _Avoid_: Handle, Address, Number
+
+**Participant**:
+Another person in a Conversation, as the account holder sees it. The account
+holder is never a participant: every conversation in an account is the holder's
+own, so the vault knows they are in it without listing them. Which of the
+holder's identities a message used is recorded on the message.
+_Avoid_: Member, Recipient
 
 **Last heard from**:
 When a contact last sent a message: the newest message any of the contact's

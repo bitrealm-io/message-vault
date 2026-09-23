@@ -444,11 +444,11 @@ fn copy_dir_recursive_refuses_a_missing_source() {
 
 #[test]
 fn apply_reexport_convert_restages_attachments_and_marks_missing_files() {
-    if !media::ffmpeg_available() {
-        // The media pass refuses to start without ffmpeg, whatever the
-        // files are, so there is nothing to assert on a machine without it.
+    // The media pass refuses to start without ffmpeg, whatever the files
+    // are, so there is nothing to assert on a machine without it.
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     let output = tempfile::tempdir().unwrap();
     let attachments = output.path().join("attachments");
     fs::create_dir_all(&attachments).unwrap();

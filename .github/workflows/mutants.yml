@@ -33,8 +33,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # ffmpeg so the transcode and media tests run; without it they skip
-      # themselves and every mutant they would catch shows as missed.
+      # ffmpeg so the transcode and media tests run; with CI set they fail
+      # without it (media::testutil) rather than skip.
       - name: Install system dependencies
         run: |
           sudo apt-get update

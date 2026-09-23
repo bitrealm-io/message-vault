@@ -164,7 +164,7 @@ mod tests {
         // Holds the tools lock: this test runs the real ffmpeg, and the tests
         // in `tools` point the process-wide override at mock and empty
         // directories while they run.
-        let Some(_tools) = crate::tools::real_ffmpeg_test_guard() else {
+        let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
             return;
         };
         let dir = tempfile::tempdir().unwrap();

@@ -678,9 +678,9 @@ fn clone_mode_runs_no_media_pass() {
 
 #[test]
 fn convert_runs_as_a_pass_after_the_drain_stages_originals() {
-    if !media::ffmpeg_available() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
         return;
-    }
+    };
     let tmp = tempfile::tempdir().unwrap();
     let out = tmp.path().join("out");
     fs::create_dir_all(&out).unwrap();

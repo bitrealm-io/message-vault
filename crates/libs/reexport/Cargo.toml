@@ -16,6 +16,7 @@ serde_json = { workspace = true }
 sms-backup-restore-exporter = { path = "../../exporters/sms-backup-restore-exporter" }
 
 [dev-dependencies]
+media = { path = "../media", features = ["testutil"] }
 message-ir = { path = "../ir", features = ["testutil"] }
 tempfile = { workspace = true }
 

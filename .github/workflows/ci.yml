@@ -142,8 +142,9 @@ jobs:
   # its shared test pool hands every test a schema of its own on the
   # service (#339), and the SQLite-only tests return early and say so. Only
   # the server reads the variable, so nothing else needs the second pass.
-  # ffmpeg is installed because the transcode, media and demo-seed tests
-  # skip themselves without it, and a skipped test asserts nothing.
+  # ffmpeg is installed because the transcode, media, reexport and demo-seed
+  # tests need it. With CI set they fail without it (media::testutil), so a
+  # missing ffmpeg shows as a red job, never as a pass that asserted nothing.
   test:
     name: Build & Test (Rust)
     needs: changes

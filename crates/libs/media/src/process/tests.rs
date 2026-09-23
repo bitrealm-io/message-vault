@@ -60,7 +60,7 @@ fn write_jpeg_that_grows_on_finer_reencode(path: &Path, target_size: u64) {
 
 #[test]
 fn compress_keeps_the_original_jpeg_when_the_re_encode_is_not_smaller() {
-    let Some(_tools) = crate::tools::real_ffmpeg_test_guard() else {
+    let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
         return;
     };
     let dir = tempfile::tempdir().unwrap();
@@ -102,7 +102,7 @@ fn compress_keeps_the_original_jpeg_when_the_re_encode_is_not_smaller() {
 
 #[test]
 fn transcode_file_writes_the_derivative_and_leaves_the_original_alone() {
-    let Some(_tools) = crate::tools::real_ffmpeg_test_guard() else {
+    let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
         return;
     };
     let dir = tempfile::tempdir().unwrap();
@@ -149,7 +149,7 @@ fn derivative_name_is_none_for_a_file_the_mode_leaves_alone() {
 
 #[test]
 fn derivative_name_matches_what_the_media_step_actually_produces() {
-    let Some(_tools) = crate::tools::real_ffmpeg_test_guard() else {
+    let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
         return;
     };
     // The forecast and the patch both trust derivative_name. If it disagrees
@@ -345,7 +345,7 @@ fn clone_with_log_emits_nothing() {
 }
 #[test]
 fn process_attachment_files_touches_only_the_listed_files() {
-    let Some(_tools) = crate::tools::real_ffmpeg_test_guard() else {
+    let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
         return;
     };
     let dir = tempfile::tempdir().unwrap();
@@ -385,7 +385,7 @@ fn process_attachment_files_touches_only_the_listed_files() {
 
 #[test]
 fn transcode_file_as_converts_an_extensionless_source_by_the_given_kind() {
-    let Some(_tools) = crate::tools::real_ffmpeg_test_guard() else {
+    let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
         return;
     };
     let dir = tempfile::tempdir().unwrap();

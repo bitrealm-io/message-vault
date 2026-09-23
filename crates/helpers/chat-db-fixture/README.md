@@ -4,7 +4,7 @@ A small Apple Messages `chat.db`, written with rusqlite, for tests. `write_chat_
 
 ## Why permissive
 
-Both a GPL crate and an FCL crate use it in their tests, and it must carry no GPL code into the exporter's test binary, so it depends on rusqlite alone and is `MIT OR Apache-2.0`, like [`imessage-reader-protocol`](../imessage-reader-protocol/). Why the two sides are separate programs at all: [`docs/agents/licences.md`](../../../docs/agents/licences.md).
+Both a GPL crate and an FCL crate use it in their tests, and it must carry no GPL code into the exporter's test binary, so it depends on rusqlite alone and is `MIT OR Apache-2.0`, like [`imessage-reader-protocol`](../imessage-reader-protocol/). Why the two sides are separate programs at all: [ADR 0014](../../../docs/adr/0014-gpl-code-only-behind-a-process-boundary.md).
 
 ## Build and test
 

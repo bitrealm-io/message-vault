@@ -53,7 +53,6 @@ export function useApiTokens() {
   const [label, setLabel] = useState("");
   const [canImport, setCanImport] = useState(true);
   const [canExport, setCanExport] = useState(true);
-  const [canDelete, setCanDelete] = useState(false);
   const [reveal, setReveal] = useState<{ label: string; token: string } | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<ApiTokenItem | null>(null);
   const [renameTarget, setRenameTarget] = useState<ApiTokenItem | null>(null);
@@ -94,7 +93,6 @@ export function useApiTokens() {
     setLabel("");
     setCanImport(true);
     setCanExport(true);
-    setCanDelete(false);
     clearError();
   }, [clearError]);
 
@@ -121,14 +119,12 @@ export function useApiTokens() {
         label: trimmed,
         can_import: canImport,
         can_export: canExport,
-        can_delete: canDelete,
       },
       {
         onSuccess: (res) => {
           setLabel("");
           setCanImport(true);
           setCanExport(true);
-          setCanDelete(false);
           setComposing(false);
           setReveal({ label: res.label, token: res.token });
         },
@@ -169,8 +165,6 @@ export function useApiTokens() {
     setCanImport,
     canExport,
     setCanExport,
-    canDelete,
-    setCanDelete,
     actionError,
     reveal,
     setReveal,

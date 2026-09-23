@@ -36,8 +36,7 @@ async fn complete_import_persists_timings_and_issues() {
         ACCOUNT_ID,
         import_id,
         &CompleteImportArgs {
-            ok: true,
-            status: None,
+            status: "completed".into(),
             message_count: Some(10),
             attachment_count: Some(2),
             bytes_uploaded: Some(100),
@@ -90,8 +89,7 @@ async fn complete_import_rejects_invalid_issue_kind() {
         ACCOUNT_ID,
         import_id,
         &CompleteImportArgs {
-            ok: false,
-            status: None,
+            status: "failed".into(),
             message_count: None,
             attachment_count: None,
             bytes_uploaded: None,
@@ -176,8 +174,7 @@ async fn get_import_detail_returns_issues() {
         ACCOUNT_ID,
         import_id,
         &CompleteImportArgs {
-            ok: true,
-            status: None,
+            status: "completed".into(),
             message_count: Some(10),
             attachment_count: Some(2),
             bytes_uploaded: Some(100),
@@ -230,8 +227,7 @@ async fn list_imports_includes_duration_ms() {
         ACCOUNT_ID,
         import_id,
         &CompleteImportArgs {
-            ok: true,
-            status: None,
+            status: "completed".into(),
             message_count: Some(10),
             attachment_count: Some(2),
             bytes_uploaded: Some(100),
@@ -432,4 +428,73 @@ fn every_stage_round_trips_through_its_string() {
         assert_eq!(ImportStage::parse(stage.as_str()), Some(stage));
     }
     assert_eq!(ImportStage::parse("gate_1"), None);
+}
+
+/// A finished run is its permanent record. Completing a discarded run once
+/// marked it completed and filed its issues against it; completing a
+/// completed run filed them a second time.
+#[tokio::test]
+async fn complete_import_refuses_a_run_that_has_finished() {
+    let (pool, _dir) = setup_accounts_only().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let with_issue = || CompleteImportArgs {
+        status: "completed_with_issues".into(),
+        issues: vec![ImportIssueInput {
+            kind: "skip".into(),
+            step: "convert".into(),
+            item: "photo.heic".into(),
+            reason: "convert failed".into(),
+        }],
+        ..Default::default()
+    };
+    let issue_count = async |conn: &mut sqlx::AnyConnection, import_id: i64| -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*) FROM vault_import_issues WHERE import_id = $1")
+            .bind(import_id)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap()
+    };
+
+    let discarded = start_import(&mut conn, &default_start_args(ACCOUNT_ID))
+        .await
+        .unwrap();
+    discard_import(&mut conn, ACCOUNT_ID, discarded)
+        .await
+        .unwrap();
+    let err = complete_import(&mut conn, ACCOUNT_ID, discarded, &with_issue())
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err.downcast_ref::<ImportLookupError>(),
+        Some(ImportLookupError::InvalidSession { .. })
+    ));
+    let row = get_owned_import(&mut conn, ACCOUNT_ID, discarded)
+        .await
+        .unwrap();
+    assert_eq!(row.status, "cancelled");
+    assert_eq!(issue_count(&mut conn, discarded).await, 0);
+
+    let completed = start_import(&mut conn, &default_start_args(ACCOUNT_ID))
+        .await
+        .unwrap();
+    complete_import(&mut conn, ACCOUNT_ID, completed, &with_issue())
+        .await
+        .unwrap();
+    let err = complete_import(
+        &mut conn,
+        ACCOUNT_ID,
+        completed,
+        &CompleteImportArgs::failed(),
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(
+        err.downcast_ref::<ImportLookupError>(),
+        Some(ImportLookupError::InvalidSession { .. })
+    ));
+    let row = get_owned_import(&mut conn, ACCOUNT_ID, completed)
+        .await
+        .unwrap();
+    assert_eq!(row.status, "completed_with_issues");
+    assert_eq!(issue_count(&mut conn, completed).await, 1);
 }

@@ -29,15 +29,9 @@ beforeEach(() => {
   apiGet.mockResolvedValue({ items: [] });
 });
 
-async function openComposeForm(accountCanDelete = false) {
+async function openComposeForm() {
   const user = userEvent.setup();
-  render(
-    <ApiTokensSection
-      accountCanImport={true}
-      accountCanExport={true}
-      accountCanDelete={accountCanDelete}
-    />,
-  );
+  render(<ApiTokensSection accountCanImport={true} accountCanExport={true} />);
   await waitFor(() => {
     expect(apiGet).toHaveBeenCalled();
   });
@@ -46,13 +40,12 @@ async function openComposeForm(accountCanDelete = false) {
 }
 
 describe("ApiTokensSection create form", () => {
-  it("sends exactly label, can_import, can_export, can_delete as the request body", async () => {
+  it("sends exactly label, can_import, can_export as the request body", async () => {
     apiPost.mockResolvedValue({
       id: "tok_1",
       label: "My token",
       can_import: true,
       can_export: true,
-      can_delete: false,
       created_at: "1700000000",
       token: "mv-api-secret",
       token_hint: "mv-api-se..et",
@@ -70,67 +63,30 @@ describe("ApiTokensSection create form", () => {
       label: "My token",
       can_import: true,
       can_export: true,
-      can_delete: false,
     });
   });
 
-  it("includes can_delete: true once the checkbox is checked", async () => {
-    apiPost.mockResolvedValue({
-      id: "tok_2",
-      label: "Destroyer",
-      can_import: true,
-      can_export: true,
-      can_delete: true,
-      created_at: "1700000000",
-      token: "mv-api-secret2",
-      token_hint: "mv-api-se..t2",
-    });
-
-    const user = await openComposeForm(true);
-    await user.type(screen.getByLabelText("API key name"), "Destroyer");
-    await user.click(screen.getByRole("checkbox", { name: "Delete messages and attachments" }));
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() => {
-      expect(apiPost).toHaveBeenCalledTimes(1);
-    });
-    expect(apiPost.mock.calls[0][0]).toEqual({
-      label: "Destroyer",
-      can_import: true,
-      can_export: true,
-      can_delete: true,
-    });
+  it("offers no delete permission, because a token never carries one", async () => {
+    await openComposeForm();
+    expect(screen.queryByRole("checkbox", { name: /delete/i })).toBeNull();
   });
 
   it("disables a permission checkbox the account itself does not hold", async () => {
     const user = userEvent.setup();
-    render(
-      <ApiTokensSection accountCanImport={true} accountCanExport={true} accountCanDelete={false} />,
-    );
+    render(<ApiTokensSection accountCanImport={false} accountCanExport={true} />);
     await waitFor(() => {
       expect(apiGet).toHaveBeenCalled();
     });
     await user.click(screen.getByRole("button", { name: "Add" }));
 
-    const deleteCheckbox = screen.getByRole("checkbox", {
-      name: "Delete messages and attachments",
-    });
-    expect(deleteCheckbox).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "Import" })).toBeDisabled();
     expect(screen.getByText("Your account cannot do this.")).toBeTruthy();
-
-    const importCheckbox = screen.getByRole("checkbox", { name: "Import" });
-    expect(importCheckbox).not.toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "Export" })).not.toBeDisabled();
   });
 
   it("forces a permission checkbox unchecked when the account lacks it, even though the form defaults it on", async () => {
     const user = userEvent.setup();
-    render(
-      <ApiTokensSection
-        accountCanImport={false}
-        accountCanExport={true}
-        accountCanDelete={false}
-      />,
-    );
+    render(<ApiTokensSection accountCanImport={false} accountCanExport={true} />);
     await waitFor(() => {
       expect(apiGet).toHaveBeenCalled();
     });
@@ -147,7 +103,6 @@ describe("ApiTokensSection create form", () => {
       label: "No import",
       can_import: false,
       can_export: true,
-      can_delete: false,
       created_at: "1700000000",
       token: "mv-api-secret3",
       token_hint: "mv-api-se..t3",
@@ -162,7 +117,6 @@ describe("ApiTokensSection create form", () => {
       label: "No import",
       can_import: false,
       can_export: true,
-      can_delete: false,
     });
   });
 });

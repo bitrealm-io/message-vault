@@ -1,6 +1,7 @@
-//! What a credential may do. One set, stored identically on `accounts` and on
-//! `account_api_tokens`, so an account's grant and a token's grant intersect
-//! field by field rather than through a translation.
+//! What a credential may do. One set for accounts and API tokens, so an
+//! account's grant and a token's grant intersect field by field rather than
+//! through a translation. A token stores only `import` and `export`: it never
+//! carries `delete` (`docs/architecture/http-api.md`, "Credentials and reach").
 
 /// Operations a credential is allowed to perform.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +29,16 @@ impl Permissions {
         Self {
             import: false,
             export: false,
+            delete: false,
+        }
+    }
+
+    /// A token's grant: `import` and `export` as chosen, and never `delete`,
+    /// because permanent deletion is a person's act.
+    pub const fn token(import: bool, export: bool) -> Self {
+        Self {
+            import,
+            export,
             delete: false,
         }
     }

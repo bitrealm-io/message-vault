@@ -5,16 +5,14 @@ import { ApiTokenCreateForm, ApiTokenRenameDialog } from "./ApiTokenForms";
 import ApiTokensTable from "./ApiTokensTable";
 import { useApiTokens } from "./useApiTokens";
 
-/** Named CLI API keys (import/export/delete). Separate from the rotating GUI session token. */
+/** Named API keys for programs (import/export). Separate from the rotating GUI session token. */
 export function ApiTokensSection({
   accountCanImport,
   accountCanExport,
-  accountCanDelete,
 }: {
   /** The logged-in account's own permissions — a token can never exceed them. */
   accountCanImport: boolean;
   accountCanExport: boolean;
-  accountCanDelete: boolean;
 }) {
   const {
     items,
@@ -28,8 +26,6 @@ export function ApiTokensSection({
     setCanImport,
     canExport,
     setCanExport,
-    canDelete,
-    setCanDelete,
     actionError,
     reveal,
     setReveal,
@@ -78,11 +74,8 @@ export function ApiTokensSection({
           onCanImportChange={setCanImport}
           canExport={canExport}
           onCanExportChange={setCanExport}
-          canDelete={canDelete}
-          onCanDeleteChange={setCanDelete}
           accountCanImport={accountCanImport}
           accountCanExport={accountCanExport}
-          accountCanDelete={accountCanDelete}
           onSave={() => void create()}
           onCancel={cancelCompose}
         />

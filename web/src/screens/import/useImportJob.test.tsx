@@ -876,7 +876,7 @@ describe("useImportJob wiring", () => {
     expect(completeCall).toBeDefined();
     const [, body] = completeCall as [string, Record<string, unknown>];
     expect(body.status).toBe("failed");
-    expect(body.ok).toBe(false);
+    expect(body).not.toHaveProperty("ok");
   });
 
   it("records the staging folder and device on the session it creates", async () => {

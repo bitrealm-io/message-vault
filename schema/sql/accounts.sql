@@ -86,8 +86,6 @@ CREATE TABLE IF NOT EXISTS account_api_tokens (
     can_import INTEGER NOT NULL DEFAULT 1,
     -- 1 = this token may call the export endpoints.
     can_export INTEGER NOT NULL DEFAULT 1,
-    -- 1 = this token may destroy message data. Off unless asked for.
-    can_delete INTEGER NOT NULL DEFAULT 0,
     -- Masked form for Settings (e.g. mv-api-Sd..mE). Not enough to recover the secret.
     token_hint TEXT NOT NULL DEFAULT 'mv-api-..',
     -- Unix-seconds string for when this API token was created.

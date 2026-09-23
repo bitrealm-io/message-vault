@@ -114,15 +114,15 @@ pub async fn lookup_account_for_api_token(
     token: &str,
 ) -> Result<Option<ApiTokenAuth>> {
     let token_hash = hash_api_token(token);
-    let row: Option<(i64, i64, i64, i64, Option<String>, i64)> = sqlx::query_as(
-        "SELECT account_id, can_import, can_export, can_delete, expires_at, disabled
+    let row: Option<(i64, i64, i64, Option<String>, i64)> = sqlx::query_as(
+        "SELECT account_id, can_import, can_export, expires_at, disabled
          FROM account_api_tokens WHERE token_hash = $1",
     )
     .bind(token_hash.as_str())
     .fetch_optional(&mut *conn)
     .await?;
     match row {
-        Some((account_id, can_import, can_export, can_delete, expires_at, disabled)) => {
+        Some((account_id, can_import, can_export, expires_at, disabled)) => {
             if disabled != 0 {
                 return Ok(None);
             }
@@ -144,7 +144,7 @@ pub async fn lookup_account_for_api_token(
             .with_context(|| "update API token last_accessed_at")?;
             Ok(Some(ApiTokenAuth {
                 account_id,
-                permissions: Permissions::from_ints(can_import, can_export, can_delete),
+                permissions: Permissions::token(can_import != 0, can_export != 0),
             }))
         }
         None => Ok(None),
@@ -171,7 +171,9 @@ pub struct CreatedApiToken {
     pub token: String,
 }
 
-/// Create a named API token.
+/// Create a named API token. It stores `permissions.import` and
+/// `permissions.export`; `permissions.delete` is not stored, because a token
+/// never carries it, and the returned grant says so.
 ///
 /// Returns `ApiTokenMutationError::InvalidLabel` when the label is empty
 /// or longer than 120 characters, and `Other` for database failures.
@@ -192,8 +194,8 @@ pub async fn create_api_token(
     let id: i64 = sqlx::query_scalar(
         r"
         INSERT INTO account_api_tokens
-            (account_id, label, token_hash, can_import, can_export, can_delete, token_hint, created_at, expires_at, disabled)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0)
+            (account_id, label, token_hash, can_import, can_export, token_hint, created_at, expires_at, disabled)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0)
         RETURNING id
         ",
     )
@@ -202,7 +204,6 @@ pub async fn create_api_token(
     .bind(token_hash.as_str())
     .bind(permissions.import as i32)
     .bind(permissions.export as i32)
-    .bind(permissions.delete as i32)
     .bind(token_hint.as_str())
     .bind(created_at.as_str())
     .bind(expires_at.as_deref())
@@ -212,7 +213,7 @@ pub async fn create_api_token(
     Ok(CreatedApiToken {
         id,
         label: label_owned,
-        permissions,
+        permissions: Permissions::token(permissions.import, permissions.export),
         created_at,
         expires_at,
         token,
@@ -224,7 +225,6 @@ pub async fn create_api_token(
 type ApiTokenRowRaw = (
     i64,
     String,
-    i64,
     i64,
     i64,
     String,
@@ -250,7 +250,7 @@ pub async fn list_api_tokens(
         "ORDER BY created_at DESC, label COLLATE NOCASE"
     };
     let rows: Vec<ApiTokenRowRaw> = sqlx::query_as(&format!(
-        "SELECT id, label, can_import, can_export, can_delete, token_hint, created_at, last_accessed_at, expires_at, disabled
+        "SELECT id, label, can_import, can_export, token_hint, created_at, last_accessed_at, expires_at, disabled
          FROM account_api_tokens
          WHERE account_id = $1
          {order_by}"
@@ -264,7 +264,6 @@ pub async fn list_api_tokens(
         label,
         can_import,
         can_export,
-        can_delete,
         token_hint,
         created_at,
         last_accessed_at,
@@ -275,7 +274,7 @@ pub async fn list_api_tokens(
         out.push(ApiTokenRow {
             id,
             label,
-            permissions: Permissions::from_ints(can_import, can_export, can_delete),
+            permissions: Permissions::token(can_import != 0, can_export != 0),
             token_hint,
             created_at,
             last_accessed_at,

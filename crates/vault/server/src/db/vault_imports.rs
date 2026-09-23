@@ -118,10 +118,8 @@ pub struct VaultImportRow {
 /// Outcome fields written when a session completes.
 #[derive(Debug, Clone, Default)]
 pub struct CompleteImportArgs {
-    /// True when the import finished successfully.
-    pub ok: bool,
-    /// Explicit outcome status; falls back to `ok` when `None`.
-    pub status: Option<String>,
+    /// How the run ended: `completed`, `completed_with_issues` or `failed`.
+    pub status: String,
     /// Messages imported; counted from the database when omitted.
     pub message_count: Option<i64>,
     /// Attachments imported; counted from the database when omitted.
@@ -148,7 +146,7 @@ impl CompleteImportArgs {
     /// Build a success outcome from message and attachment counts.
     pub fn succeeded(messages: u64, attachments: u64) -> Self {
         Self {
-            ok: true,
+            status: "completed".into(),
             message_count: Some(messages as i64),
             attachment_count: Some(attachments as i64),
             ..Default::default()
@@ -158,7 +156,7 @@ impl CompleteImportArgs {
     /// Build a failure outcome; nothing else is recorded.
     pub fn failed() -> Self {
         Self {
-            ok: false,
+            status: "failed".into(),
             ..Default::default()
         }
     }
@@ -545,19 +543,20 @@ pub async fn discard_running_import(
     Ok(Some(running))
 }
 
-/// Finish an import: prefer client counts, else derive from linked messages.
+/// Finish a running import: prefer client counts, else derive from linked
+/// messages. A run that has already finished is its permanent record and is
+/// never rewritten, so completing one is
+/// [`ImportLookupError::InvalidSession`] (`409`), checked first and again by
+/// the update itself, so two completions racing cannot both land.
 pub async fn complete_import(
     conn: &mut AnyConnection,
     account_id: i64,
     import_id: i64,
     args: &CompleteImportArgs,
 ) -> Result<VaultImportRow> {
-    let existing = get_owned_import(&mut *conn, account_id, import_id).await?;
+    let existing = require_running_import(&mut *conn, account_id, import_id).await?;
     let finished_at = Utc::now().to_rfc3339();
-    let status = args
-        .status
-        .as_deref()
-        .unwrap_or(if args.ok { "completed" } else { "failed" });
+    let status = args.status.as_str();
 
     for issue in &args.issues {
         validate_issue_kind(&issue.kind)?;
@@ -600,7 +599,7 @@ pub async fn complete_import(
     let mut tx = conn
         .begin_with(dialect::begin_immediate_sql(dialect::engine_of(conn)))
         .await?;
-    sqlx::query(
+    let updated = sqlx::query(
         r"
         UPDATE vault_imports
         SET status = $1,
@@ -615,7 +614,7 @@ pub async fn complete_import(
             upload_ms = $10,
             summary_json = $11,
             stage = NULL
-        WHERE id = $12 AND account_id = $13
+        WHERE id = $12 AND account_id = $13 AND status = 'running'
         ",
     )
     .bind(status)
@@ -633,6 +632,12 @@ pub async fn complete_import(
     .bind(account_id)
     .execute(&mut *tx)
     .await?;
+    if updated.rows_affected() == 0 {
+        return Err(ImportLookupError::InvalidSession {
+            message: format!("import {import_id} finished while it was being completed"),
+        }
+        .into());
+    }
     insert_issues(&mut tx, import_id, &args.issues).await?;
     tx.commit().await?;
 

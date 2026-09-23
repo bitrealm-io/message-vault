@@ -57,7 +57,6 @@ export function AccountSettingsPanel({ managedAccountId }: { managedAccountId?: 
         <ApiTokensSection
           accountCanImport={profile.can_import ?? true}
           accountCanExport={profile.can_export ?? true}
-          accountCanDelete={profile.can_delete ?? false}
         />
       ) : null}
 

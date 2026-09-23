@@ -54,7 +54,8 @@ impl Modify for BearerAddon {
     /// scope it needs. The scope names on a requirement are the role names
     /// OpenAPI allows on a non-OAuth scheme: `owner` for the vault owner's
     /// session, and `import`, `export` and `delete` for the three
-    /// permissions a session or a token carries.
+    /// permissions a session carries. A token carries `import` and `export`
+    /// only, so no route offers a token the `delete` scope.
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         let components = openapi.components.get_or_insert_default();
         components.add_security_scheme(
@@ -76,9 +77,9 @@ impl Modify for BearerAddon {
                     .scheme(HttpAuthScheme::Bearer)
                     .description(Some(
                         "A named API token: the `mv-api-` secret \
-                         `POST /v1/accounts/{id}/api-tokens` returns once, carrying the import, \
-                         export and delete scopes it was created with. Only the routes listing \
-                         it accept one; every other route answers 403.",
+                         `POST /v1/accounts/{id}/api-tokens` returns once, carrying the import \
+                         and export scopes it was created with; a token never carries delete. \
+                         Only the routes listing it accept one; every other route answers 403.",
                     ))
                     .build(),
             ),
@@ -355,6 +356,10 @@ mod tests {
                             assert!(
                                 !(scheme == "api-token" && scope == "owner"),
                                 "{method} {path} offers an API token the owner's role"
+                            );
+                            assert!(
+                                !(scheme == "api-token" && scope == "delete"),
+                                "{method} {path} offers an API token the delete scope"
                             );
                         }
                     }

@@ -42,7 +42,6 @@ const token: ApiTokenItem = {
   label: "Laptop",
   can_import: true,
   can_export: true,
-  can_delete: false,
   created_at: "1700000000",
   token_hint: "mv-api-la..op",
 };
@@ -78,7 +77,6 @@ describe("useApiTokens", () => {
         label: "Laptop",
         can_import: true,
         can_export: true,
-        can_delete: false,
       }),
     );
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));

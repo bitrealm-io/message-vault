@@ -699,7 +699,6 @@ async function finishImport(args: {
   if (sessionId && !skipComplete) {
     try {
       await completeImport(sessionId, {
-        ok,
         status: outcome,
         message_count: pushReport?.messages_inserted,
         attachment_count: pushReport?.assets_uploaded,

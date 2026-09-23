@@ -134,7 +134,7 @@ fn build_transcode_options(args: &StagingArgs) -> Result<TranscodeOptions, Strin
 
 /// Recompute what a staged folder holds, for the first review.
 ///
-/// Reports progress on `extract:progress` with `step: "prepare"`, so a long
+/// Reports progress on `extract:progress` with `step: "check"`, so a long
 /// summary of a huge folder shows movement on the step the user is already
 /// looking at. The read itself (folder walk plus ffprobe calls) runs on a
 /// blocking-pool thread via [`tauri::async_runtime::spawn_blocking`], so it
@@ -161,7 +161,7 @@ pub async fn summarize_staging(
                 &progress_app,
                 events::PROGRESS,
                 ExtractProgressEvent {
-                    step: "prepare".into(),
+                    step: "check".into(),
                     done: progress.done,
                     total: progress.total,
                     bytes_done: None,

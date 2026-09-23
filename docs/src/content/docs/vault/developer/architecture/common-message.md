@@ -21,7 +21,7 @@ On-disk forms:
 - **JSON** (CLI/GUI default) — one pretty-printed `<conversation-stem>.json` per chat
 - **JSONL** — one `<conversation-stem>.jsonl` per chat: header line, then one `IrMessage` per line
 
-Stem rules match CSV filenames. Packaging-only suffixes (e.g. `__whatsapp`) affect the on-disk stem but are **not** serialized in the JSON body.
+Stem rules match CSV filenames. Packaging-only suffixes (e.g. `__whatsapp`) affect the on-disk stem but are **not** serialized in the JSON body. When two conversations in one run reduce to the same stem, ignoring case (two groups with one title, or two untitled groups with the same people), each gets `__` and the first 8 hex digits of the SHA-256 of its `chat_identifier` appended, so neither file replaces the other. Two conversations with the same `chat_identifier` and stem stop the run instead.
 
 Pipeline: `backup → common message → FormatSink → user-picked format`.
 

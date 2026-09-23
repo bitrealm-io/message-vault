@@ -78,7 +78,7 @@ export interface ExtractErrorEvent {
  * `done`/`total` are the step's position, not message counts.
  */
 export interface ImportProgressEvent {
-  step: "setup" | "parse" | "attachments" | "prepare" | "media" | "upload";
+  step: "setup" | "parse" | "attachments" | "prepare" | "check" | "media" | "upload";
   done: number;
   total: number;
   bytes_done?: number;

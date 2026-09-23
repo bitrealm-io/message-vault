@@ -1169,6 +1169,101 @@ mod text_words {
     }
 }
 
+/// `%`, `_`, and `\\` in what a person types are those characters, never
+/// LIKE wildcards or escapes, and both engines agree on it. Each case seeds a
+/// near miss that a wildcard reading would also match.
+mod like_characters {
+    use super::*;
+
+    #[tokio::test]
+    async fn an_underscore_in_a_filename_is_an_underscore() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let a = ACCOUNT;
+        let exact = message(
+            &mut conn,
+            a,
+            msg(
+                f.bo_direct,
+                "2024-06-01T10:00:00Z",
+                false,
+                Some(f.bo_handle),
+                "photo",
+            ),
+        )
+        .await;
+        attachment(&mut conn, exact, "IMG_0001.jpg", "image/jpeg", 10).await;
+        let near = message(
+            &mut conn,
+            a,
+            msg(
+                f.bo_direct,
+                "2024-06-02T10:00:00Z",
+                false,
+                Some(f.bo_handle),
+                "photo",
+            ),
+        )
+        .await;
+        attachment(&mut conn, near, "IMGX0001.jpg", "image/jpeg", 10).await;
+        assert_eq!(
+            run(&mut conn, ListKind::Messages, "filename:IMG_0001").await,
+            vec![exact]
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Messages, "filename:img_0*").await,
+            vec![exact]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_percent_sign_is_a_percent_sign() {
+        let (pool, _dir, _f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let a = ACCOUNT;
+        let exact = contact(&mut conn, a, "Sale 50% off", &[]).await;
+        contact(&mut conn, a, "Sale 50 percent off", &[]).await;
+        contact(&mut conn, a, "Sale 500 off", &[]).await;
+        assert_eq!(run(&mut conn, ListKind::Contacts, "50%").await, vec![exact]);
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "name:50%").await,
+            vec![exact]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_backslash_is_a_backslash() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let a = ACCOUNT;
+        // A conversation is on the list once it has a message to show.
+        let mut titled = Vec::new();
+        for (chat, title) in [("chat900", "Path a\\b"), ("chat901", "Path ab")] {
+            let chat = handle(&mut conn, a, chat, "imessage").await;
+            let conv =
+                conversation(&mut conn, a, chat, "group", Some(title), &[f.ana_handle]).await;
+            let m = msg(
+                conv,
+                "2024-06-01T10:00:00Z",
+                false,
+                Some(f.ana_handle),
+                "hi",
+            );
+            message(&mut conn, a, m).await;
+            titled.push(conv);
+        }
+        let exact = titled[0];
+        assert_eq!(
+            run(&mut conn, ListKind::Conversations, "a\\b").await,
+            vec![exact]
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Conversations, "title:a\\b*").await,
+            vec![exact]
+        );
+    }
+}
+
 mod people_words {
     use super::*;
 

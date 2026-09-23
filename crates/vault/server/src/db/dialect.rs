@@ -9,14 +9,19 @@ use crate::db::engine::DbEngine;
 
 /// Case-insensitive substring match fragment (`%term%` patterns).
 ///
+/// Both engines name `\` as the escape character. Postgres already treats a
+/// backslash that way by default and SQLite has no escape character unless
+/// told, so without the clause the two disagree on any pattern holding a
+/// backslash. The caller escapes the text it binds.
+///
 /// The `?` placeholder form is **only** for fragments consumed by the
 /// [`crate::db::sql::renumber_placeholders`] pass, which rewrites `?` to the
 /// right `$n`; nothing else may use it — sqlx Any does no client-side
 /// placeholder rewriting, so a bare `?` is invalid on Postgres.
 pub fn like_ci(engine: DbEngine) -> &'static str {
     match engine {
-        DbEngine::Sqlite => "LIKE ? COLLATE NOCASE",
-        DbEngine::Postgres => "ILIKE ?",
+        DbEngine::Sqlite => r"LIKE ? COLLATE NOCASE ESCAPE '\'",
+        DbEngine::Postgres => r"ILIKE ? ESCAPE '\'",
     }
 }
 
@@ -141,8 +146,11 @@ mod tests {
 
     #[test]
     fn like_ci_fragment_is_stable() {
-        assert_eq!(like_ci(DbEngine::Sqlite), "LIKE ? COLLATE NOCASE");
-        assert_eq!(like_ci(DbEngine::Postgres), "ILIKE ?");
+        assert_eq!(
+            like_ci(DbEngine::Sqlite),
+            r"LIKE ? COLLATE NOCASE ESCAPE '\'"
+        );
+        assert_eq!(like_ci(DbEngine::Postgres), r"ILIKE ? ESCAPE '\'");
     }
 
     #[test]

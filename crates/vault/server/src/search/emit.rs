@@ -130,7 +130,11 @@ fn emit_expr(ctx: &ListCtx, out: &mut Sql, expr: &Expr) -> Result<(), QueryError
 ///
 /// The one place that turns text or a prefix into a LIKE pattern: free text
 /// (`free_text_match`) and the text words (`text_match`) both go through it.
+/// It escapes the text first, so a `%`, `_`, or `\` a person types is that
+/// character and never a wildcard: `filename:IMG_0001` does not find
+/// `IMGX0001`. `like_ci` names `\` as the escape character on both engines.
 fn like_contains(out: &mut Sql, engine: DbEngine, column: &str, text: &str, prefix: bool) {
+    let text = like_escape(text);
     if prefix {
         out.push("(");
         out.like(engine, column, &format!("{text}%"));
@@ -140,6 +144,18 @@ fn like_contains(out: &mut Sql, engine: DbEngine, column: &str, text: &str, pref
     } else {
         out.like(engine, column, &format!("%{text}%"));
     }
+}
+
+/// `text` with each LIKE metacharacter (`\`, `%`, `_`) behind a backslash.
+fn like_escape(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for c in text.chars() {
+        if matches!(c, '\\' | '%' | '_') {
+            escaped.push('\\');
+        }
+        escaped.push(c);
+    }
+    escaped
 }
 
 /// One free-text test on `column`, for the lists matched with LIKE.

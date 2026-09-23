@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { ImportProgressEvent } from "../../lib/types";
 import {
   attachmentDoneDetail,
+  EMPTY_TIMING,
   isProgressStepComplete,
+  recordStageTime,
+  type StageTiming,
   setupDetail,
+  stageDurations,
   stepIndexFor,
   stepsFor,
 } from "./importProgressState";
@@ -111,5 +115,46 @@ describe("stepIndexFor", () => {
     // active/done simultaneously.
     const unknownStep = "unknown-step" as unknown as ImportProgressEvent["step"];
     expect(stepIndexFor(unknownStep, "convert")).toBe(-1);
+  });
+});
+
+describe("stage timing", () => {
+  function timeline(events: [ImportProgressEvent["step"], number][]): StageTiming {
+    return events.reduce((timing, [step, now]) => recordStageTime(timing, step, now), {
+      ...EMPTY_TIMING,
+      extractStartedAt: 0,
+    });
+  }
+
+  it("times each stage from its first event to its last while they overlap", () => {
+    // Attachments copy while messages are still read and conversation files
+    // are written, so a prepare event must not end the attachment timer.
+    const timing = timeline([
+      ["setup", 100],
+      ["parse", 200],
+      ["attachments", 300],
+      ["prepare", 400],
+      ["parse", 500],
+      ["prepare", 700],
+      ["attachments", 900],
+    ]);
+    expect(stageDurations(timing, 1000)).toEqual({
+      parseMs: 400,
+      attachmentsMs: 600,
+      prepareMs: 300,
+    });
+  });
+
+  it("gives attachments and prepare no time when they never reported", () => {
+    const timing = timeline([
+      ["parse", 100],
+      ["parse", 400],
+    ]);
+    expect(stageDurations(timing, 1000)).toEqual({ parseMs: 300, attachmentsMs: 0, prepareMs: 0 });
+  });
+
+  it("runs reading to the end of extract when only setup reported", () => {
+    const timing = timeline([["setup", 100]]);
+    expect(stageDurations(timing, 1000).parseMs).toBe(900);
   });
 });

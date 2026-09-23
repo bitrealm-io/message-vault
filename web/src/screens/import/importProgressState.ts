@@ -117,3 +117,77 @@ export function attachmentDoneDetail(
     bytesTotal: counts?.bytesTotal ?? 0,
   });
 }
+
+/**
+ * When each Staging stage first and last reported, from `performance.now()`.
+ * The stages overlap: messages are still being read while attachments copy,
+ * and conversation files are written while attachments copy, so no stage's
+ * event marks the end of another.
+ */
+export type StageTiming = {
+  extractStartedAt: number | null;
+  parseStartedAt: number | null;
+  parseEndedAt: number | null;
+  attachmentsStartedAt: number | null;
+  attachmentsEndedAt: number | null;
+  prepareStartedAt: number | null;
+  prepareEndedAt: number | null;
+};
+
+export const EMPTY_TIMING: StageTiming = {
+  extractStartedAt: null,
+  parseStartedAt: null,
+  parseEndedAt: null,
+  attachmentsStartedAt: null,
+  attachmentsEndedAt: null,
+  prepareStartedAt: null,
+  prepareEndedAt: null,
+};
+
+/**
+ * Timing after one progress event at `now`: the event's stage starts at its
+ * first event and ends at its latest. The progress sink always delivers a
+ * stage's last count, so the latest event is when the stage finished.
+ * Decrypting and caching (`setup`) are the start of reading the backup, so
+ * they start the read timer without ending it.
+ */
+export function recordStageTime(
+  timing: StageTiming,
+  step: ImportProgressEvent["step"],
+  now: number,
+): StageTiming {
+  switch (step) {
+    case "setup":
+      return { ...timing, parseStartedAt: timing.parseStartedAt ?? now };
+    case "parse":
+      return { ...timing, parseStartedAt: timing.parseStartedAt ?? now, parseEndedAt: now };
+    case "attachments":
+      return {
+        ...timing,
+        attachmentsStartedAt: timing.attachmentsStartedAt ?? now,
+        attachmentsEndedAt: now,
+      };
+    case "prepare":
+      return { ...timing, prepareStartedAt: timing.prepareStartedAt ?? now, prepareEndedAt: now };
+    default:
+      return timing;
+  }
+}
+
+/**
+ * Read, attachment, and prepare durations once extract has finished. A stage
+ * that never reported took no time. Reading with no message count (only
+ * setup events) runs until the extract finished.
+ */
+export function stageDurations(
+  timing: StageTiming,
+  extractFinishedAt: number,
+): { parseMs: number; attachmentsMs: number; prepareMs: number } {
+  const span = (start: number | null, end: number | null) =>
+    start == null ? 0 : Math.max(0, (end ?? extractFinishedAt) - start);
+  return {
+    parseMs: span(timing.parseStartedAt ?? timing.extractStartedAt, timing.parseEndedAt),
+    attachmentsMs: span(timing.attachmentsStartedAt, timing.attachmentsEndedAt),
+    prepareMs: span(timing.prepareStartedAt, timing.prepareEndedAt),
+  };
+}

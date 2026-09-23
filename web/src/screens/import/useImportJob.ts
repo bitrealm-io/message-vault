@@ -53,11 +53,15 @@ import { importOutcome } from "./importOutcome";
 import {
   type AttachmentProgressCounts,
   attachmentDoneDetail,
+  EMPTY_TIMING,
   type ImportStep,
   isProgressStepComplete,
   MEDIA_LABEL,
+  recordStageTime,
   STAGING_LABEL,
+  type StageTiming,
   setupDetail,
+  stageDurations,
   stepIndexFor,
   stepsFor,
   UPLOAD_LABEL,
@@ -72,26 +76,6 @@ import {
 export type { ImportPhase, ImportStep } from "./importProgressState";
 
 export const PUSH_LOG_NAME = "vault-push.log";
-
-type StageTiming = {
-  extractStartedAt: number | null;
-  parseStartedAt: number | null;
-  parseEndedAt: number | null;
-  attachmentsStartedAt: number | null;
-  attachmentsEndedAt: number | null;
-  prepareStartedAt: number | null;
-  prepareEndedAt: number | null;
-};
-
-const EMPTY_TIMING: StageTiming = {
-  extractStartedAt: null,
-  parseStartedAt: null,
-  parseEndedAt: null,
-  attachmentsStartedAt: null,
-  attachmentsEndedAt: null,
-  prepareStartedAt: null,
-  prepareEndedAt: null,
-};
 
 /** Parse/attachments/prepare durations, fixed once extract finishes and read again at finish time. */
 type ExtractDurations = {
@@ -203,28 +187,6 @@ function resumeSteps(attachmentMedia: AttachmentMediaMode, mediaDone: boolean): 
     }
     return step;
   });
-}
-
-/** Parse, attachment, and prepare durations from timestamps recorded during extract. */
-function stageDurations(
-  timing: StageTiming,
-  extractFinishedAt: number,
-): { parseMs: number; attachmentsMs: number; prepareMs: number } {
-  const parseStart = timing.parseStartedAt ?? timing.extractStartedAt ?? extractFinishedAt;
-  const attachmentsEnd = timing.attachmentsEndedAt ?? timing.prepareStartedAt ?? extractFinishedAt;
-  const prepareEnd = timing.prepareEndedAt ?? extractFinishedAt;
-  return {
-    parseMs: Math.max(
-      0,
-      (timing.parseEndedAt ?? timing.attachmentsStartedAt ?? extractFinishedAt) - parseStart,
-    ),
-    attachmentsMs:
-      timing.attachmentsStartedAt != null
-        ? Math.max(0, attachmentsEnd - timing.attachmentsStartedAt)
-        : 0,
-    prepareMs:
-      timing.prepareStartedAt != null ? Math.max(0, prepareEnd - timing.prepareStartedAt) : 0,
-  };
 }
 
 export type ImportJobFormValues = {
@@ -486,26 +448,17 @@ function beginRun(form: ImportJobFormValues, firstStep: ImportIssue["step"]): vo
 function applyProgress(event: ImportProgressEvent): void {
   const now = performance.now();
 
-  if (event.step === "setup") {
-    // Decrypting and caching are the start of reading the backup, so the
-    // read timer starts here rather than at the first message count.
-    scratch.timing.parseStartedAt ??= now;
-  } else if (event.step === "parse") {
-    scratch.timing.parseStartedAt ??= now;
+  scratch.timing = recordStageTime(scratch.timing, event.step, now);
+  if (event.step === "parse") {
     scratch.counts.messagesParsed =
       event.total > 0 && event.done >= event.total ? event.total : event.done;
   } else if (event.step === "attachments") {
-    scratch.timing.parseEndedAt ??= now;
-    scratch.timing.attachmentsStartedAt ??= now;
     scratch.lastAttachmentProgress = {
       done: event.done,
       total: event.total,
       bytesDone: event.bytes_done ?? 0,
       bytesTotal: event.bytes_total ?? 0,
     };
-  } else if (event.step === "prepare") {
-    scratch.timing.attachmentsEndedAt ??= now;
-    scratch.timing.prepareStartedAt ??= now;
   }
 
   const stepIndex = stepIndexFor(event.step, scratch.attachmentMode);
@@ -1097,8 +1050,6 @@ async function runImport(
     }
 
     const extractFinishedAt = performance.now();
-    scratch.timing.prepareEndedAt = extractFinishedAt;
-    scratch.timing.attachmentsEndedAt ??= scratch.timing.prepareStartedAt ?? extractFinishedAt;
     const { parseMs, attachmentsMs, prepareMs } = stageDurations(scratch.timing, extractFinishedAt);
     scratch.durations = { parseMs, attachmentsMs, prepareMs };
     // What extract did ("Copied", not "Converted", under convert/compress

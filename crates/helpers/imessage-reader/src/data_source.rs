@@ -185,7 +185,7 @@ mod tests {
             .db()
             .query_row("SELECT count(*) FROM chat", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(chats, 2);
+        assert_eq!(chats, 3);
     }
 
     /// A contacts file that cannot be read is logged and the run goes on

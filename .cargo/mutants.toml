@@ -1,0 +1,47 @@
+# cargo-mutants configuration, read by scripts/mutants.sh and by any
+# `cargo mutants` run from the repository root.
+#
+# Mutation testing changes the code one small way at a time (a `<` becomes
+# `<=`, a function returns `Default::default()`, a `&&` becomes `||`) and
+# runs the tests. A mutant the tests still pass is a "missed" mutant: a
+# change in behaviour no test notices. It is a report, never a gate:
+# docs/adr/0007-ci-is-the-only-gate.md.
+#
+# Only the files below are mutated. They are where a wrong comparison or a
+# dropped branch loses, duplicates, leaks, or mis-attributes messages, so a
+# weak test there costs the most. The whole workspace would be tens of
+# thousands of mutants; add a file here when it holds a rule like that.
+
+examine_globs = [
+    # Import: staging, promote, contact naming, and deduplication.
+    "crates/vault/server/src/import/promote.rs",
+    "crates/vault/server/src/import/staging.rs",
+    "crates/vault/server/src/import/contact_name.rs",
+    "crates/vault/server/src/dedupe.rs",
+    # Who may see and change what.
+    "crates/vault/server/src/db/permissions.rs",
+    "crates/vault/server/src/db/ownership.rs",
+    "crates/vault/server/src/db/session_tokens.rs",
+    "crates/vault/server/src/db/api_tokens.rs",
+    # Search and paging: which messages a query returns.
+    "crates/vault/server/src/search/emit.rs",
+    "crates/vault/server/src/paging.rs",
+    # Phone numbers and contact names: who a message is from.
+    "crates/libs/phone/src/lib.rs",
+    "crates/libs/contacts/src/book.rs",
+    "crates/exporters/whatsapp-exporter/src/jid.rs",
+    "crates/libs/sbr/src/read.rs",
+    # Obfuscation: what an obfuscated export may still reveal.
+    "crates/libs/obfuscate/src/lib.rs",
+    "crates/libs/ir-format/src/export_transforms.rs",
+    # Staging's write queue: resume, and one file per conversation.
+    "crates/libs/staging/src/write_queue.rs",
+]
+
+# A mutant that turns a loop infinite is stopped at this multiple of the
+# unmutated test time and counted as a timeout, not a miss.
+timeout_multiplier = 3.0
+
+# Mutants are built in a copy of the tree. Leave out what .gitignore lists,
+# above all other worktrees' target/ folders under .claude/worktrees/.
+gitignore = true

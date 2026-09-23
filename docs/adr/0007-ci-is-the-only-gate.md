@@ -53,6 +53,10 @@ workflow whose every job is required. It runs `scripts/coverage.sh`
 (cargo-llvm-cov over the workspace on SQLite, then the server crate again on
 Postgres, both passes in one report) on each push
 to `main` and on demand, and keeps the reports as a workflow artifact.
+Mutation testing lives in `mutants.yml` for the same reason. It runs
+`scripts/mutants.sh` (cargo-mutants over the files listed in
+`.cargo/mutants.toml`) weekly and on demand, split across shards because a
+full run takes hours, and a missed mutant never fails anything.
 
 The docs build on a pull request is the `docs` job in `ci.yml`, not a trigger
 on `docs.yml` — a required check that lives in a path-filtered workflow

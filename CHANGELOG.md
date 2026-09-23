@@ -38,6 +38,13 @@ released versions carry their date on the heading.
   Import uses to determine which messages belong to you. The glossary and
   the architecture notes record the same distinction: a contact's identity
   means the person took part, an account's means the messages are theirs.
+- 2026-09-22 **Profile Setup shows the identities already on your account
+  in their own fields.** Phone numbers and emails the vault owner added
+  now fill the rows, where you can change or remove them before going on,
+  instead of sitting in a line of text above them.
+- 2026-09-22 **Shorter wording on two screens.** Create Vault Owner now
+  opens with "A vault owner is required to create and manage users.", and
+  the Display Name button in Settings reads Save without changing to Saved.
 
 ## [0.9.0] - 2026-09-22
 

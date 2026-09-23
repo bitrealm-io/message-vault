@@ -20,7 +20,6 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
   const updateProfile = useUpdateSettingsProfile(managedAccountId);
   const managed = managedAccountId !== undefined;
   const [name, setName] = useState("");
-  const [nameSaved, setNameSaved] = useState(false);
   const [nameError, setNameError] = useState("");
   const [zoneError, setZoneError] = useState("");
 
@@ -43,8 +42,6 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
         preferred_name: name.trim() || null,
       });
       setName(updated.preferred_name ?? "");
-      setNameSaved(true);
-      setTimeout(() => setNameSaved(false), 2000);
     } catch (e) {
       setNameError(e instanceof Error ? e.message : String(e));
     }
@@ -74,7 +71,7 @@ export function ProfileSettingsPanel({ managedAccountId }: { managedAccountId?: 
           className={`${inputClassName} flex-1`}
         />
         <Button variant="primary" onClick={handleSaveName} className="!px-[0.85rem] !py-[0.35rem]">
-          {nameSaved ? "Saved" : "Save"}
+          Save
         </Button>
       </div>
       {nameError && <div className="mb-6 text-[0.813rem] text-danger">{nameError}</div>}

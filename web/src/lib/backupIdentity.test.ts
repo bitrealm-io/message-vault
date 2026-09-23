@@ -62,12 +62,12 @@ describe("formIdentities", () => {
     ownerEmails: ["owner@example.com"],
   };
 
-  it("takes an Android SMS source's phones, and emails only for SMS Backup+", () => {
+  it("takes an Android SMS source's phones", () => {
     expect(formIdentities(sms)).toEqual(["+15550001111"]);
-    expect(formIdentities({ ...sms, source: "sms-backup-plus" })).toEqual([
-      "+15550001111",
-      "owner@example.com",
-    ]);
+  });
+
+  it("leaves out SMS Backup+'s emails, which name the Gmail account the backup is in", () => {
+    expect(formIdentities({ ...sms, source: "sms-backup-plus" })).toEqual(["+15550001111"]);
   });
 
   it("names none for a source that asks for no address", () => {

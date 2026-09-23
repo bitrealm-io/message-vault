@@ -154,9 +154,11 @@ pub struct Form {
     pub input: String,
     /// Output directory for the export.
     pub output: String,
-    /// Comma-separated owner phone numbers (marks outgoing messages).
+    /// Owner phone numbers, one per line or separated by commas or
+    /// semicolons; spaces stay inside a number (marks outgoing messages).
     pub owner_phones: String,
-    /// Comma-separated owner email addresses (marks outgoing messages).
+    /// Owner email addresses, one per line or separated by commas or
+    /// semicolons (marks outgoing messages).
     pub owner_emails: String,
     /// Optional zone for timestamps that carry none: a fixed UTC offset
     /// (`UTC-05:00`) or an IANA name (`America/New_York`).
@@ -617,7 +619,10 @@ fn lines(value: &str) -> Vec<&str> {
     value.lines().filter_map(message_ir::trimmed).collect()
 }
 
-/// Non-empty tokens split on commas or whitespace.
+/// Non-empty trimmed values split on newlines, commas or semicolons.
+///
+/// Spaces do not split: people type phone numbers with them
+/// (`+1 555-123-4567`), so `"+1555 +1666"` is one value.
 fn values(value: &str) -> Vec<&str> {
     value
         .split(['\n', ',', ';'])
@@ -633,6 +638,51 @@ fn non_empty_path(value: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn values_split_on_newline_comma_and_semicolon_but_not_spaces() {
+        let cases: &[(&str, &[&str])] = &[
+            ("", &[]),
+            ("  \n , ; ", &[]),
+            ("+15555550100", &["+15555550100"]),
+            (
+                "+15555550100\n+15555550101",
+                &["+15555550100", "+15555550101"],
+            ),
+            (
+                "+15555550100, +15555550101",
+                &["+15555550100", "+15555550101"],
+            ),
+            (
+                "+15555550100;+15555550101",
+                &["+15555550100", "+15555550101"],
+            ),
+            (
+                "+15555550100\r\n+15555550101,+15555550102 ; +15555550103",
+                &[
+                    "+15555550100",
+                    "+15555550101",
+                    "+15555550102",
+                    "+15555550103",
+                ],
+            ),
+            // A space stays inside one value: "+1 555-123-4567" is one
+            // number, typed the way the Import screen's placeholder shows it.
+            ("+1 555-123-4567", &["+1 555-123-4567"]),
+            ("+1555 +1666", &["+1555 +1666"]),
+            (
+                "+1 555-123-4567, +44 20 7946 0958",
+                &["+1 555-123-4567", "+44 20 7946 0958"],
+            ),
+            (
+                "me@example.com;; you@example.com",
+                &["me@example.com", "you@example.com"],
+            ),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(values(input), *expected, "values({input:?})");
+        }
+    }
 
     #[test]
     fn imazing_passes_obfuscate() {
@@ -655,14 +705,30 @@ mod tests {
             obfuscate_seed: "bad".into(),
             ..Form::default()
         };
-        assert!(form.to_config(Exporter::OpenExtract).is_err());
+        assert_eq!(
+            form.to_config(Exporter::OpenExtract).unwrap_err(),
+            vec!["obfuscate seed must be exactly 64 hex characters, got 3".to_string()]
+        );
         let form = Form {
             input: std::env::current_dir().unwrap().display().to_string(),
             output: "out".into(),
             obfuscate_seed: "01234567".into(),
             ..Form::default()
         };
-        assert!(form.to_config(Exporter::OpenExtract).is_err());
+        assert_eq!(
+            form.to_config(Exporter::OpenExtract).unwrap_err(),
+            vec!["obfuscate seed must be exactly 64 hex characters, got 8".to_string()]
+        );
+        let form = Form {
+            input: std::env::current_dir().unwrap().display().to_string(),
+            output: "out".into(),
+            obfuscate_seed: "g".repeat(64),
+            ..Form::default()
+        };
+        assert_eq!(
+            form.to_config(Exporter::OpenExtract).unwrap_err(),
+            vec!["obfuscate seed must contain only hex characters (0-9, a-f)".to_string()]
+        );
         let form = Form {
             input: std::env::current_dir().unwrap().display().to_string(),
             output: "out".into(),
@@ -718,7 +784,10 @@ mod tests {
             output: String::new(),
             ..Form::default()
         };
-        assert!(form.to_config(Exporter::Imessage).is_err());
+        assert_eq!(
+            form.to_config(Exporter::Imessage).unwrap_err(),
+            vec!["Output directory is required.".to_string()]
+        );
 
         let form = Form {
             output: "out".into(),

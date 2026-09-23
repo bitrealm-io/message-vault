@@ -18,7 +18,9 @@ use std::{
     },
 };
 
-use chat_db_fixture::{PHOTO_BYTES, write_chat_db};
+use chat_db_fixture::{FRIEND_EMAIL, FRIEND_PHONE, OWNER, OWNER_EMAIL, PHOTO_BYTES, write_chat_db};
+use message_ir::{ConversationDocument, IrDirection, IrMessage};
+use message_ir_format::read_conversation_jsonl;
 use message_vault_io_core::{
     AppleConfig, ApplePlatform, ExporterConfig, MediaConfig, OutputFormat, SourceConfig,
 };
@@ -116,7 +118,7 @@ fn exports_a_mac_chat_db_through_the_helper_process() {
     );
 
     let files = jsonl_files(&output);
-    assert_eq!(files.len(), 2, "one file per conversation: {files:?}");
+    assert_eq!(files.len(), 3, "one file per conversation: {files:?}");
     let all: String = files
         .iter()
         .map(|path| fs::read_to_string(path).unwrap())
@@ -163,7 +165,82 @@ fn identities_come_back_cleaned_from_the_helper_process() {
 
     let mut identities = imessage_ir_exporter::backup_identities(&db_path, false, None).unwrap();
     identities.sort();
-    assert_eq!(identities, vec!["+15550000001".to_string()]);
+    assert_eq!(
+        identities,
+        vec![OWNER.to_string(), OWNER_EMAIL.to_string()],
+        "the phone from `P:` and the email from `E:`, each once, and the \
+         NULL caller id on one outgoing row adds nothing"
+    );
+}
+
+/// The exported document for the conversation Apple identifies as `chat_identifier`.
+fn document_for(output: &Path, chat_identifier: &str) -> ConversationDocument {
+    jsonl_files(output)
+        .iter()
+        .map(|path| read_conversation_jsonl(path).unwrap())
+        .find(|doc| doc.conversation.chat_identifier == chat_identifier)
+        .unwrap_or_else(|| panic!("no exported conversation for {chat_identifier}"))
+}
+
+/// The message with `guid`, from a document.
+fn message<'a>(doc: &'a ConversationDocument, guid: &str) -> &'a IrMessage {
+    doc.messages
+        .iter()
+        .find(|m| m.guid == guid)
+        .unwrap_or_else(|| panic!("no message {guid} in {}", doc.conversation.chat_identifier))
+}
+
+/// The owner sends from a phone in one chat and from an email in another.
+/// Every outgoing row is the owner's, whichever address it went out from,
+/// and the row Apple left without a caller id takes its conversation's
+/// owner address rather than nobody's.
+#[test]
+fn messages_from_either_owner_address_are_sent_by_the_owner() {
+    helper_binary();
+    let dir = tempfile::tempdir().unwrap();
+    let db_path = write_chat_db(dir.path());
+    let output = dir.path().join("out");
+
+    imessage_ir_exporter::run(&config(&db_path, &output, None)).unwrap();
+
+    let phone_chat = document_for(&output, FRIEND_PHONE);
+    assert_eq!(phone_chat.export.owner_handle.as_deref(), Some(OWNER));
+    let nice = message(&phone_chat, "guid-2");
+    assert_eq!(nice.direction, IrDirection::Outgoing);
+    assert_eq!(nice.sender_handle.as_deref(), Some(OWNER));
+    assert_eq!(nice.owner_handle.as_deref(), Some(OWNER));
+    let still_me = message(&phone_chat, "guid-5");
+    assert_eq!(still_me.direction, IrDirection::Outgoing);
+    assert_eq!(
+        still_me.sender_handle.as_deref(),
+        Some(OWNER),
+        "a NULL caller id falls back to the conversation's owner"
+    );
+    let photo = message(&phone_chat, "guid-1");
+    assert_eq!(photo.direction, IrDirection::Incoming);
+    assert_eq!(photo.sender_handle.as_deref(), Some(FRIEND_PHONE));
+
+    let email_chat = document_for(&output, FRIEND_EMAIL);
+    assert_eq!(
+        email_chat.export.owner_handle.as_deref(),
+        Some(OWNER_EMAIL),
+        "the email account's chat is owned by the email, with no `E:` prefix"
+    );
+    let from_mac = message(&email_chat, "guid-4");
+    assert_eq!(from_mac.direction, IrDirection::Outgoing);
+    assert_eq!(from_mac.sender_handle.as_deref(), Some(OWNER_EMAIL));
+    assert_eq!(from_mac.owner_handle.as_deref(), Some(OWNER_EMAIL));
+    let roster: Vec<_> = email_chat
+        .conversation
+        .participants
+        .iter()
+        .filter_map(|p| p.handle.as_deref())
+        .collect();
+    assert_eq!(
+        roster,
+        vec![FRIEND_EMAIL],
+        "the owner's email is not a participant of the owner's own chat"
+    );
 }
 
 #[test]
@@ -204,7 +281,7 @@ fn a_second_run_reuses_the_cancelled_flag_only_when_set() {
     let cancel = Arc::new(AtomicBool::new(false));
 
     imessage_ir_exporter::run(&config(&db_path, &output, Some(cancel.clone()))).unwrap();
-    assert_eq!(jsonl_files(&output).len(), 2);
+    assert_eq!(jsonl_files(&output).len(), 3);
     cancel.store(true, Ordering::Relaxed);
     let err = imessage_ir_exporter::run(&config(&db_path, &output, Some(cancel))).unwrap_err();
     assert_eq!(err.to_string(), "cancelled");

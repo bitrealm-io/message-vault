@@ -146,18 +146,21 @@ mod tests {
     use crate::test_support::FixtureDb;
     use chat_db_fixture::{FRIEND_EMAIL, FRIEND_PHONE, GROUP_CHAT_IDENTIFIER, OWNER};
 
-    /// The caches hold what the fixture wrote: two chats, both deduped to
-    /// themselves, two handles each carrying its raw address as its details.
+    /// The caches hold what the fixture wrote: three chats, each deduped to
+    /// itself, two handles each carrying its raw address as its details. The
+    /// owner's own addresses are never handles: the chat the owner runs from
+    /// the email account has the friend as its one participant.
     #[test]
     fn a_session_caches_the_chats_and_handles() {
         let fixture = FixtureDb::write();
         let session = fixture.session();
 
-        assert_eq!(session.chatrooms.len(), 2);
+        assert_eq!(session.chatrooms.len(), 3);
         assert_eq!(session.chatrooms[&2].chat_identifier, GROUP_CHAT_IDENTIFIER);
-        assert_eq!(session.real_chatrooms.len(), 2);
+        assert_eq!(session.real_chatrooms.len(), 3);
         assert_eq!(session.chatroom_participants[&1], BTreeSet::from([1]));
         assert_eq!(session.chatroom_participants[&2], BTreeSet::from([1, 2]));
+        assert_eq!(session.chatroom_participants[&3], BTreeSet::from([2]));
 
         let phone = session.resolve_participant(1).expect("handle 1");
         assert_eq!(phone.details, FRIEND_PHONE);
@@ -178,7 +181,7 @@ mod tests {
         let fixture = FixtureDb::write();
         let session = fixture.session();
         let messages = FixtureDb::messages(&session);
-        assert_eq!(messages.len(), 3);
+        assert_eq!(messages.len(), 5);
 
         let (chat, real_id) = session.conversation(&messages[2]).expect("the group chat");
         assert_eq!(chat.rowid, 2);
@@ -187,6 +190,17 @@ mod tests {
         assert_eq!(
             session.conversation(&messages[0]).map(|(_, id)| *id),
             Some(0)
+        );
+        let (email_chat, _) = session
+            .conversation(&messages[3])
+            .expect("the chat on the owner's email account");
+        assert_eq!(email_chat.rowid, 3);
+        assert_eq!(
+            session
+                .conversation(&messages[4])
+                .map(|(chat, _)| chat.rowid),
+            Some(1),
+            "a row with no caller id still finds its chat by chat_id"
         );
 
         let mut orphan = FixtureDb::messages(&session).remove(0);

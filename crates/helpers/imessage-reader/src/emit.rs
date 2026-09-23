@@ -704,7 +704,9 @@ fn json_if_any<T: serde::Serialize>(items: &[T]) -> Option<Value> {
 mod tests {
     use super::*;
     use crate::test_support::FixtureDb;
-    use chat_db_fixture::{FRIEND_EMAIL, FRIEND_PHONE, GROUP_CHAT_IDENTIFIER, GROUP_TITLE, OWNER};
+    use chat_db_fixture::{
+        FRIEND_EMAIL, FRIEND_PHONE, GROUP_CHAT_IDENTIFIER, GROUP_TITLE, OWNER, OWNER_EMAIL,
+    };
     use imessage_reader_protocol::AttachmentSource;
     use std::collections::HashMap;
 
@@ -879,6 +881,45 @@ mod tests {
         assert_eq!(handles, vec![FRIEND_PHONE, FRIEND_EMAIL]);
         assert_eq!(message.text, "Saturday works");
         assert_eq!(message.sender_display_name.as_deref(), Some("Robin"));
+    }
+
+    /// The owner's address rides on each row as `destination_caller_id`
+    /// carries it: the email for a row sent from the email account, bare
+    /// (the `E:` prefix lives only in `chat.account_login`), and empty for a
+    /// row Apple wrote with NULL, which is still outgoing and still named
+    /// `Me` when the caller id option is on.
+    #[test]
+    fn the_owner_address_on_a_row_is_the_bare_caller_id_or_nothing() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let messages = FixtureDb::messages(&session);
+
+        let (conversation, from_mac) = build_record(&session, &messages[3]).unwrap();
+        assert_eq!(conversation.chat_identifier, FRIEND_EMAIL);
+        assert_eq!(conversation.conversation_type, "individual");
+        let handles: Vec<_> = conversation
+            .participants
+            .iter()
+            .map(|p| p.handle.as_str())
+            .collect();
+        assert_eq!(
+            handles,
+            vec![FRIEND_EMAIL],
+            "the owner is not a participant"
+        );
+        assert!(from_mac.outgoing);
+        assert_eq!(from_mac.text, "From my Mac");
+        assert_eq!(from_mac.sender_handle, None);
+        assert_eq!(from_mac.owner_handle, OWNER_EMAIL);
+        assert_eq!(from_mac.owner_display_name.as_deref(), Some(OWNER_EMAIL));
+
+        let (conversation, still_me) = build_record(&session, &messages[4]).unwrap();
+        assert_eq!(conversation.chat_identifier, FRIEND_PHONE);
+        assert!(still_me.outgoing);
+        assert_eq!(still_me.text, "Still me");
+        assert_eq!(still_me.sender_handle, None);
+        assert_eq!(still_me.owner_handle, "", "NULL comes through as empty");
+        assert_eq!(still_me.owner_display_name.as_deref(), Some(ME));
     }
 
     /// The fixture's photo message was read a minute after it arrived, so

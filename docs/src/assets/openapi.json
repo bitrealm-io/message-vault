@@ -4144,7 +4144,7 @@
         "tags": [
           "Export"
         ],
-        "summary": "Start an Export Run: compile the scope, count what it matches, and\nrecord the run as `running`. Read its messages at\n`GET /v1/exports/{id}/messages`, then close it with `complete` or `cancel`.",
+        "summary": "Start an Export Run: compile the scope, list and count the messages it\nmatches now, and record the run as `running`. Read that list at\n`GET /v1/exports/{id}/messages`, then close the run with `complete` or\n`cancel`.",
         "operationId": "exports_create_handler",
         "requestBody": {
           "content": {
@@ -4480,7 +4480,7 @@
         "tags": [
           "Export"
         ],
-        "summary": "The messages a running Export Run's scope selects, a page at a time,\noldest first unless `sort` says otherwise. Each page read raises the\nrun's `messages_delivered` to the rows handed over so far.",
+        "summary": "The messages a running Export Run matched when it was created, a page at\na time, oldest first unless `sort` says otherwise. An import, a trash or\na new day since creation changes nothing here. A message deleted since\nleaves its place empty: `total` stays `message_count`, a page can hold\nfewer than `limit` items, and a client steps `offset` by `limit`. Each\npage read raises the run's `messages_delivered` to the places reached.",
         "operationId": "export_messages_handler",
         "parameters": [
           {
@@ -4506,7 +4506,7 @@
           {
             "name": "offset",
             "in": "query",
-            "description": "Page offset; no cap, an offset past the end is an empty page",
+            "description": "Places to skip in the run's list; a client steps it by `limit`. No cap, an offset past the end is an empty page",
             "required": false,
             "schema": {
               "type": "integer",
@@ -8462,12 +8462,12 @@
           "message_count": {
             "type": "integer",
             "format": "int64",
-            "description": "Messages the scope matched when the run was created."
+            "description": "Messages the scope matched when the run was created: the places in\nthe list `GET /v1/exports/{id}/messages` pages, and every page's\n`total`."
           },
           "messages_delivered": {
             "type": "integer",
             "format": "int64",
-            "description": "Rows handed over so far through `GET /v1/exports/{id}/messages`,\nso an abandoned run shows how far it got."
+            "description": "How far `GET /v1/exports/{id}/messages` has read into the run's\nlist, in places, so an abandoned run shows how far it got."
           },
           "scope": {
             "$ref": "#/components/schemas/ExportScope",
@@ -10019,12 +10019,12 @@
                 "message_count": {
                   "type": "integer",
                   "format": "int64",
-                  "description": "Messages the scope matched when the run was created."
+                  "description": "Messages the scope matched when the run was created: the places in\nthe list `GET /v1/exports/{id}/messages` pages, and every page's\n`total`."
                 },
                 "messages_delivered": {
                   "type": "integer",
                   "format": "int64",
-                  "description": "Rows handed over so far through `GET /v1/exports/{id}/messages`,\nso an abandoned run shows how far it got."
+                  "description": "How far `GET /v1/exports/{id}/messages` has read into the run's\nlist, in places, so an abandoned run shows how far it got."
                 },
                 "scope": {
                   "$ref": "#/components/schemas/ExportScope",

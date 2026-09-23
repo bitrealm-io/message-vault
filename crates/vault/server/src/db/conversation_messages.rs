@@ -76,17 +76,6 @@ pub(crate) fn conversation_join_sql() -> String {
         .into()
 }
 
-/// Load the message rows an already-compiled filter matches, joined with
-/// their conversation, attachments and tapbacks.
-///
-/// `where_sql` and `params` are the caller's compiled `WHERE` fragment (a
-/// search query for Export, a conversation id for the read routes) with
-/// placeholders in bind order; this function appends the `ORDER BY`/`LIMIT`/
-/// `OFFSET` and does not touch the total count, which stays the caller's job.
-///
-/// # Errors
-///
-/// Returns an error when a database statement fails.
 /// The one key every message list accepts in `sort=`: `date`, the message's
 /// timestamp, with `sort_order` and `id` breaking ties the same way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,6 +94,17 @@ pub const DEFAULT_MESSAGE_SORT: [SortKey<MessageSort>; 1] = [SortKey {
     direction: Direction::Asc,
 }];
 
+/// Load the message rows an already-compiled filter matches, joined with
+/// their conversation, attachments and tapbacks.
+///
+/// `where_sql` and `params` are the caller's compiled `WHERE` fragment (a
+/// search query, a conversation id) with placeholders in bind order; this
+/// function appends the `ORDER BY`/`LIMIT`/`OFFSET` and does not touch the
+/// total count, which stays the caller's job.
+///
+/// # Errors
+///
+/// Returns an error when a database statement fails.
 pub async fn load_messages(
     conn: &mut AnyConnection,
     where_sql: &str,
@@ -118,20 +118,47 @@ pub async fn load_messages(
         .find(|k| k.key == MessageSort::Date)
         .map_or(Direction::Asc, |k| k.direction)
         .sql();
-    let mut sql = format!(
+    load_messages_from(
+        conn,
+        &messages_from_sql(),
+        where_sql,
+        params,
+        &format!("m.timestamp {direction}, m.sort_order {direction}, m.id {direction}"),
+        limit,
+        offset,
+    )
+    .await
+}
+
+/// [`load_messages`] with the caller's own `FROM` clause and `ORDER BY`.
+///
+/// `from_sql` must bind `messages m` and carry [`conversation_join_sql`],
+/// because the `SELECT` list reads `c`, `hc` and `hs`. An Export Run uses it
+/// to page the message ids it stored at creation, in the order it stored them.
+///
+/// # Errors
+///
+/// Returns an error when a database statement fails.
+pub(crate) async fn load_messages_from(
+    conn: &mut AnyConnection,
+    from_sql: &str,
+    where_sql: &str,
+    params: &[SqlParam],
+    order_by: &str,
+    limit: u32,
+    offset: u32,
+) -> Result<Vec<Message>, ApiError> {
+    let sql = format!(
         "SELECT m.id, m.conversation_id, m.source, m.service, m.guid, m.timestamp,
                 m.sort_order, m.is_from_me, hs.raw AS sender, m.subject, m.body,
                 m.is_announcement, m.is_reply, m.thread_originator_guid,
                 m.thread_originator_part, m.num_replies,
                 hc.raw AS chat_identifier, c.conversation_type, c.group_title
-         {messages_from_sql}
-         WHERE {where_sql}",
-        messages_from_sql = messages_from_sql(),
+         {from_sql}
+         WHERE {where_sql}
+         ORDER BY {order_by} LIMIT ? OFFSET ?"
     );
     let mut params = params.to_vec();
-    sql.push_str(&format!(
-        " ORDER BY m.timestamp {direction}, m.sort_order {direction}, m.id {direction} LIMIT ? OFFSET ?"
-    ));
     params.push(SqlParam::Int(limit as i64));
     params.push(SqlParam::Int(offset as i64));
 

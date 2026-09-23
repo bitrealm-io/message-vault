@@ -227,7 +227,9 @@ One attempt to move messages out of the vault, recorded permanently whether
 it completed, failed, or was cancelled. The record holds what was asked for
 and how much matched, never what the messages said. A person asks in one of
 three ways: everything the account holds, whatever a search currently shows,
-or conversations and messages they have picked by hand. Exporting everything
+or conversations and messages they have picked by hand. The run hands over
+the messages that matched when it started, whatever is imported or trashed
+while it is read. Exporting everything
 is still an Export Run; it is not called a backup, because a backup is the
 phone's file that Import reads.
 _Avoid_: Export Job, Backup, Download

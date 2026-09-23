@@ -1,9 +1,9 @@
 use super::*;
 use crate::problem::ProblemType;
 use crate::test_support::{
-    RegisteredAccount, SeedConversation, SeedMessage, TestVault, expect_problem, get_json, get_raw,
-    get_status, post_created_json, post_json, post_raw, register_via_api, seed_conversation,
-    test_vault,
+    RegisteredAccount, SeedConversation, SeedMessage, TestVault, delete_status, expect_problem,
+    get_json, get_raw, get_status, post_created_json, post_json, post_raw, post_status,
+    register_via_api, seed_conversation, test_vault,
 };
 use axum::http::StatusCode;
 use serde_json::{Value, json};
@@ -13,8 +13,8 @@ fn oldest_first() -> Vec<SortKey<MessageSort>> {
     DEFAULT_MESSAGE_SORT.to_vec()
 }
 
-/// One page of `scope` for `account`, oldest first, through the same
-/// function the route calls.
+/// Start a run over `scope` for `account` and read one page of it, oldest
+/// first, through the same functions the routes call.
 async fn page(
     conn: &mut AnyConnection,
     account: i64,
@@ -22,18 +22,31 @@ async fn page(
     limit: usize,
     offset: usize,
 ) -> Result<Page<Message>, ApiError> {
+    let run = start_export_run(conn, account, scope, None, crate::search::tests::clock()).await?;
     export_messages(
         conn,
         ExportPageOpts {
-            account_id: account,
-            scope,
+            export_id: run.id,
+            total: u64::try_from(run.message_count).unwrap(),
             limit,
             offset,
-            clock: crate::search::tests::clock(),
             order: oldest_first(),
         },
     )
     .await
+}
+
+/// The four counts a run over `scope` records.
+async fn counts_of(conn: &mut AnyConnection, scope: &ExportScope) -> ExportCounts {
+    let run = start_export_run(conn, 101, scope, None, crate::search::tests::clock())
+        .await
+        .unwrap();
+    ExportCounts {
+        messages: run.message_count,
+        conversations: run.conversation_count,
+        attachments: run.attachment_count,
+        total_bytes: run.total_bytes,
+    }
 }
 
 /// The ids a page holds, in page order.
@@ -278,12 +291,8 @@ async fn export_counts_count_messages_conversations_and_distinct_attachments() {
     .await
     .unwrap();
 
-    let clock = crate::search::tests::clock();
-    let everything = scope_filter(&mut conn, 101, &ExportScope::Everything, clock)
-        .await
-        .unwrap();
     assert_eq!(
-        export_counts(&mut conn, &everything).await.unwrap(),
+        counts_of(&mut conn, &ExportScope::Everything).await,
         ExportCounts {
             messages: 3,
             conversations: 2,
@@ -292,11 +301,8 @@ async fn export_counts_count_messages_conversations_and_distinct_attachments() {
         }
     );
 
-    let one = scope_filter(&mut conn, 101, &query(&format!("in:#{conv1}")), clock)
-        .await
-        .unwrap();
     assert_eq!(
-        export_counts(&mut conn, &one).await.unwrap(),
+        counts_of(&mut conn, &query(&format!("in:#{conv1}"))).await,
         ExportCounts {
             messages: 2,
             conversations: 1,
@@ -999,4 +1005,260 @@ async fn the_old_export_routes_are_gone() {
         let (status, text) = get_raw(&vault.state, path, &alice.token).await;
         expect_problem(status, &text, ProblemType::NotFound);
     }
+}
+
+// ── A run is a snapshot ──────────────────────────────────────────────────────
+
+/// Insert one message into `conversation` for `account`, tied to an Import
+/// Run when `import_id` is given, and return its id. Stands in for an import
+/// landing while a run is being read.
+async fn insert_message(
+    vault: &TestVault,
+    account: i64,
+    conversation: i64,
+    timestamp: &str,
+    import_id: Option<i64>,
+) -> i64 {
+    let mut conn = vault.conn().await;
+    sqlx::query_scalar(
+        "INSERT INTO messages (
+            conversation_id, account_id, source, service, timestamp,
+            is_from_me, sort_order, body, import_id
+         ) VALUES ($1, $2, 'imessage', 'imessage', $3, 0, 0, 'arrived', $4)
+         RETURNING id",
+    )
+    .bind(conversation)
+    .bind(account)
+    .bind(timestamp)
+    .bind(import_id)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap()
+}
+
+/// Record a completed Import Run for `account` and return its id.
+async fn insert_import(vault: &TestVault, account: i64) -> i64 {
+    let mut conn = vault.conn().await;
+    sqlx::query_scalar(
+        "INSERT INTO vault_imports (account_id, source, mode, status, started_at)
+         VALUES ($1, 'imessage', 'append', 'completed', '2026-01-01T00:00:00Z')
+         RETURNING id",
+    )
+    .bind(account)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap()
+}
+
+/// The ids on one page of run `id` and the page's `total`.
+async fn run_page_ids(vault: &TestVault, token: &str, id: i64, query: &str) -> (Vec<i64>, i64) {
+    let page: Value = get_json(
+        &vault.state,
+        &format!("/v1/exports/{id}/messages?{query}"),
+        token,
+    )
+    .await;
+    let ids = page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["id"].as_i64().unwrap())
+        .collect();
+    (ids, page["total"].as_i64().unwrap())
+}
+
+/// How many snapshot rows run `id` still holds.
+async fn snapshot_rows(vault: &TestVault, id: i64) -> i64 {
+    let mut conn = vault.conn().await;
+    sqlx::query_scalar("SELECT COUNT(*) FROM vault_export_messages WHERE export_id = $1")
+        .bind(id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_run_hands_over_exactly_what_matched_when_it_started() {
+    let (vault, alice, dinner, menu) = vault_with_two_conversations().await;
+    let account = alice.account_id;
+    for day in 4..=6 {
+        insert_message(
+            &vault,
+            account,
+            dinner,
+            &format!("2020-01-0{day}T00:00:00Z"),
+            None,
+        )
+        .await;
+    }
+    let mut matched = message_ids(&vault, dinner).await;
+    matched.extend(message_ids(&vault, menu).await);
+    matched.sort_unstable();
+
+    let run = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
+    let id = run["id"].as_i64().unwrap();
+    assert_eq!(run["message_count"], 6);
+
+    let (mut delivered, total) = run_page_ids(&vault, &alice.token, id, "limit=2").await;
+    assert_eq!(total, 6);
+
+    // Between pages, an import brings in messages that sort before
+    // everything already read, and the conversation on a later page is
+    // trashed.
+    for day in 1..=3 {
+        insert_message(
+            &vault,
+            account,
+            dinner,
+            &format!("2019-01-0{day}T00:00:00Z"),
+            None,
+        )
+        .await;
+    }
+    assert_eq!(
+        post_status(
+            &vault.state,
+            &format!("/v1/conversations/{menu}/trash"),
+            &alice.token,
+            json!({}),
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+
+    let mut offset = 2;
+    loop {
+        let (ids, total) = run_page_ids(
+            &vault,
+            &alice.token,
+            id,
+            &format!("limit=2&offset={offset}"),
+        )
+        .await;
+        assert_eq!(total, 6, "the total stays what matched at creation");
+        if ids.is_empty() {
+            break;
+        }
+        offset += ids.len();
+        delivered.extend(ids);
+    }
+
+    let mut unique = delivered.clone();
+    unique.sort_unstable();
+    unique.dedup();
+    assert_eq!(unique.len(), delivered.len(), "no repeats: {delivered:?}");
+    assert_eq!(unique, matched, "exactly what matched at creation");
+    let closed: Value = post_json(
+        &vault.state,
+        &format!("/v1/exports/{id}/complete"),
+        &alice.token,
+        json!({}),
+    )
+    .await;
+    assert_eq!(closed["message_count"], json!(delivered.len()));
+    assert_eq!(closed["messages_delivered"], json!(delivered.len()));
+}
+
+#[tokio::test]
+async fn a_deleted_message_leaves_its_place_empty_and_closing_drops_the_list() {
+    let (vault, alice, dinner, menu) = vault_with_two_conversations().await;
+    let menu_message = message_ids(&vault, menu).await;
+    let run = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
+    let id = run["id"].as_i64().unwrap();
+    assert_eq!(snapshot_rows(&vault, id).await, 3);
+
+    let (first, _) = run_page_ids(&vault, &alice.token, id, "limit=2").await;
+    assert_eq!(first.len(), 2);
+
+    // The conversation already read is deleted for good. Its places stay,
+    // empty, so the next page still starts where the reader left off.
+    assert_eq!(
+        post_status(
+            &vault.state,
+            &format!("/v1/conversations/{dinner}/trash"),
+            &alice.token,
+            json!({}),
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        delete_status(
+            &vault.state,
+            &format!("/v1/conversations/{dinner}"),
+            &alice.token
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+    let (second, total) = run_page_ids(&vault, &alice.token, id, "limit=2&offset=2").await;
+    assert_eq!(second, menu_message);
+    assert_eq!(total, 3, "the total is the places listed at creation");
+    let (again, total) = run_page_ids(&vault, &alice.token, id, "limit=2").await;
+    assert!(again.is_empty(), "deleted messages are gone: {again:?}");
+    assert_eq!(total, 3);
+    let (newest_first, _) = run_page_ids(&vault, &alice.token, id, "limit=1&sort=-date").await;
+    assert_eq!(newest_first, menu_message);
+
+    let closed: Value = post_json(
+        &vault.state,
+        &format!("/v1/exports/{id}/complete"),
+        &alice.token,
+        json!({}),
+    )
+    .await;
+    assert_eq!(closed["message_count"], 3, "the record keeps what matched");
+    assert_eq!(
+        snapshot_rows(&vault, id).await,
+        0,
+        "completing drops the list"
+    );
+
+    let other = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
+    let other_id = other["id"].as_i64().unwrap();
+    assert_eq!(snapshot_rows(&vault, other_id).await, 1);
+    let _cancelled: Value = post_json(
+        &vault.state,
+        &format!("/v1/exports/{other_id}/cancel"),
+        &alice.token,
+        json!({}),
+    )
+    .await;
+    assert_eq!(
+        snapshot_rows(&vault, other_id).await,
+        0,
+        "cancelling drops the list"
+    );
+}
+
+#[tokio::test]
+async fn import_last_keeps_meaning_the_import_that_was_last_at_creation() {
+    let (vault, alice, dinner, _menu) = vault_with_two_conversations().await;
+    let account = alice.account_id;
+    let first = insert_import(&vault, account).await;
+    let from_first =
+        insert_message(&vault, account, dinner, "2020-02-01T00:00:00Z", Some(first)).await;
+
+    let run = create_run(
+        &vault,
+        &alice.token,
+        json!({ "kind": "query", "q": "import:last" }),
+    )
+    .await;
+    let id = run["id"].as_i64().unwrap();
+    assert_eq!(run["message_count"], 1);
+
+    let second = insert_import(&vault, account).await;
+    insert_message(
+        &vault,
+        account,
+        dinner,
+        "2020-02-02T00:00:00Z",
+        Some(second),
+    )
+    .await;
+
+    let (ids, total) = run_page_ids(&vault, &alice.token, id, "").await;
+    assert_eq!(ids, vec![from_first]);
+    assert_eq!(total, 1);
 }

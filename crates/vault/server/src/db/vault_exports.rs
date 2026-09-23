@@ -4,7 +4,7 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
 use sqlx::any::AnyRow;
-use sqlx::{AnyConnection, Row};
+use sqlx::{AnyConnection, Connection, Row};
 use vault_api_types::{ExportRun, ExportScope};
 
 use crate::paging::{Direction, SortKey};
@@ -42,7 +42,7 @@ pub struct ExportCounts {
     pub total_bytes: i64,
 }
 
-/// Everything recorded when a run begins.
+/// Everything recorded when a run begins, before its messages are listed.
 #[derive(Debug, Clone)]
 pub struct StartExportArgs<'a> {
     /// Owning vault account.
@@ -51,8 +51,6 @@ pub struct StartExportArgs<'a> {
     pub scope: &'a ExportScope,
     /// Client/tool name, when the client named one.
     pub tool: Option<&'a str>,
-    /// The counts computed for the scope at creation.
-    pub counts: ExportCounts,
 }
 
 /// Column list for `vault_exports`, in the order [`export_from_row`] reads.
@@ -97,15 +95,14 @@ fn id_list(raw: Option<String>) -> Result<Vec<i64>> {
     }
 }
 
-/// Record a new run as `running` and return it as stored.
+/// Record a new run as `running` with zero counts and return its id. The
+/// caller lists the run's messages and then sets the counts with
+/// [`record_counts`], in the same transaction.
 ///
 /// # Errors
 ///
-/// Returns an error when the insert or the read-back fails.
-pub async fn start_export(
-    conn: &mut AnyConnection,
-    args: &StartExportArgs<'_>,
-) -> Result<ExportRun> {
+/// Returns an error when the insert fails.
+pub async fn start_export(conn: &mut AnyConnection, args: &StartExportArgs<'_>) -> Result<i64> {
     let (kind, query, conversation_ids, message_ids) = match args.scope {
         ExportScope::Everything => ("everything", None, None, None),
         ExportScope::Query { q } => ("query", Some(q.as_str()), None, None),
@@ -124,7 +121,7 @@ pub async fn start_export(
             account_id, scope_kind, scope_query, scope_conversation_ids, scope_message_ids,
             tool, status, started_at, message_count, conversation_count, attachment_count,
             total_bytes, messages_delivered
-         ) VALUES ($1, $2, $3, $4, $5, $6, 'running', $7, $8, $9, $10, $11, 0)
+         ) VALUES ($1, $2, $3, $4, $5, $6, 'running', $7, 0, 0, 0, 0, 0)
          RETURNING id",
     )
     .bind(args.account_id)
@@ -134,15 +131,35 @@ pub async fn start_export(
     .bind(message_ids)
     .bind(args.tool)
     .bind(Utc::now().to_rfc3339())
-    .bind(args.counts.messages)
-    .bind(args.counts.conversations)
-    .bind(args.counts.attachments)
-    .bind(args.counts.total_bytes)
     .fetch_one(&mut *conn)
     .await?;
-    get_export(conn, args.account_id, id)
-        .await?
-        .context("export run vanished between insert and read")
+    Ok(id)
+}
+
+/// Set the four counts on a run, computed from the messages it listed.
+///
+/// # Errors
+///
+/// Returns an error when the update fails.
+pub async fn record_counts(
+    conn: &mut AnyConnection,
+    export_id: i64,
+    counts: ExportCounts,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE vault_exports
+         SET message_count = $1, conversation_count = $2, attachment_count = $3,
+             total_bytes = $4
+         WHERE id = $5",
+    )
+    .bind(counts.messages)
+    .bind(counts.conversations)
+    .bind(counts.attachments)
+    .bind(counts.total_bytes)
+    .bind(export_id)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
 }
 
 /// The account's run with this id, or `None` when the account owns no such
@@ -167,20 +184,22 @@ pub async fn get_export(
     row.as_ref().map(export_from_row).transpose()
 }
 
-/// Close a running run with `status` and stamp `finished_at`. Returns
-/// `false` when the run was not running, which is the caller's `409`: the
-/// status check and the write are one statement, so two closers racing
-/// cannot both win.
+/// Close a running run with `status`, stamp `finished_at`, and delete the
+/// list of messages it matched at creation: a closed run hands nothing over.
+/// Returns `false` when the run was not running, which is the caller's
+/// `409`: the status check and the write are one statement, so two closers
+/// racing cannot both win.
 ///
 /// # Errors
 ///
-/// Returns an error when the update fails.
+/// Returns an error when a statement fails.
 pub async fn finish_export(
     conn: &mut AnyConnection,
     account_id: i64,
     export_id: i64,
     status: &str,
 ) -> Result<bool> {
+    let mut tx = conn.begin().await?;
     let done = sqlx::query(
         "UPDATE vault_exports SET status = $1, finished_at = $2
          WHERE id = $3 AND account_id = $4 AND status = 'running'",
@@ -189,9 +208,17 @@ pub async fn finish_export(
     .bind(Utc::now().to_rfc3339())
     .bind(export_id)
     .bind(account_id)
-    .execute(&mut *conn)
+    .execute(&mut *tx)
     .await?;
-    Ok(done.rows_affected() == 1)
+    if done.rows_affected() != 1 {
+        return Ok(false);
+    }
+    sqlx::query("DELETE FROM vault_export_messages WHERE export_id = $1")
+        .bind(export_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(true)
 }
 
 /// Raise `messages_delivered` to `delivered` when that is higher. A page read

@@ -212,7 +212,9 @@ api_shape! {
         pub started_at: String,
         /// UTC time the run finished, when it has.
         pub finished_at: Option<String>,
-        /// Messages the scope matched when the run was created.
+        /// Messages the scope matched when the run was created: the places in
+        /// the list `GET /v1/exports/{id}/messages` pages, and every page's
+        /// `total`.
         pub message_count: i64,
         /// Distinct conversations with at least one matching message.
         pub conversation_count: i64,
@@ -220,8 +222,8 @@ api_shape! {
         pub attachment_count: i64,
         /// Sum of the known sizes of those distinct attachments, in bytes.
         pub total_bytes: i64,
-        /// Rows handed over so far through `GET /v1/exports/{id}/messages`,
-        /// so an abandoned run shows how far it got.
+        /// How far `GET /v1/exports/{id}/messages` has read into the run's
+        /// list, in places, so an abandoned run shows how far it got.
         pub messages_delivered: i64,
     }
 }

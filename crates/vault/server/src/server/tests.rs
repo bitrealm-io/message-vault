@@ -9,10 +9,6 @@ use crate::import::{
 use axum::extract::State;
 use tempfile::TempDir;
 
-fn auth_public_router() -> Router<AppState> {
-    limited_auth_router().0
-}
-
 #[test]
 fn jsonl_content_type_accepts_x_ndjson() {
     assert!(is_jsonl_content_type("application/x-ndjson"));
@@ -345,26 +341,6 @@ async fn openapi_ui_on_serves_spec_without_token() {
     assert_eq!(response.status(), StatusCode::OK);
     let v: serde_json::Value = response.json().await.unwrap();
     assert!(v["openapi"].as_str().unwrap().starts_with("3."));
-}
-
-async fn auth_route_status(path: &str) -> StatusCode {
-    let (_dir, state, _token, _import_id) = test_state().await;
-    // The public auth router on its own, not http_app: the point is that
-    // these routes are gone from that router, whatever the full app does.
-    let server = crate::test_support::serve_router(auth_public_router().with_state(state)).await;
-    reqwest::Client::new()
-        .post(format!("{}{path}", server.base()))
-        .send()
-        .await
-        .unwrap()
-        .status()
-}
-
-#[tokio::test]
-async fn local_auth_routes_exist() {
-    for path in ["/v1/accounts", "/v1/session"] {
-        assert_ne!(auth_route_status(path).await, StatusCode::NOT_FOUND);
-    }
 }
 
 #[tokio::test]

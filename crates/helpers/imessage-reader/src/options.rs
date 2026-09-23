@@ -156,12 +156,28 @@ mod tests {
         );
     }
 
-    /// The log and progress helpers write to stdout; a call must not panic
-    /// and the test harness captures the lines.
+    /// A log line is one log event; a setup step is a numbered log line
+    /// for people followed by a setup progress event for the bar.
     #[test]
     fn setup_steps_and_log_lines_are_emitted() {
         let options = ReaderOptions::from_source(source(imessage_reader_protocol::Platform::MacOs));
-        options.emit_log("hello");
-        options.setup_step(1, 4, "Caching chats");
+        let events = crate::log::capture::events(|| {
+            options.emit_log("hello");
+            options.setup_step(1, 4, "Caching chats");
+        });
+        assert_eq!(
+            events,
+            [
+                serde_json::json!({"event": "log", "line": "hello"}),
+                serde_json::json!({"event": "log", "line": "  [1/4] Caching chats..."}),
+                serde_json::json!({
+                    "event": "progress",
+                    "stage": "setup",
+                    "label": "Caching chats",
+                    "step": 1,
+                    "total": 4,
+                }),
+            ]
+        );
     }
 }

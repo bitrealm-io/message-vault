@@ -132,13 +132,59 @@ pub(crate) fn run_wtsexporter(
     if !args.work_dir.is_dir() {
         bail!("work dir does not exist: {}", args.work_dir.display());
     }
-    let paths = resolve_forwarded_paths(args)?;
     let out_dir = json_out
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(out_dir).with_context(|| format!("create {}", out_dir.display()))?;
 
+    let output = wtsexporter_command(bin, args, out_dir, json_out)?
+        .output()
+        .map_err(|err| {
+            let hint = if err.kind() == std::io::ErrorKind::NotFound {
+                " (often a broken pipx/venv shim: the script exists but its Python interpreter does not — try `pipx reinstall whatsapp-chat-exporter` or set WTSEXPORTER to a working binary)"
+            } else {
+                ""
+            };
+            anyhow::anyhow!("spawn {}: {err}{hint}", bin.display())
+        })?;
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    if !output.status.success() {
+        bail!(
+            "wtsexporter failed ({}){}\n{}",
+            output.status,
+            if combined.trim().is_empty() { "" } else { ":" },
+            combined.trim()
+        );
+    }
+    if !json_out.is_file() {
+        bail!(
+            "wtsexporter finished but JSON missing at {}. Output:\n{}",
+            json_out.display(),
+            combined.trim()
+        );
+    }
+    Ok(combined)
+}
+
+/// The wtsexporter command for `args`, writing media to `out_dir` and JSON
+/// to `json_out`. A hex key is written to a file in the work dir here.
+///
+/// # Errors
+///
+/// Returns an error when a forwarded path cannot be resolved or the key
+/// file cannot be written.
+fn wtsexporter_command(
+    bin: &Path,
+    args: &WtsexporterArgs,
+    out_dir: &Path,
+    json_out: &Path,
+) -> Result<Command> {
+    let paths = resolve_forwarded_paths(args)?;
     let mut cmd = Command::new(bin);
     // Scratch cwd so iOS/Android extract does not pollute the GUI launch directory.
     cmd.current_dir(&args.work_dir)
@@ -182,36 +228,7 @@ pub(crate) fn run_wtsexporter(
     // Never pass `-c` (--move-media): wtsexporter would shutil.move the user's
     // media directory into the scratch work dir, which is deleted when the run
     // finishes — permanently destroying the original media. Always copy.
-
-    let output = cmd.output().map_err(|err| {
-        let hint = if err.kind() == std::io::ErrorKind::NotFound {
-            " (often a broken pipx/venv shim: the script exists but its Python interpreter does not — try `pipx reinstall whatsapp-chat-exporter` or set WTSEXPORTER to a working binary)"
-        } else {
-            ""
-        };
-        anyhow::anyhow!("spawn {}: {err}{hint}", bin.display())
-    })?;
-    let combined = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    if !output.status.success() {
-        bail!(
-            "wtsexporter failed ({}){}\n{}",
-            output.status,
-            if combined.trim().is_empty() { "" } else { ":" },
-            combined.trim()
-        );
-    }
-    if !json_out.is_file() {
-        bail!(
-            "wtsexporter finished but JSON missing at {}. Output:\n{}",
-            json_out.display(),
-            combined.trim()
-        );
-    }
-    Ok(combined)
+    Ok(cmd)
 }
 
 struct ForwardedPaths {
@@ -383,7 +400,10 @@ fn write_key_file(work_dir: &Path, hex_key: &str) -> Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Platform, WtsexporterArgs, android_crypt_backup, resolve_forwarded_paths};
+    use super::{
+        Platform, WtsexporterArgs, android_crypt_backup, resolve_forwarded_paths,
+        wtsexporter_command,
+    };
     use std::fs;
     use std::path::Path;
     use tempfile::tempdir;
@@ -470,26 +490,104 @@ mod tests {
         assert!(paths.key.is_none());
     }
 
+    /// The arguments of the command built for `args`, as strings.
+    fn command_args(args: &WtsexporterArgs, out_dir: &Path, json_out: &Path) -> Vec<String> {
+        let cmd = wtsexporter_command(Path::new("wtsexporter"), args, out_dir, json_out).unwrap();
+        assert_eq!(cmd.get_current_dir(), Some(args.work_dir.as_path()));
+        cmd.get_args()
+            .map(|arg| arg.to_str().unwrap().to_string())
+            .collect()
+    }
+
+    fn text(path: &Path) -> String {
+        path.to_str().unwrap().to_string()
+    }
+
+    /// An Android backup with every option found: an encrypted database,
+    /// a hex key (passed as a key file, never on the command line),
+    /// contacts, media, and the business app. The whole command line is
+    /// pinned, so a flag added in any form (`-c`, which moves the user's
+    /// media into the scratch folder, above all) fails here.
     #[test]
-    fn skipped_wtsexporter_flags_are_never_passed() {
-        let src = include_str!("wtsexporter.rs");
-        let production = src
-            .split("#[cfg(test)]")
-            .next()
-            .expect("production source before tests");
-        for flag in [
-            "--wab",
-            "--call-db",
-            "--exported",
-            "-e",
-            "-c",
-            "--move-media",
-        ] {
-            let needle = format!("arg(\"{flag}\")");
-            assert!(
-                !production.contains(&needle),
-                "wtsexporter command must not pass {needle}"
-            );
-        }
+    fn an_android_command_forwards_every_found_path_and_nothing_else() {
+        let dir = tempdir().unwrap();
+        let crypt = dir.path().join("msgstore.db.crypt15");
+        fs::write(&crypt, b"crypt").unwrap();
+        let wa = dir.path().join("wa.db");
+        fs::write(&wa, b"wa").unwrap();
+        let media = dir.path().join("WhatsApp");
+        fs::create_dir(&media).unwrap();
+        let work = tempdir().unwrap();
+        let out = work.path().join("out");
+        let json = out.join("result.json");
+        let mut args = android_args(dir.path(), Some("deadbeef"));
+        args.work_dir = work.path().to_path_buf();
+        args.business = true;
+
+        let key_file = work.path().join("decryption.key");
+        assert_eq!(
+            command_args(&args, &out, &json),
+            [
+                "-a".to_string(),
+                "--no-html".to_string(),
+                "--no-banner".to_string(),
+                "-o".to_string(),
+                text(&out),
+                "-j".to_string(),
+                text(&json),
+                "-k".to_string(),
+                text(&key_file),
+                "-b".to_string(),
+                text(&crypt),
+                "-w".to_string(),
+                text(&wa),
+                "-m".to_string(),
+                text(&media),
+                "--business".to_string(),
+            ]
+        );
+        assert_eq!(fs::read(&key_file).unwrap(), [0xde, 0xad, 0xbe, 0xef]);
+    }
+
+    /// An iOS backup forwards its database, contacts and media found under
+    /// the input folder; with no backup file there is no `-b`, so the key
+    /// is dropped too.
+    #[test]
+    fn an_ios_command_forwards_the_found_database_contacts_and_media() {
+        let dir = tempdir().unwrap();
+        let db = dir.path().join("ChatStorage.sqlite");
+        fs::write(&db, b"db").unwrap();
+        let shared = dir
+            .path()
+            .join("AppDomainGroup-group.net.whatsapp.WhatsApp.shared");
+        fs::create_dir(&shared).unwrap();
+        let contacts = shared.join("ContactsV2.sqlite");
+        fs::write(&contacts, b"contacts").unwrap();
+        let out = dir.path().join("out");
+        let json = out.join("result.json");
+        let args = WtsexporterArgs {
+            platform: Platform::Ios,
+            key: Some("deadbeef".to_string()),
+            ..android_args(dir.path(), None)
+        };
+
+        assert_eq!(
+            command_args(&args, &out, &json),
+            [
+                "-i".to_string(),
+                "--no-html".to_string(),
+                "--no-banner".to_string(),
+                "-o".to_string(),
+                text(&out),
+                "-j".to_string(),
+                text(&json),
+                "-d".to_string(),
+                text(&db),
+                "-w".to_string(),
+                text(&contacts),
+                "-m".to_string(),
+                text(&shared),
+            ]
+        );
     }
 }

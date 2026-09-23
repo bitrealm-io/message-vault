@@ -1080,13 +1080,46 @@ mod tests {
         assert_eq!(build_parent_tapbacks(&session, &messages[0]), None);
     }
 
-    /// The whole stream over the fixture: three rows seen, none skipped.
-    /// The events go to stdout, which the test harness captures.
+    /// The whole stream over the fixture: five rows seen, none skipped. Each
+    /// conversation is announced once, before its first message, and the
+    /// stream ends with the full parse count and the done event.
     #[test]
     fn the_fixture_streams_without_a_failure() {
         let fixture = FixtureDb::write();
         let session = fixture.session();
-        stream_export(&session).unwrap();
+        let events = crate::log::capture::events(|| stream_export(&session).unwrap());
+
+        let lines: Vec<String> = events
+            .iter()
+            .map(|event| match event["event"].as_str().unwrap() {
+                "conversation" => format!("conversation {}", event["chat_identifier"]),
+                "message" => format!("message {} in {}", event["guid"], event["chat_identifier"]),
+                other => other.to_string(),
+            })
+            .collect();
+        assert_eq!(
+            lines,
+            [
+                r#"conversation "+15550000002""#,
+                r#"message "guid-1" in "+15550000002""#,
+                r#"message "guid-2" in "+15550000002""#,
+                r#"conversation "chat100""#,
+                r#"message "guid-3" in "chat100""#,
+                r#"conversation "friend@example.com""#,
+                r#"message "guid-4" in "friend@example.com""#,
+                r#"message "guid-5" in "+15550000002""#,
+                "progress",
+                "export_done",
+            ]
+        );
+        assert_eq!(
+            events[8],
+            serde_json::json!({"event": "progress", "stage": "parse", "done": 5, "total": 5})
+        );
+        assert_eq!(
+            events[9],
+            serde_json::json!({"event": "export_done", "messages_seen": 5, "failures": 0})
+        );
     }
 
     #[test]

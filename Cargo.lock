@@ -4086,7 +4086,6 @@ dependencies = [
  "message-ir-format",
  "message-staging",
  "message-vault-io-core",
- "phone",
  "serde",
  "serde_json",
  "tempfile",

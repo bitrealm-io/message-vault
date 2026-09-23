@@ -15,7 +15,6 @@ message-ir = { path = "../../libs/ir" }
 message-ir-format = { path = "../../libs/ir-format" }
 message-staging = { path = "../../libs/staging" }
 media = { path = "../../libs/media" }
-phone = { path = "../../libs/phone" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

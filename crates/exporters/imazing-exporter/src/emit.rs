@@ -5,10 +5,10 @@ use crate::attachments::{AttachmentIndex, ResolveAttachmentArgs, resolve_attachm
 use crate::attachments_emit::{attachment_guid_materials, pending_attachment_to_ir};
 use crate::parse::{DiscoveredCsv, RawRow, SourceKind, discover_csv_files, parse_csv_file};
 use crate::parse_emit::{
-    PeerInfo, TzMode, collect_peer_info, is_notification, is_outgoing, parse_message_date,
-    resolve_sender, resolve_tz,
+    PeerInfo, collect_peer_info, is_notification, is_outgoing, parse_message_date, resolve_sender,
 };
 use anyhow::Result;
+use message_csv::Zone;
 use message_ir::{
     ExportMeta, HandleType, IrAttachment, IrParticipant, IrService, IrSource, PendingAttachment,
     PendingConversation, PendingMessage, ProjectedRole, ProjectionHooks,
@@ -56,7 +56,8 @@ pub(crate) struct ConvertExportArgs<'a> {
 
 /// Convert iMazing Messages / WhatsApp CSV(s) under `input`.
 ///
-/// `timezone`: fixed UTC offset (e.g. `UTC-05:00`). When `None`, use the host local zone.
+/// `timezone`: a fixed UTC offset (`UTC-05:00`) or an IANA zone name
+/// (`America/New_York`). When `None`, use the host local zone.
 /// When `transforms` copies attachments, media files are copied into `output/attachments/`.
 /// When `cancel` is set, cooperative cancellation is checked between CSV files.
 ///
@@ -74,7 +75,7 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
         cancel,
         resume,
     } = args;
-    let tz = resolve_tz(timezone)?;
+    let tz = Zone::parse(timezone)?;
     let (inputs, output) = prepare_outputs(&[input.to_path_buf()], output)?;
     let input = &inputs[0];
     let writer = ExportWriter::open(&output, output_format, transforms, resume)?;
@@ -142,7 +143,7 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
 
 /// Parse-time state shared across every CSV file in one export.
 struct Ingest {
-    tz: TzMode,
+    tz: Zone,
     attachment_index: Option<AttachmentIndex>,
     copy_attachments: bool,
     /// Keyed by `<family>|<chat id>` so a Messages chat and a WhatsApp chat
@@ -236,7 +237,7 @@ impl Ingest {
         peer: &PeerInfo,
         convo_key: &str,
     ) -> Option<PendingMessage> {
-        let Some((secs, date_ms)) = parse_message_date(&row.message_date, &self.tz) else {
+        let Some((secs, date_ms)) = parse_message_date(&row.message_date, self.tz) else {
             self.report.skipped_invalid_date += 1;
             return None;
         };

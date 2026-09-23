@@ -1,73 +1,33 @@
 //! Inclusive start / exclusive end day filters (`YYYY-MM-DD`).
 
 use anyhow::{Result, bail};
-use chrono::{FixedOffset, Local, NaiveDate, TimeZone};
+use chrono::NaiveDate;
 
-use crate::parse_utc_offset;
+use crate::Zone;
 
 /// Message timestamp window: `[start, end)` in Unix seconds.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DateRange {
-    /// Inclusive lower bound (local/tz midnight), if set.
+    /// Inclusive lower bound (midnight in the zone), if set.
     pub start_secs: Option<i64>,
-    /// Exclusive upper bound (local/tz midnight), if set.
+    /// Exclusive upper bound (midnight in the zone), if set.
     pub end_secs: Option<i64>,
 }
 
 impl DateRange {
-    /// Parse optional `YYYY-MM-DD` bounds using the host local timezone.
-    pub fn parse(start: Option<&str>, end: Option<&str>) -> Result<Self> {
+    /// Parse optional `YYYY-MM-DD` bounds, each the midnight that starts the
+    /// day in `zone` (see [`Zone::instant`] for a midnight the clocks skip).
+    pub fn parse_in(zone: Zone, start: Option<&str>, end: Option<&str>) -> Result<Self> {
         Self::parse_with(
             |date| {
-                Local
-                    .from_local_datetime(&date.and_hms_opt(0, 0, 0).expect("midnight"))
-                    .single()
+                let midnight = date.and_hms_opt(0, 0, 0).expect("midnight");
+                zone.instant(midnight)
                     .map(|dt| dt.timestamp())
-                    .ok_or_else(|| {
-                        anyhow::anyhow!("ambiguous or invalid local midnight for {date}")
-                    })
+                    .ok_or_else(|| anyhow::anyhow!("no midnight for {date} in {zone:?}"))
             },
             start,
             end,
         )
-    }
-
-    /// Parse optional `YYYY-MM-DD` bounds in a fixed UTC offset.
-    pub fn parse_in_offset(
-        start: Option<&str>,
-        end: Option<&str>,
-        offset: FixedOffset,
-    ) -> Result<Self> {
-        Self::parse_with(
-            |date| {
-                offset
-                    .from_local_datetime(&date.and_hms_opt(0, 0, 0).expect("midnight"))
-                    .single()
-                    .map(|dt| dt.timestamp())
-                    .ok_or_else(|| {
-                        anyhow::anyhow!("ambiguous or invalid midnight for {date} in {offset}")
-                    })
-            },
-            start,
-            end,
-        )
-    }
-
-    /// Parse bounds in a UTC offset string when provided; otherwise host local.
-    ///
-    /// `tz_name` accepts fixed offsets like `UTC-05:00` (see [`parse_utc_offset`]).
-    pub fn parse_optional_tz(
-        start: Option<&str>,
-        end: Option<&str>,
-        tz_name: Option<&str>,
-    ) -> Result<Self> {
-        match tz_name.and_then(message_ir::trimmed) {
-            None => Self::parse(start, end),
-            Some(name) => {
-                let offset = parse_utc_offset(name)?;
-                Self::parse_in_offset(start, end, offset)
-            }
-        }
     }
 
     /// Parse the optional start and end dates into a range; `midnight_secs` decides which zone midnight is in.
@@ -134,15 +94,14 @@ fn parse_ymd(value: &str) -> Result<NaiveDate> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::FixedOffset;
 
-    fn utc() -> FixedOffset {
-        FixedOffset::east_opt(0).unwrap()
+    fn utc() -> Zone {
+        Zone::parse(Some("UTC")).unwrap()
     }
 
     #[test]
     fn blank_is_unbounded() {
-        let range = DateRange::parse(None, None).unwrap();
+        let range = DateRange::parse_in(Zone::Local, None, None).unwrap();
         assert!(range.is_unbounded());
         assert!(range.contains_secs(0));
         assert!(range.contains_secs(i64::MAX / 2));
@@ -150,8 +109,7 @@ mod tests {
 
     #[test]
     fn inclusive_start_exclusive_end_utc() {
-        let range =
-            DateRange::parse_in_offset(Some("2020-01-01"), Some("2020-01-03"), utc()).unwrap();
+        let range = DateRange::parse_in(utc(), Some("2020-01-01"), Some("2020-01-03")).unwrap();
         // 2020-01-01 00:00:00 UTC
         assert!(range.contains_secs(1_577_836_800));
         // 2020-01-02 12:00:00 UTC
@@ -164,38 +122,28 @@ mod tests {
 
     #[test]
     fn start_must_precede_end() {
-        let err =
-            DateRange::parse_in_offset(Some("2020-01-02"), Some("2020-01-02"), utc()).unwrap_err();
+        let err = DateRange::parse_in(utc(), Some("2020-01-02"), Some("2020-01-02")).unwrap_err();
         assert!(err.to_string().contains("before end-date"));
     }
 
     #[test]
     fn rejects_bad_date() {
-        assert!(DateRange::parse(Some("2020/01/01"), None).is_err());
-        assert!(DateRange::parse_optional_tz(None, Some("nope"), Some("UTC")).is_err());
-    }
-
-    #[test]
-    fn unknown_offset() {
-        assert!(
-            DateRange::parse_optional_tz(Some("2020-01-01"), None, Some("America/New_York"))
-                .is_err()
-        );
+        assert!(DateRange::parse_in(Zone::Local, Some("2020/01/01"), None).is_err());
+        assert!(DateRange::parse_in(utc(), None, Some("nope")).is_err());
     }
 
     #[test]
     fn f64_floors_toward_contains() {
-        let range =
-            DateRange::parse_in_offset(Some("2020-01-01"), Some("2020-01-02"), utc()).unwrap();
+        let range = DateRange::parse_in(utc(), Some("2020-01-01"), Some("2020-01-02")).unwrap();
         assert!(range.contains_secs_f64(1_577_836_800.9));
         assert!(!range.contains_secs_f64(1_577_923_200.0)); // 2020-01-02 00:00 UTC
     }
 
     #[test]
-    fn optional_tz_accepts_utc_offset() {
-        let range =
-            DateRange::parse_optional_tz(Some("2020-01-01"), Some("2020-01-02"), Some("UTC-05:00"))
-                .unwrap();
-        assert!(!range.is_unbounded());
+    fn named_zone_midnight_is_that_zone_s_midnight() {
+        let zone = Zone::parse(Some("America/New_York")).unwrap();
+        let range = DateRange::parse_in(zone, Some("2020-07-01"), None).unwrap();
+        // 2020-07-01 00:00 EDT is 04:00 UTC.
+        assert_eq!(range.start_secs, Some(1_593_576_000));
     }
 }

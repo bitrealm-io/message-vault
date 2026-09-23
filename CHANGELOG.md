@@ -64,6 +64,16 @@ released versions carry their date on the heading.
   message with no recorded sender does from any other source. A message that
   does name its sender was already credited correctly, whichever position the
   sender holds in the group.
+- 2026-09-23 **An iMazing message sent in the hour the clocks spring forward
+  is kept.** iMazing writes each message's date as a wall-clock time with no
+  zone. A time that never showed on the clock, such as 02:30 on the March
+  morning when 02:00 became 03:00, was dropped as an invalid date; it is
+  now read with the offset in force just before the change, so it lands at
+  the instant the new clock called 03:30. A time that showed twice on the
+  November morning the clocks fall back is the earlier of the two. The
+  zone an iMazing export is read in can now be given by name, such as
+  `America/New_York`, as well as by offset.
+
 - 2026-09-23 **Searching for a word with punctuation in it works on every
   vault.** A search such as `a&b`, `o'bri*`, or text pasted with a hidden
   NUL character failed with an error, or on a Postgres vault found messages

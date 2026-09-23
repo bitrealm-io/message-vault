@@ -205,8 +205,83 @@ Bob,2020-01-01 12:05:00,,Incoming,+15555550100,Bob,Read,,,WA hi,,,,\n",
 
 #[test]
 fn rejects_unknown_timezone() {
-    let err = resolve_tz(Some("America/New_York")).unwrap_err();
-    assert!(err.to_string().contains("UTC"));
+    let err = Zone::parse(Some("Not/AZone")).unwrap_err();
+    assert!(err.to_string().contains("Not/AZone"), "{err}");
+}
+
+/// The Unix seconds `parse_message_date` gives `raw` in the zone named `tz`.
+fn secs_in(raw: &str, tz: &str) -> i64 {
+    let zone = Zone::parse(Some(tz)).unwrap();
+    let (secs, date_ms) = parse_message_date(raw, zone).expect("date parses");
+    assert_eq!(date_ms, (secs * 1000).to_string());
+    secs
+}
+
+#[test]
+fn fixed_offset_gives_the_exact_instant() {
+    // 12:00 at UTC-05:00 is 17:00 UTC, whatever zone the machine is in.
+    assert_eq!(secs_in("2020-01-01 12:00:00", "UTC-05:00"), 1_577_898_000);
+    assert_eq!(secs_in("2020-01-01 12:00", "UTC+05:30"), 1_577_860_200);
+    assert_eq!(secs_in("2020-01-01 12:00:00", "UTC"), 1_577_880_000);
+}
+
+#[test]
+fn spring_forward_gap_keeps_the_message() {
+    // New York skipped 02:00-03:00 on 2026-03-08. A wall clock inside the gap
+    // is read with the offset in force before the change (-05:00), so 02:30
+    // becomes 07:30 UTC, the same instant as 03:30 EDT.
+    assert_eq!(
+        secs_in("2026-03-08 02:30:00", "America/New_York"),
+        1_772_955_000
+    );
+}
+
+#[test]
+fn fall_back_ambiguity_takes_the_earlier_instant() {
+    // 01:30 happened twice in New York on 2025-11-02: first at 05:30 UTC
+    // (EDT), then at 06:30 UTC (EST). The earlier one is chosen.
+    assert_eq!(
+        secs_in("2025-11-02 01:30:00", "America/New_York"),
+        1_762_061_400
+    );
+}
+
+#[test]
+fn named_zone_outside_a_transition_is_plain_local_time() {
+    // 12:00 EDT on 2020-07-01 is 16:00 UTC.
+    assert_eq!(
+        secs_in("2020-07-01 12:00:00", "America/New_York"),
+        1_593_619_200
+    );
+}
+
+#[test]
+fn gap_row_is_exported_with_its_instant() {
+    let dir = tempfile::tempdir().unwrap();
+    write(
+        &dir,
+        "Messages - Bob.csv",
+        "Chat Session,Message Date,Service,Type,Sender ID,Sender Name,Status,Replying to,Subject,Text,Reactions,Attachment,Attachment type\n\
+Bob,2026-03-08 02:30:00,SMS,Incoming,+15555550100,Bob,Read,,,Gap,,,\n",
+    );
+    let out = dir.path().join("out");
+    let report = convert_export(ConvertExportArgs {
+        input: dir.path(),
+        output: &out,
+        timezone: Some("America/New_York"),
+        transforms: ExportTransforms::none(),
+        output_format: OutputFormat::Jsonl,
+        cancel: None,
+        resume: false,
+    })
+    .unwrap();
+    assert_eq!(report.messages, 1);
+    assert_eq!(report.skipped_invalid_date, 0);
+    let body = fs::read_to_string(out.join("+15555550100.jsonl")).unwrap();
+    assert!(
+        body.contains("\"timestamp_unix_ms\":1772955000000"),
+        "{body}"
+    );
 }
 
 #[test]

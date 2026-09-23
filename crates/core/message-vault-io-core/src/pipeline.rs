@@ -7,7 +7,7 @@
 use crate::config::OutputFormat;
 use anyhow::{Context, bail};
 use media::MediaReport;
-use message_csv::DateRange;
+use message_csv::{DateRange, Zone};
 use message_ir::{
     ConversationDocument, PendingConversation, ProjectionHooks, ProjectionTally,
     pending_to_document, prepare_conversation,
@@ -252,7 +252,8 @@ pub fn print_result(result: &RunResult) {
     }
 }
 
-/// Parse optional start/end date strings into a [`DateRange`].
+/// Parse optional start/end date strings into a [`DateRange`] in the host's
+/// local zone.
 ///
 /// # Errors
 ///
@@ -261,21 +262,23 @@ pub fn parse_date_range(
     start_date: Option<&str>,
     end_date: Option<&str>,
 ) -> Result<DateRange, String> {
-    DateRange::parse(start_date, end_date).map_err(|e| format!("invalid date range: {e}"))
+    DateRange::parse_in(Zone::Local, start_date, end_date)
+        .map_err(|e| format!("invalid date range: {e}"))
 }
 
-/// Parse optional start/end dates with an optional timezone name (iMazing path).
+/// Parse optional start/end dates in an optional zone (a `UTC±HH:MM` offset
+/// or an IANA name; blank is the host's local zone), the iMazing path.
 ///
 /// # Errors
 ///
-/// Returns an error string when a date or timezone cannot be parsed.
+/// Returns an error string when a date or the zone cannot be parsed.
 pub fn parse_date_range_tz(
     start_date: Option<&str>,
     end_date: Option<&str>,
     timezone: Option<&str>,
 ) -> Result<DateRange, String> {
-    DateRange::parse_optional_tz(start_date, end_date, timezone)
-        .map_err(|e| format!("invalid date range: {e}"))
+    let zone = Zone::parse(timezone).map_err(|e| format!("invalid date range: {e}"))?;
+    DateRange::parse_in(zone, start_date, end_date).map_err(|e| format!("invalid date range: {e}"))
 }
 
 /// Filesystem-safe stem from a display name or handle (alnum / `-` / `_` / `+`).

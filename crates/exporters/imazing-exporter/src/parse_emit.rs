@@ -1,10 +1,9 @@
-//! Peer, timezone, and row-classification helpers for the emitter.
+//! Peer, date, and row-classification helpers for the emitter.
 
 use crate::emit::TransportFamily;
 use crate::parse::{RawRow, SourceKind};
-use anyhow::Result;
-use chrono::{FixedOffset, Local, LocalResult, NaiveDateTime, TimeZone};
-use message_csv::parse_utc_offset;
+use chrono::NaiveDateTime;
+use message_csv::Zone;
 use phone::sanitize_number;
 use std::collections::{HashMap, HashSet};
 
@@ -116,26 +115,10 @@ pub(super) fn collect_peer_info(kind: SourceKind, session: &str, rows: &[&RawRow
     }
 }
 
-#[derive(Debug)]
-pub(super) enum TzMode {
-    Local,
-    Fixed(FixedOffset),
-}
-
-/// Parse a timezone string into local time or a fixed UTC offset.
-pub(super) fn resolve_tz(timezone: Option<&str>) -> Result<TzMode> {
-    match timezone.and_then(message_ir::trimmed) {
-        None => Ok(TzMode::Local),
-        Some(name) => {
-            let offset = parse_utc_offset(name).map_err(anyhow::Error::msg)?;
-            Ok(TzMode::Fixed(offset))
-        }
-    }
-}
-
-/// Parse an iMazing date string into `(unix_secs, date_ms)`; DST-ambiguous
-/// times resolve to the earliest occurrence.
-pub(super) fn parse_message_date(raw: &str, tz: &TzMode) -> Option<(i64, String)> {
+/// Parse an iMazing date string (`YYYY-MM-DD HH:MM[:SS]`, no zone) in `zone`
+/// into `(unix_secs, date_ms)`. [`Zone::instant`] settles a wall clock that a
+/// daylight-saving change repeats or skips, so every parsable row is kept.
+pub(super) fn parse_message_date(raw: &str, zone: Zone) -> Option<(i64, String)> {
     let raw = raw.trim();
     if raw.is_empty() {
         return None;
@@ -143,20 +126,7 @@ pub(super) fn parse_message_date(raw: &str, tz: &TzMode) -> Option<(i64, String)
     let naive = NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S")
         .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M"))
         .ok()?;
-    let secs = match tz {
-        // Ambiguous (DST fall-back) hours resolve to the earliest instant
-        // instead of silently dropping the message.
-        TzMode::Local => match Local.from_local_datetime(&naive) {
-            LocalResult::Single(dt) => dt.timestamp(),
-            LocalResult::Ambiguous(earliest, _latest) => earliest.timestamp(),
-            LocalResult::None => return None,
-        },
-        TzMode::Fixed(offset) => match offset.from_local_datetime(&naive) {
-            LocalResult::Single(dt) => dt.timestamp(),
-            LocalResult::Ambiguous(earliest, _latest) => earliest.timestamp(),
-            LocalResult::None => return None,
-        },
-    };
+    let secs = zone.instant(naive)?.timestamp();
     Some((secs, (secs * 1000).to_string()))
 }
 

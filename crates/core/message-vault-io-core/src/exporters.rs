@@ -158,7 +158,8 @@ pub struct Form {
     pub owner_phones: String,
     /// Comma-separated owner email addresses (marks outgoing messages).
     pub owner_emails: String,
-    /// Optional fixed UTC offset (e.g. `UTC-05:00`) for naive timestamps.
+    /// Optional zone for timestamps that carry none: a fixed UTC offset
+    /// (`UTC-05:00`) or an IANA name (`America/New_York`).
     pub timezone: String,
     /// Whether to rewrite output with stable fake identities.
     pub obfuscate: bool,

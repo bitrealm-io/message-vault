@@ -1436,3 +1436,138 @@ async fn a_batch_into_another_accounts_run_is_not_found() {
     .await;
     assert_ne!(status, axum::http::StatusCode::NOT_FOUND);
 }
+
+/// Import `path` in append mode on `conn`, as the serve path does once the
+/// schema is in place.
+async fn append_on_conn(conn: &mut AnyConnection, path: &Path, root: &Path, source: &str) {
+    let assets = root.join("assets");
+    import_jsonl_files_on_conn(
+        conn,
+        &[path.to_path_buf()],
+        &ImportOptions::fixed(FixedImportArgs {
+            assets_dir: &assets,
+            asset_root: root,
+            contacts: None,
+            overwrite_contacts: false,
+            mode: ImportMode::Append,
+            source,
+            account_id: TEST_ACCOUNT,
+            fill_content_keys: false,
+            import_id: None,
+        }),
+        ImportSchemaMode::AssumeReady,
+    )
+    .await
+    .unwrap();
+}
+
+/// Each conversation of `TEST_ACCOUNT` with its number of participant rows,
+/// and the account's number of contacts.
+async fn participant_and_contact_counts(conn: &mut AnyConnection) -> (Vec<(i64, i64)>, i64) {
+    let rows: Vec<(i64, i64)> = sqlx::query_as(
+        "SELECT c.id, COUNT(p.id) FROM conversations c
+         LEFT JOIN participants p ON p.conversation_id = c.id
+         WHERE c.account_id = $1
+         GROUP BY c.id ORDER BY c.id",
+    )
+    .bind(TEST_ACCOUNT)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    let contacts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM contacts WHERE account_id = $1")
+        .bind(TEST_ACCOUNT)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    (rows, contacts)
+}
+
+/// A participant the source named with no address has no handle, and a
+/// uniqueness rule that includes a NULL column never matches. Importing the
+/// same file twice must still leave one row per person in the conversation.
+#[tokio::test]
+async fn reimporting_a_file_with_a_name_only_participant_adds_no_participant() {
+    let vault = test_vault().await;
+    let tmp = TempDir::new().unwrap();
+    let path = write_jsonl(
+        tmp.path(),
+        "group-with-name-only.jsonl",
+        r#"{"schema_version":4,"export":{"source":"openextract","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"chat2000000001","conversation_type":"group","group_title":"Trip","participants":[{"handle":"+15555550123","display_name":"Ada"},{"display_name":"Sarah Vale"}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
+{"guid":"g-name-only-twice","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}
+"#,
+    );
+    let mut conn = vault.state.db.acquire().await.unwrap();
+
+    append_on_conn(&mut conn, &path, tmp.path(), "openextract").await;
+    let (first_rows, first_contacts) = participant_and_contact_counts(&mut conn).await;
+    assert_eq!(first_rows.len(), 1, "one conversation: {first_rows:?}");
+    assert_eq!(first_rows[0].1, 2, "Ada and Sarah Vale: {first_rows:?}");
+    assert_eq!(first_contacts, 2);
+
+    append_on_conn(&mut conn, &path, tmp.path(), "openextract").await;
+    let (second_rows, second_contacts) = participant_and_contact_counts(&mut conn).await;
+    assert_eq!(
+        second_rows, first_rows,
+        "the second import added participants"
+    );
+    assert_eq!(second_contacts, first_contacts);
+}
+
+/// ADR-0013: an import that meets a trashed contact's handle discards the
+/// contact and makes a fresh one. The discard clears `participants.contact_id`
+/// on the existing row, so the re-import must not add a second row for the
+/// same handle beside it; the conversation lists the person once.
+#[tokio::test]
+async fn reimporting_after_trashing_a_contact_lists_the_person_once() {
+    let vault = test_vault().await;
+    let tmp = TempDir::new().unwrap();
+    let path = write_jsonl(
+        tmp.path(),
+        "ada.jsonl",
+        r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":"Ada"}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}
+{"guid":"g-trashed-twice","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}
+"#,
+    );
+    let mut conn = vault.state.db.acquire().await.unwrap();
+
+    append_on_conn(&mut conn, &path, tmp.path(), "imessage").await;
+    let ada: i64 = sqlx::query_scalar(
+        "SELECT id FROM contacts WHERE account_id = $1 AND preferred_name = 'Ada'",
+    )
+    .bind(TEST_ACCOUNT)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO trashed_contacts (account_id, contact_id) VALUES ($1, $2)")
+        .bind(TEST_ACCOUNT)
+        .bind(ada)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+
+    append_on_conn(&mut conn, &path, tmp.path(), "imessage").await;
+
+    let trashed: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM trashed_contacts WHERE account_id = $1")
+            .bind(TEST_ACCOUNT)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(trashed, 0, "the import replaced the trashed contact");
+
+    let conversation_id: i64 =
+        sqlx::query_scalar("SELECT id FROM conversations WHERE account_id = $1")
+            .bind(TEST_ACCOUNT)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    let loaded =
+        crate::db::participant_names::load_for_conversations(&mut conn, &[conversation_id])
+            .await
+            .unwrap();
+    let names: Vec<&str> = loaded[&conversation_id]
+        .iter()
+        .map(|p| p.name.as_str())
+        .collect();
+    assert_eq!(names, ["Ada"], "the conversation lists Ada once");
+}

@@ -101,6 +101,17 @@ and never makes a book contact. An identity the book dropped stays in the
 vault while a conversation, a message, or the account's own profile uses it;
 a stale identity nothing uses goes with the link.
 
+**A person has one seat in a conversation.** A participant with an
+identity is keyed on the conversation and that identity. A participant with
+no identity is keyed on the conversation and its contact. The schema holds
+both as partial unique indexes on `participants`, and an import that meets
+an existing seat leaves it as it is. `participants.contact_id` is not part of
+the first key, because a participant with an identity finds its contact
+through `contact_handles`, and the column goes empty when an import replaces
+a trashed contact. Why: a key that includes an empty column matches nothing
+on SQLite or Postgres, so re-importing the same backup added the same person
+again.
+
 **A participant's display name has one rule.** The contact's name, else what
 that backup called them in that conversation, else the identity. One loader
 applies it for the conversation list, the message pane, and Export.

@@ -32,9 +32,22 @@ CREATE TABLE IF NOT EXISTS participants (
     -- Resolved address-book contact when known (`contacts.id`).
     contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
     -- Display name residue from the source for this participant.
-    name_alias TEXT,
-    UNIQUE(conversation_id, handle_id, contact_id)
+    name_alias TEXT
 );
+
+-- A participant is one person's seat in one conversation. A participant
+-- with an identity is that identity; one without is its contact. The two
+-- indexes say so, because a UNIQUE over all three columns never matches a
+-- row holding a NULL on either engine: a re-import added the name-only
+-- participant again, and one whose contact an import replaced (ADR-0013)
+-- got a second row for the same identity. `contact_id` stays out of the
+-- first index because a handle's contact is read through `contact_handles`.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_participants_conversation_handle
+    ON participants (conversation_id, handle_id)
+    WHERE handle_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_participants_conversation_name_only_contact
+    ON participants (conversation_id, contact_id)
+    WHERE handle_id IS NULL;
 
 CREATE INDEX IF NOT EXISTS ix_participants_handle_id ON participants (handle_id);
 CREATE INDEX IF NOT EXISTS ix_participants_contact_id ON participants (contact_id);

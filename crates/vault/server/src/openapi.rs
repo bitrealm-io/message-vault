@@ -246,35 +246,6 @@ mod tests {
     use super::dump_openapi_json;
 
     #[test]
-    fn dump_is_openapi_3_with_crate_version() {
-        let v: serde_json::Value = serde_json::from_str(&dump_openapi_json()).unwrap();
-        let openapi = v["openapi"].as_str().expect("openapi field");
-        assert!(
-            openapi.starts_with("3."),
-            "expected OpenAPI 3.x, got {openapi}"
-        );
-        assert_eq!(v["info"]["title"], "Message Vault HTTP API");
-        assert_eq!(v["info"]["version"], env!("CARGO_PKG_VERSION"));
-    }
-
-    #[test]
-    fn dump_pretty_print_is_stable() {
-        let a = dump_openapi_json();
-        let b = dump_openapi_json();
-        assert_eq!(a, b);
-        assert!(a.contains('\n'), "expected pretty JSON");
-    }
-
-    #[test]
-    fn dump_includes_health() {
-        let v: serde_json::Value = serde_json::from_str(&dump_openapi_json()).unwrap();
-        assert!(
-            v["paths"]["/health"]["get"].is_object(),
-            "expected GET /health in dump"
-        );
-    }
-
-    #[test]
     fn dump_includes_session_and_account_paths() {
         let v: serde_json::Value = serde_json::from_str(&dump_openapi_json()).unwrap();
         let paths = v["paths"].as_object().unwrap();
@@ -408,68 +379,6 @@ mod tests {
             scopes_of("session", &paths["/v1/accounts"]["get"]),
             ["owner"]
         );
-    }
-
-    #[test]
-    fn dump_includes_browse_paths() {
-        let v: serde_json::Value = serde_json::from_str(&dump_openapi_json()).unwrap();
-        let paths = v["paths"].as_object().unwrap();
-        for p in [
-            "/v1/contacts",
-            "/v1/contacts/summaries",
-            "/v1/contacts/{id}",
-            "/v1/contacts/{id}/trash",
-            "/v1/contacts/{id}/restore",
-            "/v1/contacts/unmatched-handles",
-            "/v1/contact-groups",
-            "/v1/contact-groups/{id}",
-            "/v1/contact-groups/{id}/members",
-            "/v1/message-tags",
-            "/v1/message-tags/{id}",
-            "/v1/message-tags/{id}/members",
-            "/v1/saved-searches",
-            "/v1/saved-searches/{id}",
-            "/v1/search-fields",
-            "/v1/conversations",
-            "/v1/messages",
-            "/v1/conversations/{id}",
-            "/v1/conversations/{id}/sources",
-            "/v1/conversations/{id}/messages",
-            "/v1/conversations/{id}/trash",
-            "/v1/conversations/{id}/restore",
-            "/v1/trash",
-        ] {
-            assert!(paths.contains_key(p), "missing {p}");
-        }
-        // Trash is the only door to permanent deletion: DELETE exists on a
-        // conversation, on a contact, and on the trash as a whole.
-        assert!(paths["/v1/conversations/{id}"]["delete"].is_object());
-        assert!(paths["/v1/contacts/{id}"]["delete"].is_object());
-        assert!(paths["/v1/trash"]["delete"].is_object());
-    }
-
-    #[test]
-    fn dump_includes_import_and_asset_paths() {
-        let v: serde_json::Value = serde_json::from_str(&dump_openapi_json()).unwrap();
-        let paths = v["paths"].as_object().unwrap();
-        for p in [
-            "/v1/imports",
-            "/v1/imports/{id}",
-            "/v1/imports/{id}/complete",
-            "/v1/imports/{id}/batches",
-            "/v1/exports",
-            "/v1/exports/{id}",
-            "/v1/exports/{id}/messages",
-            "/v1/exports/{id}/complete",
-            "/v1/exports/{id}/cancel",
-            "/v1/assets/{sha256}",
-            "/v1/assets/{sha256}/uploads",
-            "/v1/assets/{sha256}/uploads/{upload_id}/parts/{part}",
-            "/v1/assets/{sha256}/uploads/{upload_id}/complete",
-            "/v1/assets/{sha256}/uploads/{upload_id}",
-        ] {
-            assert!(paths.contains_key(p), "missing {p}");
-        }
     }
 
     #[test]

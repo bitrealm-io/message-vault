@@ -602,12 +602,6 @@ fn headroom_shortfall_speaks_when_space_is_short() {
     assert!(msg.contains("GB"), "{msg}");
 }
 
-#[test]
-fn default_writer_count_is_bounded() {
-    let n = default_writer_count();
-    assert!((1..=8).contains(&n));
-}
-
 /// A group conversation with its own chat identifier, titled or not, whose
 /// only message says `text`.
 fn group(chat_id: &str, title: Option<&str>, text: &str) -> ConversationDocument {

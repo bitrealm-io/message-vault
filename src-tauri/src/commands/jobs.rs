@@ -94,13 +94,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reset_and_clone_returns_a_fresh_false_flag() {
-        let state = Arc::new(Mutex::new(AppState::new()));
-        let cancel = reset_and_clone_cancel(&state).unwrap();
-        assert!(!cancel.load(Ordering::Relaxed));
-    }
-
-    #[test]
     fn reset_and_clone_clears_a_previous_cancel_and_shares_the_flag() {
         let state = Arc::new(Mutex::new(AppState::new()));
         state

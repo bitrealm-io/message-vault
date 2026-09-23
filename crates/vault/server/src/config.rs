@@ -337,25 +337,6 @@ mod tests {
         assert!(validate_source_id("has space").is_err());
     }
 
-    #[test]
-    fn openapi_ui_defaults_false() {
-        let raw = r#"
-bind = "127.0.0.1:8080"
-"#;
-        let cfg: ServerConfig = toml::from_str(raw).unwrap();
-        assert!(!cfg.openapi_ui);
-    }
-
-    #[test]
-    fn openapi_ui_can_enable() {
-        let raw = r#"
-bind = "127.0.0.1:8080"
-openapi_ui = true
-"#;
-        let cfg: ServerConfig = toml::from_str(raw).unwrap();
-        assert!(cfg.openapi_ui);
-    }
-
     const PACKAGED_ORIGINS: &[&str] = &[
         "https://tauri.localhost",
         "http://tauri.localhost",

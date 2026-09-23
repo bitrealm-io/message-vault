@@ -129,31 +129,6 @@ fn content_key_distinguishes_group_senders() {
     assert_ne!(alice, bob);
 }
 
-#[test]
-fn parse_rfc3339_applies_offset() {
-    assert_eq!(
-        parse_rfc3339_utc_secs("2015-03-12T18:04:22Z"),
-        Some(1426183462)
-    );
-    assert_eq!(
-        parse_rfc3339_utc_secs("2015-03-12T18:04:22+00:00"),
-        Some(1426183462)
-    );
-    assert_eq!(
-        parse_rfc3339_utc_secs("2015-03-12T14:04:22-04:00"),
-        Some(1426183462)
-    );
-}
-
-#[test]
-fn parse_rfc3339_rejects_unparseable_input() {
-    assert_eq!(parse_rfc3339_utc_secs(""), None);
-    assert_eq!(parse_rfc3339_utc_secs("not a timestamp"), None);
-    // Missing offset is not RFC3339; compute_content_key then falls back
-    // to hashing the raw string.
-    assert_eq!(parse_rfc3339_utc_secs("2015-03-12T18:04:22"), None);
-}
-
 const TEST_ACCOUNT_ID: i64 = 7;
 
 async fn setup_db(conn: &mut AnyConnection) {

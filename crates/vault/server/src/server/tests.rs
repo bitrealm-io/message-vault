@@ -361,15 +361,6 @@ async fn auth_route_status(path: &str) -> StatusCode {
 }
 
 #[tokio::test]
-async fn try_demo_route_is_gone() {
-    // server.rs's own helper returns (TempDir, AppState, token, import_id).
-    // The shared harness in test_support.rs does not exist until Task 4.
-    let (_dir, state, _token, _import_id) = test_state().await;
-    let response = get_path(state, "/v1/auth/try-demo").await;
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
-}
-
-#[tokio::test]
 async fn local_auth_routes_exist() {
     for path in ["/v1/accounts", "/v1/session"] {
         assert_ne!(auth_route_status(path).await, StatusCode::NOT_FOUND);

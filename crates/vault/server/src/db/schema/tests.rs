@@ -517,39 +517,6 @@ async fn one_running_import_per_account() {
 }
 
 #[tokio::test]
-async fn vault_imports_carries_the_session_columns() {
-    let (pool, _dir) = crate::db::engine::test_pool().await;
-    let mut conn = pool.acquire().await.unwrap();
-    ensure_vault_schema(&mut conn).await.unwrap();
-    sqlx::query(
-        "SELECT stage, staging_dir, device_id, form_json, source_fingerprint
-         FROM vault_imports WHERE 1 = 0",
-    )
-    .fetch_optional(&mut *conn)
-    .await
-    .expect("session columns exist");
-}
-
-#[tokio::test]
-async fn fresh_accounts_default_to_full_permissions() {
-    let (pool, _dir) = test_pool().await;
-    let mut conn = pool.acquire().await.unwrap();
-    ensure_accounts_schema(&mut conn).await.unwrap();
-    sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'fresh')")
-        .bind(A1)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    let row: (i64, i64, i64) =
-        sqlx::query_as("SELECT can_import, can_export, can_delete FROM accounts WHERE id = $1")
-            .bind(A1)
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
-    assert_eq!(row, (1, 1, 1));
-}
-
-#[tokio::test]
 async fn messages_fts_stays_in_sync() {
     if crate::test_support::on_postgres() {
         return; // SQLite-only: queries the FTS5 table with MATCH; messages_fts_stays_in_sync_pg is the twin

@@ -7,35 +7,27 @@
 # change in behaviour no test notices. It is a report, never a gate:
 # docs/adr/0007-ci-is-the-only-gate.md.
 #
-# Only the files below are mutated. They are where a wrong comparison or a
-# dropped branch loses, duplicates, leaks, or mis-attributes messages, so a
-# weak test there costs the most. The whole workspace would be tens of
-# thousands of mutants; add a file here when it holds a rule like that.
+# Every workspace crate is mutated except the ones below, where a missed
+# mutant can't point at a bug a person would meet. src-tauri is not a
+# workspace member, so it is never mutated.
 
-examine_globs = [
-    # Import: staging, promote, contact naming, and deduplication.
-    "crates/vault/server/src/import/promote.rs",
-    "crates/vault/server/src/import/staging.rs",
-    "crates/vault/server/src/import/contact_name.rs",
-    "crates/vault/server/src/dedupe.rs",
-    # Who may see and change what.
-    "crates/vault/server/src/db/permissions.rs",
-    "crates/vault/server/src/db/ownership.rs",
-    "crates/vault/server/src/db/session_tokens.rs",
-    "crates/vault/server/src/db/api_tokens.rs",
-    # Search and paging: which messages a query returns.
-    "crates/vault/server/src/search/emit.rs",
-    "crates/vault/server/src/paging.rs",
-    # Phone numbers and contact names: who a message is from.
-    "crates/libs/phone/src/lib.rs",
-    "crates/libs/contacts/src/book.rs",
-    "crates/exporters/whatsapp-exporter/src/jid.rs",
-    "crates/libs/sbr/src/read.rs",
-    # Obfuscation: what an obfuscated export may still reveal.
-    "crates/libs/obfuscate/src/lib.rs",
-    "crates/libs/ir-format/src/export_transforms.rs",
-    # Staging's write queue: resume, and one file per conversation.
-    "crates/libs/staging/src/write_queue.rs",
+exclude_globs = [
+    # Generates the demo vault's sample data; its output is checked by the
+    # demo import test, not line by line.
+    "crates/vault/demo-seed/**",
+    # Builds the chat.db fixture other tests read.
+    "crates/helpers/chat-db-fixture/**",
+    # Stamps the build version into binaries.
+    "crates/libs/build-version/**",
+    # Serde request and response types with no logic of their own.
+    "crates/libs/vault-api-types/**",
+]
+
+# Text meant for people to read (Display and Debug output) changes without
+# changing behaviour, so a missed mutant there is noise.
+exclude_re = [
+    "impl .*Display for",
+    "impl .*Debug for",
 ]
 
 # A mutant that turns a loop infinite is stopped at this multiple of the

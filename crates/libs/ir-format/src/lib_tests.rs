@@ -416,3 +416,129 @@ fn jsonl_refuses_a_version_3_file_by_name() {
     assert_eq!(refusal.found, 3);
     assert!(format!("{err:#}").contains("schema version 3"), "{err:#}");
 }
+
+/// Message texts that a careless writer or reader damages: line endings a
+/// normaliser rewrites, an mbox `From ` line, CSV quoting, multi-code-point
+/// emoji, and no text at all beside an attachment. Every per-conversation
+/// format writes each one and reads it back byte for byte.
+#[test]
+fn hard_texts_survive_every_format() {
+    struct Case {
+        name: &'static str,
+        text: String,
+        with_attachment: bool,
+    }
+    let case = |name: &'static str, text: &str, with_attachment: bool| Case {
+        name,
+        text: text.to_string(),
+        with_attachment,
+    };
+    let cases = [
+        case("trailing newline", "ends with one newline\n", false),
+        case(
+            "multiple trailing newlines",
+            "ends with three newlines\n\n\n",
+            false,
+        ),
+        case("CRLF line endings", "first line\r\nsecond line\r\n", false),
+        case("bare CR", "first\rsecond", false),
+        case("leading and trailing blank lines", "\n\nmiddle\n\n", false),
+        case(
+            "From line",
+            "From the top\nFrom here on\n>From quoted\n>>From twice",
+            false,
+        ),
+        case(
+            "CSV quotes, commas and newlines",
+            "she said \"hi\", then, \"\"twice\"\"\r\nnext,line\n\"",
+            false,
+        ),
+        case(
+            "emoji joiners and skin tones",
+            "\u{1F469}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466} \u{1F44D}\u{1F3FD} \
+             \u{1F9D1}\u{1F3FF}\u{200D}\u{1F680} \u{1F3F3}\u{FE0F}\u{200D}\u{1F308}",
+            false,
+        ),
+        case(
+            "leading and trailing spaces and tabs",
+            "  indented\t\nends with spaces   \n\t",
+            false,
+        ),
+        case(
+            "line longer than an RFC 5322 line",
+            &"x".repeat(1500),
+            false,
+        ),
+        case("empty text with an attachment", "", true),
+    ];
+
+    let formats = [
+        OutputFormat::Json,
+        OutputFormat::Jsonl,
+        OutputFormat::Csv,
+        OutputFormat::Eml,
+        OutputFormat::Mbox,
+    ];
+
+    let mut failures = Vec::new();
+    for case in &cases {
+        for format in formats {
+            let mut doc = message_ir::testutil::sample_document(&case.text);
+            if case.with_attachment {
+                doc.messages[0].attachments.push(message_ir::IrAttachment {
+                    path: None,
+                    original_name: Some("photo.jpg".into()),
+                    mime_type: Some("image/jpeg".into()),
+                    digest_sha256: None,
+                    is_sticker: false,
+                    transcription: None,
+                    sticker_effect: None,
+                    size_bytes: None,
+                    missing_reason: None,
+                    bytes: Some(b"\xff\xd8\xfffakejpeg".to_vec()),
+                });
+            }
+            let tmp = tempfile::tempdir().unwrap();
+            let path = write_format(tmp.path(), format, doc.clone()).unwrap();
+            let back = match format {
+                OutputFormat::Json => read_conversation_json(&path),
+                OutputFormat::Jsonl => read_conversation_jsonl(&path),
+                OutputFormat::Csv => read_conversation_csv(&path),
+                OutputFormat::Eml => read_conversation_eml_dir(&path),
+                OutputFormat::Mbox => read_conversation_mbox(&path),
+                OutputFormat::Xml => unreachable!(),
+            };
+            let back = match back {
+                Ok(back) => back,
+                Err(err) => {
+                    failures.push(format!(
+                        "{} / {}: read failed: {err:#}",
+                        format.as_str(),
+                        case.name
+                    ));
+                    continue;
+                }
+            };
+            let got = &back.messages[0];
+            if got.text != case.text {
+                failures.push(format!(
+                    "{} / {}: text {:?} came back as {:?}",
+                    format.as_str(),
+                    case.name,
+                    case.text,
+                    got.text
+                ));
+            }
+            if got.attachments.len() != doc.messages[0].attachments.len() {
+                failures.push(format!(
+                    "{} / {}: {} attachments came back as {}",
+                    format.as_str(),
+                    case.name,
+                    doc.messages[0].attachments.len(),
+                    got.attachments.len()
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+}

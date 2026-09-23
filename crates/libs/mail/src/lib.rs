@@ -12,9 +12,12 @@ mod parse;
 use anyhow::{Context, Result, bail};
 use chrono::{Local, TimeZone, Utc};
 use mail_builder::MessageBuilder;
+use mail_builder::encoders::QuotedPrintableEncoder;
 use mail_builder::headers::address::Address;
+use mail_builder::headers::content_type::ContentType;
 use mail_builder::headers::date::Date;
 use mail_builder::headers::text::Text;
+use mail_builder::mime::MimePart;
 use message_ir::{IrDirection, IrMessage};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
@@ -580,24 +583,54 @@ fn build_eml(msg: &MailMessage) -> Result<Vec<u8>> {
     builder = conversation_headers(builder, msg);
     builder = imessage_headers(builder, msg);
     builder = attachment_meta_header(builder, msg);
-    builder = builder.text_body(msg.message.text.clone());
-    for (i, att) in msg.attachments.iter().enumerate() {
-        let mime = att
-            .meta
-            .mime_type
-            .as_deref()
-            .filter(|m| !m.is_empty())
-            .unwrap_or("application/octet-stream");
-        let filename = att
-            .meta
-            .original_name
-            .clone()
-            .unwrap_or_else(|| format!("attachment-{i}"));
-        builder = builder.attachment(mime, filename, att.bytes.clone());
-    }
+    let text = text_body_part(&msg.message.text);
+    let body = if msg.attachments.is_empty() {
+        text
+    } else {
+        let mut parts = Vec::with_capacity(msg.attachments.len() + 1);
+        parts.push(text);
+        for (i, att) in msg.attachments.iter().enumerate() {
+            let mime = att
+                .meta
+                .mime_type
+                .as_deref()
+                .filter(|m| !m.is_empty())
+                .unwrap_or("application/octet-stream");
+            let filename = att
+                .meta
+                .original_name
+                .clone()
+                .unwrap_or_else(|| format!("attachment-{i}"));
+            parts.push(MimePart::new(mime.to_string(), att.bytes.clone()).attachment(filename));
+        }
+        MimePart::new("multipart/mixed", parts)
+    };
     builder
+        .body(body)
         .write_to_vec()
         .context("serialize message with mail-builder")
+}
+
+/// The `text/plain` part carrying the message text byte for byte.
+///
+/// Every byte of the text is quoted-printable encoded, each CR and LF as
+/// `=0D` and `=0A` (RFC 2045 section 6.7, rule 1), so the text's own line
+/// endings, trailing newlines and trailing whitespace come back unchanged
+/// instead of being folded to the CRLF a text body is canonicalised to
+/// (RFC 2049 section 4). The encoded body ends in a soft line break (`=` at
+/// the end of a line, rule 5), which encodes nothing: the line ending a
+/// `.eml` file or an mbox record adds after it belongs to that soft break
+/// and is never decoded as text.
+fn text_body_part(text: &str) -> MimePart<'static> {
+    let mut encoded = QuotedPrintableEncoder::new()
+        .encode(text.as_bytes())
+        .unwrap_or_default();
+    encoded.extend_from_slice(b"=\r\n");
+    MimePart::new(
+        ContentType::new("text/plain").attribute("charset", "utf-8"),
+        encoded,
+    )
+    .transfer_encoding("quoted-printable")
 }
 
 /// Who the mail is from and to.

@@ -1,20 +1,19 @@
-# HTTP interface rules
+# The HTTP interface
 
-Every rule the vault's `/v1` interface follows, in one place. A pull request
-that touches a route is graded against this file, and a change to a rule is
-made here in the same pull request that changes the code. Each rule carries
-its reason, and where an alternative was weighed and turned down, one line
-says so, so the question is not reopened by accident.
+Every rule the vault's `/v1` interface follows, in one place. The interface is
+part of the architecture, so its rules are written down when they are decided,
+not when the code catches up: a design is argued against this file, a pull
+request that touches a route is graded against it, and a route that breaks a
+rule here is a bug. Each rule carries its reason, and where an alternative was
+weighed and turned down, one line says so, so the question is not reopened by
+accident.
 
-This file states what the interface is. It never lists work in progress; an
-issue does that. Why the rules live here and not in `docs/adr/`:
-`docs/adr/0011-the-http-interface-has-one-rules-document.md`.
-
-The generated reference, `docs/src/assets/openapi.json`, is produced from the
-handlers by `message-vault-server dump-openapi` and checked in; a test fails
-when the two differ, and CI checks the web app's generated types against it.
-So the reference says what each route does today, and this file says what
-every route must do.
+This file states what every route must do. The generated reference (see
+[The reference](#the-reference)) states what each route does today. Where the
+two differ, an open issue names the routes still to change; this file never
+lists that work itself. A change to a rule is made here, in the same pull
+request as the code when the code changes with it. Why the rules live here and
+not in `docs/adr/`: `docs/adr/0011-the-http-interface-has-one-rules-document.md`.
 
 ## Identifiers
 
@@ -41,6 +40,16 @@ the first draft with no reason recorded. An integer in a URL tells a stranger
 nothing they can act on, because every route checks the caller against the
 row.
 
+## Words on the wire
+
+Paths, fields, parameters, summaries and problem details use the words
+`CONTEXT.md` defines, and never the words it lists under _Avoid_: an
+Identity, never a handle (`/v1/contacts/unmatched-identities`); a
+Conversation, never a thread; an Import Run, never an import session. "Handle"
+stays the name of a table and nothing a client sees.
+Why: the web app, the docs and the interface name one thing one way, and the
+generated types carry the interface's words into the web app's code.
+
 ## Naming a route
 
 A collection is plural, and a member is `/{collection}/{id}`. A singular path
@@ -65,7 +74,12 @@ lists.
 
 A read whose selector is too large for a query string is a `POST` named for
 what it returns, never for the verb that computes it:
-`POST /v1/contacts/summaries`, `POST /v1/contacts/unmatched-handles`.
+`POST /v1/contacts/summaries`, `POST /v1/contacts/unmatched-identities`.
+
+A choice between two different lists is a path segment, never a parameter:
+`/v1/search-fields/contacts` and `/v1/search-fields/conversations` are two
+fixed lists, not one list read with `?list=`. Why: a parameter narrows a list;
+choosing which list to read is choosing a resource, and the path does that.
 
 Two levels of nesting. The multipart upload,
 `/v1/assets/{sha256}/uploads/{upload_id}/parts/{part}`, is the one exception at
@@ -90,6 +104,14 @@ check are its `POST`, `DELETE` and `GET`.
 runs an action named by a verb sub-resource. `DELETE` removes. A read is a
 `GET`, except the large-selector `POST` above.
 
+A read by id takes no filter. `GET /v1/conversations/{id}/messages` opens a
+conversation; searching inside one is `GET /v1/messages?q=in:#{id} …`.
+Why: opening and searching answer different questions. The read by id answers
+`404` for an id the caller does not hold and shows a conversation in the
+trash; a search answers an empty page and leaves the trash out. A filter on the
+read by id is a second search that can drift from the first, as `?year=` beside
+`date:` did.
+
 Behaviour that differs by caller lives inside one handler, not in two routes.
 `PUT /v1/accounts/{id}/password` is one route: the owner sets another
 account's password without the current one, a user account changes its own on
@@ -99,39 +121,56 @@ current one, because that account reaches every other.
 ## Status codes
 
 - A creation answers `201 Created` with a `Location` header naming the new
-  resource. A create that takes a batch answers `200 OK` with a summary of what
-  was created, updated and skipped, because no single resource was made.
+  resource, whatever the method that made it: a `PUT` that stores an asset the
+  vault did not hold, and a claim that makes the owner's Session
+  (`Location: /v1/session`), both answer `201`. A create that takes a batch
+  answers `200 OK` with a summary of what was created, updated and skipped,
+  because no single resource was made.
 - A write with nothing to return answers `204 No Content`.
 - A name collision answers `409 Conflict`. So does an action on a resource in
   the wrong state: deleting before trashing, claiming a claimed vault, a batch
-  on a finished run.
+  or a `complete` on a finished run.
 - A failed credential answers `401 Unauthorized`. A refused one, including a
   token without the needed scope and a disabled account, answers
   `403 Forbidden`.
 - A `Content-Type` that is absent or unaccepted answers
-  `415 Unsupported Media Type`.
-- A request that cannot be read is `400 Bad Request` (`malformed-body`). One
-  that parsed and then broke a rule is `422 Unprocessable Entity`
-  (`validation-failed`), whether the rule was on a query parameter, a path
-  segment or a body field. Axum's own rejections follow the same line.
+  `415 Unsupported Media Type`, on every route that takes a body.
+- A request that cannot be read is `400 Bad Request` (`malformed-body`): JSON
+  that does not parse, or a body of the wrong type. Nothing else is `400`.
+- A request that was read and broke a rule is `422 Unprocessable Entity`,
+  whether the rule was on a query parameter, a path segment or a body field: a
+  field or parameter missing or blank, a value out of range, an id that names
+  no row the caller holds in a list of ids to add, a body that does not match
+  the hash it is addressed by, and a search query that uses a word its list
+  does not have. Axum's own rejections follow the same line. A missing
+  parameter is one entry in `validation-failed`'s `errors`, not a problem type
+  of its own. A search that does not parse keeps its own type,
+  `search-query-invalid`, because the client's remedy differs (rewrite the
+  query), and answers `422` like every other.
 - `429 Too Many Requests` carries `Retry-After`.
 - An unknown `/v1` path answers `404` as a problem document, and a wrong method
   `405`, never Axum's plain text.
 
-There is no `ok` flag on any success; the status carries the meaning.
+There is no `ok` flag on any success, and none in any request: the status
+carries the meaning, and a run's outcome is its `status`.
+
+Rejected: a search query that does not parse as `400`, "the query could not be
+read". The request was read; the query is a value that broke the rules of the
+search language, which is what `422` means. One line with no exception is
+easier to hold than a line with one.
 
 ## Lists
 
 Every list route answers a page, `{items, total, limit, offset}`, and takes
 `offset` and `limit`. No exceptions: a list the person curates by hand
 (groups, tags, saved searches, API tokens), a fixed reference list
-(`/v1/search-fields`), and a `POST` that reads all answer a page. The list
-key is always `items`.
+(`/v1/search-fields/contacts`), and a `POST` that reads all answer a page. The
+list key is always `items`.
 Why: the web app has one paged type and one hook, and a second shape is a
 second convention.
 
 A `POST` that reads the rows its body names — contact summaries, unmatched
-handles — answers the whole of that body as one page and takes no `offset`
+identities — answers the whole of that body as one page and takes no `offset`
 or `limit`: `total` is the row count, `limit` is the cap the body is held to,
 `offset` is 0. Why: the body already says which rows to read and how many it
 may name, so a second bound would only let a caller ask for rows it did not
@@ -143,9 +182,9 @@ contacts created and changed is on the run's own record, and the contacts are
 a page. Why: a page can only count its own rows, and a field beside `items`
 that counts something else is a second shape.
 
-`limit` is at least 1 and at most 500, default 40. `offset` is at most 50 000
-on the browse lists. A value outside the range is `validation-failed`, never a
-silent clamp.
+`limit` is at least 1 and at most 500, default 40, on every list including an
+Export Run's messages. `offset` is at most 50 000 on the browse lists. A value
+outside the range is `validation-failed`, never a silent clamp.
 
 Sorting is `sort=-field,field`: comma-separated keys, a leading `-` for
 descending. Each list declares the keys it accepts, and an unlisted key is
@@ -153,8 +192,15 @@ descending. Each list declares the keys it accepts, and an unlisted key is
 
 Filtering is the search language in `q`, and nothing else. The one exception
 is a list with no search language, which may take a filter parameter whose
-values are the ones its rows store; imports is the only such list
-(`GET /v1/imports?status=running`). There is no `fields=` selection.
+values are the ones its rows store. The Import Run and Export Run lists are the
+only such lists: `GET /v1/imports?status=running`,
+`GET /v1/exports?status=completed`, and their twins under an account. There is
+no `fields=` selection.
+
+A query parameter a route does not declare is `validation-failed`, naming the
+parameters the route accepts. Why: a typo (`limt=10`) or a guess at a
+convention this file rejects (`order=`, `fields=`, `year=`) would otherwise be
+answered as though it had been obeyed.
 
 Rejected: cursor paging. Stable under concurrent inserts, but nothing inserts
 rows under a running read on a self-hosted vault, and every screen that shows
@@ -168,6 +214,11 @@ generated types could only express that with every field optional.
 
 Rejected: query-parameter filters beside the search language. `?date_gte=2019`
 next to `q=date:>2019` is two ways to ask one question.
+
+Rejected: ignoring a query parameter the route does not know, the forgiving
+default of most web servers. The vault's clients are its own apps and programs
+written against the reference, and a silent wrong answer costs them more than
+a refusal.
 
 ## Failures
 
@@ -183,7 +234,9 @@ The code is the registry: each type is declared once in
 test fails when the checked-in pages drift. Only `500 Internal Server Error`
 uses `about:blank`, because a page about it could say nothing a reader could
 act on. The taxonomy is per problem, not per status: the test for a new type
-is that a client's remedy differs.
+is that a client's remedy differs. A closed registration is its own type,
+because the remedy (ask the owner for an account) is not the remedy for a
+caller who is not the owner.
 
 Every response, success or failure, carries an `x-request-id` header, a UUID v4
 the server makes; a request id a client sends is ignored. Problem bodies repeat
@@ -220,10 +273,18 @@ scheme with its scopes, so every route says which it accepts.
   settings and the vault's storage totals, because the owner holds no
   messages.
 - An **API token** is a named credential an account makes for a program, with
-  the scopes the person chose, capped by the account's own. A token never signs
-  in and never browses. It never signs out either: `DELETE /v1/session` refuses
-  a token with `403`, because a token is not a Session and a `204` would say
-  something ended when nothing did.
+  the scopes the person chose from `import` and `export`, capped by the
+  account's own. A token never carries `delete`: permanent deletion is a
+  person's act, and a leaked or faulty program must not be able to empty an
+  archive. A token never signs in and never browses. It is ended by the person
+  revoking it (`DELETE /v1/accounts/{id}/api-tokens/{token_id}`, with a
+  session) or by its expiry, never by the program holding it.
+- `GET /v1/session` answers whose credential the caller holds — the account's
+  id and username — for a session or a token. Why: a program holding a token
+  needs to know which account it writes to before it starts, and push and pull
+  label their work with it. `DELETE /v1/session` refuses a token with `403`,
+  because a token is not a Session and a `204` would say something ended when
+  nothing did.
 
 What each reaches:
 
@@ -238,8 +299,10 @@ What each reaches:
 - `HEAD /v1/assets/{sha256}` also accepts the `import` scope: a program that
   can only push may ask whether an asset exists, and may not read it.
 - Permanent deletion (`DELETE /v1/conversations/{id}`,
-  `DELETE /v1/contacts/{id}`, `DELETE /v1/trash`) needs a session with the
-  `delete` permission. A token is refused.
+  `DELETE /v1/contacts/{id}`, `DELETE /v1/trash`,
+  `DELETE /v1/accounts/{id}/messages`) needs a session: the account's own with
+  the `delete` permission, or, for an account's messages, the owner's. A token
+  is refused whatever its scopes.
 - `/v1/accounts/{id}` and everything under it is read and written by the owner
   or by that account; a `Location` handed to a newly registered account names a
   row it may read.
@@ -259,9 +322,17 @@ What each reaches:
 
 The credential names the account. No route takes an `account=` parameter.
 
-Rate limiting guards `POST /v1/session`, `POST /v1/accounts` and
-`POST /v1/vault/claim` over a 60-second window; the limit is documented in the
-developer reference.
+Rate limiting guards the three routes that take no credential and make one,
+over a 60-second window; the limit is documented in the developer reference.
+`POST /v1/session` counts per username, because it guards one account's
+password. `POST /v1/accounts` and `POST /v1/vault/claim` count once for the
+whole vault, because they guard against a flood of new accounts, and a count
+per name lets a script that tries a new name each time straight through.
+
+Rejected: counting registrations by the caller's address. Behind a reverse
+proxy every visitor shares one address, and believing a forwarded address
+needs a list of trusted proxies that is easy to get wrong. A self-hosted vault
+takes a handful of registrations, so a vault-wide count never stops a person.
 
 ## Runs
 
@@ -270,6 +341,16 @@ completed, failed or were cancelled, and the client closes them: a run's
 settings are stated once on creation, never per batch or per page, and
 `complete`, `discard` (imports) and `cancel` (exports) are the only ways out.
 There is no sessionless import and no unrecorded export.
+
+A run that has finished answers `409` to `complete`, `discard`, `cancel`, a
+batch, and a change of stage; its record is never rewritten. Its outcome is
+stated once, as `status`. Why: the finished record is the history the person
+reads, and a cancelled run marked completed afterwards would lie. A program
+unsure how a run ended reads it with `GET` rather than repeating the call.
+
+Rejected: a repeatable `complete`, answering `200` when the run already ended
+the same way. It makes one call safe to retry at the cost of a second rule,
+and `GET` already answers the question a retry is asking.
 
 An Export Run's scope is one of three forms, stored as given: everything the
 account holds; a query in the search language; or picked `conversation_ids`
@@ -295,6 +376,74 @@ between pages move the offsets, so pages skipped or repeated messages and
   holds fewer than `limit` items, and the places after it do not move. A
   client steps `offset` by `limit` until it reaches `total`, never by the
   items it got, and never stops on a short or empty page.
+
+## The reference
+
+The generated reference, `docs/src/assets/openapi.json`, is produced from the
+handlers by `message-vault-server dump-openapi` and checked in; a test fails
+when the two differ, and CI checks the web app's generated types against it.
+
+An operation's error responses are built from shared parts, never written out
+by hand. The credential a route accepts brings its `401` and `403`; a request
+body brings `415` and `422`; an id in the path brings `404` and `422`. The
+handler adds only what is its own, such as `409` for a run in the wrong state.
+Every error response is declared as `application/problem+json`, names the
+problem types it can carry, and has a description. The first sentence of a
+handler's doc comment is the operation's summary, and the rest is its
+description.
+Why: every mismatch between the reference and the handlers that the September
+2026 review found was in a hand-written list.
+
+A rule that can be checked by walking every operation in the document is
+checked that way, by one test, as `openapi/credential_matrix.rs` checks every
+route's reach: the page shape and paging parameters on every list, a
+`Location` on every `201`, a problem document on every failure, `401` without
+a credential, a refused unknown query parameter, kebab-case paths and the
+nesting depth. Why: a rule checked one route at a time is checked on the
+routes someone remembered.
+
+## Code
+
+A route group is one module named for the route's first path segment, with
+`_api`: `contacts_api`, `conversations_api`, `imports_api`, `exports_api`,
+`assets_api`, `search_fields_api`, `session_api`, `vault_api`, `trash_api`.
+Contact Groups and Message Tags, one shape served twice, share
+`named_set_api`. Why: a route's code is found from its URL without searching.
+
+A handler is named `verb_noun`, with no `_handler` suffix. The verb is `list`,
+`get`, `create`, `update` (`PATCH`), `replace` (`PUT`) or `delete`, or the
+action's own verb: `list_contacts`, `get_contact`, `update_contact`,
+`claim_vault`, `complete_import`.
+
+A type on the wire is named one of two ways, and a reader can tell which from
+the name:
+
+- A thing the interface hands out is named for what it is, with no suffix:
+  `Message`, `Account`, `ApiToken`, `Contact`, `ContactSummary`, `Identity`,
+  `ImportRun`. It keeps that name wherever it appears.
+- An action's input and output are named for the action:
+  `VerbNounRequest` for a body sent in, `VerbNounResponse` for an answer that
+  is not a thing (`CreateApiTokenRequest`, `DeleteMessagesResponse`), and
+  `VerbNounQuery` for a query string (`ListContactsQuery`).
+
+No other endings: no `Body`, `Payload`, `Input`, `Patch`, `Item`, `Info`,
+`Detail` or `Row`. Why: these names become the web app's type names, and
+`Message` next to `MessageResponse` would leave a reader asking whether they
+are one thing or two.
+
+A handler reads the request, checks the caller and shapes the answer; it holds
+no SQL. Every query lives in `db/`, in the module for the table it is chiefly
+about, and whatever differs between SQLite and Postgres goes through
+`db::dialect` alone. Why: a query written into a handler gets written twice
+(the identity counts for contacts and for accounts were), and an engine
+difference outside `dialect` is one the Postgres run of the suite may not
+reach.
+
+A test of a route's answer goes through the router, checks a failure with
+`expect_problem` (status, `type` and `request_id`, not only the sentence), and
+takes its vault and account from the shared fixtures in `test_support.rs`.
+A rule every route follows is tested once over the whole document, as above,
+not again per route.
 
 ## Versioning and change
 

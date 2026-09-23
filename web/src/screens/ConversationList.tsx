@@ -67,7 +67,7 @@ export default function ConversationList({
           q: debouncedQ,
           limit,
           offset,
-          // `docs/agents/http-api-rules.md`: one `sort` parameter, a leading `-` for descending.
+          // `docs/architecture/http-api.md`: one `sort` parameter, a leading `-` for descending.
           sort: sortState.order === "desc" ? `-${sortState.sort}` : sortState.sort,
         },
         { signal },

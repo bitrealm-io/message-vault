@@ -9,7 +9,7 @@
 //! moment it is registered.
 //!
 //! The expected answer comes from the operation's declared `security` and from
-//! `docs/agents/http-api-rules.md` ("Credentials and reach") and
+//! `docs/architecture/http-api.md` ("Credentials and reach") and
 //! `docs/adr/0008-the-vault-owner-holds-no-messages.md`. The test asks only
 //! whether the credential was accepted or refused as declared, not whether the
 //! call succeeded: `401` and `403` are a refusal, anything else is past the

@@ -167,7 +167,7 @@ macro_rules! api_shape {
     };
 }
 
-/// What an Export Run asked for, stored as given (`docs/agents/http-api-rules.md`,
+/// What an Export Run asked for, stored as given (`docs/architecture/http-api.md`,
 /// "Runs"). One of three forms: everything the account holds, a query in the
 /// search language, or conversations and messages picked by hand.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -470,7 +470,7 @@ mod export_scope_tests {
 }
 
 /// An RFC 7807 problem document: the body of every failure the vault answers,
-/// served as `application/problem+json` (`docs/agents/http-api-rules.md`).
+/// served as `application/problem+json` (`docs/architecture/http-api.md`).
 ///
 /// `type` is the URL of the page describing this kind of failure, one page per
 /// type, or `about:blank` for an internal error. A validation failure carries

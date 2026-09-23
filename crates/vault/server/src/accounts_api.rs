@@ -4,7 +4,7 @@
 //! One collection serves the vault owner and every account. Who may call a
 //! route is decided here, per handler, never by the path: the owner reaches
 //! every row, an account reaches its own, and a stranger may create one while
-//! the vault is open. `docs/agents/http-api-rules.md` records the rule and the
+//! the vault is open. `docs/architecture/http-api.md` records the rule and the
 //! role prefix it replaced.
 //!
 //! The owner manages accounts, not the contents of other people's vaults, so

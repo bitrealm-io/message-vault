@@ -1,0 +1,107 @@
+name: Mutants
+
+# Mutation testing for the high-risk Rust files listed in
+# .cargo/mutants.toml, run by cargo-mutants through scripts/mutants.sh. A
+# mutant the tests still pass is a change in behaviour no test notices; the
+# list of those is the report. It is a report, not a gate: nothing here
+# fails a pull request, so it lives outside ci.yml, whose every job the
+# ruleset on main requires. Why: docs/adr/0007-ci-is-the-only-gate.md.
+#
+# About 1,100 mutants take a few hours on one runner, so the run is split
+# into shards that each take a slice, and it runs weekly and on demand
+# rather than on every push. The summary job joins the shards into one
+# table on the run's summary page and keeps every missed mutant, with its
+# log and diff, as a workflow artifact.
+
+on:
+  schedule:
+    - cron: "41 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutants:
+    name: Mutants (shard ${{ matrix.shard }} of 8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v7
+
+      # ffmpeg so the transcode and media tests run; without it they skip
+      # themselves and every mutant they would catch shows as missed.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev ffmpeg
+
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-mutants-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-mutants-
+
+      # Round-robin spreads the slow server mutants evenly over the shards.
+      # --in-place mutates this checkout instead of a copy, so the cached
+      # target/ is reused; the checkout is thrown away after the job.
+      - name: Run mutants
+        run: >-
+          ./scripts/mutants.sh
+          --shard ${{ matrix.shard }}/8
+          --sharding round-robin
+          --in-place
+
+      - name: Upload shard
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutants-shard-${{ matrix.shard }}
+          path: target/mutants/mutants.out
+          retention-days: 30
+
+  summary:
+    name: Mutants summary
+    needs: mutants
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: mutants-shard-*
+          path: shards
+
+      - name: Join the shards
+        run: |
+          python3 scripts/mutants-summary.py shards/mutants-shard-* > summary.md
+          {
+            echo '## Mutants (high-risk Rust files)'
+            echo
+            echo 'A missed mutant is a change to the code that every test still'
+            echo 'passes. Each shard artifact holds the log and diff for its mutants.'
+            echo
+            cat summary.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload summary
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutants-summary-${{ github.sha }}
+          path: summary.md
+          retention-days: 30

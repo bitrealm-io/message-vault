@@ -6,7 +6,8 @@
 //! attachments first and its conversation file last, so a conversation file
 //! on disk means everything it references is on disk too. That invariant is
 //! what makes an interrupted write resumable: a resumed run skips any unit
-//! whose conversation file it already finds.
+//! whose conversation file it finds written to the end, and rewrites one
+//! whose file is empty or cut off.
 //!
 //! Writers never transcode. Convert and compress stage the originals here and
 //! run afterwards as their own resumable pass.
@@ -31,7 +32,7 @@ use message_vault_io_core::{
 };
 
 use crate::transcode::{TranscodeOptions, transcode_staged};
-use message_ir_format::write_format;
+use message_ir_format::{is_complete_file, write_format};
 
 /// Where a unit's attachment bytes come from at write time.
 #[derive(Debug, Default)]
@@ -671,10 +672,12 @@ fn write_one_unit(
     let hint_sum: u64 = attachments.iter().filter_map(|a| a.size_hint).sum();
 
     let path = output_dir.join(format!("{}.jsonl", doc.filename_stem()));
-    if options.resume && path.is_file() {
-        // Already written by an earlier run, attachments and all. Count its
-        // attachments and their bytes as done — progress describes the whole
-        // import, not just this run's share of it — and load nothing.
+    if options.resume && is_complete_file(&path) {
+        // Already written to the end by an earlier run, attachments and all;
+        // an empty or cut-off file left by a power loss is written again.
+        // Count its attachments and their bytes as done — progress describes
+        // the whole import, not just this run's share of it — and load
+        // nothing.
         on_progress(UnitProgress {
             done: attachment_count,
             bytes_done: hint_sum,

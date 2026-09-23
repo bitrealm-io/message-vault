@@ -158,7 +158,8 @@ fn hash_content_keys(
 /// Counts reported by one cross-source dedupe pass.
 #[derive(Debug, Default)]
 pub struct DedupeStats {
-    /// Content keys written (one per message; not a duplicate count).
+    /// Content keys written: those missing and those whose inputs changed
+    /// (not a duplicate count).
     pub keys_filled: u64,
     /// Groups of messages sharing one content key.
     pub exact_groups: u64,
@@ -191,7 +192,8 @@ pub async fn source_priority_from_db(
     Ok(rows.into_iter().map(|(source,)| source).collect())
 }
 
-/// Fill any missing content keys, clear prior flags, then soft-hide cross-source duplicates.
+/// Refresh the content keys, clear prior flags, then soft-hide cross-source
+/// duplicates, all in one transaction.
 ///
 /// Survivor preference: source imported first (min message id), then source name.
 /// Optional `source_priority` overrides (tests); `None` loads order from the DB.
@@ -216,11 +218,14 @@ pub async fn dedupe_cross_source(
         .collect();
     let started = Instant::now();
 
+    // One transaction for the whole run: the flags are cleared and set again,
+    // so a pass that fails after the clearing would otherwise leave every
+    // duplicate in the account shown until the next successful run.
+    let mut tx = conn.begin().await?;
     {
-        println!("  dedupe:   filling missing content keys…");
+        println!("  dedupe:   refreshing content keys…");
         let _ = io::stdout().flush();
-        let mut tx = conn.begin().await?;
-        stats.keys_filled = fill_missing_content_keys(&mut tx, account_id).await?;
+        stats.keys_filled = refresh_content_keys(&mut tx, account_id).await?;
         sqlx::query(
             r"
             UPDATE messages
@@ -233,9 +238,8 @@ pub async fn dedupe_cross_source(
         .bind(account_id)
         .execute(&mut *tx)
         .await?;
-        tx.commit().await?;
         println!(
-            "  dedupe:   keys filled={}  ({:.1}s)",
+            "  dedupe:   keys written={}  ({:.1}s)",
             stats.keys_filled,
             started.elapsed().as_secs_f64()
         );
@@ -244,11 +248,9 @@ pub async fn dedupe_cross_source(
     {
         println!("  dedupe:   pass A exact content_key…");
         let _ = io::stdout().flush();
-        let mut tx = conn.begin().await?;
         let (groups, flagged) = flag_exact_content_key_dupes(&mut tx, account_id, &prio).await?;
         stats.exact_groups = groups;
         stats.exact_flagged = flagged;
-        tx.commit().await?;
         println!(
             "  dedupe:   exact groups={} flagged={}  ({:.1}s)",
             stats.exact_groups,
@@ -260,16 +262,15 @@ pub async fn dedupe_cross_source(
     {
         println!("  dedupe:   pass B near-time (±{near_window_secs}s)…");
         let _ = io::stdout().flush();
-        let mut tx = conn.begin().await?;
         stats.near_flagged =
             flag_near_time_dupes(&mut tx, account_id, &prio, near_window_secs).await?;
-        tx.commit().await?;
         println!(
             "  dedupe:   near flagged={}  ({:.1}s total)",
             stats.near_flagged,
             started.elapsed().as_secs_f64()
         );
     }
+    tx.commit().await?;
 
     Ok(stats)
 }
@@ -277,6 +278,17 @@ pub async fn dedupe_cross_source(
 /// Compute `content_key` for production rows that still lack one (after attachments exist).
 pub async fn fill_missing_content_keys(conn: &mut AnyConnection, account_id: i64) -> Result<u64> {
     recompute_content_keys(conn, true, account_id).await
+}
+
+/// Recompute every content key of the account and write the ones that differ
+/// from what is stored. Returns how many were written.
+///
+/// A key is first written at import, but a later append import can add
+/// attachments to a message the vault already holds, or participants to a
+/// group, and both are part of the key. A key left as it was stops matching
+/// the same message from another source.
+async fn refresh_content_keys(conn: &mut AnyConnection, account_id: i64) -> Result<u64> {
+    recompute_content_keys(conn, false, account_id).await
 }
 
 /// Bulk-insert fingerprints into the `_content_keys` temp table in chunks that fit the bind limit.
@@ -308,8 +320,9 @@ async fn insert_content_key_rows(conn: &mut AnyConnection, keys: &[(i64, String)
     Ok(())
 }
 
-/// Compute and store content keys for the account's messages: every message,
-/// or only those without a key. Returns how many were written.
+/// Compute and store content keys for the account's messages: every message
+/// (writing only the keys that changed), or only those without a key.
+/// Returns how many were written.
 ///
 /// # Errors
 ///
@@ -330,9 +343,31 @@ async fn recompute_content_keys(
     let keys = tokio::task::spawn_blocking(move || inputs.hash())
         .await
         .context("content-key hash task panicked")?;
-    let filled = keys.len() as u64;
+    let keys = if missing_only {
+        keys
+    } else {
+        let stored: HashMap<i64, String> = sqlx::query_as(
+            r"
+            SELECT m.id, m.content_key
+            FROM messages m
+            JOIN conversations c ON c.id = m.conversation_id
+            WHERE c.account_id = $1 AND m.content_key IS NOT NULL
+            ",
+        )
+        .bind(account_id)
+        .fetch_all(&mut *conn)
+        .await?
+        .into_iter()
+        .collect();
+        keys.into_iter()
+            .filter(|(id, key)| stored.get(id) != Some(key))
+            .collect()
+    };
+    if keys.is_empty() {
+        return Ok(0);
+    }
     apply_content_keys(conn, &keys).await?;
-    Ok(filled)
+    Ok(keys.len() as u64)
 }
 
 /// Everything the content-key hash reads, loaded in three queries so the

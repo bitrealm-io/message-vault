@@ -5,13 +5,6 @@ export function handleDateCell(iso: string | null | undefined): string {
   return formatHandleDate(iso) ?? "—";
 }
 
-export function conversationCount(h: {
-  individual_conversations: number;
-  group_conversations: number;
-}): number {
-  return h.individual_conversations + h.group_conversations;
-}
-
 export type RemoveIdentityTarget = {
   handle: string;
   /** The service the vault recorded, or null when it recorded none. */

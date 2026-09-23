@@ -12,7 +12,7 @@ use anyhow::{Context, Result, bail};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
-use crate::assets::{self, StoredAsset};
+use crate::assets_api::{self, StoredAsset};
 
 /// Default part size advertised to clients (under Cloudflare ~100 MiB).
 pub const DEFAULT_PART_SIZE: usize = 64 * 1024 * 1024;
@@ -189,7 +189,7 @@ pub fn start_upload(
     mime: Option<&str>,
     limits: UploadLimits,
 ) -> Result<(Option<StoredAsset>, Option<StartUpload>)> {
-    let sha = assets::require_sha256(sha256)?;
+    let sha = assets_api::require_sha256(sha256)?;
     if bytes == 0 {
         bail!("bytes must be > 0");
     }
@@ -201,9 +201,9 @@ pub fn start_upload(
         );
     }
     // Best-effort: drop abandoned multipart staging so disk does not grow forever.
-    let _ = assets::gc_stale_incoming(assets_root, STALE_INCOMING_SECS);
+    let _ = assets_api::gc_stale_incoming(assets_root, STALE_INCOMING_SECS);
 
-    if let Some(existing) = assets::lookup_by_sha256(assets_root, &sha) {
+    if let Some(existing) = assets_api::lookup_by_sha256(assets_root, &sha) {
         return Ok((Some(existing), None));
     }
 
@@ -236,7 +236,7 @@ pub fn put_part(
     part: u32,
     body: &[u8],
 ) -> Result<u64> {
-    let sha = assets::require_sha256(sha256)?;
+    let sha = assets_api::require_sha256(sha256)?;
     let upload_id = require_upload_id(upload_id)?;
     if part == 0 {
         bail!("part number must be >= 1");
@@ -290,7 +290,7 @@ pub fn complete_upload(
     sha256: &str,
     upload_id: &str,
 ) -> Result<(StoredAsset, bool)> {
-    let sha = assets::require_sha256(sha256)?;
+    let sha = assets_api::require_sha256(sha256)?;
     let upload_id = require_upload_id(upload_id)?;
     let session = session_dir(assets_root, &sha, &upload_id);
     if !session.is_dir() {
@@ -321,7 +321,7 @@ pub fn complete_upload(
     {
         let mut out =
             File::create(&assembled).with_context(|| format!("create {}", assembled.display()))?;
-        let mut buf = vec![0u8; assets::COPY_BUFFER_BYTES];
+        let mut buf = vec![0u8; assets_api::COPY_BUFFER_BYTES];
         for n in 1..=count {
             let path = part_path(&session, n);
             let mut file = File::open(&path).with_context(|| format!("open {}", path.display()))?;
@@ -343,7 +343,7 @@ pub fn complete_upload(
             );
         }
     }
-    let result = assets::store_verified(
+    let result = assets_api::store_verified(
         &assembled,
         &sha,
         assets_root,
@@ -359,7 +359,7 @@ pub fn complete_upload(
 
 /// Abort and delete staging for an upload session.
 pub fn abort_upload(assets_root: &Path, sha256: &str, upload_id: &str) -> Result<()> {
-    let sha = assets::require_sha256(sha256)?;
+    let sha = assets_api::require_sha256(sha256)?;
     let upload_id = require_upload_id(upload_id)?;
     let session = session_dir(assets_root, &sha, &upload_id);
     if session.exists() {
@@ -374,7 +374,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn hash_bytes(data: &[u8]) -> String {
-        crate::assets::sha256_hex(data)
+        crate::assets_api::sha256_hex(data)
     }
 
     #[test]

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use message_ir::{HandleService, HandleType};
+use serde::Serialize;
 use sqlx::AnyConnection;
 
 /// `(account_id, normalized, handle_type, service)` → handle id for one import.
@@ -104,6 +105,125 @@ pub async fn upsert_handle_row_cached(
     let (id, flagged) = upsert_handle_row(conn, account_id, raw, handle_type, service).await?;
     cache.insert(key, id);
     Ok((id, flagged, false))
+}
+
+/// One identity of a contact or an account, and its messages: for a contact,
+/// the messages in the conversations it takes part in; for an account, the
+/// messages held at it, sent from or received at that address (ADR-0015). The
+/// contact drawer and the Profile screen show the same table, so they read the
+/// same row.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct Identity {
+    /// The identity as the vault stores it: E.164 for a number, lower case
+    /// for an address.
+    pub handle: String,
+    /// `phone`, `email`, or `whatsapp`.
+    pub service: String,
+    /// When the identity's oldest message was sent, or null when there is
+    /// none.
+    pub start_date: Option<String>,
+    /// When the newest such message was sent, or null when there is none.
+    pub end_date: Option<String>,
+    /// Direct and group conversations holding at least one of the identity's
+    /// messages, trashed conversations excluded.
+    pub conversations: u64,
+    /// The identity's messages in one-to-one conversations, trashed
+    /// conversations and duplicates excluded.
+    pub direct_messages: u64,
+    /// The identity's messages in group conversations, on the same terms.
+    pub group_messages: u64,
+}
+
+/// Whose identities [`identities`] reads.
+#[derive(Debug, Clone, Copy)]
+pub enum IdentitiesOf {
+    /// The identities the account holds as its own.
+    Account(i64),
+    /// The identities linked to one of the account's contacts.
+    Contact { account_id: i64, contact_id: i64 },
+}
+
+/// One row of [`identities`]: handle, service, first and last timestamp,
+/// conversation count, direct and group message counts.
+type IdentityRow = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    i64,
+    i64,
+    i64,
+);
+
+/// The identities of an account or of a contact, each with its messages,
+/// phones before emails and each in order.
+pub async fn identities(conn: &mut AnyConnection, of: IdentitiesOf) -> Result<Vec<Identity>> {
+    let not_trashed = crate::search::emit::NOT_TRASHED_CONVERSATION;
+    // The account holder is never a participant, so an account's identity
+    // counts the messages held at it (ADR-0015); a contact's counts the
+    // conversations it takes part in.
+    let (account_id, linked, messages) = match of {
+        IdentitiesOf::Account(account_id) => (
+            account_id,
+            "SELECT handle_id FROM account_handles WHERE account_id = $1",
+            format!(
+                "LEFT JOIN (messages m
+                   JOIN conversations c ON c.id = m.conversation_id AND {not_trashed})
+                   ON m.owner_handle_id = l.handle_id AND m.account_id = $1
+                   AND m.duplicate_of IS NULL"
+            ),
+        ),
+        IdentitiesOf::Contact { account_id, .. } => (
+            account_id,
+            "SELECT handle_id FROM contact_handles WHERE account_id = $1 AND contact_id = $2",
+            format!(
+                "LEFT JOIN conversations c ON c.account_id = $1
+                   AND (c.chat_handle_id = l.handle_id
+                        OR EXISTS (
+                          SELECT 1 FROM participants p
+                          WHERE p.conversation_id = c.id AND p.handle_id = l.handle_id
+                        ))
+                   AND {not_trashed}
+                 LEFT JOIN messages m ON m.conversation_id = c.id AND m.duplicate_of IS NULL"
+            ),
+        ),
+    };
+    let sql = format!(
+        "WITH linked AS ({linked})
+         SELECT h.normalized,
+                CASE WHEN h.handle_type = 'email' THEN 'email'
+                     WHEN h.service = 'whatsapp' THEN 'whatsapp'
+                     ELSE 'phone' END AS service,
+                MIN(m.timestamp),
+                MAX(m.timestamp),
+                COUNT(DISTINCT c.id),
+                COUNT(DISTINCT CASE WHEN c.conversation_type = 'individual' THEN m.id END),
+                COUNT(DISTINCT CASE WHEN c.conversation_type = 'group' THEN m.id END)
+         FROM linked l
+         JOIN handles h ON h.id = l.handle_id
+         {messages}
+         GROUP BY l.handle_id, h.normalized, h.handle_type, h.service
+         ORDER BY CASE WHEN h.handle_type = 'email' THEN 1 ELSE 0 END, h.normalized",
+    );
+    let mut query = sqlx::query_as::<_, IdentityRow>(&sql).bind(account_id);
+    if let IdentitiesOf::Contact { contact_id, .. } = of {
+        query = query.bind(contact_id);
+    }
+    let rows = query.fetch_all(&mut *conn).await?;
+    Ok(rows
+        .into_iter()
+        .map(
+            |(handle, service, start_date, end_date, conversations, direct, group)| Identity {
+                handle,
+                service,
+                start_date,
+                end_date,
+                conversations: conversations.max(0) as u64,
+                direct_messages: direct.max(0) as u64,
+                group_messages: group.max(0) as u64,
+            },
+        )
+        .collect())
 }
 
 #[cfg(test)]

@@ -13,7 +13,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 
 use crate::config::Config;
-use crate::db::trash::{OrphanedFile, empty_trash};
+use crate::db::trash::{self, OrphanedFile};
 use crate::server::{ApiError, AppState, FullDeleteAccess};
 
 /// Remove the files `db::trash` reported as unreferenced: each original, its
@@ -121,13 +121,13 @@ fn remove_if_present(path: &Path) -> Result<(), ApiError> {
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn empty_trash_handler(
+pub(crate) async fn empty_trash(
     State(state): State<AppState>,
     FullDeleteAccess(auth): FullDeleteAccess,
 ) -> Result<StatusCode, ApiError> {
     let orphaned = {
         let mut conn = state.db.acquire().await?;
-        empty_trash(&mut conn, auth.account_id).await?
+        trash::empty_trash(&mut conn, auth.account_id).await?
     };
     remove_orphaned_files(Arc::clone(&state.cfg), auth.account_id, orphaned).await?;
     Ok(StatusCode::NO_CONTENT)

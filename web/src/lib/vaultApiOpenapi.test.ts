@@ -148,7 +148,7 @@ const EXERCISED: Record<string, () => unknown> = {
   getContact: () => vaultApi.getContact(42),
   updateContact: () => vaultApi.updateContact(42, { name: "Sam" }),
   getContactSummaries: () => vaultApi.getContactSummaries({ ids: [1, 2] }),
-  unmatchedHandles: () => vaultApi.unmatchedHandles({ identifiers: ["+15555550100"] }),
+  unmatchedIdentities: () => vaultApi.unmatchedIdentities({ identifiers: ["+15555550100"] }),
   loadAddressBook: () => vaultApi.loadAddressBook("BEGIN:VCARD\nEND:VCARD\n", "text/vcard"),
   trashContact: () => vaultApi.trashContact(42),
   restoreContact: () => vaultApi.restoreContact(42),

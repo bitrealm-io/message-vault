@@ -20,7 +20,7 @@ async fn an_unowned_vault_reports_unclaimed() {
     let vault = test_vault().await;
     let state = vault.state.clone();
 
-    let body: VaultResponse = get_json(&state, "/v1/vault", "").await;
+    let body: Vault = get_json(&state, "/v1/vault", "").await;
     assert_eq!(body.state, VaultState::Unclaimed);
 }
 
@@ -31,7 +31,7 @@ async fn public_registration_does_not_make_an_unowned_vault_open() {
     let vault = test_vault().await;
     let state = vault.state.clone();
 
-    let body: VaultResponse = get_json(&state, "/v1/vault", "").await;
+    let body: Vault = get_json(&state, "/v1/vault", "").await;
     assert_eq!(
         body.state,
         VaultState::Unclaimed,
@@ -46,7 +46,7 @@ async fn a_claimed_vault_is_closed_until_registration_is_opened() {
     close_registration(&state).await;
     let _owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let body: VaultResponse = get_json(&state, "/v1/vault", "").await;
+    let body: Vault = get_json(&state, "/v1/vault", "").await;
     assert_eq!(body.state, VaultState::Closed);
 }
 
@@ -56,7 +56,7 @@ async fn a_claimed_vault_with_registration_on_is_open() {
     let state = vault.state.clone();
     let _owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let body: VaultResponse = get_json(&state, "/v1/vault", "").await;
+    let body: Vault = get_json(&state, "/v1/vault", "").await;
     assert_eq!(body.state, VaultState::Open);
 }
 
@@ -82,7 +82,7 @@ async fn the_state_route_carries_the_build_and_the_schema_fingerprint() {
     let vault = test_vault().await;
     let state = vault.state.clone();
 
-    let body: VaultResponse = get_json(&state, "/v1/vault", "").await;
+    let body: Vault = get_json(&state, "/v1/vault", "").await;
 
     assert_eq!(body.version, crate::BUILD);
     assert!(
@@ -121,7 +121,7 @@ async fn claiming_an_unowned_vault_creates_the_owner_and_signs_them_in() {
     assert!(auth.is_owner());
     drop(conn);
 
-    let after: VaultResponse = get_json(&state, "/v1/vault", "").await;
+    let after: Vault = get_json(&state, "/v1/vault", "").await;
     assert_eq!(
         after.state,
         VaultState::Open,
@@ -170,7 +170,7 @@ async fn claiming_needs_a_password_of_one_character_or_more() {
         StatusCode::UNPROCESSABLE_ENTITY,
         "the vault owner must have a password"
     );
-    let after: VaultResponse = get_json(&state, "/v1/vault", "").await;
+    let after: Vault = get_json(&state, "/v1/vault", "").await;
     assert_eq!(after.state, VaultState::Unclaimed);
 
     let status = post_status(
@@ -206,8 +206,7 @@ async fn the_owner_can_open_and_close_registration() {
     close_registration(&state).await;
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let settings: VaultSettingsResponse =
-        get_json(&state, "/v1/vault/settings", &owner.token).await;
+    let settings: VaultSettings = get_json(&state, "/v1/vault/settings", &owner.token).await;
     assert!(!settings.public_registration);
 
     assert_eq!(
@@ -220,7 +219,7 @@ async fn the_owner_can_open_and_close_registration() {
         StatusCode::FORBIDDEN
     );
 
-    let opened: VaultSettingsResponse = crate::test_support::patch_json(
+    let opened: VaultSettings = crate::test_support::patch_json(
         &state,
         "/v1/vault/settings",
         &owner.token,
@@ -232,7 +231,7 @@ async fn the_owner_can_open_and_close_registration() {
     let joined = register_via_api(&state, "stranger", "hunter2hunter2").await;
     assert_eq!(joined.username, "stranger");
 
-    let body: VaultResponse = get_json(&state, "/v1/vault", "").await;
+    let body: Vault = get_json(&state, "/v1/vault", "").await;
     assert_eq!(body.state, VaultState::Open);
 }
 
@@ -316,7 +315,7 @@ async fn the_owner_reads_the_vault_totals_summed_over_every_account() {
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
-    let empty: VaultStorageResponse = get_json(&state, "/v1/vault/storage", &owner.token).await;
+    let empty: VaultStorage = get_json(&state, "/v1/vault/storage", &owner.token).await;
     assert_eq!(
         (
             empty.message_count,
@@ -413,7 +412,7 @@ async fn the_owner_reads_the_vault_totals_summed_over_every_account() {
     }
     drop(conn);
 
-    let totals: VaultStorageResponse = get_json(&state, "/v1/vault/storage", &owner.token).await;
+    let totals: VaultStorage = get_json(&state, "/v1/vault/storage", &owner.token).await;
     assert_eq!(
         (
             totals.message_count,

@@ -354,8 +354,8 @@ fn a_work_file_is_stored_content_addressed_and_then_removed() {
         .unwrap();
 
     let expected = DerivedBlob {
-        sha256: crate::assets::sha256_hex(b"jpeg-bytes"),
-        assets_path: derived_rel_path(&crate::assets::sha256_hex(b"jpeg-bytes"), ".jpg"),
+        sha256: crate::assets_api::sha256_hex(b"jpeg-bytes"),
+        assets_path: derived_rel_path(&crate::assets_api::sha256_hex(b"jpeg-bytes"), ".jpg"),
         mime_type: "image/jpeg".to_string(),
     };
     assert_eq!(stored, Derived::Stored(expected.clone()));

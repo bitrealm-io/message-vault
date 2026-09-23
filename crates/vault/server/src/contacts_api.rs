@@ -16,7 +16,9 @@ use sqlx::AnyConnection;
 use crate::db::contacts::{self, contact_id_for_handle};
 use crate::db::dialect::{engine_of, group_concat_unit_separator, name_ci_expr};
 use crate::db::engine::DbEngine;
-use crate::db::handles::{infer_handle_type_from_shape, normalize_handle};
+use crate::db::handles::{
+    self, IdentitiesOf, Identity, infer_handle_type_from_shape, normalize_handle,
+};
 use crate::db::sql::{SqlParam, bind_args, in_placeholders, renumber_placeholders};
 use crate::db::trash::{DeleteOutcome, Trashable, delete_trashed, move_to_trash, restore};
 use crate::paging::{
@@ -53,33 +55,9 @@ pub struct ContactSummary {
     pub groups: Vec<String>,
 }
 
-/// One handle on a contact with service and message stats.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct ContactHandleInfo {
-    /// Normalized handle value.
-    pub handle: String,
-    /// Platform service, e.g. `whatsapp`, when the handle is linked with one.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service: Option<String>,
-    /// Date of the first message involving this handle.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_date: Option<String>,
-    /// Date of the last message involving this handle.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub end_date: Option<String>,
-    /// 1:1 conversations this handle appears in.
-    pub individual_conversations: u64,
-    /// Group conversations this handle appears in.
-    pub group_conversations: u64,
-    /// Messages in 1:1 conversations involving this handle.
-    pub individual_message_count: u64,
-    /// Messages in group conversations involving this handle.
-    pub group_message_count: u64,
-}
-
 /// A handle value plus optional platform service.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct ContactHandlePayload {
+pub struct AddContactIdentityRequest {
     /// Handle value to link.
     pub handle: String,
     /// Platform service (`phone`, `email`, or `whatsapp`); inferred when omitted.
@@ -89,7 +67,7 @@ pub struct ContactHandlePayload {
 
 /// The previous and new handle values for a link change.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct ContactUpdateHandlePayload {
+pub struct UpdateContactIdentityRequest {
     /// Handle value currently linked.
     pub previous_handle: String,
     /// Replacement handle value.
@@ -101,7 +79,7 @@ pub struct ContactUpdateHandlePayload {
 
 /// The handle to unlink.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct ContactRemoveHandlePayload {
+pub struct RemoveContactIdentityRequest {
     /// Handle value to unlink.
     pub handle: String,
     /// Platform service, when the handle is linked with one.
@@ -111,24 +89,24 @@ pub struct ContactRemoveHandlePayload {
 
 /// Body for `PATCH /v1/contacts/{id}`. Exactly one mutation field should be set.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct ContactMutationBody {
+pub struct UpdateContactRequest {
     /// New display name; `None` leaves it unchanged.
     #[serde(default)]
     pub name: Option<String>,
     /// Handle link to add.
     #[serde(default)]
-    pub add_handle: Option<ContactHandlePayload>,
+    pub add_handle: Option<AddContactIdentityRequest>,
     /// Handle link to replace.
     #[serde(default)]
-    pub update_handle: Option<ContactUpdateHandlePayload>,
+    pub update_handle: Option<UpdateContactIdentityRequest>,
     /// Handle link to remove.
     #[serde(default)]
-    pub remove_handle: Option<ContactRemoveHandlePayload>,
+    pub remove_handle: Option<RemoveContactIdentityRequest>,
 }
 
 /// Full contact view: every handle with stats, plus totals across them.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct ContactDetail {
+pub struct Contact {
     /// Contact id.
     pub id: i64,
     /// The contact's preferred name; empty when it has none.
@@ -137,7 +115,7 @@ pub struct ContactDetail {
     /// identity, or it has identities and no preferred name.
     pub unknown: bool,
     /// Every handle linked to the contact, with per-handle stats.
-    pub handles: Vec<ContactHandleInfo>,
+    pub handles: Vec<Identity>,
     /// 1:1 conversations the contact appears in.
     pub direct_conversations: u64,
     /// Group conversations the contact appears in.
@@ -153,7 +131,7 @@ pub struct ContactDetail {
 
 /// Body for `POST /v1/contacts/summaries`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct ContactSummariesBody {
+pub struct SummarizeContactsRequest {
     /// Contact ids to summarize; an empty list covers every contact.
     #[serde(default)]
     pub ids: Vec<i64>,
@@ -419,13 +397,20 @@ pub async fn get_contact_detail(
     conn: &mut AnyConnection,
     account_id: i64,
     contact_id: i64,
-) -> Result<Option<ContactDetail>, ApiError> {
+) -> Result<Option<Contact>, ApiError> {
     let Some((name, unknown, last_modified)) =
         contact_name_and_modified(conn, account_id, contact_id).await?
     else {
         return Ok(None);
     };
-    let handles = contact_handle_stats(conn, account_id, contact_id).await?;
+    let handles = handles::identities(
+        conn,
+        IdentitiesOf::Contact {
+            account_id,
+            contact_id,
+        },
+    )
+    .await?;
     let totals = contact_totals(conn, account_id, contact_id).await?;
     let contact_groups = crate::named_membership::names_for_item(
         crate::named_membership::group_spec(),
@@ -435,7 +420,7 @@ pub async fn get_contact_detail(
     )
     .await?;
 
-    Ok(Some(ContactDetail {
+    Ok(Some(Contact {
         id: contact_id,
         name,
         unknown,
@@ -470,83 +455,6 @@ async fn contact_name_and_modified(
     .fetch_optional(&mut *conn)
     .await?;
     Ok(row.map(|(name, unknown, last_modified)| (name, unknown != 0, last_modified)))
-}
-
-/// One row of [`contact_handle_stats`]: handle, service, first and last
-/// timestamp, then direct and group conversation and message counts.
-type ContactHandleRow = (
-    String,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    i64,
-    i64,
-    i64,
-    i64,
-);
-
-impl From<ContactHandleRow> for ContactHandleInfo {
-    fn from(
-        (
-            handle,
-            service,
-            start_date,
-            end_date,
-            individual_conversations,
-            group_conversations,
-            individual_message_count,
-            group_message_count,
-        ): ContactHandleRow,
-    ) -> Self {
-        Self {
-            handle,
-            service,
-            start_date,
-            end_date,
-            individual_conversations: individual_conversations.max(0) as u64,
-            group_conversations: group_conversations.max(0) as u64,
-            individual_message_count: individual_message_count.max(0) as u64,
-            group_message_count: group_message_count.max(0) as u64,
-        }
-    }
-}
-
-/// One entry per linked handle, ordered by handle: the date range and the
-/// conversation and message counts over the direct and group conversations
-/// that include it, trashed conversations excluded.
-async fn contact_handle_stats(
-    conn: &mut AnyConnection,
-    account_id: i64,
-    contact_id: i64,
-) -> Result<Vec<ContactHandleInfo>, ApiError> {
-    let rows: Vec<ContactHandleRow> = sqlx::query_as(&format!(
-        "SELECT h.raw,
-                    NULLIF(trim(h.service), '') AS service,
-                    MIN(m.timestamp) AS first_ts,
-                    MAX(m.timestamp) AS last_ts,
-                    COUNT(DISTINCT CASE WHEN c.conversation_type = 'individual' THEN c.id END),
-                    COUNT(DISTINCT CASE WHEN c.conversation_type = 'group' THEN c.id END),
-                    COUNT(DISTINCT CASE WHEN c.conversation_type = 'individual' THEN m.id END),
-                    COUNT(DISTINCT CASE WHEN c.conversation_type = 'group' THEN m.id END)
-             FROM contact_handles ch
-             JOIN handles h ON h.id = ch.handle_id
-             LEFT JOIN conversations c ON c.account_id = ch.account_id
-               AND (c.chat_handle_id = ch.handle_id
-                    OR EXISTS (
-                      SELECT 1 FROM participants p
-                      WHERE p.conversation_id = c.id AND p.handle_id = ch.handle_id
-                    ))
-               AND {NOT_TRASHED_CONVERSATION}
-             LEFT JOIN messages m ON m.conversation_id = c.id AND m.duplicate_of IS NULL
-             WHERE ch.account_id = $1 AND ch.contact_id = $2
-             GROUP BY ch.handle_id, h.raw, h.service
-             ORDER BY h.raw",
-    ))
-    .bind(account_id)
-    .bind(contact_id)
-    .fetch_all(&mut *conn)
-    .await?;
-    Ok(rows.into_iter().map(ContactHandleInfo::from).collect())
 }
 
 /// Conversation and message counts across every handle of one contact.
@@ -715,9 +623,9 @@ type ContactSelectionRow = (
 /// bigger number.
 pub(crate) const MAX_MATCH_IDENTIFIERS: usize = 500;
 
-/// Body for `POST /v1/contacts/unmatched-handles`.
+/// Body for `POST /v1/contacts/unmatched-identities`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct UnmatchedHandlesBody {
+pub(crate) struct FindUnmatchedIdentitiesRequest {
     /// Raw identifiers — phone numbers, emails — as they appear in an export.
     identifiers: Vec<String>,
 }
@@ -802,7 +710,7 @@ pub(crate) const MAX_ADDRESS_BOOK_BYTES: usize = 8 * 1024 * 1024;
 
 /// What loading an address book changed.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct AddressBookLoadResponse {
+pub(crate) struct CreateContactsResponse {
     /// Contacts written from the file.
     pub contacts: u64,
     /// Phone identities linked to those contacts.
@@ -833,7 +741,7 @@ pub(crate) struct AddressBookLoadResponse {
         description = "The address book file: a vCard file as text/vcard, or a vCard CSV export as text/csv."
     ),
     responses(
-        (status = 200, body = AddressBookLoadResponse),
+        (status = 200, body = CreateContactsResponse),
         (status = 400, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
@@ -842,12 +750,12 @@ pub(crate) struct AddressBookLoadResponse {
         (status = 422, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn contacts_create_handler(
+pub(crate) async fn create_contacts(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     headers: HeaderMap,
     body: axum::body::Bytes,
-) -> Result<Json<AddressBookLoadResponse>, ApiError> {
+) -> Result<Json<CreateContactsResponse>, ApiError> {
     let Some(name) = address_book_file_name(content_type_base(&headers)) else {
         return Err(ApiError::UnsupportedMediaType(
             "Content-Type must be text/vcard or text/csv".into(),
@@ -875,7 +783,7 @@ pub(crate) async fn contacts_create_handler(
     let stats = contacts::load_contacts_if_needed(&mut conn, Some(&path), true, auth.account_id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("load address book: {e}")))?;
-    Ok(Json(AddressBookLoadResponse {
+    Ok(Json(CreateContactsResponse {
         contacts: stats.contacts,
         phones: stats.phones,
         phones_needing_review: stats.phones_needing_review,
@@ -896,10 +804,10 @@ fn address_book_file_name(content_type: Option<&str>) -> Option<&'static str> {
 /// Report which identifiers this account has no vault contact for.
 #[utoipa::path(
     post,
-    path = "/v1/contacts/unmatched-handles",
+    path = "/v1/contacts/unmatched-identities",
     tag = "Contacts",
     security(("session" = [])),
-    request_body = UnmatchedHandlesBody,
+    request_body = FindUnmatchedIdentitiesRequest,
     responses(
         (status = 200, body = crate::paging::Page<String>),
         (status = 400, body = crate::problem::Problem),
@@ -908,10 +816,10 @@ fn address_book_file_name(content_type: Option<&str>) -> Option<&'static str> {
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn unmatched_handles_handler(
+pub(crate) async fn find_unmatched_identities(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    Json(body): Json<UnmatchedHandlesBody>,
+    Json(body): Json<FindUnmatchedIdentitiesRequest>,
 ) -> Result<Json<Page<String>>, ApiError> {
     if body.identifiers.len() > MAX_MATCH_IDENTIFIERS {
         return Err(ApiError::validation(format!(
@@ -991,14 +899,14 @@ enum ContactEdit<'a> {
     /// Give the contact a name the person typed.
     Rename(&'a str),
     /// Link a handle.
-    AddHandle(&'a ContactHandlePayload),
+    AddHandle(&'a AddContactIdentityRequest),
     /// Swap one linked handle for another.
-    UpdateHandle(&'a ContactUpdateHandlePayload),
+    UpdateHandle(&'a UpdateContactIdentityRequest),
     /// Unlink a handle.
-    RemoveHandle(&'a ContactRemoveHandlePayload),
+    RemoveHandle(&'a RemoveContactIdentityRequest),
 }
 
-impl ContactMutationBody {
+impl UpdateContactRequest {
     /// The single edit the body asks for.
     ///
     /// # Errors
@@ -1031,7 +939,7 @@ pub async fn mutate_contact(
     conn: &mut AnyConnection,
     account_id: i64,
     contact_id: i64,
-    body: &ContactMutationBody,
+    body: &UpdateContactRequest,
 ) -> Result<bool, ContactEditError> {
     let mut editor = ContactEditor {
         conn,
@@ -1102,7 +1010,10 @@ impl ContactEditor<'_> {
     }
 
     /// Link a handle, creating its row when the vault has never seen it.
-    async fn add_handle(&mut self, add: &ContactHandlePayload) -> Result<bool, ContactEditError> {
+    async fn add_handle(
+        &mut self,
+        add: &AddContactIdentityRequest,
+    ) -> Result<bool, ContactEditError> {
         let raw = add.handle.trim();
         if raw.is_empty() {
             refuse!("handle must not be empty");
@@ -1128,7 +1039,7 @@ impl ContactEditor<'_> {
     /// Replace one linked handle with another.
     async fn update_handle(
         &mut self,
-        upd: &ContactUpdateHandlePayload,
+        upd: &UpdateContactIdentityRequest,
     ) -> Result<bool, ContactEditError> {
         let prev = upd.previous_handle.trim();
         let next = upd.handle.trim();
@@ -1182,7 +1093,7 @@ impl ContactEditor<'_> {
     /// Unlink a handle. The handle row itself stays: messages still cite it.
     async fn remove_handle(
         &mut self,
-        rem: &ContactRemoveHandlePayload,
+        rem: &RemoveContactIdentityRequest,
     ) -> Result<bool, ContactEditError> {
         let raw = rem.handle.trim();
         if raw.is_empty() {
@@ -1304,7 +1215,7 @@ impl ContactEditor<'_> {
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn contacts_list_handler(
+pub(crate) async fn list_contacts(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     Query(query): Query<PageQuery>,
@@ -1342,7 +1253,7 @@ pub(crate) async fn contacts_list_handler(
     path = "/v1/contacts/summaries",
     tag = "Contacts",
     security(("session" = [])),
-    request_body = ContactSummariesBody,
+    request_body = SummarizeContactsRequest,
     responses(
         (status = 200, body = crate::paging::Page<ContactSelectionSummary>),
         (status = 400, body = crate::problem::Problem),
@@ -1351,10 +1262,10 @@ pub(crate) async fn contacts_list_handler(
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn contact_summaries_handler(
+pub(crate) async fn summarize_contacts(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    Json(body): Json<ContactSummariesBody>,
+    Json(body): Json<SummarizeContactsRequest>,
 ) -> Result<Json<Page<ContactSelectionSummary>>, ApiError> {
     if body.ids.len() > MAX_CONTACT_SUMMARY_IDS {
         return Err(ApiError::validation(format!(
@@ -1375,17 +1286,17 @@ pub(crate) async fn contact_summaries_handler(
     security(("session" = [])),
     params(("id" = i64, Path, description = "Contact id")),
     responses(
-        (status = 200, body = ContactDetail),
+        (status = 200, body = Contact),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn contact_detail_handler(
+pub(crate) async fn get_contact(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     AxumPath(contact_id): AxumPath<i64>,
-) -> Result<Json<ContactDetail>, ApiError> {
+) -> Result<Json<Contact>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let detail = get_contact_detail(&mut conn, auth.account_id, contact_id).await?;
     detail
@@ -1400,9 +1311,9 @@ pub(crate) async fn contact_detail_handler(
     tag = "Contacts",
     security(("session" = [])),
     params(("id" = i64, Path, description = "Contact id")),
-    request_body = ContactMutationBody,
+    request_body = UpdateContactRequest,
     responses(
-        (status = 200, body = ContactDetail),
+        (status = 200, body = Contact),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
@@ -1410,12 +1321,12 @@ pub(crate) async fn contact_detail_handler(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn contact_mutate_handler(
+pub(crate) async fn update_contact(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     AxumPath(contact_id): AxumPath<i64>,
-    Json(body): Json<ContactMutationBody>,
-) -> Result<Json<ContactDetail>, ApiError> {
+    Json(body): Json<UpdateContactRequest>,
+) -> Result<Json<Contact>, ApiError> {
     let mut conn = state.db.acquire().await?;
     match mutate_contact(&mut conn, auth.account_id, contact_id, &body).await {
         Ok(false) => Err(ApiError::NotFound("contact not found".into())),
@@ -1442,7 +1353,7 @@ pub(crate) async fn contact_mutate_handler(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn contact_trash_handler(
+pub(crate) async fn trash_contact(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     AxumPath(contact_id): AxumPath<i64>,
@@ -1470,7 +1381,7 @@ pub(crate) async fn contact_trash_handler(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn contact_restore_handler(
+pub(crate) async fn restore_contact(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     AxumPath(contact_id): AxumPath<i64>,
@@ -1502,7 +1413,7 @@ pub(crate) async fn contact_restore_handler(
         (status = 409, body = crate::problem::Problem, description = "The contact is not in the trash")
     )
 )]
-pub(crate) async fn contact_delete_handler(
+pub(crate) async fn delete_contact(
     State(state): State<AppState>,
     FullDeleteAccess(auth): FullDeleteAccess,
     AxumPath(contact_id): AxumPath<i64>,

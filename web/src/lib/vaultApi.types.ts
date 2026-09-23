@@ -12,7 +12,7 @@ export interface paths {
             cookie?: never;
         };
         /** Report process liveness. */
-        get: operations["health"];
+        get: operations["get_health"];
         put?: never;
         post?: never;
         delete?: never;
@@ -85,7 +85,7 @@ export interface paths {
          *     field the caller may not set answers `403 Forbidden`, and the reloaded
          *     account is the answer.
          */
-        patch: operations["patch_account"];
+        patch: operations["update_account"];
         trace?: never;
     };
     "/v1/accounts/{id}/api-tokens": {
@@ -124,7 +124,7 @@ export interface paths {
         options?: never;
         head?: never;
         /** Rename one named API token. The label is trimmed before storing. */
-        patch: operations["rename_api_token"];
+        patch: operations["update_api_token"];
         trace?: never;
     };
     "/v1/accounts/{id}/exports": {
@@ -250,7 +250,7 @@ export interface paths {
          *     account's answers `204`. That is the whole of it: the account's sessions carry on,
          *     and its holder keeps the new password until they change it themselves.
          */
-        put: operations["set_account_password"];
+        put: operations["replace_account_password"];
         post?: never;
         delete?: never;
         options?: never;
@@ -292,9 +292,9 @@ export interface paths {
          * Download a previously stored content-addressed asset (read-only).
          * @description The body streams the stored bytes; the URL is the SHA-256 fingerprint.
          */
-        get: operations["asset_get_handler"];
+        get: operations["get_asset"];
         /** Store one asset body under its SHA-256 fingerprint. */
-        put: operations["asset_put_handler"];
+        put: operations["replace_asset"];
         post?: never;
         delete?: never;
         options?: never;
@@ -302,7 +302,7 @@ export interface paths {
          * Probe whether a content-addressed asset is already stored (no body).
          * @description Clients may skip sending bytes when the asset exists.
          */
-        head: operations["asset_head_handler"];
+        head: operations["head_asset"];
         patch?: never;
         trace?: never;
     };
@@ -316,7 +316,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Start a chunked (multipart) asset upload and get the part size. */
-        post: operations["asset_upload_start_handler"];
+        post: operations["create_asset_upload"];
         delete?: never;
         options?: never;
         head?: never;
@@ -334,7 +334,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** Abort and delete a chunked asset upload's staging files. */
-        delete: operations["asset_upload_abort_handler"];
+        delete: operations["delete_asset_upload"];
         options?: never;
         head?: never;
         patch?: never;
@@ -353,7 +353,7 @@ export interface paths {
          * Assemble the uploaded parts, verify the SHA-256 fingerprint, and install
          *     the asset.
          */
-        post: operations["asset_upload_complete_handler"];
+        post: operations["complete_asset_upload"];
         delete?: never;
         options?: never;
         head?: never;
@@ -369,7 +369,7 @@ export interface paths {
         };
         get?: never;
         /** Write one part of a chunked asset upload. */
-        put: operations["asset_upload_part_handler"];
+        put: operations["replace_asset_upload_part"];
         post?: never;
         delete?: never;
         options?: never;
@@ -385,10 +385,10 @@ export interface paths {
             cookie?: never;
         };
         /** The account's Contact Groups, A–Z. */
-        get: operations["contact_groups_list"];
+        get: operations["list_contact_groups"];
         put?: never;
         /** Create a Contact Group. */
-        post: operations["contact_groups_create"];
+        post: operations["create_contact_group"];
         delete?: never;
         options?: never;
         head?: never;
@@ -406,11 +406,11 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete a Contact Group and its memberships. */
-        delete: operations["contact_groups_delete"];
+        delete: operations["delete_contact_group"];
         options?: never;
         head?: never;
         /** Rename a Contact Group. */
-        patch: operations["contact_groups_update"];
+        patch: operations["update_contact_group"];
         trace?: never;
     };
     "/v1/contact-groups/{id}/members": {
@@ -421,14 +421,14 @@ export interface paths {
             cookie?: never;
         };
         /** Contact ids in one Contact Group. */
-        get: operations["contact_group_members_list"];
+        get: operations["list_contact_group_members"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /** Put contacts in and take contacts out of one Contact Group. */
-        patch: operations["contact_group_members_update"];
+        patch: operations["update_contact_group_members"];
         trace?: never;
     };
     "/v1/contacts": {
@@ -439,7 +439,7 @@ export interface paths {
             cookie?: never;
         };
         /** Page through the account's contacts (id, name, handles, groups). */
-        get: operations["contacts_list_handler"];
+        get: operations["list_contacts"];
         put?: never;
         /**
          * Load a VCF or vCard CSV address book into this account. The body is the
@@ -451,7 +451,7 @@ export interface paths {
          *     all survive. How the file is read is the open question in #270; this route
          *     is where that answer lands.
          */
-        post: operations["contacts_create_handler"];
+        post: operations["create_contacts"];
         delete?: never;
         options?: never;
         head?: never;
@@ -468,14 +468,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** First/last message dates and counts for a list of contact ids. */
-        post: operations["contact_summaries_handler"];
+        post: operations["summarize_contacts"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/contacts/unmatched-handles": {
+    "/v1/contacts/unmatched-identities": {
         parameters: {
             query?: never;
             header?: never;
@@ -485,7 +485,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Report which identifiers this account has no vault contact for. */
-        post: operations["unmatched_handles_handler"];
+        post: operations["find_unmatched_identities"];
         delete?: never;
         options?: never;
         head?: never;
@@ -503,7 +503,7 @@ export interface paths {
          * Full contact view: per-handle services, message stats, and group
          *     memberships.
          */
-        get: operations["contact_detail_handler"];
+        get: operations["get_contact"];
         put?: never;
         post?: never;
         /**
@@ -513,11 +513,11 @@ export interface paths {
          *     handle. Conversations are never deleted with a contact. A contact that is
          *     not in the trash answers 409.
          */
-        delete: operations["contact_delete_handler"];
+        delete: operations["delete_contact"];
         options?: never;
         head?: never;
         /** Rename a contact or change its linked handles. */
-        patch: operations["contact_mutate_handler"];
+        patch: operations["update_contact"];
         trace?: never;
     };
     "/v1/contacts/{id}/restore": {
@@ -533,7 +533,7 @@ export interface paths {
          * Take a contact out of the trash. Idempotent: restoring a contact that
          *     was not trashed still answers 204.
          */
-        post: operations["contact_restore_handler"];
+        post: operations["restore_contact"];
         delete?: never;
         options?: never;
         head?: never;
@@ -553,7 +553,7 @@ export interface paths {
          * Put a contact in the trash. Idempotent: trashing an already-trashed
          *     contact still answers 204.
          */
-        post: operations["contact_trash_handler"];
+        post: operations["trash_contact"];
         delete?: never;
         options?: never;
         head?: never;
@@ -571,7 +571,7 @@ export interface paths {
          * Page through conversations with participants, message counts, and tags.
          *     Newest activity first unless `sort` says otherwise.
          */
-        get: operations["conversations_list_handler"];
+        get: operations["list_conversations"];
         put?: never;
         post?: never;
         delete?: never;
@@ -594,7 +594,7 @@ export interface paths {
          *     necessary. Trash is a property the list applies, not a gate on reading:
          *     a trashed conversation still answers here.
          */
-        get: operations["conversation_detail_handler"];
+        get: operations["get_conversation"];
         put?: never;
         post?: never;
         /**
@@ -603,7 +603,7 @@ export interface paths {
          *     the only door to deletion, so a conversation that is not in the trash
          *     answers 409 rather than being deleted from wherever it was.
          */
-        delete: operations["conversation_delete_handler"];
+        delete: operations["delete_conversation"];
         options?: never;
         head?: never;
         patch?: never;
@@ -621,7 +621,7 @@ export interface paths {
          *     read path a screen uses to open a thread: no search query to compose,
          *     just the conversation id.
          */
-        get: operations["conversation_messages_handler"];
+        get: operations["list_conversation_messages"];
         put?: never;
         post?: never;
         delete?: never;
@@ -643,7 +643,7 @@ export interface paths {
          * Take a conversation out of the trash. Idempotent: restoring a
          *     conversation that was not trashed still answers 204.
          */
-        post: operations["conversation_restore_handler"];
+        post: operations["restore_conversation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -658,7 +658,7 @@ export interface paths {
             cookie?: never;
         };
         /** Per-backup message counts for one conversation (the Sources panel). */
-        get: operations["conversation_sources_handler"];
+        get: operations["list_conversation_sources"];
         put?: never;
         post?: never;
         delete?: never;
@@ -680,7 +680,7 @@ export interface paths {
          * Put a conversation in the trash. Idempotent: trashing an
          *     already-trashed conversation still answers 204.
          */
-        post: operations["conversation_trash_handler"];
+        post: operations["trash_conversation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -698,7 +698,7 @@ export interface paths {
          * The account's Export Runs as a page, newest first unless `sort` says
          *     otherwise, narrowed to one `status` when given.
          */
-        get: operations["exports_list_handler"];
+        get: operations["list_exports"];
         put?: never;
         /**
          * Start an Export Run: compile the scope, list and count the messages it
@@ -706,7 +706,7 @@ export interface paths {
          *     `GET /v1/exports/{id}/messages`, then close the run with `complete` or
          *     `cancel`.
          */
-        post: operations["exports_create_handler"];
+        post: operations["create_export"];
         delete?: never;
         options?: never;
         head?: never;
@@ -721,7 +721,7 @@ export interface paths {
             cookie?: never;
         };
         /** One Export Run. */
-        get: operations["exports_get_handler"];
+        get: operations["get_export"];
         put?: never;
         post?: never;
         delete?: never;
@@ -740,7 +740,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Record that the client gave the run up. */
-        post: operations["exports_cancel_handler"];
+        post: operations["cancel_export"];
         delete?: never;
         options?: never;
         head?: never;
@@ -757,7 +757,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Record that the client finished reading the run. */
-        post: operations["exports_complete_handler"];
+        post: operations["complete_export"];
         delete?: never;
         options?: never;
         head?: never;
@@ -779,7 +779,7 @@ export interface paths {
          *     fewer than `limit` items, and a client steps `offset` by `limit`. Each
          *     page read raises the run's `messages_delivered` to the places reached.
          */
-        get: operations["export_messages_handler"];
+        get: operations["list_export_messages"];
         put?: never;
         post?: never;
         delete?: never;
@@ -799,13 +799,13 @@ export interface paths {
          * The account's Import Runs, newest first, as a page. `status=running`
          *     finds the one run the desktop app may resume.
          */
-        get: operations["imports_list_handler"];
+        get: operations["list_imports"];
         put?: never;
         /**
          * Start an import session and return its id. Finish the session at
          *     POST /v1/imports/{id}/complete.
          */
-        post: operations["imports_create_handler"];
+        post: operations["create_import"];
         delete?: never;
         options?: never;
         head?: never;
@@ -820,7 +820,7 @@ export interface paths {
             cookie?: never;
         };
         /** Status, timings, and issues for one import session. */
-        get: operations["imports_get_handler"];
+        get: operations["get_import"];
         put?: never;
         post?: never;
         delete?: never;
@@ -835,7 +835,7 @@ export interface paths {
          *     `GET /v1/imports/{id}` returns, so a caller reads one record wherever it
          *     asks.
          */
-        patch: operations["imports_patch_handler"];
+        patch: operations["update_import"];
         trace?: never;
     };
     "/v1/imports/{id}/batches": {
@@ -848,7 +848,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Import one message-ir JSONL body into the vault. */
-        post: operations["import_batch_handler"];
+        post: operations["create_import_batch"];
         delete?: never;
         options?: never;
         head?: never;
@@ -865,7 +865,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Record the outcome of an import session started with POST /v1/imports. */
-        post: operations["imports_complete_handler"];
+        post: operations["complete_import"];
         delete?: never;
         options?: never;
         head?: never;
@@ -888,7 +888,7 @@ export interface paths {
          *     page can only count its own rows, and the panel states the whole run's
          *     tally.
          */
-        get: operations["import_contacts_handler"];
+        get: operations["list_import_contacts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -907,7 +907,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Discard a live import session, freeing the account's single slot. */
-        post: operations["imports_discard_handler"];
+        post: operations["discard_import"];
         delete?: never;
         options?: never;
         head?: never;
@@ -922,10 +922,10 @@ export interface paths {
             cookie?: never;
         };
         /** The account's Message Tags, A–Z. */
-        get: operations["message_tags_list"];
+        get: operations["list_message_tags"];
         put?: never;
         /** Create a Message Tag. */
-        post: operations["message_tags_create"];
+        post: operations["create_message_tag"];
         delete?: never;
         options?: never;
         head?: never;
@@ -943,11 +943,11 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete a Message Tag and its memberships. */
-        delete: operations["message_tags_delete"];
+        delete: operations["delete_message_tag"];
         options?: never;
         head?: never;
         /** Rename a Message Tag. */
-        patch: operations["message_tags_update"];
+        patch: operations["update_message_tag"];
         trace?: never;
     };
     "/v1/message-tags/{id}/members": {
@@ -958,14 +958,14 @@ export interface paths {
             cookie?: never;
         };
         /** Conversation ids in one Message Tag. */
-        get: operations["message_tag_members_list"];
+        get: operations["list_message_tag_members"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /** Put conversations in and take conversations out of one Message Tag. */
-        patch: operations["message_tag_members_update"];
+        patch: operations["update_message_tag_members"];
         trace?: never;
     };
     "/v1/messages": {
@@ -980,7 +980,7 @@ export interface paths {
          *     rows an Export Run with a `query` scope would hand over, behind a logged-in
          *     session with the list defaults and the list's offset ceiling.
          */
-        get: operations["messages_list_handler"];
+        get: operations["list_messages"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1006,7 +1006,7 @@ export interface paths {
          *     duplicate — so a row the list hides is `404` here too, and a link out of
          *     a search result never reaches further than the search did.
          */
-        get: operations["message_handler"];
+        get: operations["get_message"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1023,13 +1023,13 @@ export interface paths {
             cookie?: never;
         };
         /** List the account's saved searches, A–Z. */
-        get: operations["saved_searches_list_handler"];
+        get: operations["list_saved_searches"];
         put?: never;
         /**
          * Create a saved search: `201 Created`, `Location: /v1/saved-searches/{id}`,
          *     and the row.
          */
-        post: operations["saved_searches_create_handler"];
+        post: operations["create_saved_search"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1052,11 +1052,11 @@ export interface paths {
          *     `vault_imports` row it pointed at is the account's permanent record of that
          *     run and is never touched here.
          */
-        delete: operations["saved_searches_delete_handler"];
+        delete: operations["delete_saved_search"];
         options?: never;
         head?: never;
         /** Replace a saved search's name and query, and return it. */
-        patch: operations["saved_searches_update_handler"];
+        patch: operations["update_saved_search"];
         trace?: never;
     };
     "/v1/search-fields": {
@@ -1067,7 +1067,7 @@ export interface paths {
             cookie?: never;
         };
         /** The search words one list accepts. */
-        get: operations["search_fields_list"];
+        get: operations["list_search_fields"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1088,20 +1088,20 @@ export interface paths {
          *     sources. A session token and an API token both answer, because a program
          *     checking its token needs the same facts as a browser restoring a login.
          */
-        get: operations["get_session_handler"];
+        get: operations["get_session"];
         put?: never;
         /**
          * Log in: verify a local username and password and answer the Session, a
          *     `201 Created` whose `Location` is the singleton itself.
          */
-        post: operations["create_session_handler"];
+        post: operations["create_session"];
         /**
          * Log out: revoke the presented session token, ending the Session.
          * @description It takes the bearer token itself rather than a guard, so a disabled
          *     account can still end its own Session. An API token is not a Session and
          *     is refused; a token that names nothing is a `401`.
          */
-        delete: operations["delete_session_handler"];
+        delete: operations["delete_session"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1124,7 +1124,7 @@ export interface paths {
          *     conversations untouched. Trash is the only door to permanent deletion;
          *     this is the door for everything in it at once.
          */
-        delete: operations["empty_trash_handler"];
+        delete: operations["empty_trash"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1138,7 +1138,7 @@ export interface paths {
             cookie?: never;
         };
         /** Report whether this vault is unclaimed, closed, or open. */
-        get: operations["vault_state"];
+        get: operations["get_vault"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1180,14 +1180,14 @@ export interface paths {
             cookie?: never;
         };
         /** Read the vault's settings. */
-        get: operations["vault_settings"];
+        get: operations["get_vault_settings"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         /** Change the vault's settings. */
-        patch: operations["patch_vault_settings"];
+        patch: operations["update_vault_settings"];
         trace?: never;
     };
     "/v1/vault/storage": {
@@ -1206,7 +1206,7 @@ export interface paths {
          *     "What the owner may see"). The owner's, because the owner administers the
          *     vault and nobody else holds more than their own account.
          */
-        get: operations["vault_storage"];
+        get: operations["get_vault_storage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1220,70 +1220,11 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
-         * @description One of an account's identities and the messages held at it. The
-         *     Profile screen shows the counts beside each identity and repeats them when
-         *     one is about to be removed, so the person knows what the identity is tied
-         *     to before it goes.
-         */
-        AccountIdentity: {
-            /**
-             * Format: int64
-             * @description Direct and group conversations holding at least one message held at
-             *     the identity, trashed conversations excluded.
-             */
-            conversations: number;
-            /**
-             * Format: int64
-             * @description Messages held at the identity in one-to-one conversations, trashed
-             *     conversations and duplicates excluded.
-             */
-            direct_messages: number;
-            /** @description When the newest such message was sent, or null when there is none. */
-            end_date?: string | null;
-            /**
-             * Format: int64
-             * @description Messages held at the identity in group conversations, on the same
-             *     terms.
-             */
-            group_messages: number;
-            /** @description The identity as the profile lists it: E.164 for a number, lower case for an address. */
-            handle: string;
-            /** @description `phone`, `email`, or `whatsapp`. */
-            service: string;
-            /**
-             * @description When the oldest message held at the identity was sent, or null when
-             *     there is none.
-             */
-            start_date?: string | null;
-        };
-        /** @description One account's share of the messages held: an id, a username and numbers. */
-        AccountMessagesResponse: {
-            /** Format: int64 */
-            account_id: number;
-            /**
-             * Format: int64
-             * @description The account's estimated share of `messages_bytes`, split by its share
-             *     of all text. The shares add up to `messages_bytes` exactly.
-             */
-            estimated_message_bytes: number;
-            /**
-             * Format: int64
-             * @description Messages the account holds.
-             */
-            message_count: number;
-            /**
-             * Format: int64
-             * @description Bytes of message text the account holds: every body and subject, added up.
-             */
-            text_bytes: number;
-            username: string;
-        };
-        /**
          * @description One account: who it is, what it may do, and how much it holds. The owner
          *     and the account itself both read the whole struct; nothing in it is a
          *     message.
          */
-        AccountResponse: {
+        Account: {
             /**
              * Format: int64
              * @description Account id.
@@ -1344,8 +1285,37 @@ export interface components {
             /** @description Login username. */
             username: string;
         };
+        /** @description One handle to link or unlink, with its platform service. */
+        AccountIdentityRequest: {
+            /** @description Raw handle value, e.g. `+15555550100` or `alex@example.com`. */
+            handle: string;
+            /** @description Platform the handle belongs to: `phone`, `email`, or `whatsapp`. */
+            service: string;
+        };
+        /** @description One account's share of the messages held: an id, a username and numbers. */
+        AccountMessages: {
+            /** Format: int64 */
+            account_id: number;
+            /**
+             * Format: int64
+             * @description The account's estimated share of `messages_bytes`, split by its share
+             *     of all text. The shares add up to `messages_bytes` exactly.
+             */
+            estimated_message_bytes: number;
+            /**
+             * Format: int64
+             * @description Messages the account holds.
+             */
+            message_count: number;
+            /**
+             * Format: int64
+             * @description Bytes of message text the account holds: every body and subject, added up.
+             */
+            text_bytes: number;
+            username: string;
+        };
         /** @description What an account holds: counts, attachment bytes and the largest files. */
-        AccountStorageResponse: {
+        AccountStorage: {
             /**
              * Format: int64
              * @description Attachment rows.
@@ -1369,26 +1339,15 @@ export interface components {
              */
             total_bytes: number;
         };
-        /** @description What loading an address book changed. */
-        AddressBookLoadResponse: {
-            /**
-             * Format: int64
-             * @description Contacts written from the file.
-             */
-            contacts: number;
-            /**
-             * Format: int64
-             * @description Phone identities linked to those contacts.
-             */
-            phones: number;
-            /**
-             * Format: int64
-             * @description Identities written with a review note (an ambiguous number).
-             */
-            phones_needing_review: number;
+        /** @description A handle value plus optional platform service. */
+        AddContactIdentityRequest: {
+            /** @description Handle value to link. */
+            handle: string;
+            /** @description Platform service (`phone`, `email`, or `whatsapp`); inferred when omitted. */
+            service?: string | null;
         };
         /** @description One named API token as shown in Settings: label, permissions, and masked secret. */
-        ApiTokenItem: {
+        ApiToken: {
             /** @description May call the export endpoints. */
             can_export: boolean;
             /** @description May call the import endpoints. */
@@ -1419,31 +1378,10 @@ export interface components {
          */
         AppKind: "desktop" | "website";
         /** @description Stored asset fingerprint and path. */
-        AssetPutResponse: {
+        Asset: {
             already_present: boolean;
             assets_path: string;
             sha256: string;
-        };
-        /** @description Bytes written for one part. */
-        AssetUploadPartResponse: {
-            /** Format: int64 */
-            bytes: number;
-            /** Format: int32 */
-            part: number;
-        };
-        /** @description Total bytes and optional MIME type for a chunked upload. */
-        AssetUploadStartBody: {
-            /** Format: int64 */
-            bytes: number;
-            mime?: string | null;
-        };
-        /** @description Upload id and part size, or the already-stored asset. */
-        AssetUploadStartResponse: {
-            already_present?: boolean;
-            assets_path?: string | null;
-            part_size?: number | null;
-            sha256?: string | null;
-            upload_id?: string | null;
         };
         /** @description One attachment of an exported message. */
         Attachment: {
@@ -1469,11 +1407,18 @@ export interface components {
             /** @description Login username for the vault owner. */
             username: string;
         };
+        /** @description One parse/convert/upload issue from the import. */
+        CompleteImportIssueRequest: {
+            item: string;
+            kind: string;
+            reason: string;
+            step: string;
+        };
         /**
          * @description Final stats and issues for a running Import Run. The outcome is stated
          *     once, as `status`.
          */
-        CompleteImportBody: {
+        CompleteImportRequest: {
             /** Format: int64 */
             attachment_count?: number | null;
             /** Format: int64 */
@@ -1482,7 +1427,7 @@ export interface components {
             bytes_uploaded?: number | null;
             /** Format: int64 */
             duration_ms?: number | null;
-            issues?: components["schemas"]["CompleteImportIssueBody"][];
+            issues?: components["schemas"]["CompleteImportIssueRequest"][];
             /** Format: int64 */
             message_count?: number | null;
             /** Format: int64 */
@@ -1494,13 +1439,6 @@ export interface components {
             summary?: unknown;
             /** Format: int64 */
             upload_ms?: number | null;
-        };
-        /** @description One parse/convert/upload issue from the import. */
-        CompleteImportIssueBody: {
-            item: string;
-            kind: string;
-            reason: string;
-            step: string;
         };
         /** @description Stored session status after completion. */
         CompleteImportResponse: {
@@ -1515,7 +1453,7 @@ export interface components {
             status: string;
         };
         /** @description Full contact view: every handle with stats, plus totals across them. */
-        ContactDetail: {
+        Contact: {
             /**
              * Format: int64
              * @description 1:1 conversations the contact appears in.
@@ -1529,7 +1467,7 @@ export interface components {
             /** @description Group names on this contact (A–Z). */
             groups?: string[];
             /** @description Every handle linked to the contact, with per-handle stats. */
-            handles: components["schemas"]["ContactHandleInfo"][];
+            handles: components["schemas"]["Identity"][];
             /**
              * Format: int64
              * @description Contact id.
@@ -1550,52 +1488,6 @@ export interface components {
              */
             unknown: boolean;
         };
-        /** @description One handle on a contact with service and message stats. */
-        ContactHandleInfo: {
-            /** @description Date of the last message involving this handle. */
-            end_date?: string | null;
-            /**
-             * Format: int64
-             * @description Group conversations this handle appears in.
-             */
-            group_conversations: number;
-            /**
-             * Format: int64
-             * @description Messages in group conversations involving this handle.
-             */
-            group_message_count: number;
-            /** @description Normalized handle value. */
-            handle: string;
-            /**
-             * Format: int64
-             * @description 1:1 conversations this handle appears in.
-             */
-            individual_conversations: number;
-            /**
-             * Format: int64
-             * @description Messages in 1:1 conversations involving this handle.
-             */
-            individual_message_count: number;
-            /** @description Platform service, e.g. `whatsapp`, when the handle is linked with one. */
-            service?: string | null;
-            /** @description Date of the first message involving this handle. */
-            start_date?: string | null;
-        };
-        /** @description A handle value plus optional platform service. */
-        ContactHandlePayload: {
-            /** @description Handle value to link. */
-            handle: string;
-            /** @description Platform service (`phone`, `email`, or `whatsapp`); inferred when omitted. */
-            service?: string | null;
-        };
-        /** @description Body for `PATCH /v1/contacts/{id}`. Exactly one mutation field should be set. */
-        ContactMutationBody: {
-            add_handle?: null | components["schemas"]["ContactHandlePayload"];
-            /** @description New display name; `None` leaves it unchanged. */
-            name?: string | null;
-            remove_handle?: null | components["schemas"]["ContactRemoveHandlePayload"];
-            update_handle?: null | components["schemas"]["ContactUpdateHandlePayload"];
-        };
         /**
          * @description Why a contact is on an import run's record.
          *
@@ -1606,13 +1498,6 @@ export interface components {
          * @enum {string}
          */
         ContactReason: "replaced_trashed" | "created" | "named" | "handle_added";
-        /** @description The handle to unlink. */
-        ContactRemoveHandlePayload: {
-            /** @description Handle value to unlink. */
-            handle: string;
-            /** @description Platform service, when the handle is linked with one. */
-            service?: string | null;
-        };
         /** @description Contact-level first/last seen and message counts for the selection table. */
         ContactSelectionSummary: {
             /** @description Date of the contact's last message. */
@@ -1647,11 +1532,6 @@ export interface components {
             /** @description Date of the contact's first message. */
             start_date?: string | null;
         };
-        /** @description Body for `POST /v1/contacts/summaries`. */
-        ContactSummariesBody: {
-            /** @description Contact ids to summarize; an empty list covers every contact. */
-            ids?: number[];
-        };
         /** @description Contact row for the list: name, handles, groups. */
         ContactSummary: {
             /** @description Group names on this contact (A–Z). */
@@ -1685,17 +1565,8 @@ export interface components {
              */
             unknown: boolean;
         };
-        /** @description The previous and new handle values for a link change. */
-        ContactUpdateHandlePayload: {
-            /** @description Replacement handle value. */
-            handle: string;
-            /** @description Handle value currently linked. */
-            previous_handle: string;
-            /** @description Platform service for the new handle. */
-            service?: string | null;
-        };
         /** @description One backup source with message counts and share. */
-        ConversationSourceInfo: {
+        ConversationSource: {
             /** @description Backup source name. */
             backup_name: string;
             /**
@@ -1758,6 +1629,17 @@ export interface components {
             username: string;
         };
         /**
+         * @description The account that was created, and the Session a stranger's registration
+         *     opens on it. The owner's creation opens no session, so `token` is absent.
+         */
+        CreateAccountResponse: components["schemas"]["Account"] & {
+            /**
+             * @description Session token to send as `Authorization: Bearer …`. Present only when
+             *     a stranger registered, because they are logged in on creation.
+             */
+            token?: string | null;
+        };
+        /**
          * @description Body for creating a token: label, permissions, optional expiry. A token
          *     carries `import` and `export` only, so a body naming `can_delete` is
          *     refused rather than ignored.
@@ -1797,18 +1679,57 @@ export interface components {
             /** @description Masked form for the Settings list (also persisted). */
             token_hint: string;
         };
+        /** @description Total bytes and optional MIME type for a chunked upload. */
+        CreateAssetUploadRequest: {
+            /** Format: int64 */
+            bytes: number;
+            mime?: string | null;
+        };
+        /** @description Upload id and part size, or the already-stored asset. */
+        CreateAssetUploadResponse: {
+            already_present?: boolean;
+            assets_path?: string | null;
+            part_size?: number | null;
+            sha256?: string | null;
+            upload_id?: string | null;
+        };
+        /** @description What loading an address book changed. */
+        CreateContactsResponse: {
+            /**
+             * Format: int64
+             * @description Contacts written from the file.
+             */
+            contacts: number;
+            /**
+             * Format: int64
+             * @description Phone identities linked to those contacts.
+             */
+            phones: number;
+            /**
+             * Format: int64
+             * @description Identities written with a review note (an ambiguous number).
+             */
+            phones_needing_review: number;
+        };
         /** @description Body of `POST /v1/exports`: the scope, and the tool that asked. */
-        CreateExportBody: {
+        CreateExportRequest: {
             /** @description What to export. */
             scope: components["schemas"]["ExportScope"];
             /** @description Client/tool name recorded on the run, e.g. `vault-pull`. */
             tool?: string | null;
         };
+        /** @description Import result: stats plus optional dedupe counts. */
+        CreateImportBatchResponse: components["schemas"]["ImportStats"] & {
+            /** Format: int64 */
+            account: number;
+            dedupe?: null | components["schemas"]["DedupeCounts"];
+            source: string;
+        };
         /**
          * @description Source, mode, dedupe and tool for a new Import Run. The bearer token
          *     names the account.
          */
-        CreateImportBody: {
+        CreateImportRequest: {
             /** @description Run cross-source soft-dedupe after each batch. */
             dedupe?: boolean;
             /** @description Which install is creating the session. */
@@ -1844,19 +1765,20 @@ export interface components {
             /** @description Login username. */
             username: string;
         };
-        /**
-         * @description The account that was created, and the Session a stranger's registration
-         *     opens on it. The owner's creation opens no session, so `token` is absent.
-         */
-        CreatedAccountResponse: components["schemas"]["AccountResponse"] & {
+        /** @description Session token plus the account id and username it belongs to. */
+        CreateSessionResponse: {
             /**
-             * @description Session token to send as `Authorization: Bearer …`. Present only when
-             *     a stranger registered, because they are logged in on creation.
+             * Format: int64
+             * @description Account id the session belongs to.
              */
-            token?: string | null;
+            account_id: number;
+            /** @description Session token to send as `Authorization: Bearer …`. */
+            token: string;
+            /** @description Account username (falls back to the account id). */
+            username: string;
         };
         /** @description Cross-source dedupe outcome. */
-        DedupeResponse: {
+        DedupeCounts: {
             /** Format: int64 */
             exact_flagged: number;
             /** Format: int64 */
@@ -1990,14 +1912,62 @@ export interface components {
             /** @description The spelling, without the colon. */
             word: string;
         };
+        /** @description Body for `POST /v1/contacts/unmatched-identities`. */
+        FindUnmatchedIdentitiesRequest: {
+            /** @description Raw identifiers — phone numbers, emails — as they appear in an export. */
+            identifiers: string[];
+        };
+        /**
+         * @description One identity of a contact or an account, and its messages: for a contact,
+         *     the messages in the conversations it takes part in; for an account, the
+         *     messages held at it, sent from or received at that address (ADR-0015). The
+         *     contact drawer and the Profile screen show the same table, so they read the
+         *     same row.
+         */
+        Identity: {
+            /**
+             * Format: int64
+             * @description Direct and group conversations holding at least one of the identity's
+             *     messages, trashed conversations excluded.
+             */
+            conversations: number;
+            /**
+             * Format: int64
+             * @description The identity's messages in one-to-one conversations, trashed
+             *     conversations and duplicates excluded.
+             */
+            direct_messages: number;
+            /** @description When the newest such message was sent, or null when there is none. */
+            end_date?: string | null;
+            /**
+             * Format: int64
+             * @description The identity's messages in group conversations, on the same terms.
+             */
+            group_messages: number;
+            /**
+             * @description The identity as the vault stores it: E.164 for a number, lower case
+             *     for an address.
+             */
+            handle: string;
+            /** @description `phone`, `email`, or `whatsapp`. */
+            service: string;
+            /**
+             * @description When the identity's oldest message was sent, or null when there is
+             *     none.
+             */
+            start_date?: string | null;
+        };
         /** @description One contact an import run touched, and what the run did to it. */
-        ImportContactRow: {
+        ImportContact: {
             /**
              * Format: int64
              * @description Contact id.
              */
             id: number;
-            /** @description Preferred name; empty when the run learned an address and no name. */
+            /**
+             * @description Preferred name as it is now; empty when the run learned an address
+             *     and no name.
+             */
             name: string;
             /**
              * @description Why the contact is on this run's record: the run created it, created
@@ -2007,14 +1977,20 @@ export interface components {
             reason: components["schemas"]["ContactReason"];
         };
         /** @description One stored import issue. */
-        ImportDetailIssueResponse: {
+        ImportIssue: {
             item: string;
             kind: string;
             reason: string;
             step: string;
         };
+        /**
+         * @description What happens to a source's messages that were imported before: `replace`
+         *     wipes them first, `append` keeps them and adds only new ones.
+         * @enum {string}
+         */
+        ImportMode: "replace" | "append";
         /** @description Full import session record. */
-        ImportDetailResponse: {
+        ImportRun: {
             /** Format: int64 */
             attachment_count: number;
             /** Format: int64 */
@@ -2036,7 +2012,7 @@ export interface components {
             finished_at?: string | null;
             /** Format: int64 */
             id: number;
-            issues: components["schemas"]["ImportDetailIssueResponse"][];
+            issues: components["schemas"]["ImportIssue"][];
             /** Format: int64 */
             message_count: number;
             mode: string;
@@ -2051,19 +2027,6 @@ export interface components {
             tool?: string | null;
             /** Format: int64 */
             upload_ms?: number | null;
-        };
-        /**
-         * @description What happens to a source's messages that were imported before: `replace`
-         *     wipes them first, `append` keeps them and adds only new ones.
-         * @enum {string}
-         */
-        ImportMode: "replace" | "append";
-        /** @description Import result: stats plus optional dedupe counts. */
-        ImportResponse: components["schemas"]["ImportStats"] & {
-            /** Format: int64 */
-            account: number;
-            dedupe?: null | components["schemas"]["DedupeResponse"];
-            source: string;
         };
         /** @description Counters for one import run (staging and promote results). */
         ImportStats: {
@@ -2218,18 +2181,6 @@ export interface components {
          * @enum {string}
          */
         ListKind: "contacts" | "conversations" | "messages";
-        /** @description How many memberships a patch created and how many it removed. */
-        MembersChanged: {
-            /** Format: int64 */
-            added: number;
-            /** Format: int64 */
-            removed: number;
-        };
-        /** @description Members to put in and take out of one set, in one request. */
-        MembersPatch: {
-            add?: number[];
-            remove?: number[];
-        };
         /** @description One exported message. */
         Message: {
             /** @description Attachments on this message. */
@@ -2312,55 +2263,11 @@ export interface components {
             name: string;
         };
         /** @description A name to create, or the new name for an existing set. */
-        NamedSetBody: {
+        NamedSetRequest: {
             name: string;
         };
         /** @description One page of a list. */
-        Page_AccountIdentity: {
-            /** @description The rows on this page. */
-            items: {
-                /**
-                 * Format: int64
-                 * @description Direct and group conversations holding at least one message held at
-                 *     the identity, trashed conversations excluded.
-                 */
-                conversations: number;
-                /**
-                 * Format: int64
-                 * @description Messages held at the identity in one-to-one conversations, trashed
-                 *     conversations and duplicates excluded.
-                 */
-                direct_messages: number;
-                /** @description When the newest such message was sent, or null when there is none. */
-                end_date?: string | null;
-                /**
-                 * Format: int64
-                 * @description Messages held at the identity in group conversations, on the same
-                 *     terms.
-                 */
-                group_messages: number;
-                /** @description The identity as the profile lists it: E.164 for a number, lower case for an address. */
-                handle: string;
-                /** @description `phone`, `email`, or `whatsapp`. */
-                service: string;
-                /**
-                 * @description When the oldest message held at the identity was sent, or null when
-                 *     there is none.
-                 */
-                start_date?: string | null;
-            }[];
-            /** @description Page size used. */
-            limit: number;
-            /** @description Page offset used. */
-            offset: number;
-            /**
-             * Format: int64
-             * @description Rows matching the query across every page.
-             */
-            total: number;
-        };
-        /** @description One page of a list. */
-        Page_AccountResponse: {
+        Page_Account: {
             /** @description The rows on this page. */
             items: {
                 /**
@@ -2434,7 +2341,7 @@ export interface components {
             total: number;
         };
         /** @description One page of a list. */
-        Page_ApiTokenItem: {
+        Page_ApiToken: {
             /** @description The rows on this page. */
             items: {
                 /** @description May call the export endpoints. */
@@ -2561,7 +2468,7 @@ export interface components {
             total: number;
         };
         /** @description One page of a list. */
-        Page_ConversationSourceInfo: {
+        Page_ConversationSource: {
             /** @description The rows on this page. */
             items: {
                 /** @description Backup source name. */
@@ -2717,7 +2624,53 @@ export interface components {
             total: number;
         };
         /** @description One page of a list. */
-        Page_ImportContactRow: {
+        Page_Identity: {
+            /** @description The rows on this page. */
+            items: {
+                /**
+                 * Format: int64
+                 * @description Direct and group conversations holding at least one of the identity's
+                 *     messages, trashed conversations excluded.
+                 */
+                conversations: number;
+                /**
+                 * Format: int64
+                 * @description The identity's messages in one-to-one conversations, trashed
+                 *     conversations and duplicates excluded.
+                 */
+                direct_messages: number;
+                /** @description When the newest such message was sent, or null when there is none. */
+                end_date?: string | null;
+                /**
+                 * Format: int64
+                 * @description The identity's messages in group conversations, on the same terms.
+                 */
+                group_messages: number;
+                /**
+                 * @description The identity as the vault stores it: E.164 for a number, lower case
+                 *     for an address.
+                 */
+                handle: string;
+                /** @description `phone`, `email`, or `whatsapp`. */
+                service: string;
+                /**
+                 * @description When the identity's oldest message was sent, or null when there is
+                 *     none.
+                 */
+                start_date?: string | null;
+            }[];
+            /** @description Page size used. */
+            limit: number;
+            /** @description Page offset used. */
+            offset: number;
+            /**
+             * Format: int64
+             * @description Rows matching the query across every page.
+             */
+            total: number;
+        };
+        /** @description One page of a list. */
+        Page_ImportContact: {
             /** @description The rows on this page. */
             items: {
                 /**
@@ -2725,7 +2678,10 @@ export interface components {
                  * @description Contact id.
                  */
                 id: number;
-                /** @description Preferred name; empty when the run learned an address and no name. */
+                /**
+                 * @description Preferred name as it is now; empty when the run learned an address
+                 *     and no name.
+                 */
                 name: string;
                 /**
                  * @description Why the contact is on this run's record: the run created it, created
@@ -2994,37 +2950,6 @@ export interface components {
             service?: string | null;
         };
         /**
-         * @description Body for changing an account. Omitted fields are left alone. The name,
-         *     zone and handles are set by the account or by the vault owner; the
-         *     disabled flag and the three permissions are the vault owner's alone.
-         */
-        PatchAccountRequest: {
-            /** @description Allow or forbid deleting message data. */
-            can_delete?: boolean | null;
-            /** @description Allow or forbid export. */
-            can_export?: boolean | null;
-            /** @description Allow or forbid import. */
-            can_import?: boolean | null;
-            /** @description Disable or re-enable login. */
-            disabled?: boolean | null;
-            /** @description Handles to add/link onto the account profile. */
-            handles?: components["schemas"]["ProfileHandleInput"][];
-            /** @description Display name to set; `None` (or empty) leaves the current name unchanged. */
-            preferred_name?: string | null;
-            /** @description Handles to unlink from the account profile. */
-            remove_handles?: components["schemas"]["ProfileHandleInput"][];
-            /**
-             * @description IANA time zone to set, for example `America/New_York`; `None` leaves
-             *     the current zone unchanged. An unknown name is a 422.
-             */
-            time_zone?: string | null;
-        };
-        /** @description Body for changing the vault's settings. Omitted fields are left alone. */
-        PatchVaultSettingsRequest: {
-            /** @description Let anyone reaching the vault create their own account, or stop them. */
-            public_registration?: boolean | null;
-        };
-        /**
          * @description An RFC 7807 problem document: the body of every failure the vault answers,
          *     served as `application/problem+json` (`docs/architecture/http-api.md`).
          *
@@ -3077,83 +3002,15 @@ export interface components {
             /** @description `search-query-invalid`: the `word:` the query used. */
             word?: string | null;
         };
-        /** @description One handle to link or unlink, with its platform service. */
-        ProfileHandleInput: {
-            /** @description Raw handle value, e.g. `+15555550100` or `alex@example.com`. */
+        /** @description The handle to unlink. */
+        RemoveContactIdentityRequest: {
+            /** @description Handle value to unlink. */
             handle: string;
-            /** @description Platform the handle belongs to: `phone`, `email`, or `whatsapp`. */
-            service: string;
-        };
-        /** @description Body for renaming a token. */
-        RenameApiTokenRequest: {
-            /** @description Replacement label. */
-            label: string;
-        };
-        /** @description The renamed token's id and stored label. */
-        RenameApiTokenResponse: {
-            /**
-             * Format: int64
-             * @description Token id that was renamed.
-             */
-            id: number;
-            /** @description Stored label after the rename. */
-            label: string;
-        };
-        /** @description One row of `saved_searches`. */
-        SavedSearch: {
-            /**
-             * Format: int64
-             * @description Saved search id, unique across the vault.
-             */
-            id: number;
-            /** @description `manual` or `import`. */
-            kind: string;
-            /** @description Display name, unique per account. */
-            name: string;
-            /** @description Query string, run against the conversation list. */
-            query: string;
-        };
-        /** @description A saved search's name and query. */
-        SavedSearchBody: {
-            name: string;
-            query: string;
-        };
-        /** @description The logged-in credential's account, username, and import sources. */
-        SessionResponse: {
-            /** Format: int64 */
-            account_id?: number | null;
-            sources: string[];
-            username?: string | null;
-        };
-        /** @description Session token plus the account id and username it belongs to. */
-        SessionTokenResponse: {
-            /**
-             * Format: int64
-             * @description Account id the session belongs to.
-             */
-            account_id: number;
-            /** @description Session token to send as `Authorization: Bearer …`. */
-            token: string;
-            /** @description Account username (falls back to the account id). */
-            username: string;
-        };
-        /** @description New stage for a live session. */
-        SetImportStageBody: {
-            stage: string;
-            /**
-             * @description What the user approved at the gate they just passed, when they passed one.
-             *
-             *     Recorded here rather than at completion so an approval survives a
-             *     reload: the summary shown at a gate is recomputed from the folder, but
-             *     what was approved is a different question and only the session
-             *     remembers it. Absent leaves the stored `summary_json` untouched —
-             *     most stage changes carry nothing, and treating absent as null would
-             *     throw away the plan the outcome is later judged against.
-             */
-            summary?: unknown;
+            /** @description Platform service, when the handle is linked with one. */
+            service?: string | null;
         };
         /** @description The new password. */
-        SetPasswordRequest: {
+        ReplaceAccountPasswordRequest: {
             /**
              * @description The password being replaced. Required when the vault owner changes its
              *     own; nobody else sends it.
@@ -3173,9 +3030,47 @@ export interface components {
             password_confirmation: string;
         };
         /** @description Fresh session token issued after an account changed its own password. */
-        SetPasswordResponse: {
+        ReplaceAccountPasswordResponse: {
             /** @description Replacement session token (the previous one is revoked). */
             token: string;
+        };
+        /** @description Bytes written for one part. */
+        ReplaceAssetUploadPartResponse: {
+            /** Format: int64 */
+            bytes: number;
+            /** Format: int32 */
+            part: number;
+        };
+        /** @description One row of `saved_searches`. */
+        SavedSearch: {
+            /**
+             * Format: int64
+             * @description Saved search id, unique across the vault.
+             */
+            id: number;
+            /** @description `manual` or `import`. */
+            kind: string;
+            /** @description Display name, unique per account. */
+            name: string;
+            /** @description Query string, run against the conversation list. */
+            query: string;
+        };
+        /** @description A saved search's name and query. */
+        SavedSearchRequest: {
+            name: string;
+            query: string;
+        };
+        /** @description The logged-in credential's account, username, and import sources. */
+        Session: {
+            /** Format: int64 */
+            account_id?: number | null;
+            sources: string[];
+            username?: string | null;
+        };
+        /** @description Body for `POST /v1/contacts/summaries`. */
+        SummarizeContactsRequest: {
+            /** @description Contact ids to summarize; an empty list covers every contact. */
+            ids?: number[];
         };
         /** @description One tapback reaction on an exported message. */
         Tapback: {
@@ -3221,10 +3116,95 @@ export interface components {
              */
             size_bytes: number;
         };
-        /** @description Body for `POST /v1/contacts/unmatched-handles`. */
-        UnmatchedHandlesBody: {
-            /** @description Raw identifiers — phone numbers, emails — as they appear in an export. */
-            identifiers: string[];
+        /**
+         * @description Body for changing an account. Omitted fields are left alone. The name,
+         *     zone and handles are set by the account or by the vault owner; the
+         *     disabled flag and the three permissions are the vault owner's alone.
+         */
+        UpdateAccountRequest: {
+            /** @description Allow or forbid deleting message data. */
+            can_delete?: boolean | null;
+            /** @description Allow or forbid export. */
+            can_export?: boolean | null;
+            /** @description Allow or forbid import. */
+            can_import?: boolean | null;
+            /** @description Disable or re-enable login. */
+            disabled?: boolean | null;
+            /** @description Handles to add/link onto the account profile. */
+            handles?: components["schemas"]["AccountIdentityRequest"][];
+            /** @description Display name to set; `None` (or empty) leaves the current name unchanged. */
+            preferred_name?: string | null;
+            /** @description Handles to unlink from the account profile. */
+            remove_handles?: components["schemas"]["AccountIdentityRequest"][];
+            /**
+             * @description IANA time zone to set, for example `America/New_York`; `None` leaves
+             *     the current zone unchanged. An unknown name is a 422.
+             */
+            time_zone?: string | null;
+        };
+        /** @description Body for renaming a token. */
+        UpdateApiTokenRequest: {
+            /** @description Replacement label. */
+            label: string;
+        };
+        /** @description The renamed token's id and stored label. */
+        UpdateApiTokenResponse: {
+            /**
+             * Format: int64
+             * @description Token id that was renamed.
+             */
+            id: number;
+            /** @description Stored label after the rename. */
+            label: string;
+        };
+        /** @description The previous and new handle values for a link change. */
+        UpdateContactIdentityRequest: {
+            /** @description Replacement handle value. */
+            handle: string;
+            /** @description Handle value currently linked. */
+            previous_handle: string;
+            /** @description Platform service for the new handle. */
+            service?: string | null;
+        };
+        /** @description Body for `PATCH /v1/contacts/{id}`. Exactly one mutation field should be set. */
+        UpdateContactRequest: {
+            add_handle?: null | components["schemas"]["AddContactIdentityRequest"];
+            /** @description New display name; `None` leaves it unchanged. */
+            name?: string | null;
+            remove_handle?: null | components["schemas"]["RemoveContactIdentityRequest"];
+            update_handle?: null | components["schemas"]["UpdateContactIdentityRequest"];
+        };
+        /** @description New stage for a live session. */
+        UpdateImportRequest: {
+            stage: string;
+            /**
+             * @description What the user approved at the gate they just passed, when they passed one.
+             *
+             *     Recorded here rather than at completion so an approval survives a
+             *     reload: the summary shown at a gate is recomputed from the folder, but
+             *     what was approved is a different question and only the session
+             *     remembers it. Absent leaves the stored `summary_json` untouched —
+             *     most stage changes carry nothing, and treating absent as null would
+             *     throw away the plan the outcome is later judged against.
+             */
+            summary?: unknown;
+        };
+        /** @description Members to put in and take out of one set, in one request. */
+        UpdateMembersRequest: {
+            add?: number[];
+            remove?: number[];
+        };
+        /** @description How many memberships a patch created and how many it removed. */
+        UpdateMembersResponse: {
+            /** Format: int64 */
+            added: number;
+            /** Format: int64 */
+            removed: number;
+        };
+        /** @description Body for changing the vault's settings. Omitted fields are left alone. */
+        UpdateVaultSettingsRequest: {
+            /** @description Let anyone reaching the vault create their own account, or stop them. */
+            public_registration?: boolean | null;
         };
         /**
          * @description What shape of value a word takes.
@@ -3232,7 +3212,7 @@ export interface components {
          */
         ValueType: "text" | "name" | "person" | "choice" | "date" | "count" | "size" | "flag";
         /** @description The vault's state, for the screen a logged-out person sees. */
-        VaultResponse: {
+        Vault: {
             /**
              * Format: int64
              * @description The Schema Fingerprint, the number this vault stamps into its database.
@@ -3251,7 +3231,7 @@ export interface components {
             version: string;
         };
         /** @description The vault settings the owner controls. */
-        VaultSettingsResponse: {
+        VaultSettings: {
             /** @description Anyone reaching the vault may create their own account. */
             public_registration: boolean;
         };
@@ -3261,12 +3241,12 @@ export interface components {
          */
         VaultState: "unclaimed" | "closed" | "open";
         /** @description What the whole vault holds, summed over every account. */
-        VaultStorageResponse: {
+        VaultStorage: {
             /**
              * @description Every account, including ones with no messages: the owner first, then
              *     by username, as the User Accounts table lists them.
              */
-            accounts: components["schemas"]["AccountMessagesResponse"][];
+            accounts: components["schemas"]["AccountMessages"][];
             /**
              * Format: int64
              * @description Attachment rows across every account.
@@ -3320,7 +3300,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    health: {
+    get_health: {
         parameters: {
             query?: never;
             header?: never;
@@ -3359,7 +3339,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_AccountResponse"];
+                    "application/json": components["schemas"]["Page_Account"];
                 };
             };
             401: {
@@ -3400,7 +3380,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CreatedAccountResponse"];
+                    "application/json": components["schemas"]["CreateAccountResponse"];
                 };
             };
             400: {
@@ -3465,7 +3445,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccountResponse"];
+                    "application/json": components["schemas"]["Account"];
                 };
             };
             401: {
@@ -3560,7 +3540,7 @@ export interface operations {
             };
         };
     };
-    patch_account: {
+    update_account: {
         parameters: {
             query?: never;
             header?: never;
@@ -3572,7 +3552,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PatchAccountRequest"];
+                "application/json": components["schemas"]["UpdateAccountRequest"];
             };
         };
         responses: {
@@ -3581,7 +3561,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccountResponse"];
+                    "application/json": components["schemas"]["Account"];
                 };
             };
             400: {
@@ -3648,7 +3628,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_ApiTokenItem"];
+                    "application/json": components["schemas"]["Page_ApiToken"];
                 };
             };
             401: {
@@ -3776,7 +3756,7 @@ export interface operations {
             };
         };
     };
-    rename_api_token: {
+    update_api_token: {
         parameters: {
             query?: never;
             header?: never;
@@ -3790,7 +3770,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RenameApiTokenRequest"];
+                "application/json": components["schemas"]["UpdateApiTokenRequest"];
             };
         };
         responses: {
@@ -3799,7 +3779,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RenameApiTokenResponse"];
+                    "application/json": components["schemas"]["UpdateApiTokenResponse"];
                 };
             };
             400: {
@@ -3929,7 +3909,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_AccountIdentity"];
+                    "application/json": components["schemas"]["Page_Identity"];
                 };
             };
             401: {
@@ -4048,7 +4028,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportDetailResponse"];
+                    "application/json": components["schemas"]["ImportRun"];
                 };
             };
             401: {
@@ -4144,7 +4124,7 @@ export interface operations {
             };
         };
     };
-    set_account_password: {
+    replace_account_password: {
         parameters: {
             query?: never;
             header?: never;
@@ -4156,7 +4136,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SetPasswordRequest"];
+                "application/json": components["schemas"]["ReplaceAccountPasswordRequest"];
             };
         };
         responses: {
@@ -4166,7 +4146,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SetPasswordResponse"];
+                    "application/json": components["schemas"]["ReplaceAccountPasswordResponse"];
                 };
             };
             /** @description Password set by the vault owner */
@@ -4235,7 +4215,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AccountStorageResponse"];
+                    "application/json": components["schemas"]["AccountStorage"];
                 };
             };
             401: {
@@ -4264,7 +4244,7 @@ export interface operations {
             };
         };
     };
-    asset_get_handler: {
+    get_asset: {
         parameters: {
             query: {
                 source: string;
@@ -4329,7 +4309,7 @@ export interface operations {
             };
         };
     };
-    asset_put_handler: {
+    replace_asset: {
         parameters: {
             query: {
                 source: string;
@@ -4353,7 +4333,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssetPutResponse"];
+                    "application/json": components["schemas"]["Asset"];
                 };
             };
             400: {
@@ -4398,7 +4378,7 @@ export interface operations {
             };
         };
     };
-    asset_head_handler: {
+    head_asset: {
         parameters: {
             query: {
                 source: string;
@@ -4417,7 +4397,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssetPutResponse"];
+                    "application/json": components["schemas"]["Asset"];
                 };
             };
             400: {
@@ -4462,7 +4442,7 @@ export interface operations {
             };
         };
     };
-    asset_upload_start_handler: {
+    create_asset_upload: {
         parameters: {
             query: {
                 source: string;
@@ -4476,7 +4456,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AssetUploadStartBody"];
+                "application/json": components["schemas"]["CreateAssetUploadRequest"];
             };
         };
         responses: {
@@ -4486,7 +4466,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssetUploadStartResponse"];
+                    "application/json": components["schemas"]["CreateAssetUploadResponse"];
                 };
             };
             /** @description A new upload was started */
@@ -4497,7 +4477,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssetUploadStartResponse"];
+                    "application/json": components["schemas"]["CreateAssetUploadResponse"];
                 };
             };
             400: {
@@ -4526,7 +4506,7 @@ export interface operations {
             };
         };
     };
-    asset_upload_abort_handler: {
+    delete_asset_upload: {
         parameters: {
             query: {
                 source: string;
@@ -4582,7 +4562,7 @@ export interface operations {
             };
         };
     };
-    asset_upload_complete_handler: {
+    complete_asset_upload: {
         parameters: {
             query: {
                 source: string;
@@ -4602,7 +4582,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssetPutResponse"];
+                    "application/json": components["schemas"]["Asset"];
                 };
             };
             400: {
@@ -4639,7 +4619,7 @@ export interface operations {
             };
         };
     };
-    asset_upload_part_handler: {
+    replace_asset_upload_part: {
         parameters: {
             query: {
                 source: string;
@@ -4665,7 +4645,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssetUploadPartResponse"];
+                    "application/json": components["schemas"]["ReplaceAssetUploadPartResponse"];
                 };
             };
             400: {
@@ -4710,7 +4690,7 @@ export interface operations {
             };
         };
     };
-    contact_groups_list: {
+    list_contact_groups: {
         parameters: {
             query?: {
                 /** @description Page size, default 40, max 500 */
@@ -4750,7 +4730,7 @@ export interface operations {
             };
         };
     };
-    contact_groups_create: {
+    create_contact_group: {
         parameters: {
             query?: never;
             header?: never;
@@ -4759,7 +4739,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NamedSetBody"];
+                "application/json": components["schemas"]["NamedSetRequest"];
             };
         };
         responses: {
@@ -4807,7 +4787,7 @@ export interface operations {
             };
         };
     };
-    contact_groups_delete: {
+    delete_contact_group: {
         parameters: {
             query?: never;
             header?: never;
@@ -4851,7 +4831,7 @@ export interface operations {
             };
         };
     };
-    contact_groups_update: {
+    update_contact_group: {
         parameters: {
             query?: never;
             header?: never;
@@ -4863,7 +4843,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NamedSetBody"];
+                "application/json": components["schemas"]["NamedSetRequest"];
             };
         };
         responses: {
@@ -4925,7 +4905,7 @@ export interface operations {
             };
         };
     };
-    contact_group_members_list: {
+    list_contact_group_members: {
         parameters: {
             query?: {
                 /** @description Page size, default 40, max 500 */
@@ -4976,7 +4956,7 @@ export interface operations {
             };
         };
     };
-    contact_group_members_update: {
+    update_contact_group_members: {
         parameters: {
             query?: never;
             header?: never;
@@ -4988,7 +4968,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MembersPatch"];
+                "application/json": components["schemas"]["UpdateMembersRequest"];
             };
         };
         responses: {
@@ -4997,7 +4977,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MembersChanged"];
+                    "application/json": components["schemas"]["UpdateMembersResponse"];
                 };
             };
             400: {
@@ -5042,7 +5022,7 @@ export interface operations {
             };
         };
     };
-    contacts_list_handler: {
+    list_contacts: {
         parameters: {
             query?: {
                 /** @description Contact search; empty lists all */
@@ -5102,7 +5082,7 @@ export interface operations {
             };
         };
     };
-    contacts_create_handler: {
+    create_contacts: {
         parameters: {
             query?: never;
             header?: never;
@@ -5122,7 +5102,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AddressBookLoadResponse"];
+                    "application/json": components["schemas"]["CreateContactsResponse"];
                 };
             };
             400: {
@@ -5175,7 +5155,7 @@ export interface operations {
             };
         };
     };
-    contact_summaries_handler: {
+    summarize_contacts: {
         parameters: {
             query?: never;
             header?: never;
@@ -5184,7 +5164,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ContactSummariesBody"];
+                "application/json": components["schemas"]["SummarizeContactsRequest"];
             };
         };
         responses: {
@@ -5230,7 +5210,7 @@ export interface operations {
             };
         };
     };
-    unmatched_handles_handler: {
+    find_unmatched_identities: {
         parameters: {
             query?: never;
             header?: never;
@@ -5239,7 +5219,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UnmatchedHandlesBody"];
+                "application/json": components["schemas"]["FindUnmatchedIdentitiesRequest"];
             };
         };
         responses: {
@@ -5285,7 +5265,7 @@ export interface operations {
             };
         };
     };
-    contact_detail_handler: {
+    get_contact: {
         parameters: {
             query?: never;
             header?: never;
@@ -5302,7 +5282,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ContactDetail"];
+                    "application/json": components["schemas"]["Contact"];
                 };
             };
             401: {
@@ -5331,7 +5311,7 @@ export interface operations {
             };
         };
     };
-    contact_delete_handler: {
+    delete_contact: {
         parameters: {
             query?: never;
             header?: never;
@@ -5385,7 +5365,7 @@ export interface operations {
             };
         };
     };
-    contact_mutate_handler: {
+    update_contact: {
         parameters: {
             query?: never;
             header?: never;
@@ -5397,7 +5377,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ContactMutationBody"];
+                "application/json": components["schemas"]["UpdateContactRequest"];
             };
         };
         responses: {
@@ -5406,7 +5386,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ContactDetail"];
+                    "application/json": components["schemas"]["Contact"];
                 };
             };
             400: {
@@ -5451,7 +5431,7 @@ export interface operations {
             };
         };
     };
-    contact_restore_handler: {
+    restore_contact: {
         parameters: {
             query?: never;
             header?: never;
@@ -5496,7 +5476,7 @@ export interface operations {
             };
         };
     };
-    contact_trash_handler: {
+    trash_contact: {
         parameters: {
             query?: never;
             header?: never;
@@ -5541,7 +5521,7 @@ export interface operations {
             };
         };
     };
-    conversations_list_handler: {
+    list_conversations: {
         parameters: {
             query?: {
                 /** @description Conversation search; empty lists all non-trashed */
@@ -5601,7 +5581,7 @@ export interface operations {
             };
         };
     };
-    conversation_detail_handler: {
+    get_conversation: {
         parameters: {
             query?: never;
             header?: never;
@@ -5647,7 +5627,7 @@ export interface operations {
             };
         };
     };
-    conversation_delete_handler: {
+    delete_conversation: {
         parameters: {
             query?: never;
             header?: never;
@@ -5701,7 +5681,7 @@ export interface operations {
             };
         };
     };
-    conversation_messages_handler: {
+    list_conversation_messages: {
         parameters: {
             query?: {
                 /** @description Page size, default 40, max 500 */
@@ -5772,7 +5752,7 @@ export interface operations {
             };
         };
     };
-    conversation_restore_handler: {
+    restore_conversation: {
         parameters: {
             query?: never;
             header?: never;
@@ -5817,7 +5797,7 @@ export interface operations {
             };
         };
     };
-    conversation_sources_handler: {
+    list_conversation_sources: {
         parameters: {
             query?: {
                 /** @description Page size, default 40, max 500 */
@@ -5839,7 +5819,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_ConversationSourceInfo"];
+                    "application/json": components["schemas"]["Page_ConversationSource"];
                 };
             };
             401: {
@@ -5868,7 +5848,7 @@ export interface operations {
             };
         };
     };
-    conversation_trash_handler: {
+    trash_conversation: {
         parameters: {
             query?: never;
             header?: never;
@@ -5913,7 +5893,7 @@ export interface operations {
             };
         };
     };
-    exports_list_handler: {
+    list_exports: {
         parameters: {
             query?: {
                 /** @description One of running, completed, failed, cancelled */
@@ -5965,7 +5945,7 @@ export interface operations {
             };
         };
     };
-    exports_create_handler: {
+    create_export: {
         parameters: {
             query?: never;
             header?: never;
@@ -5974,7 +5954,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateExportBody"];
+                "application/json": components["schemas"]["CreateExportRequest"];
             };
         };
         responses: {
@@ -6022,7 +6002,7 @@ export interface operations {
             };
         };
     };
-    exports_get_handler: {
+    get_export: {
         parameters: {
             query?: never;
             header?: never;
@@ -6068,62 +6048,7 @@ export interface operations {
             };
         };
     };
-    exports_cancel_handler: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Export Run id */
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExportRun"];
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description The run is already finished */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    exports_complete_handler: {
+    cancel_export: {
         parameters: {
             query?: never;
             header?: never;
@@ -6178,7 +6103,62 @@ export interface operations {
             };
         };
     };
-    export_messages_handler: {
+    complete_export: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Export Run id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportRun"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The run is already finished */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_export_messages: {
         parameters: {
             query?: {
                 /** @description Page size, default 100, max 500 */
@@ -6256,7 +6236,7 @@ export interface operations {
             };
         };
     };
-    imports_list_handler: {
+    list_imports: {
         parameters: {
             query?: {
                 /** @description One of running, completed, completed_with_issues, failed, cancelled */
@@ -6308,7 +6288,7 @@ export interface operations {
             };
         };
     };
-    imports_create_handler: {
+    create_import: {
         parameters: {
             query?: never;
             header?: never;
@@ -6317,7 +6297,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateImportBody"];
+                "application/json": components["schemas"]["CreateImportRequest"];
             };
         };
         responses: {
@@ -6366,7 +6346,7 @@ export interface operations {
             };
         };
     };
-    imports_get_handler: {
+    get_import: {
         parameters: {
             query?: never;
             header?: never;
@@ -6383,7 +6363,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportDetailResponse"];
+                    "application/json": components["schemas"]["ImportRun"];
                 };
             };
             401: {
@@ -6412,7 +6392,7 @@ export interface operations {
             };
         };
     };
-    imports_patch_handler: {
+    update_import: {
         parameters: {
             query?: never;
             header?: never;
@@ -6424,7 +6404,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SetImportStageBody"];
+                "application/json": components["schemas"]["UpdateImportRequest"];
             };
         };
         responses: {
@@ -6433,7 +6413,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportDetailResponse"];
+                    "application/json": components["schemas"]["ImportRun"];
                 };
             };
             400: {
@@ -6478,7 +6458,7 @@ export interface operations {
             };
         };
     };
-    import_batch_handler: {
+    create_import_batch: {
         parameters: {
             query?: never;
             header?: never;
@@ -6501,7 +6481,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportResponse"];
+                    "application/json": components["schemas"]["CreateImportBatchResponse"];
                 };
             };
             400: {
@@ -6564,7 +6544,7 @@ export interface operations {
             };
         };
     };
-    imports_complete_handler: {
+    complete_import: {
         parameters: {
             query?: never;
             header?: never;
@@ -6576,7 +6556,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CompleteImportBody"];
+                "application/json": components["schemas"]["CompleteImportRequest"];
             };
         };
         responses: {
@@ -6630,7 +6610,7 @@ export interface operations {
             };
         };
     };
-    import_contacts_handler: {
+    list_import_contacts: {
         parameters: {
             query?: {
                 /** @description Page size, default 40, max 500 */
@@ -6652,7 +6632,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_ImportContactRow"];
+                    "application/json": components["schemas"]["Page_ImportContact"];
                 };
             };
             401: {
@@ -6681,7 +6661,7 @@ export interface operations {
             };
         };
     };
-    imports_discard_handler: {
+    discard_import: {
         parameters: {
             query?: never;
             header?: never;
@@ -6743,7 +6723,7 @@ export interface operations {
             };
         };
     };
-    message_tags_list: {
+    list_message_tags: {
         parameters: {
             query?: {
                 /** @description Page size, default 40, max 500 */
@@ -6783,7 +6763,7 @@ export interface operations {
             };
         };
     };
-    message_tags_create: {
+    create_message_tag: {
         parameters: {
             query?: never;
             header?: never;
@@ -6792,7 +6772,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NamedSetBody"];
+                "application/json": components["schemas"]["NamedSetRequest"];
             };
         };
         responses: {
@@ -6840,7 +6820,7 @@ export interface operations {
             };
         };
     };
-    message_tags_delete: {
+    delete_message_tag: {
         parameters: {
             query?: never;
             header?: never;
@@ -6884,7 +6864,7 @@ export interface operations {
             };
         };
     };
-    message_tags_update: {
+    update_message_tag: {
         parameters: {
             query?: never;
             header?: never;
@@ -6896,7 +6876,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["NamedSetBody"];
+                "application/json": components["schemas"]["NamedSetRequest"];
             };
         };
         responses: {
@@ -6958,7 +6938,7 @@ export interface operations {
             };
         };
     };
-    message_tag_members_list: {
+    list_message_tag_members: {
         parameters: {
             query?: {
                 /** @description Page size, default 40, max 500 */
@@ -7009,7 +6989,7 @@ export interface operations {
             };
         };
     };
-    message_tag_members_update: {
+    update_message_tag_members: {
         parameters: {
             query?: never;
             header?: never;
@@ -7021,7 +7001,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MembersPatch"];
+                "application/json": components["schemas"]["UpdateMembersRequest"];
             };
         };
         responses: {
@@ -7030,7 +7010,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MembersChanged"];
+                    "application/json": components["schemas"]["UpdateMembersResponse"];
                 };
             };
             400: {
@@ -7075,7 +7055,7 @@ export interface operations {
             };
         };
     };
-    messages_list_handler: {
+    list_messages: {
         parameters: {
             query?: {
                 /** @description Search query in the Messages list's words; empty matches every message */
@@ -7135,7 +7115,7 @@ export interface operations {
             };
         };
     };
-    message_handler: {
+    get_message: {
         parameters: {
             query?: never;
             header?: never;
@@ -7181,7 +7161,7 @@ export interface operations {
             };
         };
     };
-    saved_searches_list_handler: {
+    list_saved_searches: {
         parameters: {
             query?: {
                 /** @description Page size, default 40, max 500 */
@@ -7221,7 +7201,7 @@ export interface operations {
             };
         };
     };
-    saved_searches_create_handler: {
+    create_saved_search: {
         parameters: {
             query?: never;
             header?: never;
@@ -7230,7 +7210,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SavedSearchBody"];
+                "application/json": components["schemas"]["SavedSearchRequest"];
             };
         };
         responses: {
@@ -7278,7 +7258,7 @@ export interface operations {
             };
         };
     };
-    saved_searches_delete_handler: {
+    delete_saved_search: {
         parameters: {
             query?: never;
             header?: never;
@@ -7323,7 +7303,7 @@ export interface operations {
             };
         };
     };
-    saved_searches_update_handler: {
+    update_saved_search: {
         parameters: {
             query?: never;
             header?: never;
@@ -7335,7 +7315,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SavedSearchBody"];
+                "application/json": components["schemas"]["SavedSearchRequest"];
             };
         };
         responses: {
@@ -7397,7 +7377,7 @@ export interface operations {
             };
         };
     };
-    search_fields_list: {
+    list_search_fields: {
         parameters: {
             query: {
                 /** @description `contacts`, `conversations`, or `messages`. */
@@ -7455,7 +7435,7 @@ export interface operations {
             };
         };
     };
-    get_session_handler: {
+    get_session: {
         parameters: {
             query?: never;
             header?: never;
@@ -7469,7 +7449,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionResponse"];
+                    "application/json": components["schemas"]["Session"];
                 };
             };
             401: {
@@ -7490,7 +7470,7 @@ export interface operations {
             };
         };
     };
-    create_session_handler: {
+    create_session: {
         parameters: {
             query?: never;
             header?: never;
@@ -7511,7 +7491,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionTokenResponse"];
+                    "application/json": components["schemas"]["CreateSessionResponse"];
                 };
             };
             /** @description Invalid input */
@@ -7552,7 +7532,7 @@ export interface operations {
             };
         };
     };
-    delete_session_handler: {
+    delete_session: {
         parameters: {
             query?: never;
             header?: never;
@@ -7587,7 +7567,7 @@ export interface operations {
             };
         };
     };
-    empty_trash_handler: {
+    empty_trash: {
         parameters: {
             query?: never;
             header?: never;
@@ -7621,7 +7601,7 @@ export interface operations {
             };
         };
     };
-    vault_state: {
+    get_vault: {
         parameters: {
             query?: never;
             header?: never;
@@ -7635,7 +7615,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VaultResponse"];
+                    "application/json": components["schemas"]["Vault"];
                 };
             };
         };
@@ -7659,7 +7639,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionTokenResponse"];
+                    "application/json": components["schemas"]["CreateSessionResponse"];
                 };
             };
             400: {
@@ -7697,7 +7677,7 @@ export interface operations {
             };
         };
     };
-    vault_settings: {
+    get_vault_settings: {
         parameters: {
             query?: never;
             header?: never;
@@ -7711,7 +7691,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VaultSettingsResponse"];
+                    "application/json": components["schemas"]["VaultSettings"];
                 };
             };
             401: {
@@ -7732,7 +7712,7 @@ export interface operations {
             };
         };
     };
-    patch_vault_settings: {
+    update_vault_settings: {
         parameters: {
             query?: never;
             header?: never;
@@ -7741,7 +7721,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PatchVaultSettingsRequest"];
+                "application/json": components["schemas"]["UpdateVaultSettingsRequest"];
             };
         };
         responses: {
@@ -7750,7 +7730,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VaultSettingsResponse"];
+                    "application/json": components["schemas"]["VaultSettings"];
                 };
             };
             401: {
@@ -7771,7 +7751,7 @@ export interface operations {
             };
         };
     };
-    vault_storage: {
+    get_vault_storage: {
         parameters: {
             query?: never;
             header?: never;
@@ -7785,7 +7765,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["VaultStorageResponse"];
+                    "application/json": components["schemas"]["VaultStorage"];
                 };
             };
             401: {

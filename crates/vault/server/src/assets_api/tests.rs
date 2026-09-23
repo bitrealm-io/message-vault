@@ -120,7 +120,7 @@ fn store_verified_processes_share_one_mixed_extension_path() {
                 .args([
                     "--ignored",
                     "--exact",
-                    "assets::tests::filesystem_install_worker",
+                    "assets_api::tests::filesystem_install_worker",
                     "--nocapture",
                 ])
                 .env("ASSET_TEST_ROOT", root)

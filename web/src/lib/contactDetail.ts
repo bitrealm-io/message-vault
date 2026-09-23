@@ -15,10 +15,10 @@ import { useVaultCache, useVaultQuery } from "./vaultQuery";
  * membership mutation's optimistic patch onto this same entry.
  */
 
-export type ContactDetail = components["schemas"]["ContactDetail"];
-export type ContactHandle = components["schemas"]["ContactHandleInfo"];
+export type ContactDetail = components["schemas"]["Contact"];
+export type ContactHandle = components["schemas"]["Identity"];
 /** One change to a contact: its name, or one handle added, updated or removed. */
-export type ContactChange = components["schemas"]["ContactMutationBody"];
+export type ContactChange = components["schemas"]["UpdateContactRequest"];
 
 /** The contact behind an open drawer. Skipped entirely when no contact is open. */
 export function useContactDetail(contactId: string | null): {

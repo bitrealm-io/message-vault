@@ -8,7 +8,7 @@
 //! keeps `name` non-empty is an import invariant rather than this query:
 //! import never creates a participant with neither an address nor a name, so
 //! every row has already matched one of the three earlier clauses. Read that
-//! guarantee here and enforce it in `import::contact_name`, whose
+//! guarantee here and enforce it in `imports_api::contact_name`, whose
 //! `resolve_name_only_participant` is the only writer of a handle-less
 //! participant row.
 //!

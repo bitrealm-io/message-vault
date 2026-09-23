@@ -1,10 +1,9 @@
 use super::*;
 use crate::extract::{Json, Path as AxumPath};
-use crate::import::ImportMode;
-use crate::import::{
-    CompleteImportBody, CompleteImportIssueBody, CreateImportBody, SetImportStageBody,
-    imports_complete_handler, imports_create_handler, imports_discard_handler, imports_get_handler,
-    imports_list_handler, imports_patch_handler,
+use crate::imports_api::ImportMode;
+use crate::imports_api::{
+    CompleteImportIssueRequest, CompleteImportRequest, CreateImportRequest, UpdateImportRequest,
+    complete_import, create_import, discard_import, get_import, list_imports, update_import,
 };
 use axum::extract::State;
 use tempfile::TempDir;
@@ -188,10 +187,10 @@ async fn running_import(
     state: &AppState,
     token: &str,
 ) -> Option<crate::db::vault_imports::ImportSummary> {
-    imports_list_handler(
+    list_imports(
         State(state.clone()),
         import_access(state, token).await,
-        crate::extract::Query(crate::import::ListImportsQuery {
+        crate::extract::Query(crate::imports_api::ListImportsQuery {
             sort: None,
             status: Some("running".into()),
             limit: None,
@@ -346,7 +345,7 @@ async fn openapi_ui_on_serves_spec_without_token() {
 #[tokio::test]
 async fn imports_complete_and_detail_surface_timings_and_issues() {
     let (_dir, state, token, import_id) = test_state().await;
-    let body = CompleteImportBody {
+    let body = CompleteImportRequest {
         status: "completed".into(),
         message_count: Some(10),
         attachment_count: Some(2),
@@ -361,13 +360,13 @@ async fn imports_complete_and_detail_surface_timings_and_issues() {
             "convert": { "files": 2 }
         })),
         issues: vec![
-            CompleteImportIssueBody {
+            CompleteImportIssueRequest {
                 kind: "skip".into(),
                 step: "convert".into(),
                 item: "photo.heic".into(),
                 reason: "convert failed".into(),
             },
-            CompleteImportIssueBody {
+            CompleteImportIssueRequest {
                 kind: "error".into(),
                 step: "upload".into(),
                 item: "archive.zip".into(),
@@ -376,7 +375,7 @@ async fn imports_complete_and_detail_surface_timings_and_issues() {
         ],
     };
 
-    let response = imports_complete_handler(
+    let response = complete_import(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
@@ -389,7 +388,7 @@ async fn imports_complete_and_detail_surface_timings_and_issues() {
     assert_eq!(response.0.attachment_count, 2);
     assert_eq!(response.0.bytes_uploaded, 100);
 
-    let detail = imports_get_handler(
+    let detail = get_import(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
@@ -414,7 +413,7 @@ async fn imports_complete_and_detail_surface_timings_and_issues() {
 #[tokio::test]
 async fn imports_complete_stores_completed_with_issues_status() {
     let (_dir, state, token, import_id) = test_state().await;
-    let body = CompleteImportBody {
+    let body = CompleteImportRequest {
         status: "completed_with_issues".into(),
         message_count: Some(10),
         attachment_count: Some(2),
@@ -427,7 +426,7 @@ async fn imports_complete_stores_completed_with_issues_status() {
         summary: None,
         issues: Vec::new(),
     };
-    let response = imports_complete_handler(
+    let response = complete_import(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
@@ -441,7 +440,7 @@ async fn imports_complete_stores_completed_with_issues_status() {
 #[tokio::test]
 async fn imports_complete_rejects_unknown_status() {
     let (_dir, state, token, import_id) = test_state().await;
-    let body = CompleteImportBody {
+    let body = CompleteImportRequest {
         status: "victorious".into(),
         message_count: None,
         attachment_count: None,
@@ -454,7 +453,7 @@ async fn imports_complete_rejects_unknown_status() {
         summary: None,
         issues: Vec::new(),
     };
-    let err = imports_complete_handler(
+    let err = complete_import(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
@@ -477,7 +476,7 @@ async fn imports_complete_rejects_unknown_status() {
 #[tokio::test]
 async fn imports_complete_rejects_invalid_issue_kind_before_db_write() {
     let (_dir, state, token, import_id) = test_state().await;
-    let body = CompleteImportBody {
+    let body = CompleteImportRequest {
         status: "completed".into(),
         message_count: Some(10),
         attachment_count: Some(2),
@@ -488,7 +487,7 @@ async fn imports_complete_rejects_invalid_issue_kind_before_db_write() {
         prepare_ms: Some(4_000),
         upload_ms: Some(8_000),
         summary: None,
-        issues: vec![CompleteImportIssueBody {
+        issues: vec![CompleteImportIssueRequest {
             kind: "warning".into(),
             step: "upload".into(),
             item: "archive.zip".into(),
@@ -496,7 +495,7 @@ async fn imports_complete_rejects_invalid_issue_kind_before_db_write() {
         }],
     };
 
-    let err = imports_complete_handler(
+    let err = complete_import(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
@@ -523,7 +522,7 @@ async fn imports_complete_rejects_invalid_issue_kind_before_db_write() {
 #[tokio::test]
 async fn imports_get_handler_returns_not_found_for_missing_import() {
     let (_dir, state, token, import_id) = test_state().await;
-    let err = imports_get_handler(
+    let err = get_import(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id + 1),
@@ -544,7 +543,7 @@ async fn imports_get_handler_returns_not_found_for_missing_import() {
 async fn active_session_is_empty_then_reports_the_live_one() {
     let (_dir, state, token, import_id) = test_state().await;
 
-    let body = CreateImportBody {
+    let body = CreateImportRequest {
         dedupe: false,
         source: "imessage".into(),
         mode: ImportMode::Append,
@@ -557,7 +556,7 @@ async fn active_session_is_empty_then_reports_the_live_one() {
         source_identities: None,
     };
     // `test_state` already opened a session; close it so this one can start.
-    let _ = imports_discard_handler(
+    let _ = discard_import(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
@@ -565,7 +564,7 @@ async fn active_session_is_empty_then_reports_the_live_one() {
     .await
     .unwrap();
 
-    let created = imports_create_handler(
+    let created = create_import(
         State(state.clone()),
         import_access(&state, &token).await,
         Json(body),
@@ -591,7 +590,7 @@ async fn active_session_is_empty_then_reports_the_live_one() {
 #[tokio::test]
 async fn a_stored_form_snapshot_drops_credentials() {
     let (_dir, state, token, import_id) = test_state().await;
-    let _ = imports_discard_handler(
+    let _ = discard_import(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
@@ -599,7 +598,7 @@ async fn a_stored_form_snapshot_drops_credentials() {
     .await
     .unwrap();
 
-    let body = CreateImportBody {
+    let body = CreateImportRequest {
         dedupe: false,
         source: "imessage".into(),
         mode: ImportMode::Append,
@@ -616,7 +615,7 @@ async fn a_stored_form_snapshot_drops_credentials() {
         source_fingerprint: None,
         source_identities: None,
     };
-    let _ = imports_create_handler(
+    let _ = create_import(
         State(state.clone()),
         import_access(&state, &token).await,
         Json(body),
@@ -648,7 +647,7 @@ async fn a_stored_form_snapshot_drops_credentials() {
 #[tokio::test]
 async fn imports_create_stores_source_identities() {
     let (_dir, state, token, import_id) = test_state().await;
-    let _ = imports_discard_handler(
+    let _ = discard_import(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
@@ -656,7 +655,7 @@ async fn imports_create_stores_source_identities() {
     .await
     .unwrap();
 
-    let body = CreateImportBody {
+    let body = CreateImportRequest {
         dedupe: false,
         source: "imessage".into(),
         mode: ImportMode::Append,
@@ -668,7 +667,7 @@ async fn imports_create_stores_source_identities() {
         source_fingerprint: None,
         source_identities: Some(serde_json::json!(["+15550001111", "owner@example.com"])),
     };
-    let _ = imports_create_handler(
+    let _ = create_import(
         State(state.clone()),
         import_access(&state, &token).await,
         Json(body),
@@ -688,7 +687,7 @@ async fn imports_create_stores_source_identities() {
 #[tokio::test]
 async fn a_second_session_is_refused_with_conflict() {
     let (_dir, state, token, _import_id) = test_state().await;
-    let body = CreateImportBody {
+    let body = CreateImportRequest {
         dedupe: false,
         source: "imessage".into(),
         mode: ImportMode::Append,
@@ -700,7 +699,7 @@ async fn a_second_session_is_refused_with_conflict() {
         source_fingerprint: None,
         source_identities: None,
     };
-    let err = imports_create_handler(
+    let err = create_import(
         State(state.clone()),
         import_access(&state, &token).await,
         Json(body),
@@ -723,11 +722,11 @@ async fn a_second_session_is_refused_with_conflict() {
 async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
     let (_dir, state, token, import_id) = test_state().await;
 
-    let _ = imports_patch_handler(
+    let _ = update_import(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
-        Json(SetImportStageBody {
+        Json(UpdateImportRequest {
             stage: "pushing".into(),
             summary: None,
         }),
@@ -743,11 +742,11 @@ async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
         Some("pushing")
     );
 
-    let err = imports_patch_handler(
+    let err = update_import(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
-        Json(SetImportStageBody {
+        Json(UpdateImportRequest {
             stage: "halfway".into(),
             summary: None,
         }),
@@ -760,7 +759,7 @@ async fn stage_endpoint_advances_and_rejects_an_unknown_stage() {
 #[tokio::test]
 async fn discard_frees_the_slot() {
     let (_dir, state, token, import_id) = test_state().await;
-    let _ = imports_discard_handler(
+    let _ = discard_import(
         State(state.clone()),
         import_access(&state, &token).await,
         AxumPath(import_id),
@@ -771,7 +770,7 @@ async fn discard_frees_the_slot() {
 }
 
 /// `/v1/contacts/{id}` takes an `i64`, and two literal routes sit beside
-/// it: `summaries` and `unmatched-handles`. Both are `POST`, and editing a
+/// it: `summaries` and `unmatched-identities`. Both are `POST`, and editing a
 /// contact is a `PATCH`, so if the `{id}` route ever swallowed one of them
 /// the request would come back 405 (no `POST` on `/v1/contacts/{id}`)
 /// instead of reaching its own handler. Each assertion below distinguishes
@@ -795,7 +794,10 @@ async fn literal_contact_routes_are_not_captured_by_the_id_route() {
         StatusCode::NOT_FOUND
     );
 
-    for path in ["/v1/contacts/summaries", "/v1/contacts/unmatched-handles"] {
+    for path in [
+        "/v1/contacts/summaries",
+        "/v1/contacts/unmatched-identities",
+    ] {
         let status =
             crate::test_support::post_status(&state, path, &user.token, serde_json::json!({}))
                 .await;

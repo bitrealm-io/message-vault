@@ -34,7 +34,7 @@ pub enum VaultState {
 
 /// The vault's state, for the screen a logged-out person sees.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct VaultResponse {
+pub struct Vault {
     /// `unclaimed` shows Create Vault Owner alone; `closed` shows Login alone;
     /// `open` shows Login and Create Account.
     pub state: VaultState,
@@ -73,14 +73,11 @@ async fn state_on_conn(conn: &mut sqlx::AnyConnection) -> Result<VaultState, Api
     get,
     path = "/v1/vault",
     tag = "Vault",
-    operation_id = "vault_state",
-    responses((status = 200, body = VaultResponse))
+    responses((status = 200, body = Vault))
 )]
-pub async fn vault_state_handler(
-    State(state): State<AppState>,
-) -> Result<Json<VaultResponse>, ApiError> {
+pub async fn get_vault(State(state): State<AppState>) -> Result<Json<Vault>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    Ok(Json(VaultResponse {
+    Ok(Json(Vault {
         state: state_on_conn(&mut conn).await?,
         version: crate::BUILD.to_string(),
         schema_fingerprint: crate::db::schema::SCHEMA_FINGERPRINT,
@@ -99,20 +96,19 @@ pub async fn vault_state_handler(
     post,
     path = "/v1/vault/claim",
     tag = "Vault",
-    operation_id = "claim_vault",
     request_body = ClaimVaultRequest,
     responses(
-        (status = 200, description = "Vault claimed; session issued", body = crate::session_api::SessionTokenResponse),
+        (status = 200, description = "Vault claimed; session issued", body = crate::session_api::CreateSessionResponse),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 409, description = "Already claimed", body = crate::problem::Problem),
         (status = 429, body = crate::problem::Problem)
     )
 )]
-pub async fn claim_vault_handler(
+pub async fn claim_vault(
     State(state): State<AppState>,
     Json(req): Json<ClaimVaultRequest>,
-) -> Result<Json<crate::session_api::SessionTokenResponse>, ApiError> {
+) -> Result<Json<crate::session_api::CreateSessionResponse>, ApiError> {
     let username = crate::credentials::require_valid_username(&req.username)?;
     crate::credentials::check_auth_rate_limit(&state.auth_rate_limits, "claim")?;
     let password_hash = crate::credentials::hash_owner_password(&req.password)?;
@@ -145,7 +141,7 @@ pub async fn claim_vault_handler(
     account_profile::record_login(&mut tx, account_profile::OWNER_ACCOUNT_ID).await?;
     tx.commit().await?;
 
-    Ok(Json(crate::session_api::SessionTokenResponse {
+    Ok(Json(crate::session_api::CreateSessionResponse {
         token,
         account_id: account_profile::OWNER_ACCOUNT_ID,
         username,
@@ -154,14 +150,14 @@ pub async fn claim_vault_handler(
 
 /// The vault settings the owner controls.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct VaultSettingsResponse {
+pub struct VaultSettings {
     /// Anyone reaching the vault may create their own account.
     pub public_registration: bool,
 }
 
 /// Body for changing the vault's settings. Omitted fields are left alone.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct PatchVaultSettingsRequest {
+pub struct UpdateVaultSettingsRequest {
     /// Let anyone reaching the vault create their own account, or stop them.
     #[serde(default)]
     pub public_registration: Option<bool>,
@@ -172,21 +168,20 @@ pub struct PatchVaultSettingsRequest {
     get,
     path = "/v1/vault/settings",
     tag = "Vault",
-    operation_id = "vault_settings",
     security(("session" = ["owner"])),
     responses(
-        (status = 200, body = VaultSettingsResponse),
+        (status = 200, body = VaultSettings),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub async fn vault_settings_handler(
+pub async fn get_vault_settings(
     State(state): State<AppState>,
     Owner(_auth): Owner,
-) -> Result<Json<VaultSettingsResponse>, ApiError> {
+) -> Result<Json<VaultSettings>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let settings = vault_settings::load(&mut conn).await?;
-    Ok(Json(VaultSettingsResponse {
+    Ok(Json(VaultSettings {
         public_registration: settings.public_registration,
     }))
 }
@@ -196,33 +191,32 @@ pub async fn vault_settings_handler(
     patch,
     path = "/v1/vault/settings",
     tag = "Vault",
-    operation_id = "patch_vault_settings",
     security(("session" = ["owner"])),
-    request_body = PatchVaultSettingsRequest,
+    request_body = UpdateVaultSettingsRequest,
     responses(
-        (status = 200, body = VaultSettingsResponse),
+        (status = 200, body = VaultSettings),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub async fn patch_vault_settings_handler(
+pub async fn update_vault_settings(
     State(state): State<AppState>,
     Owner(_auth): Owner,
-    Json(req): Json<PatchVaultSettingsRequest>,
-) -> Result<Json<VaultSettingsResponse>, ApiError> {
+    Json(req): Json<UpdateVaultSettingsRequest>,
+) -> Result<Json<VaultSettings>, ApiError> {
     let mut conn = state.db.acquire().await?;
     if let Some(enabled) = req.public_registration {
         vault_settings::set_public_registration(&mut conn, enabled).await?;
     }
     let settings = vault_settings::load(&mut conn).await?;
-    Ok(Json(VaultSettingsResponse {
+    Ok(Json(VaultSettings {
         public_registration: settings.public_registration,
     }))
 }
 
 /// What the whole vault holds, summed over every account.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct VaultStorageResponse {
+pub struct VaultStorage {
     /// Messages across every account.
     pub message_count: i64,
     /// Conversations across every account.
@@ -244,12 +238,12 @@ pub struct VaultStorageResponse {
     pub fts_bytes: i64,
     /// Every account, including ones with no messages: the owner first, then
     /// by username, as the User Accounts table lists them.
-    pub accounts: Vec<AccountMessagesResponse>,
+    pub accounts: Vec<AccountMessages>,
 }
 
 /// One account's share of the messages held: an id, a username and numbers.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct AccountMessagesResponse {
+pub struct AccountMessages {
     pub account_id: i64,
     pub username: String,
     /// Messages the account holds.
@@ -272,18 +266,17 @@ pub struct AccountMessagesResponse {
     get,
     path = "/v1/vault/storage",
     tag = "Vault",
-    operation_id = "vault_storage",
     security(("session" = ["owner"])),
     responses(
-        (status = 200, body = VaultStorageResponse),
+        (status = 200, body = VaultStorage),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub async fn vault_storage_handler(
+pub async fn get_vault_storage(
     State(state): State<AppState>,
     Owner(_auth): Owner,
-) -> Result<Json<VaultStorageResponse>, ApiError> {
+) -> Result<Json<VaultStorage>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let scope = storage::Scope::Vault;
     let fts_bytes = storage::fts_bytes(&mut conn).await?;
@@ -293,17 +286,15 @@ pub async fn vault_storage_handler(
     let accounts = by_account
         .into_iter()
         .zip(shares)
-        .map(
-            |(account, estimated_message_bytes)| AccountMessagesResponse {
-                account_id: account.account_id,
-                username: account.username,
-                message_count: account.message_count,
-                text_bytes: account.text_bytes,
-                estimated_message_bytes,
-            },
-        )
+        .map(|(account, estimated_message_bytes)| AccountMessages {
+            account_id: account.account_id,
+            username: account.username,
+            message_count: account.message_count,
+            text_bytes: account.text_bytes,
+            estimated_message_bytes,
+        })
         .collect();
-    Ok(Json(VaultStorageResponse {
+    Ok(Json(VaultStorage {
         message_count: storage::message_count(&mut conn, scope).await?,
         conversation_count: storage::conversation_count(&mut conn, scope).await?,
         contact_count: storage::contact_count(&mut conn, scope).await?,

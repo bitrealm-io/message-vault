@@ -349,7 +349,7 @@ async fn export_counts(conn: &mut AnyConnection, export_id: i64) -> Result<Expor
 
 /// Body of `POST /v1/exports`: the scope, and the tool that asked.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct CreateExportBody {
+pub(crate) struct CreateExportRequest {
     /// What to export.
     pub(crate) scope: ExportScope,
     /// Client/tool name recorded on the run, e.g. `vault-pull`.
@@ -372,7 +372,7 @@ pub(crate) struct ListExportsQuery {
 
 /// Query string of `GET /v1/exports/{id}/messages`.
 #[derive(Debug, Deserialize)]
-pub(crate) struct ExportMessagesQuery {
+pub(crate) struct ListExportMessagesQuery {
     #[serde(default)]
     pub(crate) limit: Option<usize>,
     #[serde(default)]
@@ -438,7 +438,7 @@ async fn close_export(
     path = "/v1/exports",
     tag = "Export",
     security(("session" = ["export"]), ("api-token" = ["export"])),
-    request_body = CreateExportBody,
+    request_body = CreateExportRequest,
     responses(
         (
             status = 201,
@@ -451,10 +451,10 @@ async fn close_export(
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn exports_create_handler(
+pub(crate) async fn create_export(
     State(state): State<AppState>,
     ExportAccess(auth): ExportAccess,
-    Json(body): Json<CreateExportBody>,
+    Json(body): Json<CreateExportRequest>,
 ) -> Result<Created<ExportRun>, ApiError> {
     let account = auth.account_id;
     let tool = body.tool.as_deref().and_then(message_ir::trimmed);
@@ -487,7 +487,7 @@ pub(crate) async fn exports_create_handler(
         (status = 422, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn exports_list_handler(
+pub(crate) async fn list_exports(
     State(state): State<AppState>,
     ExportAccess(auth): ExportAccess,
     Query(query): Query<ListExportsQuery>,
@@ -560,7 +560,7 @@ pub(crate) async fn exports_page(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn exports_get_handler(
+pub(crate) async fn get_export(
     State(state): State<AppState>,
     ExportAccess(auth): ExportAccess,
     AxumPath(export_id): AxumPath<i64>,
@@ -598,11 +598,11 @@ pub(crate) async fn exports_get_handler(
         (status = 409, body = crate::problem::Problem, description = "The run is no longer running")
     )
 )]
-pub(crate) async fn export_messages_handler(
+pub(crate) async fn list_export_messages(
     State(state): State<AppState>,
     ExportAccess(auth): ExportAccess,
     AxumPath(export_id): AxumPath<i64>,
-    Query(query): Query<ExportMessagesQuery>,
+    Query(query): Query<ListExportMessagesQuery>,
 ) -> Result<Json<Page<Message>>, ApiError> {
     let account = auth.account_id;
     let page = page_params(query.limit, query.offset, DEFAULT_EXPORT_LIMIT, None)?;
@@ -650,7 +650,7 @@ pub(crate) async fn export_messages_handler(
         (status = 409, body = crate::problem::Problem, description = "The run is already finished")
     )
 )]
-pub(crate) async fn exports_complete_handler(
+pub(crate) async fn complete_export(
     State(state): State<AppState>,
     ExportAccess(auth): ExportAccess,
     AxumPath(export_id): AxumPath<i64>,
@@ -673,7 +673,7 @@ pub(crate) async fn exports_complete_handler(
         (status = 409, body = crate::problem::Problem, description = "The run is already finished")
     )
 )]
-pub(crate) async fn exports_cancel_handler(
+pub(crate) async fn cancel_export(
     State(state): State<AppState>,
     ExportAccess(auth): ExportAccess,
     AxumPath(export_id): AxumPath<i64>,

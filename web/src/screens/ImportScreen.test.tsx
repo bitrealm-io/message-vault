@@ -94,7 +94,7 @@ vi.mock("../lib/deviceId", () => ({
 // vaultApi stays real, since other modules in this graph import from it.
 vi.mock("../lib/vaultApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/vaultApi")>()),
-  unmatchedHandles: (...args: unknown[]) => apiPostMock(...args),
+  unmatchedIdentities: (...args: unknown[]) => apiPostMock(...args),
   updateAccountProfile: (...args: unknown[]) => apiPostMock(...args),
   getAccountProfile: (...args: unknown[]) => apiGetMock(...args),
 }));

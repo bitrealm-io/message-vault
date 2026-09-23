@@ -53,7 +53,7 @@ export function describeExportScope(scope: Schema["ExportScope"]): string {
 }
 
 /** One Import Run in full, with its issues. */
-export type ImportDetailResponse = Schema["ImportDetailResponse"];
+export type ImportDetailResponse = Schema["ImportRun"];
 
 /** Human-readable file size (for example "1.2 MB"). */
 export function formatBytes(bytes: number): string {

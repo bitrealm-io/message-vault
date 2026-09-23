@@ -357,7 +357,7 @@ async fn load_conversation_sources(
 
 /// One backup source with message counts and share.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct ConversationSourceInfo {
+pub struct ConversationSource {
     /// Backup source name.
     pub backup_name: String,
     /// Messages in this conversation from this source.
@@ -377,7 +377,7 @@ pub async fn list_conversation_source_stats(
     conn: &mut AnyConnection,
     account_id: i64,
     conversation_id: i64,
-) -> Result<Option<Vec<ConversationSourceInfo>>, ApiError> {
+) -> Result<Option<Vec<ConversationSource>>, ApiError> {
     if !owns_conversation(conn, account_id, conversation_id).await? {
         return Ok(None);
     }
@@ -404,7 +404,7 @@ pub async fn list_conversation_source_stats(
             } else {
                 0.0
             };
-            ConversationSourceInfo {
+            ConversationSource {
                 backup_name: source,
                 message_count: message_count.max(0) as u64,
                 unique_count: unique_count.max(0) as u64,
@@ -530,7 +530,7 @@ pub async fn get_conversation_messages(
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn conversations_list_handler(
+pub(crate) async fn list_conversations(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     Query(query): Query<PageQuery>,
@@ -580,7 +580,7 @@ pub(crate) async fn conversations_list_handler(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn conversation_detail_handler(
+pub(crate) async fn get_conversation(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     AxumPath(conversation_id): AxumPath<i64>,
@@ -605,18 +605,18 @@ pub(crate) async fn conversation_detail_handler(
         ("offset" = Option<usize>, Query, description = "Page offset")
     ),
     responses(
-        (status = 200, body = crate::paging::Page<ConversationSourceInfo>),
+        (status = 200, body = crate::paging::Page<ConversationSource>),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn conversation_sources_handler(
+pub(crate) async fn list_conversation_sources(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     AxumPath(conversation_id): AxumPath<i64>,
     Query(query): Query<PageQuery>,
-) -> Result<Json<Page<ConversationSourceInfo>>, ApiError> {
+) -> Result<Json<Page<ConversationSource>>, ApiError> {
     let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
     let rows = list_conversation_source_stats(&mut conn, auth.account_id, conversation_id).await?;
@@ -626,7 +626,7 @@ pub(crate) async fn conversation_sources_handler(
 
 /// Query string for a conversation's messages.
 #[derive(Debug, Deserialize)]
-pub(crate) struct ConversationMessagesQuery {
+pub(crate) struct ListConversationMessagesQuery {
     #[serde(default)]
     limit: Option<usize>,
     #[serde(default)]
@@ -663,11 +663,11 @@ pub(crate) struct ConversationMessagesQuery {
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn conversation_messages_handler(
+pub(crate) async fn list_conversation_messages(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     AxumPath(conversation_id): AxumPath<i64>,
-    Query(query): Query<ConversationMessagesQuery>,
+    Query(query): Query<ListConversationMessagesQuery>,
 ) -> Result<Json<Page<Message>>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let page = page_params(
@@ -711,7 +711,7 @@ pub(crate) async fn conversation_messages_handler(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn conversation_trash_handler(
+pub(crate) async fn trash_conversation(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     AxumPath(conversation_id): AxumPath<i64>,
@@ -745,7 +745,7 @@ pub(crate) async fn conversation_trash_handler(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn conversation_restore_handler(
+pub(crate) async fn restore_conversation(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     AxumPath(conversation_id): AxumPath<i64>,
@@ -782,7 +782,7 @@ pub(crate) async fn conversation_restore_handler(
         (status = 409, body = crate::problem::Problem, description = "The conversation is not in the trash")
     )
 )]
-pub(crate) async fn conversation_delete_handler(
+pub(crate) async fn delete_conversation(
     State(state): State<AppState>,
     FullDeleteAccess(auth): FullDeleteAccess,
     AxumPath(conversation_id): AxumPath<i64>,

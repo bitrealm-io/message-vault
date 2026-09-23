@@ -23,7 +23,7 @@ use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::{Request, State};
 use axum::http::HeaderMap;
 
-use crate::assets::AssetStats;
+use crate::assets_api::AssetStats;
 use crate::config::{PathsConfig, validate_source_id};
 use crate::db::contacts;
 use crate::db::dialect;
@@ -43,7 +43,7 @@ pub use staging::is_orphaned_export;
 use staging::StagingInserts;
 
 use crate::dedupe;
-use crate::import::{self};
+use crate::imports_api::{self};
 use crate::paging::{
     DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, PageQuery, page_params, parse_sort,
 };
@@ -627,18 +627,18 @@ impl BatchContext {
 
 /// Import result: stats plus optional dedupe counts.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct ImportResponse {
+pub(crate) struct CreateImportBatchResponse {
     source: String,
     account: i64,
     #[serde(flatten)]
     stats: ImportStats,
     #[serde(skip_serializing_if = "Option::is_none")]
-    dedupe: Option<DedupeResponse>,
+    dedupe: Option<DedupeCounts>,
 }
 
 /// Cross-source dedupe outcome.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct DedupeResponse {
+pub(crate) struct DedupeCounts {
     keys_filled: u64,
     exact_groups: u64,
     exact_flagged: u64,
@@ -648,7 +648,7 @@ pub(crate) struct DedupeResponse {
 /// Source, mode, dedupe and tool for a new Import Run. The bearer token
 /// names the account.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct CreateImportBody {
+pub(crate) struct CreateImportRequest {
     pub(crate) source: String,
     #[serde(default)]
     pub(crate) mode: ImportMode,
@@ -689,7 +689,7 @@ pub(crate) struct CreateImportResponse {
 /// Final stats and issues for a running Import Run. The outcome is stated
 /// once, as `status`.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct CompleteImportBody {
+pub(crate) struct CompleteImportRequest {
     /// How the run ended: `completed`, `completed_with_issues` or `failed`.
     pub(crate) status: String,
     #[serde(default)]
@@ -711,19 +711,19 @@ pub(crate) struct CompleteImportBody {
     #[serde(default)]
     pub(crate) summary: Option<serde_json::Value>,
     #[serde(default)]
-    pub(crate) issues: Vec<CompleteImportIssueBody>,
+    pub(crate) issues: Vec<CompleteImportIssueRequest>,
 }
 
 /// One parse/convert/upload issue from the import.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct CompleteImportIssueBody {
+pub(crate) struct CompleteImportIssueRequest {
     pub(crate) kind: String,
     pub(crate) step: String,
     pub(crate) item: String,
     pub(crate) reason: String,
 }
 
-fn validate_complete_import_issues(issues: &[CompleteImportIssueBody]) -> Result<(), ApiError> {
+fn validate_complete_import_issues(issues: &[CompleteImportIssueRequest]) -> Result<(), ApiError> {
     for issue in issues {
         match issue.kind.as_str() {
             "error" | "skip" => {}
@@ -807,7 +807,7 @@ pub(crate) struct ListImportsQuery {
 
 /// One stored import issue.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct ImportDetailIssueResponse {
+pub(crate) struct ImportIssue {
     pub(crate) kind: String,
     pub(crate) step: String,
     item: String,
@@ -816,7 +816,7 @@ pub(crate) struct ImportDetailIssueResponse {
 
 /// Full import session record.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct ImportDetailResponse {
+pub(crate) struct ImportRun {
     pub(crate) id: i64,
     source: String,
     tool: Option<String>,
@@ -833,7 +833,7 @@ pub(crate) struct ImportDetailResponse {
     pub(crate) prepare_ms: Option<i64>,
     pub(crate) upload_ms: Option<i64>,
     pub(crate) summary: serde_json::Value,
-    pub(crate) issues: Vec<ImportDetailIssueResponse>,
+    pub(crate) issues: Vec<ImportIssue>,
     /// Contacts this run created.
     pub(crate) contacts_new: u64,
     /// Contacts it only changed.
@@ -860,7 +860,7 @@ pub(crate) struct ImportDetailResponse {
         (status = 422, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn imports_list_handler(
+pub(crate) async fn list_imports(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     Query(query): Query<ListImportsQuery>,
@@ -927,17 +927,17 @@ pub(crate) async fn imports_page(
     security(("session" = ["import"]), ("api-token" = ["import"])),
     params(("id" = i64, Path, description = "Import session id")),
     responses(
-        (status = 200, body = ImportDetailResponse),
+        (status = 200, body = ImportRun),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn imports_get_handler(
+pub(crate) async fn get_import(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath(import_id): AxumPath<i64>,
-) -> Result<Json<ImportDetailResponse>, ApiError> {
+) -> Result<Json<ImportRun>, ApiError> {
     import_detail(&state, auth.account_id, import_id).await
 }
 
@@ -946,7 +946,7 @@ pub(crate) async fn import_detail(
     state: &AppState,
     account: i64,
     import_id: i64,
-) -> Result<Json<ImportDetailResponse>, ApiError> {
+) -> Result<Json<ImportRun>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let detail = crate::db::vault_imports::get_import_detail(&mut conn, account, import_id)
         .await
@@ -965,7 +965,7 @@ pub(crate) async fn import_detail(
     path = "/v1/imports",
     tag = "Import",
     security(("session" = ["import"]), ("api-token" = ["import"])),
-    request_body = CreateImportBody,
+    request_body = CreateImportRequest,
     responses(
         (
             status = 201,
@@ -982,10 +982,10 @@ pub(crate) async fn import_detail(
         )
     )
 )]
-pub(crate) async fn imports_create_handler(
+pub(crate) async fn create_import(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
-    Json(body): Json<CreateImportBody>,
+    Json(body): Json<CreateImportRequest>,
 ) -> Result<Created<CreateImportResponse>, ApiError> {
     if body.source.trim().is_empty() {
         return Err(ApiError::MissingParameter(
@@ -1040,7 +1040,7 @@ pub(crate) async fn imports_create_handler(
     tag = "Import",
     security(("session" = ["import"]), ("api-token" = ["import"])),
     params(("id" = i64, Path, description = "Import session id")),
-    request_body = CompleteImportBody,
+    request_body = CompleteImportRequest,
     responses(
         (status = 200, body = CompleteImportResponse),
         (status = 400, body = crate::problem::Problem),
@@ -1050,11 +1050,11 @@ pub(crate) async fn imports_create_handler(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn imports_complete_handler(
+pub(crate) async fn complete_import(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath(import_id): AxumPath<i64>,
-    Json(body): Json<CompleteImportBody>,
+    Json(body): Json<CompleteImportRequest>,
 ) -> Result<Json<CompleteImportResponse>, ApiError> {
     let account = resolve_import_account(&auth);
     validate_complete_import_issues(&body.issues)?;
@@ -1146,19 +1146,6 @@ async fn create_import_saved_search(
     }
 }
 
-/// One contact an import run touched, and what the run did to it.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct ImportContactRow {
-    /// Contact id.
-    pub id: i64,
-    /// Preferred name; empty when the run learned an address and no name.
-    pub name: String,
-    /// Why the contact is on this run's record: the run created it, created
-    /// it in place of one the person had trashed, named it, or added a
-    /// handle to it.
-    pub reason: crate::db::import_contacts::ContactReason,
-}
-
 /// List the contacts one import run created or changed, with the reason for
 /// each, most consequential first.
 ///
@@ -1178,36 +1165,27 @@ pub(crate) struct ImportContactRow {
         ("offset" = Option<usize>, Query, description = "Page offset")
     ),
     responses(
-        (status = 200, body = Page<ImportContactRow>),
+        (status = 200, body = Page<crate::db::import_contacts::ImportContact>),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn import_contacts_handler(
+pub(crate) async fn list_import_contacts(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath(import_id): AxumPath<i64>,
     Query(query): Query<PageQuery>,
-) -> Result<Json<Page<ImportContactRow>>, ApiError> {
+) -> Result<Json<Page<crate::db::import_contacts::ImportContact>>, ApiError> {
     let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
     crate::db::vault_imports::get_import_detail(&mut conn, auth.account_id, import_id)
         .await
         .map_err(ApiError::from)?;
-    let (rows, total) =
+    let (items, total) =
         crate::db::import_contacts::page(&mut conn, import_id, params.limit, params.offset)
             .await
             .map_err(ApiError::Internal)?;
-    let items = rows
-        .into_iter()
-        .map(|c| ImportContactRow {
-            id: c.id,
-            name: c.name,
-            reason: c.reason,
-        })
-        .collect();
-
     Ok(Json(Page {
         items,
         total,
@@ -1295,12 +1273,12 @@ fn import_date_ymd(row: &crate::db::vault_imports::VaultImportRow) -> String {
 fn import_detail_response(
     detail: crate::db::vault_imports::ImportDetail,
     contacts: crate::db::import_contacts::ContactCounts,
-) -> ImportDetailResponse {
+) -> ImportRun {
     let row = detail.row;
     let issues = detail
         .issues
         .into_iter()
-        .map(|issue| ImportDetailIssueResponse {
+        .map(|issue| ImportIssue {
             kind: issue.kind,
             step: issue.step,
             item: issue.item,
@@ -1308,7 +1286,7 @@ fn import_detail_response(
         })
         .collect();
 
-    ImportDetailResponse {
+    ImportRun {
         id: row.id,
         source: row.source,
         tool: row.tool,
@@ -1333,7 +1311,7 @@ fn import_detail_response(
 
 /// New stage for a live session.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct SetImportStageBody {
+pub(crate) struct UpdateImportRequest {
     pub(crate) stage: String,
     /// What the user approved at the gate they just passed, when they passed one.
     ///
@@ -1361,9 +1339,9 @@ pub(crate) struct SetImportStageBody {
     tag = "Import",
     security(("session" = ["import"]), ("api-token" = ["import"])),
     params(("id" = i64, Path, description = "Import session id")),
-    request_body = SetImportStageBody,
+    request_body = UpdateImportRequest,
     responses(
-        (status = 200, body = ImportDetailResponse),
+        (status = 200, body = ImportRun),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
@@ -1371,12 +1349,12 @@ pub(crate) struct SetImportStageBody {
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn imports_patch_handler(
+pub(crate) async fn update_import(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath(import_id): AxumPath<i64>,
-    Json(body): Json<SetImportStageBody>,
-) -> Result<Json<ImportDetailResponse>, ApiError> {
+    Json(body): Json<UpdateImportRequest>,
+) -> Result<Json<ImportRun>, ApiError> {
     let account = resolve_import_account(&auth);
     let stage = crate::db::vault_imports::ImportStage::parse(&body.stage).ok_or_else(|| {
         ApiError::validation(format!(
@@ -1426,7 +1404,7 @@ pub(crate) struct DiscardImportResponse {
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn imports_discard_handler(
+pub(crate) async fn discard_import(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath(import_id): AxumPath<i64>,
@@ -1455,7 +1433,7 @@ pub(crate) async fn imports_discard_handler(
         description = "message-ir JSONL as application/x-ndjson or application/jsonl. Attachments are uploaded first by SHA-256 through /v1/assets."
     ),
     responses(
-        (status = 200, body = ImportResponse),
+        (status = 200, body = CreateImportBatchResponse),
         (status = 400, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
@@ -1473,13 +1451,13 @@ pub(crate) async fn imports_discard_handler(
         )
     )
 )]
-pub(crate) async fn import_batch_handler(
+pub(crate) async fn create_import_batch(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath(import_id): AxumPath<i64>,
     headers: HeaderMap,
     request: Request,
-) -> Result<Json<ImportResponse>, ApiError> {
+) -> Result<Json<CreateImportBatchResponse>, ApiError> {
     let Some(ct) = content_type_base(&headers) else {
         return Err(ApiError::UnsupportedMediaType(
             "Content-Type required (application/x-ndjson or application/jsonl)".into(),
@@ -1549,13 +1527,13 @@ fn classify_import_error(err: anyhow::Error) -> ApiError {
     }
 }
 
-/// `import_batch_handler` is the only entry point, and the run's `source`,
+/// `create_import_batch` is the only entry point, and the run's `source`,
 /// validated when the run was created, names an on-disk directory.
 async fn run_import_path(
     state: AppState,
     context: BatchContext,
     jsonl_path: PathBuf,
-) -> Result<Json<ImportResponse>, ApiError> {
+) -> Result<Json<CreateImportBatchResponse>, ApiError> {
     // An import holds one pooled connection for its whole run (JSONL parse,
     // asset IO, promote). Bound concurrent imports here so they can never
     // drain the pool; the semaphore is taken before the per-account lock so
@@ -1604,11 +1582,11 @@ async fn run_import_path(
         fill_content_keys: do_dedupe,
         import_id: Some(import_id),
     });
-    let import_result = import::import_jsonl_files_on_conn(
+    let import_result = imports_api::import_jsonl_files_on_conn(
         &mut conn,
         &[jsonl_path],
         &opts,
-        import::ImportSchemaMode::AssumeReady,
+        imports_api::ImportSchemaMode::AssumeReady,
     )
     .await;
     let stats = import_result.map_err(classify_import_error)?;
@@ -1618,11 +1596,11 @@ async fn run_import_path(
         None
     };
 
-    Ok(Json(ImportResponse {
+    Ok(Json(CreateImportBatchResponse {
         source: source_id,
         account,
         stats,
-        dedupe: dedupe_stats.map(|d| DedupeResponse {
+        dedupe: dedupe_stats.map(|d| DedupeCounts {
             keys_filled: d.keys_filled,
             exact_groups: d.exact_groups,
             exact_flagged: d.exact_flagged,

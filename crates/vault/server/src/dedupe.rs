@@ -112,7 +112,7 @@ pub fn compute_content_key(
         hasher.update(b"|");
         hasher.update(sha.as_bytes());
     }
-    crate::assets::hex_encode(&hasher.finalize())
+    crate::assets_api::hex_encode(&hasher.finalize())
 }
 
 /// Fingerprint one message row from its chat identity, direction, sender, time, body, and attachment hashes.

@@ -28,7 +28,7 @@ fn require_own_tokens(auth: &AuthIdentity, target: i64) -> Result<(), ApiError> 
 
 /// One named API token as shown in Settings: label, permissions, and masked secret.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct ApiTokenItem {
+pub struct ApiToken {
     /// Token id (the secret itself is stored hashed).
     pub id: i64,
     /// User-chosen label shown in Settings.
@@ -51,7 +51,7 @@ pub struct ApiTokenItem {
     pub disabled: bool,
 }
 
-impl From<api_tokens::ApiTokenRow> for ApiTokenItem {
+impl From<api_tokens::ApiTokenRow> for ApiToken {
     fn from(row: api_tokens::ApiTokenRow) -> Self {
         Self {
             id: row.id,
@@ -123,14 +123,14 @@ pub struct CreateApiTokenResponse {
 
 /// Body for renaming a token.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct RenameApiTokenRequest {
+pub struct UpdateApiTokenRequest {
     /// Replacement label.
     pub label: String,
 }
 
 /// The renamed token's id and stored label.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct RenameApiTokenResponse {
+pub struct UpdateApiTokenResponse {
     /// Token id that was renamed.
     pub id: i64,
     /// Stored label after the rename.
@@ -142,7 +142,6 @@ pub struct RenameApiTokenResponse {
     get,
     path = "/v1/accounts/{id}/api-tokens",
     tag = "Accounts",
-    operation_id = "list_api_tokens",
     security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Account id; must be the caller's own"),
@@ -150,24 +149,24 @@ pub struct RenameApiTokenResponse {
         ("offset" = Option<usize>, Query, description = "Page offset")
     ),
     responses(
-        (status = 200, body = crate::paging::Page<ApiTokenItem>),
+        (status = 200, body = crate::paging::Page<ApiToken>),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub async fn list_api_tokens_handler(
+pub async fn list_api_tokens(
     State(state): State<AppState>,
     Path(account_id): Path<i64>,
     FullAccess(auth): FullAccess,
     Query(query): Query<PageQuery>,
-) -> Result<Json<Page<ApiTokenItem>>, ApiError> {
+) -> Result<Json<Page<ApiToken>>, ApiError> {
     require_own_tokens(&auth, account_id)?;
     let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
 
     let mut conn = state.db.acquire().await?;
     schema::ensure_accounts_schema(&mut conn).await?;
     let rows = api_tokens::list_api_tokens(&mut conn, account_id).await?;
-    let items: Vec<ApiTokenItem> = rows.into_iter().map(ApiTokenItem::from).collect();
+    let items: Vec<ApiToken> = rows.into_iter().map(ApiToken::from).collect();
 
     Ok(Json(page_of(items, params)))
 }
@@ -178,7 +177,6 @@ pub async fn list_api_tokens_handler(
     post,
     path = "/v1/accounts/{id}/api-tokens",
     tag = "Accounts",
-    operation_id = "create_api_token",
     security(("session" = [])),
     params(("id" = i64, Path, description = "Account id; must be the caller's own")),
     request_body = CreateApiTokenRequest,
@@ -194,7 +192,7 @@ pub async fn list_api_tokens_handler(
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub async fn create_api_token_handler(
+pub async fn create_api_token(
     State(state): State<AppState>,
     Path(account_id): Path<i64>,
     FullAccess(auth): FullAccess,
@@ -232,7 +230,6 @@ pub async fn create_api_token_handler(
     delete,
     path = "/v1/accounts/{id}/api-tokens/{token_id}",
     tag = "Accounts",
-    operation_id = "delete_api_token",
     security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Account id; must be the caller's own"),
@@ -245,7 +242,7 @@ pub async fn create_api_token_handler(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub async fn delete_api_token_handler(
+pub async fn delete_api_token(
     State(state): State<AppState>,
     Path((account_id, id)): Path<(i64, i64)>,
     FullAccess(auth): FullAccess,
@@ -267,15 +264,14 @@ pub async fn delete_api_token_handler(
     patch,
     path = "/v1/accounts/{id}/api-tokens/{token_id}",
     tag = "Accounts",
-    operation_id = "rename_api_token",
     security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Account id; must be the caller's own"),
         ("token_id" = i64, Path, description = "API token id")
     ),
-    request_body = RenameApiTokenRequest,
+    request_body = UpdateApiTokenRequest,
     responses(
-        (status = 200, body = RenameApiTokenResponse),
+        (status = 200, body = UpdateApiTokenResponse),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
@@ -283,12 +279,12 @@ pub async fn delete_api_token_handler(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub async fn rename_api_token_handler(
+pub async fn update_api_token(
     State(state): State<AppState>,
     Path((account_id, id)): Path<(i64, i64)>,
     FullAccess(auth): FullAccess,
-    Json(req): Json<RenameApiTokenRequest>,
-) -> Result<Json<RenameApiTokenResponse>, ApiError> {
+    Json(req): Json<UpdateApiTokenRequest>,
+) -> Result<Json<UpdateApiTokenResponse>, ApiError> {
     require_own_tokens(&auth, account_id)?;
     let label = req.label;
 
@@ -302,7 +298,7 @@ pub async fn rename_api_token_handler(
     if !ok {
         return Err(ApiError::NotFound("API token not found".into()));
     }
-    Ok(Json(RenameApiTokenResponse { id, label: trimmed }))
+    Ok(Json(UpdateApiTokenResponse { id, label: trimmed }))
 }
 
 #[cfg(test)]

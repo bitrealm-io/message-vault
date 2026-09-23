@@ -16,7 +16,7 @@
           "Health"
         ],
         "summary": "Report process liveness.",
-        "operationId": "health",
+        "operationId": "get_health",
         "responses": {
           "200": {
             "description": "Process is up",
@@ -66,7 +66,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page_AccountResponse"
+                  "$ref": "#/components/schemas/Page_Account"
                 }
               }
             }
@@ -131,7 +131,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreatedAccountResponse"
+                  "$ref": "#/components/schemas/CreateAccountResponse"
                 }
               }
             }
@@ -222,7 +222,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AccountResponse"
+                  "$ref": "#/components/schemas/Account"
                 }
               }
             }
@@ -366,7 +366,7 @@
           "Accounts"
         ],
         "summary": "Change an account. Its display name, time zone and handles are set by\nthe account itself or by the vault owner; only the vault owner sets an\naccount's disabled flag and its import, export and delete permissions. A\nfield the caller may not set answers `403 Forbidden`, and the reloaded\naccount is the answer.",
-        "operationId": "patch_account",
+        "operationId": "update_account",
         "parameters": [
           {
             "name": "id",
@@ -383,7 +383,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PatchAccountRequest"
+                "$ref": "#/components/schemas/UpdateAccountRequest"
               }
             }
           },
@@ -395,7 +395,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AccountResponse"
+                  "$ref": "#/components/schemas/Account"
                 }
               }
             }
@@ -503,7 +503,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page_ApiTokenItem"
+                  "$ref": "#/components/schemas/Page_ApiToken"
                 }
               }
             }
@@ -705,7 +705,7 @@
           "Accounts"
         ],
         "summary": "Rename one named API token. The label is trimmed before storing.",
-        "operationId": "rename_api_token",
+        "operationId": "update_api_token",
         "parameters": [
           {
             "name": "id",
@@ -732,7 +732,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RenameApiTokenRequest"
+                "$ref": "#/components/schemas/UpdateApiTokenRequest"
               }
             }
           },
@@ -744,7 +744,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RenameApiTokenResponse"
+                  "$ref": "#/components/schemas/UpdateApiTokenResponse"
                 }
               }
             }
@@ -968,7 +968,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page_AccountIdentity"
+                  "$ref": "#/components/schemas/Page_Identity"
                 }
               }
             }
@@ -1172,7 +1172,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ImportDetailResponse"
+                  "$ref": "#/components/schemas/ImportRun"
                 }
               }
             }
@@ -1335,7 +1335,7 @@
         ],
         "summary": "Set an account's password.",
         "description": "For a user account the session is the credential, and the current\npassword is not asked for. The vault owner changing its own must send\n`current_password`: that account reaches every other, so a session left\nopen on a shared machine must not be enough to take it over.\nAn account changing its own has its API tokens revoked and gets\n`200` with a rotated session token. The vault owner setting another\naccount's answers `204`. That is the whole of it: the account's sessions carry on,\nand its holder keeps the new password until they change it themselves.",
-        "operationId": "set_account_password",
+        "operationId": "replace_account_password",
         "parameters": [
           {
             "name": "id",
@@ -1352,7 +1352,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetPasswordRequest"
+                "$ref": "#/components/schemas/ReplaceAccountPasswordRequest"
               }
             }
           },
@@ -1364,7 +1364,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SetPasswordResponse"
+                  "$ref": "#/components/schemas/ReplaceAccountPasswordResponse"
                 }
               }
             }
@@ -1455,7 +1455,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AccountStorageResponse"
+                  "$ref": "#/components/schemas/AccountStorage"
                 }
               }
             }
@@ -1505,7 +1505,7 @@
         ],
         "summary": "Download a previously stored content-addressed asset (read-only).",
         "description": "The body streams the stored bytes; the URL is the SHA-256 fingerprint.",
-        "operationId": "asset_get_handler",
+        "operationId": "get_asset",
         "parameters": [
           {
             "name": "sha256",
@@ -1601,7 +1601,7 @@
           "Assets"
         ],
         "summary": "Store one asset body under its SHA-256 fingerprint.",
-        "operationId": "asset_put_handler",
+        "operationId": "replace_asset",
         "parameters": [
           {
             "name": "sha256",
@@ -1633,7 +1633,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssetPutResponse"
+                  "$ref": "#/components/schemas/Asset"
                 }
               }
             }
@@ -1708,7 +1708,7 @@
         ],
         "summary": "Probe whether a content-addressed asset is already stored (no body).",
         "description": "Clients may skip sending bytes when the asset exists.",
-        "operationId": "asset_head_handler",
+        "operationId": "head_asset",
         "parameters": [
           {
             "name": "sha256",
@@ -1734,7 +1734,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssetPutResponse"
+                  "$ref": "#/components/schemas/Asset"
                 }
               }
             }
@@ -1820,7 +1820,7 @@
           "Assets"
         ],
         "summary": "Start a chunked (multipart) asset upload and get the part size.",
-        "operationId": "asset_upload_start_handler",
+        "operationId": "create_asset_upload",
         "parameters": [
           {
             "name": "sha256",
@@ -1844,7 +1844,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AssetUploadStartBody"
+                "$ref": "#/components/schemas/CreateAssetUploadRequest"
               }
             }
           },
@@ -1856,7 +1856,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssetUploadStartResponse"
+                  "$ref": "#/components/schemas/CreateAssetUploadResponse"
                 }
               }
             }
@@ -1874,7 +1874,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssetUploadStartResponse"
+                  "$ref": "#/components/schemas/CreateAssetUploadResponse"
                 }
               }
             }
@@ -1930,7 +1930,7 @@
           "Assets"
         ],
         "summary": "Abort and delete a chunked asset upload's staging files.",
-        "operationId": "asset_upload_abort_handler",
+        "operationId": "delete_asset_upload",
         "parameters": [
           {
             "name": "sha256",
@@ -2023,7 +2023,7 @@
           "Assets"
         ],
         "summary": "Assemble the uploaded parts, verify the SHA-256 fingerprint, and install\nthe asset.",
-        "operationId": "asset_upload_complete_handler",
+        "operationId": "complete_asset_upload",
         "parameters": [
           {
             "name": "sha256",
@@ -2057,7 +2057,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssetPutResponse"
+                  "$ref": "#/components/schemas/Asset"
                 }
               }
             }
@@ -2123,7 +2123,7 @@
           "Assets"
         ],
         "summary": "Write one part of a chunked asset upload.",
-        "operationId": "asset_upload_part_handler",
+        "operationId": "replace_asset_upload_part",
         "parameters": [
           {
             "name": "sha256",
@@ -2173,7 +2173,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssetUploadPartResponse"
+                  "$ref": "#/components/schemas/ReplaceAssetUploadPartResponse"
                 }
               }
             }
@@ -2249,7 +2249,7 @@
           "Contacts"
         ],
         "summary": "The account's Contact Groups, A–Z.",
-        "operationId": "contact_groups_list",
+        "operationId": "list_contact_groups",
         "parameters": [
           {
             "name": "limit",
@@ -2315,12 +2315,12 @@
           "Contacts"
         ],
         "summary": "Create a Contact Group.",
-        "operationId": "contact_groups_create",
+        "operationId": "create_contact_group",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NamedSetBody"
+                "$ref": "#/components/schemas/NamedSetRequest"
               }
             }
           },
@@ -2399,7 +2399,7 @@
           "Contacts"
         ],
         "summary": "Delete a Contact Group and its memberships.",
-        "operationId": "contact_groups_delete",
+        "operationId": "delete_contact_group",
         "parameters": [
           {
             "name": "id",
@@ -2458,7 +2458,7 @@
           "Contacts"
         ],
         "summary": "Rename a Contact Group.",
-        "operationId": "contact_groups_update",
+        "operationId": "update_contact_group",
         "parameters": [
           {
             "name": "id",
@@ -2475,7 +2475,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NamedSetBody"
+                "$ref": "#/components/schemas/NamedSetRequest"
               }
             }
           },
@@ -2566,7 +2566,7 @@
           "Contacts"
         ],
         "summary": "Contact ids in one Contact Group.",
-        "operationId": "contact_group_members_list",
+        "operationId": "list_contact_group_members",
         "parameters": [
           {
             "name": "id",
@@ -2652,7 +2652,7 @@
           "Contacts"
         ],
         "summary": "Put contacts in and take contacts out of one Contact Group.",
-        "operationId": "contact_group_members_update",
+        "operationId": "update_contact_group_members",
         "parameters": [
           {
             "name": "id",
@@ -2669,7 +2669,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MembersPatch"
+                "$ref": "#/components/schemas/UpdateMembersRequest"
               }
             }
           },
@@ -2681,7 +2681,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MembersChanged"
+                  "$ref": "#/components/schemas/UpdateMembersResponse"
                 }
               }
             }
@@ -2750,7 +2750,7 @@
           "Contacts"
         ],
         "summary": "Page through the account's contacts (id, name, handles, groups).",
-        "operationId": "contacts_list_handler",
+        "operationId": "list_contacts",
         "parameters": [
           {
             "name": "q",
@@ -2855,7 +2855,7 @@
         ],
         "summary": "Load a VCF or vCard CSV address book into this account. The body is the\nfile itself, and `Content-Type` says which: `text/vcard` or `text/csv`.",
         "description": "This is a standalone act against the vault, never part of an Import Run:\ncontacts are vault state, and a person may load them before or after\nbringing messages in. Only the rows the address book owns are replaced, so\nContact Groups, names the person typed, and identities an import discovered\nall survive. How the file is read is the open question in #270; this route\nis where that answer lands.",
-        "operationId": "contacts_create_handler",
+        "operationId": "create_contacts",
         "requestBody": {
           "description": "The address book file: a vCard file as text/vcard, or a vCard CSV export as text/csv.",
           "content": {
@@ -2869,7 +2869,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AddressBookLoadResponse"
+                  "$ref": "#/components/schemas/CreateContactsResponse"
                 }
               }
             }
@@ -2948,12 +2948,12 @@
           "Contacts"
         ],
         "summary": "First/last message dates and counts for a list of contact ids.",
-        "operationId": "contact_summaries_handler",
+        "operationId": "summarize_contacts",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ContactSummariesBody"
+                "$ref": "#/components/schemas/SummarizeContactsRequest"
               }
             }
           },
@@ -3018,18 +3018,18 @@
         ]
       }
     },
-    "/v1/contacts/unmatched-handles": {
+    "/v1/contacts/unmatched-identities": {
       "post": {
         "tags": [
           "Contacts"
         ],
         "summary": "Report which identifiers this account has no vault contact for.",
-        "operationId": "unmatched_handles_handler",
+        "operationId": "find_unmatched_identities",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UnmatchedHandlesBody"
+                "$ref": "#/components/schemas/FindUnmatchedIdentitiesRequest"
               }
             }
           },
@@ -3100,7 +3100,7 @@
           "Contacts"
         ],
         "summary": "Full contact view: per-handle services, message stats, and group\nmemberships.",
-        "operationId": "contact_detail_handler",
+        "operationId": "get_contact",
         "parameters": [
           {
             "name": "id",
@@ -3119,7 +3119,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ContactDetail"
+                  "$ref": "#/components/schemas/Contact"
                 }
               }
             }
@@ -3166,7 +3166,7 @@
           "Contacts"
         ],
         "summary": "Delete a trashed contact the way a phone's Delete Contact does: the name\nand the person's edits go, the contact becomes Unknown again and leaves\nthe trash, and every conversation it was in stays as it is, showing the\nhandle. Conversations are never deleted with a contact. A contact that is\nnot in the trash answers 409.",
-        "operationId": "contact_delete_handler",
+        "operationId": "delete_contact",
         "parameters": [
           {
             "name": "id",
@@ -3237,7 +3237,7 @@
           "Contacts"
         ],
         "summary": "Rename a contact or change its linked handles.",
-        "operationId": "contact_mutate_handler",
+        "operationId": "update_contact",
         "parameters": [
           {
             "name": "id",
@@ -3254,7 +3254,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ContactMutationBody"
+                "$ref": "#/components/schemas/UpdateContactRequest"
               }
             }
           },
@@ -3266,7 +3266,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ContactDetail"
+                  "$ref": "#/components/schemas/Contact"
                 }
               }
             }
@@ -3335,7 +3335,7 @@
           "Contacts"
         ],
         "summary": "Take a contact out of the trash. Idempotent: restoring a contact that\nwas not trashed still answers 204.",
-        "operationId": "contact_restore_handler",
+        "operationId": "restore_contact",
         "parameters": [
           {
             "name": "id",
@@ -3396,7 +3396,7 @@
           "Contacts"
         ],
         "summary": "Put a contact in the trash. Idempotent: trashing an already-trashed\ncontact still answers 204.",
-        "operationId": "contact_trash_handler",
+        "operationId": "trash_contact",
         "parameters": [
           {
             "name": "id",
@@ -3457,7 +3457,7 @@
           "Conversations"
         ],
         "summary": "Page through conversations with participants, message counts, and tags.\nNewest activity first unless `sort` says otherwise.",
-        "operationId": "conversations_list_handler",
+        "operationId": "list_conversations",
         "parameters": [
           {
             "name": "q",
@@ -3563,7 +3563,7 @@
           "Conversations"
         ],
         "summary": "One conversation, in the same shape a list row already has — so a caller\nthat opens a thread from a list does not have to convert between two\nshapes, and paging through the whole list to find one id is never\nnecessary. Trash is a property the list applies, not a gate on reading:\na trashed conversation still answers here.",
-        "operationId": "conversation_detail_handler",
+        "operationId": "get_conversation",
         "parameters": [
           {
             "name": "id",
@@ -3629,7 +3629,7 @@
           "Conversations"
         ],
         "summary": "Permanently delete a trashed conversation: the conversation, its\nmessages, and any attachment file no other message still uses. Trash is\nthe only door to deletion, so a conversation that is not in the trash\nanswers 409 rather than being deleted from wherever it was.",
-        "operationId": "conversation_delete_handler",
+        "operationId": "delete_conversation",
         "parameters": [
           {
             "name": "id",
@@ -3702,7 +3702,7 @@
           "Conversations"
         ],
         "summary": "A conversation's messages, ascending by timestamp then `sort_order`. The\nread path a screen uses to open a thread: no search query to compose,\njust the conversation id.",
-        "operationId": "conversation_messages_handler",
+        "operationId": "list_conversation_messages",
         "parameters": [
           {
             "name": "id",
@@ -3829,7 +3829,7 @@
           "Conversations"
         ],
         "summary": "Take a conversation out of the trash. Idempotent: restoring a\nconversation that was not trashed still answers 204.",
-        "operationId": "conversation_restore_handler",
+        "operationId": "restore_conversation",
         "parameters": [
           {
             "name": "id",
@@ -3890,7 +3890,7 @@
           "Conversations"
         ],
         "summary": "Per-backup message counts for one conversation (the Sources panel).",
-        "operationId": "conversation_sources_handler",
+        "operationId": "list_conversation_sources",
         "parameters": [
           {
             "name": "id",
@@ -3929,7 +3929,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page_ConversationSourceInfo"
+                  "$ref": "#/components/schemas/Page_ConversationSource"
                 }
               }
             }
@@ -3978,7 +3978,7 @@
           "Conversations"
         ],
         "summary": "Put a conversation in the trash. Idempotent: trashing an\nalready-trashed conversation still answers 204.",
-        "operationId": "conversation_trash_handler",
+        "operationId": "trash_conversation",
         "parameters": [
           {
             "name": "id",
@@ -4039,7 +4039,7 @@
           "Export"
         ],
         "summary": "The account's Export Runs as a page, newest first unless `sort` says\notherwise, narrowed to one `status` when given.",
-        "operationId": "exports_list_handler",
+        "operationId": "list_exports",
         "parameters": [
           {
             "name": "status",
@@ -4140,12 +4140,12 @@
           "Export"
         ],
         "summary": "Start an Export Run: compile the scope, list and count the messages it\nmatches now, and record the run as `running`. Read that list at\n`GET /v1/exports/{id}/messages`, then close the run with `complete` or\n`cancel`.",
-        "operationId": "exports_create_handler",
+        "operationId": "create_export",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateExportBody"
+                "$ref": "#/components/schemas/CreateExportRequest"
               }
             }
           },
@@ -4231,7 +4231,7 @@
           "Export"
         ],
         "summary": "One Export Run.",
-        "operationId": "exports_get_handler",
+        "operationId": "get_export",
         "parameters": [
           {
             "name": "id",
@@ -4306,7 +4306,7 @@
           "Export"
         ],
         "summary": "Record that the client gave the run up.",
-        "operationId": "exports_cancel_handler",
+        "operationId": "cancel_export",
         "parameters": [
           {
             "name": "id",
@@ -4391,7 +4391,7 @@
           "Export"
         ],
         "summary": "Record that the client finished reading the run.",
-        "operationId": "exports_complete_handler",
+        "operationId": "complete_export",
         "parameters": [
           {
             "name": "id",
@@ -4476,7 +4476,7 @@
           "Export"
         ],
         "summary": "The messages a running Export Run matched when it was created, a page at\na time, oldest first unless `sort` says otherwise. An import, a trash or\na new day since creation changes nothing here. A message deleted since\nleaves its place empty: `total` stays `message_count`, a page can hold\nfewer than `limit` items, and a client steps `offset` by `limit`. Each\npage read raises the run's `messages_delivered` to the places reached.",
-        "operationId": "export_messages_handler",
+        "operationId": "list_export_messages",
         "parameters": [
           {
             "name": "id",
@@ -4610,7 +4610,7 @@
           "Import"
         ],
         "summary": "The account's Import Runs, newest first, as a page. `status=running`\nfinds the one run the desktop app may resume.",
-        "operationId": "imports_list_handler",
+        "operationId": "list_imports",
         "parameters": [
           {
             "name": "status",
@@ -4711,12 +4711,12 @@
           "Import"
         ],
         "summary": "Start an import session and return its id. Finish the session at\nPOST /v1/imports/{id}/complete.",
-        "operationId": "imports_create_handler",
+        "operationId": "create_import",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateImportBody"
+                "$ref": "#/components/schemas/CreateImportRequest"
               }
             }
           },
@@ -4802,7 +4802,7 @@
           "Import"
         ],
         "summary": "Status, timings, and issues for one import session.",
-        "operationId": "imports_get_handler",
+        "operationId": "get_import",
         "parameters": [
           {
             "name": "id",
@@ -4821,7 +4821,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ImportDetailResponse"
+                  "$ref": "#/components/schemas/ImportRun"
                 }
               }
             }
@@ -4876,7 +4876,7 @@
         ],
         "summary": "Move a live import session to another stage.",
         "description": "The stage is a field of the run, so moving it is a `PATCH` of the run\nrather than a `POST` to a `stage` sub-resource: a path segment names a\nresource, and `stage` is not one (`docs/architecture/http-api.md`,\n\"Naming a route\"). The answer is the run itself, the same shape\n`GET /v1/imports/{id}` returns, so a caller reads one record wherever it\nasks.",
-        "operationId": "imports_patch_handler",
+        "operationId": "update_import",
         "parameters": [
           {
             "name": "id",
@@ -4893,7 +4893,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetImportStageBody"
+                "$ref": "#/components/schemas/UpdateImportRequest"
               }
             }
           },
@@ -4905,7 +4905,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ImportDetailResponse"
+                  "$ref": "#/components/schemas/ImportRun"
                 }
               }
             }
@@ -4981,7 +4981,7 @@
           "Import"
         ],
         "summary": "Import one message-ir JSONL body into the vault.",
-        "operationId": "import_batch_handler",
+        "operationId": "create_import_batch",
         "parameters": [
           {
             "name": "id",
@@ -5007,7 +5007,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ImportResponse"
+                  "$ref": "#/components/schemas/CreateImportBatchResponse"
                 }
               }
             }
@@ -5103,7 +5103,7 @@
           "Import"
         ],
         "summary": "Record the outcome of an import session started with POST /v1/imports.",
-        "operationId": "imports_complete_handler",
+        "operationId": "complete_import",
         "parameters": [
           {
             "name": "id",
@@ -5120,7 +5120,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CompleteImportBody"
+                "$ref": "#/components/schemas/CompleteImportRequest"
               }
             }
           },
@@ -5209,7 +5209,7 @@
         ],
         "summary": "List the contacts one import run created or changed, with the reason for\neach, most consequential first.",
         "description": "The run recorded each reason as it staged (`db::import_contacts`), so the\nlist is what the import decided, not what timestamps suggest. How many of\neach the run made is on the run's own record, `GET /v1/imports/{id}`: a\npage can only count its own rows, and the panel states the whole run's\ntally.",
-        "operationId": "import_contacts_handler",
+        "operationId": "list_import_contacts",
         "parameters": [
           {
             "name": "id",
@@ -5248,7 +5248,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Page_ImportContactRow"
+                  "$ref": "#/components/schemas/Page_ImportContact"
                 }
               }
             }
@@ -5304,7 +5304,7 @@
           "Import"
         ],
         "summary": "Discard a live import session, freeing the account's single slot.",
-        "operationId": "imports_discard_handler",
+        "operationId": "discard_import",
         "parameters": [
           {
             "name": "id",
@@ -5399,7 +5399,7 @@
           "Message tags"
         ],
         "summary": "The account's Message Tags, A–Z.",
-        "operationId": "message_tags_list",
+        "operationId": "list_message_tags",
         "parameters": [
           {
             "name": "limit",
@@ -5465,12 +5465,12 @@
           "Message tags"
         ],
         "summary": "Create a Message Tag.",
-        "operationId": "message_tags_create",
+        "operationId": "create_message_tag",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NamedSetBody"
+                "$ref": "#/components/schemas/NamedSetRequest"
               }
             }
           },
@@ -5549,7 +5549,7 @@
           "Message tags"
         ],
         "summary": "Delete a Message Tag and its memberships.",
-        "operationId": "message_tags_delete",
+        "operationId": "delete_message_tag",
         "parameters": [
           {
             "name": "id",
@@ -5608,7 +5608,7 @@
           "Message tags"
         ],
         "summary": "Rename a Message Tag.",
-        "operationId": "message_tags_update",
+        "operationId": "update_message_tag",
         "parameters": [
           {
             "name": "id",
@@ -5625,7 +5625,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NamedSetBody"
+                "$ref": "#/components/schemas/NamedSetRequest"
               }
             }
           },
@@ -5716,7 +5716,7 @@
           "Message tags"
         ],
         "summary": "Conversation ids in one Message Tag.",
-        "operationId": "message_tag_members_list",
+        "operationId": "list_message_tag_members",
         "parameters": [
           {
             "name": "id",
@@ -5802,7 +5802,7 @@
           "Message tags"
         ],
         "summary": "Put conversations in and take conversations out of one Message Tag.",
-        "operationId": "message_tag_members_update",
+        "operationId": "update_message_tag_members",
         "parameters": [
           {
             "name": "id",
@@ -5819,7 +5819,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MembersPatch"
+                "$ref": "#/components/schemas/UpdateMembersRequest"
               }
             }
           },
@@ -5831,7 +5831,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MembersChanged"
+                  "$ref": "#/components/schemas/UpdateMembersResponse"
                 }
               }
             }
@@ -5900,7 +5900,7 @@
           "Messages"
         ],
         "summary": "Messages matching `q`, oldest first unless `sort` says otherwise: the same\nrows an Export Run with a `query` scope would hand over, behind a logged-in\nsession with the list defaults and the list's offset ceiling.",
-        "operationId": "messages_list_handler",
+        "operationId": "list_messages",
         "parameters": [
           {
             "name": "q",
@@ -6007,7 +6007,7 @@
         ],
         "summary": "One message by id: the row the Messages list would show, looked up\ndirectly.",
         "description": "Read-only. A message is never written through this route: an import\nwrites messages, and trashing is a conversation operation\n(`docs/architecture/http-api.md`, \"Methods\"). The lookup carries the\nlist's own defaults — the caller's account, no trashed conversation, no\nduplicate — so a row the list hides is `404` here too, and a link out of\na search result never reaches further than the search did.",
-        "operationId": "message_handler",
+        "operationId": "get_message",
         "parameters": [
           {
             "name": "id",
@@ -6075,7 +6075,7 @@
           "Saved searches"
         ],
         "summary": "List the account's saved searches, A–Z.",
-        "operationId": "saved_searches_list_handler",
+        "operationId": "list_saved_searches",
         "parameters": [
           {
             "name": "limit",
@@ -6141,12 +6141,12 @@
           "Saved searches"
         ],
         "summary": "Create a saved search: `201 Created`, `Location: /v1/saved-searches/{id}`,\nand the row.",
-        "operationId": "saved_searches_create_handler",
+        "operationId": "create_saved_search",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SavedSearchBody"
+                "$ref": "#/components/schemas/SavedSearchRequest"
               }
             }
           },
@@ -6226,7 +6226,7 @@
         ],
         "summary": "Delete a saved search.",
         "description": "Deleting an import-created saved search removes the shortcut only. The\n`vault_imports` row it pointed at is the account's permanent record of that\nrun and is never touched here.",
-        "operationId": "saved_searches_delete_handler",
+        "operationId": "delete_saved_search",
         "parameters": [
           {
             "name": "id",
@@ -6285,7 +6285,7 @@
           "Saved searches"
         ],
         "summary": "Replace a saved search's name and query, and return it.",
-        "operationId": "saved_searches_update_handler",
+        "operationId": "update_saved_search",
         "parameters": [
           {
             "name": "id",
@@ -6302,7 +6302,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SavedSearchBody"
+                "$ref": "#/components/schemas/SavedSearchRequest"
               }
             }
           },
@@ -6393,7 +6393,7 @@
           "Search"
         ],
         "summary": "The search words one list accepts.",
-        "operationId": "search_fields_list",
+        "operationId": "list_search_fields",
         "parameters": [
           {
             "name": "list",
@@ -6496,14 +6496,14 @@
           "Session"
         ],
         "summary": "The Session the bearer token names: its account, username, and import\nsources. A session token and an API token both answer, because a program\nchecking its token needs the same facts as a browser restoring a login.",
-        "operationId": "get_session_handler",
+        "operationId": "get_session",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionResponse"
+                  "$ref": "#/components/schemas/Session"
                 }
               }
             }
@@ -6543,7 +6543,7 @@
           "Session"
         ],
         "summary": "Log in: verify a local username and password and answer the Session, a\n`201 Created` whose `Location` is the singleton itself.",
-        "operationId": "create_session_handler",
+        "operationId": "create_session",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6568,7 +6568,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionTokenResponse"
+                  "$ref": "#/components/schemas/CreateSessionResponse"
                 }
               }
             }
@@ -6621,7 +6621,7 @@
         ],
         "summary": "Log out: revoke the presented session token, ending the Session.",
         "description": "It takes the bearer token itself rather than a guard, so a disabled\naccount can still end its own Session. An API token is not a Session and\nis refused; a token that names nothing is a `401`.",
-        "operationId": "delete_session_handler",
+        "operationId": "delete_session",
         "responses": {
           "204": {
             "description": "Logged out"
@@ -6660,7 +6660,7 @@
           "Trash"
         ],
         "summary": "Empty the trash: every trashed conversation is deleted for good, with\nits messages and any attachment file no other message uses, and every\ntrashed contact loses its name and details and becomes Unknown, its\nconversations untouched. Trash is the only door to permanent deletion;\nthis is the door for everything in it at once.",
-        "operationId": "empty_trash_handler",
+        "operationId": "empty_trash",
         "responses": {
           "204": {
             "description": "Trash emptied"
@@ -6701,14 +6701,14 @@
           "Vault"
         ],
         "summary": "Report whether this vault is unclaimed, closed, or open.",
-        "operationId": "vault_state",
+        "operationId": "get_vault",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VaultResponse"
+                  "$ref": "#/components/schemas/Vault"
                 }
               }
             }
@@ -6740,7 +6740,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionTokenResponse"
+                  "$ref": "#/components/schemas/CreateSessionResponse"
                 }
               }
             }
@@ -6794,14 +6794,14 @@
           "Vault"
         ],
         "summary": "Read the vault's settings.",
-        "operationId": "vault_settings",
+        "operationId": "get_vault_settings",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VaultSettingsResponse"
+                  "$ref": "#/components/schemas/VaultSettings"
                 }
               }
             }
@@ -6840,12 +6840,12 @@
           "Vault"
         ],
         "summary": "Change the vault's settings.",
-        "operationId": "patch_vault_settings",
+        "operationId": "update_vault_settings",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PatchVaultSettingsRequest"
+                "$ref": "#/components/schemas/UpdateVaultSettingsRequest"
               }
             }
           },
@@ -6857,7 +6857,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VaultSettingsResponse"
+                  "$ref": "#/components/schemas/VaultSettings"
                 }
               }
             }
@@ -6898,14 +6898,14 @@
           "Vault"
         ],
         "summary": "Read what the vault holds. The counts and the attachment bytes are summed\nover every account. The database, messages and full-text search sizes\nare measured on disk. Each account's share of message storage is an\nestimate from its share of text. Counts and totals only, never a name or\na line of text (`docs/adr/0008-the-vault-owner-holds-no-messages.md`,\n\"What the owner may see\"). The owner's, because the owner administers the\nvault and nobody else holds more than their own account.",
-        "operationId": "vault_storage",
+        "operationId": "get_vault_storage",
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VaultStorageResponse"
+                  "$ref": "#/components/schemas/VaultStorage"
                 }
               }
             }
@@ -6943,95 +6943,7 @@
   },
   "components": {
     "schemas": {
-      "AccountIdentity": {
-        "type": "object",
-        "description": "One of an account's identities and the messages held at it. The\nProfile screen shows the counts beside each identity and repeats them when\none is about to be removed, so the person knows what the identity is tied\nto before it goes.",
-        "required": [
-          "handle",
-          "service",
-          "conversations",
-          "direct_messages",
-          "group_messages"
-        ],
-        "properties": {
-          "conversations": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Direct and group conversations holding at least one message held at\nthe identity, trashed conversations excluded.",
-            "minimum": 0
-          },
-          "direct_messages": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Messages held at the identity in one-to-one conversations, trashed\nconversations and duplicates excluded.",
-            "minimum": 0
-          },
-          "end_date": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "When the newest such message was sent, or null when there is none."
-          },
-          "group_messages": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Messages held at the identity in group conversations, on the same\nterms.",
-            "minimum": 0
-          },
-          "handle": {
-            "type": "string",
-            "description": "The identity as the profile lists it: E.164 for a number, lower case for an address."
-          },
-          "service": {
-            "type": "string",
-            "description": "`phone`, `email`, or `whatsapp`."
-          },
-          "start_date": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "When the oldest message held at the identity was sent, or null when\nthere is none."
-          }
-        }
-      },
-      "AccountMessagesResponse": {
-        "type": "object",
-        "description": "One account's share of the messages held: an id, a username and numbers.",
-        "required": [
-          "account_id",
-          "username",
-          "message_count",
-          "text_bytes",
-          "estimated_message_bytes"
-        ],
-        "properties": {
-          "account_id": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "estimated_message_bytes": {
-            "type": "integer",
-            "format": "int64",
-            "description": "The account's estimated share of `messages_bytes`, split by its share\nof all text. The shares add up to `messages_bytes` exactly."
-          },
-          "message_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Messages the account holds."
-          },
-          "text_bytes": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Bytes of message text the account holds: every body and subject, added up."
-          },
-          "username": {
-            "type": "string"
-          }
-        }
-      },
-      "AccountResponse": {
+      "Account": {
         "type": "object",
         "description": "One account: who it is, what it may do, and how much it holds. The owner\nand the account itself both read the whole struct; nothing in it is a\nmessage.",
         "required": [
@@ -7150,7 +7062,60 @@
           }
         }
       },
-      "AccountStorageResponse": {
+      "AccountIdentityRequest": {
+        "type": "object",
+        "description": "One handle to link or unlink, with its platform service.",
+        "required": [
+          "handle",
+          "service"
+        ],
+        "properties": {
+          "handle": {
+            "type": "string",
+            "description": "Raw handle value, e.g. `+15555550100` or `alex@example.com`."
+          },
+          "service": {
+            "type": "string",
+            "description": "Platform the handle belongs to: `phone`, `email`, or `whatsapp`."
+          }
+        }
+      },
+      "AccountMessages": {
+        "type": "object",
+        "description": "One account's share of the messages held: an id, a username and numbers.",
+        "required": [
+          "account_id",
+          "username",
+          "message_count",
+          "text_bytes",
+          "estimated_message_bytes"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "estimated_message_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The account's estimated share of `messages_bytes`, split by its share\nof all text. The shares add up to `messages_bytes` exactly."
+          },
+          "message_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Messages the account holds."
+          },
+          "text_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes of message text the account holds: every body and subject, added up."
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "AccountStorage": {
         "type": "object",
         "description": "What an account holds: counts, attachment bytes and the largest files.",
         "required": [
@@ -7189,36 +7154,27 @@
           }
         }
       },
-      "AddressBookLoadResponse": {
+      "AddContactIdentityRequest": {
         "type": "object",
-        "description": "What loading an address book changed.",
+        "description": "A handle value plus optional platform service.",
         "required": [
-          "contacts",
-          "phones",
-          "phones_needing_review"
+          "handle"
         ],
         "properties": {
-          "contacts": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Contacts written from the file.",
-            "minimum": 0
+          "handle": {
+            "type": "string",
+            "description": "Handle value to link."
           },
-          "phones": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Phone identities linked to those contacts.",
-            "minimum": 0
-          },
-          "phones_needing_review": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Identities written with a review note (an ambiguous number).",
-            "minimum": 0
+          "service": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Platform service (`phone`, `email`, or `whatsapp`); inferred when omitted."
           }
         }
       },
-      "ApiTokenItem": {
+      "ApiToken": {
         "type": "object",
         "description": "One named API token as shown in Settings: label, permissions, and masked secret.",
         "required": [
@@ -7284,7 +7240,7 @@
           "website"
         ]
       },
-      "AssetPutResponse": {
+      "Asset": {
         "type": "object",
         "description": "Stored asset fingerprint and path.",
         "required": [
@@ -7301,80 +7257,6 @@
           },
           "sha256": {
             "type": "string"
-          }
-        }
-      },
-      "AssetUploadPartResponse": {
-        "type": "object",
-        "description": "Bytes written for one part.",
-        "required": [
-          "part",
-          "bytes"
-        ],
-        "properties": {
-          "bytes": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "part": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
-      },
-      "AssetUploadStartBody": {
-        "type": "object",
-        "description": "Total bytes and optional MIME type for a chunked upload.",
-        "required": [
-          "bytes"
-        ],
-        "properties": {
-          "bytes": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "mime": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
-      "AssetUploadStartResponse": {
-        "type": "object",
-        "description": "Upload id and part size, or the already-stored asset.",
-        "properties": {
-          "already_present": {
-            "type": "boolean"
-          },
-          "assets_path": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "part_size": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 0
-          },
-          "sha256": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "upload_id": {
-            "type": [
-              "string",
-              "null"
-            ]
           }
         }
       },
@@ -7448,7 +7330,31 @@
           }
         }
       },
-      "CompleteImportBody": {
+      "CompleteImportIssueRequest": {
+        "type": "object",
+        "description": "One parse/convert/upload issue from the import.",
+        "required": [
+          "kind",
+          "step",
+          "item",
+          "reason"
+        ],
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "step": {
+            "type": "string"
+          }
+        }
+      },
+      "CompleteImportRequest": {
         "type": "object",
         "description": "Final stats and issues for a running Import Run. The outcome is stated\nonce, as `status`.",
         "required": [
@@ -7486,7 +7392,7 @@
           "issues": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/CompleteImportIssueBody"
+              "$ref": "#/components/schemas/CompleteImportIssueRequest"
             }
           },
           "message_count": {
@@ -7524,30 +7430,6 @@
           }
         }
       },
-      "CompleteImportIssueBody": {
-        "type": "object",
-        "description": "One parse/convert/upload issue from the import.",
-        "required": [
-          "kind",
-          "step",
-          "item",
-          "reason"
-        ],
-        "properties": {
-          "item": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          },
-          "step": {
-            "type": "string"
-          }
-        }
-      },
       "CompleteImportResponse": {
         "type": "object",
         "description": "Stored session status after completion.",
@@ -7580,7 +7462,7 @@
           }
         }
       },
-      "ContactDetail": {
+      "Contact": {
         "type": "object",
         "description": "Full contact view: every handle with stats, plus totals across them.",
         "required": [
@@ -7616,7 +7498,7 @@
           "handles": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ContactHandleInfo"
+              "$ref": "#/components/schemas/Identity"
             },
             "description": "Every handle linked to the contact, with per-handle stats."
           },
@@ -7645,134 +7527,6 @@
           }
         }
       },
-      "ContactHandleInfo": {
-        "type": "object",
-        "description": "One handle on a contact with service and message stats.",
-        "required": [
-          "handle",
-          "individual_conversations",
-          "group_conversations",
-          "individual_message_count",
-          "group_message_count"
-        ],
-        "properties": {
-          "end_date": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Date of the last message involving this handle."
-          },
-          "group_conversations": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Group conversations this handle appears in.",
-            "minimum": 0
-          },
-          "group_message_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Messages in group conversations involving this handle.",
-            "minimum": 0
-          },
-          "handle": {
-            "type": "string",
-            "description": "Normalized handle value."
-          },
-          "individual_conversations": {
-            "type": "integer",
-            "format": "int64",
-            "description": "1:1 conversations this handle appears in.",
-            "minimum": 0
-          },
-          "individual_message_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Messages in 1:1 conversations involving this handle.",
-            "minimum": 0
-          },
-          "service": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Platform service, e.g. `whatsapp`, when the handle is linked with one."
-          },
-          "start_date": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Date of the first message involving this handle."
-          }
-        }
-      },
-      "ContactHandlePayload": {
-        "type": "object",
-        "description": "A handle value plus optional platform service.",
-        "required": [
-          "handle"
-        ],
-        "properties": {
-          "handle": {
-            "type": "string",
-            "description": "Handle value to link."
-          },
-          "service": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Platform service (`phone`, `email`, or `whatsapp`); inferred when omitted."
-          }
-        }
-      },
-      "ContactMutationBody": {
-        "type": "object",
-        "description": "Body for `PATCH /v1/contacts/{id}`. Exactly one mutation field should be set.",
-        "properties": {
-          "add_handle": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/ContactHandlePayload",
-                "description": "Handle link to add."
-              }
-            ]
-          },
-          "name": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "New display name; `None` leaves it unchanged."
-          },
-          "remove_handle": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/ContactRemoveHandlePayload",
-                "description": "Handle link to remove."
-              }
-            ]
-          },
-          "update_handle": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/ContactUpdateHandlePayload",
-                "description": "Handle link to replace."
-              }
-            ]
-          }
-        }
-      },
       "ContactReason": {
         "type": "string",
         "description": "Why a contact is on an import run's record.\n\nOrdered from most to least consequential. When one run does more than\none of these to a contact, the record keeps the earlier variant: a\ncontact the run created was also named and given a handle by it, and\n\"created\" is the fact the person needs.",
@@ -7782,26 +7536,6 @@
           "named",
           "handle_added"
         ]
-      },
-      "ContactRemoveHandlePayload": {
-        "type": "object",
-        "description": "The handle to unlink.",
-        "required": [
-          "handle"
-        ],
-        "properties": {
-          "handle": {
-            "type": "string",
-            "description": "Handle value to unlink."
-          },
-          "service": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Platform service, when the handle is linked with one."
-          }
-        }
       },
       "ContactSelectionSummary": {
         "type": "object",
@@ -7864,20 +7598,6 @@
           }
         }
       },
-      "ContactSummariesBody": {
-        "type": "object",
-        "description": "Body for `POST /v1/contacts/summaries`.",
-        "properties": {
-          "ids": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int64"
-            },
-            "description": "Contact ids to summarize; an empty list covers every contact."
-          }
-        }
-      },
       "ContactSummary": {
         "type": "object",
         "description": "Contact row for the list: name, handles, groups.",
@@ -7935,32 +7655,7 @@
           }
         }
       },
-      "ContactUpdateHandlePayload": {
-        "type": "object",
-        "description": "The previous and new handle values for a link change.",
-        "required": [
-          "previous_handle",
-          "handle"
-        ],
-        "properties": {
-          "handle": {
-            "type": "string",
-            "description": "Replacement handle value."
-          },
-          "previous_handle": {
-            "type": "string",
-            "description": "Handle value currently linked."
-          },
-          "service": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Platform service for the new handle."
-          }
-        }
-      },
-      "ConversationSourceInfo": {
+      "ConversationSource": {
         "type": "object",
         "description": "One backup source with message counts and share.",
         "required": [
@@ -8100,6 +7795,27 @@
           }
         }
       },
+      "CreateAccountResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Account",
+            "description": "The new account."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "token": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Session token to send as `Authorization: Bearer …`. Present only when\na stranger registered, because they are logged in on creation."
+              }
+            }
+          }
+        ],
+        "description": "The account that was created, and the Session a stranger's registration\nopens on it. The owner's creation opens no session, so `token` is absent."
+      },
       "CreateApiTokenRequest": {
         "type": "object",
         "description": "Body for creating a token: label, permissions, optional expiry. A token\ncarries `import` and `export` only, so a body naming `can_delete` is\nrefused rather than ignored.",
@@ -8182,7 +7898,90 @@
           }
         }
       },
-      "CreateExportBody": {
+      "CreateAssetUploadRequest": {
+        "type": "object",
+        "description": "Total bytes and optional MIME type for a chunked upload.",
+        "required": [
+          "bytes"
+        ],
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "mime": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CreateAssetUploadResponse": {
+        "type": "object",
+        "description": "Upload id and part size, or the already-stored asset.",
+        "properties": {
+          "already_present": {
+            "type": "boolean"
+          },
+          "assets_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "part_size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "upload_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CreateContactsResponse": {
+        "type": "object",
+        "description": "What loading an address book changed.",
+        "required": [
+          "contacts",
+          "phones",
+          "phones_needing_review"
+        ],
+        "properties": {
+          "contacts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contacts written from the file.",
+            "minimum": 0
+          },
+          "phones": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Phone identities linked to those contacts.",
+            "minimum": 0
+          },
+          "phones_needing_review": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Identities written with a review note (an ambiguous number).",
+            "minimum": 0
+          }
+        }
+      },
+      "CreateExportRequest": {
         "type": "object",
         "description": "Body of `POST /v1/exports`: the scope, and the tool that asked.",
         "required": [
@@ -8202,7 +8001,41 @@
           }
         }
       },
-      "CreateImportBody": {
+      "CreateImportBatchResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ImportStats"
+          },
+          {
+            "type": "object",
+            "required": [
+              "source",
+              "account"
+            ],
+            "properties": {
+              "account": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "dedupe": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DedupeCounts"
+                  }
+                ]
+              },
+              "source": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "Import result: stats plus optional dedupe counts."
+      },
+      "CreateImportRequest": {
         "type": "object",
         "description": "Source, mode, dedupe and tool for a new Import Run. The bearer token\nnames the account.",
         "required": [
@@ -8287,28 +8120,31 @@
           }
         }
       },
-      "CreatedAccountResponse": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/AccountResponse",
-            "description": "The new account."
-          },
-          {
-            "type": "object",
-            "properties": {
-              "token": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "description": "Session token to send as `Authorization: Bearer …`. Present only when\na stranger registered, because they are logged in on creation."
-              }
-            }
-          }
+      "CreateSessionResponse": {
+        "type": "object",
+        "description": "Session token plus the account id and username it belongs to.",
+        "required": [
+          "token",
+          "account_id",
+          "username"
         ],
-        "description": "The account that was created, and the Session a stranger's registration\nopens on it. The owner's creation opens no session, so `token` is absent."
+        "properties": {
+          "account_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Account id the session belongs to."
+          },
+          "token": {
+            "type": "string",
+            "description": "Session token to send as `Authorization: Bearer …`."
+          },
+          "username": {
+            "type": "string",
+            "description": "Account username (falls back to the account id)."
+          }
+        }
       },
-      "DedupeResponse": {
+      "DedupeCounts": {
         "type": "object",
         "description": "Cross-source dedupe outcome.",
         "required": [
@@ -8592,7 +8428,76 @@
           }
         }
       },
-      "ImportContactRow": {
+      "FindUnmatchedIdentitiesRequest": {
+        "type": "object",
+        "description": "Body for `POST /v1/contacts/unmatched-identities`.",
+        "required": [
+          "identifiers"
+        ],
+        "properties": {
+          "identifiers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Raw identifiers — phone numbers, emails — as they appear in an export."
+          }
+        }
+      },
+      "Identity": {
+        "type": "object",
+        "description": "One identity of a contact or an account, and its messages: for a contact,\nthe messages in the conversations it takes part in; for an account, the\nmessages held at it, sent from or received at that address (ADR-0015). The\ncontact drawer and the Profile screen show the same table, so they read the\nsame row.",
+        "required": [
+          "handle",
+          "service",
+          "conversations",
+          "direct_messages",
+          "group_messages"
+        ],
+        "properties": {
+          "conversations": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Direct and group conversations holding at least one of the identity's\nmessages, trashed conversations excluded.",
+            "minimum": 0
+          },
+          "direct_messages": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The identity's messages in one-to-one conversations, trashed\nconversations and duplicates excluded.",
+            "minimum": 0
+          },
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the newest such message was sent, or null when there is none."
+          },
+          "group_messages": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The identity's messages in group conversations, on the same terms.",
+            "minimum": 0
+          },
+          "handle": {
+            "type": "string",
+            "description": "The identity as the vault stores it: E.164 for a number, lower case\nfor an address."
+          },
+          "service": {
+            "type": "string",
+            "description": "`phone`, `email`, or `whatsapp`."
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the identity's oldest message was sent, or null when there is\nnone."
+          }
+        }
+      },
+      "ImportContact": {
         "type": "object",
         "description": "One contact an import run touched, and what the run did to it.",
         "required": [
@@ -8608,7 +8513,7 @@
           },
           "name": {
             "type": "string",
-            "description": "Preferred name; empty when the run learned an address and no name."
+            "description": "Preferred name as it is now; empty when the run learned an address\nand no name."
           },
           "reason": {
             "$ref": "#/components/schemas/ContactReason",
@@ -8616,7 +8521,7 @@
           }
         }
       },
-      "ImportDetailIssueResponse": {
+      "ImportIssue": {
         "type": "object",
         "description": "One stored import issue.",
         "required": [
@@ -8640,7 +8545,15 @@
           }
         }
       },
-      "ImportDetailResponse": {
+      "ImportMode": {
+        "type": "string",
+        "description": "What happens to a source's messages that were imported before: `replace`\nwipes them first, `append` keeps them and adds only new ones.",
+        "enum": [
+          "replace",
+          "append"
+        ]
+      },
+      "ImportRun": {
         "type": "object",
         "description": "Full import session record.",
         "required": [
@@ -8705,7 +8618,7 @@
           "issues": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ImportDetailIssueResponse"
+              "$ref": "#/components/schemas/ImportIssue"
             }
           },
           "message_count": {
@@ -8753,48 +8666,6 @@
             "format": "int64"
           }
         }
-      },
-      "ImportMode": {
-        "type": "string",
-        "description": "What happens to a source's messages that were imported before: `replace`\nwipes them first, `append` keeps them and adds only new ones.",
-        "enum": [
-          "replace",
-          "append"
-        ]
-      },
-      "ImportResponse": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/ImportStats"
-          },
-          {
-            "type": "object",
-            "required": [
-              "source",
-              "account"
-            ],
-            "properties": {
-              "account": {
-                "type": "integer",
-                "format": "int64"
-              },
-              "dedupe": {
-                "oneOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "$ref": "#/components/schemas/DedupeResponse"
-                  }
-                ]
-              },
-              "source": {
-                "type": "string"
-              }
-            }
-          }
-        ],
-        "description": "Import result: stats plus optional dedupe counts."
       },
       "ImportStats": {
         "type": "object",
@@ -9044,46 +8915,6 @@
           "messages"
         ]
       },
-      "MembersChanged": {
-        "type": "object",
-        "description": "How many memberships a patch created and how many it removed.",
-        "required": [
-          "added",
-          "removed"
-        ],
-        "properties": {
-          "added": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "removed": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          }
-        }
-      },
-      "MembersPatch": {
-        "type": "object",
-        "description": "Members to put in and take out of one set, in one request.",
-        "properties": {
-          "add": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int64"
-            }
-          },
-          "remove": {
-            "type": "array",
-            "items": {
-              "type": "integer",
-              "format": "int64"
-            }
-          }
-        }
-      },
       "Message": {
         "type": "object",
         "description": "One exported message.",
@@ -9262,7 +9093,7 @@
           }
         }
       },
-      "NamedSetBody": {
+      "NamedSetRequest": {
         "type": "object",
         "description": "A name to create, or the new name for an existing set.",
         "required": [
@@ -9274,92 +9105,7 @@
           }
         }
       },
-      "Page_AccountIdentity": {
-        "type": "object",
-        "description": "One page of a list.",
-        "required": [
-          "items",
-          "total",
-          "limit",
-          "offset"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "description": "One of an account's identities and the messages held at it. The\nProfile screen shows the counts beside each identity and repeats them when\none is about to be removed, so the person knows what the identity is tied\nto before it goes.",
-              "required": [
-                "handle",
-                "service",
-                "conversations",
-                "direct_messages",
-                "group_messages"
-              ],
-              "properties": {
-                "conversations": {
-                  "type": "integer",
-                  "format": "int64",
-                  "description": "Direct and group conversations holding at least one message held at\nthe identity, trashed conversations excluded.",
-                  "minimum": 0
-                },
-                "direct_messages": {
-                  "type": "integer",
-                  "format": "int64",
-                  "description": "Messages held at the identity in one-to-one conversations, trashed\nconversations and duplicates excluded.",
-                  "minimum": 0
-                },
-                "end_date": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "When the newest such message was sent, or null when there is none."
-                },
-                "group_messages": {
-                  "type": "integer",
-                  "format": "int64",
-                  "description": "Messages held at the identity in group conversations, on the same\nterms.",
-                  "minimum": 0
-                },
-                "handle": {
-                  "type": "string",
-                  "description": "The identity as the profile lists it: E.164 for a number, lower case for an address."
-                },
-                "service": {
-                  "type": "string",
-                  "description": "`phone`, `email`, or `whatsapp`."
-                },
-                "start_date": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "description": "When the oldest message held at the identity was sent, or null when\nthere is none."
-                }
-              }
-            },
-            "description": "The rows on this page."
-          },
-          "limit": {
-            "type": "integer",
-            "description": "Page size used.",
-            "minimum": 0
-          },
-          "offset": {
-            "type": "integer",
-            "description": "Page offset used.",
-            "minimum": 0
-          },
-          "total": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Rows matching the query across every page.",
-            "minimum": 0
-          }
-        }
-      },
-      "Page_AccountResponse": {
+      "Page_Account": {
         "type": "object",
         "description": "One page of a list.",
         "required": [
@@ -9510,7 +9256,7 @@
           }
         }
       },
-      "Page_ApiTokenItem": {
+      "Page_ApiToken": {
         "type": "object",
         "description": "One page of a list.",
         "required": [
@@ -9782,7 +9528,7 @@
           }
         }
       },
-      "Page_ConversationSourceInfo": {
+      "Page_ConversationSource": {
         "type": "object",
         "description": "One page of a list.",
         "required": [
@@ -10125,7 +9871,92 @@
           }
         }
       },
-      "Page_ImportContactRow": {
+      "Page_Identity": {
+        "type": "object",
+        "description": "One page of a list.",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One identity of a contact or an account, and its messages: for a contact,\nthe messages in the conversations it takes part in; for an account, the\nmessages held at it, sent from or received at that address (ADR-0015). The\ncontact drawer and the Profile screen show the same table, so they read the\nsame row.",
+              "required": [
+                "handle",
+                "service",
+                "conversations",
+                "direct_messages",
+                "group_messages"
+              ],
+              "properties": {
+                "conversations": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Direct and group conversations holding at least one of the identity's\nmessages, trashed conversations excluded.",
+                  "minimum": 0
+                },
+                "direct_messages": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "The identity's messages in one-to-one conversations, trashed\nconversations and duplicates excluded.",
+                  "minimum": 0
+                },
+                "end_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "When the newest such message was sent, or null when there is none."
+                },
+                "group_messages": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "The identity's messages in group conversations, on the same terms.",
+                  "minimum": 0
+                },
+                "handle": {
+                  "type": "string",
+                  "description": "The identity as the vault stores it: E.164 for a number, lower case\nfor an address."
+                },
+                "service": {
+                  "type": "string",
+                  "description": "`phone`, `email`, or `whatsapp`."
+                },
+                "start_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "When the identity's oldest message was sent, or null when there is\nnone."
+                }
+              }
+            },
+            "description": "The rows on this page."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size used.",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Page offset used.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rows matching the query across every page.",
+            "minimum": 0
+          }
+        }
+      },
+      "Page_ImportContact": {
         "type": "object",
         "description": "One page of a list.",
         "required": [
@@ -10153,7 +9984,7 @@
                 },
                 "name": {
                   "type": "string",
-                  "description": "Preferred name; empty when the run learned an address and no name."
+                  "description": "Preferred name as it is now; empty when the run learned an address\nand no name."
                 },
                 "reason": {
                   "$ref": "#/components/schemas/ContactReason",
@@ -10699,81 +10530,6 @@
           }
         }
       },
-      "PatchAccountRequest": {
-        "type": "object",
-        "description": "Body for changing an account. Omitted fields are left alone. The name,\nzone and handles are set by the account or by the vault owner; the\ndisabled flag and the three permissions are the vault owner's alone.",
-        "properties": {
-          "can_delete": {
-            "type": [
-              "boolean",
-              "null"
-            ],
-            "description": "Allow or forbid deleting message data."
-          },
-          "can_export": {
-            "type": [
-              "boolean",
-              "null"
-            ],
-            "description": "Allow or forbid export."
-          },
-          "can_import": {
-            "type": [
-              "boolean",
-              "null"
-            ],
-            "description": "Allow or forbid import."
-          },
-          "disabled": {
-            "type": [
-              "boolean",
-              "null"
-            ],
-            "description": "Disable or re-enable login."
-          },
-          "handles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProfileHandleInput"
-            },
-            "description": "Handles to add/link onto the account profile."
-          },
-          "preferred_name": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Display name to set; `None` (or empty) leaves the current name unchanged."
-          },
-          "remove_handles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProfileHandleInput"
-            },
-            "description": "Handles to unlink from the account profile."
-          },
-          "time_zone": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "IANA time zone to set, for example `America/New_York`; `None` leaves\nthe current zone unchanged. An unknown name is a 422."
-          }
-        }
-      },
-      "PatchVaultSettingsRequest": {
-        "type": "object",
-        "description": "Body for changing the vault's settings. Omitted fields are left alone.",
-        "properties": {
-          "public_registration": {
-            "type": [
-              "boolean",
-              "null"
-            ],
-            "description": "Let anyone reaching the vault create their own account, or stop them."
-          }
-        }
-      },
       "Problem": {
         "type": "object",
         "description": "An RFC 7807 problem document: the body of every failure the vault answers,\nserved as `application/problem+json` (`docs/architecture/http-api.md`).\n\n`type` is the URL of the page describing this kind of failure, one page per\ntype, or `about:blank` for an internal error. A validation failure carries\n`errors`, every field that failed, in place of `detail`. Every problem\nrepeats the response's `x-request-id` as `request_id`, so the person\nreading the failure and the operator reading the log are looking at the\nsame request.\n\nThe extension members belong to one type each: `word` and `did_you_mean`\nto `search-query-invalid`, `retry_after` to `rate-limited`.",
@@ -10846,53 +10602,81 @@
           }
         }
       },
-      "ProfileHandleInput": {
+      "RemoveContactIdentityRequest": {
         "type": "object",
-        "description": "One handle to link or unlink, with its platform service.",
+        "description": "The handle to unlink.",
         "required": [
-          "handle",
-          "service"
+          "handle"
         ],
         "properties": {
           "handle": {
             "type": "string",
-            "description": "Raw handle value, e.g. `+15555550100` or `alex@example.com`."
+            "description": "Handle value to unlink."
           },
           "service": {
-            "type": "string",
-            "description": "Platform the handle belongs to: `phone`, `email`, or `whatsapp`."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Platform service, when the handle is linked with one."
           }
         }
       },
-      "RenameApiTokenRequest": {
+      "ReplaceAccountPasswordRequest": {
         "type": "object",
-        "description": "Body for renaming a token.",
+        "description": "The new password.",
         "required": [
-          "label"
+          "password",
+          "password_confirmation"
         ],
         "properties": {
-          "label": {
+          "current_password": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The password being replaced. Required when the vault owner changes its\nown; nobody else sends it."
+          },
+          "password": {
             "type": "string",
-            "description": "Replacement label."
+            "description": "The new password. Empty clears a user account's password; the vault\nowner's must be one character or more."
+          },
+          "password_confirmation": {
+            "type": "string",
+            "description": "The new password typed a second time. The vault, not the screen,\nrefuses a pair that differs, so the checks run in one fixed order:\ncurrent password, then the pair, then that the new one differs from the\ncurrent one."
           }
         }
       },
-      "RenameApiTokenResponse": {
+      "ReplaceAccountPasswordResponse": {
         "type": "object",
-        "description": "The renamed token's id and stored label.",
+        "description": "Fresh session token issued after an account changed its own password.",
         "required": [
-          "id",
-          "label"
+          "token"
         ],
         "properties": {
-          "id": {
+          "token": {
+            "type": "string",
+            "description": "Replacement session token (the previous one is revoked)."
+          }
+        }
+      },
+      "ReplaceAssetUploadPartResponse": {
+        "type": "object",
+        "description": "Bytes written for one part.",
+        "required": [
+          "part",
+          "bytes"
+        ],
+        "properties": {
+          "bytes": {
             "type": "integer",
             "format": "int64",
-            "description": "Token id that was renamed."
+            "minimum": 0
           },
-          "label": {
-            "type": "string",
-            "description": "Stored label after the rename."
+          "part": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       },
@@ -10925,7 +10709,7 @@
           }
         }
       },
-      "SavedSearchBody": {
+      "SavedSearchRequest": {
         "type": "object",
         "description": "A saved search's name and query.",
         "required": [
@@ -10941,7 +10725,7 @@
           }
         }
       },
-      "SessionResponse": {
+      "Session": {
         "type": "object",
         "description": "The logged-in credential's account, username, and import sources.",
         "required": [
@@ -10969,80 +10753,17 @@
           }
         }
       },
-      "SessionTokenResponse": {
+      "SummarizeContactsRequest": {
         "type": "object",
-        "description": "Session token plus the account id and username it belongs to.",
-        "required": [
-          "token",
-          "account_id",
-          "username"
-        ],
+        "description": "Body for `POST /v1/contacts/summaries`.",
         "properties": {
-          "account_id": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Account id the session belongs to."
-          },
-          "token": {
-            "type": "string",
-            "description": "Session token to send as `Authorization: Bearer …`."
-          },
-          "username": {
-            "type": "string",
-            "description": "Account username (falls back to the account id)."
-          }
-        }
-      },
-      "SetImportStageBody": {
-        "type": "object",
-        "description": "New stage for a live session.",
-        "required": [
-          "stage"
-        ],
-        "properties": {
-          "stage": {
-            "type": "string"
-          },
-          "summary": {
-            "description": "What the user approved at the gate they just passed, when they passed one.\n\nRecorded here rather than at completion so an approval survives a\nreload: the summary shown at a gate is recomputed from the folder, but\nwhat was approved is a different question and only the session\nremembers it. Absent leaves the stored `summary_json` untouched —\nmost stage changes carry nothing, and treating absent as null would\nthrow away the plan the outcome is later judged against."
-          }
-        }
-      },
-      "SetPasswordRequest": {
-        "type": "object",
-        "description": "The new password.",
-        "required": [
-          "password",
-          "password_confirmation"
-        ],
-        "properties": {
-          "current_password": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "The password being replaced. Required when the vault owner changes its\nown; nobody else sends it."
-          },
-          "password": {
-            "type": "string",
-            "description": "The new password. Empty clears a user account's password; the vault\nowner's must be one character or more."
-          },
-          "password_confirmation": {
-            "type": "string",
-            "description": "The new password typed a second time. The vault, not the screen,\nrefuses a pair that differs, so the checks run in one fixed order:\ncurrent password, then the pair, then that the new one differs from the\ncurrent one."
-          }
-        }
-      },
-      "SetPasswordResponse": {
-        "type": "object",
-        "description": "Fresh session token issued after an account changed its own password.",
-        "required": [
-          "token"
-        ],
-        "properties": {
-          "token": {
-            "type": "string",
-            "description": "Replacement session token (the previous one is revoked)."
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Contact ids to summarize; an empty list covers every contact."
           }
         }
       },
@@ -11140,19 +10861,236 @@
           }
         }
       },
-      "UnmatchedHandlesBody": {
+      "UpdateAccountRequest": {
         "type": "object",
-        "description": "Body for `POST /v1/contacts/unmatched-handles`.",
-        "required": [
-          "identifiers"
-        ],
+        "description": "Body for changing an account. Omitted fields are left alone. The name,\nzone and handles are set by the account or by the vault owner; the\ndisabled flag and the three permissions are the vault owner's alone.",
         "properties": {
-          "identifiers": {
+          "can_delete": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Allow or forbid deleting message data."
+          },
+          "can_export": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Allow or forbid export."
+          },
+          "can_import": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Allow or forbid import."
+          },
+          "disabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Disable or re-enable login."
+          },
+          "handles": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/AccountIdentityRequest"
             },
-            "description": "Raw identifiers — phone numbers, emails — as they appear in an export."
+            "description": "Handles to add/link onto the account profile."
+          },
+          "preferred_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name to set; `None` (or empty) leaves the current name unchanged."
+          },
+          "remove_handles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountIdentityRequest"
+            },
+            "description": "Handles to unlink from the account profile."
+          },
+          "time_zone": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "IANA time zone to set, for example `America/New_York`; `None` leaves\nthe current zone unchanged. An unknown name is a 422."
+          }
+        }
+      },
+      "UpdateApiTokenRequest": {
+        "type": "object",
+        "description": "Body for renaming a token.",
+        "required": [
+          "label"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Replacement label."
+          }
+        }
+      },
+      "UpdateApiTokenResponse": {
+        "type": "object",
+        "description": "The renamed token's id and stored label.",
+        "required": [
+          "id",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Token id that was renamed."
+          },
+          "label": {
+            "type": "string",
+            "description": "Stored label after the rename."
+          }
+        }
+      },
+      "UpdateContactIdentityRequest": {
+        "type": "object",
+        "description": "The previous and new handle values for a link change.",
+        "required": [
+          "previous_handle",
+          "handle"
+        ],
+        "properties": {
+          "handle": {
+            "type": "string",
+            "description": "Replacement handle value."
+          },
+          "previous_handle": {
+            "type": "string",
+            "description": "Handle value currently linked."
+          },
+          "service": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Platform service for the new handle."
+          }
+        }
+      },
+      "UpdateContactRequest": {
+        "type": "object",
+        "description": "Body for `PATCH /v1/contacts/{id}`. Exactly one mutation field should be set.",
+        "properties": {
+          "add_handle": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AddContactIdentityRequest",
+                "description": "Handle link to add."
+              }
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "New display name; `None` leaves it unchanged."
+          },
+          "remove_handle": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RemoveContactIdentityRequest",
+                "description": "Handle link to remove."
+              }
+            ]
+          },
+          "update_handle": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UpdateContactIdentityRequest",
+                "description": "Handle link to replace."
+              }
+            ]
+          }
+        }
+      },
+      "UpdateImportRequest": {
+        "type": "object",
+        "description": "New stage for a live session.",
+        "required": [
+          "stage"
+        ],
+        "properties": {
+          "stage": {
+            "type": "string"
+          },
+          "summary": {
+            "description": "What the user approved at the gate they just passed, when they passed one.\n\nRecorded here rather than at completion so an approval survives a\nreload: the summary shown at a gate is recomputed from the folder, but\nwhat was approved is a different question and only the session\nremembers it. Absent leaves the stored `summary_json` untouched —\nmost stage changes carry nothing, and treating absent as null would\nthrow away the plan the outcome is later judged against."
+          }
+        }
+      },
+      "UpdateMembersRequest": {
+        "type": "object",
+        "description": "Members to put in and take out of one set, in one request.",
+        "properties": {
+          "add": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "remove": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        }
+      },
+      "UpdateMembersResponse": {
+        "type": "object",
+        "description": "How many memberships a patch created and how many it removed.",
+        "required": [
+          "added",
+          "removed"
+        ],
+        "properties": {
+          "added": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "removed": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "UpdateVaultSettingsRequest": {
+        "type": "object",
+        "description": "Body for changing the vault's settings. Omitted fields are left alone.",
+        "properties": {
+          "public_registration": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Let anyone reaching the vault create their own account, or stop them."
           }
         }
       },
@@ -11170,7 +11108,7 @@
           "flag"
         ]
       },
-      "VaultResponse": {
+      "Vault": {
         "type": "object",
         "description": "The vault's state, for the screen a logged-out person sees.",
         "required": [
@@ -11194,7 +11132,7 @@
           }
         }
       },
-      "VaultSettingsResponse": {
+      "VaultSettings": {
         "type": "object",
         "description": "The vault settings the owner controls.",
         "required": [
@@ -11216,7 +11154,7 @@
           "open"
         ]
       },
-      "VaultStorageResponse": {
+      "VaultStorage": {
         "type": "object",
         "description": "What the whole vault holds, summed over every account.",
         "required": [
@@ -11234,7 +11172,7 @@
           "accounts": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/AccountMessagesResponse"
+              "$ref": "#/components/schemas/AccountMessages"
             },
             "description": "Every account, including ones with no messages: the owner first, then\nby username, as the User Accounts table lists them."
           },

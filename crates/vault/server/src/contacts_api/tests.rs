@@ -48,7 +48,7 @@ async fn contacts_fixture_with_trashed_handle(
 }
 
 /// A second logged-in account in the same vault, with `handle` linked to
-/// one of its contacts. Used to prove `/v1/contacts/unmatched-handles` is scoped to
+/// one of its contacts. Used to prove `/v1/contacts/unmatched-identities` is scoped to
 /// the calling account rather than the whole vault database.
 async fn account_with_handle(vault: &TestVault, handle: &str) -> RegisteredAccount {
     let account = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
@@ -63,7 +63,7 @@ async fn contact_match_reports_only_the_identifiers_the_vault_does_not_have() {
     let body = serde_json::json!({ "identifiers": ["+15550100", "+15550999"] });
     let response = post_json::<serde_json::Value>(
         &vault.state,
-        "/v1/contacts/unmatched-handles",
+        "/v1/contacts/unmatched-identities",
         &token,
         body,
     )
@@ -77,7 +77,7 @@ async fn contact_match_ignores_blank_identifiers_and_de_duplicates() {
     let body = serde_json::json!({ "identifiers": ["+15550999", "  ", "+15550999", ""] });
     let response = post_json::<serde_json::Value>(
         &vault.state,
-        "/v1/contacts/unmatched-handles",
+        "/v1/contacts/unmatched-identities",
         &token,
         body,
     )
@@ -94,7 +94,7 @@ async fn contact_match_collapses_duplicates_by_normalized_form() {
     let body = serde_json::json!({ "identifiers": ["+1 (555) 010-0100", "+15550100100"] });
     let response = post_json::<serde_json::Value>(
         &vault.state,
-        "/v1/contacts/unmatched-handles",
+        "/v1/contacts/unmatched-identities",
         &token,
         body,
     )
@@ -117,7 +117,7 @@ async fn contact_match_matches_a_differently_spelled_identifier_against_the_stor
     let body = serde_json::json!({ "identifiers": ["+1 555 0100"] });
     let response = post_json::<serde_json::Value>(
         &vault.state,
-        "/v1/contacts/unmatched-handles",
+        "/v1/contacts/unmatched-identities",
         &token,
         body,
     )
@@ -135,7 +135,7 @@ async fn contact_match_preserves_order_across_multiple_unknowns() {
     let body = serde_json::json!({ "identifiers": ["+15550100", "+15550200", "+15550300"] });
     let response = post_json::<serde_json::Value>(
         &vault.state,
-        "/v1/contacts/unmatched-handles",
+        "/v1/contacts/unmatched-identities",
         &token,
         body,
     )
@@ -149,13 +149,13 @@ async fn contact_match_preserves_order_across_multiple_unknowns() {
 #[tokio::test]
 async fn contact_match_counts_a_trashed_contact_as_new() {
     // An import that meets this handle discards the trashed contact and
-    // makes a fresh one from the backup (ADR-0013, `import::contact_name`),
+    // makes a fresh one from the backup (ADR-0013, `imports_api::contact_name`),
     // so the person is about to see a new contact, and the count says so.
     let (vault, token, _account) = contacts_fixture_with_trashed_handle("+15550100").await;
     let body = serde_json::json!({ "identifiers": ["+15550100"] });
     let response = post_json::<serde_json::Value>(
         &vault.state,
-        "/v1/contacts/unmatched-handles",
+        "/v1/contacts/unmatched-identities",
         &token,
         body,
     )
@@ -170,7 +170,7 @@ async fn contact_match_is_scoped_to_the_calling_account() {
     let body = serde_json::json!({ "identifiers": ["+15550100"] });
     let response = post_json::<serde_json::Value>(
         &vault.state,
-        "/v1/contacts/unmatched-handles",
+        "/v1/contacts/unmatched-identities",
         &token,
         body,
     )
@@ -221,7 +221,7 @@ async fn contact_match_rejects_an_oversized_batch() {
         .collect();
     let status = post_status(
         &vault.state,
-        "/v1/contacts/unmatched-handles",
+        "/v1/contacts/unmatched-identities",
         &token,
         serde_json::json!({ "identifiers": identifiers }),
     )
@@ -515,10 +515,9 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
         "handle={:?}",
         detail.handles[0].handle
     );
-    assert_eq!(detail.handles[0].individual_conversations, 1);
-    assert_eq!(detail.handles[0].group_conversations, 1);
-    assert_eq!(detail.handles[0].individual_message_count, 2);
-    assert_eq!(detail.handles[0].group_message_count, 1);
+    assert_eq!(detail.handles[0].conversations, 2);
+    assert_eq!(detail.handles[0].direct_messages, 2);
+    assert_eq!(detail.handles[0].group_messages, 1);
 }
 
 #[tokio::test]
@@ -721,9 +720,9 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
             &mut conn,
             account,
             contact_id,
-            &ContactMutationBody {
+            &UpdateContactRequest {
                 name: None,
-                add_handle: Some(ContactHandlePayload {
+                add_handle: Some(AddContactIdentityRequest {
                     handle: "+15555550200".into(),
                     service: Some("phone".into()),
                 }),
@@ -747,7 +746,7 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
             &mut conn,
             account,
             contact_id,
-            &ContactMutationBody {
+            &UpdateContactRequest {
                 name: Some("Samantha".into()),
                 add_handle: None,
                 update_handle: None,
@@ -768,10 +767,10 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
             &mut conn,
             account,
             contact_id,
-            &ContactMutationBody {
+            &UpdateContactRequest {
                 name: None,
                 add_handle: None,
-                update_handle: Some(ContactUpdateHandlePayload {
+                update_handle: Some(UpdateContactIdentityRequest {
                     previous_handle: detail.handles[0].handle.clone(),
                     handle: "sam@example.com".into(),
                     service: Some("email".into()),
@@ -794,11 +793,11 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
             &mut conn,
             account,
             contact_id,
-            &ContactMutationBody {
+            &UpdateContactRequest {
                 name: None,
                 add_handle: None,
                 update_handle: None,
-                remove_handle: Some(ContactRemoveHandlePayload {
+                remove_handle: Some(RemoveContactIdentityRequest {
                     handle: "sam@example.com".into(),
                     service: Some("phone".into()),
                 }),
@@ -832,7 +831,7 @@ async fn mutate_contact_rejects_trashed_contact() {
         &mut conn,
         account,
         contact_id,
-        &ContactMutationBody {
+        &UpdateContactRequest {
             name: Some("Changed".into()),
             add_handle: None,
             update_handle: None,
@@ -915,7 +914,7 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
             &mut conn,
             account,
             contact_id,
-            &ContactMutationBody {
+            &UpdateContactRequest {
                 name: Some("Samantha".into()),
                 add_handle: None,
                 update_handle: None,
@@ -934,9 +933,9 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
             &mut conn,
             account,
             contact_id,
-            &ContactMutationBody {
+            &UpdateContactRequest {
                 name: None,
-                add_handle: Some(ContactHandlePayload {
+                add_handle: Some(AddContactIdentityRequest {
                     handle: "+15555550200".into(),
                     service: Some("phone".into()),
                 }),
@@ -957,9 +956,9 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
             &mut conn,
             account,
             contact_id,
-            &ContactMutationBody {
+            &UpdateContactRequest {
                 name: None,
-                add_handle: Some(ContactHandlePayload {
+                add_handle: Some(AddContactIdentityRequest {
                     handle: "+15555550200".into(),
                     service: Some("phone".into()),
                 }),
@@ -981,11 +980,11 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
             &mut conn,
             account,
             contact_id,
-            &ContactMutationBody {
+            &UpdateContactRequest {
                 name: None,
                 add_handle: None,
                 update_handle: None,
-                remove_handle: Some(ContactRemoveHandlePayload {
+                remove_handle: Some(RemoveContactIdentityRequest {
                     handle: "+15555550200".into(),
                     service: Some("phone".into()),
                 }),
@@ -1532,7 +1531,7 @@ async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
         &mut conn,
         account,
         hand_typed,
-        &ContactMutationBody {
+        &UpdateContactRequest {
             name: Some("My Friend Bob".to_string()),
             add_handle: None,
             update_handle: None,

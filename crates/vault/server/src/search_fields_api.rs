@@ -10,7 +10,7 @@ use crate::server::{ApiError, FullAccess};
 
 /// Which list's words to describe.
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
-pub(crate) struct SearchFieldsQuery {
+pub(crate) struct ListSearchFieldsQuery {
     /// `contacts`, `conversations`, or `messages`.
     list: ListKind,
     /// Page size, default 40, max 500.
@@ -27,7 +27,7 @@ pub(crate) struct SearchFieldsQuery {
     path = "/v1/search-fields",
     tag = "Search",
     security(("session" = [])),
-    params(SearchFieldsQuery),
+    params(ListSearchFieldsQuery),
     responses(
         (status = 200, body = crate::paging::Page<FieldDoc>),
         (status = 400, body = crate::problem::Problem),
@@ -36,9 +36,9 @@ pub(crate) struct SearchFieldsQuery {
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn search_fields_list(
+pub(crate) async fn list_search_fields(
     FullAccess(_auth): FullAccess,
-    Query(query): Query<SearchFieldsQuery>,
+    Query(query): Query<ListSearchFieldsQuery>,
 ) -> Result<Json<Page<FieldDoc>>, ApiError> {
     let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     Ok(Json(page_of(describe(query.list), params)))

@@ -497,21 +497,116 @@ fn uintvar(mut value: usize) -> Vec<u8> {
     out
 }
 
-/// A multipart.mixed Content-Type header and body whose parts carry only a
-/// text content type (no name). Part `i` holds `len` bytes of value `i`.
-fn multipart_of(content_types: &[&str], len: usize) -> Vec<u8> {
+/// A multipart.mixed Content-Type header and a WSP multipart body (WAP-230
+/// 8.5): the part count, then each part's header length, data length,
+/// headers, and data.
+fn wsp_multipart(parts: &[(Vec<u8>, &[u8])]) -> Vec<u8> {
     let mut data = vec![0x84]; // Content-Type
     data.extend_from_slice(b"application/vnd.wap.multipart.mixed\0");
-    data.extend(uintvar(content_types.len()));
-    for (i, ct) in content_types.iter().enumerate() {
-        let mut headers = ct.as_bytes().to_vec();
-        headers.push(0);
+    data.extend(uintvar(parts.len()));
+    for (headers, payload) in parts {
         data.extend(uintvar(headers.len()));
-        data.extend(uintvar(len));
-        data.extend_from_slice(&headers);
-        data.extend(std::iter::repeat_n(i as u8 + 0x20, len));
+        data.extend(uintvar(payload.len()));
+        data.extend_from_slice(headers);
+        data.extend_from_slice(payload);
     }
     data
+}
+
+/// A multipart whose parts carry only a text content type (no name).
+/// Part `i` holds `len` bytes of value `i`.
+fn multipart_of(content_types: &[&str], len: usize) -> Vec<u8> {
+    let payloads: Vec<Vec<u8>> = (0..content_types.len())
+        .map(|i| vec![i as u8 + 0x20; len])
+        .collect();
+    let parts: Vec<(Vec<u8>, &[u8])> = content_types
+        .iter()
+        .zip(&payloads)
+        .map(|(ct, payload)| {
+            let mut headers = ct.as_bytes().to_vec();
+            headers.push(0);
+            (headers, payload.as_slice())
+        })
+        .collect();
+    wsp_multipart(&parts)
+}
+
+/// Part headers in the Content-Type general form: a well-known media id and
+/// a `Name` parameter (WAP-230 table 38), plus a UTF-8 `Charset` when asked.
+fn part_headers(media: u8, name: &str, utf8: bool) -> Vec<u8> {
+    let mut value = vec![media | 0x80];
+    if utf8 {
+        value.extend_from_slice(&[0x88, 0xea]); // Charset = UTF-8
+    }
+    value.push(0x85); // Name
+    value.extend_from_slice(name.as_bytes());
+    value.push(0);
+    let mut headers = vec![value.len() as u8];
+    headers.extend(value);
+    headers
+}
+
+/// A JPEG: the SOI marker and `len` bytes of `fill`, big enough to pass the stub guard.
+fn jpeg_of(fill: u8, len: usize) -> Vec<u8> {
+    let mut jpeg = vec![0xff, 0xd8, 0xff, 0xe0];
+    jpeg.extend(std::iter::repeat_n(fill, len));
+    jpeg
+}
+
+/// WSP well-known media ids (WAP-230 table 40).
+const TEXT_PLAIN: u8 = 0x03;
+const IMAGE_JPEG: u8 = 0x17;
+
+#[test]
+fn multipart_without_smil_gives_the_text_body_and_the_named_jpeg() {
+    let jpeg = jpeg_of(0x11, 200);
+    let body = wsp_multipart(&[
+        (
+            part_headers(TEXT_PLAIN, "text_0.txt", true),
+            b"Photo attached",
+        ),
+        (part_headers(IMAGE_JPEG, "photo.jpg", false), &jpeg),
+    ]);
+    let mut bytes = vec![0x8c, 0x84]; // m-retrieve-conf
+    bytes.extend(from_header(Some("+4075551234")));
+    bytes.extend(to_header("+15555550100"));
+    bytes.extend(body);
+
+    let parsed = parse_bytes(&bytes);
+    assert_eq!(parsed.body, "Photo attached");
+    assert_eq!(parsed.attachments.len(), 1);
+    assert_eq!(parsed.attachments[0].ext, ".jpg");
+    assert_eq!(parsed.attachments[0].data, jpeg);
+    assert_eq!(
+        parsed.attachments[0].smil_name.as_deref(),
+        Some("photo.jpg")
+    );
+    assert_eq!(parsed.decode_quality, "structured");
+}
+
+#[test]
+fn two_jpeg_parts_give_two_attachments_with_their_own_bytes() {
+    let first = jpeg_of(0x11, 200);
+    let second = jpeg_of(0x22, 300);
+    let body = wsp_multipart(&[
+        (part_headers(IMAGE_JPEG, "one.jpg", false), &first),
+        (part_headers(IMAGE_JPEG, "two.jpg", false), &second),
+    ]);
+    let mut bytes = vec![0x8c, 0x84]; // m-retrieve-conf
+    bytes.extend(from_header(Some("+4075551234")));
+    bytes.extend(to_header("+15555550100"));
+    bytes.extend(body);
+
+    let parsed = parse_bytes(&bytes);
+    assert_eq!(parsed.body, "");
+    let names: Vec<Option<&str>> = parsed
+        .attachments
+        .iter()
+        .map(|a| a.smil_name.as_deref())
+        .collect();
+    assert_eq!(names, [Some("one.jpg"), Some("two.jpg")]);
+    assert_eq!(parsed.attachments[0].data, first);
+    assert_eq!(parsed.attachments[1].data, second);
 }
 
 #[test]
@@ -585,3 +680,90 @@ fn unnamed_parts_take_their_extension_from_the_content_type() {
 }
 
 mod robustness;
+
+/// Part headers: a well-known media id, then a WSP Content-Location header
+/// (`0x8e` + text-string), the wire shape GO SMS Pro's named parts share.
+fn part_headers_with_location(media: u8, name: &str) -> Vec<u8> {
+    let mut headers = vec![media | 0x80, 0x8e];
+    headers.extend_from_slice(name.as_bytes());
+    headers.push(0);
+    headers
+}
+
+#[test]
+fn two_jpeg_parts_with_content_locations_keep_their_own_bytes() {
+    let first = jpeg_of(0x11, 200);
+    let second = jpeg_of(0x22, 300);
+    let body = wsp_multipart(&[
+        (part_headers_with_location(IMAGE_JPEG, "one.jpg"), &first),
+        (part_headers_with_location(IMAGE_JPEG, "two.jpg"), &second),
+    ]);
+    let mut bytes = vec![0x8c, 0x84]; // m-retrieve-conf
+    bytes.extend(from_header(Some("+4075551234")));
+    bytes.extend(to_header("+15555550100"));
+    bytes.extend(body);
+
+    let parsed = parse_bytes(&bytes);
+    let names: Vec<Option<&str>> = parsed
+        .attachments
+        .iter()
+        .map(|a| a.smil_name.as_deref())
+        .collect();
+    assert_eq!(names, [Some("one.jpg"), Some("two.jpg")]);
+    assert_eq!(parsed.attachments[0].data, first);
+    assert_eq!(parsed.attachments[1].data, second);
+}
+
+/// A structured part with a content id, a content type, and UTF-8 data.
+fn part(cid: &str, content_type: &str, data: &str) -> MmsPart {
+    MmsPart {
+        content_type: content_type.to_string(),
+        content_location: None,
+        content_id: Some(cid.to_string()),
+        filename: None,
+        charset: Some(crate::mms_enc::CHARSET_UTF8),
+        data: data.as_bytes().to_vec(),
+    }
+}
+
+#[test]
+fn start_names_the_text_part_that_is_the_body() {
+    let msg = StructuredMms {
+        content_start: Some("<second>".to_string()),
+        parts: vec![
+            part("first", "text/plain", "First"),
+            part("second", "text/plain", "Second"),
+        ],
+        ..StructuredMms::default()
+    };
+    let body = body_from_structured(&msg, &SmilRefs::default());
+    assert_eq!(body.as_deref(), Some("Second"));
+}
+
+#[test]
+fn start_naming_smil_under_a_text_type_is_not_the_body() {
+    let msg = StructuredMms {
+        content_start: Some("<layout>".to_string()),
+        parts: vec![
+            part("layout", "text/xml", "<smil><body/></smil>"),
+            part("words", "text/plain", "Hello"),
+        ],
+        ..StructuredMms::default()
+    };
+    let body = body_from_structured(&msg, &SmilRefs::default());
+    assert_eq!(body.as_deref(), Some("Hello"));
+}
+
+#[test]
+fn body_joins_plain_and_html_text_parts_and_skips_media() {
+    let msg = StructuredMms {
+        parts: vec![
+            part("a", "text/plain; charset=utf-8", "Plain"),
+            part("b", "text/html", "Marked up"),
+            part("c", "image/jpeg", "not text"),
+        ],
+        ..StructuredMms::default()
+    };
+    let body = body_from_structured(&msg, &SmilRefs::default());
+    assert_eq!(body.as_deref(), Some("Plain\nMarked up"));
+}

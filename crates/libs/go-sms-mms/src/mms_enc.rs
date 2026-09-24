@@ -436,12 +436,7 @@ fn looks_like_part_name(name: &str) -> bool {
 
 /// Parse a Content-Location name at a `0x8e` byte; returns the name and the index after its NUL.
 fn try_parse_cloc_name_at(data: &[u8], at: usize) -> Option<(String, usize)> {
-    // at points at 0x8e; returns (name, index of byte after NUL).
-    if at >= data.len() || data[at] != 0x8e || at + 1 >= data.len() {
-        return None;
-    }
-    let next = data[at + 1];
-    if next & 0x80 != 0 || !is_printable_name_byte(next) {
+    if data.get(at) != Some(&0x8e) || !is_printable_name_byte(*data.get(at + 1)?) {
         return None;
     }
     let name_start = at + 1;
@@ -464,14 +459,7 @@ fn try_parse_cloc_name_at(data: &[u8], at: usize) -> Option<(String, usize)> {
 
 /// Index of the next Content-Location name at or after `start`.
 fn find_next_cloc_name(data: &[u8], start: usize) -> Option<usize> {
-    let mut i = start;
-    while i + 2 < data.len() {
-        if data[i] == 0x8e && try_parse_cloc_name_at(data, i).is_some() {
-            return Some(i);
-        }
-        i += 1;
-    }
-    None
+    (start..data.len()).find(|&i| try_parse_cloc_name_at(data, i).is_some())
 }
 
 /// Matches `text.txt` or `text_<digits>.txt` (same rule as `pdu`).
@@ -572,31 +560,37 @@ pub(crate) fn content_type_from_filename(name: &str) -> String {
 }
 
 /// Attach the parts found by name scanning, skipping those the structured decode already has.
+///
+/// A WSP part's Content-Location header has the same wire shape as a GO named
+/// part, so the scanner finds every located part of a real multipart too, and
+/// its payload runs on to the next name: through the part's data and into the
+/// next part's headers. The structured decode knows each part's exact length,
+/// so a named part it already holds takes the structured bytes.
 fn merge_named_parts(msg: &mut StructuredMms, named: Vec<NamedPart>) {
     if named.is_empty() {
         return;
     }
     let mut out_named = Vec::with_capacity(named.len());
-    for np in named {
-        let already = msg.parts.iter().any(|p| {
-            p.content_location.as_deref() == Some(np.name.as_str())
-                || (p.data == np.data && !np.data.is_empty())
+    for NamedPart { name, data } in named {
+        let known = msg.parts.iter().find(|p| {
+            p.content_location.as_deref() == Some(name.as_str())
+                || (p.data == data && !data.is_empty())
         });
-        let NamedPart { name, data } = np;
-        if !already {
-            msg.parts.push(MmsPart {
-                content_type: content_type_from_filename(&name),
-                content_location: Some(name.clone()),
-                content_id: None,
-                filename: Some(name.clone()),
-                charset: None,
-                data,
-            });
-            let data = msg.parts.last().expect("just pushed").data.clone();
-            out_named.push(NamedPart { name, data });
-        } else {
-            out_named.push(NamedPart { name, data });
-        }
+        let data = match known {
+            Some(part) => part.data.clone(),
+            None => {
+                msg.parts.push(MmsPart {
+                    content_type: content_type_from_filename(&name),
+                    content_location: Some(name.clone()),
+                    content_id: None,
+                    filename: Some(name.clone()),
+                    charset: None,
+                    data: data.clone(),
+                });
+                data
+            }
+        };
+        out_named.push(NamedPart { name, data });
     }
     msg.named_parts = out_named;
 }

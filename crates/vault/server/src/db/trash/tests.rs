@@ -798,3 +798,92 @@ async fn empty_trash_on_an_empty_trash_is_a_noop() {
         1
     );
 }
+
+// ── The row asked for, and only that row ────────────────────────────────────
+
+async fn trashed_conversation_ids(conn: &mut AnyConnection, account_id: i64) -> Vec<i64> {
+    sqlx::query_scalar(
+        "SELECT conversation_id FROM trashed_conversations WHERE account_id = $1 ORDER BY 1",
+    )
+    .bind(account_id)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap()
+}
+
+async fn trashed_contact_ids(conn: &mut AnyConnection, account_id: i64) -> Vec<i64> {
+    sqlx::query_scalar("SELECT contact_id FROM trashed_contacts WHERE account_id = $1 ORDER BY 1")
+        .bind(account_id)
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn trashing_the_second_conversation_marks_only_the_second() {
+    let vault = crate::test_support::test_vault().await;
+    vault.account_with_id(ACCOUNT_A, "a").await;
+    let mut conn = vault.conn().await;
+    let _first = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550001").await;
+    let second = insert_conversation_on(&mut conn, ACCOUNT_A, "+15550002").await;
+
+    move_to_trash(&mut conn, ACCOUNT_A, Trashable::Conversation(second))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        trashed_conversation_ids(&mut conn, ACCOUNT_A).await,
+        vec![second]
+    );
+}
+
+#[tokio::test]
+async fn restoring_the_second_contact_leaves_the_first_in_the_trash() {
+    let vault = crate::test_support::test_vault().await;
+    vault.account_with_id(ACCOUNT_A, "a").await;
+    let mut conn = vault.conn().await;
+    let (first, _) =
+        insert_named_contact_in_a_conversation(&mut conn, ACCOUNT_A, "+15550001").await;
+    let (second, _) =
+        insert_named_contact_in_a_conversation(&mut conn, ACCOUNT_A, "+15550002").await;
+    for id in [first, second] {
+        move_to_trash(&mut conn, ACCOUNT_A, Trashable::Contact(id))
+            .await
+            .unwrap();
+    }
+
+    restore(&mut conn, ACCOUNT_A, Trashable::Contact(second))
+        .await
+        .unwrap();
+
+    assert_eq!(trashed_contact_ids(&mut conn, ACCOUNT_A).await, vec![first]);
+}
+
+#[tokio::test]
+async fn deleting_the_second_contact_leaves_the_first_as_it_was() {
+    let vault = crate::test_support::test_vault().await;
+    vault.account_with_id(ACCOUNT_A, "a").await;
+    let mut conn = vault.conn().await;
+    let (first, _) =
+        insert_named_contact_in_a_conversation(&mut conn, ACCOUNT_A, "+15550001").await;
+    let (second, _) =
+        insert_named_contact_in_a_conversation(&mut conn, ACCOUNT_A, "+15550002").await;
+    move_to_trash(&mut conn, ACCOUNT_A, Trashable::Contact(second))
+        .await
+        .unwrap();
+
+    let outcome = delete_trashed(&mut conn, ACCOUNT_A, Trashable::Contact(second))
+        .await
+        .unwrap();
+
+    assert_eq!(outcome, DeleteOutcome::Deleted(Vec::new()));
+    assert_eq!(
+        contact_row(&mut conn, second).await,
+        Some((String::new(), "import".into()))
+    );
+    assert_eq!(
+        contact_row(&mut conn, first).await,
+        Some(("Pat".into(), "user".into()))
+    );
+    assert!(trashed_contact_ids(&mut conn, ACCOUNT_A).await.is_empty());
+}

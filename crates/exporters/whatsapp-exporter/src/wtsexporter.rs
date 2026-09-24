@@ -549,6 +549,65 @@ mod tests {
         assert_eq!(fs::read(&key_file).unwrap(), [0xde, 0xad, 0xbe, 0xef]);
     }
 
+    /// A key given as a file path is passed to wtsexporter as that path,
+    /// made absolute, rather than read as hex key material. A path is told
+    /// from hex by a slash or by the `.key` ending.
+    #[test]
+    fn a_key_file_path_is_forwarded_as_a_path() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("msgstore.db.crypt15"), b"crypt").unwrap();
+        let work = tempdir().unwrap();
+        let out = work.path().join("out");
+        let json = out.join("result.json");
+        let cwd = std::env::current_dir().unwrap();
+
+        let absolute = dir.path().join("backup.key");
+        for (key, expected) in [
+            (text(&absolute), absolute.clone()),
+            ("x.key".to_string(), cwd.join("x.key")),
+            ("keys/key".to_string(), cwd.join("keys/key")),
+        ] {
+            let mut args = android_args(dir.path(), Some(&key));
+            args.work_dir = work.path().to_path_buf();
+            let command = command_args(&args, &out, &json);
+            let k = command.iter().position(|a| a == "-k").expect("a -k flag");
+            assert_eq!(command[k + 1], text(&expected), "{key}");
+            assert!(
+                !work.path().join("decryption.key").exists(),
+                "{key} was read as hex"
+            );
+        }
+    }
+
+    /// A database file chosen as the input is passed with `-d`, whatever it
+    /// is called.
+    #[test]
+    fn a_database_file_given_as_the_input_is_passed_as_the_database() {
+        let dir = tempdir().unwrap();
+        let db = dir.path().join("phone-msgstore.db");
+        fs::write(&db, b"db").unwrap();
+        let mut args = android_args(&db, None);
+        args.work_dir = dir.path().to_path_buf();
+        let out = dir.path().join("out");
+        let command = command_args(&args, &out, &out.join("result.json"));
+        let d = command.iter().position(|a| a == "-d").expect("a -d flag");
+        assert_eq!(command[d + 1], text(&db));
+    }
+
+    /// Only Android has crypt backup files, so an iOS folder that happens to
+    /// hold one passes no `-b`.
+    #[test]
+    fn an_ios_folder_forwards_no_android_backup() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("msgstore.db.crypt15"), b"crypt").unwrap();
+        let args = WtsexporterArgs {
+            platform: Platform::Ios,
+            ..android_args(dir.path(), None)
+        };
+        let paths = resolve_forwarded_paths(&args).unwrap();
+        assert!(paths.backup.is_none());
+    }
+
     /// An iOS backup forwards its database, contacts and media found under
     /// the input folder; with no backup file there is no `-b`, so the key
     /// is dropped too.

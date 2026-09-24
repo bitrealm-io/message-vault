@@ -57,6 +57,13 @@ released versions carry their date on the heading.
 
 ### Fixes
 
+- 2026-09-23 **Excluding something from a search no longer hides the rows
+  that have nothing to compare.** A search with `-` in front of a word left
+  out every row with no value for that word, so those rows appeared under
+  neither the word nor its negation. `-import:last` found no messages at all
+  before the first import, and `-last-message:2019` on Contacts left out
+  every contact with no messages. A search and its negation now always
+  divide the list between them.
 - 2026-09-23 **A group text from an SMS Backup & Restore backup is no longer
   credited to the wrong person when the backup names no sender.** A group
   MMS without a sender address was shown as sent by whichever member the

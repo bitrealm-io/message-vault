@@ -1,6 +1,8 @@
+use std::future::Future;
 use std::time::{Duration, SystemTime};
 
 use super::*;
+use crate::config::{DatabaseConfig, PathsConfig};
 use crate::db::engine;
 
 const SHA: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
@@ -497,97 +499,506 @@ fn a_dry_run_of_incoming_cleanup_counts_what_it_would_remove_and_removes_nothing
     }
 }
 
-#[tokio::test]
-async fn store_and_update_derived_db() {
+/// The account every database test seeds.
+const ACCOUNT: i64 = 7;
+
+/// A 1x1 plain-RGB PNG, the smallest image this build's ffmpeg decodes
+/// cleanly (an RGBA one of the same size makes its PNG decoder fail).
+#[rustfmt::skip]
+const PNG_1X1_RGB: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0xc9, 0xfe, 0x92, 0xef, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+    0x44, 0xae, 0x42, 0x60, 0x82,
+];
+
+/// A vault on a fresh database with the schema applied and its data folder
+/// under a temp dir, the shape [`run`] is handed by the command line.
+async fn open_vault() -> (OpenVault, tempfile::TempDir) {
     let (pool, dir) = engine::test_pool().await;
     schema::ensure_vault_schema(&mut pool.acquire().await.unwrap())
         .await
         .unwrap();
-    let mut conn = pool.acquire().await.unwrap();
-    sqlx::query("INSERT INTO accounts (id, username) VALUES (7, 'demo')")
+    let cfg = Config {
+        paths: PathsConfig {
+            db: dir.path().join("vault.db"),
+            data_dir: dir.path().join("data"),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: None,
+        database: DatabaseConfig::default(),
+    };
+    (OpenVault { cfg, db: pool }, dir)
+}
+
+async fn seed_account(conn: &mut AnyConnection, id: i64) {
+    sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, $2)")
+        .bind(id)
+        .bind(format!("user{id}"))
         .execute(&mut *conn)
         .await
         .unwrap();
-    sqlx::query(
+}
+
+/// One conversation with one message under `source` for [`ACCOUNT`],
+/// returning the message id an attachment can hang off.
+async fn seed_message(conn: &mut AnyConnection, source: &str) -> i64 {
+    let handle_id: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES (7, '+1', '+1', 'phone', 'phone')",
+         VALUES ($1, $2, $2, 'phone', 'phone') RETURNING id",
     )
-    .execute(&mut *conn)
+    .bind(ACCOUNT)
+    .bind(format!("+1555{source}"))
+    .fetch_one(&mut *conn)
     .await
     .unwrap();
-    sqlx::query(
-        "INSERT INTO conversations (id, account_id, chat_handle_id, conversation_type, source_file)
-         VALUES (1, 7, 1, 'individual', 't')",
+    let conversation_id: i64 = sqlx::query_scalar(
+        "INSERT INTO conversations (account_id, chat_handle_id, conversation_type, source_file)
+         VALUES ($1, $2, 'individual', 't') RETURNING id",
     )
-    .execute(&mut *conn)
+    .bind(ACCOUNT)
+    .bind(handle_id)
+    .fetch_one(&mut *conn)
     .await
     .unwrap();
-    sqlx::query(
-        "INSERT INTO messages (id, conversation_id, account_id, source, timestamp, is_from_me, sort_order)
-         VALUES (1, 1, 7, 'imessage', '2020-01-01T00:00:00Z', 0, 0)",
+    sqlx::query_scalar(
+        "INSERT INTO messages (conversation_id, account_id, source, timestamp, is_from_me, sort_order)
+         VALUES ($1, $2, $3, '2020-01-01T00:00:00Z', 0, 0) RETURNING id",
     )
-    .execute(&mut *conn)
+    .bind(conversation_id)
+    .bind(ACCOUNT)
+    .bind(source)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap()
+}
+
+/// Store `bytes` as the original for an attachment of `message_id` under
+/// `source`, the way an import leaves it: the blob at `<aa>/<sha><ext>`
+/// in the source's assets folder and a row pointing at it. Returns the
+/// attachment id.
+async fn attach_stored_blob(
+    vault: &OpenVault,
+    conn: &mut AnyConnection,
+    source: &str,
+    message_id: i64,
+    sha: &str,
+    ext: &str,
+    bytes: &[u8],
+) -> i64 {
+    let rel = format!("{}/{sha}{ext}", &sha[..2]);
+    let path = vault
+        .cfg
+        .paths
+        .assets_dir_for_account(ACCOUNT, source)
+        .join(&rel);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(&path, bytes).unwrap();
+    sqlx::query_scalar(
+        "INSERT INTO attachments (message_id, sha256, assets_path) VALUES ($1, $2, $3) RETURNING id",
+    )
+    .bind(message_id)
+    .bind(sha)
+    .bind(rel)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap()
+}
+
+/// A vault with one account whose `source` holds one PNG attachment.
+async fn vault_with_png(source: &str) -> (OpenVault, tempfile::TempDir, i64) {
+    let (vault, dir) = open_vault().await;
+    let mut conn = vault.conn().await.unwrap();
+    seed_account(&mut conn, ACCOUNT).await;
+    let message_id = seed_message(&mut conn, source).await;
+    let attachment_id = attach_stored_blob(
+        &vault,
+        &mut conn,
+        source,
+        message_id,
+        SHA,
+        ".png",
+        PNG_1X1_RGB,
+    )
+    .await;
+    (vault, dir, attachment_id)
+}
+
+/// The derived columns of one attachment row, `None` until a preview is recorded.
+async fn derived_of(
+    conn: &mut AnyConnection,
+    attachment_id: i64,
+) -> Option<(String, String, String)> {
+    let (sha, path, mime): (Option<String>, Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT derived_sha256, derived_assets_path, derived_mime_type FROM attachments WHERE id = $1",
+    )
+    .bind(attachment_id)
+    .fetch_one(&mut *conn)
     .await
     .unwrap();
-    sqlx::query(
-        "INSERT INTO attachments (id, message_id, sha256, assets_path, mime_type)
-         VALUES (1, 1, 'aa11', 'aa/aa11.jpg', 'image/jpeg')",
-    )
-    .execute(&mut *conn)
-    .await
-    .unwrap();
+    Some((sha?, path?, mime?))
+}
+
+/// Run `test` on its own runtime with the real ffmpeg held available, or
+/// skip it the way every ffmpeg test in the workspace skips (and fail under
+/// CI). The guard is taken outside the async block: holding it across an
+/// await is what Clippy's `await_holding_lock` refuses.
+fn with_real_ffmpeg(test: impl Future<Output = ()>) {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(test);
+}
+
+fn stats(scanned: u64, derived: u64, skipped: u64, errors: u64) -> ProcessAssetsStats {
+    ProcessAssetsStats {
+        scanned,
+        derived,
+        skipped,
+        errors,
+    }
+}
+
+#[tokio::test]
+async fn store_and_update_derived_db() {
+    let (vault, dir) = open_vault().await;
+    let mut conn = vault.conn().await.unwrap();
+    seed_account(&mut conn, ACCOUNT).await;
+    let message_id = seed_message(&mut conn, "imessage").await;
+    let attachment_id =
+        attach_stored_blob(&vault, &mut conn, "imessage", message_id, SHA, ".jpg", b"x").await;
 
     let converted = dir.path().join("converted");
     fs::create_dir_all(&converted).unwrap();
     let blob = store_derived_bytes(&converted, b"jpeg-bytes", ".jpg").unwrap();
     assert!(converted.join(&blob.assets_path).is_file());
 
-    update_derived(&mut conn, 7, "imessage", "aa11", &blob)
+    update_derived(&mut conn, ACCOUNT, "imessage", SHA, &blob)
         .await
         .unwrap();
 
-    let (d_sha, d_path, d_mime): (String, String, String) = sqlx::query_as(
-        "SELECT derived_sha256, derived_assets_path, derived_mime_type FROM attachments WHERE id = 1",
-    )
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    assert_eq!(d_sha, blob.sha256);
-    assert_eq!(d_path, blob.assets_path);
-    assert_eq!(d_mime, "image/jpeg");
+    assert_eq!(
+        derived_of(&mut conn, attachment_id).await,
+        Some((blob.sha256, blob.assets_path, "image/jpeg".to_string()))
+    );
 }
 
 #[tokio::test]
 async fn listed_attachments_carry_name_hints_for_extensionless_blobs() {
-    let (pool, _dir) = engine::test_pool().await;
-    schema::ensure_vault_schema(&mut pool.acquire().await.unwrap())
+    let (vault, _dir) = open_vault().await;
+    let mut conn = vault.conn().await.unwrap();
+    seed_account(&mut conn, ACCOUNT).await;
+    let message_id = seed_message(&mut conn, "imessage").await;
+    sqlx::query(
+        "INSERT INTO attachments (message_id, sha256, assets_path, mime_type, original_name, path)
+         VALUES ($1, $2, $3, NULL, 'voice-note.amr', 'attachments/voice-note.amr')",
+    )
+    .bind(message_id)
+    .bind(SHA)
+    .bind(format!("ab/{SHA}"))
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+
+    let rows = list_attachments(&mut conn, ACCOUNT, "imessage")
         .await
         .unwrap();
-    let mut conn = pool.acquire().await.unwrap();
-    for statement in [
-        "INSERT INTO accounts (id, username) VALUES (7, 'demo')".to_string(),
-        "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-            VALUES (7, '+1', '+1', 'phone', 'phone')"
-            .to_string(),
-        "INSERT INTO conversations (id, account_id, chat_handle_id, conversation_type, source_file)
-            VALUES (1, 7, 1, 'individual', 't')"
-            .to_string(),
-        "INSERT INTO messages (id, conversation_id, account_id, source, timestamp, is_from_me, sort_order)
-            VALUES (1, 1, 7, 'imessage', '2020-01-01T00:00:00Z', 0, 0)"
-            .to_string(),
-        format!(
-            "INSERT INTO attachments (id, message_id, sha256, assets_path, mime_type, original_name, path)
-            VALUES (1, 1, '{SHA}', 'ab/{SHA}', NULL, 'voice-note.amr', 'attachments/voice-note.amr')"
-        ),
-    ] {
-        sqlx::query(&statement).execute(&mut *conn).await.unwrap();
-    }
-
-    let rows = list_attachments(&mut conn, 7, "imessage").await.unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(
         plan(&rows[0], &ProcessAssetsOptions::default(), FRESH).unwrap(),
         Plan::Derive(Kind::Audio),
         "an extensionless blob with no declared MIME must classify from its attachment name"
     );
+}
+
+#[test]
+fn a_run_writes_a_jpeg_preview_under_the_converted_folder_and_records_it() {
+    with_real_ffmpeg(async {
+        let (vault, _dir, attachment_id) = vault_with_png("imessage").await;
+        let opts = ProcessAssetsOptions::default();
+
+        let first = run(&vault, &opts).await.unwrap();
+
+        assert_eq!(first, stats(1, 1, 0, 0));
+        let mut conn = vault.conn().await.unwrap();
+        let (sha, rel, mime) = derived_of(&mut conn, attachment_id)
+            .await
+            .expect("the row points at its preview");
+        let preview = vault
+            .cfg
+            .paths
+            .assets_converted_dir_for_account(ACCOUNT, "imessage")
+            .join(&rel);
+        let bytes = fs::read(&preview).expect("the preview is under assets_converted/");
+        assert_eq!(&bytes[..2], [0xff, 0xd8], "a JPEG starts with SOI");
+        assert_eq!(sha, crate::assets_api::sha256_hex(&bytes));
+        assert_eq!(rel, derived_rel_path(&sha, ".jpg"));
+        assert_eq!(mime, "image/jpeg");
+
+        // A second run leaves the preview alone; `force` makes it again.
+        assert_eq!(run(&vault, &opts).await.unwrap(), stats(1, 0, 1, 0));
+        let force = ProcessAssetsOptions {
+            force: true,
+            ..Default::default()
+        };
+        assert_eq!(run(&vault, &force).await.unwrap(), stats(1, 1, 0, 0));
+    });
+}
+
+#[test]
+fn a_dry_run_counts_the_preview_it_would_write_and_writes_nothing() {
+    with_real_ffmpeg(async {
+        let (vault, _dir, attachment_id) = vault_with_png("imessage").await;
+        let opts = ProcessAssetsOptions {
+            dry_run: true,
+            ..Default::default()
+        };
+
+        assert_eq!(run(&vault, &opts).await.unwrap(), stats(1, 1, 0, 0));
+
+        let converted = vault
+            .cfg
+            .paths
+            .assets_converted_dir_for_account(ACCOUNT, "imessage");
+        assert_eq!(fs::read_dir(&converted).unwrap().count(), 0);
+        let mut conn = vault.conn().await.unwrap();
+        assert_eq!(derived_of(&mut conn, attachment_id).await, None);
+    });
+}
+
+#[test]
+fn source_limits_the_run_to_that_source() {
+    with_real_ffmpeg(async {
+        let (vault, _dir, imessage_attachment) = vault_with_png("imessage").await;
+        let mut conn = vault.conn().await.unwrap();
+        let message_id = seed_message(&mut conn, "sms").await;
+        let sms_attachment = attach_stored_blob(
+            &vault,
+            &mut conn,
+            "sms",
+            message_id,
+            &"b".repeat(64),
+            ".png",
+            PNG_1X1_RGB,
+        )
+        .await;
+        let opts = ProcessAssetsOptions {
+            source: Some("sms".into()),
+            ..Default::default()
+        };
+
+        assert_eq!(run(&vault, &opts).await.unwrap(), stats(1, 1, 0, 0));
+
+        assert!(derived_of(&mut conn, sms_attachment).await.is_some());
+        assert_eq!(derived_of(&mut conn, imessage_attachment).await, None);
+        assert!(
+            !vault
+                .cfg
+                .paths
+                .assets_converted_dir_for_account(ACCOUNT, "imessage")
+                .exists(),
+            "a source outside the filter is not opened"
+        );
+    });
+}
+
+#[tokio::test]
+async fn an_unknown_source_is_an_error() {
+    let (vault, _dir, _attachment) = vault_with_png("imessage").await;
+    let opts = ProcessAssetsOptions {
+        source: Some("nope".into()),
+        ..Default::default()
+    };
+
+    let err = run(&vault, &opts).await.unwrap_err();
+
+    assert_eq!(err.to_string(), "unknown source 'nope' for account 7");
+}
+
+#[tokio::test]
+async fn the_source_filter_is_trimmed_before_it_is_matched() {
+    let (vault, _dir, _attachment) = vault_with_png("imessage").await;
+    let mut conn = vault.conn().await.unwrap();
+    let opts = ProcessAssetsOptions {
+        source: Some(" imessage ".into()),
+        ..Default::default()
+    };
+
+    let sources = sources_to_process(&mut conn, &vault.cfg, &opts, ACCOUNT)
+        .await
+        .unwrap();
+
+    assert_eq!(sources, ["imessage"]);
+}
+
+#[tokio::test]
+async fn a_vault_without_accounts_is_an_error() {
+    let (vault, _dir) = open_vault().await;
+
+    let err = run(&vault, &ProcessAssetsOptions::default())
+        .await
+        .unwrap_err();
+
+    assert!(
+        err.to_string().starts_with("no accounts found"),
+        "got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn an_account_without_sources_is_passed_over() {
+    let (vault, _dir) = open_vault().await;
+    let mut conn = vault.conn().await.unwrap();
+    seed_account(&mut conn, ACCOUNT).await;
+
+    assert_eq!(
+        run(&vault, &ProcessAssetsOptions::default()).await.unwrap(),
+        stats(0, 0, 0, 0)
+    );
+}
+
+#[tokio::test]
+async fn a_blob_that_is_not_media_is_left_as_is_by_the_run() {
+    let (vault, _dir) = open_vault().await;
+    let mut conn = vault.conn().await.unwrap();
+    seed_account(&mut conn, ACCOUNT).await;
+    let message_id = seed_message(&mut conn, "imessage").await;
+    let attachment_id = attach_stored_blob(
+        &vault, &mut conn, "imessage", message_id, SHA, ".txt", b"notes",
+    )
+    .await;
+
+    assert_eq!(
+        run(&vault, &ProcessAssetsOptions::default()).await.unwrap(),
+        stats(1, 0, 1, 0)
+    );
+    assert_eq!(derived_of(&mut conn, attachment_id).await, None);
+}
+
+#[tokio::test]
+async fn a_missing_original_is_counted_as_a_failure_and_the_run_goes_on() {
+    let (vault, _dir, attachment_id) = vault_with_png("imessage").await;
+    let mut conn = vault.conn().await.unwrap();
+    let original = vault
+        .cfg
+        .paths
+        .assets_dir_for_account(ACCOUNT, "imessage")
+        .join(format!("ab/{SHA}.png"));
+    fs::remove_file(&original).unwrap();
+    let message_id = seed_message(&mut conn, "sms").await;
+    attach_stored_blob(
+        &vault,
+        &mut conn,
+        "sms",
+        message_id,
+        &"b".repeat(64),
+        ".txt",
+        b"notes",
+    )
+    .await;
+
+    assert_eq!(
+        run(&vault, &ProcessAssetsOptions::default()).await.unwrap(),
+        stats(2, 0, 1, 1)
+    );
+    assert_eq!(derived_of(&mut conn, attachment_id).await, None);
+}
+
+#[tokio::test]
+async fn account_ids_come_from_the_table_or_else_from_the_data_folders() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path().join("data");
+    for folder in ["7", "12", "notes"] {
+        fs::create_dir_all(data.join(folder)).unwrap();
+    }
+    fs::write(data.join("3"), b"a file, not an account").unwrap();
+
+    // No accounts table and no data folder: nothing.
+    let (pool, _db_dir) = engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    assert_eq!(
+        list_account_ids(&mut conn, &dir.path().join("elsewhere"))
+            .await
+            .unwrap(),
+        Vec::<i64>::new()
+    );
+
+    // No accounts table yet: the folders named by an id are the accounts.
+    assert_eq!(list_account_ids(&mut conn, &data).await.unwrap(), [7, 12]);
+
+    // A table with rows in it is the answer, and the folders are ignored.
+    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    seed_account(&mut conn, 5).await;
+    assert_eq!(list_account_ids(&mut conn, &data).await.unwrap(), [5]);
+}
+
+#[tokio::test]
+async fn source_ids_come_from_messages_and_from_folders_that_hold_assets() {
+    let (vault, _dir) = open_vault().await;
+    let mut conn = vault.conn().await.unwrap();
+    seed_account(&mut conn, ACCOUNT).await;
+    seed_message(&mut conn, "imessage").await;
+    seed_message(&mut conn, " sms ").await;
+    seed_message(&mut conn, " ").await;
+    let account_root = vault.cfg.paths.data_dir.join(ACCOUNT.to_string());
+    fs::create_dir_all(account_root.join("whatsapp/assets")).unwrap();
+    fs::create_dir_all(account_root.join("stray")).unwrap();
+    fs::write(account_root.join("file"), b"").unwrap();
+
+    let ids = discover_source_ids(&mut conn, ACCOUNT, &vault.cfg.paths.data_dir, "assets")
+        .await
+        .unwrap();
+
+    assert_eq!(ids, ["imessage", "sms", "whatsapp"]);
+}
+
+#[tokio::test]
+async fn opening_a_source_without_an_assets_folder_gives_nothing_to_process() {
+    let (vault, _dir) = open_vault().await;
+    let opts = ProcessAssetsOptions::default();
+    let work = tempfile::tempdir().unwrap();
+
+    let pass = SourcePass::open(&vault.cfg, &opts, work.path(), ACCOUNT, "imessage").unwrap();
+
+    assert!(pass.is_none());
+    assert!(
+        !vault
+            .cfg
+            .paths
+            .assets_converted_dir_for_account(ACCOUNT, "imessage")
+            .exists(),
+        "no converted folder is made for a source with nothing in it"
+    );
+}
+
+#[tokio::test]
+async fn opening_a_source_makes_its_converted_folder_and_cleans_its_incoming_temps() {
+    let (vault, _dir) = open_vault().await;
+    let opts = ProcessAssetsOptions::default();
+    let work = tempfile::tempdir().unwrap();
+    let assets = vault.cfg.paths.assets_dir_for_account(ACCOUNT, "imessage");
+    let part = assets.join(".incoming").join(format!("{SHA}-1.part"));
+    fs::create_dir_all(part.parent().unwrap()).unwrap();
+    fs::write(&part, b"half").unwrap();
+
+    let pass = SourcePass::open(&vault.cfg, &opts, work.path(), ACCOUNT, "imessage")
+        .unwrap()
+        .expect("a source with an assets folder is processed");
+
+    let converted = vault
+        .cfg
+        .paths
+        .assets_converted_dir_for_account(ACCOUNT, "imessage");
+    assert_eq!(pass.assets_dir, assets);
+    assert_eq!(pass.converted_dir, converted);
+    assert_eq!(pass.account_id, ACCOUNT);
+    assert_eq!(pass.source_id, "imessage");
+    assert!(converted.is_dir());
+    assert!(!part.exists(), "a leftover upload temp is removed on open");
 }

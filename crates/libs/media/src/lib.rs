@@ -225,5 +225,82 @@ mod tests {
         assert_eq!(parse_size("20M").unwrap(), 20 * 1024 * 1024);
         assert_eq!(parse_size("512k").unwrap(), 512 * 1024);
         assert_eq!(parse_size("100").unwrap(), 100);
+        assert_eq!(parse_size("2g").unwrap(), 2 * 1024 * 1024 * 1024);
+        assert_eq!(parse_size("2G").unwrap(), 2 * 1024 * 1024 * 1024);
+    }
+
+    #[test]
+    fn every_mode_alias_maps_to_its_mode() {
+        for (alias, mode) in [
+            ("disabled", MediaMode::Disabled),
+            ("none", MediaMode::Disabled),
+            ("skip", MediaMode::Disabled),
+            ("clone", MediaMode::Clone),
+            ("copy", MediaMode::Clone),
+            ("convert", MediaMode::Convert),
+            (" COMPRESS ", MediaMode::Compress),
+        ] {
+            assert_eq!(MediaMode::parse(alias), Some(mode), "{alias}");
+        }
+        assert_eq!(MediaMode::parse("shrink"), None);
+        assert!("shrink".parse::<MediaMode>().is_err());
+    }
+
+    #[test]
+    fn every_mode_reads_back_what_it_writes() {
+        // (mode, needs ffmpeg, copies attachments)
+        for (mode, needs_tools, copies) in [
+            (MediaMode::Disabled, false, false),
+            (MediaMode::Clone, false, true),
+            (MediaMode::Convert, true, true),
+            (MediaMode::Compress, true, true),
+        ] {
+            assert_eq!(mode.to_string().parse::<MediaMode>(), Ok(mode));
+            assert_eq!(mode.needs_tools(), needs_tools, "{mode}");
+            assert_eq!(mode.copies_attachments(), copies, "{mode}");
+        }
+    }
+
+    #[test]
+    fn every_resolution_reads_back_what_it_writes() {
+        for cap in [
+            MaxResolution::P720,
+            MaxResolution::P1080,
+            MaxResolution::P4k,
+        ] {
+            assert_eq!(cap.to_string().parse::<MaxResolution>(), Ok(cap));
+        }
+        assert!("480p".parse::<MaxResolution>().is_err());
+    }
+
+    #[test]
+    fn every_resolution_alias_maps_to_its_cap() {
+        for (alias, cap) in [
+            ("720p", MaxResolution::P720),
+            ("720", MaxResolution::P720),
+            ("1080p", MaxResolution::P1080),
+            ("1080", MaxResolution::P1080),
+            ("4K", MaxResolution::P4k),
+            ("2160p", MaxResolution::P4k),
+            ("2160", MaxResolution::P4k),
+        ] {
+            assert_eq!(MaxResolution::parse(alias), Some(cap), "{alias}");
+        }
+        assert_eq!(MaxResolution::parse("480p"), None);
+    }
+
+    #[test]
+    fn compress_options_from_cli_reads_every_field() {
+        let options = compress_options_from_cli(MaxResolution::P720, 24.0, "2g", false).unwrap();
+        assert_eq!(
+            options,
+            CompressOptions {
+                max_resolution: MaxResolution::P720,
+                max_fps: 24.0,
+                min_size_bytes: 2 * 1024 * 1024 * 1024,
+                skip_efficient: false,
+            }
+        );
+        assert!(compress_options_from_cli(MaxResolution::P720, 24.0, "lots", false).is_err());
     }
 }

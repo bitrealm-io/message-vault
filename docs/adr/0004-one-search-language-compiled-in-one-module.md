@@ -6,7 +6,11 @@ Messages lists is one language, owned by one module in the vault server
 compiles it to SQL for whichever list asked. The three list routes call it;
 none of them parses a query string or builds a filter of its own.
 
-The rules of the language:
+The rules of the language as this decision set them are below. The rules
+as they stand today, each with its reason, the grammar, and what every word
+means on every list, are in
+[The search language](../architecture/search.md), which is the one to keep
+current.
 
 - **One word per concept.** A concept has exactly one spelling, with no
   aliases. Precision lives in the value using conventional notation:
@@ -36,7 +40,8 @@ The rules of the language:
 
 The word table is `crates/vault/server/src/search/fields.rs`, the registry
 every list compiles against and the source the API reference is generated
-from. The grammar a person reads is
+from. The grammar and every word's meaning are in
+`docs/architecture/search.md`; the guide a person reads is
 `docs/src/content/docs/vault/user/how-to/search.mdx`; the words each list
 accepts are in the [HTTP API reference](/vault/developer/reference/api/).
 

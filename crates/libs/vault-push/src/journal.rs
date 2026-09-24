@@ -520,6 +520,39 @@ mod tests {
         assert!(!b.files.contains("chat.jsonl"));
     }
 
+    /// Compacting for one account keeps another account's entries on the
+    /// same vault, and the same account's entries on another vault.
+    #[test]
+    fn compact_keeps_other_accounts_on_the_same_vault() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(JOURNAL_NAME);
+        for (url, username, file) in [
+            ("http://a", "alice", "alice-a.jsonl"),
+            ("http://a", "bob", "bob-a.jsonl"),
+            ("http://b", "alice", "alice-b.jsonl"),
+        ] {
+            append(
+                &path,
+                &JournalEvent::FileOk {
+                    url: url.into(),
+                    username: username.into(),
+                    source: "sms".into(),
+                    file: file.into(),
+                },
+            )
+            .unwrap();
+        }
+
+        let mut state = JournalState::default();
+        state.files.insert("alice-a.jsonl".into());
+        compact(&path, "http://a", "alice", &state).unwrap();
+
+        let files = |url: &str, username: &str| load(&path, url, username).unwrap().files;
+        assert_eq!(files("http://a", "alice"), ["alice-a.jsonl".into()].into());
+        assert_eq!(files("http://a", "bob"), ["bob-a.jsonl".into()].into());
+        assert_eq!(files("http://b", "alice"), ["alice-b.jsonl".into()].into());
+    }
+
     #[test]
     fn append_writes_complete_lines_under_contention() {
         let dir = tempfile::tempdir().unwrap();

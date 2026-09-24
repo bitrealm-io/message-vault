@@ -267,7 +267,7 @@ fn parse_timestamp_unix_ms(raw: &str) -> Result<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vault_api_types::{MessageConversation, Participant};
+    use vault_api_types::{MessageConversation, Participant, Tapback};
 
     /// One page of `GET /v1/exports/{id}/messages` exactly as the vault serializes
     /// it: `service` on the message rather than on the conversation, an
@@ -369,10 +369,129 @@ mod tests {
         assert_eq!(ir.attachments[0].size_bytes, None);
     }
 
+    /// RFC 3339, whole seconds and milliseconds all land on the same instant,
+    /// and a number at the cut-off (10^10) is read as milliseconds.
     #[test]
-    fn parses_rfc3339() {
-        let ms = parse_timestamp_unix_ms("2015-03-12T18:05:22Z").unwrap();
-        assert!(ms > 0);
+    fn parses_each_timestamp_form_to_the_exact_millisecond() {
+        const MS: i64 = 1_426_183_522_000;
+        assert_eq!(parse_timestamp_unix_ms("2015-03-12T18:05:22Z").unwrap(), MS);
+        assert_eq!(
+            parse_timestamp_unix_ms("2015-03-12T19:05:22.250+01:00").unwrap(),
+            MS + 250
+        );
+        assert_eq!(parse_timestamp_unix_ms("1426183522").unwrap(), MS);
+        assert_eq!(parse_timestamp_unix_ms("1426183522250").unwrap(), MS + 250);
+        assert_eq!(
+            parse_timestamp_unix_ms("9999999999").unwrap(),
+            9_999_999_999_000
+        );
+        assert_eq!(
+            parse_timestamp_unix_ms("10000000000").unwrap(),
+            10_000_000_000
+        );
+    }
+
+    /// Reply threading, reactions and an announcement's text come through
+    /// the pull into the message's iMessage fields.
+    #[test]
+    fn a_reply_with_tapbacks_keeps_its_threading_and_reactions() {
+        let mut msg = seed_message_with_participant(Participant {
+            handle: Some("+1".into()),
+            name: "Sam".into(),
+            service: None,
+            contact_id: None,
+        });
+        msg.timestamp = "1426183522250".into();
+        msg.is_reply = true;
+        msg.thread_originator_guid = Some("origin-guid".into());
+        msg.thread_originator_part = Some(2);
+        msg.num_replies = 3;
+        msg.tapbacks = vec![
+            Tapback {
+                part_index: 0,
+                kind: "loved".into(),
+                emoji: None,
+                is_from_me: true,
+                sender: None,
+            },
+            Tapback {
+                part_index: 1,
+                kind: "emoji".into(),
+                emoji: Some("🎉".into()),
+                is_from_me: false,
+                sender: Some("+2".into()),
+            },
+        ];
+
+        let ir = to_ir_message(&msg, false).unwrap();
+
+        assert_eq!(ir.timestamp_unix_ms, 1_426_183_522_250);
+        let imessage = ir.imessage.expect("reply fields make an iMessage block");
+        assert!(imessage.is_reply);
+        assert_eq!(imessage.in_reply_to_guid.as_deref(), Some("origin-guid"));
+        assert_eq!(imessage.thread_originator_part, Some(2));
+        assert_eq!(imessage.num_replies, Some(3));
+        assert_eq!(imessage.announcement, None);
+        assert_eq!(
+            imessage.tapbacks,
+            Some(json!([
+                { "part_index": 0, "kind": "loved", "emoji": null, "is_from_me": true, "sender": null },
+                { "part_index": 1, "kind": "emoji", "emoji": "🎉", "is_from_me": false, "sender": "+2" },
+            ]))
+        );
+    }
+
+    /// An SMS that carries a file is an MMS, and the document counts every
+    /// attachment across its messages.
+    #[test]
+    fn an_sms_with_a_file_is_an_mms_and_counts_toward_the_document() {
+        let mut sms = seed_message_with_participant(Participant {
+            handle: Some("+1".into()),
+            name: "Sam".into(),
+            service: None,
+            contact_id: None,
+        });
+        sms.service = Some("SMS".into());
+        let plain = to_ir_message(&sms, false).unwrap();
+        assert_eq!(plain.message_kind, IrMessageKind::Sms);
+
+        let file: Attachment = serde_json::from_value(json!({ "sha256": "ab" })).unwrap();
+        sms.attachments = vec![file.clone(), file.clone(), file];
+        let with_files = to_ir_message(&sms, false).unwrap();
+        assert_eq!(with_files.message_kind, IrMessageKind::Mms);
+
+        let doc = build_document("sms", &sms, vec![with_files, plain]);
+        assert_eq!(doc.conversation.stats.attachment_count, 3);
+        assert_eq!(doc.conversation.stats.message_count, 2);
+    }
+
+    /// An announcement keeps its text; one with no text carries nothing.
+    #[test]
+    fn an_announcement_keeps_its_text() {
+        let mut msg = seed_message_with_participant(Participant {
+            handle: Some("+1".into()),
+            name: "Sam".into(),
+            service: None,
+            contact_id: None,
+        });
+        msg.is_announcement = true;
+        msg.text = Some("Sam named the conversation \"Book Club\"".into());
+
+        let ir = to_ir_message(&msg, false).unwrap();
+
+        assert_eq!(ir.message_kind, IrMessageKind::Announcement);
+        let imessage = ir
+            .imessage
+            .expect("an announcement makes an iMessage block");
+        assert_eq!(
+            imessage.announcement.as_deref(),
+            Some("Sam named the conversation \"Book Club\"")
+        );
+        assert_eq!(imessage.tapbacks, None);
+
+        msg.text = None;
+        let ir = to_ir_message(&msg, false).unwrap();
+        assert!(ir.imessage.is_none());
     }
 
     #[test]

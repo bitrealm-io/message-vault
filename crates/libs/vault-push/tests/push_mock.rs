@@ -258,6 +258,93 @@ fn reuses_supplied_import_session_without_starting_or_completing_one() {
     import.assert();
 }
 
+/// A push that started its own Import Run completes it once, with the
+/// message count, attachment count and bytes the push sent.
+#[test]
+fn a_push_completes_its_import_run_with_the_counts_it_sent() {
+    const PHOTO: &[u8] = b"photo bytes";
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 42);
+    let digest = hex::encode(Sha256::digest(PHOTO));
+    let _head = server.mock(|when, then| {
+        when.method("HEAD").path(format!("/v1/assets/{digest}"));
+        then.status(404);
+    });
+    let _put = server.mock(|when, then| {
+        when.method(PUT).path(format!("/v1/assets/{digest}"));
+        then.status(200)
+            .json_body(json!({ "already_present": false }));
+    });
+    let _import = server.mock(|when, then| {
+        when.method(POST).path("/v1/imports/42/batches");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+    let complete = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/42/complete")
+            .json_body(json!({
+                "status": "completed",
+                "message_count": 1,
+                "attachment_count": 1,
+                "bytes_uploaded": PHOTO.len(),
+            }));
+        then.status(200).json_body(json!({ "id": 42 }));
+    });
+
+    let dir = tempdir().unwrap();
+    fs::create_dir(dir.path().join("attachments")).unwrap();
+    fs::write(dir.path().join("attachments/photo.txt"), PHOTO).unwrap();
+    let mut doc = sample_doc();
+    doc.messages[0].attachments = vec![ir_attachment("attachments/photo.txt", digest.clone())];
+    write_jsonl(dir.path(), &doc);
+
+    let report = run(&text_only_config(dir.path(), server.base_url()), None).unwrap();
+
+    assert!(report.ok, "{:?}", report.results);
+    assert_eq!(complete.calls(), 1, "the Import Run is completed once");
+}
+
+/// A push that stops at a failed batch still completes its Import Run, as
+/// failed, so the vault does not show it as running.
+#[test]
+fn an_aborted_push_completes_its_import_run_as_failed() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 42);
+    let _import = server.mock(|when, then| {
+        when.method(POST).path("/v1/imports/42/batches");
+        then.status(500).json_body(json!({
+            "type": "about:blank",
+            "title": "Internal server error",
+            "status": 500,
+            "detail": "intentional batch failure"
+        }));
+    });
+    let complete = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/42/complete")
+            .json_body_includes(r#"{ "status": "failed" }"#);
+        then.status(200).json_body(json!({ "id": 42 }));
+    });
+
+    let dir = tempdir().unwrap();
+    write_jsonl(dir.path(), &sample_doc());
+    let cfg = VaultPushConfig {
+        continue_on_error: false,
+        ..text_only_config(dir.path(), server.base_url())
+    };
+
+    let report = run(&cfg, None).unwrap();
+
+    assert!(!report.ok);
+    assert_eq!(complete.calls(), 1, "the Import Run is completed as failed");
+}
+
 #[test]
 fn aggregates_multiple_conversations_into_one_import_request() {
     let server = MockServer::start();

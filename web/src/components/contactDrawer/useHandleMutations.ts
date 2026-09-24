@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { type ContactHandle, useUpdateContact } from "../../lib/contactDetail";
 import { formatHandleServiceLabel, inferService } from "./contactDrawerTypes";
-import { conversationCount, type RemoveIdentityTarget } from "./handleTableLogic";
+import type { RemoveIdentityTarget } from "./handleTableLogic";
 
 export function useHandleMutations({ contactId }: { contactId: string }) {
   const [adding, setAdding] = useState(false);
@@ -25,7 +25,7 @@ export function useHandleMutations({ contactId }: { contactId: string }) {
       handle: h.handle,
       service: h.service ?? null,
       serviceLabel: formatHandleServiceLabel(h.handle, h.service),
-      conversationCount: conversationCount(h),
+      conversationCount: h.conversations,
     });
   };
 

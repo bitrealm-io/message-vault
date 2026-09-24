@@ -91,127 +91,107 @@ impl Modify for BearerAddon {
 /// reading or claiming the vault. Served behind a small body limit.
 pub fn public_openapi() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
-        .routes(routes!(crate::accounts_api::create_account_handler))
-        .routes(routes!(crate::session_api::create_session_handler))
-        .routes(routes!(crate::vault_api::vault_state_handler))
-        .routes(routes!(crate::vault_api::claim_vault_handler))
+        .routes(routes!(crate::accounts_api::create_account))
+        .routes(routes!(crate::session_api::create_session))
+        .routes(routes!(crate::vault_api::get_vault))
+        .routes(routes!(crate::vault_api::claim_vault))
 }
 
 /// Health, the logged-in Session, the accounts collection, and browse routes.
 pub fn api_openapi() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
-        .routes(routes!(crate::server::health))
+        .routes(routes!(crate::server::get_health))
         .routes(routes!(
-            crate::session_api::get_session_handler,
-            crate::session_api::delete_session_handler
+            crate::session_api::get_session,
+            crate::session_api::delete_session
         ))
-        .routes(routes!(crate::accounts_api::list_accounts_handler))
+        .routes(routes!(crate::accounts_api::list_accounts))
         .routes(routes!(
-            crate::accounts_api::get_account_handler,
-            crate::accounts_api::patch_account_handler,
-            crate::accounts_api::delete_account_handler
+            crate::accounts_api::get_account,
+            crate::accounts_api::update_account,
+            crate::accounts_api::delete_account
         ))
-        .routes(routes!(crate::accounts_api::set_password_handler))
-        .routes(routes!(crate::accounts_api::delete_messages_handler))
-        .routes(routes!(crate::accounts_api::account_storage_handler))
-        .routes(routes!(crate::accounts_api::account_identities_handler))
-        .routes(routes!(crate::accounts_api::account_imports_handler))
-        .routes(routes!(crate::accounts_api::account_import_handler))
-        .routes(routes!(crate::accounts_api::account_exports_handler))
+        .routes(routes!(crate::accounts_api::replace_account_password))
+        .routes(routes!(crate::accounts_api::delete_account_messages))
+        .routes(routes!(crate::accounts_api::get_account_storage))
+        .routes(routes!(crate::accounts_api::list_account_identities))
+        .routes(routes!(crate::accounts_api::list_account_imports))
+        .routes(routes!(crate::accounts_api::get_account_import))
+        .routes(routes!(crate::accounts_api::list_account_exports))
         .routes(routes!(
-            crate::api_tokens_api::list_api_tokens_handler,
-            crate::api_tokens_api::create_api_token_handler
-        ))
-        .routes(routes!(
-            crate::api_tokens_api::rename_api_token_handler,
-            crate::api_tokens_api::delete_api_token_handler
+            crate::api_tokens_api::list_api_tokens,
+            crate::api_tokens_api::create_api_token
         ))
         .routes(routes!(
-            crate::export_api::exports_list_handler,
-            crate::export_api::exports_create_handler
-        ))
-        .routes(routes!(crate::export_api::exports_get_handler))
-        .routes(routes!(crate::export_api::export_messages_handler))
-        .routes(routes!(crate::export_api::exports_complete_handler))
-        .routes(routes!(crate::export_api::exports_cancel_handler))
-        .routes(routes!(crate::contacts_api::contacts_list_handler))
-        .routes(routes!(crate::contacts_api::contact_summaries_handler))
-        .routes(routes!(crate::contacts_api::contact_detail_handler))
-        .routes(routes!(crate::contacts_api::contact_mutate_handler))
-        .routes(routes!(crate::contacts_api::contact_trash_handler))
-        .routes(routes!(crate::contacts_api::contact_restore_handler))
-        .routes(routes!(crate::contacts_api::contact_delete_handler))
-        .routes(routes!(crate::contacts_api::unmatched_handles_handler))
-        .routes(routes!(crate::contacts_api::contacts_create_handler))
-        .routes(routes!(crate::named_set_api::contact_groups_list))
-        .routes(routes!(crate::named_set_api::contact_groups_create))
-        .routes(routes!(crate::named_set_api::contact_groups_update))
-        .routes(routes!(crate::named_set_api::contact_groups_delete))
-        .routes(routes!(crate::named_set_api::contact_group_members_list))
-        .routes(routes!(crate::named_set_api::contact_group_members_update))
-        .routes(routes!(crate::named_set_api::message_tags_list))
-        .routes(routes!(crate::named_set_api::message_tags_create))
-        .routes(routes!(crate::named_set_api::message_tags_update))
-        .routes(routes!(crate::named_set_api::message_tags_delete))
-        .routes(routes!(crate::named_set_api::message_tag_members_list))
-        .routes(routes!(crate::named_set_api::message_tag_members_update))
-        .routes(routes!(
-            crate::saved_searches_api::saved_searches_list_handler
+            crate::api_tokens_api::update_api_token,
+            crate::api_tokens_api::delete_api_token
         ))
         .routes(routes!(
-            crate::saved_searches_api::saved_searches_create_handler
+            crate::exports_api::list_exports,
+            crate::exports_api::create_export
         ))
+        .routes(routes!(crate::exports_api::get_export))
+        .routes(routes!(crate::exports_api::list_export_messages))
+        .routes(routes!(crate::exports_api::complete_export))
+        .routes(routes!(crate::exports_api::cancel_export))
+        .routes(routes!(crate::contacts_api::list_contacts))
+        .routes(routes!(crate::contacts_api::summarize_contacts))
+        .routes(routes!(crate::contacts_api::get_contact))
+        .routes(routes!(crate::contacts_api::update_contact))
+        .routes(routes!(crate::contacts_api::trash_contact))
+        .routes(routes!(crate::contacts_api::restore_contact))
+        .routes(routes!(crate::contacts_api::delete_contact))
+        .routes(routes!(crate::contacts_api::find_unmatched_identities))
+        .routes(routes!(crate::contacts_api::create_contacts))
+        .routes(routes!(crate::named_set_api::list_contact_groups))
+        .routes(routes!(crate::named_set_api::create_contact_group))
+        .routes(routes!(crate::named_set_api::update_contact_group))
+        .routes(routes!(crate::named_set_api::delete_contact_group))
+        .routes(routes!(crate::named_set_api::list_contact_group_members))
+        .routes(routes!(crate::named_set_api::update_contact_group_members))
+        .routes(routes!(crate::named_set_api::list_message_tags))
+        .routes(routes!(crate::named_set_api::create_message_tag))
+        .routes(routes!(crate::named_set_api::update_message_tag))
+        .routes(routes!(crate::named_set_api::delete_message_tag))
+        .routes(routes!(crate::named_set_api::list_message_tag_members))
+        .routes(routes!(crate::named_set_api::update_message_tag_members))
+        .routes(routes!(crate::saved_searches_api::list_saved_searches))
+        .routes(routes!(crate::saved_searches_api::create_saved_search))
+        .routes(routes!(crate::saved_searches_api::update_saved_search))
+        .routes(routes!(crate::saved_searches_api::delete_saved_search))
+        .routes(routes!(crate::search_fields_api::list_search_fields))
+        .routes(routes!(crate::conversations_api::list_conversations))
+        .routes(routes!(crate::conversations_api::get_conversation))
+        .routes(routes!(crate::conversations_api::list_conversation_sources))
         .routes(routes!(
-            crate::saved_searches_api::saved_searches_update_handler
+            crate::conversations_api::list_conversation_messages
         ))
+        .routes(routes!(crate::messages_api::list_messages))
+        .routes(routes!(crate::messages_api::get_message))
+        .routes(routes!(crate::conversations_api::trash_conversation))
+        .routes(routes!(crate::conversations_api::restore_conversation))
+        .routes(routes!(crate::conversations_api::delete_conversation))
+        .routes(routes!(crate::trash_api::empty_trash))
+        .routes(routes!(crate::imports_api::list_imports))
+        .routes(routes!(crate::imports_api::create_import))
         .routes(routes!(
-            crate::saved_searches_api::saved_searches_delete_handler
+            crate::imports_api::get_import,
+            crate::imports_api::update_import
         ))
-        .routes(routes!(crate::search_api::search_fields_list))
-        .routes(routes!(
-            crate::conversations_api::conversations_list_handler
-        ))
-        .routes(routes!(
-            crate::conversations_api::conversation_detail_handler
-        ))
-        .routes(routes!(
-            crate::conversations_api::conversation_sources_handler
-        ))
-        .routes(routes!(
-            crate::conversations_api::conversation_messages_handler
-        ))
-        .routes(routes!(crate::messages_api::messages_list_handler))
-        .routes(routes!(crate::messages_api::message_handler))
-        .routes(routes!(
-            crate::conversations_api::conversation_trash_handler
-        ))
-        .routes(routes!(
-            crate::conversations_api::conversation_restore_handler
-        ))
-        .routes(routes!(
-            crate::conversations_api::conversation_delete_handler
-        ))
-        .routes(routes!(crate::trash_api::empty_trash_handler))
-        .routes(routes!(crate::import::imports_list_handler))
-        .routes(routes!(crate::import::imports_create_handler))
-        .routes(routes!(
-            crate::import::imports_get_handler,
-            crate::import::imports_patch_handler
-        ))
-        .routes(routes!(crate::import::import_contacts_handler))
-        .routes(routes!(crate::import::imports_complete_handler))
-        .routes(routes!(crate::import::imports_discard_handler))
-        .routes(routes!(crate::import::import_batch_handler))
-        .routes(routes!(crate::assets::asset_head_handler))
-        .routes(routes!(crate::assets::asset_get_handler))
-        .routes(routes!(crate::assets::asset_put_handler))
-        .routes(routes!(crate::assets::asset_upload_start_handler))
-        .routes(routes!(crate::assets::asset_upload_part_handler))
-        .routes(routes!(crate::assets::asset_upload_complete_handler))
-        .routes(routes!(crate::assets::asset_upload_abort_handler))
-        .routes(routes!(crate::vault_api::vault_settings_handler))
-        .routes(routes!(crate::vault_api::patch_vault_settings_handler))
-        .routes(routes!(crate::vault_api::vault_storage_handler))
+        .routes(routes!(crate::imports_api::list_import_contacts))
+        .routes(routes!(crate::imports_api::complete_import))
+        .routes(routes!(crate::imports_api::discard_import))
+        .routes(routes!(crate::imports_api::create_import_batch))
+        .routes(routes!(crate::assets_api::head_asset))
+        .routes(routes!(crate::assets_api::get_asset))
+        .routes(routes!(crate::assets_api::replace_asset))
+        .routes(routes!(crate::assets_api::create_asset_upload))
+        .routes(routes!(crate::assets_api::replace_asset_upload_part))
+        .routes(routes!(crate::assets_api::complete_asset_upload))
+        .routes(routes!(crate::assets_api::delete_asset_upload))
+        .routes(routes!(crate::vault_api::get_vault_settings))
+        .routes(routes!(crate::vault_api::update_vault_settings))
+        .routes(routes!(crate::vault_api::get_vault_storage))
 }
 
 /// Pretty OpenAPI JSON. Same string the CLI writes and the stale-spec test compares.

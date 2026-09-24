@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail};
 use crate::config::validate_source_id;
 use crate::db::account_profile;
 use crate::dedupe::{self, DedupeStats};
-use crate::import::{self, ImportMode, ImportOptions, ImportStats};
+use crate::imports_api::{self, ImportMode, ImportOptions, ImportStats};
 use crate::jsonl;
 use crate::models::ExportRecord;
 use crate::open_vault::OpenVault;
@@ -177,7 +177,7 @@ async fn import_under_session(
         cfg.paths
             .assets_dir_for_account(account_id, plan.sources.first().expect("sources non-empty"))
     });
-    let session = import::OwnedSession::start(
+    let session = imports_api::OwnedSession::start(
         conn,
         account_id,
         &plan.sources.join(","),
@@ -201,11 +201,11 @@ async fn import_under_session(
         media: opts.media,
         wipe_sources: Some(plan.sources.clone()),
     };
-    let result = import::import_jsonl_files_on_conn(
+    let result = imports_api::import_jsonl_files_on_conn(
         conn,
         paths,
         &import_opts,
-        import::ImportSchemaMode::AssumeReady,
+        imports_api::ImportSchemaMode::AssumeReady,
     )
     .await;
     session.finish(conn, &result).await;
@@ -261,7 +261,7 @@ pub fn discover_sources(paths: &[PathBuf]) -> Result<Vec<String>> {
                 set.insert(source.to_string());
             }
         }
-        let is_orphaned = import::is_orphaned_export(path);
+        let is_orphaned = imports_api::is_orphaned_export(path);
         if !saw_conversation && !is_orphaned {
             bail!(
                 "{}: no conversation header (cannot determine export.source)",

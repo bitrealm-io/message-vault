@@ -657,7 +657,7 @@ fn derived_file_exists(derived_assets_path: Option<&str>, converted_dir: &Path) 
 
 /// Content-addressed relative path: `<aa>/<sha><ext>`.
 pub fn derived_rel_path(sha256: &str, ext: &str) -> String {
-    crate::assets::shard_rel_path(sha256, ext)
+    crate::assets_api::shard_rel_path(sha256, ext)
 }
 
 /// MIME type for a derived-media extension, from the shared table in
@@ -668,7 +668,7 @@ fn mime_for_ext(ext: &str) -> &'static str {
 
 /// Write derived bytes into the content-addressed store; the same bytes always land at the same path.
 fn store_derived_bytes(derived_dir: &Path, buf: &[u8], ext: &str) -> Result<DerivedBlob> {
-    let sha = crate::assets::sha256_hex(buf);
+    let sha = crate::assets_api::sha256_hex(buf);
     let rel = derived_rel_path(&sha, ext);
     let dest = derived_dir.join(&rel);
     if let Some(parent) = dest.parent() {

@@ -1,7 +1,7 @@
 import type { components } from "../../lib/vaultApi.types";
 
-/** One identity as the vault lists it, with the messages held at it. */
-export type Identity = components["schemas"]["AccountIdentity"];
+/** One identity as the vault lists it, with its messages. */
+export type Identity = components["schemas"]["Identity"];
 
 /** "12 direct messages and 30 group messages", "1 direct message", or null when there are none. */
 export function messagesPhrase(identity: Identity): string | null {

@@ -11,7 +11,7 @@ import { keys } from "../../lib/vaultKeys";
 import { useVaultCache, useVaultQuery } from "../../lib/vaultQuery";
 
 /** One account as the vault owner sees it: the same row the account itself reads. */
-export type ManagedAccount = components["schemas"]["AccountResponse"];
+export type ManagedAccount = components["schemas"]["Account"];
 
 /** The flags the vault owner can change on one account. */
 export type ManagedAccountChanges = Partial<

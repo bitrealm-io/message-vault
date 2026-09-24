@@ -6,7 +6,7 @@ import ConfirmDialog from "../ConfirmDialog";
 import DataCard from "../DataCard";
 import IdentityTable, { type IdentityRow } from "../IdentityTable";
 import type { ContactBrowseKind } from "./contactDrawerTypes";
-import { conversationCount, removeIdentityConfirmBody } from "./handleTableLogic";
+import { removeIdentityConfirmBody } from "./handleTableLogic";
 import { useHandleMutations } from "./useHandleMutations";
 
 type BrowseFn = (args: { kind: ContactBrowseKind; handle?: string }) => void;
@@ -15,12 +15,12 @@ type BrowseFn = (args: { kind: ContactBrowseKind; handle?: string }) => void;
 function toIdentityRow(h: ContactHandle): IdentityRow {
   return {
     handle: h.handle,
-    service: h.service ?? null,
+    service: h.service,
     start_date: h.start_date ?? null,
     end_date: h.end_date ?? null,
-    conversations: conversationCount(h),
-    direct_messages: h.individual_message_count,
-    group_messages: h.group_message_count,
+    conversations: h.conversations,
+    direct_messages: h.direct_messages,
+    group_messages: h.group_messages,
   };
 }
 
@@ -61,9 +61,7 @@ export function ContactDrawerHandles({
   const rows = useMemo(() => handleRows.map(toIdentityRow), [handleRows]);
 
   const requestRemove = (row: IdentityRow) => {
-    const original = handleRows.find(
-      (h) => h.handle === row.handle && (h.service ?? null) === row.service,
-    );
+    const original = handleRows.find((h) => h.handle === row.handle && h.service === row.service);
     if (original) requestRemoveHandle(original);
   };
 

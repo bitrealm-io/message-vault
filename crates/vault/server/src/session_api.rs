@@ -30,7 +30,7 @@ pub struct CreateSessionRequest {
 
 /// Session token plus the account id and username it belongs to.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct SessionTokenResponse {
+pub struct CreateSessionResponse {
     /// Session token to send as `Authorization: Bearer …`.
     pub token: String,
     /// Account id the session belongs to.
@@ -39,19 +39,19 @@ pub struct SessionTokenResponse {
     pub username: String,
 }
 
-impl SessionTokenResponse {
+impl CreateSessionResponse {
     /// Issue (or reuse) the session token for an existing account. Uses the
     /// account id when the row has no username.
     async fn for_existing_account(
         conn: &mut AnyConnection,
         account_id: i64,
-    ) -> anyhow::Result<SessionTokenResponse> {
+    ) -> anyhow::Result<CreateSessionResponse> {
         let token = session_tokens::get_or_create_session_token(conn, account_id).await?;
         account_profile::record_login(conn, account_id).await?;
         let username = account_profile::username_for_account(conn, account_id)
             .await?
             .unwrap_or_else(|| account_id.to_string());
-        Ok(SessionTokenResponse {
+        Ok(CreateSessionResponse {
             token,
             account_id,
             username,
@@ -61,7 +61,7 @@ impl SessionTokenResponse {
 
 /// The logged-in credential's account, username, and import sources.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct SessionResponse {
+pub(crate) struct Session {
     sources: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     account_id: Option<i64>,
@@ -78,19 +78,19 @@ pub(crate) struct SessionResponse {
     tag = "Session",
     security(("session" = []), ("api-token" = [])),
     responses(
-        (status = 200, body = SessionResponse),
+        (status = 200, body = Session),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn get_session_handler(
+pub(crate) async fn get_session(
     State(state): State<AppState>,
     auth: AuthIdentity,
-) -> Result<Json<SessionResponse>, ApiError> {
+) -> Result<Json<Session>, ApiError> {
     let account_id = auth.account_id;
     let username = load_username(&state.db, account_id).await?;
     let sources = list_account_sources(&state.db, account_id).await?;
-    Ok(Json(SessionResponse {
+    Ok(Json(Session {
         sources,
         account_id: Some(account_id),
         username,
@@ -121,7 +121,7 @@ async fn load_username(pool: &AnyPool, account_id: i64) -> Result<Option<String>
         (
             status = 201,
             description = "Logged in; the Session exists",
-            body = SessionTokenResponse,
+            body = CreateSessionResponse,
             headers(("Location" = String, description = "`/v1/session`"))
         ),
         (status = 400, description = "Invalid input", body = crate::problem::Problem),
@@ -130,10 +130,10 @@ async fn load_username(pool: &AnyPool, account_id: i64) -> Result<Option<String>
         (status = 429, description = "Rate limited", body = crate::problem::Problem)
     )
 )]
-pub async fn create_session_handler(
+pub async fn create_session(
     State(state): State<AppState>,
     Json(req): Json<CreateSessionRequest>,
-) -> Result<Created<SessionTokenResponse>, ApiError> {
+) -> Result<Created<CreateSessionResponse>, ApiError> {
     let username = normalize_username(&req.username);
     if username.is_empty() {
         return Err(ApiError::validation("username is required"));
@@ -169,7 +169,7 @@ pub async fn create_session_handler(
         return Err(ApiError::AccountDisabled("this account is disabled".into()));
     }
 
-    let body = SessionTokenResponse::for_existing_account(&mut conn, account_id).await?;
+    let body = CreateSessionResponse::for_existing_account(&mut conn, account_id).await?;
 
     Ok(Created {
         location: "/v1/session".to_string(),
@@ -198,7 +198,7 @@ async fn logout_on_conn(conn: &mut AnyConnection, token: &str) -> anyhow::Result
         (status = 403, description = "The token is an API token, which is not a Session", body = crate::problem::Problem)
     )
 )]
-pub async fn delete_session_handler(
+pub async fn delete_session(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<axum::http::StatusCode, ApiError> {

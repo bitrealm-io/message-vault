@@ -1,5 +1,5 @@
 use super::*;
-use crate::assets;
+use crate::assets_api;
 use crate::test_support::{
     TestVault, get_json, patch_json, post_created_json, post_json, register_via_api, test_vault,
 };
@@ -528,7 +528,7 @@ async fn append_with_a_found_file_fills_in_the_missing_attachment() {
     let (sha256, assets_path, missing_reason) = &rows[0];
     assert_eq!(
         sha256.as_deref(),
-        Some(assets::sha256_hex(b"found-bytes").as_str())
+        Some(assets_api::sha256_hex(b"found-bytes").as_str())
     );
     assert!(assets_path.is_some());
     assert_eq!(missing_reason, &None);
@@ -1176,8 +1176,8 @@ async fn claimed_import_rejects_corrupt_existing_asset() {
     let tmp = TempDir::new().unwrap();
     let db = tmp.path().join("vault.db");
     let assets = tmp.path().join("assets");
-    let sha = assets::sha256_hex(b"expected-asset");
-    let corrupt = assets.join(assets::shard_rel_path(&sha, ".bin"));
+    let sha = assets_api::sha256_hex(b"expected-asset");
+    let corrupt = assets.join(assets_api::shard_rel_path(&sha, ".bin"));
     fs::create_dir_all(corrupt.parent().unwrap()).unwrap();
     fs::write(&corrupt, b"corrupt-asset").unwrap();
 

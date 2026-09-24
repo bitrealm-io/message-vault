@@ -9,7 +9,7 @@
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
-use crate::import::ImportMode;
+use crate::imports_api::ImportMode;
 use anyhow::{Result, bail};
 use clap::{Args, Command, CommandFactory, Parser, Subcommand};
 
@@ -468,7 +468,7 @@ fn format_discarded_import(
 }
 
 /// The counts from one import stage, one line each, ready to print.
-fn format_import_stats(import: &crate::import::ImportStats) -> String {
+fn format_import_stats(import: &crate::imports_api::ImportStats) -> String {
     let mut out = String::new();
     if import.contacts_skipped {
         out.push_str(

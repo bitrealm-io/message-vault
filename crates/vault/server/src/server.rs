@@ -2,8 +2,8 @@
 //!
 //! Domain handlers live in their own modules: `session_api` (logging in and
 //! out), `accounts_api` (the accounts collection), `api_tokens_api`,
-//! `contacts_api`, `conversations_api`, `export_api` (messages and counts),
-//! `import` (JSONL ingest and Import Runs), and `assets` (asset bytes and
+//! `contacts_api`, `conversations_api`, `exports_api` (messages and counts),
+//! `imports_api` (JSONL ingest and Import Runs), and `assets_api` (asset bytes and
 //! multipart uploads). This module
 //! keeps the pieces they share: [`AppState`], [`ApiError`], Bearer token
 //! resolution, body-streaming helpers, and `http_app`, which assembles the
@@ -942,7 +942,7 @@ async fn shutdown_signal() {
     tag = "Health",
     responses((status = 200, description = "Process is up", body = String))
 )]
-pub(crate) async fn health() -> (StatusCode, &'static str) {
+pub(crate) async fn get_health() -> (StatusCode, &'static str) {
     (StatusCode::OK, "ok\n")
 }
 

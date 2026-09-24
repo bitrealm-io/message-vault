@@ -9,7 +9,7 @@ use message_ir::{HandleService, HandleType, nonempty, trimmed};
 use sqlx::AnyConnection;
 use sqlx::Row;
 
-use crate::assets::{self, AssetStats, StoredAsset};
+use crate::assets_api::{self, AssetStats, StoredAsset};
 use crate::config::validate_source_id;
 use crate::db::dialect;
 use crate::db::handles::{
@@ -69,7 +69,7 @@ fn try_store_converted(
     // Bytes may have changed; drop any claimed SHA-256 fingerprint from the export.
     att.sha256 = None;
     att.mime_type = resolved.mime_type.or(att.mime_type.take());
-    assets::hash_and_store(
+    assets_api::hash_and_store(
         &resolved.path,
         assets_dir,
         att.mime_type.as_deref(),
@@ -86,7 +86,7 @@ fn store_claimed_or_path(
     asset_stats: &mut AssetStats,
 ) -> Result<Option<StoredAsset>> {
     if let Some(sha) = att.sha256.as_deref().and_then(trimmed) {
-        if let Some(found) = assets::lookup_by_sha256(assets_dir, sha) {
+        if let Some(found) = assets_api::lookup_by_sha256(assets_dir, sha) {
             asset_stats.deduped += 1;
             return Ok(Some(StoredAsset {
                 mime_type: att.mime_type.clone().or(found.mime_type),
@@ -95,7 +95,7 @@ fn store_claimed_or_path(
         }
         if let Some(rel) = att.path.as_deref().and_then(trimmed) {
             let source = message_ir::safe_attachment_path(export_dir, rel)?;
-            return match assets::store_verified(
+            return match assets_api::store_verified(
                 &source,
                 sha,
                 assets_dir,
@@ -124,7 +124,12 @@ fn store_claimed_or_path(
 
     if let Some(rel) = att.path.as_deref() {
         let source = message_ir::safe_attachment_path(export_dir, rel)?;
-        return assets::hash_and_store(&source, assets_dir, att.mime_type.as_deref(), asset_stats);
+        return assets_api::hash_and_store(
+            &source,
+            assets_dir,
+            att.mime_type.as_deref(),
+            asset_stats,
+        );
     }
     asset_stats.missing += 1;
     Ok(None)

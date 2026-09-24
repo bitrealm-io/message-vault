@@ -5,7 +5,7 @@ import { createAccount } from "../../lib/vaultApi";
 import type { components } from "../../lib/vaultApi.types";
 
 /** What the vault answers when it creates an account. */
-export type CreatedAccount = components["schemas"]["CreatedAccountResponse"];
+export type CreatedAccount = components["schemas"]["CreateAccountResponse"];
 
 /**
  * Creating an account: a username, the password twice, the checks, and the

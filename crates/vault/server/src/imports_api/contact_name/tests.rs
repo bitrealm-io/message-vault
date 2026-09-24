@@ -297,22 +297,22 @@ async fn import_files(conn: &mut sqlx::AnyConnection, files: &[(&str, String)]) 
         })
         .collect();
     let assets = tmp.path().join("assets");
-    let opts = crate::import::ImportOptions::fixed(crate::import::FixedImportArgs {
+    let opts = crate::imports_api::ImportOptions::fixed(crate::imports_api::FixedImportArgs {
         assets_dir: &assets,
         asset_root: tmp.path(),
         contacts: None,
         overwrite_contacts: false,
-        mode: crate::import::ImportMode::Append,
+        mode: crate::imports_api::ImportMode::Append,
         source: "imessage",
         account_id: TEST_ACCOUNT,
         fill_content_keys: false,
         import_id: None,
     });
-    crate::import::import_jsonl_files_on_conn(
+    crate::imports_api::import_jsonl_files_on_conn(
         conn,
         &paths,
         &opts,
-        crate::import::ImportSchemaMode::Ensure,
+        crate::imports_api::ImportSchemaMode::Ensure,
     )
     .await
     .unwrap();

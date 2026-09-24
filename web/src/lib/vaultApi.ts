@@ -81,13 +81,13 @@ function ownAccountPath(): string {
 /** Log in. The Session is a singleton, so the vault answers `201` with `Location: /v1/session`. */
 export function login(
   body: Schema["CreateSessionRequest"],
-): Promise<Schema["SessionTokenResponse"]> {
-  return apiClient.post<Schema["SessionTokenResponse"]>("/v1/session", body);
+): Promise<Schema["CreateSessionResponse"]> {
+  return apiClient.post<Schema["CreateSessionResponse"]>("/v1/session", body);
 }
 
 /** The Session the bearer token names: its account, username, and import sources. */
-export function getSession(opts?: VaultRequestOptions): Promise<Schema["SessionResponse"]> {
-  return apiClient.get<Schema["SessionResponse"]>("/v1/session", opts);
+export function getSession(opts?: VaultRequestOptions): Promise<Schema["Session"]> {
+  return apiClient.get<Schema["Session"]>("/v1/session", opts);
 }
 
 /** Log out: end the Session. The vault answers `204`. */
@@ -104,15 +104,15 @@ export function logout(opts?: VaultRequestOptions): Promise<void> {
  * joining "does an owner exist" to "is registration open" is stated once, on
  * the server. See `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
  */
-export function getVaultState(opts?: VaultRequestOptions): Promise<Schema["VaultResponse"]> {
-  return apiClient.get<Schema["VaultResponse"]>("/v1/vault", opts);
+export function getVaultState(opts?: VaultRequestOptions): Promise<Schema["Vault"]> {
+  return apiClient.get<Schema["Vault"]>("/v1/vault", opts);
 }
 
 /** Claim an unclaimed vault by creating its owner. Returns their session. */
 export function claimVault(
   body: Schema["ClaimVaultRequest"],
-): Promise<Schema["SessionTokenResponse"]> {
-  return apiClient.post<Schema["SessionTokenResponse"]>("/v1/vault/claim", body);
+): Promise<Schema["CreateSessionResponse"]> {
+  return apiClient.post<Schema["CreateSessionResponse"]>("/v1/vault/claim", body);
 }
 
 // ── The accounts collection ─────────────────────────────────────────────────
@@ -123,8 +123,8 @@ export function claimVault(
 // account through `ownAccountPath`.
 
 /** The accounts of this vault, for the owner: the owner's own first, then the rest by username. */
-export function listAccounts(opts?: VaultRequestOptions): Promise<Schema["Page_AccountResponse"]> {
-  return apiClient.get<Schema["Page_AccountResponse"]>("/v1/accounts", opts);
+export function listAccounts(opts?: VaultRequestOptions): Promise<Schema["Page_Account"]> {
+  return apiClient.get<Schema["Page_Account"]>("/v1/accounts", opts);
 }
 
 /**
@@ -137,30 +137,30 @@ export function listAccounts(opts?: VaultRequestOptions): Promise<Schema["Page_A
  */
 export function createAccount(
   body: Schema["CreateAccountRequest"],
-): Promise<Schema["CreatedAccountResponse"]> {
-  return apiClient.post<Schema["CreatedAccountResponse"]>("/v1/accounts", body);
+): Promise<Schema["CreateAccountResponse"]> {
+  return apiClient.post<Schema["CreateAccountResponse"]>("/v1/accounts", body);
 }
 
 /** One account, as the owner: profile, flags, and how much it holds. */
 export function getAccount(
   accountId: number,
   opts?: VaultRequestOptions,
-): Promise<Schema["AccountResponse"]> {
-  return apiClient.get<Schema["AccountResponse"]>(accountPath(accountId), opts);
+): Promise<Schema["Account"]> {
+  return apiClient.get<Schema["Account"]>(accountPath(accountId), opts);
 }
 
 /** Change an account's disabled flag or its import, export and delete grants, as the owner. */
 export function updateAccount(
   accountId: number,
-  body: Schema["PatchAccountRequest"],
-): Promise<Schema["AccountResponse"]> {
-  return apiClient.patch<Schema["AccountResponse"]>(accountPath(accountId), body);
+  body: Schema["UpdateAccountRequest"],
+): Promise<Schema["Account"]> {
+  return apiClient.patch<Schema["Account"]>(accountPath(accountId), body);
 }
 
 /** Set another account's password as the owner, ending its sessions. */
 export function setAccountPassword(
   accountId: number,
-  body: Schema["SetPasswordRequest"],
+  body: Schema["ReplaceAccountPasswordRequest"],
 ): Promise<void> {
   return apiClient.put<void>(`${accountPath(accountId)}/password`, body);
 }
@@ -176,10 +176,8 @@ export function deleteAccountMessages(accountId: number): Promise<unknown> {
 }
 
 /** Settings that belong to the whole vault. */
-export function getVaultSettings(
-  opts?: VaultRequestOptions,
-): Promise<Schema["VaultSettingsResponse"]> {
-  return apiClient.get<Schema["VaultSettingsResponse"]>("/v1/vault/settings", opts);
+export function getVaultSettings(opts?: VaultRequestOptions): Promise<Schema["VaultSettings"]> {
+  return apiClient.get<Schema["VaultSettings"]>("/v1/vault/settings", opts);
 }
 
 /**
@@ -187,38 +185,39 @@ export function getVaultSettings(
  * conversation, contact and attachment counts, and attachment bytes. The
  * owner's, and counts only (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
  */
-export function getVaultStorage(
-  opts?: VaultRequestOptions,
-): Promise<Schema["VaultStorageResponse"]> {
-  return apiClient.get<Schema["VaultStorageResponse"]>("/v1/vault/storage", opts);
+export function getVaultStorage(opts?: VaultRequestOptions): Promise<Schema["VaultStorage"]> {
+  return apiClient.get<Schema["VaultStorage"]>("/v1/vault/storage", opts);
 }
 
 /** Change the vault's settings. Omitted fields are left alone. */
 export function updateVaultSettings(
-  body: Schema["PatchVaultSettingsRequest"],
-): Promise<Schema["VaultSettingsResponse"]> {
-  return apiClient.patch<Schema["VaultSettingsResponse"]>("/v1/vault/settings", body);
+  body: Schema["UpdateVaultSettingsRequest"],
+): Promise<Schema["VaultSettings"]> {
+  return apiClient.patch<Schema["VaultSettings"]>("/v1/vault/settings", body);
 }
 
 // ── The logged-in account's own row ─────────────────────────────────────────
 
 /** The logged-in account: profile, flags, and how much it holds. */
-export function getAccountProfile(opts?: VaultRequestOptions): Promise<Schema["AccountResponse"]> {
-  return apiClient.get<Schema["AccountResponse"]>(ownAccountPath(), opts);
+export function getAccountProfile(opts?: VaultRequestOptions): Promise<Schema["Account"]> {
+  return apiClient.get<Schema["Account"]>(ownAccountPath(), opts);
 }
 
 /** Change the logged-in account's display name, time zone or handles. */
 export function updateAccountProfile(
-  body: Schema["PatchAccountRequest"],
-): Promise<Schema["AccountResponse"]> {
-  return apiClient.patch<Schema["AccountResponse"]>(ownAccountPath(), body);
+  body: Schema["UpdateAccountRequest"],
+): Promise<Schema["Account"]> {
+  return apiClient.patch<Schema["Account"]>(ownAccountPath(), body);
 }
 
 /** Change the logged-in account's own password. The vault answers a rotated session token. */
 export function changePassword(
-  body: Schema["SetPasswordRequest"],
-): Promise<Schema["SetPasswordResponse"]> {
-  return apiClient.put<Schema["SetPasswordResponse"]>(`${ownAccountPath()}/password`, body);
+  body: Schema["ReplaceAccountPasswordRequest"],
+): Promise<Schema["ReplaceAccountPasswordResponse"]> {
+  return apiClient.put<Schema["ReplaceAccountPasswordResponse"]>(
+    `${ownAccountPath()}/password`,
+    body,
+  );
 }
 
 /** Delete the logged-in account, confirming with its current password. */
@@ -230,8 +229,8 @@ export function deleteAccount(body: Schema["DeleteAccountRequest"]): Promise<voi
 export function getAccountStorage(
   opts?: VaultRequestOptions,
   accountId?: number,
-): Promise<Schema["AccountStorageResponse"]> {
-  return apiClient.get<Schema["AccountStorageResponse"]>(`${accountBase(accountId)}/storage`, opts);
+): Promise<Schema["AccountStorage"]> {
+  return apiClient.get<Schema["AccountStorage"]>(`${accountBase(accountId)}/storage`, opts);
 }
 
 // An account's import and export history, for its Storage screen. These are
@@ -246,11 +245,8 @@ function accountBase(accountId?: number): string {
 export function listAccountIdentities(
   opts?: VaultRequestOptions,
   accountId?: number,
-): Promise<Schema["Page_AccountIdentity"]> {
-  return apiClient.get<Schema["Page_AccountIdentity"]>(
-    `${accountBase(accountId)}/identities`,
-    opts,
-  );
+): Promise<Schema["Page_Identity"]> {
+  return apiClient.get<Schema["Page_Identity"]>(`${accountBase(accountId)}/identities`, opts);
 }
 
 /** An account's Import Runs, newest first: the logged-in one, or as the owner the one named. */
@@ -266,11 +262,8 @@ export function getAccountImport(
   importId: number,
   opts?: VaultRequestOptions,
   accountId?: number,
-): Promise<Schema["ImportDetailResponse"]> {
-  return apiClient.get<Schema["ImportDetailResponse"]>(
-    `${accountBase(accountId)}/imports/${importId}`,
-    opts,
-  );
+): Promise<Schema["ImportRun"]> {
+  return apiClient.get<Schema["ImportRun"]>(`${accountBase(accountId)}/imports/${importId}`, opts);
 }
 
 /** An account's Export Runs, newest first: the logged-in one, or as the owner the one named. */
@@ -293,8 +286,8 @@ export function deleteAllMessages(
 // An account's tokens live under its own row, and nobody else's session
 // reaches them.
 
-export function listApiTokens(opts?: VaultRequestOptions): Promise<Schema["Page_ApiTokenItem"]> {
-  return apiClient.get<Schema["Page_ApiTokenItem"]>(`${ownAccountPath()}/api-tokens`, opts);
+export function listApiTokens(opts?: VaultRequestOptions): Promise<Schema["Page_ApiToken"]> {
+  return apiClient.get<Schema["Page_ApiToken"]>(`${ownAccountPath()}/api-tokens`, opts);
 }
 
 export function createApiToken(
@@ -305,9 +298,9 @@ export function createApiToken(
 
 export function renameApiToken(
   id: number,
-  body: Schema["RenameApiTokenRequest"],
-): Promise<Schema["RenameApiTokenResponse"]> {
-  return apiClient.patch<Schema["RenameApiTokenResponse"]>(
+  body: Schema["UpdateApiTokenRequest"],
+): Promise<Schema["UpdateApiTokenResponse"]> {
+  return apiClient.patch<Schema["UpdateApiTokenResponse"]>(
     `${ownAccountPath()}/api-tokens/${id}`,
     body,
   );
@@ -413,8 +406,8 @@ export function listMessages(
 export function getConversationSources(
   conversationId: number,
   opts?: VaultRequestOptions,
-): Promise<Schema["Page_ConversationSourceInfo"]> {
-  return apiClient.get<Schema["Page_ConversationSourceInfo"]>(
+): Promise<Schema["Page_ConversationSource"]> {
+  return apiClient.get<Schema["Page_ConversationSource"]>(
     `/v1/conversations/${conversationId}/sources`,
     opts,
   );
@@ -467,8 +460,8 @@ export function listContacts(
 export function getContact(
   contactId: string | number,
   opts?: VaultRequestOptions,
-): Promise<Schema["ContactDetail"]> {
-  return apiClient.get<Schema["ContactDetail"]>(
+): Promise<Schema["Contact"]> {
+  return apiClient.get<Schema["Contact"]>(
     `/v1/contacts/${encodeURIComponent(String(contactId))}`,
     opts,
   );
@@ -480,16 +473,16 @@ export function getContact(
  */
 export function updateContact(
   contactId: string | number,
-  body: Schema["ContactMutationBody"],
-): Promise<Schema["ContactDetail"]> {
-  return apiClient.patch<Schema["ContactDetail"]>(
+  body: Schema["UpdateContactRequest"],
+): Promise<Schema["Contact"]> {
+  return apiClient.patch<Schema["Contact"]>(
     `/v1/contacts/${encodeURIComponent(String(contactId))}`,
     body,
   );
 }
 
 export function getContactSummaries(
-  body: Schema["ContactSummariesBody"],
+  body: Schema["SummarizeContactsRequest"],
   opts?: VaultRequestOptions,
 ): Promise<Schema["Page_ContactSelectionSummary"]> {
   return apiClient.post<Schema["Page_ContactSelectionSummary"]>(
@@ -500,10 +493,10 @@ export function getContactSummaries(
 }
 
 /** Which of these identifiers the account has no contact for. */
-export function unmatchedHandles(
-  body: Schema["UnmatchedHandlesBody"],
+export function unmatchedIdentities(
+  body: Schema["FindUnmatchedIdentitiesRequest"],
 ): Promise<Schema["Page_String"]> {
-  return apiClient.post<Schema["Page_String"]>("/v1/contacts/unmatched-handles", body);
+  return apiClient.post<Schema["Page_String"]>("/v1/contacts/unmatched-identities", body);
 }
 
 /** The media type an address book file is sent as, from its name; null when it is neither. */
@@ -521,8 +514,8 @@ export function addressBookContentType(fileName: string): "text/vcard" | "text/c
 export function loadAddressBook(
   content: string,
   contentType: "text/vcard" | "text/csv",
-): Promise<Schema["AddressBookLoadResponse"]> {
-  return apiClient.postRaw<Schema["AddressBookLoadResponse"]>("/v1/contacts", content, contentType);
+): Promise<Schema["CreateContactsResponse"]> {
+  return apiClient.postRaw<Schema["CreateContactsResponse"]>("/v1/contacts", content, contentType);
 }
 
 /** Put a contact in the trash. Idempotent: trashing an already-trashed one still answers. */
@@ -555,7 +548,7 @@ export function listContactGroups(opts?: VaultRequestOptions): Promise<Schema["P
 }
 
 export function createContactGroup(
-  body: Schema["NamedSetBody"],
+  body: Schema["NamedSetRequest"],
   opts?: VaultRequestOptions,
 ): Promise<Schema["NamedSet"]> {
   return apiClient.post<Schema["NamedSet"]>("/v1/contact-groups", body, opts);
@@ -563,7 +556,7 @@ export function createContactGroup(
 
 export function updateContactGroup(
   id: number,
-  body: Schema["NamedSetBody"],
+  body: Schema["NamedSetRequest"],
   opts?: VaultRequestOptions,
 ): Promise<Schema["NamedSet"]> {
   return apiClient.patch<Schema["NamedSet"]>(`/v1/contact-groups/${id}`, body, opts);
@@ -582,10 +575,14 @@ export function listContactGroupMembers(
 
 export function updateContactGroupMembers(
   id: number,
-  body: Schema["MembersPatch"],
+  body: Schema["UpdateMembersRequest"],
   opts?: VaultRequestOptions,
-): Promise<Schema["MembersChanged"]> {
-  return apiClient.patch<Schema["MembersChanged"]>(`/v1/contact-groups/${id}/members`, body, opts);
+): Promise<Schema["UpdateMembersResponse"]> {
+  return apiClient.patch<Schema["UpdateMembersResponse"]>(
+    `/v1/contact-groups/${id}/members`,
+    body,
+    opts,
+  );
 }
 
 // ── Message Tags ────────────────────────────────────────────────────────────
@@ -595,7 +592,7 @@ export function listMessageTags(opts?: VaultRequestOptions): Promise<Schema["Pag
 }
 
 export function createMessageTag(
-  body: Schema["NamedSetBody"],
+  body: Schema["NamedSetRequest"],
   opts?: VaultRequestOptions,
 ): Promise<Schema["NamedSet"]> {
   return apiClient.post<Schema["NamedSet"]>("/v1/message-tags", body, opts);
@@ -603,7 +600,7 @@ export function createMessageTag(
 
 export function updateMessageTag(
   id: number,
-  body: Schema["NamedSetBody"],
+  body: Schema["NamedSetRequest"],
   opts?: VaultRequestOptions,
 ): Promise<Schema["NamedSet"]> {
   return apiClient.patch<Schema["NamedSet"]>(`/v1/message-tags/${id}`, body, opts);
@@ -622,10 +619,14 @@ export function listMessageTagMembers(
 
 export function updateMessageTagMembers(
   id: number,
-  body: Schema["MembersPatch"],
+  body: Schema["UpdateMembersRequest"],
   opts?: VaultRequestOptions,
-): Promise<Schema["MembersChanged"]> {
-  return apiClient.patch<Schema["MembersChanged"]>(`/v1/message-tags/${id}/members`, body, opts);
+): Promise<Schema["UpdateMembersResponse"]> {
+  return apiClient.patch<Schema["UpdateMembersResponse"]>(
+    `/v1/message-tags/${id}/members`,
+    body,
+    opts,
+  );
 }
 
 // ── Saved Searches ──────────────────────────────────────────────────────────
@@ -634,13 +635,15 @@ export function listSavedSearches(opts?: VaultRequestOptions): Promise<Schema["P
   return apiClient.get<Schema["Page_SavedSearch"]>("/v1/saved-searches", opts);
 }
 
-export function createSavedSearch(body: Schema["SavedSearchBody"]): Promise<Schema["SavedSearch"]> {
+export function createSavedSearch(
+  body: Schema["SavedSearchRequest"],
+): Promise<Schema["SavedSearch"]> {
   return apiClient.post<Schema["SavedSearch"]>("/v1/saved-searches", body);
 }
 
 export function updateSavedSearch(
   id: number,
-  body: Schema["SavedSearchBody"],
+  body: Schema["SavedSearchRequest"],
 ): Promise<Schema["SavedSearch"]> {
   return apiClient.patch<Schema["SavedSearch"]>(`/v1/saved-searches/${id}`, body);
 }
@@ -678,15 +681,12 @@ export function listImports(
   return apiClient.get<Schema["Page_ImportSummary"]>(withQuery("/v1/imports", query(params)), opts);
 }
 
-export function getImport(
-  id: number,
-  opts?: VaultRequestOptions,
-): Promise<Schema["ImportDetailResponse"]> {
-  return apiClient.get<Schema["ImportDetailResponse"]>(`/v1/imports/${id}`, opts);
+export function getImport(id: number, opts?: VaultRequestOptions): Promise<Schema["ImportRun"]> {
+  return apiClient.get<Schema["ImportRun"]>(`/v1/imports/${id}`, opts);
 }
 
 export function createImport(
-  body: Schema["CreateImportBody"],
+  body: Schema["CreateImportRequest"],
 ): Promise<Schema["CreateImportResponse"]> {
   return apiClient.post<Schema["CreateImportResponse"]>("/v1/imports", body);
 }
@@ -694,14 +694,14 @@ export function createImport(
 /** Move a live Import Run to another stage; the run comes back. */
 export function setImportStage(
   id: number,
-  body: Schema["SetImportStageBody"],
-): Promise<Schema["ImportDetailResponse"]> {
-  return apiClient.patch<Schema["ImportDetailResponse"]>(`/v1/imports/${id}`, body);
+  body: Schema["UpdateImportRequest"],
+): Promise<Schema["ImportRun"]> {
+  return apiClient.patch<Schema["ImportRun"]>(`/v1/imports/${id}`, body);
 }
 
 export function completeImport(
   id: number,
-  body: Schema["CompleteImportBody"],
+  body: Schema["CompleteImportRequest"],
 ): Promise<Schema["CompleteImportResponse"]> {
   return apiClient.post<Schema["CompleteImportResponse"]>(`/v1/imports/${id}/complete`, body);
 }
@@ -713,8 +713,8 @@ export function discardImport(id: number): Promise<Schema["DiscardImportResponse
 export function getImportContacts(
   id: number,
   opts?: VaultRequestOptions,
-): Promise<Schema["Page_ImportContactRow"]> {
-  return apiClient.get<Schema["Page_ImportContactRow"]>(`/v1/imports/${id}/contacts`, opts);
+): Promise<Schema["Page_ImportContact"]> {
+  return apiClient.get<Schema["Page_ImportContact"]>(`/v1/imports/${id}/contacts`, opts);
 }
 
 // ── Export Runs ─────────────────────────────────────────────────────────────
@@ -727,7 +727,7 @@ export function getExport(id: number, opts?: VaultRequestOptions): Promise<Schem
 }
 
 /** Record an Export Run; the vault answers `201` with the run and its counts. */
-export function createExport(body: Schema["CreateExportBody"]): Promise<Schema["ExportRun"]> {
+export function createExport(body: Schema["CreateExportRequest"]): Promise<Schema["ExportRun"]> {
   return apiClient.post<Schema["ExportRun"]>("/v1/exports", body);
 }
 

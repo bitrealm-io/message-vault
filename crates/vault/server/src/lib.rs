@@ -12,17 +12,17 @@ pub mod error_docs;
 pub(crate) mod accounts_api;
 pub(crate) mod api_tokens_api;
 pub(crate) mod asset_uploads;
-pub(crate) mod assets;
+pub(crate) mod assets_api;
 pub(crate) mod contacts_api;
 pub(crate) mod conversations_api;
 pub(crate) mod credentials;
 pub(crate) mod db;
 pub(crate) mod dedupe;
-pub(crate) mod export_api;
+pub(crate) mod exports_api;
 pub(crate) mod extract;
-pub(crate) mod import;
 pub(crate) mod import_cli;
 pub(crate) mod import_media;
+pub(crate) mod imports_api;
 pub(crate) mod jsonl;
 pub(crate) mod keyed_locks;
 pub mod logging;
@@ -41,7 +41,7 @@ pub mod request_id;
 pub(crate) mod reset_demo;
 pub(crate) mod saved_searches_api;
 pub(crate) mod search;
-pub(crate) mod search_api;
+pub(crate) mod search_fields_api;
 pub(crate) mod server;
 pub(crate) mod session_api;
 #[cfg(test)]
@@ -61,7 +61,7 @@ pub use db::engine::{pg_test_schema_pool, sqlite_test_pool};
 #[doc(hidden)]
 pub use db::schema::ensure_vault_schema;
 #[doc(hidden)]
-pub use export_api::{ExportPageOpts, export_messages, start_export_run};
+pub use exports_api::{ExportPageOpts, export_messages, start_export_run};
 pub use vault_api_types::ExportScope;
 
 use clap::Command;

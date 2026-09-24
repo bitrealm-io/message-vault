@@ -54,6 +54,12 @@ released versions carry their date on the heading.
 - 2026-09-22 **Shorter wording on two screens.** Create Vault Owner now
   opens with "A vault owner is required to create and manage users.", and
   the Display Name button in Settings reads Save without changing to Saved.
+- 2026-09-23 **A contact's identities read the same as an account's.** The
+  contact drawer now shows each identity in the form the vault stores it,
+  a phone number in international form, and names an email address as
+  Email, just as the Profile tab does. The vault counts both tables the
+  same way. Under the surface, the vault's interface and code were renamed
+  to use the words the product uses, with nothing else to see.
 
 ### Fixes
 

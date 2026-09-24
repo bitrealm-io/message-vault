@@ -475,7 +475,7 @@ impl<'a> World<'a> {
 
         let asset = world.url(&format!(
             "/v1/assets/{}?source=imessage",
-            crate::assets::sha256_hex(ASSET_BYTES)
+            crate::assets_api::sha256_hex(ASSET_BYTES)
         ));
         let response = reqwest::Client::new()
             .put(asset)
@@ -490,7 +490,7 @@ impl<'a> World<'a> {
             .create(
                 &format!(
                     "/v1/assets/{}/uploads?source=imessage",
-                    crate::assets::sha256_hex(UPLOAD_BYTES)
+                    crate::assets_api::sha256_hex(UPLOAD_BYTES)
                 ),
                 json!({ "bytes": UPLOAD_BYTES.len() }),
             )
@@ -553,8 +553,8 @@ impl<'a> World<'a> {
             "id" if id("/v1/saved-searches/") => self.saved_search_id.to_string(),
             "token_id" => self.spare_token_id.to_string(),
             "import_id" => self.import_id.to_string(),
-            "sha256" if path.contains("/uploads") => crate::assets::sha256_hex(UPLOAD_BYTES),
-            "sha256" => crate::assets::sha256_hex(ASSET_BYTES),
+            "sha256" if path.contains("/uploads") => crate::assets_api::sha256_hex(UPLOAD_BYTES),
+            "sha256" => crate::assets_api::sha256_hex(ASSET_BYTES),
             "upload_id" => self.upload_id.clone(),
             "part" => "1".to_string(),
             _ => panic!("the credential matrix has no row for {{{name}}} in {path}; add one"),
@@ -582,7 +582,7 @@ impl<'a> World<'a> {
     async fn upload_survives(&self) -> bool {
         let path = format!(
             "/v1/assets/{}/uploads/{}/parts/1?source=imessage",
-            crate::assets::sha256_hex(UPLOAD_BYTES),
+            crate::assets_api::sha256_hex(UPLOAD_BYTES),
             self.upload_id
         );
         let response = reqwest::Client::new()
@@ -634,7 +634,7 @@ fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8>)> {
             b"BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Robin\r\nTEL:+15555550199\r\nEND:VCARD\r\n".to_vec(),
         )),
         ("post", "/v1/contacts/summaries") => json(json!({ "ids": [] })),
-        ("post", "/v1/contacts/unmatched-handles") => json(json!({ "identifiers": [] })),
+        ("post", "/v1/contacts/unmatched-identities") => json(json!({ "identifiers": [] })),
         ("patch", "/v1/contacts/{id}") => json(json!({ "name": "Samantha" })),
         ("post", "/v1/exports") => json(json!({ "scope": { "kind": "everything" } })),
         ("post", "/v1/imports") => json(json!({ "source": "imessage" })),

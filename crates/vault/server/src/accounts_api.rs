@@ -25,6 +25,7 @@ use crate::credentials::{
     change_password_on_conn, check_auth_rate_limit, hash_owner_password, hash_user_password,
     passwords_match, require_username_free, require_valid_username,
 };
+use crate::db::handles::{self, Identity};
 use crate::db::storage::{self, Scope};
 use crate::db::{account_profile, session_tokens, vault_imports, vault_settings};
 use crate::extract::{Json, Path, Query};
@@ -39,7 +40,7 @@ use crate::server::{ApiError, AppState, AuthIdentity, Created, LoggedIn, Owner};
 /// and the account itself both read the whole struct; nothing in it is a
 /// message.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct AccountResponse {
+pub struct Account {
     /// Account id.
     pub account_id: i64,
     /// Login username.
@@ -91,7 +92,7 @@ pub struct AccountResponse {
 async fn load_account(
     conn: &mut AnyConnection,
     account_id: i64,
-) -> Result<Option<AccountResponse>, ApiError> {
+) -> Result<Option<Account>, ApiError> {
     let Some(username) = account_profile::username_for_account(conn, account_id).await? else {
         return Ok(None);
     };
@@ -108,7 +109,7 @@ async fn load_account(
     let storage_bytes = storage::attachment_bytes(conn, Scope::Account(account_id)).await?;
     let last_login_at = account_profile::load_last_login(conn, account_id).await?;
     let app = crate::db::session_tokens::connecting_app_for_account(conn, account_id).await?;
-    Ok(Some(AccountResponse {
+    Ok(Some(Account {
         account_id,
         username,
         preferred_name,
@@ -131,10 +132,7 @@ async fn load_account(
 }
 
 /// Load one account's row, or `404 Not Found`.
-async fn require_account(
-    conn: &mut AnyConnection,
-    account_id: i64,
-) -> Result<AccountResponse, ApiError> {
+async fn require_account(conn: &mut AnyConnection, account_id: i64) -> Result<Account, ApiError> {
     load_account(conn, account_id)
         .await?
         .ok_or_else(|| ApiError::NotFound(format!("account {account_id} not found")))
@@ -191,23 +189,22 @@ async fn require_owner_or_self(
     get,
     path = "/v1/accounts",
     tag = "Accounts",
-    operation_id = "list_accounts",
     security(("session" = ["owner"])),
     params(
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
         ("offset" = Option<usize>, Query, description = "Page offset")
     ),
     responses(
-        (status = 200, body = crate::paging::Page<AccountResponse>),
+        (status = 200, body = crate::paging::Page<Account>),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub async fn list_accounts_handler(
+pub async fn list_accounts(
     State(state): State<AppState>,
     Owner(_auth): Owner,
     Query(query): Query<PageQuery>,
-) -> Result<Json<Page<AccountResponse>>, ApiError> {
+) -> Result<Json<Page<Account>>, ApiError> {
     let page = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
     let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
@@ -257,10 +254,10 @@ pub struct CreateAccountRequest {
 /// The account that was created, and the Session a stranger's registration
 /// opens on it. The owner's creation opens no session, so `token` is absent.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct CreatedAccountResponse {
+pub struct CreateAccountResponse {
     /// The new account.
     #[serde(flatten)]
-    pub account: AccountResponse,
+    pub account: Account,
     /// Session token to send as `Authorization: Bearer …`. Present only when
     /// a stranger registered, because they are logged in on creation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -280,13 +277,12 @@ pub struct CreatedAccountResponse {
     post,
     path = "/v1/accounts",
     tag = "Accounts",
-    operation_id = "create_account",
     security((), ("session" = ["owner"])),
     request_body = CreateAccountRequest,
     responses(
         (
             status = 201,
-            body = CreatedAccountResponse,
+            body = CreateAccountResponse,
             headers(("Location" = String, description = "Path of the new account"))
         ),
         (status = 400, body = crate::problem::Problem),
@@ -296,11 +292,11 @@ pub struct CreatedAccountResponse {
         (status = 429, description = "Rate limited", body = crate::problem::Problem)
     )
 )]
-pub async fn create_account_handler(
+pub async fn create_account(
     State(state): State<AppState>,
     auth: Option<AuthIdentity>,
     Json(req): Json<CreateAccountRequest>,
-) -> Result<Created<CreatedAccountResponse>, ApiError> {
+) -> Result<Created<CreateAccountResponse>, ApiError> {
     let username = require_valid_username(&req.username)?;
     let by_owner = match &auth {
         Some(auth) if auth.is_owner() => true,
@@ -368,7 +364,7 @@ pub async fn create_account_handler(
     })?;
     Ok(Created {
         location: format!("/v1/accounts/{account_id}"),
-        body: CreatedAccountResponse { account, token },
+        body: CreateAccountResponse { account, token },
     })
 }
 
@@ -381,21 +377,20 @@ pub async fn create_account_handler(
     get,
     path = "/v1/accounts/{id}",
     tag = "Accounts",
-    operation_id = "get_account",
     security(("session" = [])),
     params(("id" = i64, Path, description = "Account id")),
     responses(
-        (status = 200, body = AccountResponse),
+        (status = 200, body = Account),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub async fn get_account_handler(
+pub async fn get_account(
     State(state): State<AppState>,
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
-) -> Result<Json<AccountResponse>, ApiError> {
+) -> Result<Json<Account>, ApiError> {
     let mut conn = state.db.acquire().await?;
     require_owner_or_self(&mut conn, &auth, target).await?;
     Ok(Json(require_account(&mut conn, target).await?))
@@ -403,7 +398,7 @@ pub async fn get_account_handler(
 
 /// One handle to link or unlink, with its platform service.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct ProfileHandleInput {
+pub struct AccountIdentityRequest {
     /// Raw handle value, e.g. `+15555550100` or `alex@example.com`.
     pub handle: String,
     /// Platform the handle belongs to: `phone`, `email`, or `whatsapp`.
@@ -414,7 +409,7 @@ pub struct ProfileHandleInput {
 /// zone and handles are set by the account or by the vault owner; the
 /// disabled flag and the three permissions are the vault owner's alone.
 #[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
-pub struct PatchAccountRequest {
+pub struct UpdateAccountRequest {
     /// Display name to set; `None` (or empty) leaves the current name unchanged.
     #[serde(default)]
     pub preferred_name: Option<String>,
@@ -424,10 +419,10 @@ pub struct PatchAccountRequest {
     pub time_zone: Option<String>,
     /// Handles to add/link onto the account profile.
     #[serde(default)]
-    pub handles: Vec<ProfileHandleInput>,
+    pub handles: Vec<AccountIdentityRequest>,
     /// Handles to unlink from the account profile.
     #[serde(default)]
-    pub remove_handles: Vec<ProfileHandleInput>,
+    pub remove_handles: Vec<AccountIdentityRequest>,
     /// Disable or re-enable login.
     #[serde(default)]
     pub disabled: Option<bool>,
@@ -442,7 +437,7 @@ pub struct PatchAccountRequest {
     pub can_delete: Option<bool>,
 }
 
-impl PatchAccountRequest {
+impl UpdateAccountRequest {
     /// True when the body names the display name, the time zone or a handle.
     fn touches_profile(&self) -> bool {
         self.preferred_name.is_some()
@@ -514,8 +509,8 @@ async fn apply_profile_update(
     account_id: i64,
     preferred_name: Option<&str>,
     time_zone: Option<&str>,
-    handles: &[ProfileHandleInput],
-    remove_handles: &[ProfileHandleInput],
+    handles: &[AccountIdentityRequest],
+    remove_handles: &[AccountIdentityRequest],
 ) -> std::result::Result<(), ProfileUpdateError> {
     if let Some(name) = time_zone.map(str::trim).filter(|n| !n.is_empty()) {
         let zone: chrono_tz::Tz = name
@@ -595,7 +590,7 @@ async fn apply_profile_update(
 async fn update_profile_on_conn(
     conn: &mut AnyConnection,
     account_id: i64,
-    req: &PatchAccountRequest,
+    req: &UpdateAccountRequest,
     completes_setup: bool,
 ) -> std::result::Result<(), ProfileUpdateError> {
     let mut tx = conn.begin().await?;
@@ -628,7 +623,7 @@ async fn update_profile_on_conn(
 async fn apply_flags(
     conn: &mut AnyConnection,
     account_id: i64,
-    req: &PatchAccountRequest,
+    req: &UpdateAccountRequest,
 ) -> Result<(), ApiError> {
     // Column names come from this compile-time array, never from the
     // request, so formatting them into the SQL is safe; values stay bound.
@@ -658,12 +653,11 @@ async fn apply_flags(
     patch,
     path = "/v1/accounts/{id}",
     tag = "Accounts",
-    operation_id = "patch_account",
     security(("session" = [])),
     params(("id" = i64, Path, description = "Account id to change")),
-    request_body = PatchAccountRequest,
+    request_body = UpdateAccountRequest,
     responses(
-        (status = 200, body = AccountResponse),
+        (status = 200, body = Account),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
@@ -671,12 +665,12 @@ async fn apply_flags(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub async fn patch_account_handler(
+pub async fn update_account(
     State(state): State<AppState>,
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
-    Json(req): Json<PatchAccountRequest>,
-) -> Result<Json<AccountResponse>, ApiError> {
+    Json(req): Json<UpdateAccountRequest>,
+) -> Result<Json<Account>, ApiError> {
     let mut conn = state.db.acquire().await?;
     match require_owner_or_self(&mut conn, &auth, target).await? {
         Reach::Own => {
@@ -731,7 +725,6 @@ pub struct DeleteAccountRequest {
     delete,
     path = "/v1/accounts/{id}",
     tag = "Accounts",
-    operation_id = "delete_account",
     security(("session" = [])),
     params(("id" = i64, Path, description = "Account id to delete")),
     request_body(content = Option<DeleteAccountRequest>, description = "Sent by an account deleting itself; the owner sends no body"),
@@ -744,7 +737,7 @@ pub struct DeleteAccountRequest {
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub async fn delete_account_handler(
+pub async fn delete_account(
     State(state): State<AppState>,
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
@@ -803,7 +796,7 @@ pub async fn delete_account_handler(
 
 /// The new password.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub struct SetPasswordRequest {
+pub struct ReplaceAccountPasswordRequest {
     /// The new password. Empty clears a user account's password; the vault
     /// owner's must be one character or more.
     pub password: String,
@@ -820,7 +813,7 @@ pub struct SetPasswordRequest {
 
 /// Fresh session token issued after an account changed its own password.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct SetPasswordResponse {
+pub struct ReplaceAccountPasswordResponse {
     /// Replacement session token (the previous one is revoked).
     pub token: String,
 }
@@ -839,12 +832,11 @@ pub struct SetPasswordResponse {
     put,
     path = "/v1/accounts/{id}/password",
     tag = "Accounts",
-    operation_id = "set_account_password",
     security(("session" = [])),
     params(("id" = i64, Path, description = "Account id whose password is set")),
-    request_body = SetPasswordRequest,
+    request_body = ReplaceAccountPasswordRequest,
     responses(
-        (status = 200, description = "Own password changed; the rotated session token", body = SetPasswordResponse),
+        (status = 200, description = "Own password changed; the rotated session token", body = ReplaceAccountPasswordResponse),
         (status = 204, description = "Password set by the vault owner"),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
@@ -853,11 +845,11 @@ pub struct SetPasswordResponse {
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub async fn set_password_handler(
+pub async fn replace_account_password(
     State(state): State<AppState>,
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
-    Json(req): Json<SetPasswordRequest>,
+    Json(req): Json<ReplaceAccountPasswordRequest>,
 ) -> Result<Response, ApiError> {
     let mut conn = state.db.acquire().await?;
     let reach = require_owner_or_self(&mut conn, &auth, target).await?;
@@ -900,7 +892,7 @@ pub async fn set_password_handler(
     match reach {
         Reach::Own => {
             let token = change_password_on_conn(&mut conn, target, new_hash).await?;
-            Ok(Json(SetPasswordResponse { token }).into_response())
+            Ok(Json(ReplaceAccountPasswordResponse { token }).into_response())
         }
         Reach::Owner => {
             account_profile::update_password_hash(&mut conn, target, new_hash).await?;
@@ -971,7 +963,6 @@ fn remove_account_asset_trees(
     delete,
     path = "/v1/accounts/{id}/messages",
     tag = "Accounts",
-    operation_id = "delete_account_messages",
     security(
         ("session" = ["owner"]),
         ("session" = ["delete"])
@@ -987,7 +978,7 @@ fn remove_account_asset_trees(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub async fn delete_messages_handler(
+pub async fn delete_account_messages(
     State(state): State<AppState>,
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
@@ -1017,7 +1008,7 @@ pub async fn delete_messages_handler(
 
 /// What an account holds: counts, attachment bytes and the largest files.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct AccountStorageResponse {
+pub(crate) struct AccountStorage {
     /// Attachment bytes, by original file size.
     pub total_bytes: i64,
     /// Attachment rows.
@@ -1039,21 +1030,20 @@ pub(crate) struct AccountStorageResponse {
     get,
     path = "/v1/accounts/{id}/storage",
     tag = "Accounts",
-    operation_id = "get_account_storage",
     security(("session" = [])),
     params(("id" = i64, Path, description = "Account id")),
     responses(
-        (status = 200, body = AccountStorageResponse),
+        (status = 200, body = AccountStorage),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn account_storage_handler(
+pub(crate) async fn get_account_storage(
     State(state): State<AppState>,
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
-) -> Result<Json<AccountStorageResponse>, ApiError> {
+) -> Result<Json<AccountStorage>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let reach = require_owner_or_self(&mut conn, &auth, target).await?;
     let scope = Scope::Account(target);
@@ -1069,7 +1059,7 @@ pub(crate) async fn account_storage_handler(
             .map(vault_imports::TopAttachment::without_conversation)
             .collect();
     }
-    Ok(Json(AccountStorageResponse {
+    Ok(Json(AccountStorage {
         total_bytes,
         attachment_count,
         conversation_count,
@@ -1082,105 +1072,12 @@ pub(crate) async fn account_storage_handler(
 // Identities and the messages held at them
 // ---------------------------------------------------------------------------
 
-/// One of an account's identities and the messages held at it. The
-/// Profile screen shows the counts beside each identity and repeats them when
-/// one is about to be removed, so the person knows what the identity is tied
-/// to before it goes.
-#[derive(Debug, Serialize, utoipa::ToSchema)]
-pub struct AccountIdentity {
-    /// The identity as the profile lists it: E.164 for a number, lower case for an address.
-    pub handle: String,
-    /// `phone`, `email`, or `whatsapp`.
-    pub service: String,
-    /// When the oldest message held at the identity was sent, or null when
-    /// there is none.
-    pub start_date: Option<String>,
-    /// When the newest such message was sent, or null when there is none.
-    pub end_date: Option<String>,
-    /// Direct and group conversations holding at least one message held at
-    /// the identity, trashed conversations excluded.
-    pub conversations: u64,
-    /// Messages held at the identity in one-to-one conversations, trashed
-    /// conversations and duplicates excluded.
-    pub direct_messages: u64,
-    /// Messages held at the identity in group conversations, on the same
-    /// terms.
-    pub group_messages: u64,
-}
-
-/// One row of [`account_identities`]: handle, service, first and last
-/// timestamp, conversation count, direct and group message counts.
-type AccountIdentityRow = (
-    String,
-    String,
-    Option<String>,
-    Option<String>,
-    i64,
-    i64,
-    i64,
-);
-
-/// The account's identities with their message counts, phones before emails
-/// and each in order. An identity's messages are the ones held at it: sent
-/// from or received at that address (ADR-0015). The holder is never a
-/// participant, so the contact drawer's count by participation would find
-/// nothing here.
-async fn account_identities(
-    conn: &mut AnyConnection,
-    account_id: i64,
-) -> Result<Vec<AccountIdentity>, ApiError> {
-    let rows: Vec<AccountIdentityRow> = sqlx::query_as(&format!(
-        "SELECT h.normalized,
-                CASE WHEN h.handle_type = 'email' THEN 'email'
-                     WHEN h.service = 'whatsapp' THEN 'whatsapp'
-                     ELSE 'phone' END AS service,
-                MIN(m.timestamp),
-                MAX(m.timestamp),
-                COUNT(DISTINCT m.conversation_id),
-                COUNT(CASE WHEN m.conversation_type = 'individual' THEN m.id END),
-                COUNT(CASE WHEN m.conversation_type = 'group' THEN m.id END)
-         FROM account_handles ah
-         JOIN handles h ON h.id = ah.handle_id
-         LEFT JOIN (
-           SELECT m.id, m.timestamp, m.owner_handle_id, m.conversation_id, c.conversation_type
-           FROM messages m
-           JOIN conversations c ON c.id = m.conversation_id
-           WHERE m.account_id = $1 AND m.duplicate_of IS NULL
-             AND {NOT_TRASHED_CONVERSATION}
-         ) m ON m.owner_handle_id = ah.handle_id
-         WHERE ah.account_id = $1
-         GROUP BY ah.handle_id, h.normalized, h.handle_type, h.service
-         ORDER BY CASE WHEN h.handle_type = 'email' THEN 1 ELSE 0 END, h.normalized",
-        NOT_TRASHED_CONVERSATION = crate::search::emit::NOT_TRASHED_CONVERSATION,
-    ))
-    .bind(account_id)
-    .fetch_all(&mut *conn)
-    .await?;
-    Ok(rows
-        .into_iter()
-        .map(
-            |(handle, service, start_date, end_date, conversations, direct, group)| {
-                AccountIdentity {
-                    handle,
-                    service,
-                    start_date,
-                    end_date,
-                    conversations: conversations.max(0) as u64,
-                    direct_messages: direct.max(0) as u64,
-                    group_messages: group.max(0) as u64,
-                }
-            },
-        )
-        .collect())
-}
-
 /// An account's identities, each with the messages held at it. The
 /// owner reads any account's; an account reads its own.
 #[utoipa::path(
     get,
     path = "/v1/accounts/{id}/identities",
     tag = "Accounts",
-    operation_id = "list_account_identities",
     security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Account id"),
@@ -1188,23 +1085,23 @@ async fn account_identities(
         ("offset" = Option<usize>, Query, description = "Rows to skip")
     ),
     responses(
-        (status = 200, body = Page<AccountIdentity>),
+        (status = 200, body = Page<Identity>),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (status = 404, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn account_identities_handler(
+pub(crate) async fn list_account_identities(
     State(state): State<AppState>,
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
     Query(query): Query<PageQuery>,
-) -> Result<Json<Page<AccountIdentity>>, ApiError> {
+) -> Result<Json<Page<Identity>>, ApiError> {
     let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
     require_owner_or_self(&mut conn, &auth, target).await?;
-    let rows = account_identities(&mut conn, target).await?;
+    let rows = handles::identities(&mut conn, handles::IdentitiesOf::Account(target)).await?;
     Ok(Json(page_of(rows, params)))
 }
 
@@ -1226,7 +1123,6 @@ pub(crate) async fn account_identities_handler(
     get,
     path = "/v1/accounts/{id}/imports",
     tag = "Accounts",
-    operation_id = "list_account_imports",
     security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Account id"),
@@ -1243,14 +1139,14 @@ pub(crate) async fn account_identities_handler(
         (status = 422, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn account_imports_handler(
+pub(crate) async fn list_account_imports(
     State(state): State<AppState>,
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
-    Query(query): Query<crate::import::ListImportsQuery>,
+    Query(query): Query<crate::imports_api::ListImportsQuery>,
 ) -> Result<Json<Page<vault_imports::ImportSummary>>, ApiError> {
     require_reach(&state, &auth, target).await?;
-    crate::import::imports_page(&state, target, query).await
+    crate::imports_api::imports_page(&state, target, query).await
 }
 
 /// One of an account's Import Runs: status, timings, counts and issues. A run
@@ -1259,26 +1155,25 @@ pub(crate) async fn account_imports_handler(
     get,
     path = "/v1/accounts/{id}/imports/{import_id}",
     tag = "Accounts",
-    operation_id = "get_account_import",
     security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Account id"),
         ("import_id" = i64, Path, description = "Import Run id")
     ),
     responses(
-        (status = 200, body = crate::import::ImportDetailResponse),
+        (status = 200, body = crate::imports_api::ImportRun),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn account_import_handler(
+pub(crate) async fn get_account_import(
     State(state): State<AppState>,
     Path((target, import_id)): Path<(i64, i64)>,
     LoggedIn(auth): LoggedIn,
-) -> Result<Json<crate::import::ImportDetailResponse>, ApiError> {
+) -> Result<Json<crate::imports_api::ImportRun>, ApiError> {
     require_reach(&state, &auth, target).await?;
-    crate::import::import_detail(&state, target, import_id).await
+    crate::imports_api::import_detail(&state, target, import_id).await
 }
 
 /// An account's Export Runs as a page, newest first unless `sort` says
@@ -1287,7 +1182,6 @@ pub(crate) async fn account_import_handler(
     get,
     path = "/v1/accounts/{id}/exports",
     tag = "Accounts",
-    operation_id = "list_account_exports",
     security(("session" = [])),
     params(
         ("id" = i64, Path, description = "Account id"),
@@ -1304,14 +1198,14 @@ pub(crate) async fn account_import_handler(
         (status = 422, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn account_exports_handler(
+pub(crate) async fn list_account_exports(
     State(state): State<AppState>,
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
-    Query(query): Query<crate::export_api::ListExportsQuery>,
+    Query(query): Query<crate::exports_api::ListExportsQuery>,
 ) -> Result<Json<Page<vault_api_types::ExportRun>>, ApiError> {
     require_reach(&state, &auth, target).await?;
-    crate::export_api::exports_page(&state, target, query).await
+    crate::exports_api::exports_page(&state, target, query).await
 }
 
 /// `require_owner_or_self` on a connection of its own, for a handler whose

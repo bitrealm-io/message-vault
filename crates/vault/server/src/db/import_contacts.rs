@@ -119,14 +119,17 @@ pub async fn record(
     }
 }
 
-/// One contact on a run's record, with its current name.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One contact an import run touched, and what the run did to it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, utoipa::ToSchema)]
 pub struct ImportContact {
     /// Contact id.
     pub id: i64,
-    /// Preferred name as it is now; empty when the contact has none.
+    /// Preferred name as it is now; empty when the run learned an address
+    /// and no name.
     pub name: String,
-    /// What the run did to it.
+    /// Why the contact is on this run's record: the run created it, created
+    /// it in place of one the person had trashed, named it, or added a
+    /// handle to it.
     pub reason: ContactReason,
 }
 

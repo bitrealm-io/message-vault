@@ -87,7 +87,7 @@ pub(crate) async fn count_matching_messages(
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn messages_list_handler(
+pub(crate) async fn list_messages(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     Query(query): Query<PageQuery>,
@@ -151,7 +151,7 @@ pub(crate) async fn messages_list_handler(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn message_handler(
+pub(crate) async fn get_message(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     Path(message_id): Path<i64>,

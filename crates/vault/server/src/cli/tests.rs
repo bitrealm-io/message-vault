@@ -471,7 +471,7 @@ async fn dump_openapi_writes_the_document_to_the_output_path() {
 
 #[test]
 fn import_stats_print_the_contacts_lines_unless_they_were_skipped() {
-    let stats = crate::import::ImportStats {
+    let stats = crate::imports_api::ImportStats {
         conversations: 2,
         messages: 5,
         contacts: 1,
@@ -496,7 +496,7 @@ fn import_stats_print_the_contacts_lines_unless_they_were_skipped() {
          \x20 media files missing: 0 (attachment path not found on disk)\n"
     );
 
-    let skipped = crate::import::ImportStats {
+    let skipped = crate::imports_api::ImportStats {
         contacts_skipped: true,
         mode: ImportMode::Append,
         messages_appended: 4,

@@ -17,7 +17,7 @@ import Button from "./Button";
 import ContactLabel from "./ContactLabel";
 import { type ContactPreview, sumHandleTotals } from "./contactDrawer/contactDrawerTypes";
 import { CountCell, SortableColumn } from "./contactDrawer/handleTableHelpers";
-import { conversationCount, handleDateCell } from "./contactDrawer/handleTableLogic";
+import { handleDateCell } from "./contactDrawer/handleTableLogic";
 import {
   mutedClass,
   tdCenterClass,
@@ -57,10 +57,9 @@ type ContactRow = {
 
 function totalsFromSummary(summary: ContactSelectionSummary): ContactTotals {
   return {
-    individual_conversations: summary.individual_conversations,
-    group_conversations: summary.group_conversations,
-    individual_message_count: summary.individual_message_count,
-    group_message_count: summary.group_message_count,
+    conversations: summary.individual_conversations + summary.group_conversations,
+    direct_messages: summary.individual_message_count,
+    group_messages: summary.group_message_count,
     start_date: summary.start_date ?? null,
     end_date: summary.end_date ?? null,
   };
@@ -84,11 +83,11 @@ function sortValue(row: ContactRow, col: string): string | number {
     case "end_date":
       return totals?.end_date ?? "";
     case "conversations":
-      return totals ? conversationCount(totals) : -1;
+      return totals?.conversations ?? -1;
     case "direct_messages":
-      return totals?.individual_message_count ?? -1;
+      return totals?.direct_messages ?? -1;
     case "group_messages":
-      return totals?.group_message_count ?? -1;
+      return totals?.group_messages ?? -1;
     default:
       return "";
   }
@@ -266,17 +265,17 @@ export default function CheckedContactsPanel({
                 </Cell>
                 <Cell className={tdRightClass}>
                   <MetricCell loaded={row.totals != null}>
-                    <CountCell value={row.totals ? conversationCount(row.totals) : 0} />
+                    <CountCell value={row.totals?.conversations ?? 0} />
                   </MetricCell>
                 </Cell>
                 <Cell className={tdRightClass}>
                   <MetricCell loaded={row.totals != null}>
-                    <CountCell value={row.totals?.individual_message_count ?? 0} />
+                    <CountCell value={row.totals?.direct_messages ?? 0} />
                   </MetricCell>
                 </Cell>
                 <Cell className={tdRightClass}>
                   <MetricCell loaded={row.totals != null}>
-                    <CountCell value={row.totals?.group_message_count ?? 0} />
+                    <CountCell value={row.totals?.group_messages ?? 0} />
                   </MetricCell>
                 </Cell>
               </Row>

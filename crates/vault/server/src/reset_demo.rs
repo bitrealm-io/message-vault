@@ -16,7 +16,7 @@ use crate::db::dialect;
 use crate::db::engine::{self, DbTarget};
 use crate::db::schema;
 use crate::dedupe;
-use crate::import::{self, ImportExportArgs, ImportMode};
+use crate::imports_api::{self, ImportExportArgs, ImportMode};
 use crate::open_vault::OpenVault;
 use crate::process_assets::{self, ProcessAssetsOptions};
 
@@ -33,7 +33,7 @@ pub struct ResetDemoStats {
     /// Stats from regenerating the demo bundle.
     pub seed: demo_seed::GenStats,
     /// Stats from importing the regenerated bundle.
-    pub import: import::ImportStats,
+    pub import: imports_api::ImportStats,
     /// Dedupe content keys filled during the reset (one per message; not a duplicate count).
     pub dedupe_keys_filled: u64,
     /// Stats from the post-import media processing pass.
@@ -164,7 +164,7 @@ async fn dedupe_and_process_assets(
 }
 
 struct ResetPreparedStats {
-    import: import::ImportStats,
+    import: imports_api::ImportStats,
     dedupe_keys_filled: u64,
     process_assets: process_assets::ProcessAssetsStats,
 }
@@ -412,11 +412,11 @@ async fn import_demo_sources(
     prepared: &PreparedBundle,
     account_id: i64,
     target: DbTarget<'_>,
-) -> Result<import::ImportStats> {
-    let mut totals = import::ImportStats::default();
+) -> Result<imports_api::ImportStats> {
+    let mut totals = imports_api::ImportStats::default();
     for source in &DEMO_IMPORT_SOURCES {
         let assets_dir = cfg.paths.assets_dir_for_account(account_id, source.source);
-        let stats = import::import_export(&ImportExportArgs {
+        let stats = imports_api::import_export(&ImportExportArgs {
             export_dir: (source.staging_dir)(prepared),
             db: target,
             assets_dir: &assets_dir,

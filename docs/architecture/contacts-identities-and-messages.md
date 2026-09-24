@@ -220,8 +220,8 @@ flowchart LR
 |---|---|
 | Tables for contacts, identities, Contact Groups, trash | `schema/sql/contacts.sql` |
 | Tables for conversations, participants, messages | `schema/sql/messages.sql` |
-| What an import creates for a conversation and its participants | `crates/vault/server/src/import/staging.rs` |
-| Making, naming, and replacing a contact during import | `crates/vault/server/src/import/contact_name.rs` |
+| What an import creates for a conversation and its participants | `crates/vault/server/src/imports_api/staging.rs` |
+| Making, naming, and replacing a contact during import | `crates/vault/server/src/imports_api/contact_name.rs` |
 | Linking identities to contacts, sibling identities | `crates/vault/server/src/db/contacts.rs` |
 | The display name rule | `crates/vault/server/src/db/participant_names.rs` |
 | Which conversations involve a contact | `involves_contact_expr` in `contacts_api.rs`, `conversation_involves` in `search/bridge.rs` |

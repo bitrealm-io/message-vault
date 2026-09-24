@@ -16,7 +16,7 @@ use crate::server::{ApiError, AppState, Created, FullAccess};
 
 /// A saved search's name and query.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct SavedSearchBody {
+pub(crate) struct SavedSearchRequest {
     name: String,
     query: String,
 }
@@ -37,7 +37,7 @@ pub(crate) struct SavedSearchBody {
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn saved_searches_list_handler(
+pub(crate) async fn list_saved_searches(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     Query(query): Query<PageQuery>,
@@ -55,7 +55,7 @@ pub(crate) async fn saved_searches_list_handler(
     path = "/v1/saved-searches",
     tag = "Saved searches",
     security(("session" = [])),
-    request_body = SavedSearchBody,
+    request_body = SavedSearchRequest,
     responses(
         (
             status = 201,
@@ -68,10 +68,10 @@ pub(crate) async fn saved_searches_list_handler(
         (status = 409, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn saved_searches_create_handler(
+pub(crate) async fn create_saved_search(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    Json(body): Json<SavedSearchBody>,
+    Json(body): Json<SavedSearchRequest>,
 ) -> Result<Created<SavedSearch>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let row = saved_searches::create(
@@ -95,7 +95,7 @@ pub(crate) async fn saved_searches_create_handler(
     tag = "Saved searches",
     security(("session" = [])),
     params(("id" = i64, Path, description = "Saved search id")),
-    request_body = SavedSearchBody,
+    request_body = SavedSearchRequest,
     responses(
         (status = 200, body = SavedSearch),
         (status = 400, body = crate::problem::Problem),
@@ -106,11 +106,11 @@ pub(crate) async fn saved_searches_create_handler(
         (status = 409, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn saved_searches_update_handler(
+pub(crate) async fn update_saved_search(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     Path(id): Path<i64>,
-    Json(body): Json<SavedSearchBody>,
+    Json(body): Json<SavedSearchRequest>,
 ) -> Result<Json<SavedSearch>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let row =
@@ -136,7 +136,7 @@ pub(crate) async fn saved_searches_update_handler(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn saved_searches_delete_handler(
+pub(crate) async fn delete_saved_search(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
     Path(id): Path<i64>,

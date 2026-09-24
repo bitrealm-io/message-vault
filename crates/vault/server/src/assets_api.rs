@@ -615,19 +615,19 @@ fn open_nofollow_read(path: &Path) -> Result<File> {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct AssetPutQuery {
+pub(crate) struct AssetQuery {
     source: String,
 }
 
 /// Stored asset fingerprint and path.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct AssetPutResponse {
+pub(crate) struct Asset {
     sha256: String,
     assets_path: String,
     already_present: bool,
 }
 
-impl AssetPutResponse {
+impl Asset {
     /// Response body for a blob that is now in the store.
     fn stored(asset: StoredAsset, already_present: bool) -> Json<Self> {
         Json(Self {
@@ -653,7 +653,7 @@ async fn resolve_asset_lookup(
     state: &AppState,
     auth: &AuthIdentity,
     sha256: &str,
-    query: &AssetPutQuery,
+    query: &AssetQuery,
     access: AssetAccess,
 ) -> Result<(i64, String, Option<StoredAsset>), ApiError> {
     // The handler's extractor already checked the capability for this access
@@ -703,7 +703,7 @@ async fn resolve_asset_lookup(
         ("source" = String, Query)
     ),
     responses(
-        (status = 200, body = AssetPutResponse),
+        (status = 200, body = Asset),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
@@ -711,18 +711,18 @@ async fn resolve_asset_lookup(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn asset_head_handler(
+pub(crate) async fn head_asset(
     State(state): State<AppState>,
     ImportOrExportAccess(auth): ImportOrExportAccess,
     AxumPath(sha256): AxumPath<String>,
-    Query(query): Query<AssetPutQuery>,
-) -> Result<Json<AssetPutResponse>, ApiError> {
+    Query(query): Query<AssetQuery>,
+) -> Result<Json<Asset>, ApiError> {
     let (_account, _source_id, existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Probe).await?;
     let Some(stored) = existing else {
         return Err(ApiError::NotFound("asset not found".into()));
     };
-    Ok(AssetPutResponse::stored(stored, true))
+    Ok(Asset::stored(stored, true))
 }
 
 /// Download a previously stored content-addressed asset (read-only).
@@ -746,11 +746,11 @@ pub(crate) async fn asset_head_handler(
         (status = 404, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn asset_get_handler(
+pub(crate) async fn get_asset(
     State(state): State<AppState>,
     ExportAccess(auth): ExportAccess,
     AxumPath(sha256): AxumPath<String>,
-    Query(query): Query<AssetPutQuery>,
+    Query(query): Query<AssetQuery>,
 ) -> Result<Response, ApiError> {
     let (account, source_id, existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Read).await?;
@@ -818,7 +818,7 @@ pub(crate) async fn asset_get_handler(
     ),
     request_body(content_type = "application/octet-stream", description = "Raw asset bytes"),
     responses(
-        (status = 200, body = AssetPutResponse),
+        (status = 200, body = Asset),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
@@ -826,14 +826,14 @@ pub(crate) async fn asset_get_handler(
         (status = 413, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn asset_put_handler(
+pub(crate) async fn replace_asset(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     headers: HeaderMap,
     AxumPath(sha256): AxumPath<String>,
-    Query(query): Query<AssetPutQuery>,
+    Query(query): Query<AssetQuery>,
     request: Request,
-) -> Result<Json<AssetPutResponse>, ApiError> {
+) -> Result<Json<Asset>, ApiError> {
     let (account, source_id, existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
 
@@ -841,7 +841,7 @@ pub(crate) async fn asset_put_handler(
 
     if let Some(stored) = existing {
         discard_body(request.into_body(), state.max_body_bytes).await?;
-        return Ok(AssetPutResponse::stored(stored, true));
+        return Ok(Asset::stored(stored, true));
     }
 
     // Write the upload into the account assets tree so verify can rename into place
@@ -891,12 +891,12 @@ pub(crate) async fn asset_put_handler(
 
     // Rename consumes the temp file; remove leftovers after errors / already_present races.
     let _ = tokio::fs::remove_file(&tmp_path).await;
-    Ok(AssetPutResponse::stored(stored, already_present))
+    Ok(Asset::stored(stored, already_present))
 }
 
 /// Total bytes and optional MIME type for a chunked upload.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct AssetUploadStartBody {
+pub(crate) struct CreateAssetUploadRequest {
     bytes: u64,
     #[serde(default)]
     mime: Option<String>,
@@ -904,7 +904,7 @@ pub(crate) struct AssetUploadStartBody {
 
 /// Upload id and part size, or the already-stored asset.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct AssetUploadStartResponse {
+pub(crate) struct CreateAssetUploadResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     upload_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -919,7 +919,7 @@ pub(crate) struct AssetUploadStartResponse {
 
 /// Bytes written for one part.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct AssetUploadPartResponse {
+pub(crate) struct ReplaceAssetUploadPartResponse {
     part: u32,
     bytes: u64,
 }
@@ -934,17 +934,17 @@ pub(crate) struct AssetUploadPartResponse {
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
         ("source" = String, Query)
     ),
-    request_body = AssetUploadStartBody,
+    request_body = CreateAssetUploadRequest,
     responses(
         (
             status = 201,
-            body = AssetUploadStartResponse,
+            body = CreateAssetUploadResponse,
             description = "A new upload was started",
             headers(("Location" = String, description = "Path of the new upload"))
         ),
         (
             status = 200,
-            body = AssetUploadStartResponse,
+            body = CreateAssetUploadResponse,
             description = "The asset is already stored; nothing was created"
         ),
         (status = 400, body = crate::problem::Problem),
@@ -952,12 +952,12 @@ pub(crate) struct AssetUploadPartResponse {
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn asset_upload_start_handler(
+pub(crate) async fn create_asset_upload(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath(sha256): AxumPath<String>,
-    Query(query): Query<AssetPutQuery>,
-    Json(body): Json<AssetUploadStartBody>,
+    Query(query): Query<AssetQuery>,
+    Json(body): Json<CreateAssetUploadRequest>,
 ) -> Result<Response, ApiError> {
     let (account, source_id, _existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
@@ -976,7 +976,7 @@ pub(crate) async fn asset_upload_start_handler(
     // Only a fresh upload is a creation. An asset already in the store made
     // nothing, so it answers 200 OK with where the bytes already are.
     match result {
-        (Some(stored), None) => Ok(Json(AssetUploadStartResponse {
+        (Some(stored), None) => Ok(Json(CreateAssetUploadResponse {
             upload_id: None,
             part_size: None,
             sha256: Some(stored.sha256),
@@ -986,7 +986,7 @@ pub(crate) async fn asset_upload_start_handler(
         .into_response()),
         (None, Some(start)) => Ok(Created {
             location: format!("/v1/assets/{sha256}/uploads/{}", start.upload_id),
-            body: AssetUploadStartResponse {
+            body: CreateAssetUploadResponse {
                 upload_id: Some(start.upload_id),
                 part_size: Some(start.part_size),
                 sha256: None,
@@ -1015,7 +1015,7 @@ pub(crate) async fn asset_upload_start_handler(
     ),
     request_body(content_type = "application/octet-stream", description = "Raw part bytes"),
     responses(
-        (status = 200, body = AssetUploadPartResponse),
+        (status = 200, body = ReplaceAssetUploadPartResponse),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
@@ -1023,13 +1023,13 @@ pub(crate) async fn asset_upload_start_handler(
         (status = 413, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn asset_upload_part_handler(
+pub(crate) async fn replace_asset_upload_part(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath((sha256, upload_id, part)): AxumPath<(String, String, u32)>,
-    Query(query): Query<AssetPutQuery>,
+    Query(query): Query<AssetQuery>,
     request: Request,
-) -> Result<Json<AssetUploadPartResponse>, ApiError> {
+) -> Result<Json<ReplaceAssetUploadPartResponse>, ApiError> {
     let (account, source_id, _existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
     if part == 0 {
@@ -1045,7 +1045,7 @@ pub(crate) async fn asset_upload_part_handler(
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload part task: {e}")))?
     .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
-    Ok(Json(AssetUploadPartResponse {
+    Ok(Json(ReplaceAssetUploadPartResponse {
         part,
         bytes: written,
     }))
@@ -1064,19 +1064,19 @@ pub(crate) async fn asset_upload_part_handler(
         ("source" = String, Query)
     ),
     responses(
-        (status = 200, body = AssetPutResponse),
+        (status = 200, body = Asset),
         (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn asset_upload_complete_handler(
+pub(crate) async fn complete_asset_upload(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath((sha256, upload_id)): AxumPath<(String, String)>,
-    Query(query): Query<AssetPutQuery>,
-) -> Result<Json<AssetPutResponse>, ApiError> {
+    Query(query): Query<AssetQuery>,
+) -> Result<Json<Asset>, ApiError> {
     let (account, source_id, existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
     if let Some(stored) = existing {
@@ -1097,7 +1097,7 @@ pub(crate) async fn asset_upload_complete_handler(
                 "could not drop stale upload session"
             );
         }
-        return Ok(AssetPutResponse::stored(stored, true));
+        return Ok(Asset::stored(stored, true));
     }
 
     let _guard = state
@@ -1115,7 +1115,7 @@ pub(crate) async fn asset_upload_complete_handler(
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload complete task: {e}")))?
     .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
 
-    Ok(AssetPutResponse::stored(stored, already_present))
+    Ok(Asset::stored(stored, already_present))
 }
 
 /// Abort and delete a chunked asset upload's staging files.
@@ -1137,11 +1137,11 @@ pub(crate) async fn asset_upload_complete_handler(
         (status = 403, body = crate::problem::Problem)
     )
 )]
-pub(crate) async fn asset_upload_abort_handler(
+pub(crate) async fn delete_asset_upload(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     AxumPath((sha256, upload_id)): AxumPath<(String, String)>,
-    Query(query): Query<AssetPutQuery>,
+    Query(query): Query<AssetQuery>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     let (account, source_id, _existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;

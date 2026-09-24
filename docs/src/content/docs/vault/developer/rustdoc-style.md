@@ -10,7 +10,7 @@ This page is the standard for `///` and `//!` comments and utoipa annotations in
 Open every doc comment with a single sentence stating what the item is or does. Put examples, rationale, and error notes in later sentences.
 
 - `crates/vault/server/src/server.rs`, `is_asset_download` — "`GET /v1/assets/{sha256}`: the asset's own bytes, in its own media type." — Bad: the function answers whether a request is an asset download, and the opening names the route and what it serves instead.
-- `crates/vault/server/src/assets.rs:27–29` — "SHA-256 fingerprint of `data` as 64 lowercase hex digits. SHA-256 is a short fingerprint of the file contents." — Bad: the second sentence restates the first; later sentences must add information.
+- `crates/vault/server/src/assets_api.rs:27–29` — "SHA-256 fingerprint of `data` as 64 lowercase hex digits. SHA-256 is a short fingerprint of the file contents." — Bad: the second sentence restates the first; later sentences must add information.
 - `crates/libs/ir/src/lib.rs:469` — "Intermediate message before conversion to [`IrMessage`]." — Good: one sentence states what the type is.
 
 ## Module `//!` intros state responsibility
@@ -73,7 +73,7 @@ When a function returns `Result` but never errors, say so explicitly and explain
 Document the reason behind non-obvious choices — ordering, omitted files, performance tradeoffs — so future readers do not "fix" them.
 
 - `crates/vault/demo-seed/src/assets.rs:66` — "One path, `attachments/missing-file.heic`, is left out on purpose so import can show a missing-file warning." — Good: a deliberate-looking omission stated explicitly.
-- `crates/vault/server/src/assets.rs:59` — "Used only when streaming an authenticated download. … Hashing the whole file first would read every download twice." — Good: the performance tradeoff is explained instead of just describing the lookup.
+- `crates/vault/server/src/assets_api.rs:59` — "Used only when streaming an authenticated download. … Hashing the whole file first would read every download twice." — Good: the performance tradeoff is explained instead of just describing the lookup.
 - `crates/libs/vault-push/src/run.rs:16` — "Attachments first, then messages. Messages point at attachments by a content fingerprint (sha256). The vault must already have that file, or the import would fail." — Good: explains the invariant that drove the upload ordering.
 
 ## Link to real documentation

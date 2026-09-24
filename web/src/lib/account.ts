@@ -8,4 +8,4 @@ import type { components } from "./vaultApi.types";
  * a field renamed on the server becomes a build error instead of a screen that
  * silently shows nothing.
  */
-export type AccountProfile = components["schemas"]["AccountResponse"];
+export type AccountProfile = components["schemas"]["Account"];

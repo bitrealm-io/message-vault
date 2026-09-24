@@ -26,13 +26,13 @@ pub(crate) struct NamedSet {
 
 /// A name to create, or the new name for an existing set.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct NamedSetBody {
+pub(crate) struct NamedSetRequest {
     pub(crate) name: String,
 }
 
 /// Members to put in and take out of one set, in one request.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
-pub(crate) struct MembersPatch {
+pub(crate) struct UpdateMembersRequest {
     #[serde(default)]
     pub(crate) add: Vec<i64>,
     #[serde(default)]
@@ -41,7 +41,7 @@ pub(crate) struct MembersPatch {
 
 /// How many memberships a patch created and how many it removed.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
-pub(crate) struct MembersChanged {
+pub(crate) struct UpdateMembersResponse {
     pub(crate) added: u64,
     pub(crate) removed: u64,
 }
@@ -72,7 +72,7 @@ pub(crate) async fn create(
     root_path: &str,
     state: &AppState,
     account_id: i64,
-    body: NamedSetBody,
+    body: NamedSetRequest,
 ) -> Result<Created<NamedSet>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let (id, name) = named_membership::create_set(spec, &mut conn, account_id, &body.name).await?;
@@ -90,7 +90,7 @@ pub(crate) async fn update(
     state: &AppState,
     account_id: i64,
     id: i64,
-    body: NamedSetBody,
+    body: NamedSetRequest,
 ) -> Result<Json<NamedSet>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let name = named_membership::rename_set(spec, &mut conn, account_id, id, &body.name).await?;
@@ -133,13 +133,13 @@ pub(crate) async fn members_update(
     state: &AppState,
     account_id: i64,
     id: i64,
-    body: MembersPatch,
-) -> Result<Json<MembersChanged>, ApiError> {
+    body: UpdateMembersRequest,
+) -> Result<Json<UpdateMembersResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let (added, removed) =
         named_membership::patch_members(spec, &mut conn, account_id, id, &body.add, &body.remove)
             .await?;
-    Ok(Json(MembersChanged { added, removed }))
+    Ok(Json(UpdateMembersResponse { added, removed }))
 }
 
 /// One collection's six HTTP handlers.
@@ -208,7 +208,7 @@ macro_rules! named_set_routes {
             path = $root_path,
             tag = $tag,
             security(("session" = [])),
-            request_body = NamedSetBody,
+            request_body = NamedSetRequest,
             responses(
                 (
                     status = 201,
@@ -224,7 +224,7 @@ macro_rules! named_set_routes {
         pub(crate) async fn $create_fn(
             axum::extract::State(state): axum::extract::State<AppState>,
             FullAccess(auth): FullAccess,
-            Json(body): Json<NamedSetBody>,
+            Json(body): Json<NamedSetRequest>,
         ) -> Result<Created<NamedSet>, ApiError> {
             create($spec(), $root_path, &state, auth.account_id, body).await
         }
@@ -236,7 +236,7 @@ macro_rules! named_set_routes {
             tag = $tag,
             security(("session" = [])),
             params(("id" = i64, Path, description = $id_description)),
-            request_body = NamedSetBody,
+            request_body = NamedSetRequest,
             responses(
                 (status = 200, body = NamedSet),
                 (status = 400, body = crate::problem::Problem),
@@ -251,7 +251,7 @@ macro_rules! named_set_routes {
             axum::extract::State(state): axum::extract::State<AppState>,
             FullAccess(auth): FullAccess,
             crate::extract::Path(id): crate::extract::Path<i64>,
-            Json(body): Json<NamedSetBody>,
+            Json(body): Json<NamedSetRequest>,
         ) -> Result<Json<NamedSet>, ApiError> {
             update($spec(), &state, auth.account_id, id, body).await
         }
@@ -312,9 +312,9 @@ macro_rules! named_set_routes {
             tag = $tag,
             security(("session" = [])),
             params(("id" = i64, Path, description = $id_description)),
-            request_body = MembersPatch,
+            request_body = UpdateMembersRequest,
             responses(
-                (status = 200, body = MembersChanged),
+                (status = 200, body = UpdateMembersResponse),
                 (status = 400, body = crate::problem::Problem),
                 (status = 422, body = crate::problem::Problem),
                 (status = 401, body = crate::problem::Problem),
@@ -326,8 +326,8 @@ macro_rules! named_set_routes {
             axum::extract::State(state): axum::extract::State<AppState>,
             FullAccess(auth): FullAccess,
             crate::extract::Path(id): crate::extract::Path<i64>,
-            Json(body): Json<MembersPatch>,
-        ) -> Result<Json<MembersChanged>, ApiError> {
+            Json(body): Json<UpdateMembersRequest>,
+        ) -> Result<Json<UpdateMembersResponse>, ApiError> {
             members_update($spec(), &state, auth.account_id, id, body).await
         }
     };
@@ -340,12 +340,12 @@ named_set_routes! {
     root_path: "/v1/contact-groups",
     id_path: "/v1/contact-groups/{id}",
     members_path: "/v1/contact-groups/{id}/members",
-    list: contact_groups_list, "The account's Contact Groups, A–Z.",
-    create: contact_groups_create, "Create a Contact Group.",
-    update: contact_groups_update, "Rename a Contact Group.",
-    delete: contact_groups_delete, "Delete a Contact Group and its memberships.",
-    members_list: contact_group_members_list, "Contact ids in one Contact Group.",
-    members_update: contact_group_members_update,
+    list: list_contact_groups, "The account's Contact Groups, A–Z.",
+    create: create_contact_group, "Create a Contact Group.",
+    update: update_contact_group, "Rename a Contact Group.",
+    delete: delete_contact_group, "Delete a Contact Group and its memberships.",
+    members_list: list_contact_group_members, "Contact ids in one Contact Group.",
+    members_update: update_contact_group_members,
         "Put contacts in and take contacts out of one Contact Group.",
 }
 
@@ -356,12 +356,12 @@ named_set_routes! {
     root_path: "/v1/message-tags",
     id_path: "/v1/message-tags/{id}",
     members_path: "/v1/message-tags/{id}/members",
-    list: message_tags_list, "The account's Message Tags, A–Z.",
-    create: message_tags_create, "Create a Message Tag.",
-    update: message_tags_update, "Rename a Message Tag.",
-    delete: message_tags_delete, "Delete a Message Tag and its memberships.",
-    members_list: message_tag_members_list, "Conversation ids in one Message Tag.",
-    members_update: message_tag_members_update,
+    list: list_message_tags, "The account's Message Tags, A–Z.",
+    create: create_message_tag, "Create a Message Tag.",
+    update: update_message_tag, "Rename a Message Tag.",
+    delete: delete_message_tag, "Delete a Message Tag and its memberships.",
+    members_list: list_message_tag_members, "Conversation ids in one Message Tag.",
+    members_update: update_message_tag_members,
         "Put conversations in and take conversations out of one Message Tag.",
 }
 

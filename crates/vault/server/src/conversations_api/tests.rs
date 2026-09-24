@@ -424,7 +424,7 @@ async fn malformed_boolean_queries_are_bad_requests_for_export() {
 
     for query in ["foo OR", "(foo OR bar", "foo OR bar)"] {
         let scope = vault_api_types::ExportScope::Query { q: query.into() };
-        let export_error = crate::export_api::scope_filter(
+        let export_error = crate::exports_api::scope_filter(
             &mut conn,
             account,
             &scope,

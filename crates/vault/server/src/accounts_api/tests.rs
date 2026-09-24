@@ -31,9 +31,9 @@ async fn the_owner_reaches_every_row_and_an_account_reaches_its_own() {
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
-    let by_owner: AccountResponse = get_json(&state, &member(bob.account_id), &owner.token).await;
+    let by_owner: Account = get_json(&state, &member(bob.account_id), &owner.token).await;
     assert_eq!(by_owner.username, "bob");
-    let own: AccountResponse = get_json(&state, &member(bob.account_id), &bob.token).await;
+    let own: Account = get_json(&state, &member(bob.account_id), &bob.token).await;
     assert_eq!(own.username, "bob");
     assert_eq!(
         get_status(&state, &member(bob.account_id), &alice.token).await,
@@ -201,8 +201,7 @@ async fn the_owner_sees_every_account_but_no_messages() {
     let _alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let _bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
-    let body: crate::paging::Page<AccountResponse> =
-        get_json(&state, "/v1/accounts", &owner.token).await;
+    let body: crate::paging::Page<Account> = get_json(&state, "/v1/accounts", &owner.token).await;
 
     assert_eq!(body.items.len(), 3, "the owner, alice and bob");
     let bob = body.items.iter().find(|a| a.username == "bob").unwrap();
@@ -219,8 +218,7 @@ async fn the_owner_leads_the_account_list() {
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
     let _alice = register_via_api(&state, "alice", "hunter2hunter2").await;
 
-    let body: crate::paging::Page<AccountResponse> =
-        get_json(&state, "/v1/accounts", &owner.token).await;
+    let body: crate::paging::Page<Account> = get_json(&state, "/v1/accounts", &owner.token).await;
 
     assert_eq!(body.total, 2);
     let usernames: Vec<&str> = body.items.iter().map(|a| a.username.as_str()).collect();
@@ -361,7 +359,7 @@ async fn a_stranger_is_logged_in_on_creation_and_never_becomes_the_owner() {
     assert_ne!(first.account_id, account_profile::OWNER_ACCOUNT_ID);
     assert_ne!(second.account_id, account_profile::OWNER_ACCOUNT_ID);
 
-    let own: AccountResponse = get_json(&state, &member(first.account_id), &first.token).await;
+    let own: Account = get_json(&state, &member(first.account_id), &first.token).await;
     assert_eq!(
         own.username, "alice",
         "the token from creation reads the row"
@@ -612,7 +610,7 @@ async fn an_account_does_not_set_its_own_flags() {
     );
     assert!(sentence.contains("vault owner"), "{sentence}");
 
-    let row: AccountResponse = get_json(&state, &path, &owner.token).await;
+    let row: Account = get_json(&state, &path, &owner.token).await;
     assert_eq!(row.preferred_name, None, "nothing was applied");
     assert!(row.can_export);
 }
@@ -676,7 +674,7 @@ async fn the_owner_clears_a_permission_and_it_takes_effect() {
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
-    let row: AccountResponse = patch_json(
+    let row: Account = patch_json(
         &state,
         &member(bob.account_id),
         &owner.token,
@@ -705,7 +703,7 @@ async fn the_owners_own_row_cannot_be_disabled_or_deleted() {
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
     let own = member(account_profile::OWNER_ACCOUNT_ID);
 
-    let row: AccountResponse = get_json(&state, &own, &owner.token).await;
+    let row: Account = get_json(&state, &own, &owner.token).await;
     assert!(row.is_owner, "the owner reads its own row");
 
     assert_eq!(
@@ -793,7 +791,7 @@ async fn last_login_follows_sessions_being_opened() {
     let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
-    let row: AccountResponse = get_json(&state, &member(alice.account_id), &owner.token).await;
+    let row: Account = get_json(&state, &member(alice.account_id), &owner.token).await;
     let registered_at = row
         .last_login_at
         .expect("registering opens a session, so it is a login");
@@ -823,14 +821,14 @@ async fn last_login_follows_sessions_being_opened() {
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    let row: AccountResponse = get_json(&state, &member(carol), &owner.token).await;
+    let row: Account = get_json(&state, &member(carol), &owner.token).await;
     assert!(
         row.last_login_at.is_none(),
         "the owner setting a password is not carol logging in"
     );
 
     log_in(&state, "carol", "resetbytheowner").await;
-    let row: AccountResponse = get_json(&state, &member(carol), &owner.token).await;
+    let row: Account = get_json(&state, &member(carol), &owner.token).await;
     assert!(row.last_login_at.is_some(), "logging in stamps the account");
 }
 
@@ -900,7 +898,7 @@ async fn an_account_changes_its_own_password() {
     let token = login["token"].as_str().unwrap();
     let path = format!("{}/password", member(id));
 
-    let changed: SetPasswordResponse = put_json(
+    let changed: ReplaceAccountPasswordResponse = put_json(
         &state,
         &path,
         token,
@@ -953,7 +951,7 @@ async fn the_owner_changes_their_own_password_with_the_current_one() {
     // session, so the change that follows uses its token.
     let login = log_in(&state, "keeper", "hunter2hunter2").await;
 
-    let _changed: SetPasswordResponse = put_json(
+    let _changed: ReplaceAccountPasswordResponse = put_json(
         &state,
         &path,
         login["token"].as_str().unwrap(),
@@ -1094,7 +1092,7 @@ async fn the_owner_cannot_clear_their_own_password() {
     // The refusal stored nothing: the old password still logs in. That opens
     // a new session, so the next change uses its token.
     let login = log_in(&state, "keeper", "hunter2hunter2").await;
-    let _changed: SetPasswordResponse = put_json(
+    let _changed: ReplaceAccountPasswordResponse = put_json(
         &state,
         &path,
         login["token"].as_str().unwrap(),
@@ -1118,7 +1116,7 @@ async fn a_user_password_can_be_cleared_by_the_account_or_the_owner() {
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
     let path = format!("{}/password", member(bob.account_id));
 
-    let _cleared: SetPasswordResponse = put_json(
+    let _cleared: ReplaceAccountPasswordResponse = put_json(
         &state,
         &path,
         &bob.token,
@@ -1133,7 +1131,7 @@ async fn a_user_password_can_be_cleared_by_the_account_or_the_owner() {
 
     // Logging in opens a new session, so the next change uses its token.
     let login = log_in(&state, "bob", "").await;
-    let _set_again: SetPasswordResponse = put_json(
+    let _set_again: ReplaceAccountPasswordResponse = put_json(
         &state,
         &path,
         login["token"].as_str().unwrap(),
@@ -1184,8 +1182,7 @@ async fn deleting_one_accounts_messages_leaves_the_others_alone() {
         "the answer carries counts, never message content"
     );
 
-    let body: crate::paging::Page<AccountResponse> =
-        get_json(&state, "/v1/accounts", &owner.token).await;
+    let body: crate::paging::Page<Account> = get_json(&state, "/v1/accounts", &owner.token).await;
     let alice_row = body.items.iter().find(|a| a.username == "alice").unwrap();
     let bob_row = body.items.iter().find(|a| a.username == "bob").unwrap();
     assert_eq!(alice_row.message_count, 0);
@@ -1307,8 +1304,7 @@ async fn the_owner_deletes_any_account_outright() {
         StatusCode::NO_CONTENT
     );
 
-    let body: crate::paging::Page<AccountResponse> =
-        get_json(&state, "/v1/accounts", &owner.token).await;
+    let body: crate::paging::Page<Account> = get_json(&state, "/v1/accounts", &owner.token).await;
     let left: Vec<&str> = body.items.iter().map(|a| a.username.as_str()).collect();
     assert_eq!(
         left,
@@ -1705,15 +1701,15 @@ async fn apply_profile_update_sets_name_and_handles() {
         Some("Alex"),
         None,
         &[
-            ProfileHandleInput {
+            AccountIdentityRequest {
                 handle: "+1 (555) 555-0100".into(),
                 service: "phone".into(),
             },
-            ProfileHandleInput {
+            AccountIdentityRequest {
                 handle: "Alex@Example.com".into(),
                 service: "email".into(),
             },
-            ProfileHandleInput {
+            AccountIdentityRequest {
                 handle: "+15555550199".into(),
                 service: "whatsapp".into(),
             },
@@ -1769,9 +1765,9 @@ async fn saving_a_profile_clears_the_setup_owed_flag() {
     update_profile_on_conn(
         &mut conn,
         account_id,
-        &PatchAccountRequest {
+        &UpdateAccountRequest {
             preferred_name: Some("Alex".into()),
-            ..PatchAccountRequest::default()
+            ..UpdateAccountRequest::default()
         },
         true,
     )
@@ -1794,11 +1790,11 @@ async fn apply_profile_update_removes_handles() {
     let account_id = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let both = [
-        ProfileHandleInput {
+        AccountIdentityRequest {
             handle: "+15555550100".into(),
             service: "phone".into(),
         },
-        ProfileHandleInput {
+        AccountIdentityRequest {
             handle: "alex@example.com".into(),
             service: "email".into(),
         },
@@ -1824,13 +1820,13 @@ async fn profile_update_rolls_back_when_a_handle_service_is_unsupported() {
     let result = update_profile_on_conn(
         &mut conn,
         account_id,
-        &PatchAccountRequest {
+        &UpdateAccountRequest {
             preferred_name: Some("Changed Name".into()),
-            handles: vec![ProfileHandleInput {
+            handles: vec![AccountIdentityRequest {
                 handle: "alice@example.com".into(),
                 service: "unsupported".into(),
             }],
-            ..PatchAccountRequest::default()
+            ..UpdateAccountRequest::default()
         },
         true,
     )
@@ -1860,9 +1856,9 @@ async fn the_account_carries_a_time_zone_and_refuses_an_unknown_one() {
     update_profile_on_conn(
         &mut conn,
         account.account_id,
-        &PatchAccountRequest {
+        &UpdateAccountRequest {
             time_zone: Some("America/New_York".into()),
-            ..PatchAccountRequest::default()
+            ..UpdateAccountRequest::default()
         },
         true,
     )
@@ -1876,9 +1872,9 @@ async fn the_account_carries_a_time_zone_and_refuses_an_unknown_one() {
     let err = update_profile_on_conn(
         &mut conn,
         account.account_id,
-        &PatchAccountRequest {
+        &UpdateAccountRequest {
             time_zone: Some("Mars/Olympus_Mons".into()),
-            ..PatchAccountRequest::default()
+            ..UpdateAccountRequest::default()
         },
         true,
     )
@@ -1916,7 +1912,7 @@ async fn the_account_list_shows_the_app_each_account_connects_with() {
         .status();
     assert_eq!(status, StatusCode::OK);
 
-    let page: Page<AccountResponse> = get_json(&state, "/v1/accounts", &owner.token).await;
+    let page: Page<Account> = get_json(&state, "/v1/accounts", &owner.token).await;
     let row = |name: &str| {
         page.items
             .iter()

@@ -229,6 +229,39 @@ mod tests {
     use message_ir::IrAttachment;
     use message_vault_io_core::{AttachmentJob, MediaConfig, run_attachment_jobs};
 
+    /// The attachment-type column names the type when iMazing filled it in;
+    /// when it is empty, the file name's extension does, and an extension
+    /// nobody knows gives no type rather than a wrong one.
+    #[test]
+    fn the_mime_type_comes_from_the_column_or_else_the_file_name() {
+        for (column, mime) in [
+            ("Image", "image/jpeg"),
+            ("video", "video/mp4"),
+            ("Audio", "audio/mpeg"),
+            ("GIF", "image/gif"),
+            ("sticker", "image/webp"),
+            ("image/png", "image/png"),
+        ] {
+            assert_eq!(
+                mime_hint(column, "IMG_0001.heic").as_deref(),
+                Some(mime),
+                "{column}"
+            );
+        }
+        for (name, mime) in [
+            ("IMG_0001.PNG", Some("image/png")),
+            ("IMG_0001.jpg", Some("image/jpeg")),
+            ("IMG_0001.jpeg", Some("image/jpeg")),
+            ("IMG_0001.gif", Some("image/gif")),
+            ("IMG_0001.heic", Some("image/heic")),
+            ("IMG_0001.mp4", Some("video/mp4")),
+            ("IMG_0001.MOV", Some("video/mp4")),
+            ("notes.xyz", None),
+        ] {
+            assert_eq!(mime_hint(" ", name).as_deref(), mime, "{name}");
+        }
+    }
+
     #[test]
     fn attachment_name_matches_suffix_and_separators() {
         assert!(attachment_name_matches("IMG_1234.jpg", "1234.jpg"));

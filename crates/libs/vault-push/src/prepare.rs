@@ -750,7 +750,7 @@ fn preflight_existing_asset(ctx: &PrepareContext<'_>, source: &str, digest: &str
     let session = ctx.session;
     let present =
         vault_http::with_retries(ctx.cfg.max_retries, || session.head_asset(source, digest))?;
-    if present.is_some() {
+    if present {
         ctx.probe_existing.store(true, Ordering::Relaxed);
     }
     Ok(())
@@ -764,10 +764,10 @@ fn preflight_existing_asset(ctx: &PrepareContext<'_>, source: &str, digest: &str
 fn upload_one_asset(ctx: &PrepareContext<'_>, source: &str, job: &AssetUploadJob) -> Result<Asset> {
     let session = ctx.session;
     vault_http::with_retries(ctx.cfg.max_retries, || {
-        if ctx.probe_existing.load(Ordering::Relaxed)
-            && let Some(existing) = session.head_asset(source, &job.digest)?
-        {
-            return Ok(existing);
+        if ctx.probe_existing.load(Ordering::Relaxed) && session.head_asset(source, &job.digest)? {
+            return Ok(Asset {
+                already_present: true,
+            });
         }
         let response = session.put_asset(&AssetUpload {
             source,

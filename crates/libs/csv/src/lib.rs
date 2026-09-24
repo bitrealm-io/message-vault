@@ -1,10 +1,8 @@
 //! Shared CSV helpers for writing conversation files.
 
-mod date_range;
 mod utc_offset;
 mod zone;
 
-pub use date_range::DateRange;
 pub use utc_offset::parse_utc_offset;
 pub use zone::Zone;
 

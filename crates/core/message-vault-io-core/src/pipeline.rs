@@ -7,7 +7,6 @@
 use crate::config::OutputFormat;
 use anyhow::{Context, bail};
 use media::MediaReport;
-use message_csv::{DateRange, Zone};
 use message_ir::{
     ConversationDocument, PendingConversation, ProjectionHooks, ProjectionTally,
     pending_to_document, prepare_conversation,
@@ -236,51 +235,6 @@ pub fn project_conversation<H: ProjectionHooks + ?Sized>(
     Some(doc)
 }
 
-/// Print `RunResult` lines with the standard stdout/stderr split:
-/// media/obfuscate/warning lines → stderr, summary lines → stdout.
-pub fn print_result(result: &RunResult) {
-    for line in &result.messages {
-        if line.starts_with("Media:")
-            || line.starts_with("  media ")
-            || line.starts_with("Obfuscated ")
-            || line.starts_with("warning:")
-        {
-            eprintln!("{line}");
-        } else {
-            println!("{line}");
-        }
-    }
-}
-
-/// Parse optional start/end date strings into a [`DateRange`] in the host's
-/// local zone.
-///
-/// # Errors
-///
-/// Returns an error string when a date cannot be parsed.
-pub fn parse_date_range(
-    start_date: Option<&str>,
-    end_date: Option<&str>,
-) -> Result<DateRange, String> {
-    DateRange::parse_in(Zone::Local, start_date, end_date)
-        .map_err(|e| format!("invalid date range: {e}"))
-}
-
-/// Parse optional start/end dates in an optional zone (a `UTC±HH:MM` offset
-/// or an IANA name; blank is the host's local zone), the iMazing path.
-///
-/// # Errors
-///
-/// Returns an error string when a date or the zone cannot be parsed.
-pub fn parse_date_range_tz(
-    start_date: Option<&str>,
-    end_date: Option<&str>,
-    timezone: Option<&str>,
-) -> Result<DateRange, String> {
-    let zone = Zone::parse(timezone).map_err(|e| format!("invalid date range: {e}"))?;
-    DateRange::parse_in(zone, start_date, end_date).map_err(|e| format!("invalid date range: {e}"))
-}
-
 /// Filesystem-safe stem from a display name or handle (alnum / `-` / `_` / `+`).
 pub fn name_stem(value: &str) -> String {
     let mut raw = String::with_capacity(value.len());
@@ -379,12 +333,6 @@ mod tests {
         assert_eq!(name_stem("+15555550100"), "+15555550100");
         assert_eq!(name_stem("!!!"), "unknown");
         assert_eq!(name_stem(""), "unknown");
-    }
-
-    #[test]
-    fn parse_date_range_rejects_bad() {
-        let err = parse_date_range(Some("not-a-date"), None).unwrap_err();
-        assert!(err.starts_with("invalid date range:"));
     }
 
     #[test]

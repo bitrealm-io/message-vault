@@ -10,17 +10,12 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-// Only the `#[cfg(test)]` fixture builders below own paths.
-#[cfg(test)]
-use std::path::PathBuf;
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result, anyhow};
 use hmac::{Hmac, KeyInit, Mac};
 use rand::Rng;
 use regex::Regex;
-#[cfg(test)]
-use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use names::{FIRST_NAMES, LAST_NAMES};
@@ -298,40 +293,24 @@ impl Obfuscator {
         if let Some(cached) = self.text_cache.get(raw) {
             return cached.clone();
         }
-        let fake = self.rewrite_structured_text(raw, true);
+        let fake = self.rewrite_structured_text(raw);
         self.text_cache.insert(raw.to_string(), fake.clone());
         fake
     }
 
-    /// Remap URL/email/phone substrings inside a free-form field (e.g. Chat Session).
-    pub fn obfuscate_mixed_field(&mut self, raw: &str) -> String {
-        if raw.is_empty() {
-            return String::new();
-        }
-        self.rewrite_structured_text(raw, false)
-    }
-
-    /// Replace URL → email → phone spans; optionally word-shape the surrounding prose.
-    fn rewrite_structured_text(&mut self, raw: &str, shape_prose: bool) -> String {
+    /// Replace URL → email → phone spans and word-shape the prose between them.
+    fn rewrite_structured_text(&mut self, raw: &str) -> String {
         let spans = find_structured_spans(raw);
         if spans.is_empty() {
-            return if shape_prose {
-                let d = self.digest("text", raw);
-                shape_preserving_filler(raw, &d, 0)
-            } else {
-                raw.to_string()
-            };
+            let d = self.digest("text", raw);
+            return shape_preserving_filler(raw, &d, 0);
         }
         let mut out = String::with_capacity(raw.len());
         let mut cursor = 0usize;
         for (start, end, kind) in spans {
             let gap = &raw[cursor..start];
-            if shape_prose {
-                let d = self.digest("text", gap);
-                out.push_str(&shape_preserving_filler(gap, &d, 0));
-            } else {
-                out.push_str(gap);
-            }
+            let d = self.digest("text", gap);
+            out.push_str(&shape_preserving_filler(gap, &d, 0));
             let piece = &raw[start..end];
             let replacement = match kind {
                 StructuredKind::Url => self.obfuscate_url(piece),
@@ -342,12 +321,8 @@ impl Obfuscator {
             cursor = end;
         }
         let gap = &raw[cursor..];
-        if shape_prose {
-            let d = self.digest("text", gap);
-            out.push_str(&shape_preserving_filler(gap, &d, 0));
-        } else {
-            out.push_str(gap);
-        }
+        let d = self.digest("text", gap);
+        out.push_str(&shape_preserving_filler(gap, &d, 0));
         out
     }
 }
@@ -602,224 +577,6 @@ pub fn resolve_obfuscator_with_log(
         key_from_seed_bytes(&seed)
     };
     Ok(Obfuscator::new(key))
-}
-
-#[cfg(test)]
-const EXPORT_IDENTITY_COLS: &[&str] = &[
-    "chat_identifier",
-    "group_title",
-    "participants_json",
-    "sender_handle",
-    "sender_display_name",
-    "owner_handle",
-    "owner_display_name",
-    "text",
-    "subject",
-    "attachments_json",
-    "announcement",
-    "shared_location",
-];
-
-#[cfg(test)]
-fn rename_chat_csv_files(output_dir: &Path) -> Result<()> {
-    let mut csv_paths: Vec<PathBuf> = fs::read_dir(output_dir)?
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .filter(|p| {
-            p.extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| e.eq_ignore_ascii_case("csv"))
-        })
-        .collect();
-    csv_paths.sort();
-    for path in csv_paths {
-        let mut rdr = csv::ReaderBuilder::new().flexible(true).from_path(&path)?;
-        let headers = rdr.headers()?.clone();
-        let Some(chat_idx) = headers.iter().position(|h| h == "chat_identifier") else {
-            continue;
-        };
-        let Some(Ok(first)) = rdr.records().next() else {
-            continue;
-        };
-        let chat_id = first.get(chat_idx).unwrap_or("").trim();
-        if chat_id.is_empty() {
-            continue;
-        }
-        let safe: String = chat_id
-            .chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '+' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect();
-        let dest = output_dir.join(format!("{safe}.csv"));
-        if dest != path && !dest.exists() {
-            let _ = fs::rename(&path, &dest);
-        }
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-fn obfuscate_export_csv_file(input: &Path, output: &Path, anon: &mut Obfuscator) -> Result<()> {
-    let mut rdr = csv::ReaderBuilder::new()
-        .flexible(true)
-        .from_path(input)
-        .with_context(|| format!("read {}", input.display()))?;
-    let headers = rdr.headers()?.clone();
-    let mut rows: Vec<csv::StringRecord> = Vec::new();
-    for result in rdr.records() {
-        let record = result?;
-        rows.push(obfuscate_export_record(&headers, &record, anon));
-    }
-
-    let tmp = output.with_extension("csv.tmp");
-    {
-        let mut wtr =
-            csv::Writer::from_path(&tmp).with_context(|| format!("write {}", tmp.display()))?;
-        wtr.write_record(&headers)?;
-        for row in &rows {
-            wtr.write_record(row)?;
-        }
-        wtr.flush()?;
-    }
-    fs::rename(&tmp, output)?;
-    Ok(())
-}
-
-#[cfg(test)]
-fn obfuscate_export_record(
-    headers: &csv::StringRecord,
-    record: &csv::StringRecord,
-    anon: &mut Obfuscator,
-) -> csv::StringRecord {
-    let mut out = csv::StringRecord::new();
-    let mut sender_handle_original = String::new();
-    for (i, header) in headers.iter().enumerate() {
-        let val = record.get(i).unwrap_or("");
-        let new_val = match header {
-            "chat_identifier" => anon.obfuscate_handle(val),
-            "group_title" => {
-                if val.is_empty() {
-                    String::new()
-                } else {
-                    anon.obfuscate_mixed_field(val)
-                }
-            }
-            "participants_json" => obfuscate_participants_json(val, anon),
-            "sender_handle" | "owner_handle" => {
-                if header == "sender_handle" {
-                    sender_handle_original = val.to_string();
-                }
-                anon.obfuscate_handle(val)
-            }
-            "sender_display_name" | "owner_display_name" => {
-                if val.is_empty() {
-                    String::new()
-                } else if header == "sender_display_name" && !sender_handle_original.is_empty() {
-                    anon.display_name_for_handle(&sender_handle_original)
-                } else {
-                    anon.obfuscate_display_name(val)
-                }
-            }
-            "text" | "subject" | "announcement" => anon.obfuscate_text(val),
-            "attachments_json" => obfuscate_attachments_json(val),
-            "shared_location" => {
-                if val.is_empty() {
-                    String::new()
-                } else {
-                    anon.obfuscate_text(val)
-                }
-            }
-            _ => {
-                if EXPORT_IDENTITY_COLS.contains(&header) {
-                    anon.obfuscate_text(val)
-                } else {
-                    val.to_string()
-                }
-            }
-        };
-        out.push_field(&new_val);
-    }
-    out
-}
-
-#[cfg(test)]
-fn obfuscate_participants_json(raw: &str, anon: &mut Obfuscator) -> String {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() || trimmed == "null" || trimmed == "[]" {
-        return trimmed.to_string();
-    }
-    let Ok(mut value) = serde_json::from_str::<Value>(trimmed) else {
-        return anon.obfuscate_mixed_field(raw);
-    };
-    if let Some(arr) = value.as_array_mut() {
-        for item in arr.iter_mut() {
-            if let Some(obj) = item.as_object_mut() {
-                if let Some(h) = obj.get("handle").and_then(|v| v.as_str()) {
-                    let fake_n = anon.display_name_for_handle(h);
-                    let fake_h = anon.obfuscate_handle(h);
-                    obj.insert("handle".into(), json!(fake_h));
-                    if obj.contains_key("display_name") {
-                        obj.insert("display_name".into(), json!(fake_n));
-                    }
-                }
-            } else if let Some(s) = item.as_str() {
-                *item = json!(anon.obfuscate_handle(s));
-            }
-        }
-    }
-    serde_json::to_string(&value).unwrap_or_else(|_| "[]".into())
-}
-
-#[cfg(test)]
-fn obfuscate_attachments_json(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() || trimmed == "null" || trimmed == "[]" {
-        return trimmed.to_string();
-    }
-    let Ok(mut value) = serde_json::from_str::<Value>(trimmed) else {
-        return "[]".into();
-    };
-    if let Some(arr) = value.as_array_mut() {
-        for item in arr.iter_mut() {
-            if let Some(obj) = item.as_object_mut() {
-                let mime = obj
-                    .get("mime_type")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                let path = obj
-                    .get("path")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                let class = classify_attachment(mime.as_deref(), path.as_deref());
-                let rel = placeholder_rel_path(class);
-                obj.insert("path".into(), json!(rel));
-                if let Some(orig) = obj.get("original_name").and_then(|v| v.as_str()) {
-                    let ext = Path::new(rel)
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .unwrap_or("bin");
-                    let stem = Path::new(orig)
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("file");
-                    // Keep extension class only; drop original basename PII lightly.
-                    let _ = stem;
-                    obj.insert("original_name".into(), json!(format!("attachment.{ext}")));
-                }
-                if let Some(t) = obj.get_mut("transcription")
-                    && t.as_str().is_some_and(|s| !s.is_empty())
-                {
-                    *t = json!("[redacted]");
-                }
-            }
-        }
-    }
-    serde_json::to_string(&value).unwrap_or_else(|_| "[]".into())
 }
 
 #[cfg(test)]
@@ -1207,59 +964,6 @@ mod tests {
         let digits: String = fake.chars().filter(|c| c.is_ascii_digit()).collect();
         assert_eq!(digits.len(), 11);
         assert_ne!(digits, "15551234567");
-    }
-
-    #[test]
-    fn export_dir_smoke() {
-        let dir = tempfile::tempdir().unwrap();
-        let csv_path = dir.path().join("+15555550100.csv");
-        let mut wtr = csv::Writer::from_path(&csv_path).unwrap();
-        wtr.write_record([
-            "chat_identifier",
-            "sender_handle",
-            "sender_display_name",
-            "text",
-            "attachments_json",
-            "export_source",
-        ])
-        .unwrap();
-        wtr.write_record([
-            "+15555550100",
-            "+15555550100",
-            "Alice Secret",
-            "Meet at 9",
-            r#"[{"path":"attachments/photo.jpg","mime_type":"image/jpeg","original_name":"photo.jpg","is_sticker":false}]"#,
-            "go-sms-pro",
-        ])
-        .unwrap();
-        wtr.flush().unwrap();
-        fs::create_dir_all(dir.path().join("attachments")).unwrap();
-        fs::write(dir.path().join("attachments/photo.jpg"), b"REAL").unwrap();
-
-        let mut anon = Obfuscator::new(key(9));
-        materialize_placeholders(dir.path()).unwrap();
-        obfuscate_export_csv_file(&csv_path, &csv_path, &mut anon).unwrap();
-        rename_chat_csv_files(dir.path()).unwrap();
-
-        assert!(dir.path().join("attachments/placeholder.jpg").is_file());
-        assert!(!dir.path().join("attachments/photo.jpg").exists());
-
-        let mut found_original = false;
-        for entry in fs::read_dir(dir.path()).unwrap() {
-            let path = entry.unwrap().path();
-            if path.extension().and_then(|e| e.to_str()) != Some("csv") {
-                continue;
-            }
-            let text = fs::read_to_string(&path).unwrap();
-            if text.contains("15555550100")
-                || text.contains("Alice Secret")
-                || text.contains("Meet at 9")
-            {
-                found_original = true;
-            }
-            assert!(text.contains("attachments/placeholder.jpg"));
-        }
-        assert!(!found_original);
     }
 
     #[test]

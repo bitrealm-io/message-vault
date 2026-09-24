@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use media::{CompressOptions, MediaMode};
 
-use crate::exporters::{ApplePlatform, Exporter, WhatsappPlatform};
+use crate::exporters::{ApplePlatform, WhatsappPlatform};
 use crate::process::{CancelFlag, LogSink, emit_log};
 use crate::progress::{ProgressEvent, ProgressSink, emit_progress};
 
@@ -196,22 +196,6 @@ pub enum SourceConfig {
     Whatsapp(WhatsappConfig),
     /// Existing Message Vault output → another IR format (`message-reexporter`).
     Format(FormatConfig),
-}
-
-impl SourceConfig {
-    /// Backup type for this source, or `None` for the Format-tab converter.
-    pub fn exporter(&self) -> Option<Exporter> {
-        match self {
-            Self::GoSmsPro(_) => Some(Exporter::GoSmsPro),
-            Self::SmsBackupRestore(_) => Some(Exporter::SmsBackupRestore),
-            Self::SmsBackupPlus(_) => Some(Exporter::SmsBackupPlus),
-            Self::OpenExtract(_) => Some(Exporter::OpenExtract),
-            Self::Imazing(_) => Some(Exporter::Imazing),
-            Self::Apple(_) => Some(Exporter::Imessage),
-            Self::Whatsapp(_) => Some(Exporter::Whatsapp),
-            Self::Format(_) => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default)]

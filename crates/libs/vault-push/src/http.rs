@@ -126,14 +126,15 @@ impl Session {
         asset_url(&self.url, segments, source)
     }
 
-    /// Whether the vault already holds the attachment with this digest.
-    /// `None` means it does not (404); `Some` carries the vault's reply.
+    /// Whether the vault already holds the attachment with this digest:
+    /// `true` for a 2xx, `false` for a 404. A HEAD reply carries no body, so
+    /// the status is the whole answer.
     ///
     /// # Errors
     ///
     /// Returns an error for a bad key (401), a username that does not match
     /// the key (403), or any other failure.
-    pub(crate) fn head_asset(&self, source: &str, sha256: &str) -> Result<Option<Asset>> {
+    pub(crate) fn head_asset(&self, source: &str, sha256: &str) -> Result<bool> {
         let url = self.asset_url(source, &[sha256])?;
         let response = self
             .http
@@ -143,7 +144,7 @@ impl Session {
             .with_context(|| format!("HEAD {url}"))?;
         let status = response.status();
         match status.as_u16() {
-            404 => return Ok(None),
+            404 => return Ok(false),
             401 => return Err(VaultHttpError::new(401, "invalid vault key").into()),
             403 => {
                 return Err(VaultHttpError::new(403, "username does not match vault key").into());
@@ -161,20 +162,7 @@ impl Session {
             )
             .into());
         }
-        let assumed_present = Asset {
-            already_present: true,
-        };
-        let text = response.text().unwrap_or_default();
-        if text.trim().is_empty() {
-            return Ok(Some(assumed_present));
-        }
-        let Ok(parsed) = serde_json::from_str::<Asset>(&text) else {
-            return Ok(Some(assumed_present));
-        };
-        if !parsed.already_present {
-            return Ok(None);
-        }
-        Ok(Some(parsed))
+        Ok(true)
     }
 
     /// Upload one attachment: in one PUT, or in parts when the file is larger

@@ -240,6 +240,39 @@ mod tests {
         );
     }
 
+    /// An iMazing export needs all three core columns; any other CSV found
+    /// in the tree is not one. Among exports, any one of WhatsApp's own
+    /// columns marks a WhatsApp export, since iMazing versions differ in
+    /// which of them they write; with none of them, it is Messages.
+    #[test]
+    fn a_header_is_classified_by_its_core_and_whatsapp_columns() {
+        let dir = tempfile::tempdir().unwrap();
+        let classify = |header: &str| {
+            let path = write(&dir, "x.csv", &format!("{header}\n"));
+            classify_imazing_csv(&path).unwrap()
+        };
+        for missing_one in [
+            "Message Date,Type,Sender ID,Text",
+            "Chat Session,Type,Sender ID,Text",
+            "Chat Session,Message Date,Type,Text",
+        ] {
+            assert_eq!(classify(missing_one), None, "{missing_one}");
+        }
+        for whatsapp_column in ["Forwarded", "Attachment info", "Sent Date"] {
+            assert_eq!(
+                classify(&format!(
+                    "Chat Session,Message Date,Type,Sender ID,Text,{whatsapp_column}"
+                )),
+                Some(SourceKind::WhatsApp),
+                "{whatsapp_column}"
+            );
+        }
+        assert_eq!(
+            classify("Chat Session,Message Date,Type,Sender ID,Text"),
+            Some(SourceKind::Messages)
+        );
+    }
+
     #[test]
     fn discovers_nested_messages_and_whatsapp() {
         let dir = tempfile::tempdir().unwrap();

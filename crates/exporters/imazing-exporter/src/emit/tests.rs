@@ -369,3 +369,147 @@ Bob,2020-01-01 12:00:00,SMS,Incoming,+13212462167,Bob,Read,,,Hello,,,\n",
     // Source CSV must survive the refused run.
     assert!(dir.path().join("Messages - Bob.csv").is_file());
 }
+
+/// The Messages CSV header every test below writes rows under.
+const MESSAGES_HEADER: &str = "Chat Session,Message Date,Service,Type,Sender ID,Sender Name,Status,Replying to,Subject,Text,Reactions,Attachment,Attachment type\n";
+
+/// Convert one Messages CSV holding `rows` to JSON and read each
+/// conversation back.
+fn convert_rows(rows: &str) -> Vec<message_ir::ConversationDocument> {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("in");
+    fs::create_dir(&input).unwrap();
+    fs::write(
+        input.join("Messages.csv"),
+        format!("{MESSAGES_HEADER}{rows}"),
+    )
+    .unwrap();
+    let out = dir.path().join("out");
+    convert_export(ConvertExportArgs {
+        input: &input,
+        output: &out,
+        timezone: Some("UTC"),
+        transforms: ExportTransforms::none(),
+        output_format: OutputFormat::Json,
+        cancel: None,
+        resume: false,
+    })
+    .unwrap();
+    let mut documents: Vec<_> = fs::read_dir(&out)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+        .map(|path| message_ir_format::read_conversation_json(&path).unwrap())
+        .collect();
+    documents.sort_by(|a, b| {
+        a.conversation
+            .chat_identifier
+            .cmp(&b.conversation.chat_identifier)
+    });
+    documents
+}
+
+/// iMazing names a chat "Bob (+13212462167)" when it knows the number. A
+/// chat whose rows are all outgoing carries no sender id, so the number in
+/// the name is the only address the source gives, and it is the roster.
+/// The number is read as written, so a digit elsewhere in the name
+/// ("Bob 2") doesn't join it.
+#[test]
+fn a_number_in_the_chat_name_is_the_roster() {
+    for session in ["Bob (+13212462167)", "Bob 2 (+13212462167)"] {
+        let documents = convert_rows(&format!(
+            "{session},2020-01-01 12:00:00,SMS,Outgoing,,,Sent,,,Hi Bob,,,\n"
+        ));
+        assert_eq!(documents.len(), 1, "{session}");
+        let doc = &documents[0];
+        assert_eq!(
+            doc.conversation.chat_identifier, "+13212462167",
+            "{session}"
+        );
+        let roster: Vec<_> = doc
+            .conversation
+            .participants
+            .iter()
+            .filter_map(|p| p.handle.as_deref())
+            .collect();
+        assert_eq!(roster, vec!["+13212462167"], "{session}");
+    }
+}
+
+/// A Subject column value is the message's subject; an empty one is none.
+#[test]
+fn a_subject_reaches_the_message() {
+    let documents = convert_rows(
+        "Bob,2020-01-01 12:00:00,SMS,Incoming,+13212462167,Bob,Read,,Dinner,See you at 7,,,\n\
+Bob,2020-01-01 12:01:00,SMS,Incoming,+13212462167,Bob,Read,,,No subject,,,\n",
+    );
+    let subjects: Vec<_> = documents[0]
+        .messages
+        .iter()
+        .map(|m| m.subject.as_deref())
+        .collect();
+    assert_eq!(subjects, vec![Some("Dinner"), None]);
+}
+
+/// Two photos sent in the same second with no text are two messages, told
+/// apart by their attachment, so each keeps its own GUID.
+#[test]
+fn two_same_second_photos_are_two_messages() {
+    let documents = convert_rows(
+        "Bob,2020-01-01 12:00:00,iMessage,Incoming,+13212462167,Bob,Read,,,,,IMG_0001.jpg,Image\n\
+Bob,2020-01-01 12:00:00,iMessage,Incoming,+13212462167,Bob,Read,,,,,IMG_0002.jpg,Image\n",
+    );
+    let messages = &documents[0].messages;
+    assert_eq!(messages.len(), 2);
+    assert_ne!(messages[0].guid, messages[1].guid);
+}
+
+/// A notification row ("Bob left the conversation") is not a message from
+/// the chat's peer, so it takes no sender from the chat.
+#[test]
+fn a_notification_row_has_no_sender() {
+    let documents = convert_rows(
+        "Bob,2020-01-01 12:00:00,SMS,Incoming,+13212462167,Bob,Read,,,Hello,,,\n\
+Bob,2020-01-01 12:01:00,SMS,Notification,,,,,,Bob left the conversation,,,\n",
+    );
+    let notification = documents[0]
+        .messages
+        .iter()
+        .find(|m| m.text == "Bob left the conversation")
+        .unwrap();
+    assert_eq!(notification.sender_handle, None);
+    assert_eq!(notification.sender_display_name, None);
+}
+
+/// An incoming message whose row names no sender is from the chat's peer:
+/// the chat's number, and the chat's name when the row gives none. An
+/// email chat's address is never read as a number.
+#[test]
+fn an_incoming_row_without_a_sender_is_from_the_chats_peer() {
+    let documents = convert_rows(
+        "Bob McRoy,2020-01-01 12:00:00,SMS,Incoming,+13212462167,Robert,Read,,,Hello,,,\n\
+Bob McRoy,2020-01-01 12:01:00,SMS,Incoming,,,Read,,,Anyone there,,,\n\
+Bob Mail,2020-01-01 12:00:00,iMessage,Incoming,bob2024@gmail.com,Bob,Read,,,Hi,,,\n\
+Bob Mail,2020-01-01 12:01:00,iMessage,Incoming,,,Read,,,Still me,,,\n",
+    );
+    let senders: Vec<(&str, Option<&str>, Option<&str>)> = documents
+        .iter()
+        .flat_map(|doc| &doc.messages)
+        .map(|m| {
+            (
+                m.text.as_str(),
+                m.sender_handle.as_deref(),
+                m.sender_display_name.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        senders,
+        vec![
+            ("Hello", Some("+13212462167"), Some("Robert")),
+            ("Anyone there", Some("+13212462167"), Some("Bob McRoy")),
+            ("Hi", Some("bob2024@gmail.com"), Some("Bob")),
+            ("Still me", None, Some("Bob Mail")),
+        ]
+    );
+}

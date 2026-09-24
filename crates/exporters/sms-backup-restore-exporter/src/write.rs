@@ -308,27 +308,23 @@ fn synthesize_addrs(
     };
     addrs.push(addr_entry(&from, MMS_ADDR_FROM));
 
-    match msg.direction {
-        IrDirection::Incoming => {
-            if !owner.is_empty() {
-                addrs.push(addr_entry(owner, MMS_ADDR_TO));
+    if msg.direction == IrDirection::Incoming && !owner.is_empty() {
+        addrs.push(addr_entry(owner, MMS_ADDR_TO));
+    }
+    if doc.conversation.conversation_type == IrConversationType::Group {
+        // Every other party is a recipient, as SMS Backup & Restore writes a
+        // group MMS in either direction.
+        for p in &doc.conversation.participants {
+            let Some(handle) = p.handle.as_deref() else {
+                continue;
+            };
+            if handle != owner && handle != from {
+                addrs.push(addr_entry(handle, MMS_ADDR_TO));
             }
         }
-        IrDirection::Outgoing => {
-            if doc.conversation.conversation_type == IrConversationType::Group {
-                for p in &doc.conversation.participants {
-                    let Some(handle) = p.handle.as_deref() else {
-                        continue;
-                    };
-                    if handle != owner {
-                        addrs.push(addr_entry(handle, MMS_ADDR_TO));
-                    }
-                }
-            } else {
-                let peer = peer_address(doc, msg);
-                addrs.push(addr_entry(&peer, MMS_ADDR_TO));
-            }
-        }
+    } else if msg.direction == IrDirection::Outgoing {
+        let peer = peer_address(doc, msg);
+        addrs.push(addr_entry(&peer, MMS_ADDR_TO));
     }
     addrs
 }
@@ -484,60 +480,4 @@ impl MergedArchive for SbrArchive {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::{Map, json};
-    use std::fs;
-
-    #[test]
-    fn a_session_writes_every_conversation_into_one_smses_backup() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut session = SbrBackupSession::create(tmp.path()).unwrap();
-        session
-            .append_document(&message_ir::testutil::sample_document("hello ir"))
-            .unwrap();
-        session
-            .append_document(&message_ir::testutil::sample_imessage_document())
-            .unwrap();
-        let path = session.finish().unwrap();
-        assert_eq!(path.file_name().unwrap(), "smses.xml");
-        let text = fs::read_to_string(&path).unwrap();
-        assert!(text.contains(r#"count="3""#)); // 1 SMS + 2 iMessage rows
-        assert!(text.contains("hello ir"));
-        assert!(text.contains(r#"type="1""#) || text.contains(r#"msg_box="1""#));
-        assert!(text.contains("hello imessage"));
-        // iMessage bags are not mirrored as Apple attrs.
-        assert!(!text.contains("X-ME-"));
-        assert!(!text.contains("Sent with Balloons"));
-        assert!(!text.contains("tapback_kind"));
-    }
-
-    #[test]
-    fn the_archive_restores_source_fields_as_attrs() {
-        let mut doc = message_ir::testutil::sample_document("hello ir");
-        // SyncTech-shaped bag (the same shape the reader stores).
-        if let Some(source) = doc.messages[0].source.as_mut() {
-            let mut attrs = Map::new();
-            attrs.insert("protocol".into(), json!("0"));
-            attrs.insert("address".into(), json!("+15555550101"));
-            attrs.insert("date".into(), json!("1400773261000"));
-            attrs.insert("type".into(), json!("1"));
-            attrs.insert("body".into(), json!("hello ir"));
-            attrs.insert("service_center".into(), json!("+15550009999"));
-            attrs.insert("contact_name".into(), json!("Sam"));
-            source.fields = {
-                let mut m = Map::new();
-                m.insert("kind".into(), json!("sms"));
-                m.insert("attrs".into(), Value::Object(attrs));
-                m
-            };
-        }
-        let tmp = tempfile::tempdir().unwrap();
-        let path = SbrArchive
-            .write(tmp.path(), std::slice::from_ref(&doc))
-            .unwrap();
-        let text = fs::read_to_string(&path).unwrap();
-        assert!(text.contains(r#"service_center="+15550009999""#));
-        assert!(text.contains("hello ir"));
-    }
-}
+mod tests;

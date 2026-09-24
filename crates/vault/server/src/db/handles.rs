@@ -80,24 +80,6 @@ pub async fn upsert_handle_row(
     Ok((id, inserted > 0 && note.is_some()))
 }
 
-/// Set a handle row's platform service.
-///
-/// # Errors
-///
-/// Returns an error when the statement fails.
-pub async fn set_handle_service(
-    conn: &mut AnyConnection,
-    handle_id: i64,
-    service: &str,
-) -> Result<()> {
-    sqlx::query("UPDATE handles SET service = $1 WHERE id = $2")
-        .bind(service)
-        .bind(handle_id)
-        .execute(&mut *conn)
-        .await?;
-    Ok(())
-}
-
 /// Same as [`upsert_handle_row`], but skip the two SQL statements when this
 /// import already resolved the same identity. Third value is `true` on a
 /// cache hit so callers can skip leftover per-row work (sibling contact link).

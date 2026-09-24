@@ -1,7 +1,7 @@
 //! Convert or compress attachment media under a converter export directory.
 //!
 //! Modes:
-//! - **Disabled** — do not copy or write attachment files (CLI exporters)
+//! - **Disabled** — do not copy or write attachment files (the export form's "Do not copy" choice)
 //! - **Clone** — leave exported files as-is (a no-op after export)
 //! - **Convert** — rewrite images to `.jpg`, videos to `.mp4`, audio to `.mp3`
 //! - **Compress** — re-encode to shrink files, with optional video settings
@@ -47,7 +47,8 @@ pub enum MediaMode {
 }
 
 impl MediaMode {
-    /// Canonical lowercase CLI string (`disabled` / `clone` / `convert` / `compress`).
+    /// Canonical lowercase name (`disabled` / `clone` / `convert` / `compress`),
+    /// the value the export form and the desktop commands pass as text.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Disabled => "disabled",
@@ -57,7 +58,8 @@ impl MediaMode {
         }
     }
 
-    /// Parse a CLI string (case- and whitespace-insensitive); `None` for unknown input.
+    /// Parse a mode name (case- and whitespace-insensitive; `none`, `skip` and
+    /// `copy` are accepted aliases); `None` for unknown input.
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "disabled" | "none" | "skip" => Some(Self::Disabled),
@@ -153,12 +155,15 @@ impl FromStr for MaxResolution {
     }
 }
 
-/// Build compress options from CLI-style fields (`min_size` like `20M`).
+/// Build [`CompressOptions`] from the export form's values: the resolution cap,
+/// the frame-rate cap, the minimum size as the person typed it (`20M`, `2g`),
+/// and whether already-efficient videos are skipped.
 ///
 /// # Errors
 ///
-/// Returns an error when `min_size` is not a parseable size (like `20M`).
-pub fn compress_options_from_cli(
+/// Returns an error when `min_size` is not a size with an optional unit
+/// (`20M`, `2g`, `512`).
+pub fn compress_options_from_form(
     max_resolution: MaxResolution,
     max_fps: f32,
     min_size: &str,
@@ -290,8 +295,8 @@ mod tests {
     }
 
     #[test]
-    fn compress_options_from_cli_reads_every_field() {
-        let options = compress_options_from_cli(MaxResolution::P720, 24.0, "2g", false).unwrap();
+    fn compress_options_from_form_reads_every_field() {
+        let options = compress_options_from_form(MaxResolution::P720, 24.0, "2g", false).unwrap();
         assert_eq!(
             options,
             CompressOptions {
@@ -301,6 +306,6 @@ mod tests {
                 skip_efficient: false,
             }
         );
-        assert!(compress_options_from_cli(MaxResolution::P720, 24.0, "lots", false).is_err());
+        assert!(compress_options_from_form(MaxResolution::P720, 24.0, "lots", false).is_err());
     }
 }

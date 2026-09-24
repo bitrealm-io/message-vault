@@ -15,7 +15,7 @@ use crate::config::{
     WhatsappConfig,
 };
 
-/// iMessage Import / CLI copy when Convert or Compress is selected and ffmpeg is missing.
+/// Validation message when Convert or Compress is selected and ffmpeg is missing.
 pub const CONVERT_COMPRESS_FFMPEG_REQUIRED: &str = "Convert and Compress need ffmpeg and ffprobe. Put them on PATH, or in the desktop app set the ffmpeg directory in Settings → System.";
 
 /// Which backup type the user selected (iMessage, WhatsApp, SMS Backup & Restore, …).
@@ -97,8 +97,7 @@ impl fmt::Display for AttachmentMedia {
 }
 
 impl AttachmentMedia {
-    /// The `media::MediaMode` this GUI choice maps to (the same mode the
-    /// `--media-mode` CLI flag selects).
+    /// The [`MediaMode`] this export-form choice maps to.
     pub fn media_mode(self) -> MediaMode {
         match self {
             Self::Clone => MediaMode::Clone,
@@ -560,7 +559,7 @@ impl Form {
         if min_size.is_empty() {
             return Err("Min size is required for Compress.".into());
         }
-        media::compress_options_from_cli(
+        media::compress_options_from_form(
             self.media_max_resolution,
             fps,
             min_size,

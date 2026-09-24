@@ -15,7 +15,7 @@ use std::pin::Pin;
 use anyhow::Result as AnyResult;
 use sqlx::AnyConnection;
 
-use crate::db::dialect::{engine_of, name_eq_ci, order_by_name_ci};
+use crate::db::dialect::{name_eq_ci, order_by_name_ci};
 
 /// Longest allowed name for either kind of set (characters).
 pub const MAX_NAME_LEN: usize = 80;
@@ -200,7 +200,7 @@ async fn find_id(
     let sql = format!(
         "SELECT id FROM {table} WHERE account_id = $1 AND {name_eq}",
         table = spec.table,
-        name_eq = name_eq_ci(engine_of(conn), "name", "$2"),
+        name_eq = name_eq_ci("name", "$2"),
     );
     let id = sqlx::query_scalar::<_, i64>(&sql)
         .bind(account_id)
@@ -383,7 +383,7 @@ pub async fn list_sets(
     conn: &mut AnyConnection,
     account_id: i64,
 ) -> Result<Vec<(i64, String)>, MembershipError> {
-    let order = order_by_name_ci(engine_of(conn), "name");
+    let order = order_by_name_ci("name");
     let sql = format!(
         "SELECT id, name FROM {table} WHERE account_id = $1 {order}",
         table = spec.table
@@ -633,7 +633,7 @@ pub async fn names_for_item(
     account_id: i64,
     item_id: i64,
 ) -> AnyResult<Vec<String>> {
-    let order = order_by_name_ci(engine_of(conn), "n.name");
+    let order = order_by_name_ci("n.name");
     let sql = format!(
         "SELECT n.name
          FROM {table} n
@@ -664,7 +664,7 @@ pub async fn names_for_items(
     fold_in_id_chunks(conn, item_ids, |conn, chunk| {
         Box::pin(async move {
             let placeholders = in_placeholders(2, chunk.len());
-            let order = order_by_name_ci(engine_of(conn), "n.name");
+            let order = order_by_name_ci("n.name");
             let sql = format!(
                 "SELECT m.{member_col}, n.name
                  FROM {members} m

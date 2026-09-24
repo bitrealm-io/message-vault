@@ -42,13 +42,13 @@ impl Sql {
         self.params.push(SqlParam::Text(v.into()));
     }
 
-    /// `column LIKE ?` case-insensitively, binding `pattern` as it is. In the
-    /// pattern `%` and `_` are wildcards and `\` escapes, so text a person
-    /// typed reaches here only through `emit::like_contains`, which escapes it.
-    pub fn like(&mut self, engine: DbEngine, column: &str, pattern: &str) {
-        self.text.push_str(column);
-        self.text.push(' ');
-        self.text.push_str(like_ci(engine));
+    /// `column LIKE ?` case-insensitively on both engines
+    /// ([`db::dialect::like_ci`](crate::db::dialect::like_ci)), binding
+    /// `pattern` as it is. In the pattern `%` and `_` are wildcards and `\`
+    /// escapes, so text a person typed reaches here only through
+    /// `emit::like_contains`, which escapes it.
+    pub fn like(&mut self, column: &str, pattern: &str) {
+        self.text.push_str(&like_ci(column));
         self.params.push(SqlParam::Text(pattern.to_string()));
     }
 }

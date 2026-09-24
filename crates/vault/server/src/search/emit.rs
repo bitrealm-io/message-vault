@@ -138,16 +138,16 @@ fn emit_expr(ctx: &ListCtx, out: &mut Sql, expr: &Expr) -> Result<(), QueryError
 /// It escapes the text first, so a `%`, `_`, or `\` a person types is that
 /// character and never a wildcard: `filename:IMG_0001` does not find
 /// `IMGX0001`. `like_ci` names `\` as the escape character on both engines.
-fn like_contains(out: &mut Sql, engine: DbEngine, column: &str, text: &str, prefix: bool) {
+fn like_contains(out: &mut Sql, column: &str, text: &str, prefix: bool) {
     let text = like_escape(text);
     if prefix {
         out.push("(");
-        out.like(engine, column, &format!("{text}%"));
+        out.like(column, &format!("{text}%"));
         out.push(" OR ");
-        out.like(engine, column, &format!("% {text}%"));
+        out.like(column, &format!("% {text}%"));
         out.push(")");
     } else {
-        out.like(engine, column, &format!("%{text}%"));
+        out.like(column, &format!("%{text}%"));
     }
 }
 
@@ -164,10 +164,10 @@ fn like_escape(text: &str) -> String {
 }
 
 /// One free-text test on `column`, for the lists matched with LIKE.
-fn free_text_match(out: &mut Sql, engine: DbEngine, column: &str, term: &TextTerm) {
+fn free_text_match(out: &mut Sql, column: &str, term: &TextTerm) {
     match term {
-        TextTerm::Term { text, prefix } => like_contains(out, engine, column, text, *prefix),
-        TextTerm::Phrase(text) => like_contains(out, engine, column, text, false),
+        TextTerm::Term { text, prefix } => like_contains(out, column, text, *prefix),
+        TextTerm::Phrase(text) => like_contains(out, column, text, false),
     }
 }
 
@@ -199,29 +199,29 @@ fn emit_text(ctx: &ListCtx, out: &mut Sql, term: &TextTerm) {
     match ctx.list {
         ListKind::Contacts => {
             out.push("(");
-            free_text_match(out, e, "ct.preferred_name", term);
+            free_text_match(out, "ct.preferred_name", term);
             out.push(
                 " OR EXISTS (SELECT 1 FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id AND (",
             );
-            free_text_match(out, e, "h.raw", term);
+            free_text_match(out, "h.raw", term);
             out.push(" OR ");
-            free_text_match(out, e, "coalesce(h.normalized, '')", term);
+            free_text_match(out, "coalesce(h.normalized, '')", term);
             out.push(")))");
         }
         ListKind::Conversations => {
             out.push("(");
-            free_text_match(out, e, "coalesce(c.group_title, '')", term);
+            free_text_match(out, "coalesce(c.group_title, '')", term);
             out.push(" OR EXISTS (SELECT 1 FROM handles hc WHERE hc.id = c.chat_handle_id AND ");
-            free_text_match(out, e, "hc.raw", term);
+            free_text_match(out, "hc.raw", term);
             // The handle join is a LEFT join: a source may name a participant
             // and record no address for them, and that person is searchable by
             // the name the source gave.
             out.push(&format!(
                 ") OR EXISTS (SELECT 1 FROM {PARTICIPANTS_WITH_CONTACT} LEFT JOIN handles ph ON ph.id = p.handle_id WHERE p.conversation_id = c.id AND ("
             ));
-            free_text_match(out, e, "coalesce(ph.raw, '')", term);
+            free_text_match(out, "coalesce(ph.raw, '')", term);
             out.push(" OR ");
-            free_text_match(out, e, PARTICIPANT_NAME, term);
+            free_text_match(out, PARTICIPANT_NAME, term);
             out.push(")))");
         }
         // The index, or an attachment's file name. Both are needed: a file
@@ -238,7 +238,7 @@ fn emit_text(ctx: &ListCtx, out: &mut Sql, term: &TextTerm) {
             out.push("m.id IN (");
             fts::matching_ids(out, e, term);
             out.push(" UNION ALL SELECT a.message_id FROM attachments a WHERE ");
-            free_text_match(out, e, "coalesce(a.original_name, '')", term);
+            free_text_match(out, "coalesce(a.original_name, '')", term);
             out.push(")");
         }
     }
@@ -305,20 +305,14 @@ fn bad_value(term: &FieldTerm, what: &str) -> QueryError {
 /// that declares neither). That arm exists only so the match is exhaustive;
 /// it refuses by name rather than emitting a fallback that quietly matches
 /// everything or nothing.
-fn text_match(
-    out: &mut Sql,
-    engine: DbEngine,
-    column: &str,
-    term: &FieldTerm,
-    v: &Value,
-) -> Result<(), QueryError> {
+fn text_match(out: &mut Sql, column: &str, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
     match v {
         Value::Text(t) => {
-            like_contains(out, engine, column, t, false);
+            like_contains(out, column, t, false);
             Ok(())
         }
         Value::Prefix(p) => {
-            like_contains(out, engine, column, p, true);
+            like_contains(out, column, p, true);
             Ok(())
         }
         Value::Keyword("none") => {
@@ -344,26 +338,25 @@ fn emit_text_word(
     term: &FieldTerm,
     v: &Value,
 ) -> Result<(), QueryError> {
-    let e = ctx.engine;
     let mut result: Result<(), QueryError> = Ok(());
     match (term.spec.word, ctx.list) {
         ("body", _) => ctx.message(out, |o| {
-            result = text_match(o, e, "coalesce(m.body, '')", term, v);
+            result = text_match(o, "coalesce(m.body, '')", term, v);
         }),
         ("subject", _) => ctx.message(out, |o| {
-            result = text_match(o, e, "coalesce(m.subject, '')", term, v);
+            result = text_match(o, "coalesce(m.subject, '')", term, v);
         }),
         ("title", _) => ctx.conversation(out, |o| {
-            result = text_match(o, e, "coalesce(c.group_title, '')", term, v);
+            result = text_match(o, "coalesce(c.group_title, '')", term, v);
         }),
         ("name", ListKind::Contacts) => {
-            result = text_match(out, e, "ct.preferred_name", term, v);
+            result = text_match(out, "ct.preferred_name", term, v);
         }
         ("name", _) => ctx.conversation(out, |o| {
             o.push(&format!(
                 "EXISTS (SELECT 1 FROM {PARTICIPANTS_WITH_CONTACT} WHERE p.conversation_id = c.id AND "
             ));
-            result = text_match(o, e, PARTICIPANT_NAME, term, v);
+            result = text_match(o, PARTICIPANT_NAME, term, v);
             o.push(")");
         }),
         ("handle", ListKind::Contacts) => match v {
@@ -377,10 +370,10 @@ fn emit_text_word(
                 out.push(
                     "EXISTS (SELECT 1 FROM contact_handles ch JOIN handles h ON h.id = ch.handle_id WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id AND (",
                 );
-                result = text_match(out, e, "h.raw", term, v);
+                result = text_match(out, "h.raw", term, v);
                 out.push(" OR ");
                 if result.is_ok() {
-                    result = text_match(out, e, "coalesce(h.normalized, '')", term, v);
+                    result = text_match(out, "coalesce(h.normalized, '')", term, v);
                 }
                 out.push("))");
             }
@@ -403,10 +396,10 @@ fn emit_text_word(
                 o.push(
                     "EXISTS (SELECT 1 FROM handles h WHERE (h.id = c.chat_handle_id OR EXISTS (SELECT 1 FROM participants p WHERE p.conversation_id = c.id AND p.handle_id = h.id)) AND (",
                 );
-                result = text_match(o, e, "h.raw", term, v);
+                result = text_match(o, "h.raw", term, v);
                 o.push(" OR ");
                 if result.is_ok() {
-                    result = text_match(o, e, "coalesce(h.normalized, '')", term, v);
+                    result = text_match(o, "coalesce(h.normalized, '')", term, v);
                 }
                 o.push("))");
             }
@@ -416,7 +409,7 @@ fn emit_text_word(
         }),
         ("filename", _) => ctx.message(out, |o| {
             o.push("EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id AND ");
-            result = text_match(o, e, "coalesce(a.original_name, '')", term, v);
+            result = text_match(o, "coalesce(a.original_name, '')", term, v);
             o.push(")");
         }),
         _ => {
@@ -434,7 +427,6 @@ fn emit_text_word(
 /// id, or by a contains-or-prefix match on the handle or the contact's name.
 fn person_matches(
     out: &mut Sql,
-    engine: DbEngine,
     handle_id_expr: &str,
     term: &FieldTerm,
     v: &Value,
@@ -453,11 +445,11 @@ fn person_matches(
             out.push(&format!(
                 "EXISTS (SELECT 1 FROM handles hp LEFT JOIN contact_handles chp ON chp.handle_id = hp.id AND chp.account_id = hp.account_id LEFT JOIN contacts ctp ON ctp.id = chp.contact_id WHERE hp.id = {handle_id_expr} AND ("
             ));
-            like_contains(out, engine, "hp.raw", t, prefix);
+            like_contains(out, "hp.raw", t, prefix);
             out.push(" OR ");
-            like_contains(out, engine, "coalesce(hp.normalized, '')", t, prefix);
+            like_contains(out, "coalesce(hp.normalized, '')", t, prefix);
             out.push(" OR ");
-            like_contains(out, engine, "coalesce(ctp.preferred_name, '')", t, prefix);
+            like_contains(out, "coalesce(ctp.preferred_name, '')", t, prefix);
             out.push("))");
             Ok(())
         }
@@ -472,12 +464,7 @@ fn person_matches(
 /// `handle_id` NULL, so `person_matches` on it never sees them, and neither
 /// does the `contact_handles` join, which leaves `pct` NULL and the name
 /// coming from `p.name_alias`.
-fn participant_matches(
-    out: &mut Sql,
-    engine: DbEngine,
-    term: &FieldTerm,
-    v: &Value,
-) -> Result<(), QueryError> {
+fn participant_matches(out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
     match v {
         Value::Id(id) => {
             out.push("p.contact_id = ");
@@ -486,7 +473,7 @@ fn participant_matches(
         }
         Value::Text(t) | Value::Prefix(t) => {
             let prefix = matches!(v, Value::Prefix(_));
-            like_contains(out, engine, PARTICIPANT_NAME, t, prefix);
+            like_contains(out, PARTICIPANT_NAME, t, prefix);
             Ok(())
         }
         _ => Err(bad_value(term, "needs a name, a handle, or #id.")),
@@ -501,20 +488,19 @@ fn with_person(
     term: &FieldTerm,
     v: &Value,
 ) -> Result<(), QueryError> {
-    let e = ctx.engine;
     let mut result = Ok(());
     ctx.conversation(out, |o| {
         o.push("(");
-        result = person_matches(o, e, "c.chat_handle_id", term, v);
+        result = person_matches(o, "c.chat_handle_id", term, v);
         o.push(&format!(
             " OR EXISTS (SELECT 1 FROM {PARTICIPANTS_WITH_CONTACT} WHERE p.conversation_id = c.id AND ("
         ));
         if result.is_ok() {
-            result = person_matches(o, e, "p.handle_id", term, v);
+            result = person_matches(o, "p.handle_id", term, v);
         }
         o.push(" OR ");
         if result.is_ok() {
-            result = participant_matches(o, e, term, v);
+            result = participant_matches(o, term, v);
         }
         o.push(")))");
     });
@@ -582,13 +568,7 @@ impl NamedSet {
 
     /// The home row is a member of the set `v` names. Handles `#id` and a
     /// case-insensitive name; a prefix means "a name that starts with this".
-    fn contains(
-        &self,
-        out: &mut Sql,
-        engine: DbEngine,
-        term: &FieldTerm,
-        v: &Value,
-    ) -> Result<(), QueryError> {
+    fn contains(&self, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
         out.push(&format!("EXISTS ({} AND ", self.membership_from()));
         let result = match v {
             Value::Id(id) => {
@@ -597,12 +577,12 @@ impl NamedSet {
                 Ok(())
             }
             Value::Text(t) => {
-                out.push(&name_eq_ci(engine, "ns.name", "?"));
+                out.push(&name_eq_ci("ns.name", "?"));
                 out.param_text(t.clone());
                 Ok(())
             }
             Value::Prefix(t) => {
-                like_contains(out, engine, "ns.name", t, true);
+                like_contains(out, "ns.name", t, true);
                 Ok(())
             }
             _ => Err(bad_value(term, "needs a name or #id.")),
@@ -637,7 +617,7 @@ fn emit_people_word(
 ) -> Result<(), QueryError> {
     match term.spec.word {
         "with" => with_person(ctx, out, term, v),
-        "from" => emit_from(ctx, out, term, v),
+        "from" => emit_from(out, term, v),
         "to" => emit_to(ctx, out, term, v),
         "in" => emit_in(ctx, out, term, v),
         "group" => emit_set_word(ctx, out, term, v, CONTACT_GROUPS),
@@ -649,13 +629,13 @@ fn emit_people_word(
 
 /// `from:me` is the outgoing flag; `from:<person>` is an incoming message
 /// whose sender handle is that person.
-fn emit_from(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
+fn emit_from(out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
     if matches!(v, Value::Keyword("me")) {
         out.push("m.is_from_me = 1");
         return Ok(());
     }
     out.push("(m.is_from_me = 0 AND m.sender_handle_id IS NOT NULL AND ");
-    let result = person_matches(out, ctx.engine, "m.sender_handle_id", term, v);
+    let result = person_matches(out, "m.sender_handle_id", term, v);
     out.push(")");
     result
 }
@@ -671,7 +651,7 @@ fn emit_to(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<
     let mut result = with_person(ctx, out, term, v);
     out.push(" AND (m.is_from_me = 1 OR m.sender_handle_id IS NULL OR NOT ");
     if result.is_ok() {
-        result = person_matches(out, ctx.engine, "m.sender_handle_id", term, v);
+        result = person_matches(out, "m.sender_handle_id", term, v);
     }
     out.push("))");
     result
@@ -688,12 +668,11 @@ fn emit_in(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<
         }
         Value::Text(t) | Value::Prefix(t) => {
             let prefix = matches!(v, Value::Prefix(_));
-            let e = ctx.engine;
             ctx.conversation(out, |o| {
                 o.push("(");
-                like_contains(o, e, "coalesce(c.group_title, '')", t, prefix);
+                like_contains(o, "coalesce(c.group_title, '')", t, prefix);
                 o.push(" OR EXISTS (SELECT 1 FROM handles hc WHERE hc.id = c.chat_handle_id AND ");
-                like_contains(o, e, "hc.raw", t, prefix);
+                like_contains(o, "hc.raw", t, prefix);
                 o.push("))");
             });
             Ok(())
@@ -734,7 +713,7 @@ fn emit_set_word(
         _ => {
             let mut result = Ok(());
             ctx.reach(set.home, out, |o| {
-                result = set.contains(o, ctx.engine, term, v);
+                result = set.contains(o, term, v);
             });
             result
         }

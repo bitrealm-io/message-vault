@@ -7,9 +7,15 @@ use sqlx::AnyConnection;
 
 use crate::db::engine::DbEngine;
 
-/// Case-insensitive substring match fragment (`%term%` patterns).
+/// `column` contains a `LIKE` pattern, case-insensitively: both sides go
+/// through `lower()`, so a non-ASCII capital folds the same way an ASCII
+/// one does, on both engines. Postgres's `lower()` folds Unicode on its
+/// own; SQLite's folds only ASCII, so the vault registers a Unicode one on
+/// every connection ([`crate::db::sqlite_functions`]). `ILIKE` and
+/// `COLLATE NOCASE` are not used: `ILIKE` is Postgres-only, `NOCASE` folds
+/// only ASCII, and one shape for both engines is one thing to read.
 ///
-/// Both engines name `\` as the escape character. Postgres already treats a
+/// `\` is the escape character on both engines. Postgres already treats a
 /// backslash that way by default and SQLite has no escape character unless
 /// told, so without the clause the two disagree on any pattern holding a
 /// backslash. The caller escapes the text it binds.
@@ -18,41 +24,31 @@ use crate::db::engine::DbEngine;
 /// [`crate::db::sql::renumber_placeholders`] pass, which rewrites `?` to the
 /// right `$n`; nothing else may use it — sqlx Any does no client-side
 /// placeholder rewriting, so a bare `?` is invalid on Postgres.
-pub fn like_ci(engine: DbEngine) -> &'static str {
-    match engine {
-        DbEngine::Sqlite => r"LIKE ? COLLATE NOCASE ESCAPE '\'",
-        DbEngine::Postgres => r"ILIKE ? ESCAPE '\'",
-    }
+pub fn like_ci(column: &str) -> String {
+    format!(r"lower({column}) LIKE lower(?) ESCAPE '\'")
 }
 
-/// Case-insensitive equality on a name column (`COLLATE NOCASE` is invalid
-/// Postgres SQL; Postgres lower()s both sides). `column` is the full column
+/// Case-insensitive equality on a name column, folded with `lower()` on
+/// both sides for the reason [`like_ci`] gives. `column` is the full column
 /// expression (`name`, `ct.name`); the alias must stay INSIDE `lower()` —
 /// `ct.lower(...)` parses as a schema-qualified function call. `placeholder`
 /// is the placeholder text: `"?"` for renumber-pass fragments, `"$2"` for
 /// hand-numbered SQL.
-pub fn name_eq_ci(engine: DbEngine, column: &str, placeholder: &str) -> String {
-    match engine {
-        DbEngine::Sqlite => format!("{column} = {placeholder} COLLATE NOCASE"),
-        DbEngine::Postgres => format!("lower({column}) = lower({placeholder})"),
-    }
+pub fn name_eq_ci(column: &str, placeholder: &str) -> String {
+    format!("lower({column}) = lower({placeholder})")
 }
 
 /// Case-insensitive A–Z `ORDER BY` on a name column, matching [`name_eq_ci`].
 /// `column` is the full column expression (`name`, `n.name`); append further
 /// sort keys with a leading comma.
-pub fn order_by_name_ci(engine: DbEngine, column: &str) -> String {
-    format!("ORDER BY {}", name_ci_expr(engine, column))
+pub fn order_by_name_ci(column: &str) -> String {
+    format!("ORDER BY {}", name_ci_expr(column))
 }
 
 /// The case-folded form of a name column for an `ORDER BY`, so a caller can
-/// put its own direction after it: `name COLLATE NOCASE` on SQLite,
-/// `lower(name)` on Postgres.
-pub fn name_ci_expr(engine: DbEngine, column: &str) -> String {
-    match engine {
-        DbEngine::Sqlite => format!("{column} COLLATE NOCASE"),
-        DbEngine::Postgres => format!("lower({column})"),
-    }
+/// put its own direction after it: `lower(name)` on both engines.
+pub fn name_ci_expr(column: &str) -> String {
+    format!("lower({column})")
 }
 
 /// Engine for a live connection, for db-module code that has no `DbEngine` in scope.

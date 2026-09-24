@@ -146,10 +146,14 @@ daylight-saving gap starts the day at the first instant after the gap.
 
 Case and accents:
 
-- Case never matters. SQLite folds only ASCII letters in the `LIKE`
-  comparisons the text, name and person words use, so today a non-ASCII
-  capital (`É`) differs from its small letter there (#723). Message text,
-  which goes through the full-text index, folds case on both engines.
+- Case never matters. The text, name and person words compare
+  `lower(column)` with `lower(text)` on both engines, so `name:élodie` finds
+  "Élodie" as `name:jane` finds "Jane". Postgres's `lower()` folds every
+  letter. SQLite's folds only ASCII, and its `LIKE` and `NOCASE` collation
+  fold no more, so the vault replaces `lower()` on every SQLite connection
+  with one that folds Unicode (`db/sqlite_functions.rs`, registered through
+  `sqlite3_auto_extension`). Message text, which goes through the full-text
+  index, folds case on both engines.
 - Accents matter, except in message text on SQLite, whose full-text index
   folds them: `cafe` finds "café" there and not on Postgres.
 - `%`, `_`, and `\` are ordinary characters. The only wildcard is a trailing

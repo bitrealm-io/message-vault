@@ -4,8 +4,7 @@ use anyhow::{Context, Result};
 use sqlx::AnyConnection;
 
 use super::session_tokens::{generate_prefixed_token, hash_api_token, unix_secs_string};
-use crate::db::dialect;
-use crate::db::engine::DbEngine;
+use crate::db::dialect::name_ci_expr;
 use crate::db::permissions::Permissions;
 
 /// Metadata for one API token (never includes plaintext or hash).
@@ -243,12 +242,7 @@ pub async fn list_api_tokens(
     conn: &mut AnyConnection,
     account_id: i64,
 ) -> Result<Vec<ApiTokenRow>> {
-    // `COLLATE NOCASE` is SQLite-only; Postgres lowercases the label instead.
-    let order_by = if dialect::engine_of(conn) == DbEngine::Postgres {
-        "ORDER BY created_at DESC, lower(label)"
-    } else {
-        "ORDER BY created_at DESC, label COLLATE NOCASE"
-    };
+    let order_by = format!("ORDER BY created_at DESC, {}", name_ci_expr("label"));
     let rows: Vec<ApiTokenRowRaw> = sqlx::query_as(&format!(
         "SELECT id, label, can_import, can_export, token_hint, created_at, last_accessed_at, expires_at, disabled
          FROM account_api_tokens

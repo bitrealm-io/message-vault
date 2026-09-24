@@ -500,4 +500,69 @@ mod tests {
         assert_eq!(convo.messages.len(), 2);
         assert_eq!(convo.messages[0].text, "earlier");
     }
+
+    /// Hooks whose sort keys are milliseconds, as WhatsApp's are.
+    struct MillisecondHooks;
+
+    impl ProjectionHooks for MillisecondHooks {
+        fn export(&self) -> ExportMeta {
+            TestHooks.export()
+        }
+
+        fn service(&self, msg: &PendingMessage) -> IrService {
+            TestHooks.service(msg)
+        }
+
+        fn source(&self, convo: &PendingConversation, msg: &PendingMessage) -> IrSource {
+            TestHooks.source(convo, msg)
+        }
+
+        fn sort_key_unit(&self) -> SortKeyUnit {
+            SortKeyUnit::Milliseconds
+        }
+    }
+
+    #[test]
+    fn sort_key_unit_converts_to_seconds() {
+        assert_eq!(SortKeyUnit::Seconds.to_secs(1_609_459_200), 1_609_459_200);
+        assert_eq!(
+            SortKeyUnit::Milliseconds.to_secs(1_609_459_200_999),
+            1_609_459_200
+        );
+    }
+
+    #[test]
+    fn millisecond_sort_keys_keep_their_milliseconds() {
+        let mut convo = PendingConversation::new("+15555550122", false, None, Vec::new());
+        convo.messages = vec![msg(1_609_459_200_123, false, "hi")];
+
+        let (doc, _) = pending_to_document("+15555550122", &convo, &MillisecondHooks);
+        assert_eq!(doc.messages[0].timestamp_unix_ms, 1_609_459_200_123);
+        // The GUID is built from the message's second, not its millisecond.
+        let (ts_local, _, _) = format_local_ts(1_609_459_200).unwrap();
+        assert_eq!(
+            doc.messages[0].guid,
+            stable_guid("+15555550122", &ts_local, false, "hi", &[])
+        );
+    }
+
+    #[test]
+    fn photo_only_messages_in_the_same_second_get_their_own_guids() {
+        let photo = |digest: &str| {
+            let mut m = msg(1_609_459_200, true, "");
+            m.attachments = vec![PendingAttachment {
+                rel_path: format!("attachments/{digest}.jpg"),
+                content_type: "image/jpeg".into(),
+                extension: "jpg".into(),
+                digest_sha256: Some(digest.to_string()),
+                name_hint: None,
+            }];
+            m
+        };
+        let mut convo = PendingConversation::new("+15555550122", false, None, Vec::new());
+        convo.messages = vec![photo(&"a".repeat(64)), photo(&"b".repeat(64))];
+
+        let (doc, _) = pending_to_document("+15555550122", &convo, &TestHooks);
+        assert_ne!(doc.messages[0].guid, doc.messages[1].guid);
+    }
 }

@@ -256,6 +256,18 @@ mod tests {
         assert_eq!(calls, 2);
     }
 
+    /// `max_retries` counts extra tries: one retry means two calls in all.
+    #[test]
+    fn with_retries_makes_one_extra_call_per_retry() {
+        let mut calls = 0;
+        let result = with_retries(1, || -> Result<u32> {
+            calls += 1;
+            Err(anyhow::Error::from(io::Error::other("flaky")))
+        });
+        assert!(result.is_err());
+        assert_eq!(calls, 2);
+    }
+
     #[test]
     fn with_retries_gives_up_when_exhausted() {
         let mut calls = 0;

@@ -7,6 +7,8 @@
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use vault_push::ImportMode;
 
 use httpmock::prelude::*;
@@ -1650,6 +1652,76 @@ fn a_batch_retried_after_a_503_is_counted_and_journaled_once() {
     );
     assert_eq!(journal_events(dir.path(), "file_ok").len(), 1);
     assert_eq!(journaled_guids(dir.path()), vec!["guid-1".to_string()]);
+}
+
+/// A cancel that arrives while the push is under way sends no further batch:
+/// the report is not ok, and the journal leaves the unsent conversations for
+/// the next push.
+///
+/// Guards the cancel check before each batch POST. Without it, the batch
+/// already packed when the cancel arrived still goes out.
+#[test]
+fn a_cancelled_push_sends_no_further_batch_and_resumes_later() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let mut import = server.mock(|when, then| {
+        when.method(POST).path("/v1/imports/7/batches");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    write_jsonl(dir.path(), &sample_doc());
+    write_jsonl(dir.path(), &sample_doc_for("+15555550102", "guid-2"));
+    write_jsonl(dir.path(), &sample_doc_for("+15555550103", "guid-3"));
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cfg = VaultPushConfig {
+        batch_size: 1,
+        prepare_ahead: 1,
+        prepare_workers: 1,
+        cancel: Some(cancel.clone()),
+        ..text_only_config(dir.path(), server.base_url())
+    };
+
+    // Cancel as soon as the first conversation is in the vault.
+    let flag = cancel.clone();
+    let mut on_progress = move |event: ProgressEvent| {
+        if let ProgressEvent::FileDone { status, .. } = event
+            && status == "ok"
+        {
+            flag.store(true, Ordering::SeqCst);
+        }
+    };
+    let report = run(&cfg, Some(&mut on_progress)).unwrap();
+
+    assert!(!report.ok, "a cancelled push is not ok");
+    assert_eq!(import.calls(), 1, "no batch is sent after the cancel");
+    assert_eq!(report.conversations_ok, 1);
+    assert_eq!(journal_events(dir.path(), "file_ok").len(), 1);
+    assert_eq!(journaled_guids(dir.path()), vec!["guid-1".to_string()]);
+
+    import.delete();
+    let resumed_import = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_excludes("guid-1");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+    cancel.store(false, Ordering::SeqCst);
+    let resumed = run(&cfg, None).unwrap();
+
+    assert!(resumed.ok, "{:?}", resumed.results);
+    assert_eq!(resumed.conversations_skipped, 1);
+    assert_eq!(resumed.conversations_ok, 2);
+    assert_eq!(resumed_import.calls(), 2);
 }
 
 /// After one batch fails, a second push on the same folder sends only the

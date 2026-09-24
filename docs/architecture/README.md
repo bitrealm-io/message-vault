@@ -13,6 +13,7 @@ document and the code is a bug in one of them.
 | Document | Covers |
 |---|---|
 | [Contacts, identities and messages](contacts-identities-and-messages.md) | The people model: what a contact and an identity are, how conversations and messages attach to them, and what an import creates |
+| [The search language](search.md) | The language typed on the Contacts, Conversations, and Messages lists: its rules, grammar, values, each list's defaults, and what every word means on every list |
 | [The HTTP interface](http-api.md) | Every rule the `/v1` routes follow: identifiers, naming, methods, status codes, lists, failures, credentials, runs, the generated reference, and how the server code behind a route is named and layered |
 
 ## What goes where

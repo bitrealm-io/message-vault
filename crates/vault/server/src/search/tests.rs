@@ -2643,6 +2643,67 @@ mod docs {
         .all(|kind| has(a, kind) == has(b, kind))
     }
 
+    const RULES_PAGE: &str = include_str!("../../../../../docs/architecture/search.md");
+
+    /// The words `docs/architecture/search.md` describes, each with the
+    /// lists its entry gives a meaning for: a `` ### `word:` `` heading, then
+    /// one `- **List**:` line per list, up to the next heading.
+    fn rules_page_words() -> Vec<(String, Vec<ListKind>)> {
+        let mut words: Vec<(String, Vec<ListKind>)> = Vec::new();
+        for line in RULES_PAGE.lines() {
+            if line.starts_with('#') {
+                if let Some(word) = line
+                    .strip_prefix("### `")
+                    .and_then(|rest| rest.strip_suffix(":`"))
+                {
+                    words.push((word.to_string(), Vec::new()));
+                } else if !words.is_empty() && line.starts_with("## ") {
+                    break;
+                }
+                continue;
+            }
+            let Some((_, lists)) = words.last_mut() else {
+                continue;
+            };
+            for (label, list) in [
+                ("- **Contacts**:", ListKind::Contacts),
+                ("- **Conversations**:", ListKind::Conversations),
+                ("- **Messages**:", ListKind::Messages),
+            ] {
+                if line.starts_with(label) {
+                    lists.push(list);
+                }
+            }
+        }
+        words
+    }
+
+    /// The architecture document says what every word means on every list
+    /// it is on, precisely enough to write its SQL from. A word added to the
+    /// registry with no entry there, or moved to another list without its
+    /// entry following (#718 moved two), would leave a meaning nobody wrote
+    /// down.
+    #[test]
+    fn the_rules_page_gives_every_word_a_meaning_on_exactly_its_lists() {
+        let documented = rules_page_words();
+        let names: Vec<&str> = documented.iter().map(|(w, _)| w.as_str()).collect();
+        let registered: Vec<&str> = FIELDS.iter().map(|f| f.word).collect();
+        assert_eq!(
+            names, registered,
+            "docs/architecture/search.md must have one entry per word, in the registry's order"
+        );
+        for (word, lists) in &documented {
+            let spec = lookup(word).expect("checked above");
+            assert!(
+                lists.len() == spec.lists.len() && is_same_lists(lists, spec.lists),
+                "docs/architecture/search.md gives {word}: a meaning on {}, but fields.rs \
+                 registers it for {}",
+                tiles_str(lists),
+                tiles_str(spec.lists),
+            );
+        }
+    }
+
     /// Issue #328: the word-only check above says nothing about *which*
     /// lists a row claims a word applies to. `trashed:` sat at `on="C V"`
     /// after a pull request registered it for Messages too, with CI green

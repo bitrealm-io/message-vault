@@ -7,16 +7,16 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use message_ir::{HandleService, HandleType, nonempty, trimmed};
 use sqlx::AnyConnection;
-use sqlx::Row;
 
 use crate::assets_api::{self, AssetStats, StoredAsset};
 use crate::config::validate_source_id;
-use crate::db::dialect;
 use crate::db::handles::{
     HandleIdCache, infer_handle_type_from_shape as infer_handle_type, upsert_handle_row,
     upsert_handle_row_cached,
 };
-use crate::db::sql::{max_rows_for_bind_limit, values_tuples};
+use crate::db::staging::{
+    self as db_staging, StagingAttachment, StagingConversation, StagingMessage, StagingTapback,
+};
 use crate::import_media;
 use crate::jsonl;
 use crate::models::{
@@ -181,49 +181,6 @@ pub(super) struct StagingInserts {
     /// contact: an owner's handle never gets one (ADR-0015).
     owners: HashMap<(String, String), i64>,
 }
-
-const INSERT_CONVERSATION: &str = r"
-INSERT INTO staging_conversations (
-    account_id, chat_handle_id, conversation_type, group_title, exported_at, source_file
-) VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id
-";
-
-const INSERT_PARTICIPANT: &str = r"
-INSERT INTO staging_participants (conversation_id, handle_id, contact_id, name_alias)
-VALUES ($1, $2, $3, $4)
-";
-
-const INSERT_MESSAGE_PREFIX: &str = r"
-INSERT INTO staging_messages (
-    conversation_id, account_id, source, guid, timestamp, is_from_me,
-    sender_handle_id, owner_handle_id, service, subject, body, is_announcement, is_reply,
-    thread_originator_guid, thread_originator_part, num_replies, sort_order, import_id
-) VALUES
-";
-
-/// Bind counts must stay in lockstep with the `INSERT` column lists above.
-const MESSAGE_BIND_COLUMNS: usize = 18;
-const ATTACHMENT_BIND_COLUMNS: usize = 10;
-const TAPBACK_BIND_COLUMNS: usize = 6;
-
-const INSERT_MESSAGE_SUFFIX: &str = r"
-ON CONFLICT DO NOTHING
-RETURNING id, sort_order
-";
-
-const INSERT_ATTACHMENT_PREFIX: &str = r"
-INSERT INTO staging_attachments (
-    message_id, path, original_name, mime_type, is_sticker, transcription,
-    sha256, assets_path, size_bytes, missing_reason
-) VALUES
-";
-
-const INSERT_TAPBACK_PREFIX: &str = r"
-INSERT INTO staging_tapbacks (
-    message_id, part_index, kind, emoji, is_from_me, sender_handle_id
-) VALUES
-";
 
 impl StagingInserts {
     /// Fresh insert state for one import run.
@@ -454,15 +411,18 @@ impl FileStaging<'_> {
             )
             .await?;
         }
-        let conversation_id: i64 = sqlx::query_scalar(INSERT_CONVERSATION)
-            .bind(self.stmts.account_id)
-            .bind(chat_handle_id)
-            .bind(conversation.conversation_type)
-            .bind(conversation.group_title)
-            .bind(conversation.exported_at)
-            .bind(&self.source_file)
-            .fetch_one(&mut *self.tx)
-            .await?;
+        let conversation_id = db_staging::insert_conversation(
+            self.tx,
+            &StagingConversation {
+                account_id: self.stmts.account_id,
+                chat_handle_id,
+                conversation_type: &conversation.conversation_type,
+                group_title: conversation.group_title.as_deref(),
+                exported_at: conversation.exported_at.as_deref(),
+                source_file: &self.source_file,
+            },
+        )
+        .await?;
         stats.conversations = 1;
 
         for participant in conversation.participants {
@@ -480,8 +440,7 @@ impl FileStaging<'_> {
         let pending_rows =
             resolve_message_rows(self.tx, self.stmts, prepared_messages, platform, &mut stats)
                 .await?;
-        let engine = dialect::engine_of(self.tx);
-        let msg_chunk = max_rows_for_bind_limit(engine, MESSAGE_BIND_COLUMNS).max(1);
+        let msg_chunk = db_staging::message_chunk_rows(self.tx);
         for chunk in pending_rows.chunks(msg_chunk) {
             flush_staging_message_chunk(
                 self.tx,
@@ -573,13 +532,14 @@ async fn insert_participant(
         let (Some(contact_id), Some(name_alias)) = (contact_id, name_alias) else {
             return Ok(());
         };
-        sqlx::query(INSERT_PARTICIPANT)
-            .bind(conversation_id)
-            .bind(Option::<i64>::None)
-            .bind(Some(contact_id))
-            .bind(Some(name_alias))
-            .execute(&mut *tx)
-            .await?;
+        db_staging::insert_participant(
+            tx,
+            conversation_id,
+            None,
+            Some(contact_id),
+            Some(&name_alias),
+        )
+        .await?;
         stats.participants += 1;
         return Ok(());
     };
@@ -610,13 +570,14 @@ async fn insert_participant(
     // `participants.name_alias` keeps what this backup called them in this
     // conversation. It is the second clause of the naming rule, never the
     // first.
-    sqlx::query(INSERT_PARTICIPANT)
-        .bind(conversation_id)
-        .bind(handle_id)
-        .bind(Some(contact_id))
-        .bind(backup_name)
-        .execute(&mut *tx)
-        .await?;
+    db_staging::insert_participant(
+        tx,
+        conversation_id,
+        Some(handle_id),
+        Some(contact_id),
+        backup_name.as_deref(),
+    )
+    .await?;
     stats.participants += 1;
     Ok(())
 }
@@ -717,28 +678,6 @@ struct PendingStagingMessage {
     sort_order: i64,
 }
 
-struct PendingAttachmentRow {
-    message_id: i64,
-    path: Option<String>,
-    original_name: Option<String>,
-    mime_type: Option<String>,
-    is_sticker: i64,
-    transcription: Option<String>,
-    sha256: Option<String>,
-    assets_path: Option<String>,
-    size_bytes: Option<i64>,
-    missing_reason: Option<String>,
-}
-
-struct PendingTapbackRow {
-    message_id: i64,
-    part_index: i64,
-    kind: String,
-    emoji: Option<String>,
-    is_from_me: i64,
-    sender_handle_id: Option<i64>,
-}
-
 /// Bulk-insert one chunk of message rows, then their attachments and tapbacks keyed by the ids returned.
 async fn flush_staging_message_chunk(
     tx: &mut AnyConnection,
@@ -767,15 +706,15 @@ async fn flush_staging_message_chunk(
         att_rows.extend(
             row.attachments
                 .iter()
-                .map(|prepared| PendingAttachmentRow::new(message_id, prepared, assets_dir)),
+                .map(|prepared| attachment_row(message_id, prepared, assets_dir)),
         );
         for tap in &row.msg.tapbacks {
             tap_rows.push(tapback_row(tx, stmts, stats, message_id, row, tap).await?);
         }
     }
 
-    flush_attachment_chunks(tx, &att_rows, stats).await?;
-    flush_tapback_chunks(tx, &tap_rows, stats).await?;
+    stats.attachments += db_staging::insert_attachments(tx, &att_rows).await?;
+    stats.tapbacks += db_staging::insert_tapbacks(tx, &tap_rows).await?;
     Ok(())
 }
 
@@ -788,75 +727,67 @@ async fn insert_message_rows(
     source: &str,
     chunk: &[PendingStagingMessage],
 ) -> Result<HashMap<i64, i64>> {
-    let sql = format!(
-        "{INSERT_MESSAGE_PREFIX} {} {INSERT_MESSAGE_SUFFIX}",
-        values_tuples(chunk.len(), MESSAGE_BIND_COLUMNS)
-    );
-    let mut q = sqlx::query(&sql);
-    for row in chunk {
-        q = q
-            .bind(conversation_id)
-            .bind(stmts.account_id)
-            .bind(source)
-            .bind(row.msg.guid.as_deref())
-            .bind(&row.msg.timestamp)
-            .bind(row.msg.is_from_me as i64)
-            .bind(row.sender_handle_id)
-            .bind(row.owner_handle_id)
-            .bind(row.msg.service.as_deref())
-            .bind(row.msg.subject.as_deref())
-            .bind(row.body.as_deref())
-            .bind(row.msg.is_announcement as i64)
-            .bind(row.msg.is_reply as i64)
-            .bind(row.msg.thread_originator_guid.as_deref())
-            .bind(row.msg.thread_originator_part)
-            .bind(row.msg.num_replies)
-            .bind(row.sort_order)
-            .bind(stmts.import_id);
-    }
-    let returned = q.fetch_all(&mut *tx).await?;
-    let mut by_sort = HashMap::with_capacity(returned.len());
-    for row in &returned {
-        let id: i64 = row.try_get(0)?;
-        let sort_order: i64 = row.try_get(1)?;
-        by_sort.insert(sort_order, id);
-    }
-    Ok(by_sort)
+    let rows: Vec<StagingMessage<'_>> = chunk
+        .iter()
+        .map(|row| StagingMessage {
+            conversation_id,
+            account_id: stmts.account_id,
+            source,
+            guid: row.msg.guid.as_deref(),
+            timestamp: &row.msg.timestamp,
+            is_from_me: row.msg.is_from_me as i64,
+            sender_handle_id: row.sender_handle_id,
+            owner_handle_id: row.owner_handle_id,
+            service: row.msg.service.as_deref(),
+            subject: row.msg.subject.as_deref(),
+            body: row.body.as_deref(),
+            is_announcement: row.msg.is_announcement as i64,
+            is_reply: row.msg.is_reply as i64,
+            thread_originator_guid: row.msg.thread_originator_guid.as_deref(),
+            thread_originator_part: row.msg.thread_originator_part,
+            num_replies: row.msg.num_replies,
+            sort_order: row.sort_order,
+            import_id: stmts.import_id,
+        })
+        .collect();
+    db_staging::insert_messages(tx, &rows).await
 }
 
-impl PendingAttachmentRow {
-    /// The row for one of a staged message's attachments: the stored blob's
-    /// digest, path, and type when the file was stored, the record's own
-    /// type and missing reason when it was not.
-    fn new(message_id: i64, prepared: &PreparedAttachment, assets_dir: &Path) -> Self {
-        let att = &prepared.record;
-        let (sha256, assets_path, mime_type) = match &prepared.stored {
-            Some(stored) => (
-                Some(stored.sha256.clone()),
-                Some(stored.assets_path.clone()),
-                stored.mime_type.clone().or_else(|| att.mime_type.clone()),
-            ),
-            None => (None, None, att.mime_type.clone()),
-        };
-        let size_bytes = stored_size_bytes(assets_dir, assets_path.as_deref())
-            .or_else(|| att.size_bytes.map(|n| n as i64));
-        let missing_reason = if sha256.is_none() {
-            att.missing_reason.clone()
-        } else {
-            None
-        };
-        Self {
-            message_id,
-            path: att.path.clone(),
-            original_name: att.original_name.clone(),
-            mime_type,
-            is_sticker: att.is_sticker as i64,
-            transcription: att.transcription.clone(),
-            sha256,
-            assets_path,
-            size_bytes,
-            missing_reason,
-        }
+/// The row for one of a staged message's attachments: the stored blob's
+/// digest, path, and type when the file was stored, the record's own
+/// type and missing reason when it was not.
+fn attachment_row(
+    message_id: i64,
+    prepared: &PreparedAttachment,
+    assets_dir: &Path,
+) -> StagingAttachment {
+    let att = &prepared.record;
+    let (sha256, assets_path, mime_type) = match &prepared.stored {
+        Some(stored) => (
+            Some(stored.sha256.clone()),
+            Some(stored.assets_path.clone()),
+            stored.mime_type.clone().or_else(|| att.mime_type.clone()),
+        ),
+        None => (None, None, att.mime_type.clone()),
+    };
+    let size_bytes = stored_size_bytes(assets_dir, assets_path.as_deref())
+        .or_else(|| att.size_bytes.map(|n| n as i64));
+    let missing_reason = if sha256.is_none() {
+        att.missing_reason.clone()
+    } else {
+        None
+    };
+    StagingAttachment {
+        message_id,
+        path: att.path.clone(),
+        original_name: att.original_name.clone(),
+        mime_type,
+        is_sticker: att.is_sticker as i64,
+        transcription: att.transcription.clone(),
+        sha256,
+        assets_path,
+        size_bytes,
+        missing_reason,
     }
 }
 
@@ -869,7 +800,7 @@ async fn tapback_row(
     message_id: i64,
     row: &PendingStagingMessage,
     tap: &TapbackRecord,
-) -> Result<PendingTapbackRow> {
+) -> Result<StagingTapback> {
     let sender_handle_id = resolve_incoming_sender_handle(
         tx,
         &mut stmts.handles,
@@ -884,7 +815,7 @@ async fn tapback_row(
         stats,
     )
     .await?;
-    Ok(PendingTapbackRow {
+    Ok(StagingTapback {
         message_id,
         part_index: tap.part_index,
         kind: tap.kind.clone(),
@@ -892,72 +823,6 @@ async fn tapback_row(
         is_from_me: tap.is_from_me as i64,
         sender_handle_id,
     })
-}
-
-/// Bulk-insert attachment rows in chunks that fit the bind limit.
-async fn flush_attachment_chunks(
-    tx: &mut AnyConnection,
-    rows: &[PendingAttachmentRow],
-    stats: &mut ImportStats,
-) -> Result<()> {
-    let size = max_rows_for_bind_limit(dialect::engine_of(tx), ATTACHMENT_BIND_COLUMNS).max(1);
-    for chunk in rows.chunks(size) {
-        if chunk.is_empty() {
-            continue;
-        }
-        let sql = format!(
-            "{INSERT_ATTACHMENT_PREFIX} {}",
-            values_tuples(chunk.len(), ATTACHMENT_BIND_COLUMNS)
-        );
-        let mut q = sqlx::query(&sql);
-        for row in chunk {
-            q = q
-                .bind(row.message_id)
-                .bind(row.path.as_deref())
-                .bind(row.original_name.as_deref())
-                .bind(row.mime_type.as_deref())
-                .bind(row.is_sticker)
-                .bind(row.transcription.as_deref())
-                .bind(row.sha256.as_deref())
-                .bind(row.assets_path.as_deref())
-                .bind(row.size_bytes)
-                .bind(row.missing_reason.as_deref());
-        }
-        q.execute(&mut *tx).await?;
-        stats.attachments += chunk.len() as u64;
-    }
-    Ok(())
-}
-
-/// Bulk-insert tapback rows in chunks that fit the bind limit.
-async fn flush_tapback_chunks(
-    tx: &mut AnyConnection,
-    rows: &[PendingTapbackRow],
-    stats: &mut ImportStats,
-) -> Result<()> {
-    let size = max_rows_for_bind_limit(dialect::engine_of(tx), TAPBACK_BIND_COLUMNS).max(1);
-    for chunk in rows.chunks(size) {
-        if chunk.is_empty() {
-            continue;
-        }
-        let sql = format!(
-            "{INSERT_TAPBACK_PREFIX} {}",
-            values_tuples(chunk.len(), TAPBACK_BIND_COLUMNS)
-        );
-        let mut q = sqlx::query(&sql);
-        for row in chunk {
-            q = q
-                .bind(row.message_id)
-                .bind(row.part_index)
-                .bind(&row.kind)
-                .bind(row.emoji.as_deref())
-                .bind(row.is_from_me)
-                .bind(row.sender_handle_id);
-        }
-        q.execute(&mut *tx).await?;
-        stats.tapbacks += chunk.len() as u64;
-    }
-    Ok(())
 }
 
 #[cfg(test)]

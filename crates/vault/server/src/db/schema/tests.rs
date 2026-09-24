@@ -320,53 +320,6 @@ async fn same_source_guid_allowed_across_accounts() {
 }
 
 #[tokio::test]
-async fn reset_staging_for_account_leaves_other_accounts() {
-    let (pool, _vault) = seeded_schema_vault().await;
-    let mut conn = pool.acquire().await.unwrap();
-    for account in [A1, A2] {
-        let conversation_id: i64 = sqlx::query_scalar(
-            r"
-            INSERT INTO staging_conversations (
-                account_id, chat_handle_id, conversation_type,
-                group_title, exported_at, source_file
-            ) VALUES ($1, 1, 'individual', NULL, NULL, 't.json')
-            RETURNING id
-            ",
-        )
-        .bind(account)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-        sqlx::query(
-            r"
-            INSERT INTO staging_messages (
-                conversation_id, account_id, source, guid, timestamp, is_from_me, sort_order
-            ) VALUES ($1, $2, 'sms', 'g1', '2020-01-01T00:00:00Z', 0, 0)
-            ",
-        )
-        .bind(conversation_id)
-        .bind(account)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    }
-
-    reset_staging_for_account(&mut conn, A1).await.unwrap();
-    let remaining: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM staging_conversations WHERE account_id = $1")
-            .bind(A2)
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
-    let messages: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM staging_messages")
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-    assert_eq!(remaining, 1);
-    assert_eq!(messages, 1);
-}
-
-#[tokio::test]
 async fn old_vault_rebuilds_empty_at_current_version() {
     if crate::test_support::on_postgres() {
         return; // SQLite-only: builds a legacy SQLite file with its nocase collation and user_version

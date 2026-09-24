@@ -20,16 +20,18 @@ pub use vault_http::HttpSession;
 
 use crate::run::Session;
 
+/// The vault's `Asset`: the answer to `HEAD` or `PUT /v1/assets/{sha256}`
+/// and to completing a multipart upload. Only `already_present` is read.
 #[derive(Debug, Deserialize)]
-/// Vault reply after HEAD or PUT of one attachment.
-pub struct AssetPutResponse {
+pub struct Asset {
     #[serde(default)]
     pub already_present: bool,
 }
 
+/// The answer to `POST /v1/imports/{id}/batches`. Only the counts the
+/// report needs are read.
 #[derive(Debug, Deserialize)]
-/// Vault reply after posting one JSON Lines import batch.
-pub struct ImportResponse {
+pub struct CreateImportBatchResponse {
     #[serde(default)]
     pub messages: u64,
     #[serde(default)]
@@ -58,14 +60,22 @@ pub(crate) struct ImportOutcome<'a> {
     pub bytes_uploaded: u64,
 }
 
-/// Body of the `/v1/imports` and `/v1/imports/{id}/complete` replies.
+/// The answer to `POST /v1/imports`: the new Import Run's id.
 #[derive(Debug, Deserialize)]
-struct ImportRunResponse {
+struct CreateImportResponse {
     id: i64,
 }
 
+/// The answer to `POST /v1/imports/{id}/complete`. Only `id` is read: it
+/// names the run the vault closed.
 #[derive(Debug, Deserialize)]
-struct UploadStartResponse {
+struct CompleteImportResponse {
+    id: i64,
+}
+
+/// The answer to `POST /v1/assets/{sha256}/uploads`.
+#[derive(Debug, Deserialize)]
+struct CreateAssetUploadResponse {
     #[serde(default)]
     upload_id: Option<String>,
     #[serde(default)]
@@ -123,11 +133,7 @@ impl Session {
     ///
     /// Returns an error for a bad key (401), a username that does not match
     /// the key (403), or any other failure.
-    pub(crate) fn head_asset(
-        &self,
-        source: &str,
-        sha256: &str,
-    ) -> Result<Option<AssetPutResponse>> {
+    pub(crate) fn head_asset(&self, source: &str, sha256: &str) -> Result<Option<Asset>> {
         let url = self.asset_url(source, &[sha256])?;
         let response = self
             .http
@@ -155,14 +161,14 @@ impl Session {
             )
             .into());
         }
-        let assumed_present = AssetPutResponse {
+        let assumed_present = Asset {
             already_present: true,
         };
         let text = response.text().unwrap_or_default();
         if text.trim().is_empty() {
             return Ok(Some(assumed_present));
         }
-        let Ok(parsed) = serde_json::from_str::<AssetPutResponse>(&text) else {
+        let Ok(parsed) = serde_json::from_str::<Asset>(&text) else {
             return Ok(Some(assumed_present));
         };
         if !parsed.already_present {
@@ -178,7 +184,7 @@ impl Session {
     ///
     /// Returns an error when the file cannot be read or the vault rejects it;
     /// a 413 says how large a body the vault accepts.
-    pub(crate) fn put_asset(&self, asset: &AssetUpload<'_>) -> Result<AssetPutResponse> {
+    pub(crate) fn put_asset(&self, asset: &AssetUpload<'_>) -> Result<Asset> {
         let file_len = std::fs::metadata(asset.file)
             .with_context(|| format!("stat {}", asset.file.display()))?
             .len();
@@ -210,18 +216,14 @@ impl Session {
             )
             .into());
         }
-        ok_json::<AssetPutResponse>("asset upload", status, &text)
+        ok_json::<Asset>("asset upload", status, &text)
     }
 
     /// Upload in parts: open a multipart upload, send each part, complete
     /// it. A part or completion that fails aborts the upload on the vault.
-    fn put_asset_multipart(
-        &self,
-        asset: &AssetUpload<'_>,
-        file_len: u64,
-    ) -> Result<AssetPutResponse> {
+    fn put_asset_multipart(&self, asset: &AssetUpload<'_>, file_len: u64) -> Result<Asset> {
         let Some(upload) = MultipartUpload::start(self, asset, file_len)? else {
-            return Ok(AssetPutResponse {
+            return Ok(Asset {
                 already_present: true,
             });
         };
@@ -256,7 +258,11 @@ impl Session {
     ///
     /// Returns a 413 before sending when the body is over the proxy limit,
     /// and the vault's error otherwise.
-    pub(crate) fn post_import(&self, import_id: i64, ndjson: Vec<u8>) -> Result<ImportResponse> {
+    pub(crate) fn post_import(
+        &self,
+        import_id: i64,
+        ndjson: Vec<u8>,
+    ) -> Result<CreateImportBatchResponse> {
         let body_len = ndjson.len();
         if body_len > crate::run::MAX_PROXY_BODY_BYTES {
             return Err(VaultHttpError::new(
@@ -283,7 +289,7 @@ impl Session {
             )
             .into());
         }
-        ok_json::<ImportResponse>("import batch", status, &text)
+        ok_json::<CreateImportBatchResponse>("import batch", status, &text)
     }
 
     /// Create an Import Run on the vault and return its id. Every batch is
@@ -316,7 +322,7 @@ impl Session {
             .context("POST /v1/imports")?;
         let status = response.status();
         let text = response.text().context("read start-import response")?;
-        let parsed: ImportRunResponse = ok_json("import run", status, &text)?;
+        let parsed: CreateImportResponse = ok_json("import run", status, &text)?;
         Ok(parsed.id)
     }
 
@@ -351,7 +357,13 @@ impl Session {
             .with_context(|| format!("POST /v1/imports/{import_id}/complete"))?;
         let status = response.status();
         let text = response.text().context("read complete-import response")?;
-        let _: ImportRunResponse = ok_json("import run complete", status, &text)?;
+        let closed: CompleteImportResponse = ok_json("import run complete", status, &text)?;
+        if closed.id != import_id {
+            return Err(anyhow!(
+                "import run complete: the vault closed run {} for run {import_id}",
+                closed.id
+            ));
+        }
         Ok(())
     }
 }
@@ -396,7 +408,7 @@ impl<'a> MultipartUpload<'a> {
             )
             .into());
         }
-        let started: UploadStartResponse = ok_json("asset upload start", status, &text)?;
+        let started: CreateAssetUploadResponse = ok_json("asset upload start", status, &text)?;
         if started.already_present {
             return Ok(None);
         }
@@ -464,7 +476,7 @@ impl<'a> MultipartUpload<'a> {
     }
 
     /// Tell the vault every part is in and read its reply.
-    fn complete(&self) -> Result<AssetPutResponse> {
+    fn complete(&self) -> Result<Asset> {
         let complete_url = self.url(&["complete"])?;
         let response = self
             .session
@@ -475,7 +487,7 @@ impl<'a> MultipartUpload<'a> {
             .with_context(|| format!("POST {complete_url}"))?;
         let status = response.status();
         let text = response.text().context("read upload complete response")?;
-        ok_json::<AssetPutResponse>("asset upload complete", status, &text)
+        ok_json::<Asset>("asset upload complete", status, &text)
     }
 
     /// Drop the upload on the vault. Best effort: a failed abort only leaves

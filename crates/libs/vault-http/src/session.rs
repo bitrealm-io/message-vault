@@ -112,12 +112,11 @@ impl HttpSession {
         if !status.is_success() {
             return Err(classify_auth_http_status(status_code, text));
         }
-        let parsed: SessionResponse =
-            serde_json::from_str(&text).map_err(|_| AuthError::BadJson {
-                url: url.clone(),
-                status: status_code,
-                snippet: truncate(&text, 200),
-            })?;
+        let parsed: Session = serde_json::from_str(&text).map_err(|_| AuthError::BadJson {
+            url: url.clone(),
+            status: status_code,
+            snippet: truncate(&text, 200),
+        })?;
         let account_id = parsed.account_id.ok_or(AuthError::MissingAccountId)?;
         Ok(AuthInfo {
             account_id,
@@ -126,9 +125,10 @@ impl HttpSession {
     }
 }
 
-/// The fields of `GET /v1/session` the clients read.
+/// The vault's `Session`, the answer to `GET /v1/session`. Only the fields
+/// the clients read are here.
 #[derive(Debug, Deserialize)]
-struct SessionResponse {
+struct Session {
     #[serde(default)]
     account_id: Option<i64>,
     #[serde(default)]

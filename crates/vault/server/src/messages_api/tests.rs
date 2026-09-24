@@ -165,6 +165,21 @@ async fn a_word_the_messages_list_does_not_have_is_a_422_with_a_sentence() {
     );
 }
 
+/// Every list checks `sort` before it compiles `q`
+/// (`paging::ListRequest::read`), so with both wrong the Messages list
+/// reports the sort, as the contact and conversation lists do.
+#[tokio::test]
+async fn a_bad_sort_is_reported_before_a_bad_query() {
+    let (vault, alice) = vault_with_account().await;
+    let (status, text) = get_raw(
+        &vault.state,
+        "/v1/messages?q=conversations%3A0&sort=colour",
+        &alice.token,
+    )
+    .await;
+    expect_problem(status, &text, ProblemType::ValidationFailed);
+}
+
 /// One IR message line for [`import_reactions_and_flags`].
 fn ir_message(
     guid: &str,

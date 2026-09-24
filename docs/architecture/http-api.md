@@ -452,6 +452,20 @@ about, and whatever differs between SQLite and Postgres goes through
 difference outside `dialect` is one the Postgres run of the suite may not
 reach.
 
+Does the rule stop at handlers? No. An import stage (`imports_api/staging.rs`,
+`imports_api/promote.rs`) is not a handler, but it holds no SQL either: it
+sequences its statements, logs them and keeps the counts, and the statements
+are in `db/staging.rs`, the module for the staging tables. Why: the point of
+the rule is that the SQL for a table is found in one place, and a stage that
+carried its own statements would be a second place for `staging_messages`.
+
+A promotion statement reads a staging table and writes a production one in
+the same `INSERT ... SELECT`, and it belongs with the staging tables rather
+than the production one, because the staging tables have no reader but the
+import while the production tables have many. The messages watermark and
+count a promotion takes before it inserts live there too, for the same
+reason: nothing but a promotion reads them.
+
 A test of a route's answer goes through the router, checks a failure with
 `expect_problem` (status, `type` and `request_id`, not only the sentence), and
 takes its vault and account from the shared fixtures in `test_support.rs`.

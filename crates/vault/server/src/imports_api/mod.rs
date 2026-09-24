@@ -387,7 +387,7 @@ pub async fn import_jsonl_files_on_conn(
     } else {
         say("  sql:      resetting staging for account…");
     }
-    schema::reset_staging_for_account(conn, opts.account_id).await?;
+    crate::db::staging::reset_for_account(conn, opts.account_id).await?;
     let wipe_sources = sources_to_wipe(opts)?;
     say(&format!(
         "  import:   {} JSONL file{}",
@@ -430,7 +430,7 @@ pub async fn import_jsonl_files_on_conn(
         started.elapsed().as_secs_f64()
     ));
     promote_step(&mut tx, opts, &wipe_sources, &mut stats).await?;
-    schema::reset_staging_for_account(&mut tx, opts.account_id).await?;
+    crate::db::staging::reset_for_account(&mut tx, opts.account_id).await?;
     tx.commit().await?;
 
     stats.assets_copied = asset_stats.copied;

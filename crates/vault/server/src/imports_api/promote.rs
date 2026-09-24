@@ -1,4 +1,7 @@
 //! Copy staged import rows into the production tables.
+//!
+//! Every statement is in `db::staging`; this stage runs them in order, logs
+//! each phase and keeps the counts.
 
 use std::collections::HashMap;
 use std::io::{self, Write};
@@ -10,7 +13,7 @@ use sqlx::AnyConnection;
 use crate::db::dialect;
 use crate::db::engine::DbEngine;
 use crate::db::schema;
-use crate::db::sql::SQLITE_IN_CHUNK;
+use crate::db::staging;
 
 use super::ImportMode;
 
@@ -82,39 +85,6 @@ const PROMOTE_MESSAGE_BATCH: i64 = 50_000;
 /// Below this many staged messages the secondary indexes are cheaper to keep than to rebuild.
 const PROMOTE_INDEX_DROP_MIN_STAGING: i64 = 5_000;
 
-/// The column list and SELECT every staged-message insert shares; the caller
-/// adds its WHERE tail and ordering. Rows are inserted in staging id order so
-/// the production ids follow it, which the id-map zip relies on.
-const INSERT_MESSAGES_FROM_STAGING: &str = r"
-        INSERT INTO messages (
-            conversation_id, account_id, source, guid, timestamp, is_from_me,
-            sender_handle_id, owner_handle_id, service, subject, body, is_announcement, is_reply,
-            thread_originator_guid, thread_originator_part, num_replies, sort_order, import_id
-        )
-        SELECT
-            cm.prod_id, sm.account_id, sm.source, sm.guid, sm.timestamp, sm.is_from_me,
-            sm.sender_handle_id, sm.owner_handle_id, sm.service, sm.subject, sm.body, sm.is_announcement, sm.is_reply,
-            sm.thread_originator_guid, sm.thread_originator_part, sm.num_replies, sm.sort_order,
-            sm.import_id
-        FROM staging_messages sm
-        JOIN _promote_conv_map cm ON cm.staging_id = sm.conversation_id
-        WHERE sm.account_id = $1
-";
-
-/// The staged message ids the inserts above select, in the same order; the
-/// caller adds the same WHERE tail.
-const STAGED_MESSAGE_IDS: &str = r"
-        SELECT sm.id
-        FROM staging_messages sm
-        JOIN _promote_conv_map cm ON cm.staging_id = sm.conversation_id
-        WHERE sm.account_id = $1
-";
-
-const IN_ID_RANGE: &str = " AND sm.id > $2 AND sm.id <= $3 ORDER BY sm.id";
-const WITH_GUID_IN_ID_RANGE: &str =
-    " AND sm.guid IS NOT NULL AND sm.guid != '' AND sm.id > $2 AND sm.id <= $3 ORDER BY sm.id";
-const WITHOUT_GUID: &str = " AND (sm.guid IS NULL OR sm.guid = '') ORDER BY sm.id";
-
 impl Promote<'_> {
     /// Log the start of a phase and return its clock.
     fn begin(msg: impl std::fmt::Display) -> Instant {
@@ -125,28 +95,6 @@ impl Promote<'_> {
     /// Log the end of a phase with its own and the total elapsed time.
     fn done(&self, phase: Instant, msg: impl std::fmt::Display) {
         promote_phase_done(self.started, phase, msg);
-    }
-
-    /// `SELECT COALESCE(MAX(id), 0) FROM messages`: the watermark new rows land above.
-    async fn max_message_id(&mut self) -> Result<i64> {
-        Ok(
-            sqlx::query_scalar("SELECT COALESCE(MAX(id), 0) FROM messages")
-                .fetch_one(&mut *self.tx)
-                .await?,
-        )
-    }
-
-    /// Create, or empty, a temp table mapping staging ids to production ids.
-    /// Two statements on purpose: Postgres refuses two commands in one
-    /// prepared statement, and `split_ddl` only splits at line ends.
-    async fn reset_id_map(&mut self, table: &str) -> Result<()> {
-        let create = format!(
-            "CREATE TEMP TABLE IF NOT EXISTS {table} (staging_id BIGINT PRIMARY KEY, prod_id BIGINT NOT NULL)"
-        );
-        sqlx::query(&create).execute(&mut *self.tx).await?;
-        let clear = format!("DELETE FROM {table}");
-        sqlx::query(&clear).execute(&mut *self.tx).await?;
-        Ok(())
     }
 
     /// Replace mode: delete the account's existing rows for each source before
@@ -167,56 +115,13 @@ impl Promote<'_> {
     /// Upsert the staged conversations and write `_promote_conv_map`, the
     /// staging-to-production id map every later phase joins through.
     async fn promote_conversations(&mut self) -> Result<()> {
-        self.reset_id_map("_promote_conv_map").await?;
-        let staged: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM staging_conversations WHERE account_id = $1")
-                .bind(self.account_id)
-                .fetch_one(&mut *self.tx)
-                .await?;
+        let staged = staging::count_staged_conversations(self.tx, self.account_id).await?;
         let phase = Self::begin(format_args!("{staged} staging conversations → production…"));
-        let max_before: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(id), 0) FROM conversations")
-            .fetch_one(&mut *self.tx)
-            .await?;
-        sqlx::query(
-            r"
-            INSERT INTO conversations (
-                account_id, chat_handle_id, conversation_type,
-                group_title, exported_at, source_file
-            )
-            SELECT
-                account_id, chat_handle_id, conversation_type,
-                group_title, exported_at, source_file
-            FROM staging_conversations
-            WHERE account_id = $1
-            ON CONFLICT(account_id, chat_handle_id) DO UPDATE SET
-                conversation_type = excluded.conversation_type,
-                group_title = COALESCE(excluded.group_title, conversations.group_title),
-                exported_at = COALESCE(excluded.exported_at, conversations.exported_at),
-                source_file = excluded.source_file
-            ",
-        )
-        .bind(self.account_id)
-        .execute(&mut *self.tx)
-        .await?;
-        sqlx::query(
-            r"
-            INSERT INTO _promote_conv_map (staging_id, prod_id)
-            SELECT sc.id, c.id
-            FROM staging_conversations sc
-            JOIN conversations c
-              ON c.account_id = sc.account_id
-             AND c.chat_handle_id = sc.chat_handle_id
-            WHERE sc.account_id = $1
-            ",
-        )
-        .bind(self.account_id)
-        .execute(&mut *self.tx)
-        .await?;
-        let new_conversations: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM _promote_conv_map WHERE prod_id > $1")
-                .bind(max_before)
-                .fetch_one(&mut *self.tx)
-                .await?;
+        let max_before = staging::max_conversation_id(self.tx).await?;
+        staging::upsert_conversations(self.tx, self.account_id).await?;
+        staging::write_conversation_map(self.tx, self.account_id).await?;
+        let new_conversations =
+            staging::count_mapped_conversations_above(self.tx, max_before).await?;
         self.stats.conversations = u64::try_from(new_conversations).unwrap_or(0);
         self.done(
             phase,
@@ -227,30 +132,9 @@ impl Promote<'_> {
 
     /// Insert the staged participants under their production conversations.
     async fn promote_participants(&mut self) -> Result<()> {
-        let staged: i64 = sqlx::query_scalar(
-            r"
-            SELECT COUNT(*) FROM staging_participants
-            WHERE conversation_id IN (
-                SELECT id FROM staging_conversations WHERE account_id = $1
-            )
-            ",
-        )
-        .bind(self.account_id)
-        .fetch_one(&mut *self.tx)
-        .await?;
+        let staged = staging::count_staged_participants(self.tx, self.account_id).await?;
         let phase = Self::begin(format_args!("{staged} staging participants → production…"));
-        self.stats.participants = sqlx::query(
-            r"
-            INSERT INTO participants (conversation_id, handle_id, contact_id, name_alias)
-            SELECT cm.prod_id, sp.handle_id, sp.contact_id, sp.name_alias
-            FROM staging_participants sp
-            JOIN _promote_conv_map cm ON cm.staging_id = sp.conversation_id
-            ON CONFLICT DO NOTHING
-            ",
-        )
-        .execute(&mut *self.tx)
-        .await?
-        .rows_affected();
+        self.stats.participants = staging::promote_participants(self.tx).await?;
         self.done(
             phase,
             format!("participants done (new={})", self.stats.participants),
@@ -265,26 +149,14 @@ impl Promote<'_> {
     /// is how [`Self::index_fts`] tells new rows apart from already indexed
     /// ones that the map also names.
     async fn promote_messages(&mut self) -> Result<i64> {
-        let total: i64 = sqlx::query_scalar(
-            r"
-            SELECT COUNT(*) FROM staging_messages
-            WHERE conversation_id IN (
-                SELECT id FROM staging_conversations WHERE account_id = $1
-            )
-            ",
-        )
-        .bind(self.account_id)
-        .fetch_one(&mut *self.tx)
-        .await?;
+        let total = staging::count_staged_messages(self.tx, self.account_id).await?;
         promote_log(format_args!(
             "{total} staging messages → production ({})…",
             self.mode.as_str()
         ));
         self.pause_fts_triggers().await?;
 
-        let existing: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages")
-            .fetch_one(&mut *self.tx)
-            .await?;
+        let existing = staging::count_messages(self.tx).await?;
         let rebuild_indexes = should_drop_messages_secondary_indexes(total, existing);
         if rebuild_indexes {
             let phase = Self::begin(format_args!(
@@ -298,7 +170,7 @@ impl Promote<'_> {
             ));
         }
 
-        let messages_before = self.max_message_id().await?;
+        let messages_before = staging::max_message_id(self.tx).await?;
         let msg_map = self.insert_messages(total).await?;
 
         if rebuild_indexes {
@@ -324,7 +196,7 @@ impl Promote<'_> {
             "writing message id map ({} pairs)…",
             msg_map.len()
         ));
-        self.fill_message_id_map(&msg_map).await?;
+        staging::write_message_map(self.tx, self.account_id, &msg_map).await?;
         self.done(phase, "message id map written");
         Ok(messages_before)
     }
@@ -347,17 +219,7 @@ impl Promote<'_> {
     /// Insert the staged messages in id-range chunks and return the
     /// staging-to-production id map. Nothing staged means nothing inserted.
     async fn insert_messages(&mut self, total: i64) -> Result<HashMap<i64, i64>> {
-        let bounds: (Option<i64>, Option<i64>) = sqlx::query_as(
-            r"
-            SELECT MIN(sm.id), MAX(sm.id)
-            FROM staging_messages sm
-            JOIN _promote_conv_map cm ON cm.staging_id = sm.conversation_id
-            WHERE sm.account_id = $1
-            ",
-        )
-        .bind(self.account_id)
-        .fetch_one(&mut *self.tx)
-        .await?;
+        let bounds = staging::staged_message_id_bounds(self.tx, self.account_id).await?;
         let (Some(min_id), Some(max_id)) = bounds else {
             self.stats.messages = 0;
             self.stats.messages_appended = 0;
@@ -380,16 +242,18 @@ impl Promote<'_> {
         total: i64,
     ) -> Result<HashMap<i64, i64>> {
         let mut msg_map = HashMap::new();
-        let mut max_before = self.max_message_id().await?;
+        let mut max_before = staging::max_message_id(self.tx).await?;
         let mut inserted_total = 0u64;
         for (chunk, lo, hi) in message_chunks(min_id, max_id) {
             let phase = Self::begin(format_args!(
                 "inserting messages chunk {chunk} (staging id {}..{hi}, replace)…",
                 lo + 1
             ));
-            let inserted = self.insert_messages_in_range(IN_ID_RANGE, lo, hi).await?;
+            let inserted =
+                staging::promote_messages_in_range(self.tx, self.account_id, lo, hi).await?;
             inserted_total += inserted;
-            let staged = self.staged_message_ids_in_range(lo, hi).await?;
+            let staged =
+                staging::staged_message_ids_in_range(self.tx, self.account_id, lo, hi).await?;
             max_before = self
                 .zip_new_message_ids(&mut msg_map, staged, max_before, |n, p| {
                     format!(
@@ -408,13 +272,11 @@ impl Promote<'_> {
         Ok(msg_map)
     }
 
-    /// Append mode: rows production already has are skipped through the
-    /// partial unique index `ix_messages_account_source_guid` with
-    /// `ON CONFLICT DO NOTHING`. (Correlated NOT EXISTS / JOIN anti-joins
-    /// mis-plan onto `ix_messages_source` and scan the whole source, 10s+ at
-    /// 50k rows.) Rows without a guid are outside that index and are always
-    /// inserted, then zipped onto their staged ids; guid rows are mapped by
-    /// the guid join in [`Self::fill_message_id_map`].
+    /// Append mode: rows production already has are skipped by the guid
+    /// index (`staging::promote_guid_messages_in_range`). Rows without a
+    /// guid are outside that index and are always inserted, then zipped
+    /// onto their staged ids; guid rows are mapped by the guid join in
+    /// `staging::write_message_map`.
     async fn insert_messages_append(
         &mut self,
         min_id: i64,
@@ -428,16 +290,8 @@ impl Promote<'_> {
                 "inserting messages chunk {chunk} (staging id {}..{hi}, append)…",
                 lo + 1
             ));
-            let sql = format!(
-                "{INSERT_MESSAGES_FROM_STAGING}{WITH_GUID_IN_ID_RANGE} ON CONFLICT DO NOTHING"
-            );
-            let inserted = sqlx::query(&sql)
-                .bind(self.account_id)
-                .bind(lo)
-                .bind(hi)
-                .execute(&mut *self.tx)
-                .await?
-                .rows_affected();
+            let inserted =
+                staging::promote_guid_messages_in_range(self.tx, self.account_id, lo, hi).await?;
             inserted_total += inserted;
             self.done(
                 phase,
@@ -446,19 +300,11 @@ impl Promote<'_> {
         }
 
         let phase = Self::begin("inserting messages with empty guids…");
-        let max_before = self.max_message_id().await?;
-        let sql = format!("{INSERT_MESSAGES_FROM_STAGING}{WITHOUT_GUID}");
-        let inserted_empty = sqlx::query(&sql)
-            .bind(self.account_id)
-            .execute(&mut *self.tx)
-            .await?
-            .rows_affected();
+        let max_before = staging::max_message_id(self.tx).await?;
+        let inserted_empty =
+            staging::promote_messages_without_guid(self.tx, self.account_id).await?;
         inserted_total += inserted_empty;
-        let sql = format!("{STAGED_MESSAGE_IDS}{WITHOUT_GUID}");
-        let staged: Vec<i64> = sqlx::query_scalar(&sql)
-            .bind(self.account_id)
-            .fetch_all(&mut *self.tx)
-            .await?;
+        let staged = staging::staged_message_ids_without_guid(self.tx, self.account_id).await?;
         self.zip_new_message_ids(&mut msg_map, staged, max_before, |n, p| {
             format!("promote append empty-guid id map mismatch: staging={n} new_prod={p}")
         })
@@ -472,29 +318,6 @@ impl Promote<'_> {
         self.stats.messages_appended = inserted_total;
         self.stats.messages_deduped = (total as u64).saturating_sub(inserted_total);
         Ok(msg_map)
-    }
-
-    /// Insert the staged messages with ids in `lo..=hi` that match `tail`.
-    async fn insert_messages_in_range(&mut self, tail: &str, lo: i64, hi: i64) -> Result<u64> {
-        let sql = format!("{INSERT_MESSAGES_FROM_STAGING}{tail}");
-        Ok(sqlx::query(&sql)
-            .bind(self.account_id)
-            .bind(lo)
-            .bind(hi)
-            .execute(&mut *self.tx)
-            .await?
-            .rows_affected())
-    }
-
-    /// The staged message ids in `lo..=hi`, in id order.
-    async fn staged_message_ids_in_range(&mut self, lo: i64, hi: i64) -> Result<Vec<i64>> {
-        let sql = format!("{STAGED_MESSAGE_IDS}{IN_ID_RANGE}");
-        Ok(sqlx::query_scalar(&sql)
-            .bind(self.account_id)
-            .bind(lo)
-            .bind(hi)
-            .fetch_all(&mut *self.tx)
-            .await?)
     }
 
     /// Pair the staged ids just promoted with the production ids that appeared
@@ -512,173 +335,33 @@ impl Promote<'_> {
         max_before: i64,
         mismatch: impl FnOnce(usize, usize) -> String,
     ) -> Result<i64> {
-        let prod_ids: Vec<i64> = sqlx::query_scalar(
-            "SELECT id FROM messages WHERE id > $1 AND account_id = $2 ORDER BY id",
-        )
-        .bind(max_before)
-        .bind(self.account_id)
-        .fetch_all(&mut *self.tx)
-        .await?;
+        let prod_ids = staging::message_ids_above(self.tx, self.account_id, max_before).await?;
         if staged.len() != prod_ids.len() {
             bail!("{}", mismatch(staged.len(), prod_ids.len()));
         }
         msg_map.extend(staged.into_iter().zip(prod_ids));
-        self.max_message_id().await
-    }
-
-    /// Load the staging-to-production message id map into `_promote_msg_map`
-    /// for the SQL that rewrites child rows: the zipped pairs first, then
-    /// every guid row by joining production on `(account, source, guid)`,
-    /// which also maps the append-mode rows that were skipped as duplicates.
-    async fn fill_message_id_map(&mut self, msg_map: &HashMap<i64, i64>) -> Result<()> {
-        self.reset_id_map("_promote_msg_map").await?;
-        let pairs: Vec<(i64, i64)> = msg_map.iter().map(|(&s, &p)| (s, p)).collect();
-        for chunk in pairs.chunks(SQLITE_IN_CHUNK) {
-            // Hand-numbered `$N` pairs — sqlx Any does no placeholder rewriting.
-            let values: Vec<String> = (0..chunk.len())
-                .map(|i| format!("(${}, ${})", i * 2 + 1, i * 2 + 2))
-                .collect();
-            let sql = format!(
-                "INSERT INTO _promote_msg_map (staging_id, prod_id) VALUES {}",
-                values.join(",")
-            );
-            let mut q = sqlx::query(&sql);
-            for &(staging_id, prod_id) in chunk {
-                q = q.bind(staging_id).bind(prod_id);
-            }
-            q.execute(&mut *self.tx).await?;
-        }
-        sqlx::query(
-            r"
-            INSERT INTO _promote_msg_map (staging_id, prod_id)
-            SELECT sm.id, m.id
-            FROM staging_messages sm
-            JOIN messages m
-              ON m.account_id = sm.account_id
-             AND m.source = sm.source
-             AND m.guid = sm.guid
-            JOIN _promote_conv_map cm ON cm.staging_id = sm.conversation_id
-            WHERE sm.account_id = $1
-              AND sm.guid IS NOT NULL
-              AND sm.guid != ''
-            ON CONFLICT(staging_id) DO UPDATE SET prod_id = excluded.prod_id
-            ",
-        )
-        .bind(self.account_id)
-        .execute(&mut *self.tx)
-        .await?;
-        Ok(())
+        staging::max_message_id(self.tx).await
     }
 
     /// Insert the staged attachments under their production messages.
-    ///
-    /// An attachment with a path is the same attachment when its message, path,
-    /// original name, and sticker flag match; one without a path is the same only
-    /// when every field matches. A production row stored without its file takes
-    /// the file from a staged row that has one, so importing again after the file
-    /// turns up fills the row in instead of adding a second one.
     async fn promote_attachments(&mut self) -> Result<()> {
         let phase = Self::begin("bulk-inserting attachments…");
-        let found = sqlx::query(
-            r"
-            UPDATE attachments AS a
-            SET sha256 = f.sha256,
-                assets_path = f.assets_path,
-                size_bytes = f.size_bytes,
-                mime_type = COALESCE(f.mime_type, a.mime_type),
-                missing_reason = NULL
-            FROM (
-                SELECT
-                    mm.prod_id AS message_id, sa.path, sa.original_name, sa.is_sticker,
-                    sa.sha256, sa.assets_path, sa.size_bytes, sa.mime_type
-                FROM staging_attachments sa
-                JOIN _promote_msg_map mm ON mm.staging_id = sa.message_id
-                WHERE sa.path IS NOT NULL
-                  AND sa.sha256 IS NOT NULL
-            ) AS f
-            WHERE a.message_id = f.message_id
-              AND a.path = f.path
-              AND a.original_name IS NOT DISTINCT FROM f.original_name
-              AND a.is_sticker = f.is_sticker
-              AND a.sha256 IS NULL
-            ",
-        )
-        .execute(&mut *self.tx)
-        .await?
-        .rows_affected();
-        self.stats.attachments = sqlx::query(
-            r"
-            INSERT INTO attachments (
-                message_id, path, original_name, mime_type, is_sticker, transcription,
-                sha256, assets_path, size_bytes, missing_reason
-            )
-            SELECT
-                mm.prod_id, sa.path, sa.original_name, sa.mime_type, sa.is_sticker, sa.transcription,
-                sa.sha256, sa.assets_path, sa.size_bytes, sa.missing_reason
-            FROM staging_attachments sa
-            JOIN _promote_msg_map mm ON mm.staging_id = sa.message_id
-            WHERE NOT EXISTS (
-                SELECT 1
-                FROM attachments a
-                WHERE a.message_id = mm.prod_id
-                  AND a.path IS NOT DISTINCT FROM sa.path
-                  AND a.original_name IS NOT DISTINCT FROM sa.original_name
-                  AND a.is_sticker = sa.is_sticker
-                  AND (
-                      sa.path IS NOT NULL
-                      OR (
-                          a.mime_type IS NOT DISTINCT FROM sa.mime_type
-                          AND a.transcription IS NOT DISTINCT FROM sa.transcription
-                          AND a.sha256 IS NOT DISTINCT FROM sa.sha256
-                          AND a.assets_path IS NOT DISTINCT FROM sa.assets_path
-                          AND a.size_bytes IS NOT DISTINCT FROM sa.size_bytes
-                          AND a.missing_reason IS NOT DISTINCT FROM sa.missing_reason
-                      )
-                  )
-            )
-            ",
-        )
-        .execute(&mut *self.tx)
-        .await?
-        .rows_affected();
+        let promoted = staging::promote_attachments(self.tx).await?;
+        self.stats.attachments = promoted.inserted;
         self.done(
             phase,
             format!(
-                "attachments done (inserted={} found={found})",
-                self.stats.attachments
+                "attachments done (inserted={} found={})",
+                promoted.inserted, promoted.filled
             ),
         );
         Ok(())
     }
 
-    /// Insert the staged tapbacks under their production messages, skipping
-    /// any row production already has field for field.
+    /// Insert the staged tapbacks under their production messages.
     async fn promote_tapbacks(&mut self) -> Result<()> {
         let phase = Self::begin("bulk-inserting tapbacks…");
-        self.stats.tapbacks = sqlx::query(
-            r"
-            INSERT INTO tapbacks (
-                message_id, part_index, kind, emoji, is_from_me, sender_handle_id
-            )
-            SELECT
-                mm.prod_id, st.part_index, st.kind, st.emoji, st.is_from_me, st.sender_handle_id
-            FROM staging_tapbacks st
-            JOIN _promote_msg_map mm ON mm.staging_id = st.message_id
-            WHERE NOT EXISTS (
-                SELECT 1
-                FROM tapbacks t
-                WHERE t.message_id = mm.prod_id
-                  AND t.part_index = st.part_index
-                  AND t.kind = st.kind
-                  AND t.emoji IS NOT DISTINCT FROM st.emoji
-                  AND t.is_from_me = st.is_from_me
-                  AND t.sender_handle_id IS NOT DISTINCT FROM st.sender_handle_id
-            )
-            ",
-        )
-        .execute(&mut *self.tx)
-        .await?
-        .rows_affected();
+        self.stats.tapbacks = staging::promote_tapbacks(self.tx).await?;
         self.done(
             phase,
             format!("tapbacks done (inserted={})", self.stats.tapbacks),

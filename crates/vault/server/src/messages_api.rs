@@ -16,9 +16,7 @@ use crate::db::conversation_messages::{
 use crate::db::dialect::engine_of;
 use crate::db::engine::DbEngine;
 use crate::db::sql::SqlParam;
-use crate::paging::{
-    DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, PageQuery, page_params, parse_sort,
-};
+use crate::paging::{ListRequest, Page, PageQuery};
 use crate::server::{ApiError, AppState, FullAccess};
 
 /// Compile a query against the Messages list of the search language.
@@ -68,40 +66,31 @@ pub(crate) async fn list_messages(
     FullAccess(auth): FullAccess,
     Query(query): Query<PageQuery>,
 ) -> Result<Json<Page<Message>>, ApiError> {
-    let page = page_params(
-        query.limit,
-        query.offset,
-        DEFAULT_LIST_LIMIT,
-        Some(MAX_LIST_OFFSET),
-    )?;
     let mut conn = state.db.acquire().await?;
-    let clock = crate::db::account_profile::account_clock(&mut conn, auth.account_id).await?;
-    let filter = message_filter(
-        engine_of(&conn),
+    let list = ListRequest::read(
+        &mut conn,
         auth.account_id,
-        query.q.as_deref().unwrap_or(""),
-        clock,
-    )?;
-    let order = parse_sort(
-        query.sort.as_deref(),
+        query,
         &MESSAGE_SORT_KEYS,
         &DEFAULT_MESSAGE_SORT,
-    )?;
+    )
+    .await?;
+    let filter = message_filter(engine_of(&conn), auth.account_id, &list.q, list.clock)?;
     let total = count_matching_messages(&mut conn, &filter).await?;
     let items = load_messages(
         &mut conn,
         filter.where_sql(),
         filter.params(),
-        &order,
-        page.limit as u32,
-        page.offset as u32,
+        &list.order,
+        list.page.limit as u32,
+        list.page.offset as u32,
     )
     .await?;
     Ok(Json(Page {
         items,
         total,
-        limit: page.limit,
-        offset: page.offset,
+        limit: list.page.limit,
+        offset: list.page.offset,
     }))
 }
 

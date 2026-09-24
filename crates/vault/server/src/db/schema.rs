@@ -678,21 +678,6 @@ pub async fn delete_messages_for_source(
     Ok(n.rows_affected())
 }
 
-/// Clear one account's staging rows (the temporary import area). Child rows
-/// are removed by CASCADE. Other accounts are untouched.
-///
-/// # Errors
-///
-/// Returns an error when schema setup or the delete fails.
-pub async fn reset_staging_for_account(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
-    ensure_vault_schema(conn).await?;
-    sqlx::query("DELETE FROM staging_conversations WHERE account_id = $1")
-        .bind(account_id)
-        .execute(&mut *conn)
-        .await?;
-    Ok(())
-}
-
 /// Create current account and vault metadata tables.
 ///
 /// Account tables live in the same database file as the rest of the vault, so

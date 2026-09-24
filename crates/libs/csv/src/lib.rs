@@ -145,3 +145,70 @@ pub fn parse_bool(raw: &str) -> bool {
 pub fn field(rec: &csv::StringRecord, idx: usize) -> String {
     rec.get(idx).unwrap_or("").trim().to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{ParticipantCell, col, field, json_cell, parse_bool};
+    use message_ir::HandleType;
+
+    #[test]
+    fn col_finds_a_column_by_name_and_names_a_missing_one() {
+        let headers = vec!["guid".to_string(), "text".to_string(), "date".to_string()];
+        assert_eq!(col(&headers, "text").unwrap(), 1);
+        assert_eq!(col(&headers, "date").unwrap(), 2);
+        let err = col(&headers, "subject").unwrap_err().to_string();
+        assert!(err.contains("\"subject\""), "{err}");
+    }
+
+    #[test]
+    fn parse_bool_reads_the_true_spellings_and_nothing_else() {
+        for raw in ["1", "true", " TRUE ", "yes", "Y"] {
+            assert!(parse_bool(raw), "{raw}");
+        }
+        for raw in ["0", "false", "no", "", "2"] {
+            assert!(!parse_bool(raw), "{raw}");
+        }
+    }
+
+    #[test]
+    fn field_trims_a_cell_and_reads_a_missing_one_as_empty() {
+        let rec = csv::StringRecord::from(vec![" hello ", "x"]);
+        assert_eq!(field(&rec, 0), "hello");
+        assert_eq!(field(&rec, 5), "");
+    }
+
+    #[test]
+    fn json_cell_writes_json() {
+        assert_eq!(json_cell(&vec!["a", "b"]), r#"["a","b"]"#);
+    }
+
+    fn handle_type_of(json: &str) -> Option<HandleType> {
+        serde_json::from_str::<ParticipantCell>(json)
+            .unwrap()
+            .handle_type
+    }
+
+    #[test]
+    fn a_participant_cell_without_a_handle_type_is_other() {
+        assert_eq!(
+            handle_type_of(r#"{"handle": "+15555550101"}"#),
+            Some(HandleType::Other)
+        );
+    }
+
+    #[test]
+    fn a_participant_cell_with_a_null_handle_type_has_none() {
+        assert_eq!(
+            handle_type_of(r#"{"handle": "+15555550101", "handle_type": null}"#),
+            None
+        );
+    }
+
+    #[test]
+    fn a_participant_cell_handle_type_is_parsed_leniently() {
+        assert_eq!(
+            handle_type_of(r#"{"handle": "+15555550101", "handle_type": "Phone"}"#),
+            Some(HandleType::Phone)
+        );
+    }
+}

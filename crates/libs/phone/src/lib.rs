@@ -718,4 +718,57 @@ mod tests {
         assert!(owners.is_owner("+02079460000", HandleType::Phone));
         assert!(!owners.is_owner("+02079469999", HandleType::Phone));
     }
+
+    fn numbers(count: usize) -> Vec<String> {
+        (0..count).map(|i| format!("55555501{i:02}")).collect()
+    }
+
+    #[test]
+    fn group_chat_id_names_up_to_four_numbers() {
+        let others = vec![
+            "5555550102".to_string(),
+            "5555550101".to_string(),
+            "5555550102".to_string(),
+        ];
+        assert_eq!(
+            group_chat_id("grp-", &others),
+            (
+                "grp-10:5555550101_10:5555550102".to_string(),
+                "Group: +15555550101, +15555550102".to_string()
+            ),
+            "sorted, deduplicated, length-prefixed id; E.164 title"
+        );
+        assert_eq!(group_chat_id("grp-", &[]).1, "Group");
+        assert_eq!(
+            group_chat_id("grp-", &numbers(4)).1,
+            "Group: +15555550100, +15555550101, +15555550102, +15555550103"
+        );
+    }
+
+    #[test]
+    fn group_chat_id_counts_the_numbers_past_four() {
+        assert_eq!(
+            group_chat_id("grp-", &numbers(5)).1,
+            "Group: +15555550100, +15555550101, +15555550102, +15555550103, and 1 others"
+        );
+    }
+
+    #[test]
+    fn group_chat_id_hashes_an_id_past_180_bytes() {
+        // 20 numbers make a 283-byte id. The expected value is the first 16
+        // hex digits of SHA-256 over that id, computed with Python's hashlib.
+        let mut others = numbers(20);
+        assert_eq!(group_chat_id("grp-", &others).0, "grp-03ecb51fee88d135");
+        others.reverse();
+        assert_eq!(
+            group_chat_id("grp-", &others).0,
+            "grp-03ecb51fee88d135",
+            "the order the numbers arrive in doesn't change the id"
+        );
+
+        // 12 numbers behind a 13-byte prefix make exactly 180 bytes: kept.
+        let (id, _) = group_chat_id("sms-backup-g-", &numbers(12));
+        assert_eq!(id.len(), 180);
+        assert!(id.starts_with("sms-backup-g-10:5555550100_"), "{id}");
+    }
 }

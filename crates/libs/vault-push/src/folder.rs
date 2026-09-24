@@ -161,4 +161,58 @@ mod tests {
         let names: Vec<String> = files.iter().map(|p| file_label(p)).collect();
         assert_eq!(names, ["a.jsonl", "b.jsonl"]);
     }
+
+    /// A conversation header whose `export.source` is `source`.
+    fn header_line(source: &str) -> String {
+        serde_json::json!({
+            "schema_version": message_ir::SCHEMA_VERSION,
+            "export": {
+                "source": source,
+                "tool": "test",
+                "tool_version": "1",
+            },
+            "conversation": {
+                "chat_identifier": "+15555550101",
+                "conversation_type": "individual",
+                "participants": [],
+                "stats": { "message_count": 0, "attachment_count": 0 },
+            },
+        })
+        .to_string()
+    }
+
+    /// The source comes from the first conversation file in name order,
+    /// whether the folder or a file inside it is given.
+    #[test]
+    fn detect_source_reads_the_first_conversation_header() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.jsonl"), header_line("imessage") + "\n").unwrap();
+        fs::write(dir.path().join("b.jsonl"), header_line("whatsapp") + "\n").unwrap();
+
+        assert_eq!(
+            detect_source(dir.path()).unwrap().as_deref(),
+            Some("imessage")
+        );
+        assert_eq!(
+            detect_source(&dir.path().join("b.jsonl"))
+                .unwrap()
+                .as_deref(),
+            Some("imessage")
+        );
+    }
+
+    #[test]
+    fn detect_source_is_none_without_a_conversation_file() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("notes.txt"), "not a conversation").unwrap();
+        assert_eq!(detect_source(dir.path()).unwrap(), None);
+    }
+
+    #[test]
+    fn detect_source_refuses_an_empty_conversation_file() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.jsonl"), "").unwrap();
+        let error = detect_source(dir.path()).unwrap_err();
+        assert!(error.to_string().contains("empty JSONL"), "{error}");
+    }
 }

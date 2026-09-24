@@ -1196,6 +1196,82 @@ fn shared_attachment_uploaded_once_across_conversations() {
     assert_eq!(report.assets_uploaded, 1);
 }
 
+/// When the first conversation's upload of a shared file fails, its claim on
+/// the file is released, so the next conversation uploads it in the same
+/// push rather than skipping it as already in flight.
+///
+/// The two conversations come from different backup sources, so the mock
+/// vault can refuse the first upload and accept the second by the `source`
+/// each PUT carries.
+#[test]
+fn a_failed_upload_frees_a_shared_file_for_the_next_conversation() {
+    const ASSET_BYTES: &[u8] = b"shared attachment bytes";
+    let digest = hex::encode(Sha256::digest(ASSET_BYTES));
+
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let _head = server.mock(|when, then| {
+        when.method("HEAD").path(format!("/v1/assets/{digest}"));
+        then.status(404);
+    });
+    let refused = server.mock(|when, then| {
+        when.method(PUT)
+            .path(format!("/v1/assets/{digest}"))
+            .query_param("source", "sms-backup-restore");
+        then.status(503).json_body(json!({
+            "type": "about:blank",
+            "title": "Service unavailable",
+            "status": 503,
+            "detail": "the vault is busy"
+        }));
+    });
+    let accepted = server.mock(|when, then| {
+        when.method(PUT)
+            .path(format!("/v1/assets/{digest}"))
+            .query_param("source", "whatsapp");
+        then.status(200)
+            .json_body(json!({ "already_present": false }));
+    });
+    let import = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_includes("guid-2");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    fs::create_dir(dir.path().join("attachments")).unwrap();
+    fs::write(dir.path().join("attachments/shared.txt"), ASSET_BYTES).unwrap();
+    let mut first = sample_doc();
+    first.messages[0].attachments = vec![ir_attachment("attachments/shared.txt", digest.clone())];
+    write_jsonl(dir.path(), &first);
+    let mut second = sample_doc_for("+15555550102", "guid-2");
+    second.export.source = "whatsapp".into();
+    second.messages[0].attachments = vec![ir_attachment("attachments/shared.txt", digest.clone())];
+    write_jsonl(dir.path(), &second);
+    let cfg = VaultPushConfig {
+        prepare_workers: 1,
+        ..text_only_config(dir.path(), server.base_url())
+    };
+
+    let report = run(&cfg, None).unwrap();
+
+    assert_eq!(refused.calls(), 1);
+    assert_eq!(
+        accepted.calls(),
+        1,
+        "the second conversation uploads the file"
+    );
+    assert_eq!(report.assets_uploaded, 1);
+    assert_eq!(report.conversations_failed, 1);
+    assert_eq!(report.conversations_ok, 1);
+    assert_eq!(import.calls(), 1);
+}
+
 #[test]
 fn skips_oversized_attachment_keeps_conversation_ok() {
     const SMALL: &[u8] = b"ok-bytes";

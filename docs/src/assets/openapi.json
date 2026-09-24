@@ -2725,7 +2725,25 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "The vault already held the asset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Asset"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The asset is new to the vault and is now stored",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Path of the stored asset"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {

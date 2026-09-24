@@ -5021,8 +5021,20 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description The vault already held the asset */
             200: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Asset"];
+                };
+            };
+            /** @description The asset is new to the vault and is now stored */
+            201: {
+                headers: {
+                    /** @description Path of the stored asset */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {

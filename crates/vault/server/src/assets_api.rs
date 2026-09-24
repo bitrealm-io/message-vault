@@ -1,7 +1,8 @@
 //! Content-addressed asset storage under each account's `assets/` directory.
 //!
-//! Files are stored by SHA-256 fingerprint (`aa/aaaa…ext`) and every reuse
-//! re-checks the bytes against the claimed fingerprint. The HTTP handlers for
+//! Files are stored by SHA-256 fingerprint alone (`aa/aaaa…`, no extension)
+//! with the MIME type in a `.aaaa….mime` sidecar, and every reuse re-checks
+//! the bytes against the claimed fingerprint. The HTTP handlers for
 //! `HEAD` / `GET` / `PUT /v1/assets/{sha256}` and the multipart upload routes
 //! also live here; multipart staging itself is in `asset_uploads`.
 
@@ -94,9 +95,11 @@ pub fn lookup_by_sha256(assets_root: &Path, sha256: &str) -> Option<StoredAsset>
 /// received. Hashing the whole file first would read every download twice.
 pub fn lookup_by_sha256_unverified(assets_root: &Path, sha256: &str) -> Option<StoredAsset> {
     let sha = normalize_sha256(sha256)?;
-    let existing = find_existing(assets_root, &sha)?;
-    let assets_path = path_relative_to(assets_root, &existing).ok()?;
-    let mime_type = mime_for_path_or_sidecar(assets_root, &existing, &sha);
+    let assets_path = shard_rel_path(&sha, "");
+    if !is_regular_file(&assets_root.join(&assets_path)) {
+        return None;
+    }
+    let mime_type = read_mime_metadata(assets_root, &sha);
     Some(StoredAsset {
         sha256: sha,
         assets_path,
@@ -152,8 +155,10 @@ fn store_verified_inner(
 ) -> Result<(StoredAsset, bool)> {
     let claimed = require_sha256(claimed_sha256)?;
     ensure_regular_file(source)?;
-    let source_mime = resolve_mime(export_mime, source);
-    let (dest, already) = install_blob(
+    // The export's claim, else a guess from the source file's name. The stored
+    // file has no extension, so it can say nothing about its own type.
+    let mime_type = resolve_mime(export_mime, source);
+    let already = install_blob(
         source,
         assets_root,
         &claimed,
@@ -161,19 +166,13 @@ fn store_verified_inner(
         copy_ready,
         selection_ready,
     )?;
-    let rel = path_relative_to(assets_root, &dest)?;
-    let mime_type = if already {
-        mime_for_existing_file(export_mime, &dest, source_mime)
-    } else {
-        source_mime
-    };
     if let Some(mime) = mime_type.as_deref() {
         store_mime_metadata(assets_root, &claimed, mime)?;
     }
     Ok((
         StoredAsset {
+            assets_path: shard_rel_path(&claimed, ""),
             sha256: claimed,
-            assets_path: rel,
             mime_type,
         },
         already,
@@ -181,8 +180,8 @@ fn store_verified_inner(
 }
 
 /// Copy `source` into place through a temporary file in the same folder, then
-/// rename. The second return value is `true` only when a concurrent or earlier
-/// valid file already won.
+/// rename. Returns `true` only when a concurrent or earlier valid file already
+/// won.
 ///
 /// Order of work matters for both safety and cost:
 /// 1. Check an existing destination first. On a hit the source is hashed (a
@@ -200,26 +199,13 @@ fn install_blob(
     consume_source: bool,
     copy_ready: impl FnOnce(),
     selection_ready: impl FnOnce(),
-) -> Result<(PathBuf, bool)> {
+) -> Result<bool> {
     let shard = assets_root.join(&claimed_sha256[..2]);
     fs::create_dir_all(&shard).with_context(|| format!("failed to create {}", shard.display()))?;
 
-    // New files use a single path with no extension, named only from the
-    // fingerprint. `find_existing` still finds older files that kept an
-    // extension, so those remain readable and reusable.
-    let desired = assets_root.join(shard_rel_path(claimed_sha256, ""));
-    let dest = if let Some(existing) = find_existing(assets_root, claimed_sha256) {
-        if hash_file(&existing).is_ok_and(|actual| actual == claimed_sha256) {
-            verify_source_digest(source, claimed_sha256)?;
-            if consume_source {
-                let _ = fs::remove_file(source);
-            }
-            return Ok((existing, true));
-        }
-        existing
-    } else {
-        desired
-    };
+    // The one path a fingerprint can live at: no extension, named only from
+    // the fingerprint.
+    let dest = assets_root.join(shard_rel_path(claimed_sha256, ""));
     selection_ready();
 
     if let Ok(meta) = fs::symlink_metadata(&dest) {
@@ -237,7 +223,7 @@ fn install_blob(
             if consume_source {
                 let _ = fs::remove_file(source);
             }
-            return Ok((dest, true));
+            return Ok(true);
         }
         let temporary = copy_to_verified_temp(source, &shard, claimed_sha256)?;
         copy_ready();
@@ -257,7 +243,7 @@ fn install_blob(
                     if consume_source {
                         let _ = fs::remove_file(source);
                     }
-                    return Ok((dest, true));
+                    return Ok(true);
                 }
                 err.file
                     .persist(&dest)
@@ -272,7 +258,7 @@ fn install_blob(
     if consume_source {
         let _ = fs::remove_file(source);
     }
-    Ok((dest, false))
+    Ok(false)
 }
 
 /// Reject a claimed SHA-256 fingerprint that the source bytes do not produce.
@@ -446,61 +432,9 @@ pub(crate) fn hash_file(path: &Path) -> Result<String> {
     Ok(hex_encode(&hasher.finalize()))
 }
 
-/// Find a stored file whose name (without extension) is `sha`.
-///
-/// When more than one match exists, the lexicographically first path is used so
-/// the choice is stable across calls.
-fn find_existing(assets_root: &Path, sha: &str) -> Option<PathBuf> {
-    let shard = assets_root.join(&sha[..2]);
-    if !shard.is_dir() {
-        return None;
-    }
-    let entries = fs::read_dir(&shard).ok()?;
-    let mut matches = Vec::new();
-    for entry in entries {
-        let path = entry.ok()?.path();
-        if file_stem_equals(&path, sha) && is_regular_file(&path) {
-            matches.push(path);
-        }
-    }
-    matches.sort();
-    matches.into_iter().next()
-}
-
-/// True when the file name without its extension is exactly `expected`.
-fn file_stem_equals(path: &Path, expected: &str) -> bool {
-    match path.file_stem().and_then(|s| s.to_str()) {
-        Some(stem) => stem == expected,
-        None => false,
-    }
-}
-
-/// Path of the hidden `.<sha>.mime` sidecar that records a blob's MIME type when its name has no usable extension.
+/// Path of the hidden `.<sha>.mime` sidecar that records a blob's MIME type, since the blob's name carries none.
 fn mime_metadata_path(assets_root: &Path, sha: &str) -> PathBuf {
     assets_root.join(&sha[..2]).join(format!(".{sha}.mime"))
-}
-
-/// MIME type from the stored file's extension, else from its sidecar.
-fn mime_for_path_or_sidecar(assets_root: &Path, path: &Path, sha: &str) -> Option<String> {
-    match resolve_mime(None, path) {
-        Some(mime) => Some(mime),
-        None => read_mime_metadata(assets_root, sha),
-    }
-}
-
-/// MIME type to record for a blob that already exists: the export's claim wins, then what the
-/// stored file's name says, then what the source file said.
-fn mime_for_existing_file(
-    export_mime: Option<&str>,
-    dest: &Path,
-    source_mime: Option<String>,
-) -> Option<String> {
-    if let Some(mime) = export_mime
-        && !mime.is_empty()
-    {
-        return Some(mime.to_string());
-    }
-    resolve_mime(None, dest).or(source_mime)
 }
 
 /// Read the MIME sidecar for `sha`, if present and non-empty.
@@ -539,18 +473,6 @@ fn store_mime_metadata(assets_root: &Path, sha: &str, mime: &str) -> Result<()> 
         Err(err) if err.error.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
         Err(err) => Err(err.error).with_context(|| format!("install {}", path.display())),
     }
-}
-
-/// The path under `root` as a forward-slash string, the form `attachments.assets_path` stores.
-fn path_relative_to(root: &Path, path: &Path) -> Result<String> {
-    let relative = path.strip_prefix(root).with_context(|| {
-        format!(
-            "asset path {} is not under {}",
-            path.display(),
-            root.display()
-        )
-    })?;
-    Ok(relative.to_string_lossy().replace('\\', "/"))
 }
 
 /// The export's MIME claim when it has one, else a guess from the file extension.
@@ -876,7 +798,9 @@ pub(crate) async fn replace_asset(
     };
     if n == 0 {
         let _ = tokio::fs::remove_file(&tmp_path).await;
-        return Err(ApiError::MalformedBody("request body is empty".into()));
+        return Err(ApiError::AssetUploadInvalid(
+            "the body is empty, so it does not hash to the claimed sha256".into(),
+        ));
     }
 
     let sha = sha256.clone();
@@ -1078,7 +1002,13 @@ pub(crate) async fn replace_asset_upload_part(
         ("source" = String, Query)
     ),
     responses(
-        (status = 200, body = Asset),
+        (
+            status = 201,
+            body = Asset,
+            description = "The asset is new to the vault and is now stored",
+            headers(("Location" = String, description = "Path of the stored asset"))
+        ),
+        (status = 200, body = Asset, description = "The vault already held the asset"),
         crate::problem::openapi::AssetUploadInvalid
     )
 )]
@@ -1087,7 +1017,7 @@ pub(crate) async fn complete_asset_upload(
     ImportAccess(auth): ImportAccess,
     AxumPath((sha256, upload_id)): AxumPath<(String, String)>,
     Query(query): Query<AssetQuery>,
-) -> Result<Json<Asset>, ApiError> {
+) -> Result<Response, ApiError> {
     let (account, source_id, existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
     if let Some(stored) = existing {
@@ -1108,7 +1038,7 @@ pub(crate) async fn complete_asset_upload(
                 "could not drop stale upload session"
             );
         }
-        return Ok(Asset::stored(stored, true));
+        return Ok(Asset::stored(stored, true).into_response());
     }
 
     let _guard = state
@@ -1126,7 +1056,17 @@ pub(crate) async fn complete_asset_upload(
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload complete task: {e}")))?
     .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
 
-    Ok(Asset::stored(stored, already_present))
+    // A racing single PUT of the same bytes may have stored them first; then
+    // this completion made nothing.
+    if already_present {
+        return Ok(Asset::stored(stored, true).into_response());
+    }
+    let Json(body) = Asset::stored(stored, false);
+    Ok(Created {
+        location: format!("/v1/assets/{sha256}?source={source_id}"),
+        body,
+    }
+    .into_response())
 }
 
 /// Abort and delete a chunked asset upload's staging files.

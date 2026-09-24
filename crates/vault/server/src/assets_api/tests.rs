@@ -27,7 +27,7 @@ fn store_verified_replaces_corrupt_destination() {
     let source = root.join("source.bin");
     fs::write(&source, b"valid-asset").unwrap();
     let sha = hash_file(&source).unwrap();
-    let destination = root.join(shard_rel_path(&sha, ".bin"));
+    let destination = root.join(shard_rel_path(&sha, ""));
     fs::create_dir_all(destination.parent().unwrap()).unwrap();
     fs::write(&destination, b"corrupt").unwrap();
 
@@ -103,7 +103,7 @@ fn store_verified_concurrent_installers_leave_valid_destination() {
 }
 
 #[test]
-fn store_verified_processes_share_one_mixed_extension_path() {
+fn store_verified_processes_share_one_path() {
     let dir = tempdir().unwrap();
     let root = dir.path();
     let source_a = root.join("process-a.bin");
@@ -223,7 +223,7 @@ fn lookup_by_sha256_preserves_mime_for_extensionless_assets() {
 }
 
 #[test]
-#[ignore = "helper launched by store_verified_processes_share_one_mixed_extension_path"]
+#[ignore = "helper launched by store_verified_processes_share_one_path"]
 fn filesystem_install_worker() {
     let root = PathBuf::from(std::env::var_os("ASSET_TEST_ROOT").unwrap());
     let source = PathBuf::from(std::env::var_os("ASSET_TEST_SOURCE").unwrap());
@@ -555,13 +555,22 @@ async fn a_multipart_upload_completes_end_to_end_over_http() {
         assert_eq!(response.status(), StatusCode::OK, "part {}", index + 1);
     }
 
+    // Completing the upload stores the asset: a creation, answered like the
+    // single PUT that stores one.
     let response = client
         .post(url(&format!("/uploads/{upload_id}/complete")))
         .bearer_auth(&user.token)
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(
+        response
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok()),
+        Some(format!("/v1/assets/{sha}?source=imessage").as_str())
+    );
     let done: serde_json::Value = response.json().await.unwrap();
     assert_eq!(done["sha256"], sha.as_str());
     assert_eq!(done["already_present"], false);
@@ -584,18 +593,18 @@ async fn a_multipart_upload_completes_end_to_end_over_http() {
 }
 
 /// The MIME type recorded for a blob the store already holds. The export's
-/// claim wins, then the stored file's own extension (older files kept one),
-/// then what the source file said. A blank claim is not a claim.
+/// claim wins, then what the source file's name says. A blank claim is not a
+/// claim. The stored file has no extension, so it never has a say.
 #[test]
-fn mime_for_existing_file_prefers_the_claim_then_the_stored_name_then_the_source() {
+fn mime_for_a_stored_blob_is_the_claim_then_the_source_name() {
     let dir = tempdir().unwrap();
     let root = dir.path();
-    let sha = sha256_hex(b"older-jpeg");
-    let dest = root.join(shard_rel_path(&sha, ".jpg"));
+    let sha = sha256_hex(b"stored-blob");
+    let dest = root.join(shard_rel_path(&sha, ""));
     fs::create_dir_all(dest.parent().unwrap()).unwrap();
-    fs::write(&dest, b"older-jpeg").unwrap();
+    fs::write(&dest, b"stored-blob").unwrap();
     let source = root.join("source.png");
-    fs::write(&source, b"older-jpeg").unwrap();
+    fs::write(&source, b"stored-blob").unwrap();
 
     let stored = |export_mime: Option<&str>| {
         let (stored, present) =
@@ -605,23 +614,36 @@ fn mime_for_existing_file_prefers_the_claim_then_the_stored_name_then_the_source
     };
 
     assert_eq!(stored(Some("audio/amr")).as_deref(), Some("audio/amr"));
-    assert_eq!(stored(None).as_deref(), Some("image/jpeg"));
+    assert_eq!(stored(None).as_deref(), Some("image/png"));
     assert_eq!(
         stored(Some("")).as_deref(),
-        Some("image/jpeg"),
-        "an empty claim must fall through to the stored file's name"
+        Some("image/png"),
+        "an empty claim must fall through to the source file's name"
     );
+}
 
-    // With no extension on the stored file only the source is left to say.
-    let sha = sha256_hex(b"bare-blob");
-    let dest = root.join(shard_rel_path(&sha, ""));
-    fs::create_dir_all(dest.parent().unwrap()).unwrap();
-    fs::write(&dest, b"bare-blob").unwrap();
-    let source = root.join("bare.png");
-    fs::write(&source, b"bare-blob").unwrap();
-    let (stored, present) = store_verified(&source, &sha, root, Some(""), false, false).unwrap();
-    assert!(present);
-    assert_eq!(stored.mime_type.as_deref(), Some("image/png"));
+/// A file in the shard named `<sha>.jpg` is not the asset: the store holds
+/// one path per fingerprint, `<aa>/<sha>` with no extension, and looks
+/// nowhere else.
+#[test]
+fn lookup_ignores_a_file_named_with_an_extension() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    let sha = sha256_hex(b"named-with-extension");
+    let named = root.join(shard_rel_path(&sha, ".jpg"));
+    fs::create_dir_all(named.parent().unwrap()).unwrap();
+    fs::write(&named, b"named-with-extension").unwrap();
+
+    assert!(lookup_by_sha256_unverified(root, &sha).is_none());
+    assert!(lookup_by_sha256(root, &sha).is_none());
+
+    // Storing the bytes creates the extensionless path beside it.
+    let source = root.join("source.jpg");
+    fs::write(&source, b"named-with-extension").unwrap();
+    let (stored, present) = store_verified(&source, &sha, root, None, false, false).unwrap();
+    assert!(!present);
+    assert_eq!(stored.assets_path, shard_rel_path(&sha, ""));
+    assert!(root.join(shard_rel_path(&sha, "")).is_file());
 }
 
 /// The Content-Type on a PUT is the asset's own media type, so the vault
@@ -796,4 +818,104 @@ async fn deleting_an_upload_answers_204_and_removes_its_files() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+/// A PUT with no bytes was read in full; it just does not hash to the
+/// fingerprint it is addressed by, so it answers 422 like any other body that
+/// does not, and stores nothing.
+#[tokio::test]
+async fn an_asset_put_with_an_empty_body_answers_422() {
+    let (vault, user) = crate::test_support::vault_with_account().await;
+    let server = crate::test_support::serve(&vault.state).await;
+    let sha = sha256_hex(b"never-sent");
+    let response = reqwest::Client::new()
+        .put(format!("{}/v1/assets/{sha}?source=imessage", server.base()))
+        .bearer_auth(&user.token)
+        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .body(Vec::new())
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::AssetUploadInvalid,
+    );
+
+    let assets_dir = vault
+        .state
+        .cfg
+        .paths
+        .assets_dir_for_account(user.account_id, "imessage");
+    assert!(lookup_by_sha256_unverified(&assets_dir, &sha).is_none());
+}
+
+/// When a single PUT stores the bytes while a chunked upload of the same
+/// bytes is still open, `complete` finds the asset already held: it answers
+/// 200 with no `Location`, like the PUT does, and drops the session.
+#[tokio::test]
+async fn completing_an_upload_for_a_blob_a_put_stored_first_answers_200() {
+    let (vault, user) = crate::test_support::vault_with_account().await;
+    let mut state = vault.state.clone();
+    state.upload_limits.part_size = 16;
+    let server = crate::test_support::serve(&state).await;
+    let client = reqwest::Client::new();
+    let bytes: Vec<u8> = (0u8..40).collect();
+    let sha = sha256_hex(&bytes);
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+
+    let response = client
+        .post(url("/uploads"))
+        .bearer_auth(&user.token)
+        .json(&serde_json::json!({ "bytes": bytes.len(), "mime": "image/png" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let started: serde_json::Value = response.json().await.unwrap();
+    let upload_id = started["upload_id"].as_str().unwrap().to_string();
+    for (index, chunk) in bytes.chunks(16).enumerate() {
+        let response = client
+            .put(url(&format!("/uploads/{upload_id}/parts/{}", index + 1)))
+            .bearer_auth(&user.token)
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .body(chunk.to_vec())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    let response = client
+        .put(url(""))
+        .bearer_auth(&user.token)
+        .header(reqwest::header::CONTENT_TYPE, "image/png")
+        .body(bytes.clone())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = client
+        .post(url(&format!("/uploads/{upload_id}/complete")))
+        .bearer_auth(&user.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(response.headers().get(reqwest::header::LOCATION).is_none());
+    let done: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(done["already_present"], true);
+    assert_eq!(done["sha256"], sha.as_str());
+
+    let assets_dir = state
+        .cfg
+        .paths
+        .assets_dir_for_account(user.account_id, "imessage");
+    assert!(
+        !asset_uploads::session_dir(&assets_dir, &sha, &upload_id).exists(),
+        "the stale session must be dropped"
+    );
 }

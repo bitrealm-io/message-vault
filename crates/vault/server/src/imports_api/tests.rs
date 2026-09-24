@@ -1176,7 +1176,7 @@ async fn claimed_import_rejects_corrupt_existing_asset() {
     let db = tmp.path().join("vault.db");
     let assets = tmp.path().join("assets");
     let sha = assets_api::sha256_hex(b"expected-asset");
-    let corrupt = assets.join(assets_api::shard_rel_path(&sha, ".bin"));
+    let corrupt = assets.join(assets_api::shard_rel_path(&sha, ""));
     fs::create_dir_all(corrupt.parent().unwrap()).unwrap();
     fs::write(&corrupt, b"corrupt-asset").unwrap();
 

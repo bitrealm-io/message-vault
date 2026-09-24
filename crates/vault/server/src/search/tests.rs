@@ -1801,6 +1801,37 @@ mod kind_words {
         );
     }
 
+    /// Each of `video`, `audio` and `contact` finds the message holding that
+    /// kind of attachment and no other.
+    #[tokio::test]
+    async fn video_audio_and_contact_attachments_each_find_their_own() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let mut cases = Vec::new();
+        for (q, body, name, mime) in [
+            ("attachment:video", "a clip", "clip.mp4", "video/mp4"),
+            ("attachment:audio", "a voice note", "note.m4a", "audio/mp4"),
+            ("attachment:contact", "a card", "pat.vcf", "text/vcard"),
+        ] {
+            let id = message(
+                &mut conn,
+                ACCOUNT,
+                msg(f.jane_direct, "2024-06-01T10:00:00Z", true, None, body),
+            )
+            .await;
+            attachment(&mut conn, id, name, mime, 1000).await;
+            cases.push((q, id));
+        }
+
+        for (q, want) in cases {
+            assert_eq!(
+                run(&mut conn, ListKind::Messages, q).await,
+                vec![want],
+                "{q}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn trash_is_a_word() {
         let (pool, _dir, f) = seeded().await;

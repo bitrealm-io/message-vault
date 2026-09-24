@@ -5,7 +5,7 @@ use crate::db::contacts::UNKNOWN_CONTACT_SQL;
 use crate::db::dialect::name_eq_ci;
 use crate::db::engine::DbEngine;
 
-use super::bridge::{ListCtx, MessageAgg, Sql, contact_conversations_link};
+use super::bridge::{Heard, ListCtx, MessageAgg, Sql, contact_conversations_link, contact_heard};
 use super::error::{QueryError, QueryErrorKind};
 use super::fts;
 use super::parse::{Expr, FieldTerm, TextTerm};
@@ -272,8 +272,10 @@ fn emit_one(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result
         "kind" | "service" | "source" | "attachment" | "size" | "trashed" => {
             emit_kind_word(ctx, out, term, v)
         }
-        "date" | "first-message" | "last-message" | "messages" | "conversations" | "groups"
-        | "participants" | "attachments" => emit_measure_word(ctx, out, term, v),
+        "date" | "first-message" | "last-message" | "first-heard" | "last-heard" | "messages"
+        | "conversations" | "groups" | "participants" | "attachments" => {
+            emit_measure_word(ctx, out, term, v)
+        }
         other => Err(QueryError::new(
             QueryErrorKind::BadValue,
             term.span.clone(),
@@ -951,11 +953,13 @@ fn date_sql(out: &mut Sql, expr: &str, cmp: &DateCmp, zone: chrono_tz::Tz) {
     }
 }
 
-/// The eight date-and-count words: `date`, `first-message`, `last-message`,
-/// `messages`, `conversations`, `groups`, `participants`, `attachments`.
-/// `first-message:`, `last-message:`, and `messages:` compare through one
-/// aggregate over the base row's messages (`ListCtx::message_aggregate`);
-/// the other plural words are correlated counts. `groups:` and
+/// The ten date-and-count words: `date`, `first-message`, `last-message`,
+/// `first-heard`, `last-heard`, `messages`, `conversations`, `groups`,
+/// `participants`, `attachments`. `first-message:`, `last-message:`, and
+/// `messages:` compare through one aggregate over the base row's messages
+/// (`ListCtx::message_aggregate`); `first-heard:` and `last-heard:` compare
+/// the messages the contact sent (`contact_heard`); the other plural words
+/// are correlated counts. `first-heard:`, `last-heard:`, `groups:` and
 /// `conversations:` are registered for Contacts only, so they read `ct.`
 /// directly; `attachments:` is registered for Messages only, so it reads
 /// `m.` directly.
@@ -978,6 +982,14 @@ fn emit_measure_word(
         ("last-message", Value::Date(cmp)) => {
             let expr = ctx.message_aggregate(MessageAgg::Last);
             date_sql(out, &expr, cmp, ctx.zone);
+            Ok(())
+        }
+        ("first-heard", Value::Date(cmp)) => {
+            date_sql(out, &contact_heard(Heard::First), cmp, ctx.zone);
+            Ok(())
+        }
+        ("last-heard", Value::Date(cmp)) => {
+            date_sql(out, &contact_heard(Heard::Last), cmp, ctx.zone);
             Ok(())
         }
         ("messages", Value::Count(cmp)) => {

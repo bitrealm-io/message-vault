@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   advancedContacts,
   advancedMessages,
+  advancedTrash,
   type ContactsQueryInput,
   forGroup,
   forHandle,
@@ -79,8 +80,8 @@ describe("forHandle", () => {
     const contacts = advancedContacts({
       contactName: "",
       handle: "Ann Lee",
-      firstMsgBound: { op: "any", start: "", end: "" },
-      lastMsgBound: { op: "any", start: "", end: "" },
+      firstHeardBound: { op: "any", start: "", end: "" },
+      lastHeardBound: { op: "any", start: "", end: "" },
       activity: "any",
       noPreferredName: false,
       noHandle: false,
@@ -177,8 +178,8 @@ describe("advancedContacts", () => {
       advancedContacts({
         contactName: "",
         handle: "",
-        firstMsgBound: { op: "any", start: "", end: "" },
-        lastMsgBound: { op: "any", start: "", end: "" },
+        firstHeardBound: { op: "any", start: "", end: "" },
+        lastHeardBound: { op: "any", start: "", end: "" },
         activity: "any",
         noPreferredName: false,
         noHandle: false,
@@ -192,15 +193,15 @@ describe("advancedContacts", () => {
       advancedContacts({
         contactName: "ada",
         handle: "",
-        firstMsgBound: { op: "after", start: "2020-01-01", end: "" },
-        lastMsgBound: { op: "between", start: "2021-01-01", end: "2021-06-01" },
+        firstHeardBound: { op: "after", start: "2020-01-01", end: "" },
+        lastHeardBound: { op: "between", start: "2021-01-01", end: "2021-06-01" },
         activity: "messages",
         noPreferredName: true,
         noHandle: false,
         services: ["imessage", "sms"],
       }),
     ).toBe(
-      "ada first-message:>=2020-01-01 last-message:2021-01-01..2021-06-01 messages:>0 name:none service:imessage,sms",
+      "ada first-heard:>=2020-01-01 last-heard:2021-01-01..2021-06-01 messages:>0 name:none service:imessage,sms",
     );
   });
 
@@ -209,8 +210,8 @@ describe("advancedContacts", () => {
       advancedContacts({
         contactName: "",
         handle: "ann@example.com",
-        firstMsgBound: { op: "any", start: "", end: "" },
-        lastMsgBound: { op: "any", start: "", end: "" },
+        firstHeardBound: { op: "any", start: "", end: "" },
+        lastHeardBound: { op: "any", start: "", end: "" },
         activity: "any",
         noPreferredName: false,
         noHandle: false,
@@ -350,8 +351,8 @@ function buildFixtureLines(): string[] {
     {
       contactName: "",
       handle: "",
-      firstMsgBound: { op: "any", start: "", end: "" },
-      lastMsgBound: { op: "any", start: "", end: "" },
+      firstHeardBound: { op: "any", start: "", end: "" },
+      lastHeardBound: { op: "any", start: "", end: "" },
       activity: "any",
       noPreferredName: false,
       noHandle: false,
@@ -360,8 +361,8 @@ function buildFixtureLines(): string[] {
     {
       contactName: "ada",
       handle: "",
-      firstMsgBound: { op: "after", start: "2020-01-01", end: "" },
-      lastMsgBound: { op: "between", start: "2021-01-01", end: "2021-06-01" },
+      firstHeardBound: { op: "after", start: "2020-01-01", end: "" },
+      lastHeardBound: { op: "between", start: "2021-01-01", end: "2021-06-01" },
       activity: "messages",
       noPreferredName: true,
       noHandle: false,
@@ -370,8 +371,8 @@ function buildFixtureLines(): string[] {
     {
       contactName: "",
       handle: "Book Club",
-      firstMsgBound: { op: "before", start: "2022-01-01", end: "" },
-      lastMsgBound: { op: "any", start: "", end: "" },
+      firstHeardBound: { op: "before", start: "2022-01-01", end: "" },
+      lastHeardBound: { op: "any", start: "", end: "" },
       activity: "no-messages",
       noPreferredName: false,
       noHandle: true,
@@ -380,8 +381,8 @@ function buildFixtureLines(): string[] {
     {
       contactName: "",
       handle: 'Say "Hi"',
-      firstMsgBound: { op: "any", start: "", end: "" },
-      lastMsgBound: { op: "any", start: "", end: "" },
+      firstHeardBound: { op: "any", start: "", end: "" },
+      lastHeardBound: { op: "any", start: "", end: "" },
       activity: "any",
       noPreferredName: false,
       noHandle: false,
@@ -392,10 +393,10 @@ function buildFixtureLines(): string[] {
     addLines(lines, advancedContacts(input), ["contacts"]);
     // Trash's Advanced Search shows this same form (AdvancedSearchMode
     // "trash") and sends the result, behind trashed:yes, to both the
-    // contacts and the conversations list. Every word the form emits must
-    // therefore parse on both; this is the check that catches a
-    // conversations-only word (#331).
-    addLines(lines, trashed(advancedContacts(input)), ["contacts", "conversations"]);
+    // contacts and the conversations list. Every word advancedTrash emits
+    // must therefore parse on both; this is the check that catches a
+    // conversations-only word (#331) or a contacts-only one (#718).
+    addLines(lines, trashed(advancedTrash(input)), ["contacts", "conversations"]);
   }
 
   return [...lines].sort();

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildContactsQuery,
   buildMessagesQuery,
+  buildTrashQuery,
   type ContactsQueryInput,
   canSubmitContacts,
   canSubmitMessages,
@@ -14,8 +15,8 @@ import {
 const emptyContacts: ContactsQueryInput = {
   contactName: "",
   handle: "",
-  firstMsgBound: EMPTY_DATE_BOUND,
-  lastMsgBound: EMPTY_DATE_BOUND,
+  firstHeardBound: EMPTY_DATE_BOUND,
+  lastHeardBound: EMPTY_DATE_BOUND,
   activity: "any",
   noPreferredName: false,
   noHandle: false,
@@ -86,16 +87,27 @@ describe("buildContactsQuery", () => {
       buildContactsQuery({
         contactName: "ana",
         handle: "+1 555",
-        firstMsgBound: { op: "after", start: "2019-01-01", end: "" },
-        lastMsgBound: { op: "between", start: "2022-01-01", end: "2023-01-01" },
+        firstHeardBound: { op: "after", start: "2019-01-01", end: "" },
+        lastHeardBound: { op: "between", start: "2022-01-01", end: "2023-01-01" },
         activity: "messages",
         noPreferredName: true,
         noHandle: false,
         services: ["whatsapp"],
       }),
     ).toBe(
-      'ana handle:"+1 555" first-message:>=2019-01-01 last-message:2022-01-01..2023-01-01 messages:>0 name:none service:whatsapp',
+      'ana handle:"+1 555" first-heard:>=2019-01-01 last-heard:2022-01-01..2023-01-01 messages:>0 name:none service:whatsapp',
     );
+  });
+
+  it("leaves the heard dates out of a Trash search, which Conversations also runs", () => {
+    expect(
+      buildTrashQuery({
+        ...emptyContacts,
+        contactName: "ana",
+        firstHeardBound: { op: "after", start: "2019-01-01", end: "" },
+        lastHeardBound: { op: "before", start: "2022-01-01", end: "" },
+      }),
+    ).toBe("ana");
   });
 
   it("asks for contacts with no messages and no identity", () => {

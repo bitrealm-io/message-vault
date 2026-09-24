@@ -21,6 +21,16 @@ released versions carry their date on the heading.
 
 ### Features
 
+- 2026-09-23 **Search contacts by when you last heard from them.**
+  `first-heard:` and `last-heard:` on Contacts find the first and last
+  message a contact sent you, in a direct or a group conversation:
+  `-last-heard:>=2022` lists everyone you have not heard from since 2022,
+  including people who never messaged you. They replace `first-message:` and
+  `last-message:` on Contacts, which counted your own messages and everyone
+  else's in a shared group chat. On Conversations and Messages,
+  `first-message:` and `last-message:` still mean the conversation's first
+  and last message. The Advanced Search contacts form's date fields are now
+  First Heard and Last Heard, and Trash's form leaves them out.
 - 2026-09-22 **One identity table, on the contact drawer and on an account's
   Profile.** An account's identities now show what a contact's do: the
   service, the address, when it was first and last seen, and how many
@@ -67,7 +77,7 @@ released versions carry their date on the heading.
   that have nothing to compare.** A search with `-` in front of a word left
   out every row with no value for that word, so those rows appeared under
   neither the word nor its negation. `-import:last` found no messages at all
-  before the first import, and `-last-message:2019` on Contacts left out
+  before the first import, and a negated date word on Contacts left out
   every contact with no messages. A search and its negation now always
   divide the list between them.
 - 2026-09-23 **A group text from an SMS Backup & Restore backup is no longer

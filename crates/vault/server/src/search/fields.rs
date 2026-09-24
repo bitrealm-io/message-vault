@@ -41,7 +41,7 @@ pub(crate) struct FieldSpec {
 
 const NONE_ANY: &[&str] = &["none", "any"];
 
-/// The twenty-seven words, in the spec's order.
+/// The twenty-nine words, in the spec's order.
 pub(crate) static FIELDS: &[FieldSpec] = &[
     FieldSpec {
         word: "body",
@@ -174,18 +174,34 @@ pub(crate) static FIELDS: &[FieldSpec] = &[
     FieldSpec {
         word: "first-message",
         value_type: ValueType::Date,
-        lists: &[C, V, M],
+        lists: &[V, M],
         values: &[],
-        help: "the date of the earliest message",
+        help: "the date of the conversation's first message",
         example: "first-message:<2020",
     },
     FieldSpec {
         word: "last-message",
         value_type: ValueType::Date,
-        lists: &[C, V, M],
+        lists: &[V, M],
         values: &[],
-        help: "the date of the latest message",
+        help: "the date of the conversation's last message",
         example: "last-message:<2022",
+    },
+    FieldSpec {
+        word: "first-heard",
+        value_type: ValueType::Date,
+        lists: &[C],
+        values: &[],
+        help: "the date of the first message this contact sent",
+        example: "first-heard:<2020",
+    },
+    FieldSpec {
+        word: "last-heard",
+        value_type: ValueType::Date,
+        lists: &[C],
+        values: &[],
+        help: "the date of the last message this contact sent",
+        example: "last-heard:<2022",
     },
     FieldSpec {
         word: "attachment",

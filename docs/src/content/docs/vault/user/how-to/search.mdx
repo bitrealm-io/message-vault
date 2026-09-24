@@ -29,12 +29,12 @@ One language works on all three lists: **Contacts**, **Conversations**, and **Me
 
 - Put quotes around a value with a space, a colon, or a parenthesis: `group:"Book Club"`, `group:"Family (close)"`. Parentheses group clauses, so an unquoted `group:Family (close)` asks a different question. Two quotes in a row are one quote.
 - Case never matters.
-- `#12` means the thing with that id: `group:#7`, `with:#42`, `in:#19`.
+- `#12` means the thing with that id: `group:#7`, `with:#42`, `in:#19`. An id that names nothing matches nothing, so a Saved Search that names a deleted Contact Group still runs.
 - `none` means empty and `any` means not empty, on the words whose row below lists them: `name:none`, `tag:none`, `attachment:any`.
 - Dates name a span: `2024` is the year, `2024-05` the month, `2024-05-01` the day, `7d` or `2w` or `3m` or `1y` the last that long, plus `today` and `yesterday`. Add `>=` for from its start, `<` for before its start, `>` for after its end, `<=` for up to its end, or `a..b` for a range: `date:2019`, `date:>=2019`, `date:<1m`, `date:2019..2021`. Days start and end in the account's time zone (Settings → Profile), so a text sent at 11:59 pm on New Year's Eve belongs to the old year wherever the vault runs.
 - Sizes are `500k`, `1M`, `2G`, or plain bytes. Counts are plain numbers. Both take the same `>`, `>=`, `<`, `<=`, and `a..b`.
 - A comma inside a value means either: `service:imessage,sms`. Repeating a word means both: `tag:Work tag:Urgent`.
-- `-` in front of anything means not: `-tag:Work`, `-avocado`. `or` and parentheses work as you would expect: `(toast or guacamole) avocado`.
+- `-` in front of anything means not: `-tag:Work`, `-avocado`. It includes the rows that have no value for the word, so `-last-message:2019` includes contacts with no messages at all. `or` and parentheses work as you would expect: `(toast or guacamole) avocado`.
 - `avoc*` matches words starting with avoc; `"exact phrase"` matches the phrase.
 - In message text, punctuation inside a word splits it into words that must come next to each other in that order: `o'brien` finds "O'Brien" and "o brien", and `a&b` finds "a & b" but not "b and a". A word that is only punctuation or emoji finds no message text.
 - On a vault that runs on SQLite, `cafe` also finds "café" in message text. On Postgres, accents count.
@@ -80,9 +80,9 @@ The tiles mark which lists accept the word: <ListTiles on="C" /> Contacts, <List
 
 <TypedQuery query='from:me to:"Jane Doe" (avocado or "guacamole night")' note="on Messages" />
 
-<TypedQuery query="last-message:<2022" note="on Contacts" />
+<TypedQuery query="-last-message:>=2022" note="on Contacts" />
 
-Everyone you have not heard from since 2022.
+Contacts with no message since the start of 2022 in any conversation they are in, yours included, and contacts with no messages at all.
 
 <TypedQuery query="group:Family date:2019..2021 attachment:image size:>1M" note="on Messages" />
 

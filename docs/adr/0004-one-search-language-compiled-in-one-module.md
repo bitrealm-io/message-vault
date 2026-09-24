@@ -20,6 +20,12 @@ The rules of the language:
   current word list has something close. Nothing is silently searched as
   text or dropped, and the module knows nothing about spellings that came
   before it.
+- **`q` and `-q` split the list.** `-q` is every row of the list that `q`
+  does not match, so a row with no value for the word, such as a contact
+  with no messages under `last-message:`, is in `-q`. The only exception is
+  a word that lifts one of the list's defaults (`trashed:`, `source:`,
+  `import:`). A row missing from both answers is invisible to every search
+  and cannot be explained to the person looking for it.
 - **A query only narrows.** Sort order, context lines, one row per message
   versus per conversation, and the Contacts mode switch are request
   parameters, not words in the string.

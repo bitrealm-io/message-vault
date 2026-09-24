@@ -76,7 +76,7 @@ pub struct CompileRequest<'a> {
     /// Relative dates resolve against this day. Never read from the clock here.
     pub today: NaiveDate,
     /// The account's time zone: the anchor that turns a stored instant into a
-    /// day or a year for `date:`, `first-message:` and `last-message:`.
+    /// day or a year for `date:` and the first and last message and heard words.
     pub zone: chrono_tz::Tz,
 }
 

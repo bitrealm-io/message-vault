@@ -89,7 +89,7 @@ export type CountFilterInput = {
 
 export type ActivityFilter = "any" | "messages" | "no-messages";
 
-/** Operator for first-/last-message calendar bounds. */
+/** Operator for the first-heard/last-heard calendar bounds. */
 export type DateBoundOp = "any" | "after" | "before" | "between";
 
 export type DateBoundFilter = {
@@ -110,8 +110,8 @@ export type MessagesQueryInput = {
 export type ContactsQueryInput = {
   contactName: string;
   handle: string;
-  firstMsgBound: DateBoundFilter;
-  lastMsgBound: DateBoundFilter;
+  firstHeardBound: DateBoundFilter;
+  lastHeardBound: DateBoundFilter;
   activity: ActivityFilter;
   noPreferredName: boolean;
   noHandle: boolean;
@@ -128,7 +128,7 @@ export function composeCountComparison(input: CountFilterInput): string | null {
 /** Push one `prefix:` date token: `>=D`, `<D`, or an inclusive `D..D` range. */
 function pushDateBoundTokens(
   push: (s: string) => void,
-  prefix: "first-message" | "last-message",
+  prefix: "first-heard" | "last-heard",
   bound: DateBoundFilter,
 ): void {
   switch (bound.op) {
@@ -171,8 +171,8 @@ export function advancedContacts(input: ContactsQueryInput): string {
   };
   if (input.contactName.trim()) push(input.contactName.trim());
   if (input.handle.trim()) push(forHandle(input.handle));
-  pushDateBoundTokens(push, "first-message", input.firstMsgBound);
-  pushDateBoundTokens(push, "last-message", input.lastMsgBound);
+  pushDateBoundTokens(push, "first-heard", input.firstHeardBound);
+  pushDateBoundTokens(push, "last-heard", input.lastHeardBound);
   if (input.activity === "messages") push("messages:>0");
   if (input.activity === "no-messages") push("messages:0");
   if (input.noPreferredName) push("name:none");
@@ -182,4 +182,15 @@ export function advancedContacts(input: ContactsQueryInput): string {
   const services = input.services.map((id) => String(id).trim()).filter(Boolean);
   if (services.length > 0) push(`service:${services.join(",")}`);
   return parts.join(" ");
+}
+
+/**
+ * The Advanced Search contacts form as Trash sends it. Trash runs one query
+ * on both the Contacts and the Conversations list, and `first-heard:` and
+ * `last-heard:` are Contacts words, so the heard dates are left out; the
+ * form does not show them in Trash.
+ */
+export function advancedTrash(input: ContactsQueryInput): string {
+  const noBound: DateBoundFilter = { op: "any", start: "", end: "" };
+  return advancedContacts({ ...input, firstHeardBound: noBound, lastHeardBound: noBound });
 }

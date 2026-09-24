@@ -622,6 +622,133 @@ async fn two_near_messages_from_one_source_are_both_kept() {
     assert_eq!(flagged, None);
 }
 
+/// Two identical rows from one source in the same second share a content
+/// key, and still both stay: one source holding a message twice holds two
+/// messages, and the exact pass collapses only across sources.
+#[tokio::test]
+async fn identical_rows_from_one_source_are_both_kept() {
+    let (pool, _dir) = engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    setup_db(&mut conn).await;
+    let mut ids = Vec::new();
+    for guid in ["g1", "g2"] {
+        ids.push(
+            insert_msg(
+                &mut conn,
+                InsertMsgArgs {
+                    source: "go-sms-pro",
+                    guid,
+                    timestamp: "2015-03-12T18:04:22Z",
+                    from_me: 1,
+                    body: "ok",
+                    sort_order: 0,
+                },
+            )
+            .await,
+        );
+    }
+
+    let stats = dedupe_cross_source(&mut conn, TEST_ACCOUNT_ID, None, 2)
+        .await
+        .unwrap();
+
+    assert_eq!((stats.exact_groups, stats.exact_flagged), (0, 0));
+    for id in ids {
+        assert_eq!(duplicate_of(&mut conn, id).await, None);
+    }
+}
+
+/// One message held by three sources is one exact group with one survivor:
+/// the first-listed source's copy, with the other two pointing at it.
+#[tokio::test]
+async fn an_exact_duplicate_across_three_sources_keeps_one() {
+    let (pool, _dir) = engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    setup_db(&mut conn).await;
+    let mut ids = Vec::new();
+    for (guid, source) in [
+        ("g1", "go-sms-pro"),
+        ("g2", "sms-backup-plus"),
+        ("g3", "sms-backup-restore"),
+    ] {
+        ids.push(
+            insert_msg(
+                &mut conn,
+                InsertMsgArgs {
+                    source,
+                    guid,
+                    timestamp: "2015-03-12T18:04:22Z",
+                    from_me: 1,
+                    body: "Running late",
+                    sort_order: 0,
+                },
+            )
+            .await,
+        );
+    }
+
+    let priority = [
+        "go-sms-pro".into(),
+        "sms-backup-plus".into(),
+        "sms-backup-restore".into(),
+    ];
+    let stats = dedupe_cross_source(&mut conn, TEST_ACCOUNT_ID, Some(&priority), 2)
+        .await
+        .unwrap();
+
+    assert_eq!((stats.exact_groups, stats.exact_flagged), (1, 2));
+    assert_eq!(duplicate_of(&mut conn, ids[0]).await, None);
+    assert_eq!(duplicate_of(&mut conn, ids[1]).await, Some(ids[0]));
+    assert_eq!(duplicate_of(&mut conn, ids[2]).await, Some(ids[0]));
+}
+
+/// Two group members sending the same words a second apart, in copies from
+/// two sources, are two messages. The near pass pairs only rows with the
+/// same sender, so neither is hidden.
+#[tokio::test]
+async fn the_same_words_from_two_group_members_are_never_near_duplicates() {
+    let (pool, _dir) = engine::test_pool().await;
+    let mut conn = pool.acquire().await.unwrap();
+    setup_account(&mut conn).await;
+    let group = conversation(&mut conn, "chat-group", "group").await;
+    let ann = handle(&mut conn, "+15555550101").await;
+    let bo = handle(&mut conn, "+15555550102").await;
+    let from_ann = message(
+        &mut conn,
+        Msg {
+            conversation_id: group,
+            source: "go-sms-pro",
+            guid: "g1",
+            timestamp: "2015-03-12T18:04:22Z",
+            from_me: false,
+            sender: Some(ann),
+            body: "happy birthday!",
+        },
+    )
+    .await;
+    let from_bo = message(
+        &mut conn,
+        Msg {
+            conversation_id: group,
+            source: "sms-backup-plus",
+            guid: "g2",
+            timestamp: "2015-03-12T18:04:23Z",
+            from_me: false,
+            sender: Some(bo),
+            body: "happy birthday!",
+        },
+    )
+    .await;
+
+    let stats = dedupe_cross_source(&mut conn, TEST_ACCOUNT_ID, None, 2)
+        .await
+        .unwrap();
+
+    assert_eq!((stats.exact_flagged, stats.near_flagged), (0, 0));
+    assert_eq!(duplicate_of(&mut conn, from_ann).await, None);
+    assert_eq!(duplicate_of(&mut conn, from_bo).await, None);
+}
+
 // ---------------------------------------------------------------------------
 // Several conversations, handles, senders and attachments.
 //

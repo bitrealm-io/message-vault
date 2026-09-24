@@ -107,7 +107,7 @@ describe("ContactDrawer", () => {
         preview={{
           id: "1",
           name: a.name,
-          handles: a.identities.map((h) => h.address),
+          addresses: a.identities.map((h) => h.address),
           groups: a.groups,
         }}
         onClose={() => {}}
@@ -126,7 +126,7 @@ describe("ContactDrawer", () => {
         preview={{
           id: "2",
           name: "Contact b",
-          handles: ["+1555000b"],
+          addresses: ["+1555000b"],
           groups: ["Family"],
         }}
         onClose={() => {}}
@@ -178,7 +178,7 @@ describe("ContactDrawer", () => {
       <ContactDrawer
         variant="docked"
         contactId="1"
-        preview={{ id: "1", name: a.name, handles: ["+1555000a"], groups: a.groups }}
+        preview={{ id: "1", name: a.name, addresses: ["+1555000a"], groups: a.groups }}
         onClose={() => {}}
       />,
     );
@@ -194,7 +194,7 @@ describe("ContactDrawer", () => {
         preview={{
           id: "2",
           name: "Cached Bob",
-          handles: ["+15551212"],
+          addresses: ["+15551212"],
           groups: ["Work"],
         }}
         onClose={() => {}}
@@ -267,7 +267,7 @@ describe("ContactDrawer", () => {
         preview={{
           id: "2",
           name: "Contact b",
-          handles: ["+1555000b", "1555000b"],
+          addresses: ["+1555000b", "1555000b"],
           handleCount: 1,
           groups: ["Family"],
         }}
@@ -307,7 +307,7 @@ describe("ContactDrawer", () => {
     });
   });
 
-  it("stubs overlay handles from thread preview while detail is pending", async () => {
+  it("stubs overlay addresses from thread preview while detail is pending", async () => {
     let resolveDetail!: (d: ContactDetail) => void;
     const pending = new Promise<ContactDetail>((resolve) => {
       resolveDetail = resolve;
@@ -321,7 +321,7 @@ describe("ContactDrawer", () => {
         preview={{
           id: "2",
           name: "Contact b",
-          handles: ["+1555000b"],
+          addresses: ["+1555000b"],
           handleCount: 1,
         }}
         onClose={() => {}}
@@ -370,7 +370,7 @@ describe("ContactDrawer", () => {
         preview={{
           id: "2",
           name: "Mom",
-          handles: [],
+          addresses: [],
           handleCount: 1,
         }}
         onClose={() => {}}
@@ -404,7 +404,7 @@ describe("ContactDrawer", () => {
         preview={{
           id: "2",
           name: "Contact b",
-          handles: ["+15550001", "15550001", "+15550002", "15550002"],
+          addresses: ["+15550001", "15550001", "+15550002", "15550002"],
           handleCount: 2,
           groups: ["Family"],
         }}
@@ -464,7 +464,7 @@ describe("ContactDrawer", () => {
         preview={{
           id: "2",
           name: "Contact b",
-          handles: ["+1555000b"],
+          addresses: ["+1555000b"],
           handleCount: 1,
           groups: ["Family"],
         }}
@@ -490,7 +490,7 @@ describe("ContactDrawer", () => {
         preview={{
           id: "1",
           name: "Contact a",
-          handles: ["+1555000a"],
+          addresses: ["+1555000a"],
           groups: [],
         }}
         onClose={() => {}}
@@ -575,7 +575,7 @@ describe("ContactDrawer", () => {
         preview={{
           id: "1",
           name: "Contact a",
-          handles: ["+1555000a"],
+          addresses: ["+1555000a"],
           groups: [],
         }}
         onClose={() => {}}
@@ -628,7 +628,7 @@ describe("ContactDrawer", () => {
         preview={{
           id: "1",
           name: "Contact a",
-          handles: ["+1555000a"],
+          addresses: ["+1555000a"],
           groups: [],
         }}
         onClose={onClose}
@@ -660,7 +660,7 @@ describe("ContactDrawer", () => {
         preview={{
           id: "1",
           name: "Contact a",
-          handles: ["+1555000a"],
+          addresses: ["+1555000a"],
           groups: [],
         }}
         onClose={onClose}

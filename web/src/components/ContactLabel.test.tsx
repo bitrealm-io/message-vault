@@ -20,12 +20,12 @@ describe("contactLabelText", () => {
 
 describe("ContactLabel", () => {
   it("sets an identity standing in for the name in italics", () => {
-    const { container } = render(<ContactLabel name="" handles={["+15550001"]} />);
+    const { container } = render(<ContactLabel name="" addresses={["+15550001"]} />);
     expect(container.querySelector("em")?.textContent).toBe("+15550001");
   });
 
   it("sets a preferred name upright", () => {
-    const { container } = render(<ContactLabel name="Grace" handles={["+15550001"]} />);
+    const { container } = render(<ContactLabel name="Grace" addresses={["+15550001"]} />);
     expect(container.querySelector("em")).toBeNull();
     expect(container.textContent).toBe("Grace");
   });

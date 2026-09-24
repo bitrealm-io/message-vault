@@ -74,10 +74,10 @@ describe("compareContactsByName", () => {
 
 describe("compareContacts by last heard", () => {
   const rows = [
-    { name: "Silent", handles: [], last_heard_at: null },
-    { name: "Older", handles: [], last_heard_at: "2024-03-01T00:00:00Z" },
-    { name: "Recent", handles: [], last_heard_at: "2024-06-01T00:00:00Z" },
-    { name: "Quiet", handles: [] },
+    { name: "Silent", addresses: [], last_heard_at: null },
+    { name: "Older", addresses: [], last_heard_at: "2024-03-01T00:00:00Z" },
+    { name: "Recent", addresses: [], last_heard_at: "2024-06-01T00:00:00Z" },
+    { name: "Quiet", addresses: [] },
   ];
   const names = (order: "asc" | "desc") =>
     [...rows]

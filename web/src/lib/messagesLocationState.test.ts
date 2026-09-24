@@ -16,7 +16,7 @@ const conversation = {
 const preview = {
   id: "c1",
   name: "Ada",
-  handles: ["+15550001"],
+  addresses: ["+15550001"],
   handleCount: 1,
 };
 

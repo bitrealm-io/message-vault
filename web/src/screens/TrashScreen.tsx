@@ -357,7 +357,7 @@ export default function TrashScreen() {
                     >
                       <div className="min-w-0">
                         <div className="truncate text-[0.875rem] text-text">
-                          <ContactLabel name={contact.name} handles={contact.handles} />
+                          <ContactLabel name={contact.name} addresses={contact.addresses} />
                         </div>
                         <div className="text-[0.75rem] text-muted">
                           {plural(contact.identity_count, "identity", "identities")}
@@ -369,7 +369,7 @@ export default function TrashScreen() {
                           size="sm"
                           // Every row's button reads "Restore", so the name it
                           // answers to says which contact it restores.
-                          aria-label={`Restore ${contactLabelText(contact.name, contact.handles)}`}
+                          aria-label={`Restore ${contactLabelText(contact.name, contact.addresses)}`}
                           disabled={restoreContact.isPending || dialogBusy}
                           onClick={() => restoreContact.mutate(contact.id)}
                         >
@@ -378,14 +378,14 @@ export default function TrashScreen() {
                         <Button
                           variant="danger"
                           size="sm"
-                          aria-label={`Delete ${contactLabelText(contact.name, contact.handles)}`}
+                          aria-label={`Delete ${contactLabelText(contact.name, contact.addresses)}`}
                           disabled={!canDelete || restoreContact.isPending || dialogBusy}
                           title={canDelete ? undefined : CANNOT_DELETE}
                           onClick={() =>
                             setPending({
                               kind: "contact",
                               id: contact.id,
-                              name: contactLabelText(contact.name, contact.handles),
+                              name: contactLabelText(contact.name, contact.addresses),
                             })
                           }
                         >

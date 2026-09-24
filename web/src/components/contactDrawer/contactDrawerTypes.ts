@@ -9,11 +9,11 @@ export { formatHandleServiceLabel, inferService } from "../../lib/handleService"
 export type ContactPreview = {
   id: string;
   name: string;
-  handles?: string[];
+  addresses?: string[];
   /**
    * True linked-identity count from the list API (`identity_count`).
-   * List `handles` may include both raw and normalized forms of one identity;
-   * stub rows while loading should match this count, not `handles.length`.
+   * List `addresses` may include both raw and normalized forms of one identity;
+   * stub rows while loading should match this count, not `addresses.length`.
    */
   handleCount?: number;
   groups?: string[];
@@ -25,7 +25,7 @@ export type ContactPreview = {
 export type ContactListPreviewSource = {
   id: string;
   name: string;
-  handles?: string[];
+  addresses?: string[];
   identity_count?: number;
   groups?: string[];
   unknown?: boolean;
@@ -38,7 +38,7 @@ export function contactPreviewFromListRow(c: ContactListPreviewSource): ContactP
   return {
     id: c.id,
     name: c.name,
-    handles: c.handles,
+    addresses: c.addresses,
     handleCount: c.identity_count,
     groups: c.groups,
     unknown: c.unknown,
@@ -69,7 +69,7 @@ export function sameContactPreviews(
       left.name === right.name &&
       left.handleCount === right.handleCount &&
       left.unknown === right.unknown &&
-      sameStrings(left.handles, right.handles) &&
+      sameStrings(left.addresses, right.addresses) &&
       sameStrings(left.groups, right.groups)
     );
   });
@@ -96,13 +96,13 @@ export function contactPreviewFromThreadParticipants(
     (p) => p.contact_id != null && String(p.contact_id) === contactId,
   );
   if (matched.length === 0) return null;
-  const handles = matched.map((p) => p.handle).filter((h): h is string => !!h && h.length > 0);
+  const addresses = matched.map((p) => p.handle).filter((h): h is string => !!h && h.length > 0);
   const named = matched.find((p) => Boolean(p.name.trim()));
-  const uniqueCount = previewHandleStubRows(handles, undefined).length;
+  const uniqueCount = previewHandleStubRows(addresses, undefined).length;
   return {
     id: contactId,
     name: threadParticipantDisplayName(named ?? matched[0]),
-    handles,
+    addresses,
     // At least one stub row so an empty handle list does not take the empty-table Loading path.
     handleCount: Math.max(1, uniqueCount),
   };
@@ -140,12 +140,12 @@ function handleStubKey(handle: string): string {
  * string list, which can list both raw and normalized forms of the same phone.
  */
 export function previewHandleStubRows(
-  handles: string[] | undefined,
+  addresses: string[] | undefined,
   handleCount: number | undefined,
 ): ContactHandle[] {
   const unique: string[] = [];
   const seen = new Set<string>();
-  for (const handle of handles ?? []) {
+  for (const handle of addresses ?? []) {
     const key = handleStubKey(handle);
     if (seen.has(key)) continue;
     seen.add(key);

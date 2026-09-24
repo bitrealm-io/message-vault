@@ -10023,7 +10023,7 @@
       },
       "ContactSummary": {
         "type": "object",
-        "description": "Contact row for the list: name, handles, groups.",
+        "description": "Contact row for the list: name, addresses, groups.",
         "required": [
           "id",
           "name",
@@ -10032,19 +10032,19 @@
           "last_modified"
         ],
         "properties": {
+          "addresses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Normalized (and raw when distinct) address strings of the contact's\nidentities, for client-side filter and label."
+          },
           "groups": {
             "type": "array",
             "items": {
               "type": "string"
             },
             "description": "Group names on this contact (A–Z)."
-          },
-          "handles": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Normalized (and raw when distinct) handle values for client-side filter."
           },
           "id": {
             "type": "integer",
@@ -10062,7 +10062,7 @@
               "string",
               "null"
             ],
-            "description": "When the vault last heard from the contact: the newest message one of\nthe contact's handles sent (RFC 3339, UTC). Null when none of them\never sent a message. Not the contact's last activity: a message the\naccount owner sent, or another member of a group chat, does not count."
+            "description": "When the vault last heard from the contact: the newest message one of\nthe contact's identities sent (RFC 3339, UTC). Null when none of them\never sent a message. Not the contact's last activity: a message the\naccount owner sent, or another member of a group chat, does not count."
           },
           "last_modified": {
             "type": "string",
@@ -11876,7 +11876,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "description": "Contact row for the list: name, handles, groups.",
+              "description": "Contact row for the list: name, addresses, groups.",
               "required": [
                 "id",
                 "name",
@@ -11885,19 +11885,19 @@
                 "last_modified"
               ],
               "properties": {
+                "addresses": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Normalized (and raw when distinct) address strings of the contact's\nidentities, for client-side filter and label."
+                },
                 "groups": {
                   "type": "array",
                   "items": {
                     "type": "string"
                   },
                   "description": "Group names on this contact (A–Z)."
-                },
-                "handles": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  },
-                  "description": "Normalized (and raw when distinct) handle values for client-side filter."
                 },
                 "id": {
                   "type": "integer",
@@ -11915,7 +11915,7 @@
                     "string",
                     "null"
                   ],
-                  "description": "When the vault last heard from the contact: the newest message one of\nthe contact's handles sent (RFC 3339, UTC). Null when none of them\never sent a message. Not the contact's last activity: a message the\naccount owner sent, or another member of a group chat, does not count."
+                  "description": "When the vault last heard from the contact: the newest message one of\nthe contact's identities sent (RFC 3339, UTC). Null when none of them\never sent a message. Not the contact's last activity: a message the\naccount owner sent, or another member of a group chat, does not count."
                 },
                 "last_modified": {
                   "type": "string",

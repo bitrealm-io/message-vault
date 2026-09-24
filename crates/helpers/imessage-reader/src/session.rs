@@ -181,7 +181,7 @@ mod tests {
         let fixture = FixtureDb::write();
         let session = fixture.session();
         let messages = FixtureDb::messages(&session);
-        assert_eq!(messages.len(), 5);
+        assert_eq!(messages.len(), 6);
 
         let (chat, real_id) = session.conversation(&messages[2]).expect("the group chat");
         assert_eq!(chat.rowid, 2);

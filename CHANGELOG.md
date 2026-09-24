@@ -81,6 +81,13 @@ released versions carry their date on the heading.
   on it, the ones you sent are included, and a voicemail notice from Google
   Voice stays in the Google Voice conversation instead of being moved under
   the caller.
+- 2026-09-24 **iMazing message times are read in your account's time zone.**
+  An iMazing export writes each message time without a zone, and the desktop
+  app used to read them in whatever zone the computer running the import was
+  set to, so the same folder gave different times on different machines. The
+  import now reads them in the time zone on your profile. If the phone lived
+  in another zone at the time, Processing Options on the Import screen has a
+  Time zone of the messages picker for the iMazing source.
 - 2026-09-23 **Excluding something from a search no longer hides the rows
   that have nothing to compare.** A search with `-` in front of a word left
   out every row with no value for that word, so those rows appeared under

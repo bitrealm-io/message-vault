@@ -43,6 +43,8 @@ export interface ExtractConfig {
   media_max_fps?: string;
   media_min_size?: string;
   obfuscate?: boolean;
+  /** Zone iMazing dates are read in (an IANA name); iMazing carries none of its own. */
+  timezone?: string;
   /** Owner phone numbers for Android SMS exporters (repeatable). */
   owner_phones?: string[];
   /** Owner email addresses for SMS Backup+ (repeatable). */

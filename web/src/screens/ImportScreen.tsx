@@ -32,6 +32,7 @@ import {
   invokePathStat,
 } from "../lib/tauri";
 import { isTauri } from "../lib/tauri-check";
+import { useTimeZone } from "../lib/timeZone";
 import type { AttachmentMediaMode } from "../lib/types";
 import {
   useAccountProfile,
@@ -196,6 +197,11 @@ export default function ImportScreen() {
   const [processingOpen, setProcessingOpen] = useState(false);
   const [force, setForce] = useState(false);
   const [obfuscate, setObfuscate] = useState(false);
+  /** The zone iMazing dates are read in. The account's zone until the person
+   * picks another under Processing Options; null means "the account's". */
+  const accountTimeZone = useTimeZone();
+  const [timeZoneOverride, setTimeZoneOverride] = useState<string | null>(null);
+  const timeZone = timeZoneOverride ?? accountTimeZone;
   /** Profile phones after SBR fetch; empty until ready (or after a failed fetch). */
   const [profilePhones, setProfilePhones] = useState<string[]>([]);
   const [profilePhonesReady, setProfilePhonesReady] = useState(false);
@@ -321,6 +327,7 @@ export default function ImportScreen() {
     setOwnerEmails(restored.ownerEmails.join(", "));
     setForce(restored.force);
     setObfuscate(restored.obfuscate);
+    setTimeZoneOverride(restored.timeZone);
   }
 
   async function handleDiscardResume(): Promise<void> {
@@ -733,6 +740,8 @@ export default function ImportScreen() {
           onForceChange={setForce}
           obfuscate={obfuscate}
           onObfuscateChange={setObfuscate}
+          timeZone={timeZone}
+          onTimeZoneChange={setTimeZoneOverride}
           running={running}
           onImport={(flushedPhones) =>
             void startImport({
@@ -747,6 +756,7 @@ export default function ImportScreen() {
               ownerEmails: splitEmails(ownerEmails),
               force,
               obfuscate,
+              timeZone,
               isAndroidSms,
               attachmentRoot,
               appleContacts,

@@ -80,6 +80,8 @@ function renderForm(override: Partial<ImportFormFieldsProps> = {}) {
     onForceChange: vi.fn(),
     obfuscate: false,
     onObfuscateChange: vi.fn(),
+    timeZone: "America/New_York",
+    onTimeZoneChange: vi.fn(),
     running: false,
     onImport: vi.fn(),
     ...override,
@@ -384,6 +386,18 @@ describe("ImportFormFields Import button", () => {
 
     expect(onImport).toHaveBeenCalledTimes(1);
     expect(onImport).toHaveBeenCalledWith(["+15555550100"]);
+  });
+
+  it("offers the time zone picker for iMazing alone, under Processing Options", () => {
+    const { unmount } = renderForm({ source: "imazing", processingOpen: true });
+    const picker = screen.getByRole("combobox", {
+      name: "Time zone of the messages",
+    }) as HTMLInputElement;
+    // The row's label carries the offset in force today, so only the city is pinned.
+    expect(picker.value).toContain("New York");
+    unmount();
+    renderForm({ source: "imessage-ios", processingOpen: true });
+    expect(screen.queryByRole("combobox", { name: "Time zone of the messages" })).toBeNull();
   });
 
   it("refuses an Android SMS backup with no owner number", async () => {

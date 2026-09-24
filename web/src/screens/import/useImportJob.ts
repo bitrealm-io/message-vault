@@ -8,6 +8,7 @@ import { formatAttachmentProgress } from "../../lib/attachmentProgressCopy";
 import { useAuth } from "../../lib/auth";
 import { needsIdentityStop, parseSourceIdentities } from "../../lib/backupIdentity";
 import { getDeviceId } from "../../lib/deviceId";
+import { IMAZING_SOURCE_ID } from "../../lib/exportSources";
 import { imessageExtractFields } from "../../lib/imessageExtractFields";
 import { isImessageMethod } from "../../lib/imessageImport";
 import type { ActiveImportSession } from "../../lib/importSession";
@@ -207,6 +208,10 @@ export type ImportJobFormValues = {
   ownerEmails: string[];
   force: boolean;
   obfuscate: boolean;
+  /** The IANA zone iMazing dates are read in: the account's, or the one picked
+   * under Processing Options. Only the iMazing extract reads it, because its
+   * dates carry no zone of their own. */
+  timeZone: string;
   /** True for the Android SMS sources, whose extract carries owner phones. */
   isAndroidSms: boolean;
   attachmentRoot: string;
@@ -951,6 +956,9 @@ function extractFieldsFor(form: ImportJobFormValues) {
       ownerEmails: form.ownerEmails,
       obfuscate: form.obfuscate,
     });
+  }
+  if (form.source === IMAZING_SOURCE_ID) {
+    return { timezone: form.timeZone };
   }
   return {};
 }

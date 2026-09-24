@@ -391,6 +391,7 @@ describe("ImportScreen entering Import", () => {
           whatsappMedia: "",
           whatsappDb: "",
           whatsappBusiness: false,
+          timeZone: "America/New_York",
         },
       }),
     );
@@ -424,6 +425,7 @@ describe("ImportScreen entering Import", () => {
     whatsappMedia: "",
     whatsappDb: "",
     whatsappBusiness: false,
+    timeZone: "America/New_York",
   };
 
   it.each([
@@ -520,6 +522,7 @@ describe("ImportScreen entering Import", () => {
           whatsappMedia: "",
           whatsappDb: "",
           whatsappBusiness: false,
+          timeZone: "America/New_York",
         },
       }),
     );
@@ -570,6 +573,7 @@ describe("ImportScreen entering Import", () => {
           whatsappMedia: "",
           whatsappDb: "",
           whatsappBusiness: false,
+          timeZone: "America/New_York",
         },
       }),
     );
@@ -686,6 +690,7 @@ describe("ImportScreen entering Import", () => {
           whatsappMedia: "",
           whatsappDb: "",
           whatsappBusiness: false,
+          timeZone: "America/New_York",
         },
       }),
     );
@@ -762,6 +767,7 @@ describe("ImportScreen entering Import", () => {
           whatsappMedia: "",
           whatsappDb: "",
           whatsappBusiness: false,
+          timeZone: "America/New_York",
         },
       }),
     );

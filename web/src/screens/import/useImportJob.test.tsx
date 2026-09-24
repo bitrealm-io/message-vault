@@ -241,6 +241,7 @@ const baseForm = {
   whatsappMedia: "",
   whatsappDb: "",
   whatsappBusiness: false,
+  timeZone: "America/New_York",
 };
 
 function form(overrides: { attachmentMedia?: AttachmentMediaMode } = {}) {
@@ -296,6 +297,23 @@ describe("useImportJob wiring", () => {
     expect(result.current.phase).toBe("staging_review");
     expect(invokePushMock).not.toHaveBeenCalled();
     expect(invokeTranscodeStagingMock).not.toHaveBeenCalled();
+  });
+
+  it("sends the form's zone with an iMazing extract, whose dates carry none", async () => {
+    // Without it the exporter reads every date in the machine's zone (#689).
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport({ ...baseForm, source: "imazing" }));
+    expect(invokeExtractMock).toHaveBeenCalledWith(
+      expect.objectContaining({ source: "imazing", timezone: "America/New_York" }),
+    );
+  });
+
+  it("sends no zone for a source whose dates carry their own", async () => {
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form()));
+    expect(invokeExtractMock).toHaveBeenCalledWith(
+      expect.not.objectContaining({ timezone: expect.anything() }),
+    );
   });
 
   it("asks the exporter to stage originals under convert", async () => {
@@ -1277,6 +1295,7 @@ const validSnapshot = {
   whatsappMedia: "",
   whatsappDb: "",
   whatsappBusiness: false,
+  timeZone: "America/New_York",
 };
 
 describe("restoreFormFromSnapshot", () => {

@@ -742,6 +742,34 @@ mod tests {
         assert!(build_part_records(&message(), &attachments).is_empty());
     }
 
+    /// Each part carries the rows its own ranges refer to, by GUID or by
+    /// position, and a range with no row left to point at adds nothing.
+    #[test]
+    fn parts_carry_only_the_attachment_rows_that_exist() {
+        let attachments = vec![attachment(None), attachment(Some("att-b"))];
+        let meta = |guid: Option<&str>| AttachmentMeta {
+            guid: guid.map(str::to_string),
+            ..AttachmentMeta::default()
+        };
+        let mut msg = message();
+        msg.components = vec![
+            BubbleComponent::Run(vec![AttributedRange::attachment(0, 1, meta(Some("att-b")))]),
+            BubbleComponent::Run(vec![
+                AttributedRange::attachment(1, 2, meta(None)),
+                AttributedRange::attachment(2, 3, meta(None)),
+            ]),
+        ];
+
+        let parts = build_part_records(&msg, &attachments);
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0].attachment_indices, vec![1]);
+        assert_eq!(
+            parts[1].attachment_indices,
+            vec![0],
+            "the second range in the part has no row left"
+        );
+    }
+
     #[test]
     fn a_transcription_is_found_by_attachment_guid() {
         let mut msg = message();

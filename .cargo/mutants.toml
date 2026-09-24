@@ -21,6 +21,9 @@ exclude_globs = [
     "crates/libs/build-version/**",
     # Serde request and response types with no logic of their own.
     "crates/libs/vault-api-types/**",
+    # Helpers only tests call; a missed mutant there is a helper no test
+    # needs to fail, not a bug in the product.
+    "**/testutil.rs",
 ]
 
 # Text meant for people to read (Display and Debug output) changes without

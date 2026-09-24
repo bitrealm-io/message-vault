@@ -21,8 +21,9 @@
 //!    [`Event::Attachment`].
 //! 4. The app closes the helper's stdin, and the helper exits.
 //!
-//! This crate carries no logic beyond the type definitions and their serde
-//! shapes. It is MIT OR Apache-2.0 so that both sides can link it.
+//! This crate carries the type definitions, their serde shapes, and one rule:
+//! [`bare_address`], which says what an owner address looks like on the wire.
+//! It is MIT OR Apache-2.0 so that both sides can link it.
 
 use std::path::PathBuf;
 
@@ -36,7 +37,36 @@ use serde_json::Value;
 ///
 /// 2: the identities request answers [`Event::Source`] first, as an export
 /// does.
-pub const PROTOCOL_VERSION: u32 = 2;
+/// 3: [`Event::Identities`] values and [`Message::owner_handle`] are bare
+/// addresses ([`bare_address`]); the app no longer strips prefixes itself.
+pub const PROTOCOL_VERSION: u32 = 3;
+
+/// The owner address behind a raw `chat.account_login` or
+/// `message.destination_caller_id` value, or `None` when nothing is left.
+///
+/// Apple stores the owner's addresses three ways: `P:+15550001111` and
+/// `E:owner@example.com` in `chat.account_login`, and bare or as
+/// `tel:+15550001111` in `message.destination_caller_id`. The helper puts
+/// every one through this function before it crosses the pipe, so an
+/// identity in [`Event::Identities`] and the owner of a [`Message`] are
+/// spelled the same way and the app can compare them as text. Real backups
+/// hold `account_login` rows that are the bare prefix `E:` with nothing after
+/// it, so the emptiness test runs on the remainder.
+#[must_use]
+pub fn bare_address(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    let stripped = trimmed
+        .strip_prefix("P:")
+        .or_else(|| trimmed.strip_prefix("E:"))
+        .or_else(|| trimmed.strip_prefix("tel:"))
+        .unwrap_or(trimmed)
+        .trim();
+    if stripped.is_empty() {
+        None
+    } else {
+        Some(stripped.to_string())
+    }
+}
 
 /// The file name of the helper executable, without the `.exe` Windows adds.
 pub const HELPER_NAME: &str = "imessage-reader";
@@ -131,8 +161,11 @@ pub enum Event {
     },
     /// The answer to [`Request::Identities`].
     Identities {
-        /// Raw column values, uncleaned: `chat.account_login` and
-        /// `message.destination_caller_id`, with prefixes like `P:` intact.
+        /// The distinct `chat.account_login` and
+        /// `message.destination_caller_id` values, each through
+        /// [`bare_address`]: prefixes stripped, blanks dropped. One address
+        /// can still appear more than once when the columns spell it
+        /// differently; the app deduplicates.
         values: Vec<String>,
     },
     /// The answer to [`Request::Attachment`].
@@ -219,7 +252,8 @@ pub struct Message {
     /// The body, or the sentence that stands in for a tapback or
     /// announcement.
     pub text: String,
-    /// The owner's address on this row (`destination_caller_id`), or empty.
+    /// The owner's address on this row (`destination_caller_id` through
+    /// [`bare_address`]), or empty when the row carries none.
     pub owner_handle: String,
     /// The owner's display name, when `use_caller_id` asked for one.
     pub owner_display_name: Option<String>,
@@ -343,5 +377,28 @@ mod tests {
         };
         let line = serde_json::to_string(&source).unwrap();
         assert_eq!(line, r#"{"kind":"inline","text":"<svg/>"}"#);
+    }
+
+    #[test]
+    fn bare_address_strips_each_prefix_and_drops_what_is_then_empty() {
+        assert_eq!(
+            bare_address("P:+15550001111").as_deref(),
+            Some("+15550001111")
+        );
+        assert_eq!(
+            bare_address("E:owner@example.com").as_deref(),
+            Some("owner@example.com")
+        );
+        assert_eq!(
+            bare_address("tel:+15550001111").as_deref(),
+            Some("+15550001111")
+        );
+        assert_eq!(
+            bare_address(" +15550001111 ").as_deref(),
+            Some("+15550001111")
+        );
+        assert_eq!(bare_address("E:"), None);
+        assert_eq!(bare_address("tel: "), None);
+        assert_eq!(bare_address("  "), None);
     }
 }

@@ -63,7 +63,7 @@ fn main() {
 
     match request {
         Request::Identities(source) => {
-            let found = identities::raw_identities(source).unwrap_or_else(|e| fail(e));
+            let found = identities::identities(source).unwrap_or_else(|e| fail(e));
             emit(&Event::Source {
                 protocol_version: PROTOCOL_VERSION,
                 encrypted: found.encrypted,

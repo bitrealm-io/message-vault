@@ -22,7 +22,7 @@ use imessage_database::{
 };
 use imessage_reader_protocol::{
     Conversation as ConversationRecord, Event, Imessage as ImessageRecord,
-    Message as MessageRecord, Participant, Progress,
+    Message as MessageRecord, Participant, Progress, bare_address,
 };
 use serde_json::Value;
 
@@ -244,16 +244,23 @@ fn announcement_text(session: &MailSession, msg: &Message) -> Option<String> {
     Some(format!("{who} {body}"))
 }
 
+/// The owner's address on this row, bare, or `None` when Apple wrote NULL.
+///
+/// `destination_caller_id` is the same address `chat.account_login` carries
+/// with a `P:` or `E:` prefix, and some rows carry it as `tel:+1…`. One rule,
+/// [`bare_address`], strips all three so the address on a message equals the
+/// same address in the identities answer.
+fn owner_address(message: &Message) -> Option<String> {
+    message
+        .destination_caller_id
+        .as_deref()
+        .and_then(bare_address)
+}
+
 /// Owner display name from the destination caller id, or `Me`, when that option is on.
 fn owner_display_name(session: &MailSession, message: &Message) -> Option<String> {
     if session.options.use_caller_id {
-        message
-            .destination_caller_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_string)
-            .or_else(|| Some(ME.to_string()))
+        owner_address(message).or_else(|| Some(ME.to_string()))
     } else {
         None
     }
@@ -440,7 +447,7 @@ fn build_record(
         sender_display_name: context.sender_display_name,
         subject: message.subject.clone().filter(|s| !s.is_empty()),
         text,
-        owner_handle: message.destination_caller_id.clone().unwrap_or_default(),
+        owner_handle: owner_address(message).unwrap_or_default(),
         owner_display_name: owner_display_name(session, message),
         imessage: (!is_empty(&imessage)).then_some(imessage),
         attachments,
@@ -1010,6 +1017,24 @@ mod tests {
         assert_eq!(still_me.owner_display_name.as_deref(), Some(ME));
     }
 
+    /// Some iPhone rows store the caller id as `tel:+1…`. The prefix is
+    /// Apple's spelling, not part of the address, so it is gone by the time
+    /// the row crosses the pipe: the owner handle on this row equals the
+    /// identity the identities request reports for the same phone (#686).
+    #[test]
+    fn a_tel_prefixed_caller_id_crosses_the_pipe_bare() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let messages = FixtureDb::messages(&session);
+
+        let (conversation, from_the_car) = build_record(&session, &messages[5]).unwrap();
+        assert_eq!(conversation.chat_identifier, FRIEND_PHONE);
+        assert!(from_the_car.outgoing);
+        assert_eq!(from_the_car.text, "From the car");
+        assert_eq!(from_the_car.owner_handle, OWNER);
+        assert_eq!(from_the_car.owner_display_name.as_deref(), Some(OWNER));
+    }
+
     /// The fixture's photo message was read a minute after it arrived, so
     /// it carries that stamp; the outgoing "Nice" row has `date_read` NULL
     /// and must carry no receipt rather than Apple's epoch (issue #630).
@@ -1168,7 +1193,7 @@ mod tests {
         assert_eq!(build_parent_tapbacks(&session, &messages[0]), None);
     }
 
-    /// The whole stream over the fixture: five rows seen, none skipped. Each
+    /// The whole stream over the fixture: six rows seen, none skipped. Each
     /// conversation is announced once, before its first message, and the
     /// stream ends with the full parse count and the done event.
     #[test]
@@ -1196,17 +1221,18 @@ mod tests {
                 r#"conversation "friend@example.com""#,
                 r#"message "guid-4" in "friend@example.com""#,
                 r#"message "guid-5" in "+15550000002""#,
+                r#"message "guid-6" in "+15550000002""#,
                 "progress",
                 "export_done",
             ]
         );
         assert_eq!(
-            events[8],
-            serde_json::json!({"event": "progress", "stage": "parse", "done": 5, "total": 5})
+            events[9],
+            serde_json::json!({"event": "progress", "stage": "parse", "done": 6, "total": 6})
         );
         assert_eq!(
-            events[9],
-            serde_json::json!({"event": "export_done", "messages_seen": 5, "failures": 0})
+            events[10],
+            serde_json::json!({"event": "export_done", "messages_seen": 6, "failures": 0})
         );
     }
 

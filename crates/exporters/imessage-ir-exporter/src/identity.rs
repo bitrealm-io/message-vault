@@ -2,10 +2,14 @@
 //!
 //! The Import screen's identity check calls [`backup_identities`] right after
 //! the user starts an iMessage import, before the import session is created.
-//! The raw column values come from the `imessage-reader` program, which opens
-//! the source the same way the real run does, so every method (Mac
-//! `chat.db`, iPhone backup folder, jailbreak `sms.db`) and both encryption
-//! states go through one code path. Cleaning and deduplication happen here.
+//! The values come from the `imessage-reader` program, which opens the
+//! source the same way the real run does, so every method (Mac `chat.db`,
+//! iPhone backup folder, jailbreak `sms.db`) and both encryption states go
+//! through one code path. The program strips Apple's `P:`, `E:` and `tel:`
+//! prefixes before the values cross the pipe
+//! (`imessage_reader_protocol::bare_address`), the same rule it applies to a
+//! message's owner address, so an identity here and a sender handle in the
+//! export are spelled alike. Deduplication happens here.
 
 use std::{collections::HashSet, fs::File, path::Path};
 
@@ -30,7 +34,7 @@ pub fn ios_backup_phone_number(backup_root: &Path) -> Option<String> {
 
 /// Addresses the backup's device sent from: the union of
 /// `chat.account_login`, `message.destination_caller_id`, and (for iOS
-/// backups) `Info.plist` → `Phone Number`, cleaned and deduplicated.
+/// backups) `Info.plist` → `Phone Number`, deduplicated.
 ///
 /// # Errors
 ///
@@ -48,14 +52,14 @@ pub fn backup_identities(
         backup_password: backup_password.map(str::to_string),
     });
     let helper = Helper::spawn(&request, None, None)?;
-    let mut raw = read_identities(helper)?;
+    let mut values = read_identities(helper)?;
     if ios {
-        raw.extend(ios_backup_phone_number(db_path));
+        values.extend(ios_backup_phone_number(db_path));
     }
-    Ok(clean_and_dedupe(raw))
+    Ok(dedupe(values))
 }
 
-/// The raw values a started program answers the identities request with.
+/// The values a started program answers the identities request with.
 /// [`Helper::next_event`] refuses a program on another protocol version, and
 /// one that answers before its [`Event::Source`] line.
 fn read_identities(mut helper: Helper) -> anyhow::Result<Vec<String>> {
@@ -70,40 +74,20 @@ fn read_identities(mut helper: Helper) -> anyhow::Result<Vec<String>> {
     Ok(raw)
 }
 
-/// Strip prefixes, drop blanks, and keep the first spelling of each address.
-fn clean_and_dedupe(raw: Vec<String>) -> Vec<String> {
+/// Keep the first spelling of each address and drop what has no digits or
+/// letters to compare (the `Info.plist` number can be blank).
+fn dedupe(values: Vec<String>) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut identities = Vec::new();
-    for value in raw {
-        let Some(cleaned) = clean_identity(&value) else {
-            continue;
-        };
-        let key = identity_key(&cleaned);
+    for value in values {
+        let value = value.trim().to_string();
+        let key = identity_key(&value);
         if key.is_empty() || !seen.insert(key) {
             continue;
         }
-        identities.push(cleaned);
+        identities.push(value);
     }
     identities
-}
-
-/// Strip the `P:` / `E:` / `tel:` prefix and drop what is then empty.
-///
-/// Real backups hold `account_login` rows that are the bare prefix `E:` with
-/// nothing after it, so the emptiness test must run on the remainder.
-fn clean_identity(raw: &str) -> Option<String> {
-    let trimmed = raw.trim();
-    let stripped = trimmed
-        .strip_prefix("P:")
-        .or_else(|| trimmed.strip_prefix("E:"))
-        .or_else(|| trimmed.strip_prefix("tel:"))
-        .unwrap_or(trimmed)
-        .trim();
-    if stripped.is_empty() {
-        None
-    } else {
-        Some(stripped.to_string())
-    }
 }
 
 /// Deduplication key: emails lowercased, phones as US national digits
@@ -122,25 +106,7 @@ fn identity_key(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{clean_and_dedupe, clean_identity, identity_key, ios_backup_phone_number};
-
-    #[test]
-    fn clean_identity_strips_prefixes_and_drops_empties() {
-        assert_eq!(
-            clean_identity("P:+15550001111"),
-            Some("+15550001111".to_string())
-        );
-        assert_eq!(
-            clean_identity("E:owner@example.com"),
-            Some("owner@example.com".to_string())
-        );
-        assert_eq!(
-            clean_identity("tel:+15550001111"),
-            Some("+15550001111".to_string())
-        );
-        assert_eq!(clean_identity("E:"), None);
-        assert_eq!(clean_identity("  "), None);
-    }
+    use super::{dedupe, identity_key, ios_backup_phone_number};
 
     #[test]
     fn identity_key_normalizes_phones_and_emails() {
@@ -150,20 +116,22 @@ mod tests {
     }
 
     #[test]
-    fn clean_and_dedupe_keeps_the_first_spelling() {
-        let raw = vec![
-            "P:+15550001111".to_string(),
-            "E:".to_string(),
-            "E:Owner@Example.com".to_string(),
+    fn dedupe_keeps_the_first_spelling_and_drops_blanks() {
+        let values = vec![
+            "+1 (555) 000-1111".to_string(),
+            "Owner@Example.com".to_string(),
             "+15550001111".to_string(),
-            "tel:+15550001111".to_string(),
+            " ".to_string(),
             "owner@example.com".to_string(),
         ];
-        let mut identities = clean_and_dedupe(raw);
+        let mut identities = dedupe(values);
         identities.sort();
         assert_eq!(
             identities,
-            vec!["+15550001111".to_string(), "Owner@Example.com".to_string()]
+            vec![
+                "+1 (555) 000-1111".to_string(),
+                "Owner@Example.com".to_string()
+            ]
         );
     }
 
@@ -204,7 +172,7 @@ mod tests {
             })
         }
 
-        const ANSWER: &str = r#"echo '{"event":"identities","values":["P:+15550001111"]}'"#;
+        const ANSWER: &str = r#"echo '{"event":"identities","values":["+15550001111"]}'"#;
 
         #[test]
         fn the_answer_follows_the_source_event() {
@@ -212,7 +180,7 @@ mod tests {
             let body = format!("{}\n{ANSWER}", source_line(PROTOCOL_VERSION));
             let helper = spawn_fake(&fake_helper(dir.path(), &body), &request());
 
-            assert_eq!(read_identities(helper).unwrap(), vec!["P:+15550001111"]);
+            assert_eq!(read_identities(helper).unwrap(), vec!["+15550001111"]);
         }
 
         #[test]

@@ -51,12 +51,14 @@ pub fn apple_nanos(seconds_since_2001: i64) -> i64 {
 /// Write a Mac `chat.db` into `dir` and return its path.
 ///
 /// The database holds two people, two direct chats, one named group chat,
-/// five messages, and one attachment whose file (`photo.jpg`) is written
+/// six messages, and one attachment whose file (`photo.jpg`) is written
 /// beside the database. The owner sends from two addresses: the phone
 /// ([`OWNER`]) carries chats 1 and 2 and the email ([`OWNER_EMAIL`]) carries
 /// chat 3, each stored the way Apple stores it, `P:`-prefixed and
 /// `E:`-prefixed in `chat.account_login` and bare in
-/// `message.destination_caller_id`.
+/// `message.destination_caller_id`, except for one row that carries the
+/// phone as `tel:` + [`OWNER`], as real iPhone databases do on some
+/// outgoing rows.
 ///
 /// - chat 1: direct with [`FRIEND_PHONE`], `account_login` `P:` + [`OWNER`]
 /// - chat 2: the group [`GROUP_TITLE`], both friends, the same account
@@ -72,6 +74,9 @@ pub fn apple_nanos(seconds_since_2001: i64) -> i64 {
 /// - message 5: outgoing "Still me" in chat 1 with `destination_caller_id`
 ///   NULL, as Apple writes on many outgoing rows; it is the owner's all the
 ///   same
+/// - message 6: outgoing "From the car" in chat 1 with
+///   `destination_caller_id` `tel:` + [`OWNER`], the prefixed spelling some
+///   iPhone rows carry; it is the same owner address as message 2's
 ///
 /// The photo message has no `text` and no `attributedBody`. A real row
 /// carries the attachment as a placeholder range inside `attributedBody`;
@@ -124,7 +129,9 @@ pub fn write_chat_db(dir: &Path) -> PathBuf {
             VALUES (4, 'guid-4', 'From my Mac', 'iMessage', 0, '{owner_email}', {d4}, 1, 0, 0);
         INSERT INTO message (ROWID, guid, text, service, handle_id, destination_caller_id, date, is_from_me, item_type, associated_message_type)
             VALUES (5, 'guid-5', 'Still me', 'iMessage', 0, NULL, {d5}, 1, 0, 0);
-        INSERT INTO chat_message_join VALUES (1, 1, {d1}), (1, 2, {d2}), (2, 3, {d3}), (3, 4, {d4}), (1, 5, {d5});
+        INSERT INTO message (ROWID, guid, text, service, handle_id, destination_caller_id, date, is_from_me, item_type, associated_message_type)
+            VALUES (6, 'guid-6', 'From the car', 'iMessage', 0, 'tel:{owner}', {d6}, 1, 0, 0);
+        INSERT INTO chat_message_join VALUES (1, 1, {d1}), (1, 2, {d2}), (2, 3, {d3}), (3, 4, {d4}), (1, 5, {d5}), (1, 6, {d6});
 
         INSERT INTO attachment VALUES (1, 'att-1', '{photo}', 'public.jpeg', 'image/jpeg', 'photo.jpg', {photo_len}, 0, 0, NULL);
         INSERT INTO message_attachment_join VALUES (1, 1);
@@ -141,6 +148,7 @@ pub fn write_chat_db(dir: &Path) -> PathBuf {
         d3 = apple_nanos(600_000_120),
         d4 = apple_nanos(600_000_180),
         d5 = apple_nanos(600_000_240),
+        d6 = apple_nanos(600_000_300),
         photo = photo.display(),
         photo_len = PHOTO_BYTES.len(),
     ))
@@ -161,13 +169,18 @@ mod tests {
         let count = |sql: &str| db.query_row(sql, [], |row| row.get::<_, i64>(0)).unwrap();
         assert_eq!(count("SELECT count(*) FROM chat"), 3);
         assert_eq!(count("SELECT count(*) FROM handle"), 2);
-        assert_eq!(count("SELECT count(*) FROM message"), 5);
+        assert_eq!(count("SELECT count(*) FROM message"), 6);
         assert_eq!(
             count(
                 "SELECT count(*) FROM message WHERE is_from_me = 1 AND destination_caller_id IS NULL"
             ),
             1,
             "one outgoing row carries no caller id, as Apple writes"
+        );
+        assert_eq!(
+            count("SELECT count(*) FROM message WHERE destination_caller_id LIKE 'tel:%'"),
+            1,
+            "one outgoing row carries the owner's phone with the tel: prefix"
         );
         assert_eq!(
             count("SELECT count(DISTINCT account_login) FROM chat"),

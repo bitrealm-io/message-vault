@@ -88,6 +88,12 @@ released versions carry their date on the heading.
   import now reads them in the time zone on your profile. If the phone lived
   in another zone at the time, Processing Options on the Import screen has a
   Time zone of the messages picker for the iMazing source.
+- 2026-09-24 **An iMessage you sent is always yours, however the phone
+  recorded your number.** Some iPhone databases store the sending number on
+  an outgoing message as `tel:+1…`, and the import kept that prefix, so those
+  messages carried a sender that did not match the number on your profile.
+  The prefix is now removed the same way for every message and for the list
+  of addresses the backup sent from.
 - 2026-09-23 **Excluding something from a search no longer hides the rows
   that have nothing to compare.** A search with `-` in front of a word left
   out every row with no value for that word, so those rows appeared under

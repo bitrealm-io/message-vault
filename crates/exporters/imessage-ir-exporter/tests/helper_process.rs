@@ -171,8 +171,9 @@ fn identities_come_back_cleaned_from_the_helper_process() {
     assert_eq!(
         identities,
         vec![OWNER.to_string(), OWNER_EMAIL.to_string()],
-        "the phone from `P:` and the email from `E:`, each once, and the \
-         NULL caller id on one outgoing row adds nothing"
+        "the phone from `P:`, bare and `tel:`-prefixed caller ids, and the \
+         email from `E:`, each once, and the NULL caller id on one outgoing \
+         row adds nothing"
     );
 }
 
@@ -219,6 +220,15 @@ fn messages_from_either_owner_address_are_sent_by_the_owner() {
         Some(OWNER),
         "a NULL caller id falls back to the conversation's owner"
     );
+    let from_the_car = message(&phone_chat, "guid-6");
+    assert_eq!(from_the_car.direction, IrDirection::Outgoing);
+    assert_eq!(
+        from_the_car.sender_handle.as_deref(),
+        Some(OWNER),
+        "a `tel:`-prefixed caller id is the same owner address, spelled as \
+         the identities list spells it (#686)"
+    );
+    assert_eq!(from_the_car.owner_handle.as_deref(), Some(OWNER));
     let photo = message(&phone_chat, "guid-1");
     assert_eq!(photo.direction, IrDirection::Incoming);
     assert_eq!(photo.sender_handle.as_deref(), Some(FRIEND_PHONE));
@@ -308,7 +318,7 @@ fn a_csv_export_writes_each_conversation_and_copies_the_photo() {
     assert_eq!(fs::read(&staged[0]).unwrap(), PHOTO_BYTES);
 
     let phone_chat = read_conversation_csv(&output.join(format!("{FRIEND_PHONE}.csv"))).unwrap();
-    assert_eq!(phone_chat.messages.len(), 3);
+    assert_eq!(phone_chat.messages.len(), 4);
     let photo = message(&phone_chat, "guid-1");
     assert_eq!(photo.attachments.len(), 1);
     let path = photo.attachments[0]

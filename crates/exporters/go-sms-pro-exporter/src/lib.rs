@@ -21,3 +21,7 @@ mod convert_smoke;
 #[cfg(test)]
 #[path = "../tests/run_summary.rs"]
 mod run_summary;
+
+#[cfg(test)]
+#[path = "../tests/mms_export.rs"]
+mod mms_export;

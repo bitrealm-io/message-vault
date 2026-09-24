@@ -8,7 +8,7 @@ license = "LicenseRef-FCL-1.0-ALv2"
 [dependencies]
 anyhow = { workspace = true }
 phone = { path = "../phone" }
-quick-xml = { workspace = true }
+
 regex = { workspace = true }
 
 [dev-dependencies]
@@ -16,3 +16,6 @@ tempfile = { workspace = true }
 
 [lints]
 workspace = true
+
+[features]
+testutil = []

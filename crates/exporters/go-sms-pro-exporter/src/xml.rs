@@ -1,7 +1,6 @@
 //! Parse GO SMS Pro `gosms_sys*.xml` SMS backups.
 
 use crate::emit::MAX_SKIP_DETAILS;
-use crate::phone::parse_google_voice_voicemail_caller;
 use anyhow::{Context, Result};
 use go_sms_mms::decode_gosms_emojis;
 use phone::sanitize_number;
@@ -148,43 +147,27 @@ pub(crate) fn parse_xml_str(text: &str) -> Result<(Vec<XmlMessage>, XmlParseStat
                 }
             }
             "1" => {
-                if let Some(caller) = parse_google_voice_voicemail_caller(&body) {
-                    stats.received += 1;
-                    XmlMessage {
-                        other_digits: caller.clone(),
-                        name_alias: Some(caller.clone()),
-                        timestamp_secs,
-                        is_from_me: false,
-                        sender_digits: Some(caller),
-                        text: body,
-                        android_type: typ.clone(),
-                        date_ms: date_ms.clone(),
-                        contact_name: contact.clone(),
-                        xml_fields: fields,
-                    }
+                let Some(other) = addr else {
+                    push_bad_addr(&mut stats, &fields, &contact, &typ, &date_ms, &body);
+                    continue;
+                };
+                stats.received += 1;
+                let hint = if contact.is_empty() {
+                    None
                 } else {
-                    let Some(other) = addr else {
-                        push_bad_addr(&mut stats, &fields, &contact, &typ, &date_ms, &body);
-                        continue;
-                    };
-                    stats.received += 1;
-                    let hint = if contact.is_empty() {
-                        None
-                    } else {
-                        Some(contact.clone())
-                    };
-                    XmlMessage {
-                        other_digits: other.clone(),
-                        name_alias: hint,
-                        timestamp_secs,
-                        is_from_me: false,
-                        sender_digits: Some(other),
-                        text: body,
-                        android_type: typ.clone(),
-                        date_ms: date_ms.clone(),
-                        contact_name: contact,
-                        xml_fields: fields,
-                    }
+                    Some(contact.clone())
+                };
+                XmlMessage {
+                    other_digits: other.clone(),
+                    name_alias: hint,
+                    timestamp_secs,
+                    is_from_me: false,
+                    sender_digits: Some(other),
+                    text: body,
+                    android_type: typ.clone(),
+                    date_ms: date_ms.clone(),
+                    contact_name: contact,
+                    xml_fields: fields,
                 }
             }
             _ => {

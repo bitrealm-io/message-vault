@@ -18,7 +18,7 @@ message-staging = { path = "../../libs/staging" }
 media = { path = "../../libs/media" }
 phone = { path = "../../libs/phone" }
 quick-xml = { workspace = true, features = ["serialize"] }
-regex = { workspace = true }
+
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
@@ -26,6 +26,7 @@ sha2 = { workspace = true }
 [dev-dependencies]
 message-vault-io-core = { path = "../../core/message-vault-io-core", features = ["testutil"] }
 tempfile = { workspace = true }
+go-sms-mms = { path = "../../libs/go-sms-mms", features = ["testutil"] }
 
 [lints]
 workspace = true

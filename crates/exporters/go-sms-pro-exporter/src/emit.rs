@@ -6,7 +6,7 @@ use crate::attachments_emit::queue_pdu_attachments;
 use crate::chat_id::{chat_id_group, chat_id_individual, guarded_phone};
 use crate::xml::{SkippedBadAddrDetail, XmlMessage, parse_xml_file};
 use anyhow::{Context, Result, bail};
-use go_sms_mms::{ParsedPdu, parse_pdu_file};
+use go_sms_mms::{ParsedPdu, PduError, parse_pdu_file};
 use message_ir::{
     ExportMeta, IrAttachment, IrService, IrSource, PendingAttachment, PendingConversation,
     PendingMessage, ProjectionHooks, ensure_conversation, parse_android_type,
@@ -15,7 +15,7 @@ use message_staging::{AttachmentSource, ExportWriter};
 use message_vault_io_core::{
     CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
 };
-use phone::OwnerHandleSet;
+use phone::{OwnerHandleSet, sanitize_number};
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -55,14 +55,13 @@ pub(crate) struct SkippedEmptyPduDetail {
     pub pdu_filename: String,
 }
 
-/// Diagnostic row when a non-group PDU has no non-owner peer.
+/// Diagnostic row for a PDU whose every address is the owner's.
 #[derive(Debug, Clone)]
 pub(crate) struct SkippedNoPartyDetail {
     pub pdu_filename: String,
-    pub participants: String,
+    pub sender: String,
+    pub recipients: String,
     pub is_sent: bool,
-    pub has_from: bool,
-    pub has_to: bool,
 }
 
 /// Append parsed XML SMS rows to pending conversations.
@@ -113,13 +112,15 @@ fn pdu_basename(parsed: &ParsedPdu) -> String {
         .to_string()
 }
 
-/// GO SMS Pro stub / hollow PDU: no peers, no text, no media, no From/To headers.
-fn is_empty_pdu(parsed: &ParsedPdu) -> bool {
-    parsed.participants.is_empty()
-        && parsed.body.trim().is_empty()
-        && parsed.attachments.is_empty()
-        && !parsed.has_from
-        && !parsed.has_to
+/// Every number on the PDU, the sender first, once each.
+fn pdu_participants(parsed: &ParsedPdu) -> Vec<String> {
+    let mut all: Vec<String> = parsed.sender.iter().cloned().collect();
+    for r in &parsed.recipients {
+        if !all.contains(r) {
+            all.push(r.clone());
+        }
+    }
+    all
 }
 
 /// The chat a PDU message lands in.
@@ -140,17 +141,6 @@ fn add_pdu_message(
     report: &mut ExportReport,
     skips: &mut SkipDetails,
 ) {
-    if is_empty_pdu(&parsed) {
-        report.bump("skipped_empty_pdu", 1);
-        push_skip_detail(
-            &mut skips.empty_pdu,
-            &mut skips.empty_pdu_more,
-            SkippedEmptyPduDetail {
-                pdu_filename: pdu_basename(&parsed),
-            },
-        );
-        return;
-    }
     let Some(target) = pdu_target(&parsed, owners, report, skips) else {
         return;
     };
@@ -169,20 +159,20 @@ fn add_pdu_message(
     convo.messages.push(pending);
 }
 
-/// The chat the PDU belongs to, from the participants that are not the
-/// owner: a group when the PDU says so or when there are two or more of
-/// them, else the one other party. `None`, counted and detailed as a skip,
-/// when nobody but the owner is on it.
+/// The chat the PDU belongs to, from the numbers on it that are not the
+/// owner's: a group when there are two or more of them, else the one
+/// other party. `None`, counted and detailed as a skip, when nobody but
+/// the owner is on it.
 fn pdu_target(
     parsed: &ParsedPdu,
     owners: &OwnerHandleSet,
     report: &mut ExportReport,
     skips: &mut SkipDetails,
 ) -> Option<PduTarget> {
-    let others: Vec<_> = parsed
-        .participants
+    let participants = pdu_participants(parsed);
+    let others: Vec<_> = participants
         .iter()
-        .filter(|p| !p.is_empty() && !owners.is_owner_digits(p))
+        .filter(|p| !owners.is_owner_digits(p))
         .cloned()
         .collect();
     if others.is_empty() {
@@ -192,17 +182,15 @@ fn pdu_target(
             &mut skips.no_party_more,
             SkippedNoPartyDetail {
                 pdu_filename: pdu_basename(parsed),
-                participants: parsed.participants.join(";"),
+                sender: parsed.sender.clone().unwrap_or_default(),
+                recipients: parsed.recipients.join(";"),
                 is_sent: parsed.is_sent,
-                has_from: parsed.has_from,
-                has_to: parsed.has_to,
             },
         );
         return None;
     }
-    // Treat multi-peer MMS as a group even when the PDU flag is unset.
-    if parsed.is_group || others.len() >= 2 {
-        let (chat_id, title) = chat_id_group(&parsed.participants, owners);
+    if others.len() >= 2 {
+        let (chat_id, title) = chat_id_group(&participants, owners);
         Some(PduTarget {
             chat_id,
             is_group: true,
@@ -239,7 +227,7 @@ fn pdu_pending_message(parsed: ParsedPdu, attachments: Vec<PendingAttachment>) -
     let sender_handle = if parsed.is_sent {
         String::new()
     } else {
-        parsed.sender_number.clone()
+        parsed.sender.clone().unwrap_or_default()
     };
     let mut extra = BTreeMap::new();
     extra.insert("dedupe_key".into(), dedupe_key);
@@ -248,11 +236,10 @@ fn pdu_pending_message(parsed: ParsedPdu, attachments: Vec<PendingAttachment>) -
     extra.insert("date_ms".into(), String::new());
     extra.insert("contact_name".into(), String::new());
     extra.insert("pdu_filename".into(), pdu_basename(&parsed));
-    extra.insert("pdu_decode".into(), parsed.decode_quality.to_string());
-    if !parsed.pdu_fields.is_empty() {
+    if !parsed.fields.is_empty() {
         extra.insert(
             "pdu_fields".into(),
-            serde_json::to_string(&parsed.pdu_fields).unwrap_or_default(),
+            serde_json::to_string(&parsed.fields).unwrap_or_default(),
         );
     }
     PendingMessage {
@@ -319,12 +306,12 @@ fn is_xml_file(p: &Path) -> bool {
         .is_some_and(|e| e.eq_ignore_ascii_case("xml"))
 }
 
-/// True for GO SMS Pro PDU files named `I_*.pdu` (the binary encoding of an
-/// SMS/MMS on the phone).
+/// True for GO SMS Pro MMS files: `I_*.pdu` for a received message and
+/// `S_*.pdu` for a sent one.
 fn is_pdu_file(p: &Path) -> bool {
     p.file_name()
         .and_then(|n| n.to_str())
-        .is_some_and(|n| n.starts_with("I_") && n.ends_with(".pdu"))
+        .is_some_and(|n| (n.starts_with("I_") || n.starts_with("S_")) && n.ends_with(".pdu"))
 }
 
 /// GO SMS Pro deltas of the shared [`message_ir::pending_to_document`] projection.
@@ -361,13 +348,6 @@ impl ProjectionHooks for GoSmsProjection<'_> {
             fields.insert(
                 "pdu_filename".into(),
                 serde_json::Value::String(pdu_filename.to_string()),
-            );
-        }
-        let pdu_decode = msg.extra_str("pdu_decode");
-        if !pdu_decode.is_empty() {
-            fields.insert(
-                "pdu_decode".into(),
-                serde_json::Value::String(pdu_decode.to_string()),
             );
         }
         let pdu_fields = msg.extra_str("pdu_fields");
@@ -556,30 +536,50 @@ impl Ingest<'_> {
         add_xml_messages(&mut self.conversations, msgs);
     }
 
-    /// Add the MMS in one PDU file. Unparseable and empty PDUs are counted;
-    /// the first twenty unparseable ones are named in the report.
+    /// Add the MMS in one PDU file. A stub (the placeholder GO SMS Pro
+    /// writes for an MMS it never downloaded) is counted and listed; a file
+    /// that breaks the MMS rules is counted, and the first twenty are named
+    /// in the report.
     fn ingest_pdu(&mut self, pdu_path: &Path) {
-        let all_digits = self.owners.all_phone_digits();
-        let primary = self.owners.primary_owner_handle().unwrap_or_default();
-        let parsed = parse_pdu_file(pdu_path, &all_digits, &primary);
-        let parsed = match parsed {
-            Ok(Some(parsed)) => parsed,
-            Ok(None) => {
+        let mut parsed = match parse_pdu_file(pdu_path) {
+            Ok(parsed) => parsed,
+            Err(PduError::Stub) => {
+                self.report.bump("skipped_empty_pdu", 1);
+                push_skip_detail(
+                    &mut self.skips.empty_pdu,
+                    &mut self.skips.empty_pdu_more,
+                    SkippedEmptyPduDetail {
+                        pdu_filename: pdu_path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("")
+                            .to_string(),
+                    },
+                );
+                return;
+            }
+            Err(err) => {
                 self.report.bump("skipped_unparseable_pdu", 1);
                 if self.report.errors.len() < 20 {
                     self.report
                         .errors
-                        .push(format!("{}: unparseable PDU", pdu_path.display()));
+                        .push(format!("{}: {err}", pdu_path.display()));
                 }
                 return;
             }
-            Err(err) => {
-                self.report
-                    .errors
-                    .push(format!("{}: {err:#}", pdu_path.display()));
-                return;
-            }
         };
+        // The parser keeps an address's digits as written, and a phone writes
+        // the same person as `4075551234` on one MMS and `14075551234` on
+        // the next. One form per number, or the group they share gets two
+        // chat ids.
+        parsed.sender = parsed.sender.as_deref().and_then(sanitize_number);
+        let mut recipients = Vec::with_capacity(parsed.recipients.len());
+        for r in parsed.recipients.iter().filter_map(|r| sanitize_number(r)) {
+            if !recipients.contains(&r) {
+                recipients.push(r);
+            }
+        }
+        parsed.recipients = recipients;
         let atts = queue_pdu_attachments(&parsed, self.copy_attachments, &mut self.blob_bytes);
         add_pdu_message(
             &mut self.conversations,
@@ -682,30 +682,17 @@ fn write_skipped_no_party_csv(
     }
     let mut wtr =
         csv::Writer::from_path(&path).with_context(|| format!("create {}", path.display()))?;
-    wtr.write_record([
-        "pdu_filename",
-        "participants",
-        "is_sent",
-        "has_from",
-        "has_to",
-    ])?;
+    wtr.write_record(["pdu_filename", "sender", "recipients", "is_sent"])?;
     for d in details {
         wtr.write_record([
             d.pdu_filename.as_str(),
-            d.participants.as_str(),
+            d.sender.as_str(),
+            d.recipients.as_str(),
             if d.is_sent { "1" } else { "0" },
-            if d.has_from { "1" } else { "0" },
-            if d.has_to { "1" } else { "0" },
         ])?;
     }
     if more > 0 {
-        wtr.write_record([
-            "",
-            "",
-            "",
-            "",
-            &format!("...and {more} more entries not shown"),
-        ])?;
+        wtr.write_record(["", "", "", &format!("...and {more} more entries not shown")])?;
     }
     wtr.flush()?;
     Ok(())
@@ -726,25 +713,17 @@ mod tests {
     }
 
     #[test]
-    fn multi_peer_pdu_without_group_flag_uses_group_chat_id() {
+    fn a_sent_pdu_to_two_people_is_a_group() {
         let owners = OwnerHandleSet::from_phones(&["+15555550100".into()]).unwrap();
         let parsed = ParsedPdu {
-            path: std::path::PathBuf::from("I_1609459200_x.pdu"),
+            path: std::path::PathBuf::from("S_1609459200_x.pdu"),
             timestamp: 1_609_459_200,
-            participants: vec![
-                "15555550100".into(),
-                "15555550122".into(),
-                "15555550133".into(),
-            ],
+            is_sent: true,
+            sender: None,
+            recipients: vec!["15555550122".into(), "15555550133".into()],
             body: "hi".into(),
             attachments: Vec::new(),
-            is_sent: true,
-            is_group: false,
-            sender_number: String::new(),
-            has_from: false,
-            has_to: true,
-            pdu_fields: BTreeMap::new(),
-            decode_quality: "structured",
+            fields: BTreeMap::new(),
         };
         let mut conversations = BTreeMap::new();
         let mut report = ExportReport::default();

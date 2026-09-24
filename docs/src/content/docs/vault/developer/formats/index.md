@@ -36,7 +36,7 @@ All converters build a **common message** per conversation (`ConversationDocumen
 
 | Exporter | Main gaps |
 |---|---|
-| **GO SMS Pro** | Proprietary MMS `.pdu` (heuristic decode); many empty stub PDUs; `export_tool_version` unpinned; SMS attachments not in XML |
+| **GO SMS Pro** | MMS as WAP-209 `.pdu` files; many empty stub PDUs; `export_tool_version` unpinned; SMS attachments not in XML |
 | **SMS Backup & Restore** | Call logs ignored; drafts / failed / queued skipped; encrypted ZIP not supported (unlock first) |
 | **SMS Backup+** | Offline `.eml` only (no IMAP); archive attachment→message pairing is guesswork; unresolved peers → `unknown.csv` |
 | **OpenExtract** | No media extraction; no groups; thin source format; name-only chats common without a good VCF |

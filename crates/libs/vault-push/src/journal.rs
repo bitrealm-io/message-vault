@@ -419,6 +419,81 @@ mod tests {
         );
     }
 
+    /// One event of each success kind, all for the given vault target.
+    fn success_events(url: &str, username: &str, tag: &str) -> Vec<JournalEvent> {
+        vec![
+            JournalEvent::AssetOk {
+                url: url.into(),
+                username: username.into(),
+                source: "sms".into(),
+                sha256: format!("sha-{tag}"),
+            },
+            JournalEvent::MessageOk {
+                url: url.into(),
+                username: username.into(),
+                source: "sms".into(),
+                file: "chat.jsonl".into(),
+                guid: format!("single-{tag}"),
+            },
+            JournalEvent::MessageBatchOk {
+                url: url.into(),
+                username: username.into(),
+                source: "sms".into(),
+                messages: vec![JournalMessage {
+                    file: "chat.jsonl".into(),
+                    guid: format!("batch-{tag}"),
+                }],
+            },
+            JournalEvent::FileOk {
+                url: url.into(),
+                username: username.into(),
+                source: "sms".into(),
+                file: format!("file-{tag}.jsonl"),
+            },
+        ]
+    }
+
+    #[test]
+    fn load_keeps_only_events_for_this_vault_and_username() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(JOURNAL_NAME);
+        let events = [
+            success_events("http://other", "alice", "other-url"),
+            success_events("http://vault", "bob", "other-user"),
+            success_events("http://vault", "alice", "mine"),
+        ];
+        for event in events.iter().flatten() {
+            append(&path, event).unwrap();
+        }
+
+        let state = load(&path, "http://vault", "alice").unwrap();
+
+        let expected_assets: HashSet<String> = ["sha-mine".to_string()].into();
+        assert_eq!(state.assets, expected_assets);
+        let expected_messages: HashSet<String> = [
+            JournalState::message_key("chat.jsonl", "single-mine"),
+            JournalState::message_key("chat.jsonl", "batch-mine"),
+        ]
+        .into();
+        assert_eq!(state.messages, expected_messages);
+        let expected_files: HashSet<String> = ["file-mine.jsonl".to_string()].into();
+        assert_eq!(state.files, expected_files);
+    }
+
+    #[test]
+    fn a_recorded_asset_is_skipped_after_reopening_the_journal() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(JOURNAL_NAME);
+        let mut journal = RunJournal::open(path.clone(), "http://vault", "alice", false).unwrap();
+        assert!(!journal.has_asset("sha-1"));
+        journal.asset_ok("sms", "sha-1").unwrap();
+        drop(journal);
+
+        let reopened = RunJournal::open(path, "http://vault", "alice", false).unwrap();
+        assert!(reopened.has_asset("sha-1"));
+        assert!(!reopened.has_asset("sha-2"));
+    }
+
     #[test]
     fn compact_preserves_other_vault_target_events() {
         let dir = tempfile::tempdir().unwrap();

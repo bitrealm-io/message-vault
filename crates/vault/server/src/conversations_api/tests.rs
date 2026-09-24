@@ -1,5 +1,8 @@
 use super::*;
+use crate::db::conversations::{ConversationSort, display_service_label};
+use crate::db::participant_names::Participant;
 use message_ir::HandleType;
+use sqlx::AnyConnection;
 
 use crate::db::{account_profile, vault_imports};
 use crate::test_support::{
@@ -390,11 +393,11 @@ async fn list_queries_enforce_search_limits() {
     let too_many_nodes = "(".repeat(65);
 
     for query in [&oversized, &too_many_terms, &too_many_nodes] {
-        let contact_error = crate::contacts_api::list_contacts_sorted(
+        let contact_error = crate::db::contacts::read::list_contacts_sorted(
             &mut conn,
             account,
             query,
-            &crate::contacts_api::DEFAULT_CONTACT_SORT,
+            &crate::db::contacts::read::DEFAULT_CONTACT_SORT,
             DEFAULT_LIST_LIMIT,
             0,
             crate::search::tests::clock(),
@@ -1204,8 +1207,8 @@ fn display_service_label_from_sources() {
 async fn list_conversations_filters_by_tag_and_people() {
     let (pool, _vault, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
-    crate::named_membership::set_membership(
-        crate::named_membership::tag_spec(),
+    crate::db::named_membership::set_membership(
+        crate::db::named_membership::tag_spec(),
         &mut conn,
         account,
         &[1],
@@ -1249,8 +1252,8 @@ async fn list_conversations_filters_by_tag_and_people() {
     .execute(&mut *conn)
     .await
     .unwrap();
-    crate::named_membership::set_membership(
-        crate::named_membership::group_spec(),
+    crate::db::named_membership::set_membership(
+        crate::db::named_membership::group_spec(),
         &mut conn,
         account,
         &[contact_id],

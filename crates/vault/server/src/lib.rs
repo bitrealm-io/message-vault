@@ -28,7 +28,6 @@ pub(crate) mod keyed_locks;
 pub mod logging;
 pub(crate) mod messages_api;
 pub(crate) mod models;
-pub(crate) mod named_membership;
 pub(crate) mod named_set_api;
 pub(crate) mod open_vault;
 pub(crate) mod openapi;
@@ -61,7 +60,9 @@ pub use db::engine::{pg_test_schema_pool, sqlite_test_pool};
 #[doc(hidden)]
 pub use db::schema::ensure_vault_schema;
 #[doc(hidden)]
-pub use exports_api::{ExportPageOpts, export_messages, start_export_run};
+pub use db::vault_exports::{ExportPageOpts, export_messages};
+#[doc(hidden)]
+pub use exports_api::start_export_run;
 pub use vault_api_types::ExportScope;
 
 use clap::Command;

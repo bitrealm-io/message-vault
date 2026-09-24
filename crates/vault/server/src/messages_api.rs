@@ -9,15 +9,13 @@
 
 use crate::extract::{Json, Query};
 use axum::extract::{Path, State};
-use sqlx::AnyConnection;
-use sqlx::{Executor, Row};
 
 use crate::db::conversation_messages::{
-    DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, load_messages, messages_from_sql,
+    DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, count_matching_messages, load_messages,
 };
 use crate::db::dialect::engine_of;
 use crate::db::engine::DbEngine;
-use crate::db::sql::{SqlParam, bind_all, renumber_placeholders};
+use crate::db::sql::SqlParam;
 use crate::paging::{
     DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, PageQuery, page_params, parse_sort,
 };
@@ -44,25 +42,6 @@ pub(crate) fn message_filter(
         today,
         zone,
     })?)
-}
-
-/// `COUNT(*)` of the messages a compiled filter matches.
-pub(crate) async fn count_matching_messages(
-    conn: &mut AnyConnection,
-    filter: &crate::search::Filter,
-) -> Result<u64, ApiError> {
-    let sql = format!(
-        "SELECT COUNT(*)
-         {messages_from_sql}
-         WHERE {where_sql}",
-        messages_from_sql = messages_from_sql(),
-        where_sql = filter.where_sql(),
-    );
-    let n: i64 = (&mut *conn)
-        .fetch_one(bind_all(&renumber_placeholders(&sql), filter.params()))
-        .await?
-        .try_get(0)?;
-    Ok(n.max(0) as u64)
 }
 
 /// Messages matching `q`, oldest first unless `sort` says otherwise: the same

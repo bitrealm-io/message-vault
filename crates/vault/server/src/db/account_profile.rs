@@ -433,6 +433,100 @@ pub async fn load_preferred_name(
         .filter(|s| !s.is_empty()))
 }
 
+/// Set or clear an account's `preferred_name`.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn set_preferred_name(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    name: Option<&str>,
+) -> Result<()> {
+    sqlx::query("UPDATE accounts SET preferred_name = $1 WHERE id = $2")
+        .bind(name)
+        .bind(account_id)
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+/// The flags only the vault owner sets on an account. `None` leaves a flag
+/// as it is.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AccountFlags {
+    /// May not log in.
+    pub disabled: Option<bool>,
+    /// May call the import endpoints.
+    pub can_import: Option<bool>,
+    /// May call the export endpoints.
+    pub can_export: Option<bool>,
+    /// May destroy message data.
+    pub can_delete: Option<bool>,
+}
+
+/// Write the flags `flags` names onto an account.
+///
+/// # Errors
+///
+/// Returns an error when a statement fails.
+pub async fn set_account_flags(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    flags: AccountFlags,
+) -> Result<()> {
+    // Column names come from this compile-time array, never from the
+    // request, so formatting them into the SQL is safe; values stay bound.
+    let columns = [
+        ("disabled", flags.disabled),
+        ("can_import", flags.can_import),
+        ("can_export", flags.can_export),
+        ("can_delete", flags.can_delete),
+    ];
+    for (column, value) in columns {
+        let Some(value) = value else { continue };
+        sqlx::query(&format!("UPDATE accounts SET {column} = $1 WHERE id = $2"))
+            .bind(i32::from(value))
+            .bind(account_id)
+            .execute(&mut *conn)
+            .await?;
+    }
+    Ok(())
+}
+
+/// How many accounts the vault holds.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn count_accounts(conn: &mut AnyConnection) -> Result<i64> {
+    Ok(sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
+        .fetch_one(&mut *conn)
+        .await?)
+}
+
+/// One page of account ids: the vault owner's first, then the rest by
+/// username.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn account_ids_page(
+    conn: &mut AnyConnection,
+    limit: usize,
+    offset: usize,
+) -> Result<Vec<i64>> {
+    Ok(sqlx::query_scalar(
+        "SELECT id FROM accounts \
+         ORDER BY CASE WHEN id = $1 THEN 0 ELSE 1 END, username LIMIT $2 OFFSET $3",
+    )
+    .bind(OWNER_ACCOUNT_ID)
+    .bind(limit as i64)
+    .bind(offset as i64)
+    .fetch_all(&mut *conn)
+    .await?)
+}
+
 /// Insert a new account row. All fields except id and username are optional.
 /// The new account gets every permission (`Permissions::all()`); narrow it
 /// afterward if needed.

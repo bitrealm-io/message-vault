@@ -1,4 +1,10 @@
 use super::*;
+use crate::db::contacts;
+use crate::db::contacts::read::DEFAULT_CONTACT_SORT;
+use crate::paging::{DEFAULT_LIST_LIMIT, parse_sort};
+use address_book::address_book_file_name;
+use edit::ContactEditError;
+use message_ir::HandleType;
 
 use crate::db::account_profile;
 use crate::test_support::{
@@ -1513,8 +1519,8 @@ async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
         .await
         .unwrap();
     // The person is in a Contact Group they built by hand.
-    crate::named_membership::set_membership(
-        crate::named_membership::group_spec(),
+    crate::db::named_membership::set_membership(
+        crate::db::named_membership::group_spec(),
         &mut conn,
         account,
         &[hand_typed],
@@ -1624,8 +1630,8 @@ async fn loading_an_address_book_replaces_only_its_own_rows() {
         .execute(&mut *conn)
         .await
         .unwrap();
-    crate::named_membership::set_membership(
-        crate::named_membership::group_spec(),
+    crate::db::named_membership::set_membership(
+        crate::db::named_membership::group_spec(),
         &mut conn,
         account,
         &[discovered],
@@ -1718,8 +1724,8 @@ async fn reloading_an_address_book_keeps_a_contact_still_in_the_file() {
     // Three things hang off her id: a Contact Group the person built, a
     // conversation her number is in, and the record of the import that met
     // her.
-    crate::named_membership::set_membership(
-        crate::named_membership::group_spec(),
+    crate::db::named_membership::set_membership(
+        crate::db::named_membership::group_spec(),
         &mut conn,
         account,
         &[ada],
@@ -1913,8 +1919,8 @@ async fn a_card_whose_number_changed_is_a_new_contact() {
         .fetch_one(&mut *conn)
         .await
         .unwrap();
-    crate::named_membership::set_membership(
-        crate::named_membership::group_spec(),
+    crate::db::named_membership::set_membership(
+        crate::db::named_membership::group_spec(),
         &mut conn,
         account,
         &[ada],
@@ -2032,8 +2038,8 @@ async fn list_contacts_filters_by_group_and_no_group() {
     let mut conn = vault.conn().await;
     let family = insert_contact_with_handle(&mut conn, account, "Ada", "+15555550100").await;
     insert_contact_with_handle(&mut conn, account, "Ben", "+15555550200").await;
-    crate::named_membership::set_membership(
-        crate::named_membership::group_spec(),
+    crate::db::named_membership::set_membership(
+        crate::db::named_membership::group_spec(),
         &mut conn,
         account,
         &[family],

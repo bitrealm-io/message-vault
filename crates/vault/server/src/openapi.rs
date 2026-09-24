@@ -142,7 +142,7 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::contacts_api::restore_contact))
         .routes(routes!(crate::contacts_api::delete_contact))
         .routes(routes!(crate::contacts_api::find_unmatched_identities))
-        .routes(routes!(crate::contacts_api::create_contacts))
+        .routes(routes!(crate::contacts_api::address_book::create_contacts))
         .routes(routes!(crate::named_set_api::list_contact_groups))
         .routes(routes!(crate::named_set_api::create_contact_group))
         .routes(routes!(crate::named_set_api::update_contact_group))

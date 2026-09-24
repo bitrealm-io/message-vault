@@ -120,7 +120,7 @@ impl ContactsIndex {
 
         let mut idx: HashMap<String, Name> = HashMap::new();
 
-        for db_path in find_macos_addressbook_db_paths() {
+        for db_path in find_macos_addressbook_db_paths(&macos_sources_dir()) {
             if let Ok(local_conn) = get_connection(&db_path) {
                 let sub = Self::build_from_macos(&local_conn)?;
 
@@ -379,11 +379,11 @@ fn to_phone_digits(raw: &str) -> String {
 }
 
 // MARK: macOS Dirs
-/// Scans the macOS Contacts Sources directory (`~/Library/Application Support/AddressBook/Sources`)
-/// for AddressBook-v22.abcddb database files.
-fn find_macos_addressbook_db_paths() -> Vec<PathBuf> {
+/// Scans a macOS Contacts Sources directory ([`macos_sources_dir`]) for
+/// the AddressBook-v22.abcddb database each source folder holds.
+fn find_macos_addressbook_db_paths(sources_dir: &Path) -> Vec<PathBuf> {
     let mut results = Vec::new();
-    if let Ok(entries) = fs::read_dir(macos_sources_dir()) {
+    if let Ok(entries) = fs::read_dir(sources_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
@@ -435,6 +435,49 @@ mod tests {
         assert!(uk.contains(&"442071838750".to_string()), "{uk:?}");
         assert!(uk.contains(&"+442071838750".to_string()), "{uk:?}");
         assert_eq!(uk.len(), 2, "no ten-digit variant for a UK number: {uk:?}");
+
+        // An eleven-digit number is US only when it starts `+1`. A French
+        // mobile has eleven digits too, and its last ten would match a US
+        // number that isn't this person's.
+        let fr = phone_keys("+33 6 12 34 56 78");
+        assert_eq!(
+            fr,
+            vec!["33612345678".to_string(), "+33612345678".to_string()]
+        );
+    }
+
+    /// The Mac keeps one Address Book per account, each in a folder under
+    /// `~/Library/Application Support/AddressBook/Sources`. Every folder's
+    /// database is found; a folder without one and a stray file are not.
+    #[test]
+    fn every_mac_address_book_under_the_sources_folder_is_found() {
+        assert!(
+            macos_sources_dir().ends_with("Library/Application Support/AddressBook/Sources"),
+            "{}",
+            macos_sources_dir().display()
+        );
+
+        let sources = tempfile::tempdir().unwrap();
+        for account in ["icloud", "exchange"] {
+            let folder = sources.path().join(account);
+            fs::create_dir(&folder).unwrap();
+            fill_macos_address_book(
+                &Connection::open(folder.join("AddressBook-v22.abcddb")).unwrap(),
+            );
+        }
+        fs::create_dir(sources.path().join("empty")).unwrap();
+        fs::write(sources.path().join("AddressBook-v22.abcddb"), b"").unwrap();
+
+        let mut found = find_macos_addressbook_db_paths(sources.path());
+        found.sort();
+        assert_eq!(
+            found,
+            vec![
+                sources.path().join("exchange/AddressBook-v22.abcddb"),
+                sources.path().join("icloud/AddressBook-v22.abcddb"),
+            ]
+        );
+        assert!(find_macos_addressbook_db_paths(&sources.path().join("missing")).is_empty());
     }
 
     #[test]

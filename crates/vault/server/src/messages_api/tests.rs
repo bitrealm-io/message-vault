@@ -165,6 +165,184 @@ async fn a_word_the_messages_list_does_not_have_is_a_422_with_a_sentence() {
     );
 }
 
+/// One IR message line for [`import_reactions_and_flags`].
+fn ir_message(
+    guid: &str,
+    ms: i64,
+    text: &str,
+    is_sticker: bool,
+    imessage: serde_json::Value,
+) -> String {
+    serde_json::json!({
+        "guid": guid,
+        "timestamp_unix_ms": ms,
+        "direction": "incoming",
+        "service": "imessage",
+        "message_kind": "imessage",
+        "sender_handle": "+15555550123",
+        "sender_display_name": null,
+        "subject": null,
+        "text": text,
+        "attachments": [{
+            "path": format!("attachments/{guid}.png"),
+            "original_name": format!("{guid}.png"),
+            "mime_type": "image/png",
+            "digest_sha256": null,
+            "is_sticker": is_sticker,
+            "transcription": null,
+            "sticker_effect": null,
+            "size_bytes": 12,
+            "missing_reason": "not_found"
+        }],
+        "imessage": imessage,
+        "source": null
+    })
+    .to_string()
+}
+
+/// Import, through the whole pipeline, three messages into `account_id`: a
+/// reply carrying a sticker and a tapback array of two, an announcement
+/// carrying a single tapback object, and a plain message with none of these.
+async fn import_reactions_and_flags(vault: &TestVault, account_id: i64) {
+    let header = serde_json::json!({
+        "schema_version": 4,
+        "export": {"source": "imessage", "tool": "test", "tool_version": "0",
+                   "owner_handle": null, "owner_display_name": null},
+        "conversation": {
+            "chat_identifier": "chat-reactions",
+            "conversation_type": "group",
+            "group_title": "Reactions",
+            "participants": [
+                {"handle": "+15555550123", "display_name": null},
+                {"handle": "+15555550999", "display_name": null},
+                {"handle": "+15555550888", "display_name": null}
+            ],
+            "stats": {"message_count": 3, "attachment_count": 3,
+                      "first_timestamp_unix_ms": 1426183462000_i64,
+                      "last_timestamp_unix_ms": 1426183464000_i64}
+        }
+    });
+    let reply = ir_message(
+        "g-reply",
+        1_426_183_462_000,
+        "a reply",
+        true,
+        serde_json::json!({
+            "is_reply": true,
+            "is_deleted": false,
+            "tapbacks": [
+                {"kind": "liked", "emoji": null, "part_index": 0,
+                 "is_from_me": false, "sender": "+15555550999"},
+                {"kind": "emoji", "emoji": "🎉", "part_index": 1,
+                 "is_from_me": false, "sender": "+15555550888"}
+            ]
+        }),
+    );
+    let announcement = ir_message(
+        "g-announce",
+        1_426_183_463_000,
+        "an announcement",
+        false,
+        serde_json::json!({
+            "is_reply": false,
+            "is_deleted": false,
+            "announcement": "named the conversation Reactions",
+            "tapbacks": {"kind": "loved", "emoji": null, "part_index": 2,
+                         "is_from_me": false, "sender": "+15555550999"}
+        }),
+    );
+    let plain = ir_message(
+        "g-plain",
+        1_426_183_464_000,
+        "a plain message",
+        false,
+        serde_json::Value::Null,
+    );
+    let dir = vault.dir().join("reactions");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("reactions.jsonl");
+    std::fs::write(
+        &path,
+        format!("{header}\n{reply}\n{announcement}\n{plain}\n"),
+    )
+    .unwrap();
+    let assets = dir.join("assets");
+    let mut conn = vault.conn().await;
+    let stats = crate::imports_api::import_jsonl_files_on_conn(
+        &mut conn,
+        &[path],
+        &crate::imports_api::ImportOptions::fixed(crate::imports_api::FixedImportArgs {
+            assets_dir: &assets,
+            asset_root: &dir,
+            contacts: None,
+            overwrite_contacts: false,
+            mode: crate::imports_api::ImportMode::Append,
+            source: "imessage",
+            account_id,
+            fill_content_keys: false,
+            import_id: None,
+        }),
+        crate::imports_api::ImportSchemaMode::Ensure,
+    )
+    .await
+    .unwrap();
+    assert_eq!(stats.messages, 3);
+    assert_eq!(stats.tapbacks, 3);
+}
+
+/// Tapbacks and the reply, announcement and sticker flags survive the trip
+/// from an import to the messages route, both when set and when not. A
+/// single tapback object is read the same as an array of one.
+#[tokio::test]
+async fn reactions_and_message_flags_are_read_back_as_imported() {
+    let (vault, alice) = vault_with_account().await;
+    import_reactions_and_flags(&vault, alice.account_id).await;
+
+    let page: serde_json::Value = get_json(&vault.state, "/v1/messages", &alice.token).await;
+    let by_guid = |guid: &str| {
+        page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["guid"] == guid)
+            .unwrap_or_else(|| panic!("no message {guid:?} in {page}"))
+            .clone()
+    };
+    let reply = by_guid("g-reply");
+    let announcement = by_guid("g-announce");
+    let plain = by_guid("g-plain");
+
+    assert_eq!(
+        reply["tapbacks"],
+        serde_json::json!([
+            {"part_index": 0, "kind": "liked",
+             "is_from_me": false, "sender": "+15555550999"},
+            {"part_index": 1, "kind": "emoji", "emoji": "🎉",
+             "is_from_me": false, "sender": "+15555550888"}
+        ])
+    );
+    assert_eq!(
+        announcement["tapbacks"],
+        serde_json::json!([
+            {"part_index": 2, "kind": "loved",
+             "is_from_me": false, "sender": "+15555550999"}
+        ])
+    );
+    assert_eq!(plain["tapbacks"], serde_json::json!([]));
+
+    let flags = |m: &serde_json::Value| {
+        (
+            m["is_reply"].as_bool().unwrap(),
+            m["is_announcement"].as_bool().unwrap(),
+            // `is_sticker` is left out of the JSON when false.
+            m["attachments"][0]["is_sticker"] == true,
+        )
+    };
+    assert_eq!(flags(&reply), (true, false, true), "{reply}");
+    assert_eq!(flags(&announcement), (false, true, false), "{announcement}");
+    assert_eq!(flags(&plain), (false, false, false), "{plain}");
+}
+
 #[tokio::test]
 async fn one_message_is_read_by_id_and_only_by_the_account_that_owns_it() {
     let (vault, alice, _direct, _group) = seeded().await;

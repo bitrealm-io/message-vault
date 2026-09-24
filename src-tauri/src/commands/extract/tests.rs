@@ -64,7 +64,7 @@ fn non_imessage_sources_defer_the_media_step_too() {
     // reach the exporter with Clone when Convert or Compress was chosen.
     let dump = tempfile::tempdir().unwrap();
     for chosen in [AttachmentMedia::Convert, AttachmentMedia::Compress] {
-        let mut options = test_options(Vec::new());
+        let mut options = test_options(vec!["+15555550100".into()]);
         options.attachment_media = chosen;
         let config = build_exporter_config(
             "whatsapp-android",
@@ -290,7 +290,7 @@ fn sms_backup_plus_passes_owner_phones_and_emails() {
 
 #[test]
 fn whatsapp_android_forwards_key_and_optional_paths() {
-    let mut options = test_options(Vec::new());
+    let mut options = test_options(vec!["+15555550100".into()]);
     options.whatsapp_key = "deadbeef".into();
     options.whatsapp_wa = "/tmp/wa.db".into();
     options.whatsapp_media = "/tmp/WhatsApp".into();
@@ -320,9 +320,54 @@ fn whatsapp_android_forwards_key_and_optional_paths() {
             );
             assert!(wa.backup.is_none());
             assert!(!wa.business);
+            assert_eq!(wa.owner_phone.as_deref(), Some("+15555550100"));
         }
         other => panic!("{other:?}"),
     }
+}
+
+/// An Android crypt backup carries no owner number, so an empty field is
+/// refused before the run starts rather than importing with no owner.
+#[test]
+fn whatsapp_android_refuses_an_empty_owner_phone() {
+    let dump = tempfile::tempdir().unwrap();
+    let err = build_exporter_config(
+        "whatsapp-android",
+        dump.path().to_str().unwrap(),
+        "/tmp/out",
+        &test_options(Vec::new()),
+    )
+    .unwrap_err();
+    assert!(
+        err.contains("Owner's WhatsApp number is required."),
+        "{err}"
+    );
+}
+
+/// iPhone reads the number from the backup, so the field may be empty; when
+/// filled it reaches the exporter as the fallback.
+#[test]
+fn whatsapp_ios_forwards_the_owner_phone_as_a_fallback() {
+    let backup = tempfile::tempdir().unwrap();
+    let path = backup.path().to_str().unwrap();
+    let empty =
+        build_exporter_config("whatsapp-ios", path, "/tmp/out", &test_options(Vec::new())).unwrap();
+    let SourceConfig::Whatsapp(wa) = empty.source else {
+        panic!("{:?}", empty.source);
+    };
+    assert!(wa.owner_phone.is_none());
+
+    let filled = build_exporter_config(
+        "whatsapp-ios",
+        path,
+        "/tmp/out",
+        &test_options(vec!["+15555550100".into()]),
+    )
+    .unwrap();
+    let SourceConfig::Whatsapp(wa) = filled.source else {
+        panic!("{:?}", filled.source);
+    };
+    assert_eq!(wa.owner_phone.as_deref(), Some("+15555550100"));
 }
 
 #[test]

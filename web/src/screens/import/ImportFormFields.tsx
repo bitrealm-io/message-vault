@@ -37,6 +37,7 @@ import {
   type WhatsappPathStats,
   whatsappCanImport,
   whatsappCryptRequired,
+  whatsappOwnerPhoneRequired,
   whatsappShowsBusiness,
   whatsappShowsContactsDb,
   whatsappShowsDb,
@@ -79,6 +80,9 @@ export type ImportFormFieldsProps = {
   onWhatsappDbChange: (path: string) => void;
   whatsappBusiness: boolean;
   onWhatsappBusinessChange: (value: boolean) => void;
+  /** The holder's WhatsApp number: required on Android, a fallback on iPhone. */
+  whatsappOwnerPhone: string;
+  onWhatsappOwnerPhoneChange: (value: string) => void;
   whatsappStats: WhatsappPathStats;
   attachmentMedia: AttachmentMediaMode;
   onAttachmentMediaChange: (mode: AttachmentMediaMode) => void;
@@ -128,6 +132,11 @@ const WHATSAPP_CONTACTS_HINT_ANDROID = "Leave empty if wa.db is in the backup fo
 const WHATSAPP_CONTACTS_HINT_IPHONE = "Leave empty if ContactsV2.sqlite is in the backup.";
 const WHATSAPP_MEDIA_HINT = "Leave empty if the WhatsApp media folder is in the backup folder.";
 const WHATSAPP_DB_HINT = "Leave empty if msgstore.db is in the backup folder.";
+const WHATSAPP_OWNER_PHONE_LABEL = "WhatsApp phone number";
+const WHATSAPP_OWNER_PHONE_HINT_ANDROID =
+  "Pre-filled from your profile. The number your WhatsApp account is registered to.";
+const WHATSAPP_OWNER_PHONE_HINT_IPHONE =
+  "Fallback, used when the backup does not contain your phone number.";
 
 const ATTACHMENT_FOLDER_HINT_MAC =
   "Leave empty if Attachments and StickerCache are next to chat.db. Set this only when those folders live somewhere else.";
@@ -254,6 +263,7 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
         contactsDb: props.whatsappWa,
         media: props.whatsappMedia,
         db: props.whatsappDb,
+        ownerPhone: props.whatsappOwnerPhone,
         stats: props.whatsappStats,
       })
     : null;
@@ -517,6 +527,22 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
               </StackedField>
             ) : null}
 
+            {whatsappOwnerPhoneRequired(whatsappMethod) ? (
+              <StackedField label={WHATSAPP_OWNER_PHONE_LABEL} required>
+                <input
+                  type="text"
+                  inputMode="tel"
+                  aria-label={WHATSAPP_OWNER_PHONE_LABEL}
+                  value={props.whatsappOwnerPhone}
+                  onChange={(e) => props.onWhatsappOwnerPhoneChange(e.target.value)}
+                  placeholder="+1 555 555 0100"
+                  className={fieldStyle}
+                />
+                <p className={hintStyle}>{WHATSAPP_OWNER_PHONE_HINT_ANDROID}</p>
+                <FieldStatus message={whatsappErrors.ownerPhone} />
+              </StackedField>
+            ) : null}
+
             {whatsappShowsContactsDb(whatsappMethod) ? (
               <StackedField label="Contacts database" optional>
                 <PathPicker
@@ -699,6 +725,20 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
             </div>
           ) : null}
         </div>
+        {whatsappMethod !== null && !whatsappOwnerPhoneRequired(whatsappMethod) ? (
+          <StackedField label={WHATSAPP_OWNER_PHONE_LABEL} optional>
+            <input
+              type="text"
+              inputMode="tel"
+              aria-label={`${WHATSAPP_OWNER_PHONE_LABEL} (Optional)`}
+              value={props.whatsappOwnerPhone}
+              onChange={(e) => props.onWhatsappOwnerPhoneChange(e.target.value)}
+              placeholder="+1 555 555 0100"
+              className={fieldStyle}
+            />
+            <p className={hintStyle}>{WHATSAPP_OWNER_PHONE_HINT_IPHONE}</p>
+          </StackedField>
+        ) : null}
       </CollapsibleSection>
 
       <div className="mt-2 flex gap-3">

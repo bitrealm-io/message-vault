@@ -1,6 +1,7 @@
 //! Full export pipeline (wtsexporter/JSON convert) for CLI and GUI.
 
-use crate::emit::convert_json;
+use crate::emit::{ConvertRequest, convert_json};
+use crate::owner::{owner_from_backup, owner_from_form};
 use crate::wtsexporter::{Platform, WtsexporterArgs, resolve_wtsexporter, run_wtsexporter};
 use anyhow::{Context, Result, bail};
 use message_vault_io_core::{
@@ -30,7 +31,16 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     };
     let input = config.primary_input().map(|p| p.to_path_buf());
 
-    let (json_path, media_roots, _work_keep_alive) = if let Some(json) = &source.json {
+    // The number typed on the form, under the vault's handle key. Android's
+    // only source; iPhone's fallback when the backup carries no owner key.
+    let form_owner = source
+        .owner_phone
+        .as_deref()
+        .map(owner_from_form)
+        .transpose()?;
+
+    let (json_path, media_roots, owner_handle, _work_keep_alive) = if let Some(json) = &source.json
+    {
         // Allowed roots are only the backup input and the JSON parent — never
         // the process CWD, which would let crafted paths copy arbitrary files.
         let mut media_roots = Vec::new();
@@ -42,7 +52,9 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
         }
         media_roots.sort();
         media_roots.dedup();
-        (json.clone(), media_roots, None)
+        // A ready-made result.json names no owner; the form's number is all
+        // there is, and a conversion may leave it empty.
+        (json.clone(), media_roots, form_owner, None)
     } else {
         let platform =
             platform.ok_or_else(|| anyhow::anyhow!("platform is required unless json is set"))?;
@@ -96,7 +108,27 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
         media_roots.sort();
         media_roots.dedup();
 
-        (kept, media_roots, Some(work))
+        let owner_handle = match platform {
+            // wtsexporter copies the whole app-group domain into the work
+            // dir, preferences plist included; a backup someone extracted by
+            // hand has it under the input folder. The form's number covers a
+            // backup that carries no owner key (the Business app, a moved key).
+            Platform::Ios => match owner_from_backup(&media_roots, &mut messages).or(form_owner) {
+                Some(owner) => owner,
+                None => bail!(
+                    "the backup does not contain your WhatsApp phone number; \
+                     enter it on the import form"
+                ),
+            },
+            // A crypt backup carries no owner; the form checks the field is
+            // filled before the run starts, so this only guards a caller
+            // that skipped the form.
+            Platform::Android => {
+                form_owner.ok_or_else(|| anyhow::anyhow!("Owner's WhatsApp number is required."))?
+            }
+        };
+
+        (kept, media_roots, Some(owner_handle), Some(work))
     };
 
     if !json_path.is_file() {
@@ -106,15 +138,16 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     message_vault_io_core::check_cancel(config.cancel.as_ref())?;
     let transforms = ExportTransforms::from_config(config);
     let needs_media_tools = transforms.needs_media_tools();
-    let report = convert_json(
-        &json_path,
-        &config.output,
+    let report = convert_json(ConvertRequest {
+        json_path: &json_path,
+        output: &config.output,
         transforms,
-        &media_roots,
-        config.output_format,
-        config.cancel.as_ref(),
-        config.resume,
-    )?;
+        media_search_roots: &media_roots,
+        owner_handle,
+        output_format: config.output_format,
+        cancel: config.cancel.as_ref(),
+        resume: config.resume,
+    })?;
     // Drop tempdir after convert (media files already copied).
     drop(_work_keep_alive);
 

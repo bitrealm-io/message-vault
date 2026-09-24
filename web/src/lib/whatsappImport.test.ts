@@ -6,6 +6,7 @@ import {
   WHATSAPP_ERR_FOLDER_IS_FILE,
   WHATSAPP_ERR_MUST_BE_FILE,
   WHATSAPP_ERR_MUST_BE_FOLDER,
+  WHATSAPP_ERR_OWNER_PHONE,
   WHATSAPP_ERR_PATH_MISSING,
   WHATSAPP_SOURCE_ID,
   whatsappCanImport,
@@ -43,6 +44,7 @@ describe("whatsappImport", () => {
       contactsDb: "",
       media: "",
       db: "",
+      ownerPhone: "+15555550100",
       stats: {
         backup: missing,
         contactsDb: null,
@@ -65,6 +67,7 @@ describe("whatsappImport", () => {
       contactsDb: "/tmp/missing-wa.db",
       media: "",
       db: "",
+      ownerPhone: "+15555550100",
       stats: {
         backup: dir,
         contactsDb: missing,
@@ -92,6 +95,7 @@ describe("whatsappImport", () => {
       contactsDb: "",
       media: "",
       db: "",
+      ownerPhone: "+15555550100",
       stats: {
         backup: null,
         contactsDb: null,
@@ -113,6 +117,7 @@ describe("whatsappImport", () => {
       contactsDb: "",
       media: "",
       db: "",
+      ownerPhone: "+15555550100",
       stats: {
         backup: file,
         contactsDb: null,
@@ -134,6 +139,7 @@ describe("whatsappImport", () => {
       contactsDb: "",
       media: "",
       db: "",
+      ownerPhone: "+15555550100",
       stats: {
         backup: dir,
         contactsDb: null,
@@ -155,6 +161,7 @@ describe("whatsappImport", () => {
       contactsDb: "",
       media: "",
       db: "",
+      ownerPhone: "+15555550100",
       stats: {
         backup: dir,
         contactsDb: null,
@@ -176,6 +183,7 @@ describe("whatsappImport", () => {
       contactsDb: "/tmp/wa.db",
       media: "",
       db: "",
+      ownerPhone: "+15555550100",
       stats: {
         backup: dir,
         contactsDb: dir,
@@ -197,6 +205,7 @@ describe("whatsappImport", () => {
       contactsDb: "",
       media: "/tmp/media.txt",
       db: "",
+      ownerPhone: "+15555550100",
       stats: {
         backup: dir,
         contactsDb: null,
@@ -218,6 +227,7 @@ describe("whatsappImport", () => {
       contactsDb: "",
       media: "",
       db: "",
+      ownerPhone: "+15555550100",
       stats: {
         backup: dir,
         contactsDb: null,
@@ -229,5 +239,44 @@ describe("whatsappImport", () => {
     });
     expect(result.enabled).toBe(true);
     expect(result.errors).toEqual({});
+  });
+
+  // An Android crypt backup carries no owner number, so the form's number
+  // is the only source; an iPhone backup carries it in WhatsApp's
+  // preferences, so the field is a fallback and may stay empty.
+  it("requires the owner's number on Android and not on iPhone", () => {
+    const stats = {
+      backup: dir,
+      contactsDb: null,
+      media: null,
+      db: null,
+      hasMsgstoreDb: true,
+      cryptName: null,
+    };
+    const android = whatsappCanImport({
+      method: "whatsapp-android",
+      backupPath: "/tmp/wa",
+      key: "",
+      contactsDb: "",
+      media: "",
+      db: "",
+      ownerPhone: "  ",
+      stats,
+    });
+    expect(android.enabled).toBe(false);
+    expect(android.errors.ownerPhone).toBe(WHATSAPP_ERR_OWNER_PHONE);
+
+    const iphone = whatsappCanImport({
+      method: "whatsapp-ios",
+      backupPath: "/backups/iphone",
+      key: "",
+      contactsDb: "",
+      media: "",
+      db: "",
+      ownerPhone: "",
+      stats,
+    });
+    expect(iphone.enabled).toBe(true);
+    expect(iphone.errors).toEqual({});
   });
 });

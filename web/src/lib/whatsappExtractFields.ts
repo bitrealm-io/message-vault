@@ -9,7 +9,10 @@ import type { WhatsappMethodId } from "./whatsappImport";
  * and message database are sent only for Android when the trimmed value
  * is non-empty. Contacts database is sent on both platforms when
  * non-empty. WhatsApp Business is sent only for iPhone when the checkbox
- * is on. Never sets `backup_password`.
+ * is on. The owner's number goes on both platforms when non-empty, as the
+ * one-entry `owner_phones` the desktop already reads for Android SMS:
+ * Android's only source, iPhone's fallback when the backup carries no owner
+ * key. Never sets `backup_password`.
  */
 export function whatsappExtractFields(args: {
   source: WhatsappMethodId;
@@ -22,6 +25,7 @@ export function whatsappExtractFields(args: {
   media: string;
   db: string;
   business: boolean;
+  ownerPhone: string;
 }): Pick<
   ExtractConfig,
   | "attachment_media"
@@ -33,10 +37,16 @@ export function whatsappExtractFields(args: {
   | "whatsapp_media"
   | "whatsapp_db"
   | "whatsapp_business"
+  | "owner_phones"
 > {
   const fields: ReturnType<typeof whatsappExtractFields> = {
     ...mediaExtractFields(args),
   };
+
+  const ownerPhone = args.ownerPhone.trim();
+  if (ownerPhone) {
+    fields.owner_phones = [ownerPhone];
+  }
 
   if (args.source === "whatsapp-android") {
     const key = args.key.trim();

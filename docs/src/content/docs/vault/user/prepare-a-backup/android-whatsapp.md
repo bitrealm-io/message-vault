@@ -32,6 +32,8 @@ See WhatsApp's official [backup documentation](https://faq.whatsapp.com/) for th
 
 The desktop app runs `wtsexporter` to read the database or encrypted backup, then imports the result. Conversation names use a `__whatsapp` suffix.
 
+An Android backup does not carry the phone number the WhatsApp account is registered to, so the Import form asks for it in the **WhatsApp phone number** field, pre-filled from the profile's phone. Import records that number on every message as the address it was held at, so the conversations count toward that identity in Settings. An empty field stops the form before the import starts.
+
 ## Known limitations
 
 - Getting the files from the phone varies by device and Android version. On modern phones without root access, the direct database path may be restricted

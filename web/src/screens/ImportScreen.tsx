@@ -183,6 +183,8 @@ export default function ImportScreen() {
   const [whatsappMedia, setWhatsappMedia] = useState("");
   const [whatsappDb, setWhatsappDb] = useState("");
   const [whatsappBusiness, setWhatsappBusiness] = useState(false);
+  /** The holder's WhatsApp number; seeded from the profile's first phone. */
+  const [whatsappOwnerPhone, setWhatsappOwnerPhone] = useState("");
   const [whatsappStats, setWhatsappStats] = useState(emptyWhatsappPathStats);
   const [backupPassword, setBackupPassword] = useState("");
   const [showBackupPassword, setShowBackupPassword] = useState(false);
@@ -208,6 +210,7 @@ export default function ImportScreen() {
   const [profilePhonesError, setProfilePhonesError] = useState(false);
   const ownerPhonesSeededRef = useRef(false);
   const ownerEmailsSeededRef = useRef(false);
+  const whatsappOwnerPhoneSeededRef = useRef(false);
   const lastImessageMethodRef = useRef<ImessageMethodId>(IMESSAGE_DEFAULT_METHOD);
   const lastWhatsappMethodRef = useRef<WhatsappMethodId>(WHATSAPP_DEFAULT_METHOD);
   const sourceChangeGenRef = useRef(0);
@@ -315,6 +318,8 @@ export default function ImportScreen() {
     setWhatsappMedia(restored.whatsappMedia);
     setWhatsappDb(restored.whatsappDb);
     setWhatsappBusiness(restored.whatsappBusiness);
+    whatsappOwnerPhoneSeededRef.current = true;
+    setWhatsappOwnerPhone(restored.whatsappOwnerPhone);
     setAttachmentMedia(restored.attachmentMedia);
     setMaxResolution(restored.maxResolution);
     setMaxFps(restored.maxFps);
@@ -442,13 +447,17 @@ export default function ImportScreen() {
     }
   }
 
+  // The profile's phones seed the owner fields: the Android SMS phone list,
+  // and the one WhatsApp number (Android's only source, iPhone's fallback).
   useEffect(() => {
-    if (!isAndroidSmsSource(source)) {
+    const isWhatsapp = isWhatsappMethod(source);
+    if (!isAndroidSmsSource(source) && !isWhatsapp) {
       setProfilePhones([]);
       setProfilePhonesReady(false);
       setProfilePhonesError(false);
       ownerPhonesSeededRef.current = false;
       ownerEmailsSeededRef.current = false;
+      whatsappOwnerPhoneSeededRef.current = false;
       return;
     }
     const wantsEmails = needsOwnerEmails(source);
@@ -463,6 +472,16 @@ export default function ImportScreen() {
         setProfilePhones([...profile.phones]);
         setProfilePhonesError(false);
         setProfilePhonesReady(true);
+        if (isWhatsapp) {
+          const [first] = profile.phones;
+          if (first === undefined || whatsappOwnerPhoneSeededRef.current) return;
+          setWhatsappOwnerPhone((current) => {
+            if (current.trim().length > 0) return current;
+            whatsappOwnerPhoneSeededRef.current = true;
+            return first;
+          });
+          return;
+        }
         if (wantsEmails && profile.emails.length > 0 && !ownerEmailsSeededRef.current) {
           setOwnerEmails((current) => {
             if (current.trim().length > 0) return current;
@@ -707,6 +726,11 @@ export default function ImportScreen() {
           onWhatsappDbChange={updateWhatsappDb}
           whatsappBusiness={whatsappBusiness}
           onWhatsappBusinessChange={setWhatsappBusiness}
+          whatsappOwnerPhone={whatsappOwnerPhone}
+          onWhatsappOwnerPhoneChange={(value) => {
+            whatsappOwnerPhoneSeededRef.current = true;
+            setWhatsappOwnerPhone(value);
+          }}
           whatsappStats={whatsappStats}
           attachmentMedia={attachmentMedia}
           onAttachmentMediaChange={setAttachmentMedia}
@@ -765,6 +789,7 @@ export default function ImportScreen() {
               whatsappMedia,
               whatsappDb,
               whatsappBusiness,
+              whatsappOwnerPhone,
             })
           }
         />

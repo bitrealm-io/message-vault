@@ -5012,6 +5012,8 @@ dependencies = [
  "message-ir-format",
  "message-staging",
  "message-vault-io-core",
+ "phone",
+ "plist",
  "serde",
  "serde_json",
  "tempfile",

@@ -57,6 +57,7 @@ After you pick **WhatsApp**, **Platform** chooses Android or iPhone. Default Pla
 
 - **Backup folder** (required) — a folder that contains `msgstore.db` and/or `msgstore.db.crypt12` / `.crypt14` / `.crypt15`. See [WhatsApp on Android](/vault/user/prepare-a-backup/android-whatsapp/).
 - **Decryption key** — required (red asterisk) when the folder has a crypt file and no decrypted `msgstore.db`. **(Optional)** when `msgstore.db` is already in the folder. Enter a key file path or a crypt15 hex string. This is the WhatsApp Android decryption key, not the Apple backup password. The app does not save it.
+- **WhatsApp phone number** (required) — the number the WhatsApp account is registered to, pre-filled from the profile's phone. An Android backup does not carry it, so the form asks. Every imported message records this number as the address it was held at, which is what the identity counts in Settings add up; the number is not added to the profile.
 - **Contacts database (Optional)** — `wa.db`. Leave empty if that file is in the backup folder.
 - **Media folder (Optional)** — leave empty if a `WhatsApp` media folder is in the backup folder.
 - **Message database (Optional)** — leave empty if `msgstore.db` is in the backup folder.
@@ -66,6 +67,7 @@ After you pick **WhatsApp**, **Platform** chooses Android or iPhone. Default Pla
 - **Backup folder** (required) — the device UUID folder from Finder or iTunes. See [WhatsApp on iPhone](/vault/user/prepare-a-backup/iphone-whatsapp/).
 - **Contacts database (Optional)** — `ContactsV2.sqlite`. Leave empty if that file is in the backup.
 - **WhatsApp Business** — optional checkbox, unmarked by default. Turn it on only for a WhatsApp Business backup. The app does not remember this choice.
+- **WhatsApp phone number (Optional)**, under **Processing Options (Advanced)** — a fallback, pre-filled from the profile's phone. An iPhone backup carries the number in WhatsApp's own preferences, and Import reads it from there; the field is used only when the backup has no such entry. Import stops with a message when the backup has none and the field is empty.
 
 **Attachments** and **Contacts** apply to both platforms. Attachments is Copy / Convert / Compress / Skip. Contacts fills names from vault contacts after import; that is separate from the WhatsApp contacts database above.
 

@@ -478,8 +478,12 @@ fn build_exporter_config(
             form.timezone.clone_from(&options.timezone);
             Exporter::Imazing
         }
+        // Both WhatsApp platforms take the holder's number as an owner phone:
+        // Android's only source, iPhone's fallback when the backup's
+        // preferences carry no owner key.
         "whatsapp-android" => {
             form.input = path.to_string();
+            form.owner_phones = options.owner_phones.join("\n");
             form.whatsapp_platform = WhatsappPlatform::Android;
             form.whatsapp_key.clone_from(&options.whatsapp_key);
             form.whatsapp_wa.clone_from(&options.whatsapp_wa);
@@ -489,6 +493,7 @@ fn build_exporter_config(
         }
         "whatsapp-ios" => {
             form.input = path.to_string();
+            form.owner_phones = options.owner_phones.join("\n");
             form.whatsapp_platform = WhatsappPlatform::Ios;
             form.whatsapp_backup = path.to_string();
             form.whatsapp_wa.clone_from(&options.whatsapp_wa);

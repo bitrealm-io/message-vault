@@ -85,10 +85,11 @@ fn value_hint(spec: &FieldSpec) -> String {
         ValueType::Count => "Write a number, with >, >=, <, <=, or a..b.".into(),
         ValueType::Size => "Write a size like 500k, 1M, or 2G, with >, >=, <, <=, or a..b.".into(),
         ValueType::Choice | ValueType::Flag => format!("Write one of: {}.", choices()),
-        ValueType::Name if spec.values.is_empty() => "Write a name or #id.".into(),
-        ValueType::Name => format!("Write a name, #id, or one of: {}.", choices()),
-        ValueType::Person if spec.values.is_empty() => "Write a name, a handle, or #id.".into(),
-        ValueType::Person => format!("Write a name, a handle, #id, or one of: {}.", choices()),
+        ValueType::Name if spec.word == "import" => "Write #id or last.".into(),
+        ValueType::Name if spec.values.is_empty() => "Write a name, pre* for a prefix, or #id.".into(),
+        ValueType::Name => format!("Write a name, pre* for a prefix, #id, or one of: {}.", choices()),
+        ValueType::Person if spec.values.is_empty() => "Write a name, a handle, pre* for a prefix, or #id.".into(),
+        ValueType::Person => format!("Write a name, a handle, pre* for a prefix, #id, or one of: {}.", choices()),
         ValueType::Text if spec.values.is_empty() => "Write some text, or pre* for a prefix.".into(),
         ValueType::Text => format!("Write some text, pre* for a prefix, or one of: {}.", choices()),
     }
@@ -96,8 +97,8 @@ fn value_hint(spec: &FieldSpec) -> String {
 
 /// One value for `spec`, restricted to the shapes that word's meaning
 /// allows: `import:` (the only Name word without a name fallback) takes only
-/// `#id` or its `last` keyword. Any `Text` word takes a trailing `*` as a
-/// prefix, unquoted and non-empty before the star.
+/// `#id` or its `last` keyword. Every `Text`, `Name`, and `Person` word takes
+/// a trailing `*` as a prefix, unquoted and non-empty before the star.
 fn parse_one_value(spec: &FieldSpec, raw: &str, quoted: bool, today: NaiveDate) -> Option<Value> {
     let lower = raw.trim().to_ascii_lowercase();
     if let Some(kw) = spec.values.iter().find(|v| **v == lower) {
@@ -106,24 +107,25 @@ fn parse_one_value(spec: &FieldSpec, raw: &str, quoted: bool, today: NaiveDate) 
             _ => Value::Keyword(kw),
         });
     }
+    let text_or_prefix = || {
+        if !quoted
+            && let Some(p) = raw.strip_suffix('*')
+            && !p.is_empty()
+        {
+            Value::Prefix(p.to_string())
+        } else {
+            Value::Text(raw.trim().to_string())
+        }
+    };
     match spec.value_type {
         ValueType::Choice | ValueType::Flag => None,
-        ValueType::Text => {
-            if !quoted
-                && let Some(p) = raw.strip_suffix('*')
-                && !p.is_empty()
-            {
-                Some(Value::Prefix(p.to_string()))
-            } else {
-                Some(Value::Text(raw.trim().to_string()))
-            }
-        }
+        ValueType::Text => Some(text_or_prefix()),
         ValueType::Name if spec.word == "import" => value::parse_id(raw).map(Value::Id),
         ValueType::Name | ValueType::Person => {
             if !quoted && let Some(id) = value::parse_id(raw) {
                 Some(Value::Id(id))
             } else {
-                Some(Value::Text(raw.trim().to_string()))
+                Some(text_or_prefix())
             }
         }
         ValueType::Date => value::parse_date(raw, today).map(Value::Date),
@@ -524,6 +526,21 @@ mod tests {
         let e = parse_ok(ListKind::Messages, "body:avo*");
         let Expr::Field(term) = e else { panic!() };
         assert_eq!(term.values, vec![Value::Prefix("avo".into())]);
+        // So do the Name and Person words, `import:` aside.
+        for (q, p) in [
+            ("tag:Arch*", "Arch"),
+            ("group:Fam*", "Fam"),
+            ("with:Ja*", "Ja"),
+        ] {
+            let Expr::Field(term) = parse_ok(ListKind::Messages, q) else {
+                panic!()
+            };
+            assert_eq!(term.values, vec![Value::Prefix(p.into())], "{q}");
+        }
+        assert_eq!(
+            parse_err(ListKind::Messages, "import:la*").kind,
+            QueryErrorKind::BadValue
+        );
         // Quoting keeps the star literal.
         let e = parse_ok(ListKind::Messages, r#"body:"avo*""#);
         let Expr::Field(term) = e else { panic!() };

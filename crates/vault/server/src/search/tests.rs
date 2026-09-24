@@ -804,6 +804,39 @@ mod free_text {
         );
     }
 
+    /// `-(a or b)` negates the group, the same as `not (a or b)`, and the
+    /// group and its negation split the list.
+    #[tokio::test]
+    async fn a_minus_before_a_group_negates_the_group() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let all = run(&mut conn, ListKind::Messages, "").await;
+        let either = run(&mut conn, ListKind::Messages, "(toast or guacamole)").await;
+        let neither = run(&mut conn, ListKind::Messages, "-(toast or guacamole)").await;
+        assert_eq!(
+            either,
+            sorted(vec![f.jane_guac_from_me, f.jane_avocado_to_me])
+        );
+        assert_eq!(
+            neither,
+            run(&mut conn, ListKind::Messages, "not (toast or guacamole)").await
+        );
+        assert!(neither.iter().all(|id| !either.contains(id)));
+        let mut both = either.clone();
+        both.extend(&neither);
+        assert_eq!(sorted(both), all);
+        // The negated group composes with a term beside it.
+        assert_eq!(
+            run(
+                &mut conn,
+                ListKind::Messages,
+                "avocado -(toast or guacamole)"
+            )
+            .await,
+            sorted(vec![f.jane_avocado_from_me, f.sam_avocado_from_me])
+        );
+    }
+
     #[tokio::test]
     async fn phrases_prefixes_negation_and_or() {
         let (pool, _dir, f) = seeded().await;
@@ -1608,6 +1641,40 @@ mod people_words {
             )
             .await,
             vec![f.archive_msg]
+        );
+    }
+
+    /// `tag:` and `group:` take `pre*` like the Text words do, matching a
+    /// name that starts with the prefix. A quoted star is text.
+    #[tokio::test]
+    async fn tag_and_group_prefixes_match_the_start_of_a_name() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        tag(&mut conn, ACCOUNT, "food", &[f.jane_direct]).await;
+        tag(&mut conn, ACCOUNT, "bar", &[f.sam_direct]).await;
+        assert_eq!(
+            run(&mut conn, ListKind::Conversations, "tag:foo*").await,
+            vec![f.jane_direct]
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Conversations, "tag:FOO*").await,
+            vec![f.jane_direct]
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "tag:foo*").await,
+            vec![f.jane]
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Conversations, "tag:\"foo*\"").await,
+            Vec::<i64>::new()
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Conversations, "group:Fam*").await,
+            run(&mut conn, ListKind::Conversations, "group:Family").await
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "group:Fam*").await,
+            vec![f.ana]
         );
     }
 

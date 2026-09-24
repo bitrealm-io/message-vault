@@ -165,12 +165,13 @@ impl Lexer<'_> {
             }
             _ => {}
         }
-        // A leading `-` negates the token after it, unless nothing follows it.
+        // A leading `-` negates the token after it: a word, a phrase, or a
+        // group. A `-` with nothing, a space, or `)` after it is a word.
         let negated = self.peek() == Some(b'-')
             && self
                 .bytes
                 .get(self.pos + 1)
-                .is_some_and(|&b| !is_bare_end(b));
+                .is_some_and(|&b| !b.is_ascii_whitespace() && b != b')');
         if negated {
             self.pos += 1;
         }
@@ -366,6 +367,24 @@ mod tests {
         assert_eq!(toks[7].kind, TokenKind::RParen);
         // Operator words are case-insensitive.
         assert_eq!(kinds("OR")[0], TokenKind::Or);
+    }
+
+    #[test]
+    fn a_minus_before_a_group_negates_the_group() {
+        let toks = tokenize("-(a or b)").unwrap();
+        assert_eq!(toks[0].kind, TokenKind::LParen);
+        assert!(toks[0].negated);
+        assert_eq!(toks[0].span, 0..2);
+        assert_eq!(toks.len(), 5);
+        // A `-` before a space or a closing parenthesis is a word.
+        assert_eq!(
+            kinds("- a")[0],
+            TokenKind::Word {
+                text: "-".into(),
+                prefix: false
+            }
+        );
+        assert!(!tokenize("(a -)").unwrap()[2].negated);
     }
 
     #[test]

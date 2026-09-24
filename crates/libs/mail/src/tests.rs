@@ -381,6 +381,37 @@ fn escape_mboxrd_from_lines() {
     assert_eq!(escape_mboxrd_line("Fromage"), "Fromage");
 }
 
+/// Other mail clients show the `From_` line's sender and date, so both must
+/// be right even though reading the mbox back does not use them.
+#[test]
+fn each_mbox_record_starts_with_its_sender_and_utc_date() {
+    let incoming = base_sms(); // 2014-05-22 15:41:01 UTC, from +15555550101
+    let mut outgoing = base_sms();
+    outgoing.message.guid = "bbccddeeff00112233445566778899aa".into();
+    outgoing.message.direction = IrDirection::Outgoing;
+    outgoing.message.timestamp_unix_ms = 1_401_700_000_000; // 2014-06-02 09:06:40 UTC
+    let mut from_email = base_sms();
+    from_email.message.guid = "ccddeeff00112233445566778899aabb".into();
+    from_email.message.sender_handle = Some("sam@example.com".into());
+    from_email.message.timestamp_unix_ms = 1_401_700_001_000;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let path = write_conversation_mbox(tmp.path(), &[incoming, outgoing, from_email]).unwrap();
+
+    let text = fs::read_to_string(&path).unwrap();
+    let from_lines: Vec<&str> = text.lines().filter(|l| l.starts_with("From ")).collect();
+    assert_eq!(
+        from_lines,
+        [
+            "From +15555550101@sms.local Thu May 22 15:41:01 2014",
+            // The owner sent it. asctime pads a one-digit day with a space.
+            "From +15555550100@sms.local Mon Jun  2 09:06:40 2014",
+            // An address may not hold a second `@`, so it becomes `=`.
+            "From sam=example.com@handle.local Mon Jun  2 09:06:41 2014",
+        ]
+    );
+}
+
 #[test]
 fn writes_conversation_mboxrd() {
     let mut a = base_sms();

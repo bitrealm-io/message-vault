@@ -946,3 +946,30 @@ fn without_ffmpeg_the_whole_pass_fails_and_touches_nothing() {
         }
     }
 }
+
+/// Healing `a-mv.jpg` must re-transcode `a.*`. Any other file would put
+/// someone else's photo on the message.
+#[test]
+fn crash_recovery_finds_only_an_original_with_the_same_stem() {
+    let dir = tempfile::tempdir().unwrap();
+    let attachments = dir.path().join("attachments");
+    std::fs::create_dir_all(&attachments).unwrap();
+    for name in ["a.png", "b.png", "c.gif"] {
+        std::fs::write(attachments.join(name), b"image").unwrap();
+    }
+
+    assert_eq!(
+        find_recoverable_original(dir.path(), "a", MediaMode::Convert).unwrap(),
+        Some(attachments.join("a.png"))
+    );
+    // `c.gif` has the stem but the media step never touches a GIF, and
+    // `a.png` and `b.png` are convertible but belong to other attachments.
+    assert_eq!(
+        find_recoverable_original(dir.path(), "c", MediaMode::Convert).unwrap(),
+        None
+    );
+    assert_eq!(
+        find_recoverable_original(dir.path(), "d", MediaMode::Convert).unwrap(),
+        None
+    );
+}

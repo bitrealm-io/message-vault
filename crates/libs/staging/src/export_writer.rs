@@ -257,3 +257,95 @@ impl ExportWriter {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn transforms(obfuscate: bool) -> ExportTransforms {
+        ExportTransforms {
+            obfuscate,
+            ..ExportTransforms::none()
+        }
+    }
+
+    #[test]
+    fn only_unobfuscated_jsonl_takes_the_queue() {
+        let tmp = tempfile::tempdir().unwrap();
+        let open = |format, obfuscate| {
+            ExportWriter::open(tmp.path(), format, transforms(obfuscate), false).unwrap()
+        };
+
+        let jsonl = open(OutputFormat::Jsonl, false);
+        assert!(jsonl.use_queue());
+        assert!(jsonl.copies_attachments());
+        assert_eq!(jsonl.media_mode(), MediaMode::Clone);
+
+        assert!(!open(OutputFormat::Csv, false).use_queue());
+        assert!(!open(OutputFormat::Json, false).use_queue());
+
+        let obfuscated = open(OutputFormat::Jsonl, true);
+        assert!(!obfuscated.use_queue());
+        assert!(!obfuscated.copies_attachments());
+        assert_eq!(obfuscated.media_mode(), MediaMode::Disabled);
+    }
+
+    /// One conversation whose only message carries one attachment's bytes.
+    fn document_with_bytes() -> ConversationDocument {
+        let mut doc = message_ir::testutil::sample_document("with a photo");
+        doc.messages[0].attachments = vec![IrAttachment {
+            path: None,
+            original_name: Some("photo.jpg".into()),
+            mime_type: Some("image/jpeg".into()),
+            digest_sha256: None,
+            is_sticker: false,
+            transcription: None,
+            sticker_effect: None,
+            size_bytes: None,
+            missing_reason: None,
+            bytes: Some(b"\xff\xd8\xffphoto".to_vec()),
+        }];
+        doc
+    }
+
+    /// Both paths stage the attachment's bytes, write the conversation, and
+    /// count both in the report.
+    #[test]
+    fn finish_stages_attachments_and_counts_them_on_both_paths() {
+        for format in [OutputFormat::Jsonl, OutputFormat::Csv] {
+            let tmp = tempfile::tempdir().unwrap();
+            let writer = ExportWriter::open(tmp.path(), format, transforms(false), false).unwrap();
+            let mut report = ExportReport::default();
+
+            writer
+                .finish(
+                    vec![document_with_bytes()],
+                    &mut AttachmentSource::take_bytes,
+                    None,
+                    &mut report,
+                )
+                .unwrap();
+
+            assert_eq!(report.conversations, 1, "{format:?}");
+            assert_eq!(report.attachments_saved, 1, "{format:?}");
+            let staged: Vec<Vec<u8>> = fs::read_dir(tmp.path().join("attachments"))
+                .unwrap()
+                .map(|e| fs::read(e.unwrap().path()).unwrap())
+                .collect();
+            assert_eq!(staged, [b"\xff\xd8\xffphoto".to_vec()], "{format:?}");
+            let written = fs::read_dir(tmp.path())
+                .unwrap()
+                .filter(|e| {
+                    e.as_ref()
+                        .unwrap()
+                        .path()
+                        .extension()
+                        .and_then(|x| x.to_str())
+                        == Some(format.as_str())
+                })
+                .count();
+            assert_eq!(written, 1, "{format:?}: one conversation file");
+        }
+    }
+}

@@ -97,11 +97,10 @@ pub fn clean_previous_ir_output(output_dir: &Path) -> Result<()> {
 }
 
 /// Returns true when `name` matches a known export artifact pattern.
+/// `.json` and `.json.tmp` cover the `.meta.json` sidecars as well.
 fn is_export_artifact(name: &str) -> bool {
     name.ends_with(".csv")
         || name.ends_with(".csv.tmp")
-        || name.ends_with(".meta.json")
-        || name.ends_with(".meta.json.tmp")
         || name.ends_with(".json")
         || name.ends_with(".json.tmp")
         || name.ends_with(".jsonl")
@@ -109,4 +108,109 @@ fn is_export_artifact(name: &str) -> bool {
         || name == "smses.xml"
         || name.ends_with(".xml.tmp")
         || name.ends_with(".xml.sbrbody")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn names(dir: &Path) -> Vec<String> {
+        let mut out: Vec<String> = fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn refuses_a_folder_of_the_users_own_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join("notes.txt"), "mine").unwrap();
+
+        let err = clean_previous_ir_output(tmp.path()).unwrap_err();
+
+        assert!(err.to_string().contains("Refusing to clean"), "{err}");
+        assert_eq!(names(tmp.path()), ["notes.txt"]);
+    }
+
+    #[test]
+    fn removes_only_export_files_from_a_marked_folder() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_export_sentinel(dir).unwrap();
+        for name in [
+            "a.jsonl",
+            "b.csv",
+            "c.json",
+            "c.meta.json",
+            "d.jsonl.tmp",
+            "smses.xml",
+            "e.xml.tmp",
+            "notes.txt",
+        ] {
+            fs::write(dir.join(name), "x").unwrap();
+        }
+        fs::create_dir(dir.join("attachments")).unwrap();
+        fs::write(dir.join("attachments").join("a.jpg"), "x").unwrap();
+        // A folder named like an export file is not an export file.
+        fs::create_dir(dir.join("kept.json")).unwrap();
+
+        clean_previous_ir_output(dir).unwrap();
+
+        assert_eq!(names(dir), [EXPORT_SENTINEL, "kept.json", "notes.txt"]);
+    }
+
+    #[test]
+    fn cleans_a_marked_folder_that_holds_no_export_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_export_sentinel(tmp.path()).unwrap();
+        fs::write(tmp.path().join("notes.txt"), "mine").unwrap();
+
+        clean_previous_ir_output(tmp.path()).unwrap();
+
+        assert_eq!(names(tmp.path()), [EXPORT_SENTINEL, "notes.txt"]);
+    }
+
+    #[test]
+    fn cleans_an_unmarked_folder_with_export_files_and_marks_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join("a.jsonl"), "x").unwrap();
+        fs::write(tmp.path().join("notes.txt"), "mine").unwrap();
+
+        clean_previous_ir_output(tmp.path()).unwrap();
+
+        assert_eq!(names(tmp.path()), [EXPORT_SENTINEL, "notes.txt"]);
+    }
+
+    #[test]
+    fn marks_an_empty_folder() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        clean_previous_ir_output(tmp.path()).unwrap();
+
+        assert_eq!(names(tmp.path()), [EXPORT_SENTINEL]);
+    }
+
+    #[test]
+    fn export_artifacts_are_recognised_by_name() {
+        for name in [
+            "a.csv",
+            "a.csv.tmp",
+            "a.meta.json",
+            "a.meta.json.tmp",
+            "a.json",
+            "a.json.tmp",
+            "a.jsonl",
+            "a.jsonl.tmp",
+            "smses.xml",
+            "a.xml.tmp",
+            "a.xml.sbrbody",
+        ] {
+            assert!(is_export_artifact(name), "{name} is an export file");
+        }
+        for name in ["notes.txt", "photo.jpg", "other.xml", "a.csv.bak", ""] {
+            assert!(!is_export_artifact(name), "{name} is not an export file");
+        }
+    }
 }

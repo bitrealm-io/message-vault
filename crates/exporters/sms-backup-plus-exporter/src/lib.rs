@@ -23,3 +23,7 @@ mod convert_smoke;
 #[cfg(test)]
 #[path = "../tests/run_summary.rs"]
 mod run_summary;
+
+#[cfg(test)]
+#[path = "../tests/roster_and_inputs.rs"]
+mod roster_and_inputs;

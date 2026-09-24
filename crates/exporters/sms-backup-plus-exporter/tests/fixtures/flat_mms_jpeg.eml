@@ -1,0 +1,23 @@
+From: alice@unknown.email
+To: me@example.com
+Subject: SMS with Alice
+X-smssync-type: 132
+X-smssync-address: 4075551234
+X-smssync-date: 1609459320000
+Content-Type: multipart/mixed; boundary="mv-part"
+
+--mv-part
+Content-Type: text/plain; charset=utf-8
+
+Picture from Alice
+--mv-part
+Content-Type: image/jpeg
+Content-Transfer-Encoding: base64
+
+/9j/4AAQSkZJRgABAQAAAQABAAD/2Q==
+--mv-part
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="empty.bin"
+
+
+--mv-part--

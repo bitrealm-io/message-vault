@@ -234,7 +234,9 @@ fn pdu_pending_message(parsed: ParsedPdu, attachments: Vec<PendingAttachment>) -
         parsed.body,
         att_names.join(",")
     );
-    let sender_handle = if parsed.is_sent || parsed.sender_number.is_empty() {
+    // The projection names the owner as the sender of every outgoing message
+    // itself, so only a received PDU carries its sender here.
+    let sender_handle = if parsed.is_sent {
         String::new()
     } else {
         parsed.sender_number.clone()

@@ -41,6 +41,7 @@ fn convert_smoke_writes_csv_not_json() {
             // the export must carry the decoded character, not the escape.
             ("text", "smoke hello \u{1f44b}"),
             ("direction", "incoming"),
+            ("sender_handle", "+14075551234"),
             ("timestamp_unix_ms", "1609459200000"),
             ("chat_identifier", "+14075551234"),
         ],
@@ -65,6 +66,7 @@ fn convert_smoke_writes_csv_not_json() {
         &[
             ("text", "Hello one to one"),
             ("direction", "incoming"),
+            ("sender_handle", "+14075551234"),
             ("message_kind", "sms"),
         ],
     );

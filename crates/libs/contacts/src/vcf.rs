@@ -230,4 +230,24 @@ mod tests {
         assert_eq!(tags, vec!["Family", "Work"]);
         assert_eq!(strip_tags("Ada [Family]"), "Ada");
     }
+
+    #[test]
+    fn parse_vcf_unfolds_lines_continued_with_a_space_or_a_tab() {
+        // A continuation line drops its one leading space or tab and joins
+        // the line before it.
+        let text = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ada Augusta King, Coun\r\n \
+             tess of Lovelace\r\nTEL:+1555\r\n\t1234567\r\nEND:VCARD\r\n";
+        let cards = parse_vcf_str(text);
+        assert_eq!(cards.len(), 1);
+        assert_eq!(cards[0].fn_raw, "Ada Augusta King, Countess of Lovelace");
+        assert_eq!(cards[0].phones, vec!["+15551234567"]);
+    }
+
+    #[test]
+    fn parse_vcf_keeps_one_phone_for_a_repeated_or_empty_tel() {
+        let text = "BEGIN:VCARD\nFN:Ada\nTEL;TYPE=CELL:+15551234567\n\
+             TEL;TYPE=HOME:+15551234567\nTEL:\nEND:VCARD\n";
+        let cards = parse_vcf_str(text);
+        assert_eq!(cards[0].phones, vec!["+15551234567"]);
+    }
 }

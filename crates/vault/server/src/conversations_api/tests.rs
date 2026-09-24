@@ -1210,6 +1210,62 @@ fn display_service_label_from_sources() {
     assert_eq!(display_service_label(&["whatsapp".into()]), "WhatsApp");
 }
 
+/// The conversation list labels each thread by the sources its messages
+/// came from: an SMS Backup & Restore thread is "SMS/MMS", an iMessage-only
+/// one "imessage", a WhatsApp one "WhatsApp", and a thread from both
+/// "unknown". A message with a blank source says nothing about the service,
+/// so it doesn't turn an iMessage thread into "unknown".
+#[tokio::test]
+async fn the_conversation_list_labels_each_thread_by_its_sources() {
+    use crate::test_support::{SeedConversation, SeedMessage, get_json, seed_conversation};
+    use std::collections::HashMap;
+
+    let (vault, user) = vault_with_account().await;
+    let message = |source| SeedMessage {
+        source,
+        timestamp: "2024-01-01T00:00:00Z",
+        is_from_me: true,
+        body: "hi",
+    };
+    let mut expected = HashMap::new();
+    for (handle, sources, label) in [
+        ("+15555550101", &["sms-backup-restore"][..], "SMS/MMS"),
+        ("+15555550102", &["imessage"][..], "imessage"),
+        ("+15555550103", &["whatsapp"][..], "WhatsApp"),
+        ("+15555550104", &["imessage", ""][..], "imessage"),
+        ("+15555550105", &["imessage", "whatsapp"][..], "unknown"),
+    ] {
+        let messages: Vec<SeedMessage> = sources.iter().map(|s| message(*s)).collect();
+        let id = seed_conversation(
+            &vault.state,
+            &SeedConversation {
+                account_id: user.account_id,
+                handle,
+                conversation_type: "individual",
+                group_title: None,
+                source_file: "t.jsonl",
+                messages: &messages,
+            },
+        )
+        .await;
+        expected.insert(id, label.to_string());
+    }
+
+    let page: serde_json::Value = get_json(&vault.state, "/v1/conversations", &user.token).await;
+    let labels: HashMap<i64, String> = page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| {
+            (
+                c["id"].as_i64().unwrap(),
+                c["service"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    assert_eq!(labels, expected);
+}
+
 #[tokio::test]
 async fn list_conversations_filters_by_tag_and_people() {
     let (pool, _vault, account) = conversations_setup().await;
@@ -1894,6 +1950,45 @@ async fn conversation_messages_are_ascending_by_timestamp_then_sort_order() {
         .map(|m| m["text"].as_str().unwrap())
         .collect();
     assert_eq!(texts, vec!["first", "second", "third"]);
+}
+
+/// `sort=-date` turns both message lists newest first, ties broken by
+/// `sort_order` the same way round.
+#[tokio::test]
+async fn sort_minus_date_lists_messages_newest_first() {
+    let (vault, user, conversation_id) = conversation_messages_fixture().await;
+    let mut conn = vault.state.db.acquire().await.unwrap();
+    for (timestamp, sort_order, body) in [
+        ("2024-01-01T00:00:00Z", 1, "first"),
+        ("2024-01-03T00:00:00Z", 0, "third"),
+        ("2024-01-01T00:00:00Z", 5, "second"),
+    ] {
+        insert_message(
+            &mut conn,
+            conversation_id,
+            user.account_id,
+            timestamp,
+            sort_order,
+            body,
+        )
+        .await;
+    }
+    drop(conn);
+
+    for path in [
+        format!("/v1/conversations/{conversation_id}/messages?sort=-date"),
+        "/v1/messages?sort=-date".to_string(),
+    ] {
+        let page: serde_json::Value =
+            crate::test_support::get_json(&vault.state, &path, &user.token).await;
+        let texts: Vec<&str> = page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["text"].as_str().unwrap())
+            .collect();
+        assert_eq!(texts, ["third", "second", "first"], "{path}");
+    }
 }
 
 #[tokio::test]

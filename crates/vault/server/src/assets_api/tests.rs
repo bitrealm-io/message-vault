@@ -582,3 +582,218 @@ async fn a_multipart_upload_completes_end_to_end_over_http() {
     );
     assert_eq!(response.bytes().await.unwrap().as_ref(), bytes.as_slice());
 }
+
+/// The MIME type recorded for a blob the store already holds. The export's
+/// claim wins, then the stored file's own extension (older files kept one),
+/// then what the source file said. A blank claim is not a claim.
+#[test]
+fn mime_for_existing_file_prefers_the_claim_then_the_stored_name_then_the_source() {
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+    let sha = sha256_hex(b"older-jpeg");
+    let dest = root.join(shard_rel_path(&sha, ".jpg"));
+    fs::create_dir_all(dest.parent().unwrap()).unwrap();
+    fs::write(&dest, b"older-jpeg").unwrap();
+    let source = root.join("source.png");
+    fs::write(&source, b"older-jpeg").unwrap();
+
+    let stored = |export_mime: Option<&str>| {
+        let (stored, present) =
+            store_verified(&source, &sha, root, export_mime, false, false).unwrap();
+        assert!(present, "the blob is already stored");
+        stored.mime_type
+    };
+
+    assert_eq!(stored(Some("audio/amr")).as_deref(), Some("audio/amr"));
+    assert_eq!(stored(None).as_deref(), Some("image/jpeg"));
+    assert_eq!(
+        stored(Some("")).as_deref(),
+        Some("image/jpeg"),
+        "an empty claim must fall through to the stored file's name"
+    );
+
+    // With no extension on the stored file only the source is left to say.
+    let sha = sha256_hex(b"bare-blob");
+    let dest = root.join(shard_rel_path(&sha, ""));
+    fs::create_dir_all(dest.parent().unwrap()).unwrap();
+    fs::write(&dest, b"bare-blob").unwrap();
+    let source = root.join("bare.png");
+    fs::write(&source, b"bare-blob").unwrap();
+    let (stored, present) = store_verified(&source, &sha, root, Some(""), false, false).unwrap();
+    assert!(present);
+    assert_eq!(stored.mime_type.as_deref(), Some("image/png"));
+}
+
+/// The Content-Type on a PUT is the asset's own media type, so the vault
+/// records it and serves it back. `application/octet-stream` only says the
+/// body is bytes, so nothing is recorded and the download falls back to it.
+#[tokio::test]
+async fn an_asset_put_keeps_its_media_type_but_not_octet_stream() {
+    let (vault, user) = crate::test_support::vault_with_account().await;
+    let server = crate::test_support::serve(&vault.state).await;
+    let client = reqwest::Client::new();
+    let url = |sha: &str| format!("{}/v1/assets/{sha}?source=imessage", server.base());
+
+    let jpeg = b"jpeg-bytes".to_vec();
+    let jpeg_sha = sha256_hex(&jpeg);
+    let blob = b"blob-bytes".to_vec();
+    let blob_sha = sha256_hex(&blob);
+    for (sha, bytes, content_type) in [
+        (&jpeg_sha, jpeg.clone(), "image/jpeg; charset=binary"),
+        (&blob_sha, blob.clone(), "application/octet-stream"),
+    ] {
+        let response = client
+            .put(url(sha))
+            .bearer_auth(&user.token)
+            .header(reqwest::header::CONTENT_TYPE, content_type)
+            .body(bytes)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    let served_type = |sha: &str| {
+        let request = client.get(url(sha)).bearer_auth(&user.token);
+        async move {
+            let response = request.send().await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_owned)
+        }
+    };
+    assert_eq!(served_type(&jpeg_sha).await.as_deref(), Some("image/jpeg"));
+    assert_eq!(
+        served_type(&blob_sha).await.as_deref(),
+        Some("application/octet-stream")
+    );
+
+    // Stored files have no extension, so the served type is the sidecar's.
+    let assets_dir = vault
+        .state
+        .cfg
+        .paths
+        .assets_dir_for_account(user.account_id, "imessage");
+    assert_eq!(
+        read_mime_metadata(&assets_dir, &jpeg_sha).as_deref(),
+        Some("image/jpeg")
+    );
+    assert!(
+        !mime_metadata_path(&assets_dir, &blob_sha).exists(),
+        "octet-stream must not be recorded as the asset's type"
+    );
+}
+
+/// Starting a chunked upload for a blob the vault already holds creates
+/// nothing: the answer is 200 with where the bytes are, and no session.
+#[tokio::test]
+async fn starting_an_upload_for_a_stored_blob_answers_200_already_present() {
+    let (vault, user) = crate::test_support::vault_with_account().await;
+    let server = crate::test_support::serve(&vault.state).await;
+    let client = reqwest::Client::new();
+    let bytes = b"already-stored".to_vec();
+    let sha = sha256_hex(&bytes);
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+
+    let response = client
+        .put(url(""))
+        .bearer_auth(&user.token)
+        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .body(bytes.clone())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let created: serde_json::Value = response.json().await.unwrap();
+
+    let response = client
+        .post(url("/uploads"))
+        .bearer_auth(&user.token)
+        .json(&serde_json::json!({ "bytes": bytes.len(), "mime": "image/png" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(response.headers().get(reqwest::header::LOCATION).is_none());
+    let started: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(started["already_present"], true);
+    assert_eq!(started["upload_id"], serde_json::Value::Null);
+    assert_eq!(started["part_size"], serde_json::Value::Null);
+    assert_eq!(started["sha256"], sha.as_str());
+    assert_eq!(started["assets_path"], created["assets_path"]);
+
+    let incoming = vault
+        .state
+        .cfg
+        .paths
+        .assets_dir_for_account(user.account_id, "imessage")
+        .join(".incoming")
+        .join(&sha);
+    assert!(!incoming.exists(), "no upload session may be opened");
+}
+
+/// Aborting a chunked upload answers 204 and removes the session's folder,
+/// manifest and parts included, so an abandoned upload holds no disk.
+#[tokio::test]
+async fn deleting_an_upload_answers_204_and_removes_its_files() {
+    let (vault, user) = crate::test_support::vault_with_account().await;
+    let mut state = vault.state.clone();
+    state.upload_limits.part_size = 16;
+    let server = crate::test_support::serve(&state).await;
+    let client = reqwest::Client::new();
+    let bytes: Vec<u8> = (0u8..40).collect();
+    let sha = sha256_hex(&bytes);
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+
+    let response = client
+        .post(url("/uploads"))
+        .bearer_auth(&user.token)
+        .json(&serde_json::json!({ "bytes": bytes.len(), "mime": "image/png" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let started: serde_json::Value = response.json().await.unwrap();
+    let upload_id = started["upload_id"].as_str().unwrap().to_string();
+
+    let response = client
+        .put(url(&format!("/uploads/{upload_id}/parts/1")))
+        .bearer_auth(&user.token)
+        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .body(bytes[..16].to_vec())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let assets_dir = state
+        .cfg
+        .paths
+        .assets_dir_for_account(user.account_id, "imessage");
+    let session = asset_uploads::session_dir(&assets_dir, &sha, &upload_id);
+    assert!(session.join("manifest.json").is_file());
+    assert!(session.join("part-0001").is_file());
+
+    let response = client
+        .delete(url(&format!("/uploads/{upload_id}")))
+        .bearer_auth(&user.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert!(!session.exists(), "the session folder must be gone");
+
+    // The session is gone, so a part for it has nowhere to go.
+    let response = client
+        .put(url(&format!("/uploads/{upload_id}/parts/2")))
+        .bearer_auth(&user.token)
+        .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .body(bytes[16..32].to_vec())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}

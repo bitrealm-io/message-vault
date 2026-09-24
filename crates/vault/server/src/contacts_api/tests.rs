@@ -1544,6 +1544,61 @@ async fn a_broken_address_book_is_a_422_and_a_good_one_loads() {
     assert_eq!(body["contacts"], 1, "{text}");
 }
 
+/// A vCard file of exactly `len` bytes: one card whose `NOTE` line, which the
+/// reader ignores, is padded to make up the size.
+fn address_book_of(len: usize) -> String {
+    let head = "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Dana\r\nTEL:+15555550100\r\nNOTE:";
+    let tail = "\r\nEND:VCARD\r\n";
+    let padding = len
+        .checked_sub(head.len() + tail.len())
+        .expect("len holds the fixed part of the card");
+    let book = format!("{head}{}{tail}", "a".repeat(padding));
+    assert_eq!(book.len(), len);
+    book
+}
+
+/// The size cap is on the file as sent: a book of exactly
+/// `MAX_ADDRESS_BOOK_BYTES` loads, and one byte more answers `413` with
+/// `read_body_limited`'s sentence, which proves the route's own cap answered
+/// and not the app-wide body limit layer (whose sentence is "the request
+/// body is too large") or Axum's 2 MiB extractor default.
+#[tokio::test]
+async fn an_address_book_at_the_size_cap_loads_and_one_byte_over_is_a_413() {
+    use address_book::MAX_ADDRESS_BOOK_BYTES;
+    let (vault, account) = vault_with_account().await;
+
+    let (status, text) = crate::test_support::post_raw(
+        &vault.state,
+        "/v1/contacts",
+        &account.token,
+        "text/vcard",
+        address_book_of(MAX_ADDRESS_BOOK_BYTES),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let body: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(body["contacts"], 1, "{text}");
+
+    let (status, text) = crate::test_support::post_raw(
+        &vault.state,
+        "/v1/contacts",
+        &account.token,
+        "text/vcard",
+        address_book_of(MAX_ADDRESS_BOOK_BYTES + 1),
+    )
+    .await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::PayloadTooLarge,
+    );
+    assert_eq!(
+        problem.detail.as_deref(),
+        Some("request body too large"),
+        "the sentence must be the route's own: {text}"
+    );
+}
+
 #[test]
 fn the_media_type_alone_decides_the_address_book_format() {
     assert_eq!(

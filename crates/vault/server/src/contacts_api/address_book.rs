@@ -3,19 +3,20 @@
 //! by `db::contacts::replace_address_book`; this module checks the upload and
 //! hands it over.
 
-use axum::extract::State;
-use axum::http::HeaderMap;
+use axum::extract::{Request, State};
 use serde::Serialize;
 
 use crate::db::contacts;
 use crate::extract::Json;
-use crate::server::{ApiError, AppState, FullAccess, content_type_base};
+use crate::server::{ApiError, AppState, FullAccess, content_type_base, read_body_limited};
 
 /// Largest address book the load route accepts, in bytes.
 ///
 /// A phone's contacts export is measured in tens of kilobytes; a few megabytes
 /// is already far past any real address book, and the whole file is read into
-/// memory before parsing.
+/// memory before parsing. The route reads the body itself against this cap,
+/// as the asset routes do: Axum's `Bytes` extractor would stop at its own
+/// 2 MiB default first, and a cap that never answers is no cap.
 pub(crate) const MAX_ADDRESS_BOOK_BYTES: usize = 8 * 1024 * 1024;
 
 /// What loading an address book changed.
@@ -57,19 +58,14 @@ pub(crate) struct CreateContactsResponse {
 pub(crate) async fn create_contacts(
     State(state): State<AppState>,
     FullAccess(auth): FullAccess,
-    headers: HeaderMap,
-    body: axum::body::Bytes,
+    request: Request,
 ) -> Result<Json<CreateContactsResponse>, ApiError> {
-    let Some(name) = address_book_file_name(content_type_base(&headers)) else {
+    let Some(name) = address_book_file_name(content_type_base(request.headers())) else {
         return Err(ApiError::UnsupportedMediaType(
             "Content-Type must be text/vcard or text/csv".into(),
         ));
     };
-    if body.len() > MAX_ADDRESS_BOOK_BYTES {
-        return Err(ApiError::PayloadTooLarge(format!(
-            "address book is larger than {MAX_ADDRESS_BOOK_BYTES} bytes"
-        )));
-    }
+    let body = read_body_limited(request.into_body(), MAX_ADDRESS_BOOK_BYTES).await?;
     let content = std::str::from_utf8(&body)
         .map_err(|_| ApiError::MalformedBody("address book is not UTF-8 text".into()))?;
     if content.trim().is_empty() {

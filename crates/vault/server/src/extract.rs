@@ -119,10 +119,14 @@ impl<T: Serialize> IntoResponse for Json<T> {
 
 #[cfg(test)]
 mod tests {
+    use super::Json;
     use crate::problem::ProblemType;
+    use crate::server::ApiError;
     use crate::test_support::{
         PASSWORD, delete_raw, expect_problem, get_raw, post_raw, test_vault, vault_with_account,
     };
+    use axum::extract::FromRequest;
+    use axum::http::{Request, StatusCode, header};
 
     #[tokio::test]
     async fn a_query_parameter_of_the_wrong_type_is_a_validation_422() {
@@ -172,6 +176,101 @@ mod tests {
         )
         .await;
         expect_problem(status, &text, ProblemType::UnsupportedMediaType);
+    }
+
+    /// A JSON body over `[server] max_body_bytes` on an ordinary route answers
+    /// the `payload-too-large` problem, while a body under the cap that is
+    /// not JSON still answers `malformed-body`: the cap never turns a syntax
+    /// error into a 413, and a 413 is never a 400. Sent with a
+    /// `Content-Length`, so `RequestBodyLimitLayer` answers before the
+    /// extractor runs and `json_body_limit_response` rewrites its plain
+    /// text; the extractor's own arm is tested below without HTTP.
+    #[tokio::test]
+    async fn a_json_body_over_the_body_cap_is_a_json_413_and_a_syntax_error_a_400() {
+        let (vault, user) = vault_with_account().await;
+        let mut state = vault.state.clone();
+        state.max_body_bytes = 1024;
+
+        let padding = "a".repeat(4096);
+        let body = serde_json::json!({ "name": padding, "query": "hi" }).to_string();
+        let (status, text) = post_raw(
+            &state,
+            "/v1/saved-searches",
+            &user.token,
+            "application/json",
+            body,
+        )
+        .await;
+        expect_problem(status, &text, ProblemType::PayloadTooLarge);
+
+        let (status, text) = post_raw(
+            &state,
+            "/v1/saved-searches",
+            &user.token,
+            "application/json",
+            r#"{"name": "unterminated"#,
+        )
+        .await;
+        expect_problem(status, &text, ProblemType::MalformedBody);
+    }
+
+    /// A request to the extractor itself, so the body reaches Axum's `Json`
+    /// with no `Content-Length` for the limit layer to answer from.
+    fn json_request(body: axum::body::Body) -> Request<axum::body::Body> {
+        Request::post("/")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(body)
+            .unwrap()
+    }
+
+    /// A body the extractor had to read to discover it was too long (no
+    /// `Content-Length`, so the limit layer cannot answer early) is Axum's
+    /// `413` rejection, and `json_rejection` keeps that status as the
+    /// `payload-too-large` problem rather than folding it into `400`. Axum's
+    /// own default cap is 2 MiB; the body streams in past it.
+    #[tokio::test]
+    async fn a_streamed_json_body_over_the_limit_is_payload_too_large() {
+        let chunk = axum::body::Bytes::from(vec![b'a'; 1024 * 1024]);
+        let chunks: Vec<Result<axum::body::Bytes, std::io::Error>> =
+            std::iter::once(axum::body::Bytes::from_static(b"\""))
+                .chain(std::iter::repeat_n(chunk, 3))
+                .map(Ok)
+                .collect();
+        let body = axum::body::Body::from_stream(futures_util::stream::iter(chunks));
+
+        let error = Json::<serde_json::Value>::from_request(json_request(body), &())
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(error, ApiError::PayloadTooLarge(_)),
+            "a body over the limit is payload-too-large, got {error:?}"
+        );
+        assert_eq!(error.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    /// A body that fails while being read is the other rejection on the
+    /// buffering path, and it is not over any limit: it is `malformed-body`,
+    /// never `payload-too-large`. This is what keeps the status check in
+    /// `json_rejection` honest instead of treating every read failure as a
+    /// 413.
+    #[tokio::test]
+    async fn a_json_body_that_fails_midway_is_malformed_not_too_large() {
+        let chunks: Vec<Result<axum::body::Bytes, std::io::Error>> = vec![
+            Ok(axum::body::Bytes::from_static(b"{\"name\": ")),
+            Err(std::io::Error::other("connection reset")),
+        ];
+        let body = axum::body::Body::from_stream(futures_util::stream::iter(chunks));
+
+        let error = Json::<serde_json::Value>::from_request(json_request(body), &())
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(error, ApiError::MalformedBody(_)),
+            "a read failure is malformed-body, got {error:?}"
+        );
+        assert_eq!(error.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

@@ -602,6 +602,55 @@ fn headroom_shortfall_speaks_when_space_is_short() {
     assert!(msg.contains("GB"), "{msg}");
 }
 
+/// A backup no disk could hold is refused before a single file is written,
+/// by both drains.
+#[test]
+fn a_drain_the_disk_cannot_hold_is_refused_before_anything_is_written() {
+    let hinted = || {
+        let mut unit = unit_from(
+            doc_with("+15550000001", 1),
+            vec![AttachmentSource::Bytes(b"small".to_vec())],
+        );
+        unit.attachments[0].size_hint = Some(u64::MAX / 2);
+        vec![unit]
+    };
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path().join("out");
+    fs::create_dir_all(&out).unwrap();
+
+    let err = drain(&out, hinted(), &options(MediaMode::Clone, false)).unwrap_err();
+    assert!(err.to_string().contains("Not enough space"), "{err}");
+    let err = drain_write_queue(
+        &out,
+        hinted(),
+        &options(MediaMode::Clone, false),
+        None,
+        None,
+        None,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("Not enough space"), "{err}");
+
+    assert_eq!(fs::read_dir(&out).unwrap().count(), 0, "nothing written");
+}
+
+#[test]
+fn take_bytes_moves_the_bytes_out_of_the_attachment() {
+    let mut with_bytes = att("a.jpg");
+    with_bytes.bytes = Some(b"jpeg".to_vec());
+    let (source, hint) = AttachmentSource::take_bytes(&mut with_bytes);
+    assert!(matches!(source, AttachmentSource::Bytes(ref b) if b == b"jpeg"));
+    assert_eq!(hint, Some(4));
+    assert!(
+        with_bytes.bytes.is_none(),
+        "the bytes are moved, not copied"
+    );
+
+    let mut without = att("b.jpg");
+    let (source, _) = AttachmentSource::take_bytes(&mut without);
+    assert!(matches!(source, AttachmentSource::Missing));
+}
+
 /// A group conversation with its own chat identifier, titled or not, whose
 /// only message says `text`.
 fn group(chat_id: &str, title: Option<&str>, text: &str) -> ConversationDocument {

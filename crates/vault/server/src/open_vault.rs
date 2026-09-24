@@ -83,29 +83,32 @@ impl OpenVault {
     }
 }
 
+/// A config for a fresh vault under `dir`, for tests that open one through
+/// [`OpenVault`]. On a Postgres run the database is a schema of its own on
+/// that server, as every other test's is.
+#[cfg(test)]
+pub(crate) async fn fresh_config(dir: &std::path::Path) -> Config {
+    use crate::config::{DatabaseConfig, PathsConfig};
+
+    let url = match crate::pg_test_url() {
+        Some(url) => Some(crate::db::engine::pg_test_schema_url(&url).await),
+        None => None,
+    };
+    Config {
+        paths: PathsConfig {
+            db: dir.join("vault.db"),
+            data_dir: dir.join("data"),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: None,
+        database: DatabaseConfig { url },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{DatabaseConfig, PathsConfig};
-
-    /// A config for a fresh vault under `dir`. On a Postgres run the database
-    /// is a schema of its own on that server, as every other test's is.
-    async fn fresh_config(dir: &std::path::Path) -> Config {
-        let url = match crate::pg_test_url() {
-            Some(url) => Some(crate::db::engine::pg_test_schema_url(&url).await),
-            None => None,
-        };
-        Config {
-            paths: PathsConfig {
-                db: dir.join("vault.db"),
-                data_dir: dir.join("data"),
-                assets_dir: "assets".into(),
-                assets_converted_dir: "assets_converted".into(),
-            },
-            server: None,
-            database: DatabaseConfig { url },
-        }
-    }
 
     #[tokio::test]
     async fn opening_a_new_vault_creates_it_with_its_schema() {

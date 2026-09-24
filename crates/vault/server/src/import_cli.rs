@@ -266,7 +266,170 @@ pub fn discover_sources(paths: &[PathBuf]) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::account_profile;
+    use crate::open_vault::fresh_config;
     use tempfile::TempDir;
+
+    const ALICE: i64 = 7;
+
+    /// The number the address book and the conversation share, so loading the
+    /// book links the conversation's participant to the contact.
+    const PHONE: &str = "+14075551234";
+
+    /// One incoming text from `PHONE`, the message the contact should own.
+    fn conversation_with(phone: &str) -> String {
+        format!(
+            r#"{{"schema_version":4,"export":{{"source":"sms-backup-restore","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null}},"conversation":{{"chat_identifier":"{phone}","conversation_type":"individual","group_title":null,"participants":[{{"handle":"{phone}","display_name":null}}],"stats":{{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}}}}
+{{"guid":"g-contacts-1","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"{phone}","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}}
+"#
+        )
+    }
+
+    /// A vault with account alice, an export folder holding one conversation
+    /// with `PHONE`, and a one-card address book naming that number.
+    async fn vault_with_export_and_book(dir: &Path) -> (OpenVault, CliImportOptions) {
+        let vault = OpenVault::open(fresh_config(dir).await).await.unwrap();
+        let mut conn = vault.conn().await.unwrap();
+        account_profile::insert_account_at(&mut conn, ALICE, "alice", None, None)
+            .await
+            .unwrap();
+        drop(conn);
+
+        let input = dir.join("export");
+        fs::create_dir_all(&input).unwrap();
+        fs::write(input.join("chat.jsonl"), conversation_with(PHONE)).unwrap();
+        let book = dir.join("book.vcf");
+        fs::write(
+            &book,
+            format!("BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nTEL:{PHONE}\nEND:VCARD\n"),
+        )
+        .unwrap();
+
+        let opts = CliImportOptions {
+            account_id: ALICE,
+            input_dir: input,
+            assets_dir: None,
+            source_override: None,
+            mode: ImportMode::Append,
+            media: MediaMode::Clone,
+            contacts: Some(book),
+            overwrite_contacts: false,
+            skip_dedupe: true,
+            window_secs: 2,
+        };
+        (vault, opts)
+    }
+
+    async fn count(vault: &OpenVault, sql: &str) -> i64 {
+        let mut conn = vault.conn().await.unwrap();
+        sqlx::query_scalar(sql)
+            .bind(ALICE)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn an_import_with_contacts_loads_the_book_and_links_its_phone_to_the_participant() {
+        sqlx::any::install_default_drivers();
+        let dir = TempDir::new().unwrap();
+        let (vault, opts) = vault_with_export_and_book(dir.path()).await;
+
+        let stats = run(&vault, &opts).await.unwrap();
+
+        assert!(!stats.import.contacts_skipped, "the book was loaded");
+        assert_eq!(stats.import.contacts, 1);
+        assert_eq!(stats.import.contact_handles, 1);
+        assert_eq!(stats.import.messages, 1);
+        assert_eq!(stats.import.mode, ImportMode::Append);
+
+        // The card is a contact whose linked handle is the card's number.
+        assert_eq!(
+            count(
+                &vault,
+                "SELECT COUNT(*) FROM contacts
+                 WHERE account_id = $1 AND preferred_name = 'Ada Lovelace'"
+            )
+            .await,
+            1
+        );
+        assert_eq!(
+            count(
+                &vault,
+                "SELECT COUNT(*) FROM contact_handles ch
+                 JOIN contacts c ON c.id = ch.contact_id
+                 JOIN handles h ON h.id = ch.handle_id
+                 WHERE ch.account_id = $1
+                   AND c.preferred_name = 'Ada Lovelace'
+                   AND h.normalized = '+14075551234'"
+            )
+            .await,
+            1
+        );
+        // The conversation's participant is that contact, because the book
+        // was loaded before the messages were promoted.
+        assert_eq!(
+            count(
+                &vault,
+                "SELECT COUNT(*) FROM participants p
+                 JOIN conversations cv ON cv.id = p.conversation_id
+                 JOIN contacts c ON c.id = p.contact_id
+                 WHERE cv.account_id = $1 AND c.preferred_name = 'Ada Lovelace'"
+            )
+            .await,
+            1
+        );
+        vault.close().await;
+    }
+
+    #[tokio::test]
+    async fn a_second_import_with_the_same_book_and_no_overwrite_skips_the_contacts() {
+        sqlx::any::install_default_drivers();
+        let dir = TempDir::new().unwrap();
+        let (vault, opts) = vault_with_export_and_book(dir.path()).await;
+        run(&vault, &opts).await.unwrap();
+
+        let stats = run(&vault, &opts).await.unwrap();
+
+        assert!(
+            stats.import.contacts_skipped,
+            "contacts already loaded and --overwrite-contacts not given"
+        );
+        assert_eq!(stats.import.contacts, 0);
+        assert_eq!(stats.import.contact_handles, 0);
+        assert_eq!(
+            count(
+                &vault,
+                "SELECT COUNT(*) FROM contacts WHERE account_id = $1"
+            )
+            .await,
+            1,
+            "the skipped load added no contact"
+        );
+        vault.close().await;
+    }
+
+    #[tokio::test]
+    async fn an_import_without_contacts_reports_the_load_as_skipped() {
+        sqlx::any::install_default_drivers();
+        let dir = TempDir::new().unwrap();
+        let (vault, mut opts) = vault_with_export_and_book(dir.path()).await;
+        opts.contacts = None;
+
+        let stats = run(&vault, &opts).await.unwrap();
+
+        assert!(stats.import.contacts_skipped, "no address book was given");
+        assert_eq!(
+            count(
+                &vault,
+                "SELECT COUNT(*) FROM contacts WHERE account_id = $1"
+            )
+            .await,
+            1,
+            "only the conversation's participant became a contact"
+        );
+        vault.close().await;
+    }
 
     #[test]
     fn discover_sources_from_ir_headers() {

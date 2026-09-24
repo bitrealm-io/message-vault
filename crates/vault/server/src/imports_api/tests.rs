@@ -1880,6 +1880,157 @@ async fn a_batch_into_another_accounts_run_is_not_found() {
     assert_ne!(status, axum::http::StatusCode::NOT_FOUND);
 }
 
+/// The account that owns Import Run `import_id`.
+async fn run_account(state: &crate::server::AppState, import_id: i64) -> i64 {
+    let mut conn = state.db.acquire().await.unwrap();
+    sqlx::query_scalar("SELECT account_id FROM vault_imports WHERE id = $1")
+        .bind(import_id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// Complete `import_id` and hand back the date its row says it
+/// finished on, the `YYYY-MM-DD` the shortcuts are named after.
+async fn complete_run(state: &crate::server::AppState, token: &str, import_id: i64) -> String {
+    let _: serde_json::Value = post_json(
+        state,
+        &format!("/v1/imports/{import_id}/complete"),
+        token,
+        serde_json::json!({ "status": "completed" }),
+    )
+    .await;
+    let mut conn = state.db.acquire().await.unwrap();
+    let finished_at: String =
+        sqlx::query_scalar("SELECT finished_at FROM vault_imports WHERE id = $1")
+            .bind(import_id)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    finished_at[..10].to_string()
+}
+
+/// Every saved search the account owns as `(name, query, kind)`, and every
+/// Contact Group as `(name, kind, member contact ids ascending)`.
+async fn shortcuts(
+    state: &crate::server::AppState,
+    account_id: i64,
+) -> (
+    Vec<(String, String, String)>,
+    Vec<(String, String, Vec<i64>)>,
+) {
+    let mut conn = state.db.acquire().await.unwrap();
+    let searches: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT name, query, kind FROM saved_searches WHERE account_id = $1 ORDER BY name",
+    )
+    .bind(account_id)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    let groups: Vec<(i64, String, String)> = sqlx::query_as(
+        "SELECT id, name, kind FROM contact_groups WHERE account_id = $1 ORDER BY name",
+    )
+    .bind(account_id)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    let mut out = Vec::new();
+    for (id, name, kind) in groups {
+        let members: Vec<i64> = sqlx::query_scalar(
+            "SELECT contact_id FROM contact_group_members WHERE group_id = $1 ORDER BY contact_id",
+        )
+        .bind(id)
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap();
+        out.push((name, kind, members));
+    }
+    (searches, out)
+}
+
+/// Finishing a run that stored messages leaves two shortcuts behind: a
+/// saved search whose query is the run's id, and a Contact Group holding
+/// exactly the contacts the run recorded touching. Both carry the source
+/// and the day the run finished in their names, and both are marked
+/// `import` so the sidebar can tell them from what a person made.
+#[tokio::test]
+async fn completing_an_import_with_messages_creates_its_saved_search_and_contact_group() {
+    let (state, _vault, token) = importer().await;
+    let path = batches_path(&state, &token, "whatsapp").await;
+    let import_id: i64 = path
+        .trim_start_matches("/v1/imports/")
+        .trim_end_matches("/batches")
+        .parse()
+        .unwrap();
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        &path,
+        &token,
+        "application/jsonl",
+        wipe_test_batch("whatsapp", &["g-1", "g-2"]),
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{text}");
+
+    let date = complete_run(&state, &token, import_id).await;
+    let (searches, groups) = shortcuts(&state, run_account(&state, import_id).await).await;
+
+    assert_eq!(
+        searches,
+        [(
+            format!("Import whatsapp {date}"),
+            format!("import:{import_id}"),
+            "import".to_string()
+        )]
+    );
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let touched = crate::db::import_contacts::contact_ids(&mut conn, import_id)
+        .await
+        .unwrap();
+    assert!(!touched.is_empty(), "the run must have touched a contact");
+    assert_eq!(
+        groups,
+        [(
+            format!("whatsapp import {date}"),
+            "import".to_string(),
+            touched
+        )]
+    );
+}
+
+/// A run that stored nothing gets no saved search: one matching no
+/// messages would only clutter the sidebar, and the run stays visible in
+/// Import History regardless. With no contacts touched there is no Contact
+/// Group either.
+#[tokio::test]
+async fn completing_an_import_with_no_messages_creates_no_saved_search() {
+    let (state, _vault, token) = importer().await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &state,
+        "/v1/imports",
+        &token,
+        serde_json::json!({ "source": "whatsapp" }),
+    )
+    .await;
+    let import_id = created["id"].as_i64().unwrap();
+
+    complete_run(&state, &token, import_id).await;
+    let completed: serde_json::Value =
+        get_json(&state, &format!("/v1/imports/{import_id}"), &token).await;
+    assert_eq!(completed["message_count"], 0, "{completed}");
+
+    let (searches, groups) = shortcuts(&state, run_account(&state, import_id).await).await;
+    assert!(
+        searches.is_empty(),
+        "no saved search for an empty run: {searches:?}"
+    );
+    assert!(
+        groups.is_empty(),
+        "no Contact Group for an empty run: {groups:?}"
+    );
+}
+
 /// Import `path` in append mode on `conn`, as the serve path does once the
 /// schema is in place.
 async fn append_on_conn(conn: &mut AnyConnection, path: &Path, root: &Path, source: &str) {

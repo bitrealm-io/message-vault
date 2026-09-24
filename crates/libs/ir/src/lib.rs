@@ -1142,5 +1142,96 @@ mod handle_service_tests {
     }
 }
 
+/// Every enum value survives being written and read back.
+///
+/// Each list names every variant, so a new variant without a `parse` arm
+/// fails here instead of turning into the fallback value on read. The storage
+/// id must also be the serde name, because JSONL is written by serde and read
+/// back through `parse` by the vault.
+#[cfg(test)]
+mod storage_id_round_trip_tests {
+    use super::*;
+
+    fn assert_matches_serde<T: Serialize>(value: T, id: &str) {
+        assert_eq!(
+            serde_json::to_value(value).unwrap(),
+            serde_json::Value::String(id.to_string()),
+            "{id}"
+        );
+    }
+
+    #[test]
+    fn conversation_type() {
+        for v in [IrConversationType::Individual, IrConversationType::Group] {
+            assert_eq!(IrConversationType::parse(v.as_str()), v);
+            assert_matches_serde(v, v.as_str());
+        }
+    }
+
+    #[test]
+    fn handle_type() {
+        for v in [
+            HandleType::Phone,
+            HandleType::Email,
+            HandleType::Username,
+            HandleType::Other,
+        ] {
+            assert_eq!(HandleType::parse(v.as_str()), v);
+            assert_matches_serde(v, v.as_str());
+        }
+    }
+
+    #[test]
+    fn service() {
+        for v in [
+            IrService::Sms,
+            IrService::IMessage,
+            IrService::Whatsapp,
+            IrService::Rcs,
+            IrService::Discord,
+            IrService::Signal,
+            IrService::Telegram,
+            IrService::Slack,
+            IrService::Unknown,
+        ] {
+            assert_eq!(IrService::parse(v.as_str()), v);
+            assert_matches_serde(v, v.as_str());
+        }
+    }
+
+    #[test]
+    fn handle_service() {
+        for v in [HandleService::Phone, HandleService::Whatsapp] {
+            assert_eq!(HandleService::parse(v.as_str()), v);
+            assert_matches_serde(v, v.as_str());
+        }
+    }
+
+    #[test]
+    fn message_kind() {
+        for v in [
+            IrMessageKind::Sms,
+            IrMessageKind::Mms,
+            IrMessageKind::IMessage,
+            IrMessageKind::Tapback,
+            IrMessageKind::StickerTapback,
+            IrMessageKind::Announcement,
+            IrMessageKind::LocationShare,
+            IrMessageKind::Balloon,
+            IrMessageKind::Unknown,
+        ] {
+            assert_eq!(IrMessageKind::parse(v.as_str()), v);
+            assert_matches_serde(v, v.as_str());
+        }
+    }
+
+    #[test]
+    fn direction() {
+        for v in [IrDirection::Incoming, IrDirection::Outgoing] {
+            assert_matches_serde(v, v.as_str());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;

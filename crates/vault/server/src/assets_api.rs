@@ -23,8 +23,8 @@ use crate::asset_uploads;
 use crate::config::validate_source_id;
 use crate::server::{
     ApiError, AppState, AuthIdentity, Created, ExportAccess, ImportAccess, ImportOrExportAccess,
-    discard_body, read_body_limited, resolve_import_account, stream_body_to_file,
-    upload_content_type,
+    content_type_base, discard_body, read_body_limited, resolve_import_account,
+    stream_body_to_file, upload_content_type,
 };
 
 /// Read/write chunk for hashing and copying files: 1 MiB.
@@ -636,6 +636,36 @@ impl Asset {
             already_present,
         })
     }
+
+    /// The answer to a write that leaves the blob in the store: `201 Created`
+    /// naming the asset when this write stored it, `200 OK` when the vault
+    /// already held it and nothing was made.
+    fn written(asset: StoredAsset, already_present: bool) -> Response {
+        if already_present {
+            return Self::stored(asset, true).into_response();
+        }
+        Created {
+            location: format!("/v1/assets/{}", asset.sha256),
+            body: Self {
+                sha256: asset.sha256,
+                assets_path: asset.assets_path,
+                already_present: false,
+            },
+        }
+        .into_response()
+    }
+}
+
+/// Refuse a raw body sent with no `Content-Type`. Any media type is accepted,
+/// because the header names the asset's own type; its absence is a client
+/// that did not say what it sent.
+fn require_content_type(headers: &HeaderMap) -> Result<(), ApiError> {
+    match content_type_base(headers) {
+        Some(base) if !base.is_empty() => Ok(()),
+        _ => Err(ApiError::UnsupportedMediaType(
+            "Content-Type is required: the asset's media type, or application/octet-stream".into(),
+        )),
+    }
 }
 
 enum AssetAccess {
@@ -666,9 +696,7 @@ async fn resolve_asset_lookup(
         AssetAccess::Write | AssetAccess::Probe => true,
     };
     if query.source.trim().is_empty() {
-        return Err(ApiError::MissingParameter(
-            "query param source is required".into(),
-        ));
+        return Err(ApiError::validation("source is required"));
     }
     validate_source_id(&query.source).map_err(|e| ApiError::validation(e.to_string()))?;
     let account = resolve_import_account(auth);
@@ -704,7 +732,6 @@ async fn resolve_asset_lookup(
     ),
     responses(
         (status = 200, body = Asset),
-        (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
@@ -739,7 +766,6 @@ pub(crate) async fn head_asset(
     ),
     responses(
         (status = 200, description = "Raw asset bytes", content_type = "application/octet-stream"),
-        (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
@@ -816,14 +842,21 @@ pub(crate) async fn get_asset(
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
         ("source" = String, Query)
     ),
-    request_body(content_type = "application/octet-stream", description = "Raw asset bytes"),
+    request_body(content_type = "application/octet-stream", description = "Raw asset bytes, sent with the asset's own media type or application/octet-stream"),
     responses(
-        (status = 200, body = Asset),
+        (
+            status = 201,
+            body = Asset,
+            description = "The asset was stored",
+            headers(("Location" = String, description = "Path of the asset"))
+        ),
+        (status = 200, body = Asset, description = "The vault already held the asset; nothing was stored"),
         (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
-        (status = 413, body = crate::problem::Problem)
+        (status = 413, body = crate::problem::Problem),
+        (status = 415, body = crate::problem::Problem),
+        (status = 422, description = "A parameter broke a rule, or the bytes do not hash to the address", body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn replace_asset(
@@ -833,7 +866,8 @@ pub(crate) async fn replace_asset(
     AxumPath(sha256): AxumPath<String>,
     Query(query): Query<AssetQuery>,
     request: Request,
-) -> Result<Json<Asset>, ApiError> {
+) -> Result<Response, ApiError> {
+    require_content_type(&headers)?;
     let (account, source_id, existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
 
@@ -841,7 +875,7 @@ pub(crate) async fn replace_asset(
 
     if let Some(stored) = existing {
         discard_body(request.into_body(), state.max_body_bytes).await?;
-        return Ok(Asset::stored(stored, true));
+        return Ok(Asset::written(stored, true));
     }
 
     // Write the upload into the account assets tree so verify can rename into place
@@ -891,7 +925,7 @@ pub(crate) async fn replace_asset(
 
     // Rename consumes the temp file; remove leftovers after errors / already_present races.
     let _ = tokio::fs::remove_file(&tmp_path).await;
-    Ok(Asset::stored(stored, already_present))
+    Ok(Asset::written(stored, already_present))
 }
 
 /// Total bytes and optional MIME type for a chunked upload.
@@ -949,7 +983,9 @@ pub(crate) struct ReplaceAssetUploadPartResponse {
         ),
         (status = 400, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
+        (status = 403, body = crate::problem::Problem),
+        (status = 415, body = crate::problem::Problem),
+        (status = 422, description = "A parameter broke a rule, or the upload is larger than the vault accepts", body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn create_asset_upload(
@@ -1020,7 +1056,8 @@ pub(crate) async fn create_asset_upload(
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
-        (status = 413, body = crate::problem::Problem)
+        (status = 413, body = crate::problem::Problem),
+        (status = 415, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn replace_asset_upload_part(
@@ -1028,8 +1065,10 @@ pub(crate) async fn replace_asset_upload_part(
     ImportAccess(auth): ImportAccess,
     AxumPath((sha256, upload_id, part)): AxumPath<(String, String, u32)>,
     Query(query): Query<AssetQuery>,
+    headers: HeaderMap,
     request: Request,
 ) -> Result<Json<ReplaceAssetUploadPartResponse>, ApiError> {
+    require_content_type(&headers)?;
     let (account, source_id, _existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
     if part == 0 {
@@ -1064,11 +1103,16 @@ pub(crate) async fn replace_asset_upload_part(
         ("source" = String, Query)
     ),
     responses(
-        (status = 200, body = Asset),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
+        (
+            status = 201,
+            body = Asset,
+            description = "The parts were joined and the asset stored",
+            headers(("Location" = String, description = "Path of the asset"))
+        ),
+        (status = 200, body = Asset, description = "The vault already held the asset; nothing was stored"),
         (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
+        (status = 403, body = crate::problem::Problem),
+        (status = 422, description = "A parameter broke a rule, a part is missing, or the joined bytes do not hash to the address", body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn complete_asset_upload(
@@ -1076,7 +1120,7 @@ pub(crate) async fn complete_asset_upload(
     ImportAccess(auth): ImportAccess,
     AxumPath((sha256, upload_id)): AxumPath<(String, String)>,
     Query(query): Query<AssetQuery>,
-) -> Result<Json<Asset>, ApiError> {
+) -> Result<Response, ApiError> {
     let (account, source_id, existing) =
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
     if let Some(stored) = existing {
@@ -1097,7 +1141,7 @@ pub(crate) async fn complete_asset_upload(
                 "could not drop stale upload session"
             );
         }
-        return Ok(Asset::stored(stored, true));
+        return Ok(Asset::written(stored, true));
     }
 
     let _guard = state
@@ -1115,7 +1159,7 @@ pub(crate) async fn complete_asset_upload(
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("upload complete task: {e}")))?
     .map_err(|e| ApiError::AssetUploadInvalid(e.to_string()))?;
 
-    Ok(Asset::stored(stored, already_present))
+    Ok(Asset::written(stored, already_present))
 }
 
 /// Abort and delete a chunked asset upload's staging files.
@@ -1131,7 +1175,6 @@ pub(crate) async fn complete_asset_upload(
     ),
     responses(
         (status = 204, description = "Upload aborted"),
-        (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)

@@ -1121,10 +1121,6 @@ fn every_api_error_answers_the_status_its_problem_type_declares() {
             ApiError::ValidationFailed(vec!["x".into()]),
             StatusCode::UNPROCESSABLE_ENTITY,
         ),
-        (
-            ApiError::MissingParameter("x".into()),
-            StatusCode::BAD_REQUEST,
-        ),
         (ApiError::MalformedBody("x".into()), StatusCode::BAD_REQUEST),
         (
             ApiError::UnsupportedMediaType("x".into()),
@@ -1156,6 +1152,10 @@ fn every_api_error_answers_the_status_its_problem_type_declares() {
         ),
         (ApiError::NotTheOwner("x".into()), StatusCode::FORBIDDEN),
         (
+            ApiError::RegistrationClosed("x".into()),
+            StatusCode::FORBIDDEN,
+        ),
+        (
             ApiError::InsufficientScope("x".into()),
             StatusCode::FORBIDDEN,
         ),
@@ -1166,12 +1166,12 @@ fn every_api_error_answers_the_status_its_problem_type_declares() {
                 word: None,
                 did_you_mean: None,
             },
-            StatusCode::BAD_REQUEST,
+            StatusCode::UNPROCESSABLE_ENTITY,
         ),
         (ApiError::StateConflict("x".into()), StatusCode::CONFLICT),
         (
             ApiError::AssetUploadInvalid("x".into()),
-            StatusCode::BAD_REQUEST,
+            StatusCode::UNPROCESSABLE_ENTITY,
         ),
         (ApiError::NotFound("x".into()), StatusCode::NOT_FOUND),
         (
@@ -1198,10 +1198,6 @@ fn every_api_error_displays_its_detail_sentence() {
         ApiError::ValidationFailed(vec!["name is required".into(), "name is too long".into()])
             .to_string(),
         "name is required; name is too long"
-    );
-    assert_eq!(
-        ApiError::MissingParameter("q is required".into()).to_string(),
-        "q is required"
     );
     assert_eq!(
         ApiError::MalformedBody("body is not JSON".into()).to_string(),
@@ -1245,6 +1241,10 @@ fn every_api_error_displays_its_detail_sentence() {
     assert_eq!(
         ApiError::NotTheOwner("owner only".into()).to_string(),
         "owner only"
+    );
+    assert_eq!(
+        ApiError::RegistrationClosed("ask the owner".into()).to_string(),
+        "ask the owner"
     );
     assert_eq!(
         ApiError::InsufficientScope("needs import".into()).to_string(),

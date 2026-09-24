@@ -122,9 +122,9 @@ describe("useConversationMessages", () => {
     expect(result.current.loading).toBe(false);
   });
 
-  it("asks for a year with year=, one page at a time like every other view", async () => {
-    getMessages
-      .mockResolvedValueOnce(page([message(9)]))
+  it("asks for a year as a search in the conversation, one page at a time", async () => {
+    getMessages.mockResolvedValueOnce(page([message(9)]));
+    searchMessages
       .mockResolvedValueOnce({ items: [message(1), message(2)], total: 3, limit: 50, offset: 0 })
       .mockResolvedValueOnce({ items: [message(3)], total: 3, limit: 50, offset: 50 });
 
@@ -145,28 +145,27 @@ describe("useConversationMessages", () => {
     act(() => result.current.selectYear(2020));
     await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual([1, 2]));
 
-    // The year is a `year=` parameter on the conversation's own messages
-    // route, at the ordinary page size. A year is not loaded in full (#323):
-    // find-in-conversation runs on the vault now, so nothing needs the whole
-    // year in the browser, and a 50,000-message year no longer hits the
+    // Opening a conversation takes no filter, so a year is `date:` in a
+    // search scoped to the conversation, at the ordinary page size. A year is
+    // not loaded in full (#323), and a 50,000-message year no longer hits the
     // offset ceiling mid-walk (#326).
-    expect(getMessages).toHaveBeenNthCalledWith(
-      2,
-      7,
-      { offset: 0, limit: 50, year: 2020 },
+    expect(searchMessages).toHaveBeenNthCalledWith(
+      1,
+      { q: "in:#7 trashed:any date:2020", offset: 0, limit: 50 },
       expect.objectContaining({ signal: expect.anything() }),
     );
     expect(result.current.total).toBe(3);
+    expect(result.current.finding).toBe(false);
 
     act(() => result.current.fetchConversationPage(50));
     await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual([3]));
-    expect(getMessages).toHaveBeenNthCalledWith(
-      3,
-      7,
-      { offset: 50, limit: 50, year: 2020 },
+    expect(searchMessages).toHaveBeenNthCalledWith(
+      2,
+      { q: "in:#7 trashed:any date:2020", offset: 50, limit: 50 },
       expect.objectContaining({ signal: expect.anything() }),
     );
-    expect(getMessages).toHaveBeenCalledTimes(3);
+    expect(getMessages).toHaveBeenCalledTimes(1);
+    expect(searchMessages).toHaveBeenCalledTimes(2);
   });
 
   it("runs the find box on the vault, scoped to the conversation and the chosen year", async () => {
@@ -188,16 +187,18 @@ describe("useConversationMessages", () => {
     await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual([4, 5]));
     expect(result.current.finding).toBe(true);
     expect(result.current.total).toBe(2);
-    // `in:#id` plus the term as free text: the same language every list speaks.
+    // `in:#id` plus the term as free text: the same language every list
+    // speaks. `trashed:any` keeps a conversation opened from the Trash
+    // screen searchable.
     expect(searchMessages).toHaveBeenLastCalledWith(
-      { q: "in:#7 dentist", offset: 0, limit: 50 },
+      { q: "in:#7 trashed:any dentist", offset: 0, limit: 50 },
       expect.objectContaining({ signal: expect.anything() }),
     );
 
     act(() => result.current.selectYear(2021));
     await waitFor(() =>
       expect(searchMessages).toHaveBeenLastCalledWith(
-        { q: "in:#7 date:2021 dentist", offset: 0, limit: 50 },
+        { q: "in:#7 trashed:any date:2021 dentist", offset: 0, limit: 50 },
         expect.objectContaining({ signal: expect.anything() }),
       ),
     );
@@ -206,7 +207,7 @@ describe("useConversationMessages", () => {
     act(() => result.current.setFindTerm("book club"));
     await waitFor(() =>
       expect(searchMessages).toHaveBeenLastCalledWith(
-        { q: 'in:#7 date:2021 "book club"', offset: 0, limit: 50 },
+        { q: 'in:#7 trashed:any date:2021 "book club"', offset: 0, limit: 50 },
         expect.objectContaining({ signal: expect.anything() }),
       ),
     );

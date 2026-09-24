@@ -877,7 +877,10 @@ async fn paging_a_run_raises_messages_delivered_to_the_rows_handed_over() {
     )
     .await;
     assert_eq!(newest_first["items"][0]["text"], "the menu");
-    assert_eq!(newest_first["limit"], DEFAULT_EXPORT_LIMIT);
+    assert_eq!(
+        newest_first["limit"], 40,
+        "the default page, as on every list"
+    );
 
     let (status, text) = get_raw(
         &vault.state,

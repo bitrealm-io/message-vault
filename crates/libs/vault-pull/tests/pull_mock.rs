@@ -224,7 +224,8 @@ fn mock_asset<'a>(
         when.method(GET)
             .path(format!("/v1/assets/{sha256}"))
             .query_param("source", source)
-            .query_param("account", "1");
+            // The key names the account; the vault refuses an `account=`.
+            .query_param_missing("account");
         then.status(200)
             .header("content-type", "application/octet-stream")
             .body(bytes);

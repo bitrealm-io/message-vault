@@ -50,7 +50,8 @@ pub struct SavedSearch {
 /// Create / update / delete failures for a saved search.
 #[derive(Debug)]
 pub enum SavedSearchError {
-    BadRequest(String),
+    /// A name or query in the body broke a rule: `422`.
+    Invalid(String),
     NotFound(String),
     Conflict(String),
     Internal(anyhow::Error),
@@ -65,7 +66,7 @@ impl From<sqlx::Error> for SavedSearchError {
 impl From<SavedSearchError> for crate::server::ApiError {
     fn from(e: SavedSearchError) -> Self {
         match e {
-            SavedSearchError::BadRequest(m) => Self::validation(m),
+            SavedSearchError::Invalid(m) => Self::validation(m),
             SavedSearchError::NotFound(m) => Self::NotFound(m),
             SavedSearchError::Conflict(m) => Self::NameTaken(m),
             SavedSearchError::Internal(e) => Self::Internal(e),
@@ -99,10 +100,10 @@ fn row_to_saved_search(row: &AnyRow) -> Result<SavedSearch> {
 fn normalize_name(name: &str) -> Result<String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
-        return Err(SavedSearchError::BadRequest("name required".into()));
+        return Err(SavedSearchError::Invalid("name required".into()));
     }
     if trimmed.chars().count() > MAX_NAME_LEN {
-        return Err(SavedSearchError::BadRequest(format!(
+        return Err(SavedSearchError::Invalid(format!(
             "name must be {MAX_NAME_LEN} characters or fewer"
         )));
     }
@@ -113,7 +114,7 @@ fn normalize_name(name: &str) -> Result<String> {
 fn normalize_query(query: &str) -> Result<String> {
     let trimmed = query.trim();
     if trimmed.is_empty() {
-        return Err(SavedSearchError::BadRequest("query required".into()));
+        return Err(SavedSearchError::Invalid("query required".into()));
     }
     Ok(trimmed.to_string())
 }

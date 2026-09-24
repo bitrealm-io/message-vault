@@ -27,7 +27,6 @@ A `500 Internal Server Error` has no page: its `type` is `about:blank`, and its 
 | Type | Status | Title |
 |---|---|---|
 | [`validation-failed`](./validation-failed/) | `422 Unprocessable Entity` | Validation failed |
-| [`missing-parameter`](./missing-parameter/) | `400 Bad Request` | Missing parameter |
 | [`malformed-body`](./malformed-body/) | `400 Bad Request` | Malformed body |
 | [`unsupported-media-type`](./unsupported-media-type/) | `415 Unsupported Media Type` | Unsupported media type |
 | [`payload-too-large`](./payload-too-large/) | `413 Payload Too Large` | Payload too large |
@@ -38,11 +37,12 @@ A `500 Internal Server Error` has no page: its `type` is `about:blank`, and its 
 | [`name-taken`](./name-taken/) | `409 Conflict` | Name taken |
 | [`demo-account-protected`](./demo-account-protected/) | `403 Forbidden` | Demo account protected |
 | [`not-the-owner`](./not-the-owner/) | `403 Forbidden` | Not the owner |
+| [`registration-closed`](./registration-closed/) | `403 Forbidden` | Registration closed |
 | [`insufficient-scope`](./insufficient-scope/) | `403 Forbidden` | Insufficient scope |
 | [`account-disabled`](./account-disabled/) | `403 Forbidden` | Account disabled |
-| [`search-query-invalid`](./search-query-invalid/) | `400 Bad Request` | Search query invalid |
+| [`search-query-invalid`](./search-query-invalid/) | `422 Unprocessable Entity` | Search query invalid |
 | [`state-conflict`](./state-conflict/) | `409 Conflict` | State conflict |
-| [`asset-upload-invalid`](./asset-upload-invalid/) | `400 Bad Request` | Asset upload invalid |
+| [`asset-upload-invalid`](./asset-upload-invalid/) | `422 Unprocessable Entity` | Asset upload invalid |
 | [`not-found`](./not-found/) | `404 Not Found` | Not found |
 | [`method-not-allowed`](./method-not-allowed/) | `405 Method Not Allowed` | Method not allowed |
 | [`not-acceptable`](./not-acceptable/) | `406 Not Acceptable` | Not acceptable |

@@ -131,23 +131,27 @@ async fn a_disabled_account_can_still_log_out() {
 }
 
 /// The credential names the account. There is no `account=` parameter on the
-/// singleton, so a query string naming someone else is not a refusal: it is
-/// nothing, and the reply is still the token's own account.
+/// singleton, so a query string naming someone else is refused like any
+/// parameter the route does not declare, rather than answered as though it
+/// had chosen whose Session to read.
 #[tokio::test]
-async fn a_session_read_ignores_a_query_string() {
+async fn a_session_read_refuses_an_account_parameter() {
     let vault = test_vault().await;
     let state = vault.state.clone();
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
-    let body: serde_json::Value = crate::test_support::get_json(
+    let (status, text) = crate::test_support::get_raw(
         &state,
         &format!("/v1/session?account={}", bob.username),
         &alice.token,
     )
     .await;
-    assert_eq!(body["username"], "alice");
-    assert_eq!(body["account_id"], alice.account_id);
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
 }
 
 #[tokio::test]

@@ -742,12 +742,12 @@ pub(crate) struct CreateContactsResponse {
     ),
     responses(
         (status = 200, body = CreateContactsResponse),
-        (status = 400, body = crate::problem::Problem),
+        (status = 400, description = "The body is not UTF-8 text", body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (status = 413, body = crate::problem::Problem),
         (status = 415, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem)
+        (status = 422, description = "The address book is empty, or is not a vCard file or a vCard CSV export", body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn create_contacts(
@@ -779,10 +779,19 @@ pub(crate) async fn create_contacts(
     std::fs::write(&path, content.as_bytes())
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("write address book: {e}")))?;
 
+    // Reading the file touches no database, so whatever fails here is the
+    // address book's own fault: it was read and broke a rule, a 422. The
+    // temp file's path means nothing to the person, so the sentence says
+    // "the address book" where the reader wrote the path.
+    let book = contacts::read_address_book(&path).map_err(|e| {
+        ApiError::validation(
+            format!("{e:#}").replace(&path.display().to_string(), "the address book"),
+        )
+    })?;
     let mut conn = state.db.acquire().await?;
-    let stats = contacts::load_contacts_if_needed(&mut conn, Some(&path), true, auth.account_id)
+    let stats = contacts::replace_address_book(&mut conn, auth.account_id, book)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("load address book: {e}")))?;
+        .map_err(|e| ApiError::Internal(e.context("load address book")))?;
     Ok(Json(CreateContactsResponse {
         contacts: stats.contacts,
         phones: stats.phones,
@@ -1209,7 +1218,6 @@ impl ContactEditor<'_> {
     ),
     responses(
         (status = 200, body = Page<ContactSummary>),
-        (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)

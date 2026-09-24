@@ -29,9 +29,9 @@ use crate::trash_api::remove_orphaned_files;
 /// The keys `GET /v1/conversations` accepts in `sort=`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConversationSort {
-    /// Timestamp of the most recent non-duplicate message in the thread.
+    /// Timestamp of the most recent non-duplicate message in the conversation.
     Date,
-    /// Number of non-duplicate messages in the thread.
+    /// Number of non-duplicate messages in the conversation.
     Messages,
 }
 
@@ -416,45 +416,18 @@ pub async fn list_conversation_source_stats(
 }
 
 /// The `WHERE` a conversation's message page and its `total` share: the
-/// conversation itself, the account scope, Export's not-duplicate filter
-/// (`ListKind::Messages`'s default in `search::emit::compile`), and — when
-/// `year` is given — the same calendar-year bounds `date:YYYY` matches in
-/// the search language, computed by the same
-/// [`crate::search::value::parse_date_span`] the search compiler calls, so a
-/// day cannot fall inside the year for one and outside it for the other.
-/// Trash plays no part here: reading one conversation's messages is not
-/// gated by trash, the same rule [`get_conversation_summary`] follows for
-/// the conversation itself.
-///
-/// # Errors
-///
-/// `BadRequest` when `year` is not a four-digit year.
-fn conversation_messages_where(
-    conversation_id: i64,
-    account_id: i64,
-    year: Option<i32>,
-    zone: chrono_tz::Tz,
-) -> Result<(String, Vec<SqlParam>), ApiError> {
-    let mut sql =
-        "m.conversation_id = ? AND m.account_id = ? AND m.duplicate_of IS NULL".to_string();
-    let mut params = vec![SqlParam::Int(conversation_id), SqlParam::Int(account_id)];
-    if let Some(year) = year {
-        // `today` only matters to the relative-span forms (`7d`, `1y`, …)
-        // `parse_date_span` also understands; a bare `YYYY` ignores it. The
-        // year's edges are the instants it begins and ends in the account's
-        // zone, the same rule `date:YYYY` uses.
-        let today = crate::search::today_in(zone);
-        let span = crate::search::value::parse_date_span(&year.to_string(), today)
-            .ok_or_else(|| ApiError::validation("year must be a four-digit year"))?;
-        sql.push_str(" AND m.timestamp >= ? AND m.timestamp < ?");
-        params.push(SqlParam::Text(crate::search::value::utc_instant(
-            zone, span.start,
-        )));
-        params.push(SqlParam::Text(crate::search::value::utc_instant(
-            zone, span.end,
-        )));
-    }
-    Ok((sql, params))
+/// conversation itself, the account scope, and Export's not-duplicate filter
+/// (`ListKind::Messages`'s default in `search::emit::compile`). It takes no
+/// filter: opening a conversation is a read by id, and searching inside one,
+/// by year or by word, is `GET /v1/messages?q=in:#{id} …`
+/// (`docs/architecture/http-api.md`, "Methods"). Trash plays no part here:
+/// reading one conversation's messages is not gated by trash, the same rule
+/// [`get_conversation_summary`] follows for the conversation itself.
+fn conversation_messages_where(conversation_id: i64, account_id: i64) -> (String, Vec<SqlParam>) {
+    (
+        "m.conversation_id = ? AND m.account_id = ? AND m.duplicate_of IS NULL".to_string(),
+        vec![SqlParam::Int(conversation_id), SqlParam::Int(account_id)],
+    )
 }
 
 /// One page of a conversation's messages, ascending by timestamp then
@@ -465,13 +438,11 @@ fn conversation_messages_where(
 ///
 /// # Errors
 ///
-/// `BadRequest` when `year` is not a four-digit year; `Internal` when a
-/// statement fails.
+/// `Internal` when a statement fails.
 pub async fn get_conversation_messages(
     conn: &mut AnyConnection,
     account_id: i64,
     conversation_id: i64,
-    year: Option<i32>,
     order: &[SortKey<MessageSort>],
     limit: usize,
     offset: usize,
@@ -480,8 +451,7 @@ pub async fn get_conversation_messages(
         return Ok(None);
     }
 
-    let zone = crate::db::account_profile::load_time_zone(conn, account_id).await?;
-    let (where_sql, params) = conversation_messages_where(conversation_id, account_id, year, zone)?;
+    let (where_sql, params) = conversation_messages_where(conversation_id, account_id);
 
     let count_sql = renumber_placeholders(&format!(
         "SELECT COUNT(*) FROM messages m WHERE {where_sql}"
@@ -524,7 +494,6 @@ pub async fn get_conversation_messages(
     ),
     responses(
         (status = 200, body = crate::paging::Page<crate::conversations_api::ConversationSummary>),
-        (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
@@ -563,7 +532,7 @@ pub(crate) async fn list_conversations(
 }
 
 /// One conversation, in the same shape a list row already has — so a caller
-/// that opens a thread from a list does not have to convert between two
+/// that opens a conversation from a list does not have to convert between two
 /// shapes, and paging through the whole list to find one id is never
 /// necessary. Trash is a property the list applies, not a gate on reading:
 /// a trashed conversation still answers here.
@@ -631,17 +600,15 @@ pub(crate) struct ListConversationMessagesQuery {
     limit: Option<usize>,
     #[serde(default)]
     offset: Option<usize>,
-    /// Narrow to one calendar year in the vault's stored offset — the same
-    /// year `date:YYYY` matches in the search language.
-    #[serde(default)]
-    year: Option<i32>,
     #[serde(default)]
     sort: Option<String>,
 }
 
-/// A conversation's messages, ascending by timestamp then `sort_order`. The
-/// read path a screen uses to open a thread: no search query to compose,
-/// just the conversation id.
+/// A conversation's messages, ascending by timestamp then `sort_order`.
+///
+/// The read path a screen uses to open a conversation: no search query to
+/// compose, just the conversation id. It takes no filter; searching inside a
+/// conversation, by year or by word, is `GET /v1/messages?q=in:#{id} …`.
 #[utoipa::path(
     get,
     path = "/v1/conversations/{id}/messages",
@@ -651,12 +618,10 @@ pub(crate) struct ListConversationMessagesQuery {
         ("id" = i64, Path, description = "Conversation id"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
         ("offset" = Option<usize>, Query, description = "Page offset, max 50000"),
-        ("year" = Option<i32>, Query, description = "Narrow to one calendar year, in the vault's stored offset"),
         ("sort" = Option<String>, Query, description = "`date` or `-date`. Default `date`, oldest first.")
     ),
     responses(
         (status = 200, body = crate::paging::Page<vault_api_types::Message>),
-        (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
@@ -685,7 +650,6 @@ pub(crate) async fn list_conversation_messages(
         &mut conn,
         auth.account_id,
         conversation_id,
-        query.year,
         &order,
         page.limit,
         page.offset,

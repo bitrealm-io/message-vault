@@ -14,8 +14,8 @@ type MessagesResult = { items: Message[]; total: number };
 
 /**
  * Calendar years covered by a conversation's first and last message instants,
- * read in the account's `zone`: the same rule the vault's `year=` filter and
- * `date:2024` use, so every chip names a year that has messages in it.
+ * read in the account's `zone`: the rule `date:2024` follows, so every chip
+ * names a year that has messages in it.
  */
 export function conversationYears(
   startIso: string | null | undefined,
@@ -58,28 +58,33 @@ export function buildFooterLabel(
 }
 
 /**
- * The search-language query a find in one conversation compiles to: the
- * conversation by id, the active year when one is chosen, and the typed term
- * as free text. Runs on `GET /v1/messages`, so it reaches every message in
- * the conversation, not the page in hand (#313).
+ * The search-language query a year or a find in one conversation compiles to:
+ * the conversation by id, the active year when one is chosen, and the typed
+ * term as free text when there is one. Runs on `GET /v1/messages`, so it
+ * reaches every message in the conversation, not the page in hand (#313).
+ * Opening a conversation takes no filter, so a year is a search too.
+ *
+ * `trashed:any` lifts the Messages list's default of leaving the trash out.
+ * The conversation is named by id, and one opened from the Trash screen must
+ * answer a year or a find like any other.
  */
-export function findQueryFor(
+export function conversationQueryFor(
   conversationId: number,
   activeYear: number | null,
   term: string,
 ): string {
-  const parts = [`in:#${conversationId}`];
+  const parts = [`in:#${conversationId}`, "trashed:any"];
   if (activeYear !== null) parts.push(`date:${activeYear}`);
-  parts.push(quote(term.trim()));
+  if (term.trim()) parts.push(quote(term.trim()));
   return parts.join(" ");
 }
 
 /**
  * What a cache key says the thread is looking at: the list under
- * `conversations` (messages or find) and the conversation id. Two keys with
- * the same scope show the same kind of rows for the same thread, so the
+ * `conversations` (messages or a search) and the conversation id. Two keys
+ * with the same scope show the same kind of rows for the same thread, so the
  * previous page may stand in while the next one loads; anything else (a new
- * conversation, a find replacing the thread) must not.
+ * conversation, a search replacing the thread) must not.
  */
 function threadScope(queryKey: readonly unknown[] | undefined): string | null {
   if (!queryKey) return null;
@@ -116,24 +121,21 @@ export function useConversationMessages(conversationId: number) {
   }
 
   const finding = findTerm.trim().length > 0;
-  const findQuery = finding ? findQueryFor(conversationId, activeYear, findTerm) : "";
+  // A year or a find is a search in the conversation; the whole thread is
+  // the conversation's own messages route, which takes no filter.
+  const searching = finding || activeYear !== null;
+  const searchQuery = searching ? conversationQueryFor(conversationId, activeYear, findTerm) : "";
 
-  const key = finding
-    ? keys.conversations.find(conversationId, findQuery, offset, PAGE_SIZE)
-    : keys.conversations.messages(conversationId, { offset, limit: PAGE_SIZE, year: activeYear });
+  const key = searching
+    ? keys.conversations.find(conversationId, searchQuery, offset, PAGE_SIZE)
+    : keys.conversations.messages(conversationId, { offset, limit: PAGE_SIZE });
 
   const query = useVaultQuery<MessagesResult>(
     key,
     (signal) =>
-      finding
-        ? listMessages({ q: findQuery, offset, limit: PAGE_SIZE }, { signal })
-        : listConversationMessages(
-            conversationId,
-            activeYear !== null
-              ? { offset, limit: PAGE_SIZE, year: activeYear }
-              : { offset, limit: PAGE_SIZE },
-            { signal },
-          ),
+      searching
+        ? listMessages({ q: searchQuery, offset, limit: PAGE_SIZE }, { signal })
+        : listConversationMessages(conversationId, { offset, limit: PAGE_SIZE }, { signal }),
     {
       // Turning a page keeps the current one on screen until the next lands,
       // instead of flashing "0 of 0" and disabling both pager buttons

@@ -99,7 +99,7 @@ fn auth_rate_limit_forgets_idle_buckets() {
 #[test]
 fn auth_rate_limit_trips_after_max() {
     let limits: AuthRateLimits = Arc::new(Mutex::new(HashMap::new()));
-    let bucket = "register:someone";
+    let bucket = "session:someone";
     for _ in 0..AUTH_RATE_MAX {
         check_auth_rate_limit(&limits, bucket).unwrap();
     }
@@ -116,7 +116,7 @@ fn auth_rate_limit_trips_after_max() {
 fn auth_rate_limits_do_not_cross_vaults() {
     let one: AuthRateLimits = Arc::new(Mutex::new(HashMap::new()));
     let two: AuthRateLimits = Arc::new(Mutex::new(HashMap::new()));
-    let bucket = "register:someone";
+    let bucket = "session:someone";
     for _ in 0..AUTH_RATE_MAX {
         check_auth_rate_limit(&one, bucket).unwrap();
     }

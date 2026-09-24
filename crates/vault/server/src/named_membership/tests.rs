@@ -20,21 +20,21 @@ async fn reserved_names_rejected_with_exact_messages() {
         .await
         .unwrap_err();
     match err {
-        MembershipError::BadRequest(msg) => assert_eq!(msg, "\"Trash\" is a reserved tag"),
+        MembershipError::Invalid(msg) => assert_eq!(msg, "\"Trash\" is a reserved tag"),
         other => panic!("expected BadRequest, got {other:?}"),
     }
     let err = create_set(group_spec(), &mut conn, account, "Trash")
         .await
         .unwrap_err();
     match err {
-        MembershipError::BadRequest(msg) => assert_eq!(msg, "Trash is a reserved group"),
+        MembershipError::Invalid(msg) => assert_eq!(msg, "Trash is a reserved group"),
         other => panic!("expected BadRequest, got {other:?}"),
     }
     let err = create_set(group_spec(), &mut conn, account, "Group Chats")
         .await
         .unwrap_err();
     match err {
-        MembershipError::BadRequest(msg) => {
+        MembershipError::Invalid(msg) => {
             assert_eq!(msg, "Group Messages is a reserved name");
         }
         other => panic!("expected BadRequest, got {other:?}"),
@@ -51,7 +51,7 @@ async fn names_over_max_len_rejected() {
         .await
         .unwrap_err();
     match err {
-        MembershipError::BadRequest(msg) => {
+        MembershipError::Invalid(msg) => {
             assert_eq!(
                 msg,
                 format!("name must be at most {MAX_NAME_LEN} characters")
@@ -69,7 +69,7 @@ async fn create_set_refuses_an_empty_name() {
     let err = create_set(group_spec(), &mut conn, account, "   ")
         .await
         .unwrap_err();
-    assert!(matches!(err, MembershipError::BadRequest(_)));
+    assert!(matches!(err, MembershipError::Invalid(_)));
 }
 
 #[tokio::test]
@@ -84,13 +84,13 @@ async fn rename_set_refuses_an_empty_or_over_long_name() {
     let err = rename_set(group_spec(), &mut conn, account, id, "   ")
         .await
         .unwrap_err();
-    assert!(matches!(err, MembershipError::BadRequest(_)));
+    assert!(matches!(err, MembershipError::Invalid(_)));
 
     let long = "x".repeat(MAX_NAME_LEN + 1);
     let err = rename_set(group_spec(), &mut conn, account, id, &long)
         .await
         .unwrap_err();
-    assert!(matches!(err, MembershipError::BadRequest(_)));
+    assert!(matches!(err, MembershipError::Invalid(_)));
 }
 
 #[tokio::test]
@@ -183,7 +183,7 @@ async fn create_set_refuses_duplicates_and_reserved_names() {
     let err = create_set(group_spec(), &mut conn, account, "Trash")
         .await
         .unwrap_err();
-    assert!(matches!(err, MembershipError::BadRequest(_)));
+    assert!(matches!(err, MembershipError::Invalid(_)));
 }
 
 #[tokio::test]
@@ -283,7 +283,7 @@ async fn patch_members_adds_and_removes_in_one_call() {
     let err = patch_members(group_spec(), &mut conn, account, id, &[], &[])
         .await
         .unwrap_err();
-    assert!(matches!(err, MembershipError::BadRequest(_)));
+    assert!(matches!(err, MembershipError::Invalid(_)));
 }
 
 #[tokio::test]
@@ -298,7 +298,7 @@ async fn patch_members_with_a_foreign_member_writes_nothing() {
     let err = patch_members(group_spec(), &mut conn, account, id, &[a, 999_999], &[])
         .await
         .unwrap_err();
-    assert!(matches!(err, MembershipError::NotFound(_)));
+    assert!(matches!(err, MembershipError::Invalid(_)));
     assert!(
         list_member_ids_of(group_spec(), &mut conn, account, id)
             .await

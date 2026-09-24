@@ -1,17 +1,15 @@
 //! One shape for every paged list on the HTTP interface (`docs/architecture/http-api.md`).
 //!
 //! A list takes `?offset=&limit=` and answers `{items, total, limit, offset}`.
-//! A `limit` above the cap or a zero `limit` is a 400, never a silent clamp,
+//! A `limit` above the cap or a zero `limit` is a 422, never a silent clamp,
 //! so a caller learns the rule the first time it breaks it.
 
 use serde::{Deserialize, Serialize};
 
 use crate::server::ApiError;
 
-/// Default page size for the Contacts and Conversations lists.
+/// Default page size for every list, an Export Run's messages included.
 pub const DEFAULT_LIST_LIMIT: usize = 40;
-/// Default page size for `GET /v1/exports/{id}/messages`.
-pub const DEFAULT_EXPORT_LIMIT: usize = 100;
 /// The largest page any list route returns. One number, one meaning.
 pub const MAX_LIST_LIMIT: usize = 500;
 /// Cap on `OFFSET` skips for the Contacts and Conversations lists. Export has
@@ -180,7 +178,7 @@ pub struct PageParams {
     pub offset: usize,
 }
 
-/// Turn the raw `limit` and `offset` into a page, or a 400 that says which
+/// Turn the raw `limit` and `offset` into a page, or a 422 that says which
 /// one is wrong. `max_offset` is `None` for a route that may walk the whole set.
 pub fn page_params(
     limit: Option<usize>,

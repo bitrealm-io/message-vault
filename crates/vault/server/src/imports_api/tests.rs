@@ -1906,3 +1906,25 @@ async fn a_message_is_held_at_its_own_owner_else_the_headers_and_the_owner_gets_
     .unwrap();
     assert_eq!(owner_participants, 0, "the holder is never a participant");
 }
+
+/// A blank `source` is refused exactly as a missing one is: both are one
+/// entry in `validation-failed`'s `errors`, never a problem type of their own.
+#[tokio::test]
+async fn a_blank_source_answers_the_same_as_a_missing_one() {
+    let (state, _vault, token) = importer().await;
+    for body in [r#"{"source": "  "}"#, r#"{}"#] {
+        let (status, text) =
+            crate::test_support::post_raw(&state, "/v1/imports", &token, "application/json", body)
+                .await;
+        let problem = crate::test_support::expect_problem(
+            status,
+            &text,
+            crate::problem::ProblemType::ValidationFailed,
+        );
+        let errors = problem.errors.unwrap_or_default();
+        assert!(
+            errors.iter().any(|e| e.contains("source")),
+            "{body}: {text}"
+        );
+    }
+}

@@ -23,7 +23,8 @@ pub const MAX_NAME_LEN: usize = 80;
 /// Create / rename / delete / membership failures for a named set.
 #[derive(Debug)]
 pub enum MembershipError {
-    BadRequest(String),
+    /// A name or member id in the body broke a rule: `422`.
+    Invalid(String),
     NotFound(String),
     Conflict(String),
     Internal(anyhow::Error),
@@ -38,7 +39,7 @@ impl From<sqlx::Error> for MembershipError {
 impl From<MembershipError> for crate::server::ApiError {
     fn from(e: MembershipError) -> Self {
         match e {
-            MembershipError::BadRequest(m) => Self::validation(m),
+            MembershipError::Invalid(m) => Self::validation(m),
             MembershipError::NotFound(m) => Self::NotFound(m),
             MembershipError::Conflict(m) => Self::NameTaken(m),
             MembershipError::Internal(e) => Self::Internal(e),
@@ -255,16 +256,16 @@ fn reserved_error(spec: &MembershipSpec, name: &str) -> String {
 fn normalize_name(spec: &MembershipSpec, name: &str) -> Result<String, MembershipError> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
-        return Err(MembershipError::BadRequest("name required".into()));
+        return Err(MembershipError::Invalid("name required".into()));
     }
     if trimmed.chars().count() > spec.max_name_len {
-        return Err(MembershipError::BadRequest(format!(
+        return Err(MembershipError::Invalid(format!(
             "name must be at most {} characters",
             spec.max_name_len
         )));
     }
     if is_reserved(spec, trimmed) {
-        return Err(MembershipError::BadRequest(reserved_error(spec, trimmed)));
+        return Err(MembershipError::Invalid(reserved_error(spec, trimmed)));
     }
     Ok(trimmed.to_string())
 }
@@ -299,23 +300,20 @@ pub async fn set_membership(
 ) -> Result<u64, MembershipError> {
     let ids = clean_ids(member_ids);
     if ids.is_empty() {
-        return Err(MembershipError::BadRequest(format!(
+        return Err(MembershipError::Invalid(format!(
             "{} ids required",
             spec.member_label
         )));
     }
     let name_trimmed = name.trim();
     if name_trimmed.is_empty() {
-        return Err(MembershipError::BadRequest(format!(
+        return Err(MembershipError::Invalid(format!(
             "{} name required",
             spec.label
         )));
     }
     if is_reserved(spec, name_trimmed) {
-        return Err(MembershipError::BadRequest(reserved_error(
-            spec,
-            name_trimmed,
-        )));
+        return Err(MembershipError::Invalid(reserved_error(spec, name_trimmed)));
     }
 
     for id in &ids {
@@ -560,14 +558,17 @@ pub async fn patch_members(
         .filter(|id| !remove.contains(id))
         .collect();
     if add.is_empty() && remove.is_empty() {
-        return Err(MembershipError::BadRequest(format!(
+        return Err(MembershipError::Invalid(format!(
             "{} ids required",
             spec.member_label
         )));
     }
+    // The set is the addressed resource; a member id is a value in the body.
+    // One that names no row the caller holds broke a rule, so it is a 422,
+    // not a 404.
     for member in add.iter().chain(remove.iter()) {
         if !member_exists(spec, conn, account_id, *member).await? {
-            return Err(MembershipError::NotFound(format!(
+            return Err(MembershipError::Invalid(format!(
                 "{} {member} not found",
                 spec.member_label
             )));

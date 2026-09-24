@@ -150,7 +150,7 @@ async fn the_route_pages_by_offset_and_reports_the_total() {
 }
 
 #[tokio::test]
-async fn a_word_the_messages_list_does_not_have_is_a_400_with_a_sentence() {
+async fn a_word_the_messages_list_does_not_have_is_a_422_with_a_sentence() {
     let (vault, alice, _direct, _group) = seeded().await;
     let (status, text) = get_raw(
         &vault.state,
@@ -158,10 +158,14 @@ async fn a_word_the_messages_list_does_not_have_is_a_400_with_a_sentence() {
         &alice.token,
     )
     .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{text}");
-    let body: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let body = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::SearchQueryInvalid,
+    );
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{text}");
     assert!(
-        body["detail"].as_str().unwrap().contains("conversations"),
+        body.detail.as_deref().unwrap().contains("conversations"),
         "{text}"
     );
 }
@@ -210,5 +214,19 @@ async fn one_message_is_read_by_id_and_only_by_the_account_that_owns_it() {
     assert_eq!(
         get_status(&vault.state, &format!("/v1/messages/{id}"), "not-a-token").await,
         StatusCode::UNAUTHORIZED
+    );
+}
+
+/// A message id that is not a number is refused like any other path segment
+/// that broke a rule: a `validation-failed` problem document, not Axum's own
+/// plain-text rejection.
+#[tokio::test]
+async fn a_message_id_that_is_not_a_number_is_a_validation_problem() {
+    let (vault, alice, _direct, _group) = seeded().await;
+    let (status, text) = get_raw(&vault.state, "/v1/messages/abc", &alice.token).await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
     );
 }

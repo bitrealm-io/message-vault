@@ -27,7 +27,7 @@ use crate::server::AppState;
         (name = "Health", description = "Process liveness"),
         (name = "Session", description = "The logged-in credential: log in, check it, log out"),
         (name = "Accounts", description = "The vault's accounts: the owner manages them, and each account reads and writes its own, API tokens included"),
-        (name = "Import", description = "JSONL import sessions and ingest"),
+        (name = "Import", description = "Import Runs: create one, send its batches, close it"),
         (name = "Export", description = "Export Runs: create one, page its messages, close it"),
         (name = "Assets", description = "Attachment bytes"),
         (name = "Contacts", description = "Address book and contact groups"),
@@ -159,7 +159,15 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::saved_searches_api::create_saved_search))
         .routes(routes!(crate::saved_searches_api::update_saved_search))
         .routes(routes!(crate::saved_searches_api::delete_saved_search))
-        .routes(routes!(crate::search_fields_api::list_search_fields))
+        .routes(routes!(
+            crate::search_fields_api::list_contact_search_fields
+        ))
+        .routes(routes!(
+            crate::search_fields_api::list_conversation_search_fields
+        ))
+        .routes(routes!(
+            crate::search_fields_api::list_message_search_fields
+        ))
         .routes(routes!(crate::conversations_api::list_conversations))
         .routes(routes!(crate::conversations_api::get_conversation))
         .routes(routes!(crate::conversations_api::list_conversation_sources))
@@ -221,6 +229,9 @@ pub fn write_openapi(path: Option<&Path>) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod credential_matrix;
+
+#[cfg(test)]
+mod undeclared_parameters;
 
 #[cfg(test)]
 mod tests {

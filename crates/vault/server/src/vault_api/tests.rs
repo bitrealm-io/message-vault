@@ -3,9 +3,31 @@ use axum::http::StatusCode;
 use super::*;
 use crate::test_support::{
     SeedConversation, SeedMessage, claim_vault_as_owner, get_json, get_status, patch_status,
-    post_json, post_status, post_status_logged_out, register_via_api, seed_conversation,
-    test_vault,
+    post_status, post_status_logged_out, register_via_api, seed_conversation, test_vault,
 };
+
+/// POST a JSON body with no credential and return the status, the
+/// `Location` header and the body.
+async fn post_logged_out(
+    state: &AppState,
+    path: &str,
+    body: serde_json::Value,
+) -> (StatusCode, Option<String>, String) {
+    let server = crate::test_support::serve(state).await;
+    let response = reqwest::Client::new()
+        .post(format!("{}{path}", server.base()))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let location = response
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
+    (status, location, response.text().await.unwrap())
+}
 
 /// Turn public registration off, the way a real vault ships.
 async fn close_registration(state: &AppState) {
@@ -101,14 +123,17 @@ async fn claiming_an_unowned_vault_creates_the_owner_and_signs_them_in() {
     let vault = test_vault().await;
     let state = vault.state.clone();
 
-    let body: serde_json::Value = post_json(
+    let (status, location, text) = post_logged_out(
         &state,
         "/v1/vault/claim",
-        "",
         serde_json::json!({ "username": "keeper", "password": "hunter2hunter2" }),
     )
     .await;
 
+    // Claiming makes the owner's Session, so it is a creation naming it.
+    assert_eq!(status, StatusCode::CREATED, "{text}");
+    assert_eq!(location.as_deref(), Some("/v1/session"));
+    let body: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(body["account_id"], account_profile::OWNER_ACCOUNT_ID);
     assert_eq!(body["username"], "keeper");
 
@@ -180,7 +205,7 @@ async fn claiming_needs_a_password_of_one_character_or_more() {
         serde_json::json!({ "username": "keeper", "password": "k" }),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "one character is enough");
+    assert_eq!(status, StatusCode::CREATED, "one character is enough");
 }
 
 #[tokio::test]
@@ -189,13 +214,67 @@ async fn registration_is_refused_while_the_vault_is_closed() {
     let state = vault.state.clone();
     close_registration(&state).await;
 
-    let status = post_status_logged_out(
+    let (status, _, text) = post_logged_out(
         &state,
         "/v1/accounts",
         serde_json::json!({ "username": "stranger", "password": "hunter2hunter2" }),
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
+    // Its own type, because the remedy (ask the owner for an account) is not
+    // the remedy for a caller who is not the owner.
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::RegistrationClosed,
+    );
+}
+
+/// Claiming counts once for the whole vault, so a script cannot keep trying
+/// past the limit by changing the username it sends.
+#[tokio::test]
+async fn claiming_past_the_rate_limit_is_a_429_with_retry_after() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+
+    for n in 0..crate::credentials::AUTH_RATE_MAX {
+        // An empty password is refused after the attempt is counted, so no
+        // attempt claims the vault and each one reaches the limiter.
+        let (status, _, text) = post_logged_out(
+            &state,
+            "/v1/vault/claim",
+            serde_json::json!({ "username": format!("keeper{n}"), "password": "" }),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "attempt {n}: {text}"
+        );
+    }
+
+    let server = crate::test_support::serve(&state).await;
+    let response = reqwest::Client::new()
+        .post(format!("{}/v1/vault/claim", server.base()))
+        .json(&serde_json::json!({ "username": "latecomer", "password": "hunter2hunter2" }))
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let retry_after = response
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
+    let text = response.text().await.unwrap();
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::RateLimited);
+    assert!(retry_after.is_some_and(|secs| secs > 0), "{text}");
+
+    let after: Vault = get_json(&state, "/v1/vault", "").await;
+    assert_eq!(
+        after.state,
+        VaultState::Unclaimed,
+        "the refused claim made nothing"
+    );
 }
 
 /// The owner opens the door, and the same request that was refused succeeds.

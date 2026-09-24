@@ -7,8 +7,8 @@
 //! with `in:#id`, so a find reaches every message in the conversation rather
 //! than whatever page the browser happens to hold (#313).
 
-use crate::extract::{Json, Query};
-use axum::extract::{Path, State};
+use crate::extract::{Json, Path, Query};
+use axum::extract::State;
 use sqlx::AnyConnection;
 use sqlx::{Executor, Row};
 
@@ -81,7 +81,6 @@ pub(crate) async fn count_matching_messages(
     ),
     responses(
         (status = 200, body = crate::paging::Page<Message>),
-        (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)

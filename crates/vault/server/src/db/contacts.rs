@@ -436,20 +436,43 @@ pub async fn load_contacts_if_needed(
         });
     }
 
-    let drafts = if path.exists() {
-        match contacts_file_format(path)? {
-            ContactsFormat::VcardCsv => drafts_from_vcard_csv(path)?,
-            ContactsFormat::Vcf => drafts_from_vcf(path)?,
-        }
+    let book = if path.exists() {
+        read_address_book(path)?
     } else {
         eprintln!(
             "warning: contacts file not found at {}; leaving contacts empty",
             path.display()
         );
-        Vec::new()
+        AddressBook(Vec::new())
     };
 
-    apply_address_book(conn, account_id, drafts).await
+    replace_address_book(conn, account_id, book).await
+}
+
+/// An address book read from a file, not yet written to any account.
+pub struct AddressBook(Vec<ContactDraft>);
+
+/// Read a VCF or vCard CSV address book.
+///
+/// # Errors
+///
+/// Fails when the file is neither format or a row cannot be read. Reading
+/// touches no database, so a failure here is always the file's own fault.
+pub fn read_address_book(path: &Path) -> Result<AddressBook> {
+    Ok(AddressBook(match contacts_file_format(path)? {
+        ContactsFormat::VcardCsv => drafts_from_vcard_csv(path)?,
+        ContactsFormat::Vcf => drafts_from_vcf(path)?,
+    }))
+}
+
+/// Write an address book's contacts over the account's book rows: a card that
+/// matches one keeps that row, and only the contacts the book dropped go.
+pub async fn replace_address_book(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    book: AddressBook,
+) -> Result<ContactLoadStats> {
+    apply_address_book(conn, account_id, book.0).await
 }
 
 /// Drafts from a vCard CSV export (First Name, Last Name, Phone columns).

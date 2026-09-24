@@ -46,7 +46,7 @@ async fn conversation_list_takes_the_search_language() {
     let status =
         crate::test_support::get_status(&vault.state, "/v1/conversations?q=wibble:direct", &token)
             .await;
-    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(status, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
     let status =
         crate::test_support::get_status(&vault.state, "/v1/conversations?q=trashed:yes", &token)
             .await;
@@ -2020,8 +2020,12 @@ async fn conversation_messages_page_and_total_is_the_whole_count() {
     assert_eq!(texts, vec!["msg2", "msg3"]);
 }
 
+/// The thread's year jump is a search inside the conversation,
+/// `in:#{id} date:{year}` on `GET /v1/messages`, and its total is the year's
+/// count. Opening a conversation by id takes no filter, so `year=` there is a
+/// parameter the route does not declare.
 #[tokio::test]
-async fn conversation_messages_year_narrows_and_total_is_the_years_count() {
+async fn the_year_jump_is_a_search_in_the_conversation_and_the_read_by_id_takes_no_year() {
     let (vault, user, conversation_id) = conversation_messages_fixture().await;
     let mut conn = vault.state.db.acquire().await.unwrap();
     for day in 1..=2 {
@@ -2050,7 +2054,7 @@ async fn conversation_messages_year_narrows_and_total_is_the_years_count() {
 
     let page: serde_json::Value = crate::test_support::get_json(
         &vault.state,
-        &format!("/v1/conversations/{conversation_id}/messages?year=2024"),
+        &format!("/v1/messages?q=in%3A%23{conversation_id}%20date%3A2024"),
         &user.token,
     )
     .await;
@@ -2070,7 +2074,30 @@ async fn conversation_messages_year_narrows_and_total_is_the_years_count() {
         &user.token,
     )
     .await;
-    assert_eq!(whole["total"], 5, "no year= is the whole conversation");
+    assert_eq!(
+        whole["total"], 5,
+        "the read by id is the whole conversation"
+    );
+
+    let (status, text) = crate::test_support::get_raw(
+        &vault.state,
+        &format!("/v1/conversations/{conversation_id}/messages?year=2024"),
+        &user.token,
+    )
+    .await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert!(
+        problem
+            .errors
+            .unwrap_or_default()
+            .join(" ")
+            .contains("year"),
+        "{text}"
+    );
 }
 
 #[tokio::test]
@@ -2079,9 +2106,9 @@ async fn a_message_at_31_december_2359_local_is_in_that_year_not_the_next() {
     let mut conn = vault.state.db.acquire().await.unwrap();
     // The account lives in New York. A message at 2024-12-31 23:59 there is
     // the instant 2025-01-01T04:59:00Z, which is what the vault stores. The
-    // year's edges are computed in the account's zone, the same rule
-    // `date:2024` uses, so this message is in 2024 and not in 2025. A
-    // boundary computed in UTC would file it under 2025.
+    // year's edges are computed in the account's zone, the rule `date:2024`
+    // follows, so this message is in 2024 and not in 2025. A boundary
+    // computed in UTC would file it under 2025.
     crate::db::account_profile::set_time_zone(
         &mut conn,
         user.account_id,
@@ -2105,7 +2132,7 @@ async fn a_message_at_31_december_2359_local_is_in_that_year_not_the_next() {
 
     let this_year: serde_json::Value = crate::test_support::get_json(
         &vault.state,
-        &format!("/v1/conversations/{conversation_id}/messages?year=2024"),
+        &format!("/v1/messages?q=in%3A%23{conversation_id}%20date%3A2024"),
         &user.token,
     )
     .await;
@@ -2116,7 +2143,7 @@ async fn a_message_at_31_december_2359_local_is_in_that_year_not_the_next() {
 
     let next_year: serde_json::Value = crate::test_support::get_json(
         &vault.state,
-        &format!("/v1/conversations/{conversation_id}/messages?year=2025"),
+        &format!("/v1/messages?q=in%3A%23{conversation_id}%20date%3A2025"),
         &user.token,
     )
     .await;

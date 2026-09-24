@@ -120,18 +120,9 @@ describe("browse routes", () => {
     expect(lastQuery(get)).toEqual({ offset: "50", limit: "50" });
   });
 
-  // The point of the read route: a year is a `year=` parameter, not a
-  // `date:YYYY` term smuggled through the search language.
-  it("narrows a conversation's messages with year=, not with date:YYYY", async () => {
-    await listConversationMessages(12, { offset: 0, limit: 500, year: 2020 });
-    expect(lastPath(get)).toBe("/v1/conversations/12/messages");
-    expect(lastQuery(get)).toEqual({ offset: "0", limit: "500", year: "2020" });
-    expect(String(get.mock.calls.at(-1)?.[0])).not.toContain("date:");
-  });
-
-  it("listSearchFields asks for one list's words", async () => {
+  it("listSearchFields reads one list's words from that list's own path", async () => {
     await listSearchFields("contacts");
-    expect(get).toHaveBeenCalledWith("/v1/search-fields?list=contacts", undefined);
+    expect(get).toHaveBeenCalledWith("/v1/search-fields/contacts", undefined);
   });
 });
 

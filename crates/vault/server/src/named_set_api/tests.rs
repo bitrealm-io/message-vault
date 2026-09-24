@@ -275,11 +275,17 @@ async fn members_patch_with_a_foreign_member_writes_nothing() {
         let a = kind.member(state, user.account_id).await;
         let id = create(state, kind, &user.token, "Family").await;
         let members = format!("{}/{id}/members", kind.base());
+        // The set is the addressed resource and exists; the unknown id is a
+        // value in the body that broke a rule, so it is a 422, not a 404.
         assert_eq!(
             patch_status(state, &members, &user.token, json!({ "add": [a, 999999] })).await,
-            StatusCode::NOT_FOUND
+            StatusCode::UNPROCESSABLE_ENTITY
         );
         assert!(member_ids(state, kind, &user.token, id).await.is_empty());
+        assert_eq!(
+            patch_status(state, &members, &user.token, json!({ "remove": [999999] })).await,
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
     }
 }
 

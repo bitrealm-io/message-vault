@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::{account_profile, storage, vault_settings};
 use crate::extract::Json;
-use crate::server::{ApiError, AppState, Owner};
+use crate::server::{ApiError, AppState, Created, Owner};
 
 /// What state a vault is in, from outside.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
@@ -98,17 +98,23 @@ pub async fn get_vault(State(state): State<AppState>) -> Result<Json<Vault>, Api
     tag = "Vault",
     request_body = ClaimVaultRequest,
     responses(
-        (status = 200, description = "Vault claimed; session issued", body = crate::session_api::CreateSessionResponse),
+        (
+            status = 201,
+            description = "Vault claimed; the owner's Session exists",
+            body = crate::session_api::CreateSessionResponse,
+            headers(("Location" = String, description = "`/v1/session`"))
+        ),
         (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
         (status = 409, description = "Already claimed", body = crate::problem::Problem),
-        (status = 429, body = crate::problem::Problem)
+        (status = 415, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
+        (status = 429, description = "Rate limited, counted once for the whole vault", body = crate::problem::Problem)
     )
 )]
 pub async fn claim_vault(
     State(state): State<AppState>,
     Json(req): Json<ClaimVaultRequest>,
-) -> Result<Json<crate::session_api::CreateSessionResponse>, ApiError> {
+) -> Result<Created<crate::session_api::CreateSessionResponse>, ApiError> {
     let username = crate::credentials::require_valid_username(&req.username)?;
     crate::credentials::check_auth_rate_limit(&state.auth_rate_limits, "claim")?;
     let password_hash = crate::credentials::hash_owner_password(&req.password)?;
@@ -141,11 +147,16 @@ pub async fn claim_vault(
     account_profile::record_login(&mut tx, account_profile::OWNER_ACCOUNT_ID).await?;
     tx.commit().await?;
 
-    Ok(Json(crate::session_api::CreateSessionResponse {
-        token,
-        account_id: account_profile::OWNER_ACCOUNT_ID,
-        username,
-    }))
+    // Claiming makes the owner's Session, so the answer is a creation naming
+    // the singleton, as logging in is.
+    Ok(Created {
+        location: "/v1/session".to_string(),
+        body: crate::session_api::CreateSessionResponse {
+            token,
+            account_id: account_profile::OWNER_ACCOUNT_ID,
+            username,
+        },
+    })
 }
 
 /// The vault settings the owner controls.

@@ -20,7 +20,9 @@ pub struct PullArgs {
     pub base_url: String,
     /// Vault account name.
     pub username: String,
-    /// API token or account password for the vault.
+    /// The bearer token for the vault: the logged-in session token or an API
+    /// token. A password is never sent here; the vault checks a password only
+    /// at `POST /v1/session`.
     pub key: String,
     /// Folder the pulled conversation files are written into.
     pub out_dir: String,

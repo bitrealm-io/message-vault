@@ -193,17 +193,11 @@ async fn empty_name_or_query_is_rejected() {
     )
     .await
     .unwrap_err();
-    assert!(
-        matches!(err, SavedSearchError::BadRequest(_)),
-        "got {err:?}"
-    );
+    assert!(matches!(err, SavedSearchError::Invalid(_)), "got {err:?}");
     let err = create(&mut conn, account, "Name", "   ", SavedSearchKind::Manual)
         .await
         .unwrap_err();
-    assert!(
-        matches!(err, SavedSearchError::BadRequest(_)),
-        "got {err:?}"
-    );
+    assert!(matches!(err, SavedSearchError::Invalid(_)), "got {err:?}");
 }
 
 #[tokio::test]
@@ -221,10 +215,7 @@ async fn names_over_max_len_are_rejected() {
     )
     .await
     .unwrap_err();
-    assert!(
-        matches!(err, SavedSearchError::BadRequest(_)),
-        "got {err:?}"
-    );
+    assert!(matches!(err, SavedSearchError::Invalid(_)), "got {err:?}");
 }
 
 #[tokio::test]

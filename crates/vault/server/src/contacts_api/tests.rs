@@ -2126,7 +2126,7 @@ async fn contact_list_refuses_a_word_from_another_list() {
     let (vault, token, _account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let status =
         crate::test_support::get_status(&vault.state, "/v1/contacts?q=from:me", &token).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[test]
@@ -2617,4 +2617,27 @@ async fn the_contacts_route_refuses_an_offset_past_the_ceiling() {
         axum::http::StatusCode::OK,
         "the ceiling itself is allowed"
     );
+}
+
+/// An address book the vault cannot make sense of was read and broke a rule,
+/// so it is a `422` naming what is wrong, never a `500`. The sentence does not
+/// leak the temporary file the upload was written to.
+#[tokio::test]
+async fn a_broken_address_book_is_a_422_not_a_500() {
+    let (vault, token, _account) = contacts_fixture_with_handles(&[]).await;
+    for (content_type, body) in [
+        ("text/vcard", "this is not a vCard at all\n"),
+        ("text/csv", "Colour,Shape\nred,round\n"),
+    ] {
+        let (status, text) =
+            crate::test_support::post_raw(&vault.state, "/v1/contacts", &token, content_type, body)
+                .await;
+        let problem = crate::test_support::expect_problem(
+            status,
+            &text,
+            crate::problem::ProblemType::ValidationFailed,
+        );
+        let errors = problem.errors.unwrap_or_default().join(" ");
+        assert!(!errors.contains("address-book."), "{content_type}: {text}");
+    }
 }

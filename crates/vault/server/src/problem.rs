@@ -22,8 +22,6 @@ pub const INTERNAL_TYPE: &str = "about:blank";
 pub enum ProblemType {
     /// A query parameter, path segment or body field parsed and then broke a rule.
     ValidationFailed,
-    /// A required query parameter or body field is absent.
-    MissingParameter,
     /// The request cannot be read: not valid JSON or JSONL, or a body that failed to arrive.
     MalformedBody,
     /// `Content-Type` is absent or not one the route accepts.
@@ -44,6 +42,8 @@ pub enum ProblemType {
     DemoAccountProtected,
     /// The account is not the vault owner.
     NotTheOwner,
+    /// A stranger tried to register while the vault does not accept new accounts.
+    RegistrationClosed,
     /// The token is valid but lacks the scope the route needs.
     InsufficientScope,
     /// The account exists but may not log in or act.
@@ -66,7 +66,6 @@ impl ProblemType {
     /// Every registered type, in the order the docs index lists them.
     pub const ALL: [Self; 20] = [
         Self::ValidationFailed,
-        Self::MissingParameter,
         Self::MalformedBody,
         Self::UnsupportedMediaType,
         Self::PayloadTooLarge,
@@ -77,6 +76,7 @@ impl ProblemType {
         Self::NameTaken,
         Self::DemoAccountProtected,
         Self::NotTheOwner,
+        Self::RegistrationClosed,
         Self::InsufficientScope,
         Self::AccountDisabled,
         Self::SearchQueryInvalid,
@@ -92,7 +92,6 @@ impl ProblemType {
     pub const fn slug(self) -> &'static str {
         match self {
             Self::ValidationFailed => "validation-failed",
-            Self::MissingParameter => "missing-parameter",
             Self::MalformedBody => "malformed-body",
             Self::UnsupportedMediaType => "unsupported-media-type",
             Self::PayloadTooLarge => "payload-too-large",
@@ -103,6 +102,7 @@ impl ProblemType {
             Self::NameTaken => "name-taken",
             Self::DemoAccountProtected => "demo-account-protected",
             Self::NotTheOwner => "not-the-owner",
+            Self::RegistrationClosed => "registration-closed",
             Self::InsufficientScope => "insufficient-scope",
             Self::AccountDisabled => "account-disabled",
             Self::SearchQueryInvalid => "search-query-invalid",
@@ -118,11 +118,10 @@ impl ProblemType {
     #[must_use]
     pub const fn status(self) -> StatusCode {
         match self {
-            Self::ValidationFailed => StatusCode::UNPROCESSABLE_ENTITY,
-            Self::MissingParameter
-            | Self::MalformedBody
-            | Self::SearchQueryInvalid
-            | Self::AssetUploadInvalid => StatusCode::BAD_REQUEST,
+            Self::ValidationFailed | Self::SearchQueryInvalid | Self::AssetUploadInvalid => {
+                StatusCode::UNPROCESSABLE_ENTITY
+            }
+            Self::MalformedBody => StatusCode::BAD_REQUEST,
             Self::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Self::InvalidCredentials | Self::AuthenticationRequired => StatusCode::UNAUTHORIZED,
@@ -130,6 +129,7 @@ impl ProblemType {
             Self::UsernameTaken | Self::NameTaken | Self::StateConflict => StatusCode::CONFLICT,
             Self::DemoAccountProtected
             | Self::NotTheOwner
+            | Self::RegistrationClosed
             | Self::InsufficientScope
             | Self::AccountDisabled => StatusCode::FORBIDDEN,
             Self::NotFound => StatusCode::NOT_FOUND,
@@ -143,7 +143,6 @@ impl ProblemType {
     pub const fn title(self) -> &'static str {
         match self {
             Self::ValidationFailed => "Validation failed",
-            Self::MissingParameter => "Missing parameter",
             Self::MalformedBody => "Malformed body",
             Self::UnsupportedMediaType => "Unsupported media type",
             Self::PayloadTooLarge => "Payload too large",
@@ -154,6 +153,7 @@ impl ProblemType {
             Self::NameTaken => "Name taken",
             Self::DemoAccountProtected => "Demo account protected",
             Self::NotTheOwner => "Not the owner",
+            Self::RegistrationClosed => "Registration closed",
             Self::InsufficientScope => "Insufficient scope",
             Self::AccountDisabled => "Account disabled",
             Self::SearchQueryInvalid => "Search query invalid",
@@ -176,16 +176,15 @@ impl ProblemType {
     #[must_use]
     pub fn page(self) -> String {
         match self {
-            Self::ValidationFailed => "A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a body missing a required field.\n\n\
+            Self::ValidationFailed => "A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or field that is missing or blank, a query parameter the route does not take.\n\n\
 `errors` lists every rule the request broke, one sentence each, not only the first. Fix each one and send the request again.".to_string(),
-            Self::MissingParameter => "A query parameter or body field the route requires was absent. `detail` names it.".to_string(),
             Self::MalformedBody => "The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. Nothing was parsed, so nothing is reported field by field; `detail` says where reading stopped.".to_string(),
             Self::UnsupportedMediaType => "The request's `Content-Type` is absent or not one this route accepts. An import body is `application/x-ndjson` or `application/jsonl`; a JSON route takes `application/json`. Send the right header with the same body.".to_string(),
             Self::PayloadTooLarge => "The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. Auth routes cap at 32 KiB; other routes at `[server] max_body_bytes`. Send less, or raise the cap on the vault.".to_string(),
             Self::InvalidCredentials => "The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong. The vault does not say which half failed. Check both and try again; repeated attempts are rate limited.".to_string(),
             Self::AuthenticationRequired => "The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. Log in again, or issue a new API token, and send the new token.".to_string(),
             Self::RateLimited => format!(
-                "The vault refused an authentication attempt because the same username has tried too often: more than {} attempts to log in, register or claim the vault inside {} seconds. Wait the number of seconds in the `Retry-After` header (repeated as `retry_after` in the body) and try again.",
+                "The vault refused an authentication attempt because there were too many inside {1} seconds: more than {0} attempts to log in as one username, or more than {0} attempts to register or to claim the vault, counted once for the whole vault. Wait the number of seconds in the `Retry-After` header (repeated as `retry_after` in the body) and try again.",
                 crate::credentials::AUTH_RATE_MAX,
                 crate::credentials::AUTH_RATE_WINDOW.as_secs()
             ),
@@ -193,6 +192,7 @@ impl ProblemType {
             Self::NameTaken => "A Contact Group, Message Tag or Saved Search with this name already exists for the account. Names are compared ignoring case. Pick another, or rename the existing one.".to_string(),
             Self::DemoAccountProtected => "The demo account refuses this operation, because it exists to be looked at and reset rather than changed. Log in as a real account, or run `reset-demo` on the vault to restore the demo data.".to_string(),
             Self::NotTheOwner => "This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates. Ask the owner to do it, or to give you what you need.".to_string(),
+            Self::RegistrationClosed => "The vault does not accept new accounts from strangers, because its owner has not opened registration. Ask the owner for an account, or to open registration.".to_string(),
             Self::InsufficientScope => "The credential was accepted but may not do this. An API token carries import and export permissions and never a logged-in session's full access; an account may be restricted from import, export or deletion by the owner. Use a session, a token with the right scope, or ask the owner.".to_string(),
             Self::AccountDisabled => "The account exists but the vault owner has disabled it, so it may not log in or act. Ask the owner to enable it.".to_string(),
             Self::SearchQueryInvalid => "The search language refused the query. `detail` names the word and the list it was used on; `word` carries the word, and `did_you_mean` a word the language does have when one is close. The query language is documented in the search reference.".to_string(),

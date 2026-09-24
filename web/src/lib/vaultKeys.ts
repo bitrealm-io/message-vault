@@ -45,11 +45,14 @@ export const keys = {
     list: ({ q, sort, order }: ConversationListKey) =>
       ["conversations", "list", q, sort, order] as const,
     detail: (id: number) => ["conversations", "detail", String(id)] as const,
-    messages: (id: number, p: { offset: number; limit: number; year: number | null }) =>
-      ["conversations", "messages", String(id), p.offset, p.limit, String(p.year)] as const,
-    /** Every find inside any conversation, for the trash mutations to mark stale. */
+    messages: (id: number, p: { offset: number; limit: number }) =>
+      ["conversations", "messages", String(id), p.offset, p.limit] as const,
+    /** Every search inside any conversation, for the trash mutations to mark stale. */
     finds: ["conversations", "find"] as const,
-    /** The messages matching the find box inside one conversation: `GET /v1/messages?q=in:#id …`. */
+    /**
+     * The messages a year or the find box picks out inside one conversation:
+     * `GET /v1/messages?q=in:#id …`.
+     */
     find: (id: number, q: string, offset: number, limit: number) =>
       ["conversations", "find", String(id), q, offset, limit] as const,
     sources: (id: number | null) => ["conversations", "sources", String(id)] as const,

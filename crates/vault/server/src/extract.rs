@@ -1,4 +1,5 @@
-//! Axum's `Query`, `Path`, and `Json`, answering as problem documents.
+//! Axum's `Query`, `Path`, and `Json`, answering as problem documents, and
+//! the layer that refuses a query parameter a route does not declare.
 //!
 //! Axum's extractors reject a bad request with a plain-text body. Every other
 //! failure on this interface is a problem document (`docs/architecture/http-api.md`), so these three
@@ -7,13 +8,20 @@
 //! and then broke a rule is `validation-failed`. Handlers use these names in
 //! place of Axum's.
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use axum::extract::rejection::JsonRejection;
-use axum::extract::{FromRequest, FromRequestParts, OptionalFromRequest, Request};
-use axum::http::StatusCode;
+use axum::extract::{
+    FromRequest, FromRequestParts, MatchedPath, OptionalFromRequest, Request, State,
+};
 use axum::http::request::Parts;
+use axum::http::{Method, StatusCode};
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use utoipa::openapi::path::ParameterIn;
 
 use crate::server::ApiError;
 
@@ -115,6 +123,114 @@ impl<T: Serialize> IntoResponse for Json<T> {
     fn into_response(self) -> Response {
         axum::Json(self.0).into_response()
     }
+}
+
+/// The query parameters each operation declares in the OpenAPI document,
+/// keyed by method and path template (`/v1/conversations/{id}/messages`).
+///
+/// The document is built from the handlers' own annotations, so it is the one
+/// place that says what a route accepts. Checking a request against it, in one
+/// layer, reaches every route, including those that read no query string at
+/// all and so have no extractor that could object.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct DeclaredQueryParameters(Arc<HashMap<(Method, String), Vec<String>>>);
+
+impl DeclaredQueryParameters {
+    /// Every operation's declared query parameters, in the order declared.
+    pub(crate) fn from_openapi(spec: &utoipa::openapi::OpenApi) -> Self {
+        let mut declared = HashMap::new();
+        for (path, item) in &spec.paths.paths {
+            let shared = item.parameters.iter().flatten();
+            for (method, operation) in [
+                (Method::GET, &item.get),
+                (Method::PUT, &item.put),
+                (Method::POST, &item.post),
+                (Method::DELETE, &item.delete),
+                (Method::PATCH, &item.patch),
+                (Method::HEAD, &item.head),
+            ] {
+                let Some(operation) = operation else {
+                    continue;
+                };
+                let names = shared
+                    .clone()
+                    .chain(operation.parameters.iter().flatten())
+                    .filter(|p| matches!(p.parameter_in, ParameterIn::Query))
+                    .map(|p| p.name.clone())
+                    .collect();
+                declared.insert((method, path.clone()), names);
+            }
+        }
+        Self(Arc::new(declared))
+    }
+
+    /// The parameters `method` on `path` declares, or `None` for a route the
+    /// document does not describe. A `HEAD` Axum answers from a `GET` handler
+    /// takes what the `GET` takes.
+    fn for_route(&self, method: &Method, path: &str) -> Option<&[String]> {
+        self.0
+            .get(&(method.clone(), path.to_string()))
+            .or_else(|| {
+                (method == Method::HEAD)
+                    .then(|| self.0.get(&(Method::GET, path.to_string())))
+                    .flatten()
+            })
+            .map(Vec::as_slice)
+    }
+}
+
+/// Refuse a query parameter the route does not declare, as
+/// `validation-failed` naming the ones it does (`docs/architecture/http-api.md`,
+/// "Lists"). A typo (`limt=10`) or a guess at a convention the rules turn down
+/// (`order=`, `fields=`, `year=`) would otherwise be answered as though it had
+/// been obeyed.
+///
+/// Applied with `route_layer`, so the route has been matched and
+/// [`MatchedPath`] names its template. A path the document does not describe
+/// (the `/v1` fallbacks) is let through to answer what it answers.
+pub(crate) async fn refuse_undeclared_query_parameters(
+    State(declared): State<DeclaredQueryParameters>,
+    matched: Option<MatchedPath>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let accepted = matched
+        .as_ref()
+        .and_then(|m| declared.for_route(request.method(), m.as_str()));
+    let Some(accepted) = accepted else {
+        return next.run(request).await;
+    };
+    let mut unknown: Vec<String> = Vec::new();
+    for key in query_keys(request.uri()) {
+        if !accepted.contains(&key) && !unknown.contains(&key) {
+            unknown.push(key);
+        }
+    }
+    if unknown.is_empty() {
+        return next.run(request).await;
+    }
+    let accepts = if accepted.is_empty() {
+        "this route takes no query parameters".to_string()
+    } else {
+        let names: Vec<String> = accepted.iter().map(|name| format!("`{name}`")).collect();
+        format!("this route accepts {}", names.join(", "))
+    };
+    ApiError::ValidationFailed(
+        unknown
+            .iter()
+            .map(|key| format!("unknown query parameter `{key}`; {accepts}"))
+            .collect(),
+    )
+    .into_response()
+}
+
+/// The keys of a query string, decoded, in the order they appear. A string
+/// that does not decode yields none here, and the route's own extractor
+/// refuses it as it always has.
+fn query_keys(uri: &axum::http::Uri) -> Vec<String> {
+    axum::extract::Query::<Vec<(String, String)>>::try_from_uri(uri)
+        .map(|axum::extract::Query(pairs)| pairs.into_iter().map(|(key, _)| key).collect())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

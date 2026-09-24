@@ -19,7 +19,7 @@ Discovery walks the selected path recursively without following directory symbol
 
 ## Output policy
 
-- Pipeline: iMazing CSV → `ConversationDocument` → [`message_ir_format::FormatSink`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/ir-format/src/format_sink.rs) (`--format csv|eml|mbox|json|jsonl|xml`). Shared header: [`CSV_HEADERS`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/ir-format/src/write.rs) / [CSV columns](/vault/developer/reference/csv-columns/).
+- Pipeline: iMazing CSV → `ConversationDocument` → [`message_ir_format::FormatSink`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/ir-format/src/format_sink.rs) Import writes JSON Lines; the other formats come from [Convert](/vault/developer/formats/convert/). Shared header: [`CSV_HEADERS`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/ir-format/src/write.rs) / [CSV columns](/vault/developer/reference/csv-columns/).
 - SMS + iMessage for the same peer merge into one conversation (Messages family).
 - WhatsApp for the same peer is a **separate** file (`…__whatsapp.csv` / matching stem suffix for other formats).
 - Notification rows keep `imazing_type=Notification` in `source_fields_json`; direction is emitted as `incoming`.
@@ -29,7 +29,7 @@ Discovery walks the selected path recursively without following directory symbol
   string is a display title.
 - `participants_json` is always written (unified header).
 - Deduplication key includes attachment identity so same-time/text with different media are kept.
-- With `--media-mode` copy (and always for mail / Xml), attachments are resolved by basename or
+- When the Import form's **Attachments** choice copies media (and always for mail / Xml), attachments are resolved by basename or
   suffix-match against files beside the source CSV and copied under `output/attachments/`.
 - Untitled group files are `group_+A_+B_….csv` (max 10 phones; if more, append a 16-hex hash of
   the full roster). WhatsApp adds `__whatsapp` before `.csv`. The `chat_identifier` cell is unchanged.
@@ -64,7 +64,7 @@ Non-senders are invisible in the CSV.
 
 ## Future work (not yet implemented)
 
-- Optional owner-phone flag to annotate outgoing sender handle.
+- An optional owner phone number on the Import form to annotate the outgoing sender handle.
 - Structured parse of reactions / replies if a stable grammar is confirmed.
 
 ## Related docs

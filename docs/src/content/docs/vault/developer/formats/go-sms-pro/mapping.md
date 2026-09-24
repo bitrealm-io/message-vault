@@ -14,11 +14,14 @@ Shared model: [message-ir](/vault/developer/architecture/common-message/). CSV p
 
 ## Pipeline / output
 
-Source XML/PDU → `ConversationDocument` → [`message_ir_format::FormatSink`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/ir-format/src/format_sink.rs) (`--format json|jsonl|csv|eml|mbox|xml`; default `json`).
+Source XML/PDU → `ConversationDocument` → [`message_ir_format::FormatSink`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/ir-format/src/format_sink.rs).
 
-With `--format csv`: one file per conversation. PDU media under `attachments/` when copying/embedding. Filenames: 1:1 → `+E164.csv`; untitled groups → `group_+A_+B_….csv` (max 10 phones, then a hash). `--format xml` writes a single SyncTech `smses.xml`.
+The desktop app's Import screen runs this exporter and always writes JSON Lines, one file per conversation, because Import and Push read conversation files in that form (`src-tauri/src/commands/extract.rs`).
+Every other format (JSON, CSV, EML, MBOX, SMS Backup & Restore XML) is a rewrite of that output through [Convert](/vault/developer/formats/convert/), which Export and **Settings → Convert** run.
 
-Diagnostic skip lists (`skipped_invalid_address.csv`, `skipped_empty_pdu.csv`, `skipped_no_party.csv`) are **not** conversation CSVs; they use their own small headers (see [Skip counters](#skip-counters-cli-summary)).
+In CSV form: one file per conversation. PDU media under `attachments/` when copying/embedding. Filenames: 1:1 → `+E164.csv`; untitled groups → `group_+A_+B_….csv` (max 10 phones, then a hash). The XML form is a single SyncTech `smses.xml`.
+
+Diagnostic skip lists (`skipped_invalid_address.csv`, `skipped_empty_pdu.csv`, `skipped_no_party.csv`) are **not** conversation CSVs; they use their own small headers (see [Skipped records](#skipped-records)).
 
 ## XML structure
 
@@ -87,19 +90,23 @@ Always includes `source_kind`: `"xml"` or `"pdu"`.
 
 `message_size` is the WAP-209 Message-Size long-integer (advisory octets). GO SMS Pro `0x8e` + `filename\0` named parts are unrelated and are not decoded as Message-Size.
 
-## Skip counters (CLI summary)
+## Skipped records
 
-Printed only when non-zero:
+The exporter counts every record it drops on its `ExportReport`, and the run summary in the Import screen's log lists each count that is not zero (`ExportReport::summary_lines` in `crates/core/message-vault-io-core/src/pipeline.rs`).
+Invalid dates have a field of their own on the report and print as `skipped N invalid-date rows`; the other counts live in the report's `extra` map and print as `name: N`.
+The same lines also show `xml_messages_seen`, `pdu_messages`, and `pdu_group_messages`, which are totals rather than skips.
 
-| Label | Meaning |
+| Summary line | Meaning |
 |-------|---------|
-| `skipped bad date` | XML `<date>` was not a number |
-| `skipped date range` | Message outside `--start-date` / `--end-date` |
-| `skipped bad type` | XML `<type>` was not `1` (inbox) or `2` (sent) |
-| `skipped invalid address` | XML SMS with no usable phone digits in `<address>` (empty, under 4 digits, email-like, junk). 4–6 digit short codes (e.g. AT&T `7535`) are kept. Google Voice voicemail can still export if the caller is parsed from `<body>`. Full list: `skipped_invalid_address.csv`; first 10 also printed on stderr. |
-| `skipped empty pdu` | Hollow PDU stub with no participants, From/To, body, or attachments (common GO SMS Pro placeholder is only `application/smil` + null). Full list: `skipped_empty_pdu.csv`. |
-| `skipped no party` | Non-empty PDU classified as non-group (`< 3` unique participants) where every decoded number was empty or the owner (`--owner-phone`). Full list: `skipped_no_party.csv` (`pdu_filename`, `participants`, `is_sent`, `has_from`, `has_to`); first 10 also printed on stderr. |
-| `skipped bad PDU` | PDU filename/timestamp could not be parsed |
+| `skipped N invalid-date rows` | XML `<date>` was missing or not a number. A missing date is skipped rather than read as 1970-01-01, because every such row would share timestamp 0 and could falsely deduplicate. |
+| `skipped_unknown_type` | XML `<type>` was not `1` (inbox) or `2` (sent) |
+| `skipped_unknown_address` | XML SMS whose `<address>` had fewer than four digits once non-digits are stripped (empty, a name, junk), the minimum `phone::sanitize_number` (`crates/libs/phone/src/lib.rs`) accepts. 4–6 digit short codes (e.g. AT&T `7535`) are kept. An incoming Google Voice voicemail still exports when the caller can be parsed from `<body>`. Full list: `skipped_invalid_address.csv`. |
+| `skipped_empty_pdu` | Hollow PDU stub with no participants, From/To, body, or attachments (the common GO SMS Pro placeholder is only `application/smil` + null). Full list: `skipped_empty_pdu.csv`. |
+| `skipped_no_other_party` | Non-empty PDU classified as non-group (`< 3` unique participants) where every decoded number was empty or one of the owner phone numbers entered on the Import form. Full list: `skipped_no_party.csv` (`pdu_filename`, `participants`, `is_sent`, `has_from`, `has_to`). |
+| `skipped_unparseable_pdu` | PDU filename/timestamp could not be parsed. The first twenty are named as `error:` lines in the summary. |
+
+Each `skipped_*.csv` names at most the first twenty records (`MAX_SKIP_DETAILS` in `crates/exporters/go-sms-pro-exporter/src/emit.rs`) and closes with a `...and N more entries not shown` row when there were more, so a large backup does not produce a diagnostic file the size of the export.
+A run that skips nothing of that kind writes no file, and removes a stale one left by an earlier run into the same folder.
 
 ## PDU rows
 

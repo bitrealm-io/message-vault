@@ -14,9 +14,11 @@ Input layouts: [format](/vault/developer/formats/sms-backup-plus/format/). Share
 
 ## Pipeline / output
 
-Source EML → `ConversationDocument` → [`message_ir_format::FormatSink`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/ir-format/src/format_sink.rs) (`--format json|jsonl|csv|eml|mbox|xml`; default `json`).
+Source EML → `ConversationDocument` → [`message_ir_format::FormatSink`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/ir-format/src/format_sink.rs) ).
 
-With `--format csv`: one file per conversation (header + one row per message after dedupe). MIME attachments under `attachments/` when copying/embedding. Filenames: 1:1 → `+E164.csv`; untitled groups → `group_+A_+B_….csv` (max 10 phones, then a hash). Peers with no usable phone number are written to `unknown.csv`. `--format xml` writes a single SyncTech `smses.xml`.
+The desktop app's Import screen always writes JSON Lines, one file per conversation, because Import and Push read conversation files in that form. Every other format (JSON, CSV, EML, MBOX, SMS Backup & Restore XML) is a rewrite of that output through [Convert](/vault/developer/formats/convert/), which Export and **Settings → Convert** run.
+
+In CSV form: one file per conversation (header + one row per message after dedupe). MIME attachments under `attachments/` when copying/embedding. Filenames: 1:1 → `+E164.csv`; untitled groups → `group_+A_+B_….csv` (max 10 phones, then a hash). Peers with no usable phone number are written to `unknown.csv`. The XML form is a single SyncTech `smses.xml`.
 
 ## Source → shared fields
 

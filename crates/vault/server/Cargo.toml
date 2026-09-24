@@ -46,6 +46,9 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 [dev-dependencies]
 # The small seed, so a test can generate a demo bundle and import it.
 demo-seed = { path = "../demo-seed", features = ["testutil"] }
+# `media::testutil`, so a test that runs the real ffmpeg skips or fails the
+# way every other crate's does.
+media = { path = "../../libs/media", features = ["testutil"] }
 reqwest = { workspace = true }
 
 [lints]

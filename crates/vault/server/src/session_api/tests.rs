@@ -3,9 +3,9 @@ use axum::http::StatusCode;
 use super::*;
 use crate::problem::ProblemType;
 use crate::test_support::{
-    RegisteredAccount, claim_vault_as_owner, delete_status, expect_problem, get_raw, get_status,
-    log_in, login_status, post_created_json, post_raw, put_status, register_via_api, test_vault,
-    vault_with_account,
+    RegisteredAccount, SeedConversation, SeedMessage, claim_vault_as_owner, delete_status,
+    expect_problem, get_json, get_raw, get_status, log_in, login_status, post_created_json,
+    post_raw, put_status, register_via_api, seed_conversation, test_vault, vault_with_account,
 };
 
 const TEST_ACCOUNT: i64 = 7;
@@ -151,6 +151,55 @@ async fn a_session_read_refuses_an_account_parameter() {
         problem.errors.unwrap(),
         ["unknown query parameter 'account'; this route takes no query parameters"]
     );
+}
+
+/// Seed one conversation for `account_id` whose single message came from
+/// `source`. The handle is derived from both so every call gets a fresh
+/// `handles` row.
+async fn seed_source(state: &crate::server::AppState, account_id: i64, source: &str) {
+    seed_conversation(
+        state,
+        &SeedConversation {
+            account_id,
+            handle: &format!("+1555{account_id}{}", source.len()),
+            conversation_type: "individual",
+            group_title: None,
+            source_file: "seed.jsonl",
+            messages: &[SeedMessage {
+                source,
+                timestamp: "2020-01-01T00:00:00Z",
+                is_from_me: true,
+                body: "hello",
+            }],
+        },
+    )
+    .await;
+}
+
+/// The Session lists the sources this account has imported, oldest import
+/// first, and an account with no imports lists none. `sms-backup` is seeded
+/// first and `imessage` second, so an alphabetical list would come out the
+/// other way round; another account's import never shows up.
+#[tokio::test]
+async fn a_session_lists_the_account_sources_oldest_first() {
+    let (vault, alice) = vault_with_account().await;
+    let state = vault.state.clone();
+    let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
+
+    let body: serde_json::Value = get_json(&state, "/v1/session", &alice.token).await;
+    assert_eq!(body["sources"], serde_json::json!([]), "no imports yet");
+
+    seed_source(&state, alice.account_id, "sms-backup").await;
+    seed_source(&state, bob.account_id, "whatsapp").await;
+    seed_source(&state, alice.account_id, "imessage").await;
+
+    let body: serde_json::Value = get_json(&state, "/v1/session", &alice.token).await;
+    assert_eq!(
+        body["sources"],
+        serde_json::json!(["sms-backup", "imessage"])
+    );
+    let body: serde_json::Value = get_json(&state, "/v1/session", &bob.token).await;
+    assert_eq!(body["sources"], serde_json::json!(["whatsapp"]));
 }
 
 #[tokio::test]

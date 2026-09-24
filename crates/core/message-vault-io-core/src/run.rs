@@ -42,3 +42,75 @@ pub fn finish_run(
     report.summary_lines(config.output_format, &config.output, &mut messages);
     Ok(RunResult { messages })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{FormatConfig, MediaConfig, ObfuscateConfig, OutputFormat, SourceConfig};
+    use media::{CompressOptions, MediaMode};
+    use std::path::PathBuf;
+
+    fn config(mode: MediaMode, obfuscate: bool) -> ExporterConfig {
+        ExporterConfig {
+            inputs: Vec::new(),
+            output: PathBuf::from("out"),
+            timezone: None,
+            obfuscate: ObfuscateConfig {
+                enabled: obfuscate,
+                seed: None,
+            },
+            media: MediaConfig {
+                mode,
+                compress: CompressOptions::default(),
+            },
+            cancel: None,
+            log: None,
+            progress: None,
+            output_format: OutputFormat::Jsonl,
+            resume: false,
+            source: SourceConfig::Format(FormatConfig {}),
+        }
+    }
+
+    #[test]
+    fn run_pipeline_hands_the_config_transforms_to_convert_and_returns_the_summary() {
+        let result = run_pipeline(&config(MediaMode::Convert, true), |t| {
+            assert!(t.obfuscate);
+            assert_eq!(t.media, MediaMode::Convert);
+            Ok(ExportReport {
+                conversations: 1,
+                attachments_saved: 2,
+                ..ExportReport::default()
+            })
+        })
+        .unwrap();
+
+        assert_eq!(
+            result.messages,
+            ["Wrote jsonl export under out", "  saved 2 attachments"]
+        );
+    }
+
+    #[test]
+    fn run_pipeline_fails_when_media_failed_on_every_file() {
+        let err = run_pipeline(&config(MediaMode::Convert, false), |_| {
+            let mut report = ExportReport::default();
+            report.media.errors.push("a.heic: ffmpeg not found".into());
+            Ok(report)
+        })
+        .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "media processing failed for all candidate files"
+        );
+    }
+
+    #[test]
+    fn run_pipeline_returns_the_convert_error() {
+        let err = run_pipeline(&config(MediaMode::Clone, false), |_| {
+            anyhow::bail!("unreadable backup")
+        })
+        .unwrap_err();
+        assert_eq!(err.to_string(), "unreadable backup");
+    }
+}

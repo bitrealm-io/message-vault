@@ -116,7 +116,7 @@ pub async fn upsert_handle_row_cached(
 pub struct Identity {
     /// The identity as the vault stores it: E.164 for a number, lower case
     /// for an address.
-    pub handle: String,
+    pub address: String,
     /// `phone`, `email`, or `whatsapp`.
     pub service: String,
     /// When the identity's oldest message was sent, or null when there is
@@ -143,7 +143,7 @@ pub enum IdentitiesOf {
     Contact { account_id: i64, contact_id: i64 },
 }
 
-/// One row of [`identities`]: handle, service, first and last timestamp,
+/// One row of [`identities`]: address, service, first and last timestamp,
 /// conversation count, direct and group message counts.
 type IdentityRow = (
     String,
@@ -214,7 +214,7 @@ pub async fn identities(conn: &mut AnyConnection, of: IdentitiesOf) -> Result<Ve
         .into_iter()
         .map(
             |(handle, service, start_date, end_date, conversations, direct, group)| Identity {
-                handle,
+                address: handle,
                 service,
                 start_date,
                 end_date,

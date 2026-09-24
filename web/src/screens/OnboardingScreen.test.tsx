@@ -118,8 +118,8 @@ describe("OnboardingScreen", () => {
     await waitFor(() => expect(apiPost).toHaveBeenCalled());
     expect(apiPost).toHaveBeenCalledWith(
       expect.objectContaining({
-        handles: [{ handle: "+1 555-555-0199", service: "phone" }],
-        remove_handles: [{ handle: "+15555550100", service: "phone" }],
+        identities: [{ address: "+1 555-555-0199", service: "phone" }],
+        remove_identities: [{ address: "+15555550100", service: "phone" }],
       }),
     );
   });
@@ -139,8 +139,8 @@ describe("OnboardingScreen", () => {
     await waitFor(() => expect(apiPost).toHaveBeenCalled());
     expect(apiPost).toHaveBeenCalledWith(
       expect.objectContaining({
-        handles: [],
-        remove_handles: [{ handle: "+15555550101", service: "phone" }],
+        identities: [],
+        remove_identities: [{ address: "+15555550101", service: "phone" }],
       }),
     );
   });
@@ -162,7 +162,7 @@ describe("OnboardingScreen", () => {
     await user.click(screen.getByRole("button", { name: "Continue to vault" }));
     await waitFor(() => expect(apiPost).toHaveBeenCalled());
     expect(apiPost).toHaveBeenCalledWith(
-      expect.objectContaining({ handles: [], remove_handles: [] }),
+      expect.objectContaining({ identities: [], remove_identities: [] }),
     );
   });
 

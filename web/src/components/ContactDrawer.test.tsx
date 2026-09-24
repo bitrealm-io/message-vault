@@ -44,9 +44,9 @@ function detail(id: number, overrides: Partial<ContactDetail> = {}): ContactDeta
     name: `Contact ${id}`,
     unknown: false,
     last_modified: "2024-01-01T00:00:00Z",
-    handles: [
+    identities: [
       {
-        handle: `+1555000${id}`,
+        address: `+1555000${id}`,
         service: "phone",
         start_date: "2020-01-01T00:00:00Z",
         end_date: "2024-01-01T00:00:00Z",
@@ -107,7 +107,7 @@ describe("ContactDrawer", () => {
         preview={{
           id: "1",
           name: a.name,
-          handles: a.handles.map((h) => h.handle),
+          handles: a.identities.map((h) => h.address),
           groups: a.groups,
         }}
         onClose={() => {}}
@@ -154,9 +154,9 @@ describe("ContactDrawer", () => {
     const b = detail(2, {
       name: "Cached Bob",
       groups: ["Work"],
-      handles: [
+      identities: [
         {
-          handle: "+15551212",
+          address: "+15551212",
           service: "phone",
           start_date: "2021-06-01T00:00:00Z",
           end_date: "2025-01-01T00:00:00Z",
@@ -288,9 +288,9 @@ describe("ContactDrawer", () => {
       detail(2, {
         name: "Contact b",
         groups: ["Family"],
-        handles: [
+        identities: [
           {
-            handle: "+1555000b",
+            address: "+1555000b",
             service: "phone",
             start_date: "2020-01-01T00:00:00Z",
             end_date: "2024-01-01T00:00:00Z",
@@ -338,9 +338,9 @@ describe("ContactDrawer", () => {
     resolveDetail(
       detail(2, {
         name: "Contact b",
-        handles: [
+        identities: [
           {
-            handle: "+1555000b",
+            address: "+1555000b",
             service: "phone",
             start_date: "2020-01-01T00:00:00Z",
             end_date: "2024-01-01T00:00:00Z",
@@ -423,9 +423,9 @@ describe("ContactDrawer", () => {
       detail(2, {
         name: "Contact b",
         groups: ["Family"],
-        handles: [
+        identities: [
           {
-            handle: "+15550001",
+            address: "+15550001",
             service: "phone",
             start_date: "2020-01-01T00:00:00Z",
             end_date: "2024-01-01T00:00:00Z",
@@ -434,7 +434,7 @@ describe("ContactDrawer", () => {
             group_messages: 0,
           },
           {
-            handle: "+15550002",
+            address: "+15550002",
             service: "phone",
             start_date: "2020-01-01T00:00:00Z",
             end_date: "2024-01-01T00:00:00Z",

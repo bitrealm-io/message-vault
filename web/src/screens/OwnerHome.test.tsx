@@ -126,7 +126,7 @@ beforeEach(() => {
   listAccountIdentities.mockResolvedValue({
     items: [
       {
-        handle: "+15555550100",
+        address: "+15555550100",
         service: "phone",
         start_date: "2020-01-01T00:00:00Z",
         end_date: "2020-02-03T00:00:00Z",
@@ -463,13 +463,13 @@ describe("OwnerHome", () => {
     await user.click(screen.getByRole("button", { name: "Remove +15555550100 (Text message)" }));
     expect(updateAccount).not.toHaveBeenCalledWith(
       101,
-      expect.objectContaining({ remove_handles: expect.anything() }),
+      expect.objectContaining({ remove_identities: expect.anything() }),
     );
     const dialog = await screen.findByRole("dialog", { name: "Remove identity?" });
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
     await waitFor(() =>
       expect(updateAccount).toHaveBeenCalledWith(101, {
-        remove_handles: [{ handle: "+15555550100", service: "phone" }],
+        remove_identities: [{ address: "+15555550100", service: "phone" }],
       }),
     );
     expect(await screen.findByText("No identities yet.")).toBeInTheDocument();

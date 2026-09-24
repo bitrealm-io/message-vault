@@ -52,7 +52,7 @@ beforeEach(() => {
           {
             id: 1,
             name: "Alice",
-            handle_count: 1,
+            identity_count: 1,
             handles: [],
             groups: familyRemoved ? [] : ["Family"],
           },
@@ -121,7 +121,7 @@ describe("ContactList", () => {
       items: names.map((name, i) => ({
         id: i + 1,
         name,
-        handle_count: 1,
+        identity_count: 1,
         handles: [],
         groups: [],
       })),

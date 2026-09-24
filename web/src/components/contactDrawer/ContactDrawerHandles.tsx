@@ -14,7 +14,7 @@ type BrowseFn = (args: { kind: ContactBrowseKind; handle?: string }) => void;
 /** A contact's identity as the shared table shows it. */
 function toIdentityRow(h: ContactHandle): IdentityRow {
   return {
-    handle: h.handle,
+    address: h.address,
     service: h.service,
     start_date: h.start_date ?? null,
     end_date: h.end_date ?? null,
@@ -39,7 +39,7 @@ export function ContactDrawerHandles({
   toolbarExtra,
 }: {
   contactId: string;
-  handleRows: ContactDetail["handles"];
+  handleRows: ContactDetail["identities"];
   loading: boolean;
   onBrowse?: BrowseFn;
   title?: ReactNode;
@@ -61,7 +61,7 @@ export function ContactDrawerHandles({
   const rows = useMemo(() => handleRows.map(toIdentityRow), [handleRows]);
 
   const requestRemove = (row: IdentityRow) => {
-    const original = handleRows.find((h) => h.handle === row.handle && h.service === row.service);
+    const original = handleRows.find((h) => h.address === row.address && h.service === row.service);
     if (original) requestRemoveHandle(original);
   };
 
@@ -92,7 +92,7 @@ export function ContactDrawerHandles({
         totals
         emptyText={loading ? "Loading…" : "No identities"}
         onRemove={requestRemove}
-        onBrowse={onBrowse ? (row) => onBrowse({ kind: "all", handle: row.handle }) : undefined}
+        onBrowse={onBrowse ? (row) => onBrowse({ kind: "all", handle: row.address }) : undefined}
       />
       <AddIdentityDialog
         open={adding}

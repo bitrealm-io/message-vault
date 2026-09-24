@@ -514,7 +514,7 @@
           "Accounts"
         ],
         "summary": "Change an account.",
-        "description": "Its display name, time zone and handles are set by the account itself or by the vault owner; only the vault owner sets an account's disabled flag and its import, export and delete permissions. A field the caller may not set answers `403 Forbidden`, and the reloaded account is the answer.",
+        "description": "Its display name, time zone and identities are set by the account itself or by the vault owner; only the vault owner sets an account's disabled flag and its import, export and delete permissions. A field the caller may not set answers `403 Forbidden`, and the reloaded account is the answer.",
         "operationId": "update_account",
         "parameters": [
           {
@@ -3683,7 +3683,7 @@
         "tags": [
           "Contacts"
         ],
-        "summary": "Page through the account's contacts (id, name, handles, groups).",
+        "summary": "Page through the account’s contacts (id, name, identities, groups).",
         "operationId": "list_contacts",
         "parameters": [
           {
@@ -4318,7 +4318,7 @@
         "tags": [
           "Contacts"
         ],
-        "summary": "Rename a contact or change its linked handles.",
+        "summary": "Rename a contact or change its linked identities.",
         "operationId": "update_contact",
         "parameters": [
           {
@@ -9461,7 +9461,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Phone handles linked to the account."
+            "description": "Phone numbers linked to the account."
           },
           "preferred_name": {
             "type": [
@@ -9487,19 +9487,19 @@
       },
       "AccountIdentityRequest": {
         "type": "object",
-        "description": "One handle to link or unlink, with its platform service.",
+        "description": "One identity to link or unlink, with its platform service.",
         "required": [
-          "handle",
+          "address",
           "service"
         ],
         "properties": {
-          "handle": {
+          "address": {
             "type": "string",
-            "description": "Raw handle value, e.g. `+15555550100` or `alex@example.com`."
+            "description": "The address as typed, e.g. `+15555550100` or `alex@example.com`."
           },
           "service": {
             "type": "string",
-            "description": "Platform the handle belongs to: `phone`, `email`, or `whatsapp`."
+            "description": "Platform the address belongs to: `phone`, `email`, or `whatsapp`."
           }
         }
       },
@@ -9579,14 +9579,14 @@
       },
       "AddContactIdentityRequest": {
         "type": "object",
-        "description": "A handle value plus optional platform service.",
+        "description": "An address to link plus optional platform service.",
         "required": [
-          "handle"
+          "address"
         ],
         "properties": {
-          "handle": {
+          "address": {
             "type": "string",
-            "description": "Handle value to link."
+            "description": "The address to link."
           },
           "service": {
             "type": [
@@ -9887,12 +9887,12 @@
       },
       "Contact": {
         "type": "object",
-        "description": "Full contact view: every handle with stats, plus totals across them.",
+        "description": "Full contact view: every identity with stats, plus totals across them.",
         "required": [
           "id",
           "name",
           "unknown",
-          "handles",
+          "identities",
           "direct_conversations",
           "group_conversations",
           "total_messages",
@@ -9918,17 +9918,17 @@
             },
             "description": "Group names on this contact (A–Z)."
           },
-          "handles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Identity"
-            },
-            "description": "Every handle linked to the contact, with per-handle stats."
-          },
           "id": {
             "type": "integer",
             "format": "int64",
             "description": "Contact id."
+          },
+          "identities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Identity"
+            },
+            "description": "Every identity linked to the contact, with per-identity stats."
           },
           "last_modified": {
             "type": "string",
@@ -10028,7 +10028,7 @@
           "id",
           "name",
           "unknown",
-          "handle_count",
+          "identity_count",
           "last_modified"
         ],
         "properties": {
@@ -10038,12 +10038,6 @@
               "type": "string"
             },
             "description": "Group names on this contact (A–Z)."
-          },
-          "handle_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Number of handles linked to the contact.",
-            "minimum": 0
           },
           "handles": {
             "type": "array",
@@ -10056,6 +10050,12 @@
             "type": "integer",
             "format": "int64",
             "description": "Contact id."
+          },
+          "identity_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of identities linked to the contact.",
+            "minimum": 0
           },
           "last_heard_at": {
             "type": [
@@ -10871,13 +10871,17 @@
         "type": "object",
         "description": "One identity of a contact or an account, and its messages: for a contact,\nthe messages in the conversations it takes part in; for an account, the\nmessages held at it, sent from or received at that address (ADR-0015). The\ncontact drawer and the Profile screen show the same table, so they read the\nsame row.",
         "required": [
-          "handle",
+          "address",
           "service",
           "conversations",
           "direct_messages",
           "group_messages"
         ],
         "properties": {
+          "address": {
+            "type": "string",
+            "description": "The identity as the vault stores it: E.164 for a number, lower case\nfor an address."
+          },
           "conversations": {
             "type": "integer",
             "format": "int64",
@@ -10902,10 +10906,6 @@
             "format": "int64",
             "description": "The identity's messages in group conversations, on the same terms.",
             "minimum": 0
-          },
-          "handle": {
-            "type": "string",
-            "description": "The identity as the vault stores it: E.164 for a number, lower case\nfor an address."
           },
           "service": {
             "type": "string",
@@ -11635,7 +11635,7 @@
                   "items": {
                     "type": "string"
                   },
-                  "description": "Phone handles linked to the account."
+                  "description": "Phone numbers linked to the account."
                 },
                 "preferred_name": {
                   "type": [
@@ -11881,7 +11881,7 @@
                 "id",
                 "name",
                 "unknown",
-                "handle_count",
+                "identity_count",
                 "last_modified"
               ],
               "properties": {
@@ -11891,12 +11891,6 @@
                     "type": "string"
                   },
                   "description": "Group names on this contact (A–Z)."
-                },
-                "handle_count": {
-                  "type": "integer",
-                  "format": "int64",
-                  "description": "Number of handles linked to the contact.",
-                  "minimum": 0
                 },
                 "handles": {
                   "type": "array",
@@ -11909,6 +11903,12 @@
                   "type": "integer",
                   "format": "int64",
                   "description": "Contact id."
+                },
+                "identity_count": {
+                  "type": "integer",
+                  "format": "int64",
+                  "description": "Number of identities linked to the contact.",
+                  "minimum": 0
                 },
                 "last_heard_at": {
                   "type": [
@@ -12310,13 +12310,17 @@
               "type": "object",
               "description": "One identity of a contact or an account, and its messages: for a contact,\nthe messages in the conversations it takes part in; for an account, the\nmessages held at it, sent from or received at that address (ADR-0015). The\ncontact drawer and the Profile screen show the same table, so they read the\nsame row.",
               "required": [
-                "handle",
+                "address",
                 "service",
                 "conversations",
                 "direct_messages",
                 "group_messages"
               ],
               "properties": {
+                "address": {
+                  "type": "string",
+                  "description": "The identity as the vault stores it: E.164 for a number, lower case\nfor an address."
+                },
                 "conversations": {
                   "type": "integer",
                   "format": "int64",
@@ -12341,10 +12345,6 @@
                   "format": "int64",
                   "description": "The identity's messages in group conversations, on the same terms.",
                   "minimum": 0
-                },
-                "handle": {
-                  "type": "string",
-                  "description": "The identity as the vault stores it: E.164 for a number, lower case\nfor an address."
                 },
                 "service": {
                   "type": "string",
@@ -13027,21 +13027,21 @@
       },
       "RemoveContactIdentityRequest": {
         "type": "object",
-        "description": "The handle to unlink.",
+        "description": "The identity to unlink.",
         "required": [
-          "handle"
+          "address"
         ],
         "properties": {
-          "handle": {
+          "address": {
             "type": "string",
-            "description": "Handle value to unlink."
+            "description": "The address to unlink."
           },
           "service": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Platform service, when the handle is linked with one."
+            "description": "Platform service, when the identity is linked with one."
           }
         }
       },
@@ -13286,7 +13286,7 @@
       },
       "UpdateAccountRequest": {
         "type": "object",
-        "description": "Body for changing an account. Omitted fields are left alone. The name,\nzone and handles are set by the account or by the vault owner; the\ndisabled flag and the three permissions are the vault owner's alone.",
+        "description": "Body for changing an account. Omitted fields are left alone. The name,\nzone and identities are set by the account or by the vault owner; the\ndisabled flag and the three permissions are the vault owner's alone.",
         "properties": {
           "can_delete": {
             "type": [
@@ -13316,12 +13316,12 @@
             ],
             "description": "Disable or re-enable login."
           },
-          "handles": {
+          "identities": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AccountIdentityRequest"
             },
-            "description": "Handles to add/link onto the account profile."
+            "description": "Identities to link onto the account profile."
           },
           "preferred_name": {
             "type": [
@@ -13330,12 +13330,12 @@
             ],
             "description": "Display name to set; `None` (or empty) leaves the current name unchanged."
           },
-          "remove_handles": {
+          "remove_identities": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AccountIdentityRequest"
             },
-            "description": "Handles to unlink from the account profile."
+            "description": "Identities to unlink from the account profile."
           },
           "time_zone": {
             "type": [
@@ -13380,26 +13380,26 @@
       },
       "UpdateContactIdentityRequest": {
         "type": "object",
-        "description": "The previous and new handle values for a link change.",
+        "description": "The previous and new addresses for a link change.",
         "required": [
-          "previous_handle",
-          "handle"
+          "previous_address",
+          "address"
         ],
         "properties": {
-          "handle": {
+          "address": {
             "type": "string",
-            "description": "Replacement handle value."
+            "description": "The replacement address."
           },
-          "previous_handle": {
+          "previous_address": {
             "type": "string",
-            "description": "Handle value currently linked."
+            "description": "The address currently linked."
           },
           "service": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Platform service for the new handle."
+            "description": "Platform service for the new address."
           }
         }
       },
@@ -13407,14 +13407,14 @@
         "type": "object",
         "description": "Body for `PATCH /v1/contacts/{id}`. Exactly one mutation field should be set.",
         "properties": {
-          "add_handle": {
+          "add_identity": {
             "oneOf": [
               {
                 "type": "null"
               },
               {
                 "$ref": "#/components/schemas/AddContactIdentityRequest",
-                "description": "Handle link to add."
+                "description": "Identity to link."
               }
             ]
           },
@@ -13425,25 +13425,25 @@
             ],
             "description": "New display name; `None` leaves it unchanged."
           },
-          "remove_handle": {
+          "remove_identity": {
             "oneOf": [
               {
                 "type": "null"
               },
               {
                 "$ref": "#/components/schemas/RemoveContactIdentityRequest",
-                "description": "Handle link to remove."
+                "description": "Identity to unlink."
               }
             ]
           },
-          "update_handle": {
+          "update_identity": {
             "oneOf": [
               {
                 "type": "null"
               },
               {
                 "$ref": "#/components/schemas/UpdateContactIdentityRequest",
-                "description": "Handle link to replace."
+                "description": "Identity to replace."
               }
             ]
           }

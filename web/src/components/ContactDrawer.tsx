@@ -169,8 +169,8 @@ export default function ContactDrawer({
 
   if (!contactId) return null;
 
-  const handleRows: ContactDetail["handles"] = detailMatches
-    ? matchedDetail.handles
+  const handleRows: ContactDetail["identities"] = detailMatches
+    ? matchedDetail.identities
     : previewMatches
       ? previewHandleStubRows(preview?.handles, preview?.handleCount)
       : [];
@@ -233,7 +233,7 @@ export default function ContactDrawer({
       role="dialog"
       aria-label={contactLabelText(
         displayName ?? "",
-        handleRows.map((h) => h.handle),
+        handleRows.map((h) => h.address),
       )}
       aria-busy={loading || undefined}
       className={panelClass}
@@ -277,7 +277,7 @@ export default function ContactDrawer({
                 {detailMatches || previewMatches ? (
                   <ContactLabel
                     name={displayName ?? ""}
-                    handles={handleRows.map((h) => h.handle)}
+                    handles={handleRows.map((h) => h.address)}
                   />
                 ) : (
                   displayName

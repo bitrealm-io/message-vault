@@ -8,13 +8,13 @@ import {
 } from "./contactDrawerTypes";
 
 describe("contactPreviewFromListRow", () => {
-  it("maps list-API handle_count onto preview handleCount", () => {
+  it("maps list-API identity_count onto preview handleCount", () => {
     expect(
       contactPreviewFromListRow({
         id: "1",
         name: "Ada",
         handles: ["+15550001", "15550001"],
-        handle_count: 1,
+        identity_count: 1,
         groups: ["Family"],
       }),
     ).toEqual({
@@ -30,17 +30,17 @@ describe("contactPreviewFromListRow", () => {
 describe("previewHandleStubRows", () => {
   it("stubs one row when preview lists raw and normalized forms of one identity", () => {
     const rows = previewHandleStubRows(["+1555000b", "1555000b"], 1);
-    expect(rows.map((r) => r.handle)).toEqual(["+1555000b"]);
+    expect(rows.map((r) => r.address)).toEqual(["+1555000b"]);
   });
 
   it("uses unique identities when handleCount is missing", () => {
     const rows = previewHandleStubRows(["+1555000b", "1555000b"], undefined);
-    expect(rows.map((r) => r.handle)).toEqual(["+1555000b"]);
+    expect(rows.map((r) => r.address)).toEqual(["+1555000b"]);
   });
 
   it("pads with a placeholder when handleCount is larger than the unique list", () => {
     const rows = previewHandleStubRows(["+1555000b"], 3);
-    expect(rows.map((r) => r.handle)).toEqual([
+    expect(rows.map((r) => r.address)).toEqual([
       "+1555000b",
       HANDLE_STUB_PLACEHOLDER,
       HANDLE_STUB_PLACEHOLDER,
@@ -53,7 +53,7 @@ describe("previewHandleStubRows", () => {
 
   it("keeps two distinct phones when handleCount is 2", () => {
     const rows = previewHandleStubRows(["+15550001", "15550001", "+15550002", "15550002"], 2);
-    expect(rows.map((r) => r.handle)).toEqual(["+15550001", "+15550002"]);
+    expect(rows.map((r) => r.address)).toEqual(["+15550001", "+15550002"]);
   });
 });
 

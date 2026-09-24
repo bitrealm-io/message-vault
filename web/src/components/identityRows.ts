@@ -7,7 +7,7 @@ import { formatHandleServiceLabel } from "../lib/handleService";
  * this and the Profile tab maps an account's, so the two tables are one.
  */
 export type IdentityRow = {
-  handle: string;
+  address: string;
   service: string | null;
   /** When the oldest message the identity takes part in was sent, or null. */
   start_date: string | null;
@@ -21,7 +21,7 @@ export type IdentityRow = {
 
 const SORT_COLUMNS = [
   "service",
-  "handle",
+  "address",
   "start_date",
   "end_date",
   "conversations",
@@ -33,9 +33,9 @@ type SortColumn = (typeof SORT_COLUMNS)[number];
 function sortKey(row: IdentityRow, column: SortColumn): string | number {
   switch (column) {
     case "service":
-      return formatHandleServiceLabel(row.handle, row.service).toLowerCase();
-    case "handle":
-      return row.handle.toLowerCase();
+      return formatHandleServiceLabel(row.address, row.service).toLowerCase();
+    case "address":
+      return row.address.toLowerCase();
     case "start_date":
       return row.start_date ?? "";
     case "end_date":
@@ -62,7 +62,7 @@ export function sortIdentityRows(
     const bv = sortKey(b, column);
     if (av < bv) return -dir;
     if (av > bv) return dir;
-    return a.handle.localeCompare(b.handle);
+    return a.address.localeCompare(b.address);
   });
 }
 
@@ -81,7 +81,7 @@ export function identityTotals(rows: readonly IdentityRow[]): IdentityRow {
     group += row.group_messages;
   }
   return {
-    handle: "",
+    address: "",
     service: null,
     start_date: start,
     end_date: end,

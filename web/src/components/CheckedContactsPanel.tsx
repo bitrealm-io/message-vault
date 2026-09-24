@@ -128,7 +128,7 @@ export default function CheckedContactsPanel({
       if (cached) {
         seeded[c.id] = {
           name: cached.name,
-          totals: sumHandleTotals(cached.handles),
+          totals: sumHandleTotals(cached.identities),
         };
       } else {
         missing.push(c.id);

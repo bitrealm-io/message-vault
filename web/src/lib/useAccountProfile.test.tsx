@@ -78,7 +78,7 @@ describe("useUpdateAccountProfile", () => {
 
     await expect(
       both.result.current.update.mutateAsync({
-        handles: [{ handle: "+15550000", service: "phone" }],
+        identities: [{ address: "+15550000", service: "phone" }],
       }),
     ).rejects.toThrow("that address is already claimed");
     expect(both.result.current.profile.profile?.preferred_name).toBe("Ada");

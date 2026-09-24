@@ -28,11 +28,11 @@ export function useAccountProfile(): {
   return { profile: data ?? null, loading: isPending, error: error ? error.message : "" };
 }
 
-/** What a change to the profile can carry: a name, handles to add, handles to drop. */
+/** What a change to the profile can carry: a name, identities to add, identities to drop. */
 export type AccountProfileChange = Parameters<typeof updateAccountProfile>[0];
 
 /**
- * Change the account's own name or handles.
+ * Change the account’s own name or identities.
  *
  * The vault answers with the profile as it now stands, so that answer goes
  * into the entry every screen reads. Nothing is marked stale: there is nothing

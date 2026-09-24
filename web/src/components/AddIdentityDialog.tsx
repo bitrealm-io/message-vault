@@ -25,16 +25,16 @@ const DUPLICATE_MESSAGE = "This identity is already in the list.";
 
 /** Whether `existing` already holds `handle` on `service`, however it was typed. */
 function alreadyListed(
-  existing: readonly { handle: string; service?: string | null }[],
+  existing: readonly { address: string; service?: string | null }[],
   handle: string,
   service: HandleService,
 ): boolean {
   const key = handleDuplicateKey(service, handle);
   if (!key) return false;
   return existing.some((row) => {
-    const rowService = inferService(row.handle, row.service);
+    const rowService = inferService(row.address, row.service);
     const known = HANDLE_SERVICES.find((s) => s === rowService) ?? "phone";
-    return handleDuplicateKey(known, row.handle) === key;
+    return handleDuplicateKey(known, row.address) === key;
   });
 }
 
@@ -60,9 +60,9 @@ export default function AddIdentityDialog({
   busy?: boolean;
   /** Why the last submit failed. The dialog stays open so it can be retried. */
   error?: string;
-  existing?: readonly { handle: string; service?: string | null }[];
+  existing?: readonly { address: string; service?: string | null }[];
   onClose: () => void;
-  onConfirm: (args: { handle: string; service: HandleService }) => void;
+  onConfirm: (args: { address: string; service: HandleService }) => void;
 }) {
   const [service, setService] = useState<HandleService>("phone");
   const [handle, setHandle] = useState("");
@@ -90,7 +90,7 @@ export default function AddIdentityDialog({
       setInvalid(why);
       return;
     }
-    onConfirm({ handle: trimmed, service });
+    onConfirm({ address: trimmed, service });
   };
 
   return (

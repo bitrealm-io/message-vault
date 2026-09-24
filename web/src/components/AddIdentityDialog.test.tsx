@@ -26,7 +26,7 @@ describe("AddIdentityDialog", () => {
     );
     await user.type(screen.getByRole("textbox", { name: "Identity" }), "Bob@Example.com");
     await user.click(screen.getByRole("button", { name: "Add" }));
-    expect(onConfirm).toHaveBeenCalledWith({ handle: "Bob@Example.com", service: "email" });
+    expect(onConfirm).toHaveBeenCalledWith({ address: "Bob@Example.com", service: "email" });
   });
 
   it("refuses a value that is not a number or an address, before asking anyone", async () => {
@@ -58,7 +58,7 @@ describe("AddIdentityDialog", () => {
     render(
       <AddIdentityDialog
         open
-        existing={[{ handle: "+15555550100", service: "phone" }]}
+        existing={[{ address: "+15555550100", service: "phone" }]}
         onClose={() => {}}
         onConfirm={onConfirm}
       />,
@@ -72,7 +72,7 @@ describe("AddIdentityDialog", () => {
     await user.click(screen.getByRole("option", { name: "WhatsApp" }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Add" }));
-    expect(onConfirm).toHaveBeenCalledWith({ handle: "+1 (555) 555-0100", service: "whatsapp" });
+    expect(onConfirm).toHaveBeenCalledWith({ address: "+1 (555) 555-0100", service: "whatsapp" });
   });
 
   it("shows why the last attempt failed and stays open while busy", () => {

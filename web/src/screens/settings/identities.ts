@@ -18,5 +18,5 @@ export function removeBody(identity: Identity): string {
   const phrase = messagesPhrase(identity);
   return phrase
     ? `${phrase} will no longer be associated with this account.`
-    : `${identity.handle} has no messages. It will no longer count as this account's own.`;
+    : `${identity.address} has no messages. It will no longer count as this account's own.`;
 }

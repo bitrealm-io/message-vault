@@ -403,6 +403,68 @@ async fn vault_db_without_accounts_table_does_not_block_reset_check() {
         .expect("a vault.db with no accounts table must not block reset-demo");
 }
 
+/// Copy a seeded active database (demo account plus account 9, one message
+/// each) to a prepared one beside it, and return both paths.
+async fn active_and_prepared_reset_databases(root: &Path) -> (PathBuf, PathBuf) {
+    let active = root.join("vault.db");
+    seed_reset_test_database(&active).await;
+    let prepared = root.join("prepared.db");
+    fs::copy(&active, &prepared).expect("copy prepared database");
+    (active, prepared)
+}
+
+#[tokio::test]
+async fn reset_check_accepts_a_prepared_database_that_changed_only_the_demo_account() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let (active, prepared) = active_and_prepared_reset_databases(temp.path()).await;
+    make_prepared_reset_database_observably_different(&prepared).await;
+
+    verify_non_demo_state_preserved(&active, &prepared, DEMO_ACCOUNT_ID)
+        .await
+        .expect("a reset that only changed the demo account must be accepted");
+}
+
+#[tokio::test]
+async fn reset_check_refuses_a_prepared_database_with_fewer_non_demo_messages() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let (active, prepared) = active_and_prepared_reset_databases(temp.path()).await;
+    let (pool, mut conn) = test_db(&prepared).await;
+    sqlx::query("DELETE FROM messages WHERE account_id = 9")
+        .execute(&mut *conn)
+        .await
+        .expect("delete account 9's message");
+    close_test_db(pool, conn).await;
+
+    let error = verify_non_demo_state_preserved(&active, &prepared, DEMO_ACCOUNT_ID)
+        .await
+        .expect_err("a reset that lost a non-demo account's message must be refused")
+        .to_string();
+
+    assert!(
+        error.contains("active={9: 1}, prepared={9: 0}"),
+        "the error must name account 9 and both counts: {error}"
+    );
+}
+
+#[tokio::test]
+async fn reset_check_refuses_a_prepared_database_with_more_non_demo_messages() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let (active, prepared) = active_and_prepared_reset_databases(temp.path()).await;
+    let (pool, mut conn) = test_db(&prepared).await;
+    seed_reset_test_account(&mut conn, 10, "new-non-demo").await;
+    close_test_db(pool, conn).await;
+
+    let error = verify_non_demo_state_preserved(&active, &prepared, DEMO_ACCOUNT_ID)
+        .await
+        .expect_err("a reset that added a non-demo account's message must be refused")
+        .to_string();
+
+    assert!(
+        error.contains("active={9: 1}, prepared={9: 1, 10: 1}"),
+        "the error must name account 10: {error}"
+    );
+}
+
 #[test]
 fn reset_refuses_while_server_holds_database_lock() {
     let temp = tempfile::tempdir().expect("create test directory");

@@ -17,3 +17,7 @@ pub use run::run;
 #[cfg(test)]
 #[path = "../tests/convert_smoke.rs"]
 mod convert_smoke;
+
+#[cfg(test)]
+#[path = "../tests/run_summary.rs"]
+mod run_summary;

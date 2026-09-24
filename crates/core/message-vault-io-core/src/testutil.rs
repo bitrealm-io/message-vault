@@ -245,3 +245,63 @@ pub fn assert_jsonl_resumes(
     }
     report
 }
+
+/// The config an exporter's `run()` test passes: read `inputs`, write JSONL
+/// into `output`, copy no attachments and keep every name, so the result
+/// shows only what the exporter itself did.
+pub fn jsonl_run_config(
+    inputs: &[&Path],
+    output: &Path,
+    source: crate::SourceConfig,
+) -> crate::ExporterConfig {
+    crate::ExporterConfig {
+        inputs: inputs.iter().map(|p| p.to_path_buf()).collect(),
+        output: output.to_path_buf(),
+        timezone: None,
+        obfuscate: crate::ObfuscateConfig {
+            enabled: false,
+            seed: None,
+        },
+        media: crate::MediaConfig {
+            mode: media::MediaMode::Disabled,
+            compress: media::CompressOptions::default(),
+        },
+        cancel: None,
+        log: None,
+        progress: None,
+        output_format: crate::OutputFormat::Jsonl,
+        resume: false,
+        source,
+    }
+}
+
+/// Assert that a `run()` into `output` wrote `conversations` JSONL files and
+/// opened its summary with where the export went. Returns every file's text,
+/// joined, for assertions about what the files carry.
+///
+/// # Panics
+///
+/// Panics when the file count or the summary's first line is wrong.
+pub fn assert_run_wrote_jsonl(
+    result: &crate::RunResult,
+    output: &Path,
+    conversations: usize,
+) -> String {
+    let names = jsonl_names(output);
+    assert_eq!(
+        names.len(),
+        conversations,
+        "one JSONL file per conversation: {names:?}"
+    );
+    assert_eq!(
+        result.messages.first().map(String::as_str),
+        Some(format!("Wrote jsonl export under {}", output.display()).as_str()),
+        "the summary opens with where the export went: {:?}",
+        result.messages
+    );
+    names
+        .iter()
+        .map(|n| fs::read_to_string(output.join(n)).expect("read jsonl"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}

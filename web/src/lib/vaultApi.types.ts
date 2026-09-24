@@ -1508,12 +1508,15 @@ export interface components {
             /** @description Date of the contact's first message. */
             start_date?: string | null;
         };
-        /** @description Contact row for the list: name, handles, groups. */
+        /** @description Contact row for the list: name, addresses, groups. */
         ContactSummary: {
+            /**
+             * @description Normalized (and raw when distinct) address strings of the contact's
+             *     identities, for client-side filter and label.
+             */
+            addresses?: string[];
             /** @description Group names on this contact (A–Z). */
             groups?: string[];
-            /** @description Normalized (and raw when distinct) handle values for client-side filter. */
-            handles?: string[];
             /**
              * Format: int64
              * @description Contact id.
@@ -1526,7 +1529,7 @@ export interface components {
             identity_count: number;
             /**
              * @description When the vault last heard from the contact: the newest message one of
-             *     the contact's handles sent (RFC 3339, UTC). Null when none of them
+             *     the contact's identities sent (RFC 3339, UTC). Null when none of them
              *     ever sent a message. Not the contact's last activity: a message the
              *     account owner sent, or another member of a group chat, does not count.
              */
@@ -2402,10 +2405,13 @@ export interface components {
         Page_ContactSummary: {
             /** @description The rows on this page. */
             items: {
+                /**
+                 * @description Normalized (and raw when distinct) address strings of the contact's
+                 *     identities, for client-side filter and label.
+                 */
+                addresses?: string[];
                 /** @description Group names on this contact (A–Z). */
                 groups?: string[];
-                /** @description Normalized (and raw when distinct) handle values for client-side filter. */
-                handles?: string[];
                 /**
                  * Format: int64
                  * @description Contact id.
@@ -2418,7 +2424,7 @@ export interface components {
                 identity_count: number;
                 /**
                  * @description When the vault last heard from the contact: the newest message one of
-                 *     the contact's handles sent (RFC 3339, UTC). Null when none of them
+                 *     the contact's identities sent (RFC 3339, UTC). Null when none of them
                  *     ever sent a message. Not the contact's last activity: a message the
                  *     account owner sent, or another member of a group chat, does not count.
                  */

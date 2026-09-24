@@ -24,7 +24,7 @@ const STORAGE_KEY = "contactSort:v1";
 /** The row fields the sort reads. */
 export interface SortableContact {
   name: string;
-  handles?: readonly string[];
+  addresses?: readonly string[];
   last_heard_at?: string | null;
 }
 
@@ -127,8 +127,8 @@ export function compareContactsByLastHeard(
 
 /** The list's comparator for `state`; ties on last heard fall back to the name, A to Z. */
 export function compareContacts(a: SortableContact, b: SortableContact, state: ContactSortState) {
-  const labelA = contactLabelText(a.name, a.handles);
-  const labelB = contactLabelText(b.name, b.handles);
+  const labelA = contactLabelText(a.name, a.addresses);
+  const labelB = contactLabelText(b.name, b.addresses);
   if (isNameSort(state.sort)) {
     return compareContactsByName(labelA, labelB, state.sort, state.order);
   }

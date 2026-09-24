@@ -17,7 +17,7 @@ use crate::paging::{Direction, MAX_CONTACT_SUMMARY_IDS, Page, SortKey};
 use crate::search::emit::{NOT_TRASHED_CONTACT, NOT_TRASHED_CONVERSATION};
 use crate::server::ApiError;
 
-/// Contact row for the list: name, handles, groups.
+/// Contact row for the list: name, addresses, groups.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ContactSummary {
     /// Contact id.
@@ -29,13 +29,14 @@ pub struct ContactSummary {
     pub unknown: bool,
     /// Number of identities linked to the contact.
     pub identity_count: u64,
-    /// Normalized (and raw when distinct) handle values for client-side filter.
+    /// Normalized (and raw when distinct) address strings of the contact's
+    /// identities, for client-side filter and label.
     #[serde(default)]
-    pub handles: Vec<String>,
+    pub addresses: Vec<String>,
     /// When the contact’s address-book shape last changed (`datetime('now')`).
     pub last_modified: String,
     /// When the vault last heard from the contact: the newest message one of
-    /// the contact's handles sent (RFC 3339, UTC). Null when none of them
+    /// the contact's identities sent (RFC 3339, UTC). Null when none of them
     /// ever sent a message. Not the contact's last activity: a message the
     /// account owner sent, or another member of a group chat, does not count.
     pub last_heard_at: Option<String>,
@@ -195,7 +196,7 @@ pub async fn list_contacts_sorted(
                 (SELECT COUNT(*)
                  FROM contact_handles ch
                  WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id) AS identity_count,
-                (SELECT {handles_agg}
+                (SELECT {addresses_agg}
                  FROM (
                    SELECT DISTINCT h.normalized AS val
                    FROM contact_handles ch
@@ -208,7 +209,7 @@ pub async fn list_contacts_sorted(
                    JOIN handles h ON h.id = ch.handle_id
                    WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id
                      AND h.raw IS NOT NULL AND trim(h.raw) != ''
-                 )) AS handles,
+                 )) AS addresses,
                 ct.last_modified,
                 (SELECT MAX(m.timestamp)
                  FROM contact_handles ch
@@ -223,7 +224,7 @@ pub async fn list_contacts_sorted(
          {order_by}
          LIMIT ? OFFSET ?",
         unknown = UNKNOWN_CONTACT_SQL,
-        handles_agg = group_concat_unit_separator(engine, "val"),
+        addresses_agg = group_concat_unit_separator(engine, "val"),
         groups_agg = group_concat_unit_separator(engine, "cl.name"),
     ));
     let mut params = filter.params().to_vec();
@@ -241,12 +242,12 @@ pub async fn list_contacts_sorted(
                 name,
                 is_unknown,
                 identity_count,
-                handles_blob,
+                addresses_blob,
                 last_modified,
                 last_heard_at,
                 groups_blob,
             )| {
-                let handles = handles_blob
+                let addresses = addresses_blob
                     .map(|s| {
                         s.split('\u{1f}')
                             .filter_map(message_ir::nonempty)
@@ -266,7 +267,7 @@ pub async fn list_contacts_sorted(
                     name,
                     unknown: is_unknown != 0,
                     identity_count: identity_count.max(0) as u64,
-                    handles,
+                    addresses,
                     last_modified,
                     last_heard_at,
                     groups,

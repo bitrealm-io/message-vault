@@ -38,7 +38,7 @@ function contact(name: string) {
     id: 7,
     name,
     last_modified: "2024-01-01T00:00:00Z",
-    handles: [],
+    addresses: [],
     groups: ["Family"],
     direct_conversations: 1,
     group_conversations: 0,

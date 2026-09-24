@@ -13,14 +13,14 @@ describe("contactPreviewFromListRow", () => {
       contactPreviewFromListRow({
         id: "1",
         name: "Ada",
-        handles: ["+15550001", "15550001"],
+        addresses: ["+15550001", "15550001"],
         identity_count: 1,
         groups: ["Family"],
       }),
     ).toEqual({
       id: "1",
       name: "Ada",
-      handles: ["+15550001", "15550001"],
+      addresses: ["+15550001", "15550001"],
       handleCount: 1,
       groups: ["Family"],
     });
@@ -67,7 +67,7 @@ describe("contactPreviewFromThreadParticipants", () => {
     ).toEqual({
       id: "1",
       name: "Ada",
-      handles: ["+15550001"],
+      addresses: ["+15550001"],
       handleCount: 1,
     });
   });
@@ -79,7 +79,7 @@ describe("contactPreviewFromThreadParticipants", () => {
         { contact_id: 1, handle: "+15550002", name: "Ada" },
       ]),
     ).toMatchObject({
-      handles: ["+15550001", "+15550002"],
+      addresses: ["+15550001", "+15550002"],
       handleCount: 2,
     });
   });
@@ -100,12 +100,12 @@ describe("contactPreviewFromThreadParticipants", () => {
     ).toBe("+15550001");
   });
 
-  it("stubs at least one identity when matched handles are empty", () => {
+  it("stubs at least one identity when matched addresses are empty", () => {
     expect(
       contactPreviewFromThreadParticipants("1", [{ contact_id: 1, handle: "", name: "Ada" }]),
     ).toMatchObject({
       name: "Ada",
-      handles: [],
+      addresses: [],
       handleCount: 1,
     });
   });
@@ -120,11 +120,17 @@ describe("contactPreviewFromThreadParticipants", () => {
 });
 
 describe("sameContactPreviews", () => {
-  const ada = { id: "1", name: "Ada", handles: ["+15550001"], handleCount: 1, groups: ["Family"] };
+  const ada = {
+    id: "1",
+    name: "Ada",
+    addresses: ["+15550001"],
+    handleCount: 1,
+    groups: ["Family"],
+  };
 
   it("treats a re-mapped but equal list as unchanged", () => {
     expect(
-      sameContactPreviews([ada], [{ ...ada, handles: ["+15550001"], groups: ["Family"] }]),
+      sameContactPreviews([ada], [{ ...ada, addresses: ["+15550001"], groups: ["Family"] }]),
     ).toBe(true);
   });
 
@@ -145,9 +151,9 @@ describe("sameContactPreviews", () => {
     expect(sameContactPreviews([], [])).toBe(true);
   });
 
-  it("distinguishes a missing handles list from an empty one", () => {
+  it("distinguishes a missing addresses list from an empty one", () => {
     expect(
-      sameContactPreviews([{ id: "1", name: "Ada" }], [{ id: "1", name: "Ada", handles: [] }]),
+      sameContactPreviews([{ id: "1", name: "Ada" }], [{ id: "1", name: "Ada", addresses: [] }]),
     ).toBe(false);
   });
 });

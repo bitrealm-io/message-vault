@@ -4,7 +4,7 @@ import type { Conversation } from "./types";
 export type OpenContactPreview = {
   id: string;
   name: string;
-  handles?: string[];
+  addresses?: string[];
   handleCount?: number;
   groups?: string[];
 };
@@ -36,7 +36,7 @@ const MAX_OPEN_CONTACT_HANDLE_COUNT = 500;
 
 /**
  * Parse a contact preview from location state.
- * Requires non-empty string `id` and `name`. Optional `handles`/`groups` must be string arrays;
+ * Requires non-empty string `id` and `name`. Optional `addresses`/`groups` must be string arrays;
  * optional `handleCount` must be a non-negative integer at most 500. Returns null on any invalid field.
  */
 function asOpenContactPreview(value: unknown): OpenContactPreview | null {
@@ -46,9 +46,9 @@ function asOpenContactPreview(value: unknown): OpenContactPreview | null {
 
   const out: OpenContactPreview = { id: value.id, name: value.name };
 
-  if ("handles" in value && value.handles !== undefined) {
-    if (!isStringArray(value.handles)) return null;
-    out.handles = value.handles;
+  if ("addresses" in value && value.addresses !== undefined) {
+    if (!isStringArray(value.addresses)) return null;
+    out.addresses = value.addresses;
   }
 
   if ("groups" in value && value.groups !== undefined) {

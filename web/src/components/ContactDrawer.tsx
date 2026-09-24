@@ -172,7 +172,7 @@ export default function ContactDrawer({
   const handleRows: ContactDetail["identities"] = detailMatches
     ? matchedDetail.identities
     : previewMatches
-      ? previewHandleStubRows(preview?.handles, preview?.handleCount)
+      ? previewHandleStubRows(preview?.addresses, preview?.handleCount)
       : [];
 
   // null = membership unknown (loading, no preview groups); [] = known empty.
@@ -277,7 +277,7 @@ export default function ContactDrawer({
                 {detailMatches || previewMatches ? (
                   <ContactLabel
                     name={displayName ?? ""}
-                    handles={handleRows.map((h) => h.address)}
+                    addresses={handleRows.map((h) => h.address)}
                   />
                 ) : (
                   displayName

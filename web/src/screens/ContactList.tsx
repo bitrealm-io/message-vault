@@ -72,10 +72,10 @@ function handleMatchesNeedle(handle: string, needle: string): boolean {
 }
 
 /** Handles on this contact that match the current filter. */
-function matchingHandles(handles: string[] | undefined, filter: string): string[] {
+function matchingHandles(addresses: string[] | undefined, filter: string): string[] {
   const { text, handle } = filterNeedles(filter);
   if (!text && !handle) return [];
-  return (handles ?? []).filter((h) => {
+  return (addresses ?? []).filter((h) => {
     if (handle && handleMatchesNeedle(h, handle)) return true;
     if (text && handleMatchesNeedle(h, text)) return true;
     return false;
@@ -93,7 +93,7 @@ function contactMatchesFilter(c: Contact, filter: string): boolean {
   const { text, handle } = filterNeedles(filter);
   if (!text && !handle) return true;
   if (text && c.name.toLowerCase().includes(text.toLowerCase())) return true;
-  return matchingHandles(c.handles, filter).length > 0;
+  return matchingHandles(c.addresses, filter).length > 0;
 }
 
 /** Make every contact id a string so list keys stay stable. */
@@ -101,7 +101,7 @@ function normalizeContacts(rows: ContactSummary[]): Contact[] {
   return rows.map((c) => ({
     ...c,
     id: String(c.id),
-    handles: c.handles ?? [],
+    addresses: c.addresses ?? [],
     groups: c.groups ?? [],
   }));
 }
@@ -401,7 +401,7 @@ export default function ContactList({
   // A–Z sections only make sense over a name; a list ordered by date has none.
   const nameSort = sortState.sort;
   const sectionLetter = isNameSort(nameSort)
-    ? (c: Contact) => contactSortLetter(contactLabelText(c.name, c.handles), nameSort)
+    ? (c: Contact) => contactSortLetter(contactLabelText(c.name, c.addresses), nameSort)
     : undefined;
 
   const localSlice =
@@ -446,7 +446,7 @@ export default function ContactList({
       }}
       selectAllLabel="Select all contacts"
       getId={(c) => c.id}
-      getTextValue={(c) => contactLabelText(c.name, c.handles)}
+      getTextValue={(c) => contactLabelText(c.name, c.addresses)}
       ariaLabel="Contacts"
       errorPrefix="Could not load contacts"
       headerActions={<ContactSortMenu state={sortState} onChange={onSortChange} />}
@@ -496,12 +496,15 @@ export default function ContactList({
                   : "group-hover/avatar:invisible group-focus-within/avatar:invisible"
               }
             >
-              <ContactInitialCircle displayName={c.name} preferredHandle={c.handles?.[0] ?? null} />
+              <ContactInitialCircle
+                displayName={c.name}
+                preferredHandle={c.addresses?.[0] ?? null}
+              />
             </span>
             <Checkbox
               id={checkId}
               checked={checked}
-              aria-label={`Select ${contactLabelText(c.name, c.handles)}`}
+              aria-label={`Select ${contactLabelText(c.name, c.addresses)}`}
               onChange={(on, e) => {
                 // A checkbox change is a click underneath, so the Shift key is on it.
                 if ((e.nativeEvent as MouseEvent).shiftKey) setRangeChecked(c.id, on);
@@ -515,9 +518,9 @@ export default function ContactList({
         );
       }}
       renderRow={(c) => {
-        const nameKey = contactLabelText(c.name, c.handles).toLowerCase();
+        const nameKey = contactLabelText(c.name, c.addresses).toLowerCase();
         const shownHandles = filterActive
-          ? matchingHandles(c.handles, filter).filter((h) => h.trim().toLowerCase() !== nameKey)
+          ? matchingHandles(c.addresses, filter).filter((h) => h.trim().toLowerCase() !== nameKey)
           : [];
         return (
           <div className="min-w-0 flex-1">
@@ -525,7 +528,7 @@ export default function ContactList({
               <div className="min-w-0 flex-1 truncate text-[0.875rem] font-medium">
                 <ContactLabel
                   name={c.name}
-                  handles={c.handles}
+                  addresses={c.addresses}
                   render={(text) =>
                     filterActive && nameMarkTerm ? highlightText(text, nameMarkTerm) : text
                   }

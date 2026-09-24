@@ -8,13 +8,13 @@ import { contactLabelText } from "../lib/contactLabel";
  */
 export default function ContactLabel({
   name,
-  handles,
+  addresses,
   render = (text) => text,
 }: {
   name: string;
-  handles: readonly string[] | undefined;
+  addresses: readonly string[] | undefined;
   render?: (text: string) => ReactNode;
 }) {
-  const text = contactLabelText(name, handles);
+  const text = contactLabelText(name, addresses);
   return name.trim() ? render(text) : <em>{render(text)}</em>;
 }

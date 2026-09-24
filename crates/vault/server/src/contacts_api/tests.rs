@@ -275,11 +275,11 @@ async fn list_contacts_uses_preferred_name_and_handle_ids() {
     assert_eq!(page.items[0].identity_count, 1);
     assert!(
         page.items[0]
-            .handles
+            .addresses
             .iter()
             .any(|h| h.contains("5555550100") || h.contains("+15555550100")),
-        "handles={:?}",
-        page.items[0].handles
+        "addresses={:?}",
+        page.items[0].addresses
     );
 }
 

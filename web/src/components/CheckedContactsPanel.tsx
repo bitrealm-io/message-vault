@@ -51,7 +51,7 @@ type RowMetrics = {
 type ContactRow = {
   id: string;
   name: string;
-  handles: string[] | undefined;
+  addresses: string[] | undefined;
   totals: ContactTotals | null;
 };
 
@@ -77,7 +77,7 @@ function sortValue(row: ContactRow, col: string): string | number {
   const totals = row.totals;
   switch (col) {
     case "name":
-      return contactLabelText(row.name, row.handles).toLowerCase();
+      return contactLabelText(row.name, row.addresses).toLowerCase();
     case "start_date":
       return totals?.start_date ?? "";
     case "end_date":
@@ -169,7 +169,7 @@ export default function CheckedContactsPanel({
       return {
         id: c.id,
         name: row?.name ?? c.name,
-        handles: c.handles,
+        addresses: c.addresses,
         totals: row?.totals ?? null,
       };
     });
@@ -181,7 +181,9 @@ export default function CheckedContactsPanel({
       const bv = sortValue(b, col);
       if (av < bv) return -1 * dir;
       if (av > bv) return 1 * dir;
-      return contactLabelText(a.name, a.handles).localeCompare(contactLabelText(b.name, b.handles));
+      return contactLabelText(a.name, a.addresses).localeCompare(
+        contactLabelText(b.name, b.addresses),
+      );
     });
   }, [contacts, metrics, sortDescriptor]);
 
@@ -250,7 +252,7 @@ export default function CheckedContactsPanel({
               <Row id={row.id} className="outline-none">
                 <Cell className={`${tdClass} !text-left`}>
                   <span className="min-w-0 truncate font-medium">
-                    <ContactLabel name={row.name} handles={row.handles} />
+                    <ContactLabel name={row.name} addresses={row.addresses} />
                   </span>
                 </Cell>
                 <Cell className={`${tdCenterClass} whitespace-nowrap text-muted`}>

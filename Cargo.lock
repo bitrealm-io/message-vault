@@ -1938,6 +1938,7 @@ dependencies = [
  "fs2",
  "futures-util",
  "libc",
+ "libsqlite3-sys",
  "media",
  "message-ir",
  "phone",

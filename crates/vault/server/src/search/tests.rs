@@ -1203,6 +1203,131 @@ mod text_words {
     }
 }
 
+/// A capital outside ASCII is the same letter as its small form on every
+/// word that compares text, on both engines (#723). SQLite's own `LIKE` and
+/// `NOCASE` fold only ASCII, so each case stores the capital and searches
+/// with the small letter, and the other way round. Accents still matter:
+/// each case also seeds the unaccented spelling as a near miss.
+mod unicode_case {
+    use super::*;
+
+    #[tokio::test]
+    async fn name_handle_and_plain_text_on_contacts() {
+        let (pool, _dir, _f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let a = ACCOUNT;
+        let address = handle(&mut conn, a, "Élodie.Ünal@example.fr", "imessage").await;
+        let elodie = contact(&mut conn, a, "Élodie Ünal", &[address]).await;
+        let plain = handle(&mut conn, a, "elodie.unal@example.fr", "imessage").await;
+        contact(&mut conn, a, "Elodie Unal", &[plain]).await;
+        for q in [
+            "name:élodie",
+            "name:ÉLODIE",
+            "name:\"élodie ünal\"",
+            "name:élod*",
+            "handle:élodie.ünal",
+            "handle:ÉLODIE*",
+            "élodie",
+            "ÜNAL",
+            "élod*",
+        ] {
+            assert_eq!(
+                run(&mut conn, ListKind::Contacts, q).await,
+                vec![elodie],
+                "{q}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn group_and_tag_by_name() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let a = ACCOUNT;
+        group(&mut conn, a, "Équipe", &[f.bo]).await;
+        group(&mut conn, a, "Equipe", &[f.cy]).await;
+        tag(&mut conn, a, "Über", &[f.bo_direct]).await;
+        tag(&mut conn, a, "Uber", &[f.sam_direct]).await;
+        for q in ["group:équipe", "group:ÉQUIPE", "group:équ*"] {
+            assert_eq!(
+                run(&mut conn, ListKind::Contacts, q).await,
+                vec![f.bo],
+                "{q}"
+            );
+        }
+        for q in ["tag:über", "tag:ÜBER", "tag:üb*"] {
+            assert_eq!(
+                run(&mut conn, ListKind::Conversations, q).await,
+                vec![f.bo_direct],
+                "{q}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn title_body_and_person_words() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let a = ACCOUNT;
+        let oystein = handle(&mut conn, a, "Øystein@example.no", "imessage").await;
+        contact(&mut conn, a, "Øystein Ås", &[oystein]).await;
+        let trip = conversation(
+            &mut conn,
+            a,
+            oystein,
+            "group",
+            Some("Ålesund Trip"),
+            &[oystein, f.bo_handle],
+        )
+        .await;
+        let plain = handle(&mut conn, a, "oystein@example.no", "imessage").await;
+        contact(&mut conn, a, "Oystein As", &[plain]).await;
+        conversation(
+            &mut conn,
+            a,
+            plain,
+            "group",
+            Some("Alesund Trip"),
+            &[plain, f.bo_handle],
+        )
+        .await;
+        let hello = message(
+            &mut conn,
+            a,
+            msg(
+                trip,
+                "2024-03-01T10:00:00Z",
+                false,
+                Some(oystein),
+                "Været er fint",
+            ),
+        )
+        .await;
+        for q in [
+            "title:ålesund",
+            "title:ÅLESUND",
+            "name:øystein",
+            "handle:ØYSTEIN",
+            "with:øystein",
+            "ålesund",
+            "øystein",
+        ] {
+            assert_eq!(
+                run(&mut conn, ListKind::Conversations, q).await,
+                vec![trip],
+                "{q}"
+            );
+        }
+        for q in ["body:været", "body:VÆRET", "from:øystein", "in:ålesund"] {
+            assert_eq!(
+                run(&mut conn, ListKind::Messages, q).await,
+                vec![hello],
+                "{q}"
+            );
+        }
+    }
+}
+
 /// `%`, `_`, and `\\` in what a person types are those characters, never
 /// LIKE wildcards or escapes, and both engines agree on it. Each case seeds a
 /// near miss that a wildcard reading would also match.

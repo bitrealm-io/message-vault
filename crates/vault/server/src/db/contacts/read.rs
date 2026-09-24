@@ -10,7 +10,6 @@ use sqlx::AnyConnection;
 
 use crate::db::contacts::UNKNOWN_CONTACT_SQL;
 use crate::db::dialect::{engine_of, group_concat_unit_separator, name_ci_expr};
-use crate::db::engine::DbEngine;
 use crate::db::handles::{infer_handle_type_from_shape, normalize_handle};
 use crate::db::sql::{SqlParam, bind_args, in_placeholders, renumber_placeholders};
 use crate::paging::{Direction, MAX_CONTACT_SUMMARY_IDS, Page, SortKey};
@@ -131,12 +130,12 @@ pub const DEFAULT_CONTACT_SORT: [SortKey<ContactSort>; 1] = [SortKey {
 ///
 /// `ct.id` breaks ties in the direction of the last key, so paging cannot
 /// repeat a row.
-fn contact_order_by(engine: DbEngine, keys: &[SortKey<ContactSort>]) -> String {
+fn contact_order_by(keys: &[SortKey<ContactSort>]) -> String {
     let mut parts: Vec<String> = keys
         .iter()
         .map(|k| match k.key {
             ContactSort::Name => {
-                format!("{} {}", name_ci_expr(engine, "name"), k.direction.sql())
+                format!("{} {}", name_ci_expr("name"), k.direction.sql())
             }
             ContactSort::LastHeard => format!(
                 "(last_heard_at IS NULL) ASC, last_heard_at {}",
@@ -184,7 +183,7 @@ pub async fn list_contacts_sorted(
         .await?;
     let total = total.max(0) as u64;
 
-    let order_by = contact_order_by(engine, order);
+    let order_by = contact_order_by(order);
     // `last_heard_at` is the newest message one of the contact's handles sent.
     // A flagged duplicate carries the same timestamp as the message it
     // duplicates, so it cannot move the maximum and is not filtered out; that

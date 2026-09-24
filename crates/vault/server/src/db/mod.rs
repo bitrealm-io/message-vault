@@ -19,6 +19,7 @@ pub mod saved_searches;
 pub mod schema;
 pub mod session_tokens;
 pub mod sql;
+pub mod sqlite_functions;
 pub mod staging;
 pub mod storage;
 pub mod trash;

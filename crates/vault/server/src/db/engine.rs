@@ -61,8 +61,12 @@ fn sqlite_url_from_path(path: &Path) -> String {
         .to_string()
 }
 
-/// Pool options for SQLite: four connections plus the vault pragmas.
+/// Pool options for SQLite: four connections plus the vault pragmas. Every
+/// SQLite pool comes through here, so this is also where the vault's SQL
+/// functions are registered for the connections the pool will open
+/// ([`crate::db::sqlite_functions`]).
 fn sqlite_pool_options() -> AnyPoolOptions {
+    crate::db::sqlite_functions::register();
     with_vault_pragmas(AnyPoolOptions::new().max_connections(4))
 }
 

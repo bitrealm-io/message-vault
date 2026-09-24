@@ -12,7 +12,7 @@ use serde::Serialize;
 use sqlx::any::AnyRow;
 use sqlx::{AnyConnection, Row};
 
-use crate::db::dialect::{engine_of, name_eq_ci, order_by_name_ci};
+use crate::db::dialect::{name_eq_ci, order_by_name_ci};
 use crate::db::named_membership::MAX_NAME_LEN;
 
 /// How a saved search was created.
@@ -126,7 +126,7 @@ async fn find_id_by_name(
 ) -> Result<Option<i64>> {
     let sql = format!(
         "SELECT id FROM saved_searches WHERE account_id = $1 AND {}",
-        name_eq_ci(engine_of(conn), "name", "$2")
+        name_eq_ci("name", "$2")
     );
     let id = sqlx::query_scalar::<_, i64>(&sql)
         .bind(account_id)
@@ -140,7 +140,7 @@ async fn find_id_by_name(
 pub async fn list(conn: &mut AnyConnection, account_id: i64) -> Result<Vec<SavedSearch>> {
     let sql = format!(
         "SELECT id, name, query, kind FROM saved_searches WHERE account_id = $1 {}",
-        order_by_name_ci(engine_of(conn), "name")
+        order_by_name_ci("name")
     );
     let rows = sqlx::query(&sql)
         .bind(account_id)

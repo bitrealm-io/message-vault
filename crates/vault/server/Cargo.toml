@@ -20,6 +20,9 @@ demo-seed = { path = "../demo-seed" }
 fs2 = "0.4.3"
 futures-util = { version = "0.3.31", default-features = false }
 libc = "0.2"
+# The bindings sqlx-sqlite already links (VENDORING.md pins the version), for
+# the Unicode lower() the vault registers on every SQLite connection.
+libsqlite3-sys = { version = "0.38", default-features = false, features = ["bundled"] }
 media = { path = "../../libs/media" }
 message-ir = { workspace = true }
 phone = { workspace = true }

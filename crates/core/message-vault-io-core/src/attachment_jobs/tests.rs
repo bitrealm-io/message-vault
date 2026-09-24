@@ -140,6 +140,7 @@ fn missing_source_is_file_missing_and_continues() {
     std::fs::create_dir_all(&att_dir).unwrap();
     let mut a = empty_att("a.jpg");
     let mut b = empty_att("b.jpg");
+    let mut done = Vec::new();
     {
         let mut jobs = [
             AttachmentJob {
@@ -164,7 +165,7 @@ fn missing_source_is_file_missing_and_continues() {
                     Ok(Some(b"data".to_vec()))
                 }
             },
-            |_| {},
+            |p| done.push(p.done),
             None,
             None,
         )
@@ -172,6 +173,7 @@ fn missing_source_is_file_missing_and_continues() {
     }
     assert_eq!(a.missing_reason.as_deref(), Some("file_missing"));
     assert!(b.path.is_some());
+    assert_eq!(done, [1, 2], "a missing file still counts as done");
 }
 
 #[test]
@@ -726,4 +728,115 @@ fn staging_frees_the_bytes_the_documents_were_carrying() {
         documents[0].messages[0].attachments[0].path.is_some(),
         "and the file is on disk"
     );
+}
+
+/// A 1x1 RGB PNG that ffmpeg decodes.
+#[rustfmt::skip]
+const PNG_1X1_RGB: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0xc9, 0xfe, 0x92, 0xef, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+    0x44, 0xae, 0x42, 0x60, 0x82,
+];
+
+/// Convert must leave each attachment pointing at the file it produced, with
+/// that file's type, and mark the one it could not convert.
+#[test]
+fn convert_points_each_attachment_at_its_converted_file() {
+    let Some(_tools) = media::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let att_dir = dir.path().join("attachments");
+    std::fs::create_dir_all(&att_dir).unwrap();
+    let mut photo = empty_att("photo.png");
+    photo.mime_type = Some("image/png".into());
+    let mut broken = empty_att("broken.png");
+    broken.mime_type = Some("image/png".into());
+    {
+        let mut jobs = [
+            AttachmentJob {
+                attachment: &mut photo,
+                timestamp_unix_ms: 1_609_459_200_000,
+                size_hint: None,
+            },
+            AttachmentJob {
+                attachment: &mut broken,
+                timestamp_unix_ms: 1_609_459_200_000,
+                size_hint: None,
+            },
+        ];
+        run_attachment_jobs(
+            &mut jobs,
+            &att_dir,
+            &media_cfg(MediaMode::Convert),
+            |i| {
+                Ok(Some(if i == 0 {
+                    PNG_1X1_RGB.to_vec()
+                } else {
+                    b"not an image".to_vec()
+                }))
+            },
+            |_| {},
+            None,
+            None,
+        )
+        .unwrap();
+    }
+
+    let path = photo.path.as_deref().unwrap();
+    assert!(
+        path.starts_with("attachments/") && path.ends_with(".jpg"),
+        "{path}"
+    );
+    assert_eq!(photo.mime_type.as_deref(), Some("image/jpeg"));
+    assert_eq!(photo.missing_reason, None);
+    let converted = std::fs::read(dir.path().join(path)).unwrap();
+    assert!(converted.starts_with(&[0xff, 0xd8]), "the file is a JPEG");
+    assert_eq!(photo.digest_sha256, Some(hex_sha256(&converted)));
+    assert_eq!(photo.size_bytes, Some(converted.len() as u64));
+
+    let reason = broken.missing_reason.as_deref().unwrap_or("");
+    assert!(reason.starts_with("convert_failed: "), "{reason:?}");
+    assert_eq!(broken.mime_type.as_deref(), Some("image/png"));
+}
+
+#[test]
+fn a_convert_error_marks_only_the_attachment_it_names() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut named = empty_att("a.heic");
+    named.path = Some("attachments/a.heic".into());
+    let mut other = empty_att("b.heic");
+    other.path = Some("attachments/b.heic".into());
+    let mut pathless = empty_att("c.heic");
+    {
+        let mut jobs = [
+            AttachmentJob {
+                attachment: &mut named,
+                timestamp_unix_ms: 0,
+                size_hint: None,
+            },
+            AttachmentJob {
+                attachment: &mut other,
+                timestamp_unix_ms: 0,
+                size_hint: None,
+            },
+            AttachmentJob {
+                attachment: &mut pathless,
+                timestamp_unix_ms: 0,
+                size_hint: None,
+            },
+        ];
+        let failed = dir.path().join("attachments").join("a.heic");
+        mark_convert_error(&mut jobs, &format!("{}: ffmpeg failed", failed.display()));
+        // A line with no path in front of it names nothing.
+        mark_convert_error(&mut jobs, "ffmpeg failed");
+    }
+    assert_eq!(
+        named.missing_reason.as_deref(),
+        Some("convert_failed: ffmpeg failed")
+    );
+    assert_eq!(other.missing_reason, None);
+    assert_eq!(pathless.missing_reason, None);
 }

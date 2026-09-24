@@ -580,4 +580,28 @@ mod tests {
         let err = discover_files(Path::new("/no/such/dir"), &|_| true).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
     }
+
+    /// Cleaning the output before a write would delete the backup being read.
+    #[test]
+    fn prepare_outputs_refuses_an_output_that_is_or_contains_an_input() {
+        let tmp = tempfile::tempdir().unwrap();
+        let input = tmp.path().join("backup");
+        std::fs::create_dir_all(&input).unwrap();
+        let inputs = [input.clone()];
+
+        for output in [input.clone(), tmp.path().to_path_buf()] {
+            let err = prepare_outputs(&inputs, &output).unwrap_err().to_string();
+            assert!(
+                err.contains("must not be the same as, or contain, the input"),
+                "{}: {err}",
+                output.display()
+            );
+        }
+
+        let output = tmp.path().join("export");
+        let (resolved, out) = prepare_outputs(&inputs, &output).unwrap();
+        assert!(output.is_dir(), "the output folder is created");
+        assert_eq!(out, std::fs::canonicalize(&output).unwrap());
+        assert_eq!(resolved, [std::fs::canonicalize(&input).unwrap()]);
+    }
 }

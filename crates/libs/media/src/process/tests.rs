@@ -724,6 +724,246 @@ fn kind_of_never_lets_a_name_hint_override_the_declared_media_type() {
     );
 }
 
+/// Write a noise JPEG through ffmpeg at `-q:v 2`. Noise at that fine a
+/// quantization shrinks when compress mode re-encodes it at `-q:v 5` (see
+/// `write_jpeg_that_grows_on_finer_reencode` for the measurements).
+fn write_jpeg_that_shrinks_on_compress(path: &Path) {
+    let args = vec![
+        "-y".into(),
+        "-f".into(),
+        "lavfi".into(),
+        "-i".into(),
+        "nullsrc=size=800x600,geq=random(1)*255:random(1)*255:random(1)*255".into(),
+        "-frames:v".into(),
+        "1".into(),
+        "-update".into(),
+        "1".into(),
+        "-q:v".into(),
+        "2".into(),
+        path_str(path),
+    ];
+    run_ffmpeg(&args).expect("generate noise jpeg fixture");
+}
+
+#[test]
+fn convert_never_overwrites_a_file_that_already_has_the_target_name() {
+    let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let attachments = dir.path().join("attachments");
+    fs::create_dir_all(&attachments).unwrap();
+    // a.png beside a.jpg, c.png beside c.jpg and c_1.jpg, and a plain b.png.
+    for name in ["a.png", "b.png", "c.png"] {
+        write_test_png(&attachments.join(name));
+    }
+    for name in ["a.jpg", "c.jpg", "c_1.jpg"] {
+        fs::write(attachments.join(name), format!("the user's own {name}")).unwrap();
+    }
+    let files: Vec<PathBuf> = ["a.png", "b.png", "c.png"]
+        .iter()
+        .map(|name| attachments.join(name))
+        .collect();
+
+    let (report, remap) = process_attachment_files(
+        dir.path(),
+        &files,
+        MediaMode::Convert,
+        &CompressOptions::default(),
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(report.errors, Vec::<String>::new());
+    assert_eq!(report.processed, 3);
+    assert_eq!(report.skipped, 0);
+    let expected: HashMap<String, String> = [
+        ("attachments/a.png", "attachments/a_1.jpg"),
+        ("attachments/b.png", "attachments/b.jpg"),
+        ("attachments/c.png", "attachments/c_2.jpg"),
+    ]
+    .into_iter()
+    .map(|(from, to)| (from.to_string(), to.to_string()))
+    .collect();
+    assert_eq!(remap, expected);
+    for name in ["a.jpg", "c.jpg", "c_1.jpg"] {
+        assert_eq!(
+            fs::read_to_string(attachments.join(name)).unwrap(),
+            format!("the user's own {name}"),
+            "{name} was overwritten"
+        );
+    }
+    for name in ["a_1.jpg", "b.jpg", "c_2.jpg"] {
+        let bytes = fs::read(attachments.join(name)).unwrap();
+        assert!(bytes.starts_with(&[0xff, 0xd8]), "{name} is not a JPEG");
+    }
+    for name in ["a.png", "b.png", "c.png"] {
+        assert!(!attachments.join(name).exists(), "{name} was left behind");
+    }
+}
+
+#[test]
+fn compress_shrinks_large_jpegs_converts_pngs_and_leaves_gifs_and_small_jpegs() {
+    let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let attachments = dir.path().join("attachments");
+    fs::create_dir_all(&attachments).unwrap();
+    let large = attachments.join("large.jpg");
+    write_jpeg_that_shrinks_on_compress(&large);
+    let large_before = fs::metadata(&large).unwrap().len();
+    assert!(
+        large_before > JPEG_COMPRESS_FLOOR,
+        "fixture must clear the floor, or the size gate skips it"
+    );
+    let png = attachments.join("still.png");
+    write_test_png(&png);
+    // Neither of these reaches ffmpeg, so their bytes need not decode.
+    let gif = attachments.join("loop.gif");
+    fs::write(&gif, b"GIF89a animated").unwrap();
+    let small = attachments.join("small.jpg");
+    fs::write(&small, b"\xff\xd8\xff small jpeg").unwrap();
+    let files = vec![large.clone(), png, gif.clone(), small.clone()];
+
+    let (report, remap) = process_attachment_files(
+        dir.path(),
+        &files,
+        MediaMode::Compress,
+        &CompressOptions::default(),
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(report.errors, Vec::<String>::new());
+    assert_eq!((report.processed, report.skipped), (2, 2));
+    assert!(
+        fs::metadata(&large).unwrap().len() < large_before,
+        "the large JPEG was not replaced by the smaller re-encode"
+    );
+    assert_eq!(
+        remap.get("attachments/large.jpg").map(String::as_str),
+        Some("attachments/large.jpg")
+    );
+    assert_eq!(
+        remap.get("attachments/still.png").map(String::as_str),
+        Some("attachments/still.jpg")
+    );
+    assert_eq!(fs::read(&gif).unwrap(), b"GIF89a animated");
+    assert_eq!(fs::read(&small).unwrap(), b"\xff\xd8\xff small jpeg");
+    assert_eq!(remap.len(), 2);
+}
+
+/// Staging forecasts output names from `derivative_name`, and recovers after
+/// a crash by looking for them. It must answer as the pass itself decides.
+#[test]
+fn derivative_name_follows_the_media_step_for_every_mode_and_extension() {
+    let dir = tempfile::tempdir().unwrap();
+    let sized = |name: &str, len: u64| {
+        let path = dir.path().join(name);
+        fs::File::create(&path).unwrap().set_len(len).unwrap();
+        path
+    };
+    let small = 10;
+    let jpeg_floor = JPEG_COMPRESS_FLOOR;
+    let mp3_floor = MP3_COMPRESS_FLOOR;
+    let cases: &[(&str, u64, MediaMode, Option<&str>)] = &[
+        ("x.png", small, MediaMode::Clone, None),
+        ("x.png", small, MediaMode::Disabled, None),
+        ("x.png", small, MediaMode::Convert, Some("x.jpg")),
+        ("x.heic", small, MediaMode::Convert, Some("x.jpg")),
+        ("x.gif", small, MediaMode::Convert, None),
+        ("x.jpg", small, MediaMode::Convert, None),
+        ("x.JPEG", small, MediaMode::Convert, None),
+        ("x.m4a", small, MediaMode::Convert, Some("x.mp3")),
+        ("x.mp3", small, MediaMode::Convert, None),
+        ("x.mov", small, MediaMode::Convert, Some("x.mp4")),
+        ("x.pdf", small, MediaMode::Convert, None),
+        ("x.png", small, MediaMode::Compress, Some("x.jpg")),
+        ("x.gif", jpeg_floor + 1, MediaMode::Compress, None),
+        ("x.jpg", small, MediaMode::Compress, None),
+        ("x.jpg", jpeg_floor, MediaMode::Compress, None),
+        ("x.jpg", jpeg_floor + 1, MediaMode::Compress, Some("x.jpg")),
+        ("x.jpeg", jpeg_floor + 1, MediaMode::Compress, Some("x.jpg")),
+        ("x.m4a", small, MediaMode::Compress, Some("x.mp3")),
+        ("x.mp3", mp3_floor, MediaMode::Compress, None),
+        ("x.mp3", mp3_floor + 1, MediaMode::Compress, Some("x.mp3")),
+        ("x.mp4", small, MediaMode::Compress, Some("x.mp4")),
+    ];
+    for (name, len, mode, expected) in cases {
+        let path = sized(name, *len);
+        assert_eq!(
+            derivative_name(&path, *mode).as_deref(),
+            *expected,
+            "{name} ({len} bytes) in {mode:?}"
+        );
+    }
+}
+
+#[test]
+fn derivative_name_for_missing_ignores_the_size_floors() {
+    let dir = tempfile::tempdir().unwrap();
+    let jpg = dir.path().join("gone.jpg");
+    let mp3 = dir.path().join("gone.mp3");
+    assert_eq!(
+        derivative_name_for_missing(&jpg, MediaMode::Compress).as_deref(),
+        Some("gone.jpg")
+    );
+    assert_eq!(
+        derivative_name_for_missing(&mp3, MediaMode::Compress).as_deref(),
+        Some("gone.mp3")
+    );
+    assert_eq!(derivative_name_for_missing(&jpg, MediaMode::Convert), None);
+    // The stat-reading variant sees a missing file as size 0, under the floor.
+    assert_eq!(derivative_name(&jpg, MediaMode::Compress), None);
+}
+
+#[test]
+fn audio_becomes_mp3_and_a_small_mp3_is_left_alone() {
+    let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    for mode in [MediaMode::Convert, MediaMode::Compress] {
+        let dir = tempfile::tempdir().unwrap();
+        let attachments = dir.path().join("attachments");
+        fs::create_dir_all(&attachments).unwrap();
+        let m4a = attachments.join("voice.m4a");
+        run_ffmpeg(&[
+            "-y".into(),
+            "-f".into(),
+            "lavfi".into(),
+            "-i".into(),
+            "sine=frequency=440:duration=1".into(),
+            "-c:a".into(),
+            "aac".into(),
+            path_str(&m4a),
+        ])
+        .expect("generate m4a fixture");
+        // Under the MP3 floor, and not decodable: ffmpeg must never see it.
+        let mp3 = attachments.join("small.mp3");
+        fs::write(&mp3, b"ID3 small mp3").unwrap();
+
+        let (report, remap) = process_attachment_files(
+            dir.path(),
+            &[m4a.clone(), mp3.clone()],
+            mode,
+            &CompressOptions::default(),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(report.errors, Vec::<String>::new(), "{mode:?}");
+        assert_eq!((report.processed, report.skipped), (1, 1), "{mode:?}");
+        assert_eq!(
+            remap.get("attachments/voice.m4a").map(String::as_str),
+            Some("attachments/voice.mp3"),
+            "{mode:?}"
+        );
+        assert!(!m4a.exists(), "{mode:?}");
+        assert_eq!(fs::read(&mp3).unwrap(), b"ID3 small mp3", "{mode:?}");
+    }
+}
+
 #[test]
 fn collect_media_files_keeps_media_and_leaves_everything_else() {
     let dir = tempfile::tempdir().unwrap();

@@ -126,9 +126,10 @@ pub(crate) async fn members_list(
 }
 
 /// Add and remove members of one set in one call, answering how many
-/// changed. An unknown or another account's set id, or an unknown member id
-/// in `remove`, answers 404; an unknown member id in `add`, or an empty
-/// patch, answers 422.
+/// changed. An unknown or another account's set id answers 404; an unknown
+/// member id in `add`, or an empty patch, answers 422. An id in `remove`
+/// that names no member is ignored, so the route answers 200 and `removed`
+/// counts only the rows that were deleted.
 pub(crate) async fn members_update(
     spec: &'static MembershipSpec,
     state: &AppState,

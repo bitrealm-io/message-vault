@@ -540,11 +540,14 @@ pub async fn list_member_ids_of(
 }
 
 /// Add and remove members of one set in one call, answering
-/// `(added, removed)`. Every id is checked before anything is written, so a
-/// foreign or unknown member id leaves the set as it was. An id present in
-/// both `add` and `remove` nets to "removed": it is dropped from `add` so it
-/// is deleted, not inserted then deleted, and the `on_change` hook fires
-/// once for it rather than twice.
+/// `(added, removed)`. Every id in `add` is checked before anything is
+/// written, so a foreign or unknown id there leaves the set as it was. An id
+/// in `remove` that names no member, or a row the caller does not hold, is
+/// ignored, because the set is already in the state the caller asked for;
+/// `removed` counts only the rows that were deleted. An id present in both
+/// `add` and `remove` nets to "removed": it is dropped from `add` so it is
+/// deleted, not inserted then deleted, and the `on_change` hook fires once
+/// for it rather than twice.
 pub async fn patch_members(
     spec: &MembershipSpec,
     conn: &mut AnyConnection,
@@ -576,14 +579,10 @@ pub async fn patch_members(
             )));
         }
     }
-    for member in &remove {
-        if !member_exists(spec, conn, account_id, *member).await? {
-            return Err(MembershipError::NotFound(format!(
-                "{} {member} not found",
-                spec.member_label
-            )));
-        }
-    }
+    // An id to remove is not checked: `delete_member_sql` deletes only a row
+    // the caller holds, and a member that was never in the set is already in
+    // the state the caller asked for (`docs/architecture/http-api.md`,
+    // "Status codes").
 
     let insert_sql = insert_member_sql(spec);
     let delete_sql = delete_member_sql(spec);

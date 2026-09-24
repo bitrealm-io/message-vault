@@ -411,6 +411,170 @@ mod tests {
         );
     }
 
+    fn report_with_media(processed: usize, errors: &[&str]) -> ExportReport {
+        ExportReport {
+            media: MediaReport {
+                processed,
+                errors: errors.iter().map(|e| (*e).to_string()).collect(),
+                ..MediaReport::default()
+            },
+            ..ExportReport::default()
+        }
+    }
+
+    #[test]
+    fn check_media_refuses_a_pass_that_failed_on_every_file() {
+        let err = report_with_media(0, &["a.heic: ffmpeg not found"])
+            .check_media(true)
+            .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "media processing failed for all candidate files"
+        );
+    }
+
+    #[test]
+    fn check_media_accepts_a_pass_that_processed_a_file() {
+        report_with_media(1, &["a.heic: bad file"])
+            .check_media(true)
+            .unwrap();
+    }
+
+    #[test]
+    fn check_media_accepts_a_pass_with_no_errors() {
+        report_with_media(0, &[]).check_media(true).unwrap();
+    }
+
+    #[test]
+    fn check_media_accepts_failures_when_the_mode_needs_no_tools() {
+        report_with_media(0, &["a.heic: ffmpeg not found"])
+            .check_media(false)
+            .unwrap();
+    }
+
+    fn pending_message(sort_key: i64, attachment: bool) -> message_ir::PendingMessage {
+        message_ir::PendingMessage {
+            sort_key,
+            is_from_me: false,
+            sender_handle: "+15555550100".to_string(),
+            sender_display_name: None,
+            text: "hi".to_string(),
+            attachments: if attachment {
+                vec![message_ir::PendingAttachment {
+                    rel_path: "attachments/a.jpg".to_string(),
+                    content_type: "image/jpeg".to_string(),
+                    extension: "jpg".to_string(),
+                    digest_sha256: None,
+                    name_hint: None,
+                }]
+            } else {
+                Vec::new()
+            },
+            extra: std::collections::BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn prune_drops_and_counts_invalid_dates_and_keeps_the_rest() {
+        let mut convo = PendingConversation::new("chat", false, None, Vec::new());
+        convo.messages = vec![
+            pending_message(i64::MAX, true),
+            pending_message(1_700_000_000, false),
+            pending_message(i64::MAX, false),
+        ];
+        convo.has_attachments = true;
+        let mut report = ExportReport {
+            skipped_invalid_date: 5,
+            ..ExportReport::default()
+        };
+
+        assert!(prune_and_finish_conversation(
+            &mut convo,
+            &mut report,
+            |k| k
+        ));
+        assert_eq!(report.skipped_invalid_date, 7);
+        assert_eq!(convo.messages.len(), 1);
+        assert_eq!(convo.messages[0].sort_key, 1_700_000_000);
+        // The only attachment went with a dropped message.
+        assert!(!convo.has_attachments);
+    }
+
+    #[test]
+    fn prune_reports_a_conversation_with_no_valid_message_as_empty() {
+        let mut convo = PendingConversation::new("chat", false, None, Vec::new());
+        convo.messages = vec![pending_message(i64::MAX, false)];
+        let mut report = ExportReport::default();
+
+        assert!(!prune_and_finish_conversation(
+            &mut convo,
+            &mut report,
+            |k| k
+        ));
+        assert_eq!(report.skipped_invalid_date, 1);
+        assert!(convo.messages.is_empty());
+    }
+
+    #[test]
+    fn prune_passes_sort_keys_through_to_secs() {
+        // Milliseconds that are valid only once divided by 1000.
+        let mut convo = PendingConversation::new("chat", false, None, Vec::new());
+        convo.messages = vec![pending_message(i64::MAX / 10, true)];
+        let mut report = ExportReport::default();
+
+        assert!(prune_and_finish_conversation(
+            &mut convo,
+            &mut report,
+            |_| 1_700_000_000
+        ));
+        assert_eq!(report.skipped_invalid_date, 0);
+        assert!(convo.has_attachments);
+    }
+
+    #[test]
+    fn absorb_tally_adds_every_count_to_the_report() {
+        let mut report = ExportReport {
+            messages: 10,
+            sent: 4,
+            received: 6,
+            ..ExportReport::default()
+        };
+        report.bump("notifications", 2);
+
+        report.absorb_tally(ProjectionTally {
+            messages: 5,
+            sent: 2,
+            received: 3,
+            notifications: 3,
+        });
+
+        assert_eq!(report.messages, 15);
+        assert_eq!(report.sent, 6);
+        assert_eq!(report.received, 9);
+        assert_eq!(report.extra("notifications"), 5);
+    }
+
+    #[test]
+    fn absorb_tally_adds_no_notifications_key_when_there_were_none() {
+        let mut report = ExportReport::default();
+        report.absorb_tally(ProjectionTally {
+            messages: 1,
+            sent: 1,
+            received: 0,
+            notifications: 0,
+        });
+        assert!(report.extra.is_empty());
+    }
+
+    #[test]
+    fn bump_adds_to_a_counter_and_extra_reads_zero_when_unset() {
+        let mut report = ExportReport::default();
+        assert_eq!(report.extra("pdu"), 0);
+        report.bump("pdu", 3);
+        report.bump("pdu", 4);
+        assert_eq!(report.extra("pdu"), 7);
+    }
+
     #[test]
     fn discover_files_missing_root_errors() {
         let err = discover_files(Path::new("/no/such/dir"), &|_| true).unwrap_err();

@@ -234,4 +234,28 @@ mod tests {
         assert_eq!(rows[0].first, "Ada");
         assert_eq!(rows[0].phones, vec!["+15551111", "+15552222"]);
     }
+
+    #[test]
+    fn refuses_a_csv_that_is_not_a_vcard_export() {
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        write!(tmp, "Date,Amount,Payee\n2024-01-02,12.50,Grocer\n").unwrap();
+        let err = read_vcard_csv_rows(tmp.path()).unwrap_err().to_string();
+        assert!(err.contains("does not look like a vCard CSV"), "{err}");
+    }
+
+    #[test]
+    fn a_first_name_column_or_a_phone_column_alone_is_enough() {
+        let names_only = VcardCsvColumns::from_headers(["First Name", "Notes"]);
+        assert!(names_only.looks_like_vcard_csv());
+        let phones_only = VcardCsvColumns::from_headers(["Name", "Mobile Phone"]);
+        assert!(phones_only.looks_like_vcard_csv());
+    }
+
+    #[test]
+    fn read_rows_keeps_one_phone_for_a_repeated_or_empty_value() {
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        write!(tmp, "First Name,Mobile Phone\nAda,+1555; +1555;\n").unwrap();
+        let rows = read_vcard_csv_rows(tmp.path()).unwrap();
+        assert_eq!(rows[0].phones, vec!["+1555"]);
+    }
 }

@@ -1642,6 +1642,177 @@ async fn a_retried_batch_in_a_replace_run_keeps_every_message_once() {
     assert_eq!(guids, ["g-1a", "g-1b", "g-2a", "g-2b"]);
 }
 
+/// One `source` conversation with `+15550000002`, one message per guid. The
+/// message `g-gone` carries a missing attachment and a tapback, so a wipe
+/// that leaves children behind shows.
+fn wipe_test_batch(source: &str, guids: &[&str]) -> String {
+    let mut lines = vec![format!(
+        concat!(
+            r#"{{"schema_version":4,"export":{{"source":"{source}","tool":"t","tool_version":"0","owner_handle":"+15550000001","owner_display_name":"Me"}},"#,
+            r#""conversation":{{"chat_identifier":"+15550000002","conversation_type":"individual","group_title":null,"#,
+            r#""participants":[{{"handle":"+15550000002","display_name":null}}],"#,
+            r#""stats":{{"message_count":{n},"attachment_count":0,"first_timestamp_unix_ms":1700000000000,"last_timestamp_unix_ms":1700000000000}}}}}}"#,
+        ),
+        source = source,
+        n = guids.len(),
+    )];
+    let tapback = TAPBACK_IMESSAGE.replace("+15555550999", "+15550000002");
+    for guid in guids {
+        let (attachments, imessage) = if *guid == "g-gone" {
+            (missing_attachment_json("gone.bin"), tapback.as_str())
+        } else {
+            ("[]".to_string(), "null")
+        };
+        lines.push(format!(
+            r#"{{"guid":"{guid}","timestamp_unix_ms":1700000000000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+15550000002","sender_display_name":null,"subject":null,"text":"{guid}","attachments":{attachments},"imessage":{imessage},"source":null}}"#
+        ));
+    }
+    lines.join("\n") + "\n"
+}
+
+/// Create an Import Run for `source` in `mode`, post `body` as its one
+/// batch, and complete the run so the account may start another.
+async fn import_one_batch(
+    state: &crate::server::AppState,
+    token: &str,
+    source: &str,
+    mode: &str,
+    body: String,
+) {
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        state,
+        "/v1/imports",
+        token,
+        serde_json::json!({ "source": source, "mode": mode }),
+    )
+    .await;
+    let id = created["id"].as_i64().unwrap();
+    let (status, text) = crate::test_support::post_raw(
+        state,
+        &format!("/v1/imports/{id}/batches"),
+        token,
+        "application/jsonl",
+        body,
+    )
+    .await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{text}");
+    let _: serde_json::Value = post_json(
+        state,
+        &format!("/v1/imports/{id}/complete"),
+        token,
+        serde_json::json!({ "status": "completed" }),
+    )
+    .await;
+}
+
+/// A replace run deletes the account's existing messages for its source
+/// before it promotes the new ones, so a message dropped from the new
+/// export leaves the vault, with its attachments and tapbacks. Nothing
+/// else moves: another source's messages, another account's messages for
+/// the same source, and a message that pointed at a deleted one as its
+/// duplicate (which now points nowhere).
+#[tokio::test]
+async fn a_replace_run_deletes_only_its_own_sources_old_messages() {
+    let (state, _vault, token) = importer().await;
+    let other = crate::test_support::register_via_api(&state, "other", "hunter2hunter2").await;
+
+    import_one_batch(
+        &state,
+        &token,
+        "whatsapp",
+        "replace",
+        wipe_test_batch("whatsapp", &["g-keep", "g-gone"]),
+    )
+    .await;
+    import_one_batch(
+        &state,
+        &token,
+        "sms-backup-restore",
+        "append",
+        wipe_test_batch("sms-backup-restore", &["g-sms"]),
+    )
+    .await;
+    import_one_batch(
+        &state,
+        &other.token,
+        "whatsapp",
+        "replace",
+        wipe_test_batch("whatsapp", &["g-other", "g-gone"]),
+    )
+    .await;
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let children = |table: &'static str| {
+        format!(
+            "SELECT COUNT(*) FROM {table} t JOIN messages m ON m.id = t.message_id \
+             WHERE m.guid = 'g-gone'"
+        )
+    };
+    for table in ["attachments", "tapbacks"] {
+        let n: i64 = sqlx::query_scalar(&children(table))
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(n, 2, "both accounts' g-gone carry one row in {table}");
+    }
+    sqlx::query(
+        "UPDATE messages SET duplicate_of = (
+             SELECT id FROM messages WHERE guid = 'g-gone' AND account_id != $1
+         ) WHERE guid = 'g-sms'",
+    )
+    .bind(other.account_id)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    drop(conn);
+
+    import_one_batch(
+        &state,
+        &token,
+        "whatsapp",
+        "replace",
+        wipe_test_batch("whatsapp", &["g-keep"]),
+    )
+    .await;
+
+    let mut conn = state.db.acquire().await.unwrap();
+    let rows: Vec<(i64, String, String)> =
+        sqlx::query_as("SELECT account_id, source, guid FROM messages")
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    let mut rows: Vec<(bool, &str, &str)> = rows
+        .iter()
+        .map(|(a, s, g)| (*a == other.account_id, s.as_str(), g.as_str()))
+        .collect();
+    rows.sort_unstable();
+    assert_eq!(
+        rows,
+        [
+            (false, "sms-backup-restore", "g-sms"),
+            (false, "whatsapp", "g-keep"),
+            (true, "whatsapp", "g-gone"),
+            (true, "whatsapp", "g-other"),
+        ]
+    );
+    for table in ["attachments", "tapbacks"] {
+        let n: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(
+            n, 1,
+            "only the other account's g-gone keeps a row in {table}"
+        );
+    }
+    let duplicate_of: Option<i64> =
+        sqlx::query_scalar("SELECT duplicate_of FROM messages WHERE guid = 'g-sms'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(duplicate_of, None, "no message may point at a deleted one");
+}
+
 /// The import body is JSON Lines and nothing else. `multipart/form-data`
 /// used to be accepted (a `jsonl` field plus `file` parts) but nothing
 /// sent it: vault-push posts JSON Lines and uploads attachments through

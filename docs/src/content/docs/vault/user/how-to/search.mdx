@@ -34,9 +34,9 @@ One language works on all three lists: **Contacts**, **Conversations**, and **Me
 - Dates name a span: `2024` is the year, `2024-05` the month, `2024-05-01` the day, `7d` or `2w` or `3m` or `1y` the last that long, plus `today` and `yesterday`. Add `>=` for from its start, `<` for before its start, `>` for after its end, `<=` for up to its end, or `a..b` for a range: `date:2019`, `date:>=2019`, `date:<1m`, `date:2019..2021`. Days start and end in the account's time zone (Settings → Profile), so a text sent at 11:59 pm on New Year's Eve belongs to the old year wherever the vault runs.
 - Sizes are `500k`, `1M`, `2G`, or plain bytes. Counts are plain numbers. Both take the same `>`, `>=`, `<`, `<=`, and `a..b`.
 - A comma inside a value means either: `service:imessage,sms`. Repeating a word means both: `tag:Work tag:Urgent`.
-- `-` in front of anything means not: `-tag:Work`, `-avocado`. It includes the rows that have no value for the word, so `-last-heard:2019` includes contacts who never sent a message. `not` does the same as a word of its own: `not tag:Work`.
+- `-` in front of anything means not: `-tag:Work`, `-avocado`, `-(toast or guacamole)`. It includes the rows that have no value for the word, so `-last-heard:2019` includes contacts who never sent a message. `not` does the same as a word of its own: `not tag:Work`.
 - A space between two terms means both, and so does `and`. `or` means either, and binds looser than both: `a b or c` is `(a b) or c`. Parentheses group: `(toast or guacamole) avocado`.
-- `avoc*` matches words starting with avoc; `"exact phrase"` matches the phrase.
+- `avoc*` matches words starting with avoc, and `tag:Hol*` a Message Tag whose name starts with Hol; `"exact phrase"` matches the phrase.
 - In message text, punctuation inside a word splits it into words that must come next to each other in that order: `o'brien` finds "O'Brien" and "o brien", and `a&b` finds "a & b" but not "b and a". A word that is only punctuation or emoji finds no message text.
 - On a vault that runs on SQLite, `cafe` also finds "café" in message text. On Postgres, accents count.
 - A trailing `*` is the only wildcard. `%`, `_`, and `\` are ordinary characters, so `filename:IMG_0001` finds IMG_0001.jpg and not IMGX0001.jpg.
@@ -58,12 +58,12 @@ The tiles mark which lists accept the word: <ListTiles on="C" /> Contacts, <List
 | `name:` | on Contacts, the contact's own name; elsewhere, the name of someone in the conversation | text, `none`, `any` | <ListTiles on="C V M" /> |
 | `title:` | the conversation's title | text, `none`, `any` | <ListTiles on="V M" /> |
 | `handle:` | a phone number, email, or username: on Contacts, the contact's own; elsewhere, one in the conversation | text, `none`, `any` | <ListTiles on="C V M" /> |
-| `with:` | this person is in the conversation | name, handle, `#id` | <ListTiles on="V M" /> |
-| `from:` | this person sent it | `me`, name, handle, `#id` | <ListTiles on="M" /> |
-| `to:` | it was sent to this person | `me`, name, handle, `#id` | <ListTiles on="M" /> |
-| `in:` | this one conversation | title, handle, `#id` | <ListTiles on="M" /> |
-| `group:` | in this Contact Group: on Contacts, the contact; elsewhere, someone in the conversation | name, `#id`, `none`, `unknown` | <ListTiles on="C V M" /> |
-| `tag:` | the conversation carries this Message Tag; on Contacts, one of the contact's conversations does | name, `#id`, `none` | <ListTiles on="C V M" /> |
+| `with:` | this person is in the conversation | name, handle, `pre*`, `#id` | <ListTiles on="V M" /> |
+| `from:` | this person sent it | `me`, name, handle, `pre*`, `#id` | <ListTiles on="M" /> |
+| `to:` | it was sent to this person | `me`, name, handle, `pre*`, `#id` | <ListTiles on="M" /> |
+| `in:` | this one conversation | title, handle, `pre*`, `#id` | <ListTiles on="M" /> |
+| `group:` | in this Contact Group: on Contacts, the contact; elsewhere, someone in the conversation | name, `pre*`, `#id`, `none`, `unknown` | <ListTiles on="C V M" /> |
+| `tag:` | the conversation carries this Message Tag; on Contacts, one of the contact's conversations does | name, `pre*`, `#id`, `none` | <ListTiles on="C V M" /> |
 | `kind:` | direct or group conversation | `direct`, `group` | <ListTiles on="C V M" /> |
 | `service:` | how the message travelled | `imessage`, `sms`, `mms`, `rcs`, `whatsapp` | <ListTiles on="C V M" /> |
 | `source:` | which backup it was imported from | `imessage`, `whatsapp`, `sms` | <ListTiles on="V M" /> |

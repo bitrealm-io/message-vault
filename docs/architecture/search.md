@@ -91,8 +91,8 @@ In practical terms:
   `a b or c` is `(a b) or c`. Both are left-associative and flatten:
   `a or b or c` is one three-way `or`.
 - `not` and `-` bind tightest. `-` negates the one token it is attached to,
-  with no space between. `not` is a word of its own and negates the operand
-  after it, a parenthesised group included: `not (a or b)`.
+  with no space between, a parenthesised group included: `-(a or b)`. `not`
+  is a word of its own and negates the operand after it: `not (a or b)`.
 - `or`, `and`, and `not` are operators in any case. With a `-` attached they
   are text: `-or` excludes the word "or".
 - A `word:` is a field only when the word is letters and hyphens, starting
@@ -110,9 +110,6 @@ nodes in its tree, or parentheses and `not` nested deeper than 32. An
 unclosed quote or parenthesis, an `or` or `and` with nothing on one side, and
 a `word:` with no value are refused with the span of the text at fault.
 
-`-(a or b)` is meant to negate the group, as the lexer's own comment says;
-today the `-` is read as a term of its own (#722).
-
 ## Values
 
 Every word takes one shape of value, named by its `ValueType` in `fields.rs`,
@@ -121,8 +118,8 @@ plus the keywords its registry entry lists.
 | Shape | Accepts | Matches |
 |---|---|---|
 | Text | text, `pre*`, and `none`/`any` where listed | The column contains the text, case-insensitively. `pre*` matches the start of the column or of any word in it (after a space). `none` is empty or only spaces; `any` is its complement. |
-| Name | a name, `#id`, and the word's keywords | `#id` is that row by id, unquoted. `group:` and `tag:` match a name equal to the text, case-insensitively; `in:` matches a title or identity that contains it. `import:` takes only `#id` and `last`. |
-| Person | a name, a handle, `#id`, `me` where listed | `#id` is a contact: one of their identities, or a participant linked to them. Text is contained in an identity's raw or normalized form, in the name of the contact linked to it, or in a participant's name. |
+| Name | a name, `pre*`, `#id`, and the word's keywords | `#id` is that row by id, unquoted. `group:` and `tag:` match a name equal to the text, case-insensitively, or starting with the prefix; `in:` matches a title or identity that contains the text or starts with the prefix. `import:` takes only `#id` and `last`. |
+| Person | a name, a handle, `pre*`, `#id`, `me` where listed | `#id` is a contact: one of their identities, or a participant linked to them. Text is contained in an identity's raw or normalized form, in the name of the contact linked to it, or in a participant's name; `pre*` matches the start of any of those instead. |
 | Choice | one of the word's fixed values | That value, compared case-insensitively. |
 | Flag | `yes`, `no`, `any` | `trashed:` only. |
 | Date | a span, with `>`, `>=`, `<`, `<=`, or `a..b` | See below. |

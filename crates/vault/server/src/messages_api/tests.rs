@@ -1,8 +1,9 @@
 use axum::http::StatusCode;
 
+use crate::problem::ProblemType;
 use crate::test_support::{
-    RegisteredAccount, SeedConversation, SeedMessage, TestVault, get_json, get_raw, get_status,
-    register_via_api, seed_conversation, test_vault,
+    RegisteredAccount, SeedConversation, SeedMessage, TestVault, expect_problem, get_json, get_raw,
+    get_status, register_via_api, seed_conversation, test_vault,
 };
 
 /// Two conversations for alice (a direct thread and a group), and one for bob
@@ -150,7 +151,7 @@ async fn the_route_pages_by_offset_and_reports_the_total() {
 }
 
 #[tokio::test]
-async fn a_word_the_messages_list_does_not_have_is_a_400_with_a_sentence() {
+async fn a_word_the_messages_list_does_not_have_is_a_422_with_a_sentence() {
     let (vault, alice, _direct, _group) = seeded().await;
     let (status, text) = get_raw(
         &vault.state,
@@ -158,10 +159,9 @@ async fn a_word_the_messages_list_does_not_have_is_a_400_with_a_sentence() {
         &alice.token,
     )
     .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST, "{text}");
-    let body: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let problem = expect_problem(status, &text, ProblemType::SearchQueryInvalid);
     assert!(
-        body["detail"].as_str().unwrap().contains("conversations"),
+        problem.detail.as_deref().unwrap().contains("conversations"),
         "{text}"
     );
 }
@@ -211,4 +211,8 @@ async fn one_message_is_read_by_id_and_only_by_the_account_that_owns_it() {
         get_status(&vault.state, &format!("/v1/messages/{id}"), "not-a-token").await,
         StatusCode::UNAUTHORIZED
     );
+    // An id that is not a number is a problem document like every other
+    // failure, not Axum's plain-text rejection.
+    let (status, text) = get_raw(&vault.state, "/v1/messages/abc", &alice.token).await;
+    expect_problem(status, &text, ProblemType::ValidationFailed);
 }

@@ -293,7 +293,12 @@ export interface paths {
          * @description The body streams the stored bytes; the URL is the SHA-256 fingerprint.
          */
         get: operations["get_asset"];
-        /** Store one asset body under its SHA-256 fingerprint. */
+        /**
+         * Store one asset body under its SHA-256 fingerprint.
+         * @description `201 Created` when the vault did not hold the asset and now does, with a
+         *     `Location` naming it; `200 OK` when it already held it, and the body was
+         *     read and dropped.
+         */
         put: operations["replace_asset"];
         post?: never;
         delete?: never;
@@ -589,7 +594,7 @@ export interface paths {
         };
         /**
          * One conversation, in the same shape a list row already has — so a caller
-         *     that opens a thread from a list does not have to convert between two
+         *     that opens a conversation from a list does not have to convert between two
          *     shapes, and paging through the whole list to find one id is never
          *     necessary. Trash is a property the list applies, not a gate on reading:
          *     a trashed conversation still answers here.
@@ -618,7 +623,7 @@ export interface paths {
         };
         /**
          * A conversation's messages, ascending by timestamp then `sort_order`. The
-         *     read path a screen uses to open a thread: no search query to compose,
+         *     read path a screen uses to open a conversation: no search query to compose,
          *     just the conversation id.
          */
         get: operations["list_conversation_messages"];
@@ -802,7 +807,7 @@ export interface paths {
         get: operations["list_imports"];
         put?: never;
         /**
-         * Start an import session and return its id. Finish the session at
+         * Start an Import Run and return its id. Finish the run at
          *     POST /v1/imports/{id}/complete.
          */
         post: operations["create_import"];
@@ -819,7 +824,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Status, timings, and issues for one import session. */
+        /** Status, timings, and issues for one Import Run. */
         get: operations["get_import"];
         put?: never;
         post?: never;
@@ -827,7 +832,7 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Move a live import session to another stage.
+         * Move a running Import Run to another stage.
          * @description The stage is a field of the run, so moving it is a `PATCH` of the run
          *     rather than a `POST` to a `stage` sub-resource: a path segment names a
          *     resource, and `stage` is not one (`docs/architecture/http-api.md`,
@@ -864,7 +869,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Record the outcome of an import session started with POST /v1/imports. */
+        /** Record the outcome of an Import Run started with POST /v1/imports. */
         post: operations["complete_import"];
         delete?: never;
         options?: never;
@@ -906,7 +911,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Discard a live import session, freeing the account's single slot. */
+        /** Discard a running Import Run, freeing the account's single slot. */
         post: operations["discard_import"];
         delete?: never;
         options?: never;
@@ -1059,15 +1064,32 @@ export interface paths {
         patch: operations["update_saved_search"];
         trace?: never;
     };
-    "/v1/search-fields": {
+    "/v1/search-fields/contacts": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The search words one list accepts. */
-        get: operations["list_search_fields"];
+        /** The search words the Contacts list accepts. */
+        get: operations["list_contact_search_fields"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/search-fields/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The search words the Conversations list accepts. */
+        get: operations["list_conversation_search_fields"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1440,7 +1462,7 @@ export interface components {
             /** Format: int64 */
             upload_ms?: number | null;
         };
-        /** @description Stored session status after completion. */
+        /** @description The Import Run that was completed. */
         CompleteImportResponse: {
             /** Format: int64 */
             attachment_count: number;
@@ -1732,7 +1754,7 @@ export interface components {
         CreateImportRequest: {
             /** @description Run cross-source soft-dedupe after each batch. */
             dedupe?: boolean;
-            /** @description Which install is creating the session. */
+            /** @description Which install is creating the Import Run. */
             device_id?: string | null;
             /**
              * @description Import form snapshot, stored so the screen can be restored.
@@ -1749,7 +1771,7 @@ export interface components {
             source_identities?: unknown;
             /** @description Stage the run opens at. Defaults to `parse`. */
             stage?: string | null;
-            /** @description Absolute staging path on the client that owns this session. */
+            /** @description Absolute staging path on the client that owns this Import Run. */
             staging_dir?: string | null;
             tool?: string | null;
         };
@@ -1819,7 +1841,7 @@ export interface components {
              */
             conversations: number;
         };
-        /** @description Confirmation that a session was discarded. */
+        /** @description Confirmation that an Import Run was discarded. */
         DiscardImportResponse: {
             /** Format: int64 */
             id: number;
@@ -1989,7 +2011,7 @@ export interface components {
          * @enum {string}
          */
         ImportMode: "replace" | "append";
-        /** @description Full import session record. */
+        /** @description Full Import Run record. */
         ImportRun: {
             /** Format: int64 */
             attachment_count: number;
@@ -3174,7 +3196,7 @@ export interface components {
             remove_handle?: null | components["schemas"]["RemoveContactIdentityRequest"];
             update_handle?: null | components["schemas"]["UpdateContactIdentityRequest"];
         };
-        /** @description New stage for a live session. */
+        /** @description New stage for a running Import Run. */
         UpdateImportRequest: {
             stage: string;
             /**
@@ -3182,7 +3204,7 @@ export interface components {
              *
              *     Recorded here rather than at completion so an approval survives a
              *     reload: the summary shown at a gate is recomputed from the folder, but
-             *     what was approved is a different question and only the session
+             *     what was approved is a different question and only the run
              *     remembers it. Absent leaves the stored `summary_json` untouched —
              *     most stage changes carry nothing, and treating absent as null would
              *     throw away the plan the outcome is later judged against.
@@ -4267,14 +4289,6 @@ export interface operations {
                     "application/octet-stream": unknown;
                 };
             };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4321,15 +4335,27 @@ export interface operations {
             };
             cookie?: never;
         };
-        /** @description Raw asset bytes */
+        /** @description Raw asset bytes, sent with the asset's own media type as Content-Type */
         requestBody?: {
             content: {
                 "application/octet-stream": unknown;
             };
         };
         responses: {
+            /** @description The vault already held the asset */
             200: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Asset"];
+                };
+            };
+            /** @description The asset is new to the vault and is now stored */
+            201: {
+                headers: {
+                    /** @description Path of the stored asset */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -4368,6 +4394,14 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4398,14 +4432,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Asset"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
                 };
             };
             401: {
@@ -4504,6 +4530,14 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     delete_asset_upload: {
@@ -4527,14 +4561,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
             };
             401: {
                 headers: {
@@ -4583,14 +4609,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Asset"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
                 };
             };
             401: {
@@ -4673,6 +4691,14 @@ export interface operations {
                 };
             };
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4778,6 +4804,14 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5046,14 +5080,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_ContactSummary"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
                 };
             };
             401: {
@@ -5547,14 +5573,6 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ConversationSummary"];
                 };
             };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5688,8 +5706,6 @@ export interface operations {
                 limit?: number;
                 /** @description Page offset, max 50000 */
                 offset?: number;
-                /** @description Narrow to one calendar year, in the vault's stored offset */
-                year?: number;
                 /** @description `date` or `-date`. Default `date`, oldest first. */
                 sort?: string;
             };
@@ -5708,14 +5724,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_Message"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
                 };
             };
             401: {
@@ -6161,7 +6169,7 @@ export interface operations {
     list_export_messages: {
         parameters: {
             query?: {
-                /** @description Page size, default 100, max 500 */
+                /** @description Page size, default 40, max 500 */
                 limit?: number;
                 /** @description Places to skip in the run's list; a client steps it by `limit`. No cap, an offset past the end is an empty page */
                 offset?: number;
@@ -6183,14 +6191,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_Message"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
                 };
             };
             401: {
@@ -6335,8 +6335,16 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The account already has an active import session */
+            /** @description The account already has a running Import Run */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6351,7 +6359,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Import session id */
+                /** @description Import Run id */
                 id: number;
             };
             cookie?: never;
@@ -6397,7 +6405,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Import session id */
+                /** @description Import Run id */
                 id: number;
             };
             cookie?: never;
@@ -6542,6 +6550,14 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     complete_import: {
@@ -6549,7 +6565,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Import session id */
+                /** @description Import Run id */
                 id: number;
             };
             cookie?: never;
@@ -6620,7 +6636,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                /** @description Import session id */
+                /** @description Import Run id */
                 id: number;
             };
             cookie?: never;
@@ -6666,7 +6682,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Import session id */
+                /** @description Import Run id */
                 id: number;
             };
             cookie?: never;
@@ -6679,14 +6695,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DiscardImportResponse"];
-                };
-            };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
                 };
             };
             401: {
@@ -6811,6 +6819,14 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7081,14 +7097,6 @@ export interface operations {
                     "application/json": components["schemas"]["Page_Message"];
                 };
             };
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7256,6 +7264,14 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     delete_saved_search: {
@@ -7377,11 +7393,9 @@ export interface operations {
             };
         };
     };
-    list_search_fields: {
+    list_contact_search_fields: {
         parameters: {
-            query: {
-                /** @description `contacts`, `conversations`, or `messages`. */
-                list: components["schemas"]["ListKind"];
+            query?: {
                 /** @description Page size, default 40, max 500. */
                 limit?: number | null;
                 /** @description Page offset. */
@@ -7401,12 +7415,52 @@ export interface operations {
                     "application/json": components["schemas"]["Page_FieldDoc"];
                 };
             };
-            400: {
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_conversation_search_fields: {
+        parameters: {
+            query?: {
+                /** @description Page size, default 40, max 500. */
+                limit?: number | null;
+                /** @description Page offset. */
+                offset?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_FieldDoc"];
                 };
             };
             401: {
@@ -7494,7 +7548,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateSessionResponse"];
                 };
             };
-            /** @description Invalid input */
+            /** @description The body is not JSON */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7514,6 +7568,15 @@ export interface operations {
             };
             /** @description Account is disabled */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A blank username or password */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7633,9 +7696,11 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Vault claimed; session issued */
-            200: {
+            /** @description Vault claimed; the owner's Session is made */
+            201: {
                 headers: {
+                    /** @description `/v1/session`, the Session the claim made */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {

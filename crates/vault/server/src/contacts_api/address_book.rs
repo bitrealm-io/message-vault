@@ -1,6 +1,7 @@
 //! `POST /v1/contacts`: load a vCard or vCard CSV address book into the
-//! account. The file is read by `db::contacts::load_contacts_if_needed`; this
-//! module checks the upload and hands it over.
+//! account. The file is read by `db::contacts::read_address_book` and written
+//! by `db::contacts::replace_address_book`; this module checks the upload and
+//! hands it over.
 
 use axum::extract::State;
 use axum::http::HeaderMap;
@@ -88,10 +89,18 @@ pub(crate) async fn create_contacts(
     std::fs::write(&path, content.as_bytes())
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("write address book: {e}")))?;
 
+    // A file that does not parse is a body that broke a rule, `422`; only a
+    // failed write after it parsed is the vault's own fault. The reader names
+    // the file it read, which here is the vault's temp copy: the caller is
+    // told about "the upload" instead.
+    let book = contacts::read_address_book(&path).map_err(|e| {
+        let reason = format!("{e:#}").replace(&path.display().to_string(), "the upload");
+        ApiError::validation(format!("the address book could not be read: {reason}"))
+    })?;
     let mut conn = state.db.acquire().await?;
-    let stats = contacts::load_contacts_if_needed(&mut conn, Some(&path), true, auth.account_id)
+    let stats = contacts::replace_address_book(&mut conn, auth.account_id, book)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("load address book: {e}")))?;
+        .map_err(|e| ApiError::Internal(e.context("load address book")))?;
     Ok(Json(CreateContactsResponse {
         contacts: stats.contacts,
         phones: stats.phones,

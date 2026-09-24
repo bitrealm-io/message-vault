@@ -63,8 +63,9 @@ from `100` up.
 - Web login uses username + password (Argon2id hash in `accounts.password_hash`).
   An account may have no password (`password_hash` NULL); an empty password is
   accepted only for those accounts.
-- Logging in, creating an account, and claiming the vault are each
-  rate-limited to 20 attempts per username per 60 seconds, tracked separately.
+- Logging in is rate-limited to 20 attempts per username per 60 seconds.
+  Creating an account and claiming the vault are each limited to 20 attempts
+  per 60 seconds across the whole vault, whatever the username.
 - Each account can create named **API tokens** for programs that call the HTTP API
   (stored hashed; shown once when created). GUI sessions use a separate rotating
   token.

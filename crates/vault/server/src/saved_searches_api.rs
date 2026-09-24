@@ -63,6 +63,7 @@ pub(crate) async fn list_saved_searches(
             headers(("Location" = String, description = "Path of the new saved search"))
         ),
         (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (status = 409, body = crate::problem::Problem)

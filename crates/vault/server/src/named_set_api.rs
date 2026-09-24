@@ -66,7 +66,7 @@ pub(crate) async fn list(
 
 /// Create a set and answer `201 Created` with its id and trimmed name, and a
 /// `Location` of `{root_path}/{id}`. A blank or over-long name, or a reserved
-/// name, answers 400; a name already taken (ignoring case) answers 409.
+/// name, answers 422; a name already taken (ignoring case) answers 409.
 pub(crate) async fn create(
     spec: &'static MembershipSpec,
     root_path: &str,
@@ -84,7 +84,7 @@ pub(crate) async fn create(
 
 /// Rename a set by id, answering its id and the new name. An unknown or
 /// another account's id answers 404; a blank, over-long, or reserved name
-/// answers 400; another set's name (ignoring case) answers 409.
+/// answers 422; another set's name (ignoring case) answers 409.
 pub(crate) async fn update(
     spec: &'static MembershipSpec,
     state: &AppState,
@@ -127,7 +127,8 @@ pub(crate) async fn members_list(
 
 /// Add and remove members of one set in one call, answering how many
 /// changed. An unknown or another account's set id, or an unknown member id
-/// in `add` or `remove`, answers 404; an empty patch answers 400.
+/// in `remove`, answers 404; an unknown member id in `add`, or an empty
+/// patch, answers 422.
 pub(crate) async fn members_update(
     spec: &'static MembershipSpec,
     state: &AppState,
@@ -216,6 +217,7 @@ macro_rules! named_set_routes {
                     headers(("Location" = String, description = "Path of the new set"))
                 ),
                 (status = 400, body = crate::problem::Problem),
+                (status = 422, body = crate::problem::Problem),
                 (status = 401, body = crate::problem::Problem),
                 (status = 403, body = crate::problem::Problem),
                 (status = 409, body = crate::problem::Problem)

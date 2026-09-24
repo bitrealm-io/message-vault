@@ -17,6 +17,7 @@ pub(crate) mod contacts_api;
 pub(crate) mod conversations_api;
 pub(crate) mod credentials;
 pub(crate) mod db;
+pub(crate) mod declared_query;
 pub(crate) mod dedupe;
 pub(crate) mod exports_api;
 pub(crate) mod extract;

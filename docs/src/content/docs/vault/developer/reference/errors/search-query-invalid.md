@@ -1,6 +1,6 @@
 ---
 title: Search query invalid
-description: "`400 Bad Request` — `search-query-invalid`"
+description: "`422 Unprocessable Entity` — `search-query-invalid`"
 editUrl: false
 ---
 
@@ -8,7 +8,7 @@ editUrl: false
 
 | | |
 |---|---|
-| Status | `400 Bad Request` |
+| Status | `422 Unprocessable Entity` |
 | Type | `https://bitrealm.io/vault/developer/reference/errors/search-query-invalid` |
 
 The search language refused the query. `detail` names the word and the list it was used on; `word` carries the word, and `did_you_mean` a word the language does have when one is close. The query language is documented in the search reference.

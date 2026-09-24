@@ -326,7 +326,9 @@ pub async fn create_account(
             ));
         }
         None => {
-            check_auth_rate_limit(&state.auth_rate_limits, &format!("register:{username}"))?;
+            // One count for the whole vault, like `claim`: a count per
+            // username lets a script that tries a new name each time through.
+            check_auth_rate_limit(&state.auth_rate_limits, "register")?;
             false
         }
     };
@@ -337,7 +339,7 @@ pub async fn create_account(
 
     let mut conn = state.db.acquire().await?;
     if !by_owner && !vault_settings::load(&mut conn).await?.public_registration {
-        return Err(ApiError::NotTheOwner(
+        return Err(ApiError::RegistrationClosed(
             "this vault does not accept new accounts; ask its owner for one".into(),
         ));
     }
@@ -767,8 +769,8 @@ pub async fn delete_account(
             ));
         }
         let Some(Json(req)) = body else {
-            return Err(ApiError::MissingParameter(
-                "deleting your own account takes a body with confirm and current_password".into(),
+            return Err(ApiError::validation(
+                "deleting your own account takes a body with confirm and current_password",
             ));
         };
         if !req.confirm {

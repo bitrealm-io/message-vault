@@ -1051,6 +1051,72 @@ async fn a_wrong_password_is_401_and_the_limit_answers_429_with_retry_after() {
     assert!((1..=crate::credentials::AUTH_RATE_WINDOW.as_secs()).contains(&retry_after));
 }
 
+/// Every `/v1` operation in the document refuses a query parameter it does
+/// not declare, and accepts the ones it does: walked over the whole document
+/// once, as `docs/architecture/http-api.md` asks of a rule every route
+/// follows, so a new route is covered without anyone remembering it.
+#[tokio::test]
+async fn every_operation_refuses_a_query_parameter_it_does_not_declare() {
+    let vault = crate::test_support::test_vault().await;
+    let state = vault.state.clone();
+    let server = crate::test_support::serve(&state).await;
+    let client = reqwest::Client::new();
+    let spec: serde_json::Value =
+        serde_json::from_str(&crate::openapi::dump_openapi_json()).unwrap();
+
+    let mut checked = 0;
+    for (template, item) in spec["paths"].as_object().unwrap() {
+        if !template.starts_with("/v1/") {
+            continue;
+        }
+        // Any segment matches a route; the refusal comes before the handler
+        // reads it, so the value never matters.
+        let path = template
+            .split('/')
+            .map(|seg| if seg.starts_with('{') { "1" } else { seg })
+            .collect::<Vec<_>>()
+            .join("/");
+        for (method, op) in item.as_object().unwrap() {
+            let method = reqwest::Method::from_bytes(method.to_uppercase().as_bytes()).unwrap();
+            let declared: Vec<&str> = op["parameters"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|p| p["in"] == "query")
+                .filter_map(|p| p["name"].as_str())
+                .collect();
+            let response = client
+                .request(
+                    method.clone(),
+                    format!("{}{path}?no_such_parameter=1", server.base()),
+                )
+                .send()
+                .await
+                .unwrap();
+            let status = response.status();
+            let text = response.text().await.unwrap();
+            if method == reqwest::Method::HEAD {
+                // A HEAD answer has no body to read a problem from.
+                assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "HEAD {template}");
+            } else {
+                let problem = crate::test_support::expect_problem(
+                    status,
+                    &text,
+                    crate::problem::ProblemType::ValidationFailed,
+                );
+                let errors = problem.errors.unwrap().join(" ");
+                assert!(
+                    errors.contains("no_such_parameter")
+                        && declared.iter().all(|name| errors.contains(name)),
+                    "{method} {template} must name the parameter and the ones it takes: {errors}"
+                );
+            }
+            checked += 1;
+        }
+    }
+    assert!(checked > 60, "walked only {checked} operations");
+}
+
 /// `Accept` is checked on the `/v1` routes that produce JSON and nowhere
 /// else: not on the static app, and not on the asset download.
 #[tokio::test]
@@ -1121,10 +1187,6 @@ fn every_api_error_answers_the_status_its_problem_type_declares() {
             ApiError::ValidationFailed(vec!["x".into()]),
             StatusCode::UNPROCESSABLE_ENTITY,
         ),
-        (
-            ApiError::MissingParameter("x".into()),
-            StatusCode::BAD_REQUEST,
-        ),
         (ApiError::MalformedBody("x".into()), StatusCode::BAD_REQUEST),
         (
             ApiError::UnsupportedMediaType("x".into()),
@@ -1156,6 +1218,10 @@ fn every_api_error_answers_the_status_its_problem_type_declares() {
         ),
         (ApiError::NotTheOwner("x".into()), StatusCode::FORBIDDEN),
         (
+            ApiError::RegistrationClosed("x".into()),
+            StatusCode::FORBIDDEN,
+        ),
+        (
             ApiError::InsufficientScope("x".into()),
             StatusCode::FORBIDDEN,
         ),
@@ -1166,12 +1232,12 @@ fn every_api_error_answers_the_status_its_problem_type_declares() {
                 word: None,
                 did_you_mean: None,
             },
-            StatusCode::BAD_REQUEST,
+            StatusCode::UNPROCESSABLE_ENTITY,
         ),
         (ApiError::StateConflict("x".into()), StatusCode::CONFLICT),
         (
             ApiError::AssetUploadInvalid("x".into()),
-            StatusCode::BAD_REQUEST,
+            StatusCode::UNPROCESSABLE_ENTITY,
         ),
         (ApiError::NotFound("x".into()), StatusCode::NOT_FOUND),
         (
@@ -1198,10 +1264,6 @@ fn every_api_error_displays_its_detail_sentence() {
         ApiError::ValidationFailed(vec!["name is required".into(), "name is too long".into()])
             .to_string(),
         "name is required; name is too long"
-    );
-    assert_eq!(
-        ApiError::MissingParameter("q is required".into()).to_string(),
-        "q is required"
     );
     assert_eq!(
         ApiError::MalformedBody("body is not JSON".into()).to_string(),

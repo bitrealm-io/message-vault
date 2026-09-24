@@ -143,7 +143,6 @@ pub fn download_asset(
     http: &HttpSession,
     base_url: &str,
     key: &str,
-    account: &str,
     source: &str,
     sha256: &str,
     dest: &Path,
@@ -156,14 +155,9 @@ pub fn download_asset(
     let base = trim_base_url(base_url);
     let mut url = reqwest::Url::parse(&format!("{base}/v1/assets/{sha_clean}"))
         .with_context(|| format!("invalid vault URL {base}"))?;
-    {
-        let mut qp = url.query_pairs_mut();
-        qp.append_pair("source", source);
-        let account = account.trim();
-        if !account.is_empty() {
-            qp.append_pair("account", account);
-        }
-    }
+    // The key names the account; the route takes no `account=`, and refuses
+    // a parameter it does not declare.
+    url.query_pairs_mut().append_pair("source", source);
 
     let mut response = http
         .request_url(Method::GET, url, key)

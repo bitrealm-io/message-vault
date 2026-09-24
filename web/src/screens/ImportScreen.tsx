@@ -66,7 +66,7 @@ const DEFAULT_SOURCE = IMESSAGE_DEFAULT_METHOD;
 const PATH_PROBE_DEBOUNCE_MS = 200;
 /** The server's own cap on one `/v1/contacts/unmatched-identities` request (`MAX_MATCH_IDENTIFIERS`,
  * `crates/vault/server/src/contacts_api.rs`) — the client batches to it rather than
- * discovering the limit from a 400. */
+ * discovering the limit from a 422. */
 const MAX_MATCH_IDENTIFIERS = 500;
 
 /** Nothing to decide -- the form renders. The one spelling of "no resume". */

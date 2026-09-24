@@ -11,6 +11,6 @@ editUrl: false
 | Status | `422 Unprocessable Entity` |
 | Type | `https://bitrealm.io/vault/developer/reference/errors/validation-failed` |
 
-A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a body missing a required field.
+A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
 
 `errors` lists every rule the request broke, one sentence each, not only the first. Fix each one and send the request again.

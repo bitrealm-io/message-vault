@@ -367,11 +367,11 @@ export function getConversation(
   return apiClient.get<Schema["ConversationSummary"]>(`/v1/conversations/${conversationId}`, opts);
 }
 
-/** Filters `GET /v1/conversations/{id}/messages` accepts. */
+/** Paging for `GET /v1/conversations/{id}/messages`. Opening a conversation
+ * takes no filter: a year inside one is the search `in:#id date:YYYY`. */
 export type ConversationMessagesParams = {
   offset?: number;
   limit?: number;
-  year?: number;
 };
 
 export function listConversationMessages(
@@ -654,15 +654,15 @@ export function deleteSavedSearch(id: number): Promise<void> {
 
 // ── Search ──────────────────────────────────────────────────────────────────
 
+/** The lists whose search words the vault describes, one path each. */
+export type SearchFieldList = "contacts" | "conversations";
+
 /** The words the search language accepts on one list. */
 export function listSearchFields(
-  list: Schema["ListKind"],
+  list: SearchFieldList,
   opts?: VaultRequestOptions,
 ): Promise<Schema["Page_FieldDoc"]> {
-  return apiClient.get<Schema["Page_FieldDoc"]>(
-    withQuery("/v1/search-fields", query({ list })),
-    opts,
-  );
+  return apiClient.get<Schema["Page_FieldDoc"]>(`/v1/search-fields/${list}`, opts);
 }
 
 // ── Import Runs ─────────────────────────────────────────────────────────────

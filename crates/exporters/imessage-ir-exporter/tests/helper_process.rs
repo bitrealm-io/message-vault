@@ -286,7 +286,11 @@ fn a_csv_export_writes_each_conversation_and_copies_the_photo() {
 
     let result =
         imessage_ir_exporter::run(&config_for(&db_path, &output, OutputFormat::Csv)).unwrap();
-    eprintln!("PROBE {:#?}", result.messages);
+    assert!(
+        result.messages.iter().any(|l| l == "  saved 1 attachments"),
+        "{:#?}",
+        result.messages
+    );
 
     let csv_files: Vec<PathBuf> = fs::read_dir(&output)
         .unwrap()

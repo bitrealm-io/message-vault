@@ -184,6 +184,17 @@ pub(crate) fn trim_encoded_string_junk(s: &str) -> String {
     s.trim_end_matches('\0').to_string()
 }
 
+/// How many continuation bytes follow a UTF-8 lead byte: 0 for ASCII or a byte
+/// that cannot start a character.
+fn utf8_continuation_count(lead: u8) -> usize {
+    match lead {
+        0xc0..=0xdf => 1,
+        0xe0..=0xef => 2,
+        0xf0..=0xf7 => 3,
+        _ => 0,
+    }
+}
+
 /// Encoded-string-value = Text-string | Value-length Char-set Text-string
 ///
 /// GO SMS Pro PDUs often declare a Value-length that overlaps the next MMS
@@ -222,12 +233,19 @@ pub(crate) fn decode_encoded_string_value(cur: &mut Cursor<'_>) -> Result<String
             Some(CHARSET_UTF8) => {
                 // Prefer value-length end (real UTF-8). Also stop before an obvious
                 // next MMS header when GO overshoots (ASCII PLMN then 0x8x/0x9x).
+                // Header codes are 0x81..=0x98, the range of UTF-8 continuation
+                // bytes, so only a byte where a character would start can be one.
                 while cur.pos < end && cur.data[cur.pos] != 0 {
                     let b = cur.data[cur.pos];
                     if b & 0x80 != 0 && is_mms_short_integer_field(b & 0x7f) {
                         break;
                     }
                     cur.pos += 1;
+                    let mut continuation = utf8_continuation_count(b);
+                    while continuation > 0 && cur.pos < end && cur.data[cur.pos] & 0xc0 == 0x80 {
+                        cur.pos += 1;
+                        continuation -= 1;
+                    }
                 }
             }
             _ => {
@@ -921,4 +939,54 @@ pub(crate) fn decode_multipart_body(cur: &mut Cursor<'_>) -> Result<Vec<MmsPart>
         });
     }
     Ok(parts)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Value-length, charset UTF-8 (0xEA), then `text` and a NUL.
+    fn utf8_value(text: &str) -> Vec<u8> {
+        let mut v = vec![(text.len() + 2) as u8, 0xEA];
+        v.extend_from_slice(text.as_bytes());
+        v.push(0);
+        v
+    }
+
+    #[test]
+    fn utf8_encoded_string_keeps_non_latin_text_whole() {
+        // "т" is d1 82 and "—" is e2 80 94: continuation bytes whose low bits
+        // are header codes. "😀" is f0 9f 98 80 (0x98 is Transaction-Id).
+        // A tab (0x09) is the From code without the high bit, so it stays text.
+        let text = "Привет — café\t😀";
+        let v = utf8_value(text);
+        let mut cur = Cursor::new(&v);
+        assert_eq!(decode_encoded_string_value(&mut cur).unwrap(), text);
+        assert_eq!(cur.pos, v.len());
+    }
+
+    #[test]
+    fn utf8_encoded_string_stops_at_a_real_next_header() {
+        // GO SMS Pro overshoot: the value length runs past the address into the
+        // Subject header (0x96) that follows it.
+        let addr = b"+15555550101/TYPE=PLMN";
+        let mut v = vec![(addr.len() + 4) as u8, 0xEA];
+        v.extend_from_slice(addr);
+        v.extend_from_slice(&[0x96, b'h', b'i']);
+        let mut cur = Cursor::new(&v);
+        assert_eq!(
+            decode_encoded_string_value(&mut cur).unwrap(),
+            "+15555550101/TYPE=PLMN"
+        );
+        assert_eq!(cur.data[cur.pos], 0x96);
+
+        // The same overshoot after a value that ends in a two-byte character.
+        let text = "café";
+        let mut v = vec![(text.len() + 4) as u8, 0xEA];
+        v.extend_from_slice(text.as_bytes());
+        v.extend_from_slice(&[0x96, b'h', b'i']);
+        let mut cur = Cursor::new(&v);
+        assert_eq!(decode_encoded_string_value(&mut cur).unwrap(), "café");
+        assert_eq!(cur.data[cur.pos], 0x96);
+    }
 }

@@ -401,4 +401,110 @@ fn mms_date_overrides_filename_timestamp() {
     assert_eq!(parsed.body, "Dated body");
 }
 
+/// A GO named part: `0x8e`, the NUL-terminated name, then the payload.
+fn push_named_part(data: &mut Vec<u8>, name: &str, payload: &[u8]) {
+    data.push(0x8e);
+    data.extend_from_slice(name.as_bytes());
+    data.push(0);
+    data.extend_from_slice(payload);
+}
+
+/// A WSP uintvar: seven bits per byte, high bit set on all but the last.
+fn uintvar(mut value: usize) -> Vec<u8> {
+    let mut out = vec![(value & 0x7f) as u8];
+    value >>= 7;
+    while value > 0 {
+        out.insert(0, 0x80 | (value & 0x7f) as u8);
+        value >>= 7;
+    }
+    out
+}
+
+/// A multipart.mixed Content-Type header and body whose parts carry only a
+/// text content type (no name). Part `i` holds `len` bytes of value `i`.
+fn multipart_of(content_types: &[&str], len: usize) -> Vec<u8> {
+    let mut data = vec![0x84]; // Content-Type
+    data.extend_from_slice(b"application/vnd.wap.multipart.mixed\0");
+    data.extend(uintvar(content_types.len()));
+    for (i, ct) in content_types.iter().enumerate() {
+        let mut headers = ct.as_bytes().to_vec();
+        headers.push(0);
+        data.extend(uintvar(headers.len()));
+        data.extend(uintvar(len));
+        data.extend_from_slice(&headers);
+        data.extend(std::iter::repeat_n(i as u8 + 0x20, len));
+    }
+    data
+}
+
+#[test]
+fn named_media_parts_keep_their_type() {
+    let media = vec![0x11u8; 80];
+    let wav = vec![0x11u8; 10_000]; // shorter WAVs are dropped as stubs
+    let mut data = Vec::new();
+    push_named_part(&mut data, "pic.png", &media);
+    push_named_part(&mut data, "anim.gif", &media);
+    push_named_part(&mut data, "voice.amr", &media);
+    push_named_part(&mut data, "song.mp3", &media);
+    push_named_part(&mut data, "sound.wav", &wav);
+    push_named_part(&mut data, "clip.mp4", &media);
+    push_named_part(&mut data, "movie.3gp", &media);
+    push_named_part(&mut data, "note.txt", b"Hello note");
+    push_named_part(&mut data, "page.html", b"Hello page");
+
+    let structured = decode_mms_best_effort(&data);
+    let smil = SmilRefs::default();
+    let atts = attachments_from_named_parts(&structured.named_parts, &smil);
+    let exts: Vec<&str> = atts.iter().map(|a| a.ext.as_str()).collect();
+    assert_eq!(
+        exts,
+        [".png", ".gif", ".amr", ".mp3", ".wav", ".mp4", ".3gp"],
+        "text and HTML parts are not attachments"
+    );
+    assert_eq!(atts[0].smil_name.as_deref(), Some("pic.png"));
+    assert_eq!(atts[0].data, media);
+    let body = body_from_named_parts(&structured.named_parts, &smil).unwrap();
+    assert_eq!(body, "Hello note\nHello page");
+}
+
+#[test]
+fn unnamed_parts_take_their_extension_from_the_content_type() {
+    let cases = [
+        ("image/jpg", Some(".jpg")),
+        ("image/png", Some(".png")),
+        ("image/gif", Some(".gif")),
+        ("image/tiff", Some(".tiff")),
+        ("image/vnd.wap.wbmp", Some(".wbmp")),
+        ("audio/amr", Some(".amr")),
+        ("audio/3gpp", Some(".amr")),
+        ("audio/mpeg", Some(".mp3")),
+        ("audio/mp3", Some(".mp3")),
+        ("audio/wav", Some(".wav")),
+        ("audio/x-wav", Some(".wav")),
+        ("video/3gpp", Some(".3gp")),
+        ("video/mp4", Some(".mp4")),
+        // Types with no extension of their own are kept as .bin.
+        ("image/heic", Some(".bin")),
+        ("audio/aac", Some(".bin")),
+        ("video/quicktime", Some(".bin")),
+        // Text is the body, never an attachment.
+        ("text/plain", None),
+        ("text/html", None),
+    ];
+    let types: Vec<&str> = cases.iter().map(|(ct, _)| *ct).collect();
+    // 10,000 bytes, since a shorter WAV is dropped as a stub.
+    let structured = decode_mms_best_effort(&multipart_of(&types, 10_000));
+    assert_eq!(structured.parts.len(), cases.len());
+    let smil = SmilRefs::default();
+    for (part, (ct, ext)) in structured.parts.iter().zip(cases) {
+        let single = StructuredMms {
+            parts: vec![part.clone()],
+            ..StructuredMms::default()
+        };
+        let atts = attachments_from_structured(&single, &smil);
+        let got = atts.first().map(|a| a.ext.as_str());
+        assert_eq!(got, ext, "{ct}");
+    }
+}
+
 mod robustness;

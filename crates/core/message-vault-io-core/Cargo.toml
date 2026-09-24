@@ -19,6 +19,7 @@ thiserror = { workspace = true }
 testutil = []
 
 [dev-dependencies]
+media = { path = "../../libs/media", features = ["testutil"] }
 tempfile = { workspace = true }
 
 [lints]

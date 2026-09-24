@@ -963,24 +963,12 @@ mod tests {
         let _ = fs::remove_dir_all(&out);
     }
 
-    struct RestoreToolsDir;
-
-    impl Drop for RestoreToolsDir {
-        fn drop(&mut self) {
-            media::set_tools_dir(None);
-        }
-    }
-
     const SEED: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-    /// Every case that needs ffmpeg hidden lives in this one test, because
-    /// the tools folder is process-wide and `cargo test` runs tests on
-    /// threads: another test restoring it would show ffmpeg again mid-case.
     #[test]
     fn without_ffmpeg_only_unobfuscated_convert_and_compress_are_refused() {
-        let dir = tempfile::tempdir().unwrap();
-        let _restore = RestoreToolsDir;
-        media::set_tools_dir(Some(dir.path().to_path_buf()));
+        // Holds the tools lock, so a test that runs the real ffmpeg waits.
+        let _hidden = media::testutil::hide_ffmpeg();
         assert!(!media::ffmpeg_available());
 
         let form = |attachment_media, obfuscate, seed: &str| Form {

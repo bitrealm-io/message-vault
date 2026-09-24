@@ -1,6 +1,6 @@
 //! Shared exporter forms, typed config, and background-job helpers for desktop apps.
 //!
-//! The desktop app and exporter command-line tools share this crate so every
+//! The desktop app's commands and the exporter crates share this crate so every
 //! backup type validates the same way before a job starts.
 
 pub mod attachment_jobs;

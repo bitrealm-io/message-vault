@@ -1,4 +1,4 @@
-//! Shared typed export configuration for CLI, library, and GUI.
+//! Shared typed export configuration for the exporter crates and the desktop app.
 //!
 //! [`ExporterConfig`] holds options common to (nearly) every exporter.
 //! Exporter-specific knobs live in [`SourceConfig`].
@@ -44,7 +44,8 @@ impl fmt::Display for OutputFormat {
 }
 
 impl OutputFormat {
-    /// Short format id used on the CLI (`json`, `jsonl`, `csv`, …).
+    /// Short format id (`json`, `jsonl`, `csv`, …) that the export form stores
+    /// and [`OutputFormat::parse`] reads back.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Csv => "csv",
@@ -84,7 +85,7 @@ impl OutputFormat {
 /// Shared export inputs. Source-specific fields are in [`Self::source`].
 #[derive(Debug, Clone)]
 pub struct ExporterConfig {
-    /// Input paths (usually one). SMS Backup+ CLI may pass several; WhatsApp may leave empty.
+    /// Input paths (usually one). SMS Backup+ may pass several; WhatsApp may leave empty.
     pub inputs: Vec<PathBuf>,
     /// Output directory the export is written to (packaging plus `attachments/`).
     pub output: PathBuf,
@@ -96,7 +97,8 @@ pub struct ExporterConfig {
     pub obfuscate: ObfuscateConfig,
     /// Attachment handling for `FormatSink` (none / copy / convert / compress).
     pub media: MediaConfig,
-    /// Shared cancel flag for in-process jobs; CLI runs leave it unset.
+    /// Shared cancel flag for in-process jobs; `None` means the run cannot be
+    /// cancelled.
     pub cancel: Option<CancelFlag>,
     /// Human-readable mid-run notes and warnings. `None` → stderr; the
     /// desktop app sets a sink and shows the lines in its log panel.
@@ -109,7 +111,7 @@ pub struct ExporterConfig {
     pub output_format: OutputFormat,
     /// Continue an interrupted export in the same output directory: previous
     /// output is kept, and conversations already written are skipped. Only
-    /// the desktop's import resume sets this; CLI runs leave it false.
+    /// the desktop's import resume sets this.
     pub resume: bool,
     /// Exporter-specific options; exactly one variant is set per run.
     pub source: SourceConfig,

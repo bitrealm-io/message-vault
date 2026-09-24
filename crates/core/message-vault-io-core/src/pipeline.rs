@@ -1,4 +1,4 @@
-//! Helpers shared by exporter command-line tools and in-process runners.
+//! Helpers shared by the exporter crates and the desktop app's in-process runners.
 //!
 //! This module keeps its dependency surface small (only `anyhow` for
 //! context-rich path errors) so the desktop app stays lightweight. Callers map

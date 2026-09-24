@@ -373,7 +373,7 @@ pub(crate) fn parse_compress_options(
     let fps = max_fps
         .parse::<f32>()
         .map_err(|_| format!("invalid media_max_fps '{max_fps}'"))?;
-    media::compress_options_from_cli(max_resolution, fps, min_size, true)
+    media::compress_options_from_form(max_resolution, fps, min_size, true)
         .map_err(|e| format!("{e:#}"))
 }
 

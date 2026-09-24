@@ -8,7 +8,8 @@ use std::sync::{Arc, Mutex};
 /// Shared cancel flag for cooperative in-process jobs.
 pub type CancelFlag = Arc<AtomicBool>;
 
-/// Callback for mid-run progress / warning lines (GUI streams these; CLI leaves unset).
+/// Callback for mid-run progress / warning lines. The desktop app sets one and
+/// streams the lines to its log panel; `None` sends them to stderr.
 #[derive(Clone)]
 pub struct LogSink(Arc<dyn Fn(&str) + Send + Sync>);
 
@@ -33,7 +34,7 @@ impl fmt::Debug for LogSink {
     }
 }
 
-/// Send a log line to `sink` when set. Otherwise print to stderr (CLI default).
+/// Send a log line to `sink` when set. Otherwise print to stderr.
 pub fn emit_log(sink: Option<&LogSink>, line: impl AsRef<str>) {
     let line = line.as_ref();
     match sink {

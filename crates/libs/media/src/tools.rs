@@ -104,8 +104,9 @@ fn command_runs(bin: &Path, args: &[&str]) -> bool {
         .is_ok_and(|s| s.success())
 }
 
-/// Resolve `ffmpeg` / `ffprobe`: tools-dir override, then sibling of current exe,
-/// `lib/` next to the GUI, `../lib/` from `cli/`, legacy parent dir,
+/// Resolve `ffmpeg` / `ffprobe`: tools-dir override, then beside the running
+/// executable, `lib/` under its directory, `lib/` under its parent directory,
+/// the parent directory itself (legacy flat-root archives),
 /// `MESSAGE_VAULT_IO_BIN`, then PATH.
 fn resolve_tool(name: &str) -> Option<PathBuf> {
     if !matches!(name, "ffmpeg" | "ffprobe") {

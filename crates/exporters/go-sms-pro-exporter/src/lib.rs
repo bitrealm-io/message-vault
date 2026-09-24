@@ -1,13 +1,12 @@
 //! Convert GO SMS Pro backups into the shared conversation structure
 //! ([`message_ir::ConversationDocument`]) every exporter writes.
 //!
-//! Library entry: [`run`] for the full pipeline.
-//! The `go-sms-pro-exporter` binary is a thin CLI over [`run`].
+//! Library entry: [`run`] for the full pipeline; the desktop app calls it
+//! in process.
 
 mod attachments_emit;
 mod chat_id;
 mod emit;
-mod phone;
 mod run;
 mod xml;
 
@@ -25,3 +24,7 @@ mod run_summary;
 #[cfg(test)]
 #[path = "../tests/mms_export.rs"]
 mod mms_export;
+
+#[cfg(test)]
+#[path = "../tests/real_backup.rs"]
+mod real_backup;

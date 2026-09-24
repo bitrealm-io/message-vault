@@ -1336,7 +1336,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "phone",
- "quick-xml",
  "regex",
 ]
 
@@ -1356,7 +1355,6 @@ dependencies = [
  "message-vault-io-core",
  "phone",
  "quick-xml",
- "regex",
  "serde",
  "serde_json",
  "sha2 0.11.0",

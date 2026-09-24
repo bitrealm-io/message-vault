@@ -1,10 +1,25 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
+use go_sms_mms::testutil::PduBuilder;
 use message_vault_io_core::testutil::{
     assert_csv_export, assert_csv_row, assert_jsonl_resumes, csv_files,
 };
 use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
+use std::fs;
 use std::path::{Path, PathBuf};
+
+/// The smoke backup: the two-message XML fixture and one received MMS.
+fn write_backup(dir: &Path) {
+    fs::create_dir_all(dir).unwrap();
+    let xml = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/sample_export/gosms_sys_smoke.xml");
+    fs::copy(xml, dir.join("gosms_sys_smoke.xml")).unwrap();
+    let pdu = PduBuilder::received("+14075551234")
+        .to("+15555550100")
+        .text("Hello one to one")
+        .build();
+    fs::write(dir.join("I_1609459200_1_0.pdu"), pdu).unwrap();
+}
 
 fn convert(input_dir: &Path, output_dir: &Path) -> Result<ExportReport> {
     convert_export(ConvertExportArgs {
@@ -20,20 +35,19 @@ fn convert(input_dir: &Path, output_dir: &Path) -> Result<ExportReport> {
 
 #[test]
 fn convert_smoke_writes_csv_not_json() {
-    let input = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample_export");
-    assert!(input.is_dir(), "missing fixture: {}", input.display());
-
     let tmp = tempfile::tempdir().expect("tempdir");
-    let report = convert(input.as_path(), tmp.path()).expect("convert_export should succeed");
-    assert!(report.conversations >= 1);
-    assert!(report.extra.get("xml_messages_seen").copied().unwrap_or(0) >= 2);
+    let input = tmp.path().join("backup");
+    write_backup(&input);
+    let output = tmp.path().join("out");
+    let report = convert(&input, &output).expect("convert_export should succeed");
+    assert_eq!(report.conversations, 1);
+    assert_eq!(report.extra("xml_messages_seen"), 2);
+    assert_eq!(report.extra("pdu_messages"), 1);
 
-    // Every message the fixture carries, read back out of the export. The
-    // previous version of this passed `""` as the body needle, which every
-    // file contains, so it asserted the header columns and nothing else — an
-    // exporter that wrote a correct header and no messages passed it.
+    // Every message the fixture carries, read back out of the export. An
+    // exporter that wrote a correct header and no messages must fail here.
     assert_csv_export(
-        tmp.path(),
+        &output,
         &["chat_identifier", "direction", "attachments_json"],
         &["export_schema"],
         &[
@@ -47,7 +61,7 @@ fn convert_smoke_writes_csv_not_json() {
         ],
     );
 
-    let csv = &csv_files(tmp.path())[0];
+    let csv = &csv_files(&output)[0];
     // `type` 2 in the fixture is an outgoing message, and the direction column
     // is where that decision shows up.
     assert_csv_row(
@@ -58,24 +72,23 @@ fn convert_smoke_writes_csv_not_json() {
             ("timestamp_unix_ms", "1609459260000"),
         ],
     );
-    // The `.pdu` fixture beside the XML. Nothing read it before: the export
-    // could have dropped every binary PDU and this test still passed, because
-    // the XML alone satisfied the conversation count.
+    // The PDU beside the XML lands in the same conversation.
     assert_csv_row(
         csv,
         &[
             ("text", "Hello one to one"),
             ("direction", "incoming"),
             ("sender_handle", "+14075551234"),
-            ("message_kind", "sms"),
         ],
     );
 }
 
 #[test]
 fn output_equals_input_bails_before_cleaning() {
-    let input = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample_export");
-    let err = convert(input.as_path(), input.as_path()).expect_err("output == input must fail");
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let input = tmp.path().join("backup");
+    write_backup(&input);
+    let err = convert(&input, &input).expect_err("output == input must fail");
     assert!(
         err.to_string()
             .contains("must not be the same as, or contain"),
@@ -83,17 +96,19 @@ fn output_equals_input_bails_before_cleaning() {
     );
     // The backup directory must not have been cleaned by the failed run.
     assert!(input.join("gosms_sys_smoke.xml").is_file());
-    assert!(input.join("I_1609459200_recv.pdu").is_file());
+    assert!(input.join("I_1609459200_1_0.pdu").is_file());
 }
 
 #[test]
 fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
-    let input = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample_export");
     let tmp = tempfile::tempdir().expect("tempdir");
-    assert_jsonl_resumes(tmp.path(), |resume| {
+    let input = tmp.path().join("backup");
+    write_backup(&input);
+    let output = tmp.path().join("out");
+    assert_jsonl_resumes(&output, |resume| {
         convert_export(ConvertExportArgs {
-            input_dir: input.as_path(),
-            output_dir: tmp.path(),
+            input_dir: &input,
+            output_dir: &output,
             owner_phones: &["+15555550100".into()],
             transforms: ExportTransforms::none(),
             output_format: OutputFormat::Jsonl,

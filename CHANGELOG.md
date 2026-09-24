@@ -73,6 +73,14 @@ released versions carry their date on the heading.
 
 ### Fixes
 
+- 2026-09-24 **GO SMS Pro picture messages import whole, and the ones you
+  sent import at all.** An import read only the picture messages you received
+  and, for most of them, mistook bytes inside the picture for phone numbers,
+  so a photo from one friend could land in a group chat with hundreds of made-up
+  members. Every picture message now lands with the people who were actually
+  on it, the ones you sent are included, and a voicemail notice from Google
+  Voice stays in the Google Voice conversation instead of being moved under
+  the caller.
 - 2026-09-23 **Excluding something from a search no longer hides the rows
   that have nothing to compare.** A search with `-` in front of a word left
   out every row with no value for that word, so those rows appeared under

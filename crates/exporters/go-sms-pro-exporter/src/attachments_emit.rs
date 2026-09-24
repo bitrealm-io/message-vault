@@ -7,7 +7,9 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
 /// Queue PDU attachment parts as metadata. Bytes stay in `blob_bytes` until
-/// the shared runner writes them.
+/// the shared runner writes them. The extension comes from the part's
+/// content type; a type the media table does not know gets `.bin` so the
+/// bytes are still kept.
 pub(super) fn queue_pdu_attachments(
     parsed: &ParsedPdu,
     copy_attachments: bool,
@@ -21,20 +23,20 @@ pub(super) fn queue_pdu_attachments(
                 .entry(digest_hex.clone())
                 .or_insert_with(|| att.data.clone());
         }
-        let digest_prefix = digest_prefix(&digest_hex);
+        let ext = media::ext_for_mime(&att.content_type).unwrap_or(".bin");
         let name = format!(
             "I_{}_{}_{}{}",
             parsed.timestamp,
-            digest_prefix,
+            digest_prefix(&digest_hex),
             idx + 1,
-            att.ext
+            ext
         );
         out.push(PendingAttachment {
             rel_path: String::new(),
-            content_type: media::mime_for_ext(&att.ext).unwrap_or("").to_string(),
-            extension: att.ext.trim_start_matches('.').to_string(),
+            content_type: att.content_type.clone(),
+            extension: ext.trim_start_matches('.').to_string(),
             digest_sha256: Some(digest_hex),
-            name_hint: att.smil_name.clone().or(Some(name)),
+            name_hint: att.name.clone().or(Some(name)),
         });
     }
     out

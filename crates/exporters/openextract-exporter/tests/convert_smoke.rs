@@ -97,3 +97,138 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
         })
     });
 }
+
+/// Convert the CSV files `files` (name, body) as one OpenExtract export to
+/// JSON, and read each conversation back, keyed by chat identifier.
+fn convert_to_documents(
+    files: &[(&str, &str)],
+) -> (
+    ExportReport,
+    std::collections::BTreeMap<String, message_ir::ConversationDocument>,
+) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let input = dir.path().join("in");
+    fs::create_dir(&input).unwrap();
+    for (name, body) in files {
+        fs::write(input.join(name), body).unwrap();
+    }
+    let out = dir.path().join("out");
+    let report = convert_export(ConvertExportArgs {
+        input: &input,
+        output: &out,
+        transforms: ExportTransforms::none(),
+        output_format: OutputFormat::Json,
+        cancel: None,
+        resume: false,
+    })
+    .expect("convert");
+    let documents = fs::read_dir(&out)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+        .map(|path| message_ir_format::read_conversation_json(&path).expect("read back"))
+        .map(|doc| (doc.conversation.chat_identifier.clone(), doc))
+        .collect();
+    (report, documents)
+}
+
+/// The phone handles on a conversation's roster.
+fn roster(doc: &message_ir::ConversationDocument) -> Vec<&str> {
+    doc.conversation
+        .participants
+        .iter()
+        .filter_map(|p| p.handle.as_deref())
+        .collect()
+}
+
+/// A chat labelled with a name is keyed by the number its incoming rows
+/// carry, and that number is the roster. The owner's own number on a sent
+/// row comes first here and must not become the chat's key.
+#[test]
+fn a_named_chat_is_keyed_by_its_peers_number() {
+    let (_, documents) = convert_to_documents(&[(
+        "all_conversations.csv",
+        "Date,Conversation,Direction,Sender,Text,Is From Me,Has Attachments\n\
+2020-01-01T17:00:00+00:00,Sam Example,Sent,+15555550100,Hi Sam,True,False\n\
+2020-01-01T17:01:00+00:00,Sam Example,Received,+15555550122,Hello from Sam,False,False\n",
+    )]);
+    let keys: Vec<_> = documents.keys().map(String::as_str).collect();
+    assert_eq!(keys, vec!["+15555550122"]);
+    let doc = &documents["+15555550122"];
+    assert_eq!(doc.messages.len(), 2);
+    assert_eq!(roster(doc), vec!["+15555550122"]);
+}
+
+/// A row with no conversation named, or one named only `Me`, belongs to
+/// its incoming sender. An outgoing row with nothing to say who it went to
+/// lands in the `unknown` chat, which has no roster.
+#[test]
+fn a_row_without_a_conversation_belongs_to_its_sender_or_to_no_one() {
+    let (_, documents) = convert_to_documents(&[(
+        "all_conversations.csv",
+        "Date,Conversation,Direction,Sender,Text,Is From Me,Has Attachments\n\
+2020-01-01T17:00:00+00:00,,Received,+15555550133,Hey,False,False\n\
+2020-01-01T17:01:00+00:00,,Sent,me,To whom,True,False\n\
+2020-01-01T17:02:00+00:00,Me,Received,Cathy Arp,Still here,False,False\n",
+    )]);
+    let keys: Vec<_> = documents.keys().map(String::as_str).collect();
+    assert_eq!(keys, vec!["+15555550133", "Cathy_Arp", "unknown"]);
+    assert_eq!(roster(&documents["+15555550133"]), vec!["+15555550133"]);
+    assert!(documents["unknown"].conversation.participants.is_empty());
+}
+
+/// In a per-chat file every row is the one chat, whatever its sender says:
+/// a sent row carrying the owner's number, and a `Me` row whose
+/// "Is From Me" column was left blank.
+#[test]
+fn every_row_of_a_per_chat_file_is_the_one_chat() {
+    let (report, documents) = convert_to_documents(&[
+        (
+            "conversation_1.csv",
+            "Date,Sender,Text,Is From Me,Has Attachments\n\
+2020-01-01T12:00:00+00:00,+15555550122,Hello,False,False\n\
+2020-01-01T12:01:00+00:00,+15555550100,Hi,True,False\n",
+        ),
+        (
+            "conversation_2.csv",
+            "Date,Sender,Text,Is From Me,Has Attachments\n\
+2020-01-01T12:00:00+00:00,Me,Are you there,,False\n\
+2020-01-01T12:01:00+00:00,Cathy Arp,Yes,False,False\n",
+        ),
+    ]);
+    let keys: Vec<_> = documents.keys().map(String::as_str).collect();
+    assert_eq!(keys, vec!["+15555550122", "Cathy_Arp"]);
+    assert_eq!(documents["+15555550122"].messages.len(), 2);
+    assert_eq!(documents["Cathy_Arp"].messages.len(), 2);
+    assert_eq!(report.conversations, 2);
+}
+
+/// OpenExtract writes each chat's attachments to a CSV of their own. That
+/// file is not a conversation, so it is skipped rather than read and
+/// reported as a file that failed to parse.
+#[test]
+fn an_attachments_csv_is_not_read_as_a_conversation() {
+    let (report, documents) = convert_to_documents(&[
+        (
+            "conversation_1.csv",
+            "Date,Sender,Text,Is From Me,Has Attachments\n\
+2020-01-01T12:00:00+00:00,+15555550122,Hello,False,True\n",
+        ),
+        (
+            "conversation_1_attachments.csv",
+            "Date,Filename,Mime Type\n2020-01-01T12:00:00+00:00,photo.jpg,image/jpeg\n",
+        ),
+    ]);
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    assert_eq!(documents.len(), 1);
+
+    let dir = tempfile::tempdir().unwrap();
+    let attachments = dir.path().join("conversation_1_attachments.csv");
+    fs::write(&attachments, "Date,Filename\n").unwrap();
+    let err = convert(&attachments, &dir.path().join("out")).unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("not an OpenExtract conversation CSV"),
+        "{err}"
+    );
+}

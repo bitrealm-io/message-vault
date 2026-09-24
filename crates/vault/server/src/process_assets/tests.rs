@@ -412,6 +412,91 @@ fn an_upload_session_is_stale_after_a_day_by_its_manifest_or_its_folder() {
     assert!(!upload_session_is_stale(&with_manifest, now + limit / 2).unwrap());
 }
 
+/// An assets folder whose `.incoming/` holds one of each thing cleanup
+/// meets: a `.part` temp, a file that is not a `.part`, a multipart
+/// session two days old, and one still being uploaded.
+struct Incoming {
+    _dir: tempfile::TempDir,
+    assets: PathBuf,
+    part: PathBuf,
+    other_file: PathBuf,
+    stale_session: PathBuf,
+    fresh_session: PathBuf,
+}
+
+fn incoming_with_leftovers() -> Incoming {
+    let dir = tempfile::tempdir().unwrap();
+    let assets = dir.path().join("assets");
+    let incoming = assets.join(".incoming");
+    fs::create_dir_all(&incoming).unwrap();
+    let part = incoming.join(format!("{}-1.part", "a".repeat(64)));
+    fs::write(&part, b"half an upload").unwrap();
+    let other_file = incoming.join("notes.txt");
+    fs::write(&other_file, b"not a temp").unwrap();
+
+    let stale_session = incoming.join("b".repeat(64)).join("upload-stale");
+    fs::create_dir_all(&stale_session).unwrap();
+    let manifest = stale_session.join("manifest.json");
+    fs::write(&manifest, b"{}").unwrap();
+    let two_days_ago = SystemTime::now() - Duration::from_secs(2 * STALE_UPLOAD_SESSION_SECS);
+    fs::File::options()
+        .write(true)
+        .open(&manifest)
+        .unwrap()
+        .set_modified(two_days_ago)
+        .unwrap();
+
+    let fresh_session = incoming.join("c".repeat(64)).join("upload-fresh");
+    fs::create_dir_all(&fresh_session).unwrap();
+    fs::write(fresh_session.join("manifest.json"), b"{}").unwrap();
+
+    Incoming {
+        _dir: dir,
+        assets,
+        part,
+        other_file,
+        stale_session,
+        fresh_session,
+    }
+}
+
+#[test]
+fn incoming_cleanup_removes_part_temps_and_stale_sessions_and_nothing_else() {
+    let incoming = incoming_with_leftovers();
+
+    let removed = cleanup_incoming_parts(&incoming.assets, false).unwrap();
+
+    assert_eq!(removed, 2, "the .part temp and the stale session");
+    assert!(!incoming.part.exists());
+    assert!(!incoming.stale_session.exists());
+    assert!(
+        !incoming.stale_session.parent().unwrap().exists(),
+        "the stale session's emptied sha folder goes too"
+    );
+    assert!(incoming.other_file.exists(), "only .part files are temps");
+    assert!(
+        incoming.fresh_session.join("manifest.json").exists(),
+        "an upload still in progress is kept"
+    );
+}
+
+#[test]
+fn a_dry_run_of_incoming_cleanup_counts_what_it_would_remove_and_removes_nothing() {
+    let incoming = incoming_with_leftovers();
+
+    let removed = cleanup_incoming_parts(&incoming.assets, true).unwrap();
+
+    assert_eq!(removed, 2, "the .part temp and the stale session");
+    for kept in [
+        &incoming.part,
+        &incoming.other_file,
+        &incoming.stale_session.join("manifest.json"),
+        &incoming.fresh_session.join("manifest.json"),
+    ] {
+        assert!(kept.exists(), "a dry run removed {}", kept.display());
+    }
+}
+
 #[tokio::test]
 async fn store_and_update_derived_db() {
     let (pool, dir) = engine::test_pool().await;

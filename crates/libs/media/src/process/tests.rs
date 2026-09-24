@@ -343,6 +343,226 @@ fn clone_with_log_emits_nothing() {
     .unwrap();
     assert!(lines.is_empty());
 }
+
+#[test]
+fn is_efficient_accepts_only_hevc_within_the_resolution_and_bitrate_caps() {
+    let opts = CompressOptions::default(); // 1080p: long edge 1920
+    let cap = 12_000_000;
+    assert!(is_efficient("hevc", 1920, 1080, cap, &opts));
+    assert!(is_efficient("h265", 1080, 1920, 1_000_000, &opts));
+    assert!(!is_efficient("hevc", 1921, 1080, 1_000_000, &opts));
+    assert!(!is_efficient("hevc", 1080, 1921, 1_000_000, &opts));
+    assert!(!is_efficient("hevc", 1920, 1080, cap + 1, &opts));
+    assert!(!is_efficient("h264", 640, 480, 1_000_000, &opts));
+    assert!(!is_efficient("", 0, 0, 0, &opts));
+    let p720 = CompressOptions {
+        max_resolution: crate::MaxResolution::P720,
+        ..CompressOptions::default()
+    };
+    assert!(is_efficient("hevc", 1280, 720, 1_000_000, &p720));
+    assert!(!is_efficient("hevc", 1281, 720, 1_000_000, &p720));
+}
+
+/// Write a one-second 320x240 test pattern with the given video codec.
+fn write_test_video(path: &Path, codec: &[&str]) {
+    let mut args: Vec<String> = [
+        "-y",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=size=320x240:rate=10:duration=1",
+        "-pix_fmt",
+        "yuv420p",
+    ]
+    .iter()
+    .map(|s| (*s).to_string())
+    .collect();
+    args.extend(codec.iter().map(|s| (*s).to_string()));
+    args.push(path_str(path));
+    run_ffmpeg(&args).expect("generate test video");
+}
+
+/// One file through a media pass: its remap target, or `None` when skipped.
+fn process_single(
+    dir: &Path,
+    file: &Path,
+    mode: MediaMode,
+    opts: &CompressOptions,
+) -> Option<String> {
+    let (report, mut remap) =
+        process_attachment_files(dir, &[file.to_path_buf()], mode, opts, None).unwrap();
+    assert_eq!(report.errors, Vec::<String>::new());
+    let old_rel = rel_path(dir, file).unwrap();
+    let new_rel = remap.remove(&old_rel);
+    assert_eq!(report.processed, usize::from(new_rel.is_some()));
+    assert_eq!(report.skipped, usize::from(new_rel.is_none()));
+    new_rel
+}
+
+#[test]
+fn convert_turns_a_mov_into_an_mp4_and_removes_the_original() {
+    let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let attachments = dir.path().join("attachments");
+    fs::create_dir_all(&attachments).unwrap();
+    let mov = attachments.join("clip.mov");
+    write_test_video(&mov, &["-c:v", "libx264"]);
+
+    let new_rel = process_single(
+        dir.path(),
+        &mov,
+        MediaMode::Convert,
+        &CompressOptions::default(),
+    );
+
+    assert_eq!(new_rel.as_deref(), Some("attachments/clip.mp4"));
+    assert!(!mov.exists(), "the .mov was left behind");
+    let probe = probe_video(&attachments.join("clip.mp4")).unwrap();
+    assert_eq!(probe.codec, "h264", "a remux keeps the stream");
+}
+
+#[test]
+fn compress_only_remuxes_a_video_under_the_minimum_size() {
+    let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let attachments = dir.path().join("attachments");
+    fs::create_dir_all(&attachments).unwrap();
+    let mov = attachments.join("small.mov");
+    write_test_video(&mov, &["-c:v", "libx264"]);
+    let mp4 = attachments.join("other.mp4");
+    write_test_video(&mp4, &["-c:v", "libx264"]);
+    let mp4_before = fs::read(&mp4).unwrap();
+    let opts = CompressOptions {
+        min_size_bytes: 100 * 1024 * 1024,
+        ..CompressOptions::default()
+    };
+
+    let new_rel = process_single(dir.path(), &mov, MediaMode::Compress, &opts);
+    assert_eq!(new_rel.as_deref(), Some("attachments/small.mp4"));
+    assert!(!mov.exists());
+    let probe = probe_video(&attachments.join("small.mp4")).unwrap();
+    assert_eq!(
+        probe.codec, "h264",
+        "a small video is remuxed, not re-encoded"
+    );
+
+    // A small MP4 is already in the target container: nothing to do.
+    assert_eq!(
+        process_single(dir.path(), &mp4, MediaMode::Compress, &opts),
+        None
+    );
+    assert_eq!(fs::read(&mp4).unwrap(), mp4_before);
+}
+
+#[test]
+fn compress_re_encodes_a_large_video_and_skips_an_efficient_one() {
+    let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let attachments = dir.path().join("attachments");
+    fs::create_dir_all(&attachments).unwrap();
+    let opts = CompressOptions {
+        min_size_bytes: 0,
+        ..CompressOptions::default()
+    };
+
+    let avc = attachments.join("avc.mp4");
+    write_test_video(&avc, &["-c:v", "libx264"]);
+    // Exactly the minimum size is large enough.
+    let at_minimum = CompressOptions {
+        min_size_bytes: fs::metadata(&avc).unwrap().len(),
+        max_fps: 5.0,
+        ..CompressOptions::default()
+    };
+    let new_rel = process_single(dir.path(), &avc, MediaMode::Compress, &at_minimum);
+    assert_eq!(new_rel.as_deref(), Some("attachments/avc.mp4"));
+    let probe = crate::probe_media(&avc).unwrap();
+    assert_eq!(probe.codec, "hevc", "a large H.264 video is re-encoded");
+    assert_eq!(probe.fps, Some(5.0), "the frame rate is capped at max_fps");
+
+    // Already HEVC, small and low bitrate: re-encoding would buy nothing.
+    let hevc = attachments.join("hevc.mp4");
+    write_test_video(&hevc, &["-c:v", "libx265", "-tag:v", "hvc1"]);
+    let before = fs::read(&hevc).unwrap();
+    assert_eq!(
+        process_single(dir.path(), &hevc, MediaMode::Compress, &opts),
+        None
+    );
+    assert_eq!(fs::read(&hevc).unwrap(), before);
+
+    // With the skip turned off, the same file is re-encoded. A max fps of
+    // zero means no cap was given, and the pass uses 30.
+    let opts = CompressOptions {
+        skip_efficient: false,
+        max_fps: 0.0,
+        ..opts
+    };
+    assert_eq!(
+        process_single(dir.path(), &hevc, MediaMode::Compress, &opts).as_deref(),
+        Some("attachments/hevc.mp4")
+    );
+    assert_ne!(fs::read(&hevc).unwrap(), before);
+    assert_eq!(crate::probe_media(&hevc).unwrap().fps, Some(30.0));
+}
+
+#[test]
+fn compress_re_encodes_a_large_mp3_when_the_result_is_smaller() {
+    let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let attachments = dir.path().join("attachments");
+    fs::create_dir_all(&attachments).unwrap();
+    let mp3 = attachments.join("song.mp3");
+    run_ffmpeg(&[
+        "-y".into(),
+        "-loglevel".into(),
+        "error".into(),
+        "-f".into(),
+        "lavfi".into(),
+        "-i".into(),
+        "sine=frequency=440:duration=10".into(),
+        "-ac".into(),
+        "2".into(),
+        "-b:a".into(),
+        "320k".into(),
+        path_str(&mp3),
+    ])
+    .expect("generate mp3 fixture");
+    let before = fs::metadata(&mp3).unwrap().len();
+    assert!(before > MP3_COMPRESS_FLOOR, "fixture must clear the floor");
+
+    let new_rel = process_single(
+        dir.path(),
+        &mp3,
+        MediaMode::Compress,
+        &CompressOptions::default(),
+    );
+
+    assert_eq!(new_rel.as_deref(), Some("attachments/song.mp3"));
+    assert!(fs::metadata(&mp3).unwrap().len() < before);
+
+    // Convert leaves an MP3 alone, whatever its size.
+    let bytes = fs::read(&mp3).unwrap();
+    assert_eq!(
+        process_single(
+            dir.path(),
+            &mp3,
+            MediaMode::Convert,
+            &CompressOptions::default()
+        ),
+        None
+    );
+    assert_eq!(fs::read(&mp3).unwrap(), bytes);
+}
+
 #[test]
 fn process_attachment_files_touches_only_the_listed_files() {
     let Some(_tools) = crate::testutil::real_ffmpeg_test_guard() else {

@@ -28,7 +28,7 @@ The CSV `Attachment` cell usually contains only the original basename.
 
 ## Accepted input paths
 
-`--input` accepts:
+The path given on the Import form accepts:
 
 | Path | Files available to the importer |
 |------|---------------------------------|

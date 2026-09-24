@@ -3,7 +3,7 @@ title: "Converter capabilities"
 description: "What each backup converter writes, where it falls short, and links to input-format and mapping pages."
 ---
 
-These pages are Developer docs (CLI converters and field mapping). Day-to-day Import from a phone backup is in the [User Guide](/vault/user/import-from-a-backup/).
+These pages are Developer docs (the converter libraries and their field mapping; none has a command line, see [ADR 0001](https://github.com/bitrealm-io/message-vault/blob/main/docs/adr/0001-no-command-line-except-the-vault-server.md)). Day-to-day Import from a phone backup is in the [User Guide](/vault/user/import-from-a-backup/).
 
 What each converter writes (and where it falls short). Marks: **yes** / **partial** / **no**.
 
@@ -29,8 +29,8 @@ All converters build a **common message** per conversation (`ConversationDocumen
 | **Groups** | partial (PDU MMS) | yes (MMS) | partial (flat multi-address) | no | partial (WhatsApp roster weak) | yes (title + sender phones) | yes (full DB roster) |
 | **Attachments** | partial (PDU only; XML none) | yes (MMS) | yes (archive pairing heuristic) | no (flag only) | yes | yes (media paths via wtsexporter) | yes |
 | **Media modes** (`clone`/`convert`/`compress`) | yes | yes | yes | no | yes | yes | yes (`clone`/`basic`/`full`/`disabled`) |
-| **Contacts** | optional | optional | optional | recommended | recommended | via `--wa` / wtsexporter | optional |
-| **Owner phone CLI** | required | required | required (+ owner email) | no | no | no | no |
+| **Contacts** | optional | optional | optional | recommended | recommended | via the `wa.db` path / wtsexporter | optional |
+| **Owner phone** (Import form) | required | required | required (+ owner email) | no | no | no | no |
 
 ## Deficiencies
 
@@ -40,7 +40,7 @@ All converters build a **common message** per conversation (`ConversationDocumen
 | **SMS Backup & Restore** | Call logs ignored; drafts / failed / queued skipped; encrypted ZIP not supported (unlock first) |
 | **SMS Backup+** | Offline `.eml` only (no IMAP); archive attachment→message pairing is guesswork; unresolved peers → `unknown.csv` |
 | **OpenExtract** | No media extraction; no groups; thin source format; name-only chats common without a good VCF |
-| **iMazing** | Reactions/replies are free text; WhatsApp groups lack full roster; naive dates need `--timezone` |
+| **iMazing** | Reactions/replies are free text; WhatsApp groups lack full roster; naive dates are read in the host's local zone because the Import form has no zone field |
 | **WhatsApp** | Requires external `wtsexporter` (pip or bundled binary); LID / non-phone JIDs stay raw; full group roster depends on upstream JSON |
 | **iMessage** (`imessage-ir-exporter`) | No WhatsApp; reads the database through the separate `imessage-reader` program (GPL, shipped beside the app) because `imessage-database` is GPL and the app is not; needs Mac/`chat.db` or iOS backup; no TXT/HTML |
 
@@ -57,8 +57,8 @@ All converters build a **common message** per conversation (`ConversationDocumen
 | **Reactions / tapbacks** | no | no | no | no | free-text in `source_fields_json` | reactions in `source_fields_json` | structured `tapbacks_json` |
 | **Edits / replies** | no | no | no | no | raw dates / free-text | reply in `source_fields_json` | `edits_json` / thread GUIDs |
 | **Source extras** | `pdu_*` (in `source_fields_json`) | `subject`, `message_kind`, `source_fields_json` | `smssync_id`, `eml_path` (in `source_fields_json`) | `source_kind`, `has_attachments` (in `source_fields_json`) | vendor cols (in `source_fields_json`) | `jid` / `key_id` (in `source_fields_json`) | `parts_json`, `app_json`, … |
-| **Timezone** | XML/PDU epoch | XML epoch | EML dates | vendor `Date` | naive + `--timezone` | epoch from wtsexporter | DB epoch + offset |
-| **Skip diagnostics** | `skipped_*.csv` (invalid address, empty PDU, no party) | counters on stderr | counters on stderr | unresolved phone count | counters on stderr | counters on stderr | counters on stderr |
+| **Timezone** | XML/PDU epoch | XML epoch | EML dates | vendor `Date` | naive, host local zone | epoch from wtsexporter | DB epoch + offset |
+| **Skip diagnostics** | `skipped_*.csv` (invalid address, empty PDU, no party) plus run summary counters | run summary counters | run summary counters | unresolved phone count | run summary counters | run summary counters | run summary counters |
 
 Discord, Signal, Telegram, and Slack are recognized services in the shared model (`IrService`), but no exporter parses those backup sources yet — they are future sources, listed as **no** until an exporter lands.
 
@@ -74,6 +74,6 @@ Discord, Signal, Telegram, and Slack are recognized services in the shared model
 | WhatsApp | [Import methods](/vault/user/prepare-a-backup/android-whatsapp/) |
 | iMessage | [Prepare a backup](/vault/user/prepare-a-backup/iphone-ipad/) |
 
-**Common message:** end-user [export structure](/vault/developer/reference/export-structure/); schema [message-ir architecture](/vault/developer/architecture/common-message/). All exporters parse to `ConversationDocument` then project via `message_ir_format::FormatSink` (per-chat JSON/JSONL/CSV/EML/MBOX, or one SyncTech `smses.xml` with `--format xml`). Output formats: [mail archives](/vault/developer/formats/mail-archive/) and [SMS Backup & Restore XML](/vault/developer/formats/sms-backup-restore-xml/). Attachment modes (none / copy / convert / compress) and obfuscate apply through `FormatSink` for every format.
+**Common message:** end-user [export structure](/vault/developer/reference/export-structure/); schema [message-ir architecture](/vault/developer/architecture/common-message/). All exporters parse to `ConversationDocument` then project via `message_ir_format::FormatSink` (per-chat JSON/JSONL/CSV/EML/MBOX, or one SyncTech `smses.xml` as the XML format). Output formats: [mail archives](/vault/developer/formats/mail-archive/) and [SMS Backup & Restore XML](/vault/developer/formats/sms-backup-restore-xml/). Attachment modes (none / copy / convert / compress) and obfuscate apply through `FormatSink` for every format.
 
 **Convert:** [`message-reexport`](/vault/developer/formats/convert/) converts an existing Message Vault output directory to another format, detecting the input format from the folder. Export uses it for any format other than JSON Lines. Not a vendor backup source.

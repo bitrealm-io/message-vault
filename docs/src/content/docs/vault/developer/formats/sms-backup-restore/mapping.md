@@ -9,9 +9,11 @@ Input structure and attribute meanings: [input format](/vault/developer/formats/
 
 ## Pipeline
 
-Source XML → `ConversationDocument` → packaging (`--format json|jsonl|csv|eml|mbox|xml`; default `json`).
+Source XML → `ConversationDocument` → packaging.
 
-With `--format csv`: one file per conversation. Decoded MMS media under `attachments/` when copying/embedding. Filenames: 1:1 → `+E164.csv`; untitled groups → `group_+A_+B_….csv`. `--format xml` writes a single SyncTech `smses.xml`.
+The desktop app's Import screen always writes JSON Lines, one file per conversation, because Import and Push read conversation files in that form. Every other format (JSON, CSV, EML, MBOX, SMS Backup & Restore XML) is a rewrite of that output through [Convert](/vault/developer/formats/convert/), which Export and **Settings → Convert** run.
+
+In CSV form: one file per conversation. Decoded MMS media under `attachments/` when copying/embedding. Filenames: 1:1 → `+E164.csv`; untitled groups → `group_+A_+B_….csv`. The XML form is a single SyncTech `smses.xml`.
 ## Source → shared fields
 
 | Shared field | SMS / MMS source |

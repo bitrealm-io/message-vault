@@ -5,7 +5,7 @@ description: "EML and MBOX layout and X-ME headers used when Message Vault write
 
 Design for a human-viewable export: **one folder per conversation**, **one `.eml` per message**, with structured `X-ME-*` headers for machine fidelity. Intended as an archive / interchange path before vault exists. Mail clients can open individual messages; translators can recover SMS, group MMS, and (later) iMessage semantics without relying on CSV.
 
-**Status:** Writer in [`message-mail`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/mail/). All GUI exporters support `--format eml` / `mbox`. All exporters (including iMessage via [`imessage-ir-exporter`](https://github.com/bitrealm-io/message-vault/blob/main/crates/exporters/imessage-ir-exporter/)) go backup → [shared conversation structure](/vault/developer/reference/export-structure/) ([`message-ir`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/ir/)) → output format (see [message-ir architecture](/vault/developer/architecture/common-message/)). JSON is the default format. iMessage writes extension headers; handwriting attaches SVG. See also [CSV columns](/vault/developer/reference/csv-columns/).
+**Status:** Writer in [`message-mail`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/mail/). Every exporter's output can be rewritten as EML or MBOX through [Convert](/vault/developer/formats/convert/). All exporters (including iMessage via [`imessage-ir-exporter`](https://github.com/bitrealm-io/message-vault/blob/main/crates/exporters/imessage-ir-exporter/)) go backup → [shared conversation structure](/vault/developer/reference/export-structure/) ([`message-ir`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/ir/)) → output format (see [message-ir architecture](/vault/developer/architecture/common-message/)). JSON is the default format. iMessage writes extension headers; handwriting attaches SVG. See also [CSV columns](/vault/developer/reference/csv-columns/).
 
 ## Goals
 
@@ -341,7 +341,7 @@ Normal sticker sends: image MIME part + `X-ME-Attachment-Meta` (`is_sticker`, `s
 ## Implementation notes
 
 1. Crate [`message-mail`](https://github.com/bitrealm-io/message-vault/blob/main/crates/libs/mail/) emits one `.eml` / mboxrd record per message (`write_mail_package`).
-2. **Android / OpenExtract / iMazing / WhatsApp** exporters map pending rows → `MailMessage` (`--format eml|mbox`).
+2. **Android / OpenExtract / iMazing / WhatsApp** exporters map pending rows → `MailMessage` for the EML and MBOX formats.
 3. **iMessage** is [`imessage-ir-exporter`](https://github.com/bitrealm-io/message-vault/blob/main/crates/exporters/imessage-ir-exporter/) (`imessage-database` → common message → packaging).
 4. Deferred: Digital Touch animation, translations UI, HEIC convert / obfuscate inside MIME, Askama HTML bodies.
 

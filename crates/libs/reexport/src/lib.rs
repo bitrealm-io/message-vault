@@ -336,13 +336,13 @@ fn list_artifacts(input_dir: &Path, format: OutputFormat) -> Result<Vec<PathBuf>
     Ok(paths)
 }
 
-/// True for sidecar files that are not conversation artifacts.
+/// True for sidecar files that are not conversation artifacts. `.tmp`
+/// covers `.xml.tmp` as well.
 fn ignored_artifact(name: &str) -> bool {
     name == "attachments"
         || name.starts_with('.')
         || name.ends_with(".meta.json")
         || name.ends_with(".tmp")
-        || name.ends_with(".xml.tmp")
         || name.ends_with(".xml.sbrbody")
 }
 

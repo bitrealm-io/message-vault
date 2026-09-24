@@ -5,7 +5,7 @@ use crate::db::contacts::UNKNOWN_CONTACT_SQL;
 use crate::db::dialect::name_eq_ci;
 use crate::db::engine::DbEngine;
 
-use super::bridge::{Heard, ListCtx, MessageAgg, Sql, contact_conversations_link, contact_heard};
+use super::bridge::{ListCtx, MessageAgg, Sql, TrashScope};
 use super::error::{QueryError, QueryErrorKind};
 use super::fts;
 use super::parse::{Expr, FieldTerm, TextTerm};
@@ -26,6 +26,21 @@ pub(crate) fn not_trashed_conversation(conv: &str) -> String {
     )
 }
 
+/// Contact `ct` is not in the trash: [`NOT_TRASHED_CONTACT`] for a subquery
+/// whose contacts alias is not `ct`.
+pub(crate) fn not_trashed_contact(ct: &str) -> String {
+    not_trashed_contact_id(&format!("{ct}.account_id"), &format!("{ct}.id"))
+}
+
+/// The contact with id `id_expr` in account `account_expr` is not in the
+/// trash, for a row that carries a contact id without joining `contacts`
+/// (a `contact_handles` or a `participants` row).
+pub(crate) fn not_trashed_contact_id(account_expr: &str, id_expr: &str) -> String {
+    format!(
+        "NOT EXISTS (SELECT 1 FROM trashed_contacts tct WHERE tct.account_id = {account_expr} AND tct.contact_id = {id_expr})"
+    )
+}
+
 /// Compile a parsed query into one parenthesised WHERE fragment.
 pub(crate) fn compile(
     list: ListKind,
@@ -34,18 +49,27 @@ pub(crate) fn compile(
     engine: DbEngine,
     zone: chrono_tz::Tz,
 ) -> Result<Filter, QueryError> {
+    let uses = |word: &str| expr.is_some_and(|e| e.uses(word));
+    // `trashed:` anywhere in the query lifts the trash everywhere the search
+    // looks: the list's own default below, and the rows a word reaches on
+    // another list (#724).
+    let trash = if uses("trashed") {
+        TrashScope::Counted
+    } else {
+        TrashScope::LeftOut
+    };
     let ctx = ListCtx {
         list,
         engine,
         account_id,
         zone,
+        trash,
     };
     let mut out = Sql::default();
     out.push("(");
     out.push(ctx.account_col());
     out.push(" = ");
     out.bind_int(ctx.account_id);
-    let uses = |word: &str| expr.is_some_and(|e| e.uses(word));
     match list {
         ListKind::Contacts => {
             if !uses("trashed") {
@@ -189,9 +213,18 @@ const PARTICIPANT_NAME: &str =
 /// two contacts are merged, or an address book adopts someone. Joining on
 /// `participants.contact_id` therefore showed one name in the conversation
 /// list and found a different one with `name:`.
-const PARTICIPANTS_WITH_CONTACT: &str = "participants p \
-     LEFT JOIN contact_handles pch ON pch.handle_id = p.handle_id AND pch.account_id = c.account_id \
-     LEFT JOIN contacts pct ON pct.id = pch.contact_id AND pct.account_id = c.account_id";
+///
+/// A contact in the trash is not joined unless the query carries `trashed:`
+/// (#724): `pct` is then NULL for its participant, and the name read is the
+/// one the source gave, as for a participant linked to no contact.
+fn participants_with_contact(trash: TrashScope) -> String {
+    format!(
+        "participants p \
+         LEFT JOIN contact_handles pch ON pch.handle_id = p.handle_id AND pch.account_id = c.account_id \
+         LEFT JOIN contacts pct ON pct.id = pch.contact_id AND pct.account_id = c.account_id{}",
+        trash.contact_clause("pct")
+    )
+}
 
 /// Free text: the row's own text, one meaning applied per row type.
 fn emit_text(ctx: &ListCtx, out: &mut Sql, term: &TextTerm) {
@@ -217,7 +250,8 @@ fn emit_text(ctx: &ListCtx, out: &mut Sql, term: &TextTerm) {
             // and record no address for them, and that person is searchable by
             // the name the source gave.
             out.push(&format!(
-                ") OR EXISTS (SELECT 1 FROM {PARTICIPANTS_WITH_CONTACT} LEFT JOIN handles ph ON ph.id = p.handle_id WHERE p.conversation_id = c.id AND ("
+                ") OR EXISTS (SELECT 1 FROM {} LEFT JOIN handles ph ON ph.id = p.handle_id WHERE p.conversation_id = c.id AND (",
+                participants_with_contact(ctx.trash)
             ));
             free_text_match(out, "coalesce(ph.raw, '')", term);
             out.push(" OR ");
@@ -272,10 +306,8 @@ fn emit_one(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result
         "kind" | "service" | "source" | "attachment" | "size" | "trashed" => {
             emit_kind_word(ctx, out, term, v)
         }
-        "date" | "first-message" | "last-message" | "first-heard" | "last-heard" | "messages"
-        | "conversations" | "groups" | "participants" | "attachments" => {
-            emit_measure_word(ctx, out, term, v)
-        }
+        "date" | "first-message" | "last-message" | "messages" | "conversations" | "groups"
+        | "participants" | "attachments" => emit_measure_word(ctx, out, term, v),
         other => Err(QueryError::new(
             QueryErrorKind::BadValue,
             term.span.clone(),
@@ -354,7 +386,8 @@ fn emit_text_word(
         }
         ("name", _) => ctx.conversation(out, |o| {
             o.push(&format!(
-                "EXISTS (SELECT 1 FROM {PARTICIPANTS_WITH_CONTACT} WHERE p.conversation_id = c.id AND "
+                "EXISTS (SELECT 1 FROM {} WHERE p.conversation_id = c.id AND ",
+                participants_with_contact(ctx.trash)
             ));
             result = text_match(o, PARTICIPANT_NAME, term, v);
             o.push(")");
@@ -425,7 +458,10 @@ fn emit_text_word(
 
 /// The handle with id `handle_id_expr` belongs to the person `v`: by contact
 /// id, or by a contains-or-prefix match on the handle or the contact's name.
+/// The contact is read only when it is not in the trash, unless the query
+/// carries `trashed:` (#724); the handle itself still matches by text.
 fn person_matches(
+    ctx: &ListCtx,
     out: &mut Sql,
     handle_id_expr: &str,
     term: &FieldTerm,
@@ -437,13 +473,18 @@ fn person_matches(
                 "EXISTS (SELECT 1 FROM contact_handles chp WHERE chp.handle_id = {handle_id_expr} AND chp.contact_id = "
             ));
             out.bind_int(*id);
+            if ctx.trash == TrashScope::LeftOut {
+                out.push(" AND ");
+                out.push(&not_trashed_contact_id("chp.account_id", "chp.contact_id"));
+            }
             out.push(")");
             Ok(())
         }
         Value::Text(t) | Value::Prefix(t) => {
             let prefix = matches!(v, Value::Prefix(_));
             out.push(&format!(
-                "EXISTS (SELECT 1 FROM handles hp LEFT JOIN contact_handles chp ON chp.handle_id = hp.id AND chp.account_id = hp.account_id LEFT JOIN contacts ctp ON ctp.id = chp.contact_id WHERE hp.id = {handle_id_expr} AND ("
+                "EXISTS (SELECT 1 FROM handles hp LEFT JOIN contact_handles chp ON chp.handle_id = hp.id AND chp.account_id = hp.account_id LEFT JOIN contacts ctp ON ctp.id = chp.contact_id{} WHERE hp.id = {handle_id_expr} AND (",
+                ctx.trash.contact_clause("ctp")
             ));
             like_contains(out, "hp.raw", t, prefix);
             out.push(" OR ");
@@ -458,17 +499,27 @@ fn person_matches(
 }
 
 /// The participant row `p` (with `pct` the Contact its handle is on, when
-/// any, in scope via [`PARTICIPANTS_WITH_CONTACT`]) is itself the person `v`:
+/// any, in scope via [`participants_with_contact`]) is itself the person `v`:
 /// by contact id, or by a contains-or-prefix match on their display name.
 /// This is how `with:` reaches a participant the source only named —
 /// `handle_id` NULL, so `person_matches` on it never sees them, and neither
 /// does the `contact_handles` join, which leaves `pct` NULL and the name
 /// coming from `p.name_alias`.
-fn participant_matches(out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
+fn participant_matches(
+    ctx: &ListCtx,
+    out: &mut Sql,
+    term: &FieldTerm,
+    v: &Value,
+) -> Result<(), QueryError> {
     match v {
         Value::Id(id) => {
-            out.push("p.contact_id = ");
+            out.push("(p.contact_id = ");
             out.bind_int(*id);
+            if ctx.trash == TrashScope::LeftOut {
+                out.push(" AND ");
+                out.push(&not_trashed_contact_id("c.account_id", "p.contact_id"));
+            }
+            out.push(")");
             Ok(())
         }
         Value::Text(t) | Value::Prefix(t) => {
@@ -491,16 +542,17 @@ fn with_person(
     let mut result = Ok(());
     ctx.conversation(out, |o| {
         o.push("(");
-        result = person_matches(o, "c.chat_handle_id", term, v);
+        result = person_matches(ctx, o, "c.chat_handle_id", term, v);
         o.push(&format!(
-            " OR EXISTS (SELECT 1 FROM {PARTICIPANTS_WITH_CONTACT} WHERE p.conversation_id = c.id AND ("
+            " OR EXISTS (SELECT 1 FROM {} WHERE p.conversation_id = c.id AND (",
+            participants_with_contact(ctx.trash)
         ));
         if result.is_ok() {
-            result = person_matches(o, "p.handle_id", term, v);
+            result = person_matches(ctx, o, "p.handle_id", term, v);
         }
         o.push(" OR ");
         if result.is_ok() {
-            result = participant_matches(o, term, v);
+            result = participant_matches(ctx, o, term, v);
         }
         o.push(")))");
     });
@@ -617,7 +669,7 @@ fn emit_people_word(
 ) -> Result<(), QueryError> {
     match term.spec.word {
         "with" => with_person(ctx, out, term, v),
-        "from" => emit_from(out, term, v),
+        "from" => emit_from(ctx, out, term, v),
         "to" => emit_to(ctx, out, term, v),
         "in" => emit_in(ctx, out, term, v),
         "group" => emit_set_word(ctx, out, term, v, CONTACT_GROUPS),
@@ -629,13 +681,13 @@ fn emit_people_word(
 
 /// `from:me` is the outgoing flag; `from:<person>` is an incoming message
 /// whose sender handle is that person.
-fn emit_from(out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
+fn emit_from(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<(), QueryError> {
     if matches!(v, Value::Keyword("me")) {
         out.push("m.is_from_me = 1");
         return Ok(());
     }
     out.push("(m.is_from_me = 0 AND m.sender_handle_id IS NOT NULL AND ");
-    let result = person_matches(out, "m.sender_handle_id", term, v);
+    let result = person_matches(ctx, out, "m.sender_handle_id", term, v);
     out.push(")");
     result
 }
@@ -651,7 +703,7 @@ fn emit_to(ctx: &ListCtx, out: &mut Sql, term: &FieldTerm, v: &Value) -> Result<
     let mut result = with_person(ctx, out, term, v);
     out.push(" AND (m.is_from_me = 1 OR m.sender_handle_id IS NULL OR NOT ");
     if result.is_ok() {
-        result = person_matches(out, "m.sender_handle_id", term, v);
+        result = person_matches(ctx, out, "m.sender_handle_id", term, v);
     }
     out.push("))");
     result
@@ -932,16 +984,16 @@ fn date_sql(out: &mut Sql, expr: &str, cmp: &DateCmp, zone: chrono_tz::Tz) {
     }
 }
 
-/// The ten date-and-count words: `date`, `first-message`, `last-message`,
-/// `first-heard`, `last-heard`, `messages`, `conversations`, `groups`,
-/// `participants`, `attachments`. `first-message:`, `last-message:`, and
-/// `messages:` compare through one aggregate over the base row's messages
-/// (`ListCtx::message_aggregate`); `first-heard:` and `last-heard:` compare
-/// the messages the contact sent (`contact_heard`); the other plural words
-/// are correlated counts. `first-heard:`, `last-heard:`, `groups:` and
-/// `conversations:` are registered for Contacts only, so they read `ct.`
-/// directly; `attachments:` is registered for Messages only, so it reads
-/// `m.` directly.
+/// The eight date-and-count words: `date`, `first-message`, `last-message`,
+/// `messages`, `conversations`, `groups`, `participants`, `attachments`.
+/// `date:` asks the base row's messages through `ListCtx::message`;
+/// `first-message:`, `last-message:`, and `messages:` compare through one
+/// aggregate over them (`ListCtx::message_aggregate`). On Contacts both are
+/// the messages the contact sent (`contact_sent_messages`). The other
+/// plural words are correlated counts. `groups:` and `conversations:` are
+/// registered for Contacts only, so they read `ct.` directly;
+/// `attachments:` is registered for Messages only, so it reads `m.`
+/// directly.
 fn emit_measure_word(
     ctx: &ListCtx,
     out: &mut Sql,
@@ -963,14 +1015,6 @@ fn emit_measure_word(
             date_sql(out, &expr, cmp, ctx.zone);
             Ok(())
         }
-        ("first-heard", Value::Date(cmp)) => {
-            date_sql(out, &contact_heard(Heard::First), cmp, ctx.zone);
-            Ok(())
-        }
-        ("last-heard", Value::Date(cmp)) => {
-            date_sql(out, &contact_heard(Heard::Last), cmp, ctx.zone);
-            Ok(())
-        }
         ("messages", Value::Count(cmp)) => {
             let expr = ctx.message_aggregate(MessageAgg::Count);
             cmp_sql(out, &expr, cmp);
@@ -979,7 +1023,7 @@ fn emit_measure_word(
         ("conversations", Value::Count(cmp)) => {
             let expr = format!(
                 "(SELECT COUNT(*) FROM conversations c2 WHERE {})",
-                contact_conversations_link("c2")
+                ctx.contact_conversations_link("c2")
             );
             cmp_sql(out, &expr, cmp);
             Ok(())

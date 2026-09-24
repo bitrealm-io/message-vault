@@ -10,7 +10,7 @@ import {
 } from "./advancedSearchStyles";
 import type { DateBoundFilter, DateBoundOp } from "./buildAdvancedQuery";
 
-/** Compact DateField used under the First/Last Heard operators (label is sr-only). */
+/** Compact DateField used under the First/Last message operators (label is sr-only). */
 function BoundDateInput({
   label,
   pickAriaLabel,

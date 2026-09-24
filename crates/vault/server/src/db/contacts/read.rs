@@ -13,6 +13,7 @@ use crate::db::dialect::{engine_of, group_concat_unit_separator, name_ci_expr};
 use crate::db::handles::{infer_handle_type_from_shape, normalize_handle};
 use crate::db::sql::{SqlParam, bind_args, in_placeholders, renumber_placeholders};
 use crate::paging::{Direction, MAX_CONTACT_SUMMARY_IDS, Page, SortKey};
+use crate::search::bridge::{TrashScope, contact_sent_messages};
 use crate::search::emit::{NOT_TRASHED_CONTACT, NOT_TRASHED_CONVERSATION};
 use crate::server::ApiError;
 
@@ -35,9 +36,11 @@ pub struct ContactSummary {
     /// When the contact’s address-book shape last changed (`datetime('now')`).
     pub last_modified: String,
     /// When the vault last heard from the contact: the newest message one of
-    /// the contact's identities sent (RFC 3339, UTC). Null when none of them
-    /// ever sent a message. Not the contact's last activity: a message the
-    /// account owner sent, or another member of a group chat, does not count.
+    /// the contact's identities sent (RFC 3339, UTC), conversations in the
+    /// trash and duplicate messages left out. Null when none of them ever
+    /// sent a message. Not the contact's last activity: a message the
+    /// account owner sent, or another member of a group chat, does not
+    /// count. The same question `last-message:` asks on Contacts.
     pub last_heard_at: Option<String>,
     /// Group names on this contact (A–Z).
     #[serde(default)]
@@ -184,10 +187,10 @@ pub async fn list_contacts_sorted(
     let total = total.max(0) as u64;
 
     let order_by = contact_order_by(order);
-    // `last_heard_at` is the newest message one of the contact's handles sent.
-    // A flagged duplicate carries the same timestamp as the message it
-    // duplicates, so it cannot move the maximum and is not filtered out; that
-    // keeps the lookup on `ix_messages_sender_timestamp` alone.
+    // `last_heard_at` is the newest message the contact sent, by the one
+    // definition `last-message:` on Contacts uses, so the column and the word
+    // cannot drift. It leaves the trash out whatever `q` says: the column is
+    // not asked for the trash (#725).
     let sql = renumber_placeholders(&format!(
         "SELECT * FROM (SELECT ct.id,
                 trim(ct.preferred_name) AS name,
@@ -210,10 +213,7 @@ pub async fn list_contacts_sorted(
                      AND h.raw IS NOT NULL AND trim(h.raw) != ''
                  )) AS addresses,
                 ct.last_modified,
-                (SELECT MAX(m.timestamp)
-                 FROM contact_handles ch
-                 JOIN messages m ON m.sender_handle_id = ch.handle_id
-                 WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id) AS last_heard_at,
+                (SELECT MAX(m.timestamp) {sent}) AS last_heard_at,
                 (SELECT {groups_agg}
                  FROM contact_group_members clm
                  JOIN contact_groups cl ON cl.id = clm.group_id
@@ -224,6 +224,7 @@ pub async fn list_contacts_sorted(
          LIMIT ? OFFSET ?",
         unknown = UNKNOWN_CONTACT_SQL,
         addresses_agg = group_concat_unit_separator(engine, "val"),
+        sent = contact_sent_messages(TrashScope::LeftOut),
         groups_agg = group_concat_unit_separator(engine, "cl.name"),
     ));
     let mut params = filter.params().to_vec();
@@ -328,13 +329,14 @@ pub struct ContactTotals {
     pub direct: u64,
     /// Group conversations the contact appears in.
     pub groups: u64,
-    /// Messages across all of the contact's conversations.
+    /// Messages the contact sent, in any of its conversations.
     pub messages: u64,
 }
 
-/// Counts over the conversations the contact is in, trashed ones excluded.
-/// Scoped to those conversations on purpose: grouping the whole account's
-/// messages table dominated drawer latency.
+/// Conversation counts over the conversations the contact is in, and the
+/// count of messages the contact sent, trashed conversations left out of
+/// both. The message count is `messages:` on Contacts by the same
+/// definition ([`contact_sent_messages`]), so the drawer and a search agree.
 ///
 /// # Errors
 ///
@@ -355,11 +357,11 @@ pub async fn contact_totals(
              SELECT
                (SELECT COUNT(*) FROM involved WHERE conversation_type = 'individual'),
                (SELECT COUNT(*) FROM involved WHERE conversation_type = 'group'),
-               (SELECT COUNT(*) FROM messages m
-                WHERE m.duplicate_of IS NULL
-                  AND m.conversation_id IN (SELECT id FROM involved))",
+               COALESCE((SELECT (SELECT COUNT(*) {sent})
+                         FROM contacts ct WHERE ct.account_id = $1 AND ct.id = $2), 0)",
         involves_contact_sql = involves_contact_sql(),
         not_trashed_conversation = NOT_TRASHED_CONVERSATION,
+        sent = contact_sent_messages(TrashScope::LeftOut),
     ))
     .bind(account_id)
     .bind(contact_id)

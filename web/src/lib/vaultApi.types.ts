@@ -1455,7 +1455,11 @@ export interface components {
             name: string;
             /**
              * Format: int64
-             * @description Messages across all of the contact's conversations.
+             * @description Messages the contact sent, in any of its conversations, direct or
+             *     group: the account holder's own messages and other people's messages
+             *     in a shared group are not counted, and neither are conversations in
+             *     the trash or duplicate messages. `messages:` on Contacts counts the
+             *     same messages.
              */
             total_messages: number;
             /**
@@ -1529,9 +1533,11 @@ export interface components {
             identity_count: number;
             /**
              * @description When the vault last heard from the contact: the newest message one of
-             *     the contact's identities sent (RFC 3339, UTC). Null when none of them
-             *     ever sent a message. Not the contact's last activity: a message the
-             *     account owner sent, or another member of a group chat, does not count.
+             *     the contact's identities sent (RFC 3339, UTC), conversations in the
+             *     trash and duplicate messages left out. Null when none of them ever
+             *     sent a message. Not the contact's last activity: a message the
+             *     account owner sent, or another member of a group chat, does not
+             *     count. The same question `last-message:` asks on Contacts.
              */
             last_heard_at?: string | null;
             /** @description When the contact’s address-book shape last changed (`datetime('now')`). */
@@ -2424,9 +2430,11 @@ export interface components {
                 identity_count: number;
                 /**
                  * @description When the vault last heard from the contact: the newest message one of
-                 *     the contact's identities sent (RFC 3339, UTC). Null when none of them
-                 *     ever sent a message. Not the contact's last activity: a message the
-                 *     account owner sent, or another member of a group chat, does not count.
+                 *     the contact's identities sent (RFC 3339, UTC), conversations in the
+                 *     trash and duplicate messages left out. Null when none of them ever
+                 *     sent a message. Not the contact's last activity: a message the
+                 *     account owner sent, or another member of a group chat, does not
+                 *     count. The same question `last-message:` asks on Contacts.
                  */
                 last_heard_at?: string | null;
                 /** @description When the contact’s address-book shape last changed (`datetime('now')`). */

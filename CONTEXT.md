@@ -121,8 +121,11 @@ identities was the sender of, shown on the contact list and one of the two ways
 the list can be ordered. It is not the contact's last activity. A message the
 account owner sent to the contact, or one another member of a group chat
 sent, does not move it, because neither is hearing from the contact. A
-contact none of whose identities ever sent a message has no date and sorts last
-whichever way the list runs.
+message in a conversation in the Trash does not move it either: the column
+is not asked for the Trash, so it leaves the Trash out, and `last-message:`
+on Contacts asks the same question with the same answer. A contact none of
+whose identities ever sent a message has no date and sorts last whichever way
+the list runs.
 _Avoid_: Last seen, Last active, Last message
 
 **Unknown**:
@@ -134,7 +137,11 @@ _Avoid_: Unnamed, Unresolved, Uncategorised
 Where a person sets aside conversations and contacts they do not want to
 see. Membership is explicit, nothing in it is deleted, and a trashed
 conversation can still be opened and read. Lists leave the trash out unless
-asked to show it. A trashed contact stays set aside until an import meets
+asked to show it, and so does everything a search looks at on the way to its
+answer: a trashed conversation is not one of a contact's conversations and a
+trashed contact is not one of a conversation's contacts, until the search
+asks for the trash with `trashed:`, and then the trash counts everywhere that
+search looks. A trashed contact stays set aside until an import meets
 one of its identities: the import then discards the trashed contact together
 with every identity it had and makes a new contact from the backup, as a first
 import would. The trash is the only door to permanent

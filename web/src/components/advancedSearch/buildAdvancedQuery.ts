@@ -1,7 +1,6 @@
 import {
   advancedContacts,
   advancedMessages,
-  advancedTrash,
   type ContactsQueryInput,
   type CountFilterInput,
   composeCountComparison,
@@ -25,15 +24,14 @@ export { composeCountComparison };
 
 /**
  * Which form the panel shows. `messages` is the conversation-list form,
- * `contacts` the contact-list form. `trash` is the form for a screen that
- * sends one query to both the contacts and the conversations list, so it may
- * only offer words both accept. The contacts form's `name:`, `handle:`,
- * `messages:`, and `service:` are registered on both lists, while the
- * messages form's `participants:` is conversations-only; so Trash shows the
- * contacts form, without its `first-heard:` and `last-heard:` dates, which
- * are Contacts words.
+ * `contacts` the contact-list form. Trash sends one query to both the
+ * contacts and the conversations list, so it may only offer words both
+ * accept: it shows the contacts form, every word of which (`name:`,
+ * `handle:`, `first-message:`, `last-message:`, `messages:`, `service:`) is
+ * registered on both lists, while the messages form's `participants:` is
+ * conversations-only.
  */
-export type AdvancedSearchMode = "messages" | "contacts" | "trash";
+export type AdvancedSearchMode = "messages" | "contacts";
 
 export const EMPTY_COUNT: CountFilterInput = { comparator: "any", value: "" };
 export const EMPTY_DATE_BOUND: DateBoundFilter = { op: "any", start: "", end: "" };
@@ -51,10 +49,6 @@ export function buildContactsQuery(input: ContactsQueryInput): string {
   return advancedContacts(input);
 }
 
-export function buildTrashQuery(input: ContactsQueryInput): string {
-  return advancedTrash(input);
-}
-
 export function canSubmitMessages(input: MessagesQueryInput): boolean {
   return Boolean(
     input.nameOrHandle.trim() ||
@@ -68,8 +62,8 @@ export function canSubmitContacts(input: ContactsQueryInput): boolean {
   return Boolean(
     input.contactName.trim() ||
       input.handle.trim() ||
-      dateBoundHasValue(input.firstHeardBound) ||
-      dateBoundHasValue(input.lastHeardBound) ||
+      dateBoundHasValue(input.firstMessageBound) ||
+      dateBoundHasValue(input.lastMessageBound) ||
       input.activity !== "any" ||
       input.noPreferredName ||
       input.noHandle ||

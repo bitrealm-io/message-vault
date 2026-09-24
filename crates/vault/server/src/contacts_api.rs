@@ -90,7 +90,11 @@ pub struct Contact {
     pub direct_conversations: u64,
     /// Group conversations the contact appears in.
     pub group_conversations: u64,
-    /// Messages across all of the contact's conversations.
+    /// Messages the contact sent, in any of its conversations, direct or
+    /// group: the account holder's own messages and other people's messages
+    /// in a shared group are not counted, and neither are conversations in
+    /// the trash or duplicate messages. `messages:` on Contacts counts the
+    /// same messages.
     pub total_messages: u64,
     /// When the contact’s address-book shape last changed (`datetime('now')`).
     pub last_modified: String,

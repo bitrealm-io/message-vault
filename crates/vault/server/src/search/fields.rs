@@ -41,7 +41,7 @@ pub(crate) struct FieldSpec {
 
 const NONE_ANY: &[&str] = &["none", "any"];
 
-/// The twenty-nine words, in the spec's order.
+/// The twenty-seven words, in the spec's order.
 pub(crate) static FIELDS: &[FieldSpec] = &[
     FieldSpec {
         word: "body",
@@ -168,40 +168,24 @@ pub(crate) static FIELDS: &[FieldSpec] = &[
         value_type: ValueType::Date,
         lists: &[C, V, M],
         values: &[],
-        help: "when a message was sent; on Contacts and Conversations, has a message then",
+        help: "when a message was sent; on Contacts, one the contact sent; on Conversations, one in it",
         example: "date:2019..2021",
     },
     FieldSpec {
         word: "first-message",
         value_type: ValueType::Date,
-        lists: &[V, M],
+        lists: &[C, V, M],
         values: &[],
-        help: "the date of the conversation's first message",
+        help: "the date of the first message: the contact's own, or the conversation's",
         example: "first-message:<2020",
     },
     FieldSpec {
         word: "last-message",
         value_type: ValueType::Date,
-        lists: &[V, M],
+        lists: &[C, V, M],
         values: &[],
-        help: "the date of the conversation's last message",
+        help: "the date of the last message: the contact's own, or the conversation's",
         example: "last-message:<2022",
-    },
-    FieldSpec {
-        word: "first-heard",
-        value_type: ValueType::Date,
-        lists: &[C],
-        values: &[],
-        help: "the date of the first message this contact sent",
-        example: "first-heard:<2020",
-    },
-    FieldSpec {
-        word: "last-heard",
-        value_type: ValueType::Date,
-        lists: &[C],
-        values: &[],
-        help: "the date of the last message this contact sent",
-        example: "last-heard:<2022",
     },
     FieldSpec {
         word: "attachment",
@@ -234,7 +218,7 @@ pub(crate) static FIELDS: &[FieldSpec] = &[
         value_type: ValueType::Count,
         lists: &[C, V],
         values: &[],
-        help: "how many messages",
+        help: "how many messages: the contact sent, or the conversation holds",
         example: "messages:>100",
     },
     FieldSpec {

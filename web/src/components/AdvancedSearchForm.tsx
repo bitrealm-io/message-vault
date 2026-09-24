@@ -7,7 +7,6 @@ import {
   type AdvancedSearchMode,
   buildContactsQuery,
   buildMessagesQuery,
-  buildTrashQuery,
   type CountFilterInput,
   canSubmitContacts,
   canSubmitMessages,
@@ -39,8 +38,8 @@ export default function AdvancedSearchForm({
   const [handle, setHandle] = useState("");
   const [msgType, setMsgType] = useState<"all" | "direct" | "group">("all");
   const [participants, setParticipants] = useState<CountFilterInput>(EMPTY_COUNT);
-  const [firstHeardBound, setFirstHeardBound] = useState<DateBoundFilter>(EMPTY_DATE_BOUND);
-  const [lastHeardBound, setLastHeardBound] = useState<DateBoundFilter>(EMPTY_DATE_BOUND);
+  const [firstMessageBound, setFirstMessageBound] = useState<DateBoundFilter>(EMPTY_DATE_BOUND);
+  const [lastMessageBound, setLastMessageBound] = useState<DateBoundFilter>(EMPTY_DATE_BOUND);
   const [activity, setActivity] = useState<ActivityFilter>("any");
   const [noPreferredName, setNoPreferredName] = useState(false);
   const [noHandle, setNoHandle] = useState(false);
@@ -49,8 +48,8 @@ export default function AdvancedSearchForm({
   /** Snapshot restored when unchecking No handle (handle-dependent filters). */
   const [lockedByNoHandle, setLockedByNoHandle] = useState<{
     services: Key[];
-    firstHeardBound: DateBoundFilter;
-    lastHeardBound: DateBoundFilter;
+    firstMessageBound: DateBoundFilter;
+    lastMessageBound: DateBoundFilter;
     activity: ActivityFilter;
   } | null>(null);
 
@@ -60,8 +59,8 @@ export default function AdvancedSearchForm({
       : canSubmitContacts({
           contactName,
           handle,
-          firstHeardBound,
-          lastHeardBound,
+          firstMessageBound,
+          lastMessageBound,
           activity,
           noPreferredName,
           noHandle,
@@ -85,13 +84,12 @@ export default function AdvancedSearchForm({
     } else {
       setContactName((v) => v.trim());
       setHandle((v) => v.trim());
-      const build = mode === "trash" ? buildTrashQuery : buildContactsQuery;
       onApply(
-        build({
+        buildContactsQuery({
           contactName: contactName.trim(),
           handle: handle.trim(),
-          firstHeardBound,
-          lastHeardBound,
+          firstMessageBound,
+          lastMessageBound,
           activity,
           noPreferredName,
           noHandle,
@@ -139,15 +137,14 @@ export default function AdvancedSearchForm({
           onNoHandleChange={setNoHandle}
           services={services}
           onServicesChange={setServices}
-          firstHeardBound={firstHeardBound}
-          onFirstHeardBoundChange={setFirstHeardBound}
-          lastHeardBound={lastHeardBound}
-          onLastHeardBoundChange={setLastHeardBound}
+          firstMessageBound={firstMessageBound}
+          onFirstMessageBoundChange={setFirstMessageBound}
+          lastMessageBound={lastMessageBound}
+          onLastMessageBoundChange={setLastMessageBound}
           activity={activity}
           onActivityChange={setActivity}
           lockedByNoHandle={lockedByNoHandle}
           onLockedByNoHandleChange={setLockedByNoHandle}
-          showHeard={mode !== "trash"}
         />
       )}
 

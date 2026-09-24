@@ -647,6 +647,7 @@ fn mms_peers(participants: &[String], owners: &HashSet<String>) -> Vec<String> {
 /// The message text: the text parts the SMIL references, in its order, or
 /// when there is no SMIL every text part sorted and de-duplicated.
 fn mms_text(parts: &[MmsPart], text_refs: &[String]) -> String {
+    let mut texts = Vec::new();
     let mut text_by_key = HashMap::new();
     for part in parts
         .iter()
@@ -657,10 +658,13 @@ fn mms_text(parts: &[MmsPart], text_refs: &[String]) -> String {
             for key in content_keys(part) {
                 text_by_key.entry(key).or_insert_with(|| text.clone());
             }
+            // A part with no name, cl or fn has no key, but without SMIL its
+            // text still belongs in the message.
+            texts.push(text);
         }
     }
     if text_refs.is_empty() {
-        let mut values: Vec<String> = text_by_key.into_values().collect();
+        let mut values = texts;
         values.sort();
         values.dedup();
         return values.join("\n");
@@ -925,6 +929,20 @@ mod tests {
         let (records, _) = parse_reader(xml.as_slice(), &owners).unwrap();
         assert_eq!(records[0].conversation_kind, ConversationKind::Individual);
         assert_eq!(records[0].sender_digits.as_deref(), Some("5555550101"));
+    }
+
+    #[test]
+    fn mms_text_part_without_a_name_keeps_its_text() {
+        let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#;
+        let (records, _) = parse_reader(xml.as_slice(), &HashSet::new()).unwrap();
+        assert_eq!(records[0].text, "hi");
+    }
+
+    #[test]
+    fn mms_text_follows_smil_order() {
+        let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101"><parts><part ct="application/smil" text="&lt;smil&gt;&lt;body&gt;&lt;par&gt;&lt;text src=&quot;b.txt&quot;/&gt;&lt;/par&gt;&lt;par&gt;&lt;text src=&quot;a.txt&quot;/&gt;&lt;/par&gt;&lt;/body&gt;&lt;/smil&gt;"/><part ct="text/plain" name="a.txt" text="second"/><part ct="text/plain" cl="b.txt" text="first"/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#;
+        let (records, _) = parse_reader(xml.as_slice(), &HashSet::new()).unwrap();
+        assert_eq!(records[0].text, "first\nsecond");
     }
 
     #[test]

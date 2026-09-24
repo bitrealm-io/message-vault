@@ -938,11 +938,91 @@ mod tests {
         assert_eq!(records[0].text, "hi");
     }
 
+    /// An incoming MMS from +15555550101 with the given parts.
+    fn mms_with_parts(parts: &str) -> Record {
+        let xml = format!(
+            r#"<smses><mms date="1" msg_box="1" address="+15555550101"><parts>{parts}</parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#
+        );
+        let (mut records, _) = parse_reader(xml.as_bytes(), &HashSet::new()).unwrap();
+        records.remove(0)
+    }
+
+    /// Two text parts the SMIL names in reverse alphabetical order: b.txt
+    /// ("zulu"), then a.txt ("alpha"). b.txt is matched by the last segment
+    /// of its location.
+    const TEXT_PARTS: &str = r#"<part ct="text/plain" name="a.txt" text="alpha"/><part ct="text/plain" cl="parts/b.txt" text="zulu"/>"#;
+    const SMIL: &str =
+        r#"<smil><body><par><text src="b.txt"/></par><par><text src="a.txt"/></par></body></smil>"#;
+
     #[test]
     fn mms_text_follows_smil_order() {
-        let xml = br#"<smses><mms date="1" msg_box="1" address="+15555550101"><parts><part ct="application/smil" text="&lt;smil&gt;&lt;body&gt;&lt;par&gt;&lt;text src=&quot;b.txt&quot;/&gt;&lt;/par&gt;&lt;par&gt;&lt;text src=&quot;a.txt&quot;/&gt;&lt;/par&gt;&lt;/body&gt;&lt;/smil&gt;"/><part ct="text/plain" name="a.txt" text="second"/><part ct="text/plain" cl="b.txt" text="first"/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms></smses>"#;
+        let smil = html_escape::encode_double_quoted_attribute(SMIL);
+        let record = mms_with_parts(&format!(
+            r#"<part ct="application/smil" text="{smil}"/>{TEXT_PARTS}"#
+        ));
+        assert_eq!(record.text, "zulu\nalpha");
+    }
+
+    #[test]
+    fn mms_text_follows_smil_order_from_base64_data() {
+        let smil = crate::encode_part_data(SMIL.as_bytes());
+        let record = mms_with_parts(&format!(
+            r#"<part ct="application/smil" data="{smil}"/>{TEXT_PARTS}"#
+        ));
+        assert_eq!(record.text, "zulu\nalpha");
+    }
+
+    #[test]
+    fn sms_body_is_decoded_and_normalized() {
+        let xml = br#"<smses><sms protocol="0" address="+15555550101" date="1" type="1" body="Tom &amp;amp; Jerry&#13;&#10;line two&#13;three"/></smses>"#;
         let (records, _) = parse_reader(xml.as_slice(), &HashSet::new()).unwrap();
-        assert_eq!(records[0].text, "first\nsecond");
+        assert_eq!(records[0].text, "Tom & Jerry\nline two\nthree");
+    }
+
+    #[test]
+    fn contact_names_and_subjects_treat_null_as_missing() {
+        let sms = |attrs: &str| {
+            let xml = format!(
+                r#"<smses><sms protocol="0" address="+15555550101" date="1" type="1" body="hi" {attrs}/></smses>"#
+            );
+            let (mut records, _) = parse_reader(xml.as_bytes(), &HashSet::new()).unwrap();
+            records.remove(0)
+        };
+        let named = sms(r#"contact_name="Sam" subject="Plans""#);
+        assert_eq!(named.sender_display_name.as_deref(), Some("Sam"));
+        assert_eq!(named.contact_name, "Sam");
+        assert_eq!(named.subject, "Plans");
+
+        let null = sms(r#"contact_name="null" subject="null""#);
+        assert_eq!(null.sender_display_name, None);
+        assert_eq!(null.subject, "");
+
+        let fallback = sms(r#"contact_name="" name="Alex" subject="""#);
+        assert_eq!(fallback.sender_display_name.as_deref(), Some("Alex"));
+        assert_eq!(fallback.contact_name, "Alex");
+        assert_eq!(fallback.subject, "");
+    }
+
+    #[test]
+    fn attachment_extension_comes_from_the_type_then_the_name() {
+        let data = crate::encode_part_data(b"payload");
+        let ext = |ct: &str, name: &str| {
+            let record =
+                mms_with_parts(&format!(r#"<part ct="{ct}" name="{name}" data="{data}"/>"#));
+            let file = &record.attachments[0].filename;
+            file[file.find('.').unwrap()..].to_string()
+        };
+        assert_eq!(ext("video/3gpp", "clip"), ".3gp");
+        assert_eq!(ext("application/x-thing", "notes.PDF"), ".pdf");
+        assert_eq!(ext("image/heic", "null"), ".jpg");
+        assert_eq!(ext("application/x-thing", "null"), ".bin");
+    }
+
+    #[test]
+    fn null_part_data_is_no_attachment() {
+        // "null" is valid base64 for three junk bytes.
+        let record = mms_with_parts(r#"<part ct="image/jpeg" name="pic.jpg" data="null"/>"#);
+        assert!(record.attachments.is_empty());
     }
 
     #[test]

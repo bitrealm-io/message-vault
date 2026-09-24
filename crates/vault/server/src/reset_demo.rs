@@ -154,13 +154,20 @@ async fn dedupe_and_process_assets(
     .await
     .context("process-assets after prepared demo import")?;
     vault.close().await;
-    if process_stats.errors > 0 {
-        eprintln!(
-            "warning: {} demo attachment(s) failed conversion; originals stay in place and reset-demo continues",
-            process_stats.errors
-        );
+    if let Some(warning) = conversion_warning(process_stats.errors) {
+        eprintln!("warning: {warning}");
     }
     Ok((dedupe_stats, process_stats))
+}
+
+/// The warning printed when `errors` attachments failed conversion, or
+/// `None` when every attachment converted.
+fn conversion_warning(errors: u64) -> Option<String> {
+    (errors > 0).then(|| {
+        format!(
+            "{errors} demo attachment(s) failed conversion; originals stay in place and reset-demo continues"
+        )
+    })
 }
 
 struct ResetPreparedStats {

@@ -1552,3 +1552,14 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
     let owner = crate::test_support::log_in(&state, DEMO_OWNER_USERNAME, DEMO_OWNER_PASSWORD).await;
     assert_eq!(owner["account_id"], account_profile::OWNER_ACCOUNT_ID);
 }
+
+#[test]
+fn the_conversion_warning_names_the_failed_attachments_and_is_silent_at_zero() {
+    assert_eq!(conversion_warning(0), None);
+    assert_eq!(
+        conversion_warning(2).as_deref(),
+        Some(
+            "2 demo attachment(s) failed conversion; originals stay in place and reset-demo continues"
+        )
+    );
+}

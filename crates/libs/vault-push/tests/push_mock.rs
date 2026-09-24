@@ -1554,6 +1554,96 @@ fn reports_pathless_attachment_without_reason_as_no_path() {
     );
 }
 
+/// A text-only push sends each message with its text and GUID but without
+/// its attachments, uploads nothing, and journals the message's own GUID.
+#[test]
+fn a_push_that_skips_attachments_sends_text_and_uploads_nothing() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let assets = server.mock(|when, then| {
+        when.path_prefix("/v1/assets");
+        then.status(500);
+    });
+    let import = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_includes("\"guid\":\"guid-1\"")
+            .body_includes("hello vault")
+            .body_excludes("photo.txt");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    fs::create_dir(dir.path().join("attachments")).unwrap();
+    fs::write(dir.path().join("attachments/photo.txt"), b"photo bytes").unwrap();
+    let mut doc = sample_doc();
+    doc.messages[0].attachments = vec![ir_attachment(
+        "attachments/photo.txt",
+        hex::encode(Sha256::digest(b"photo bytes")),
+    )];
+    write_jsonl(dir.path(), &doc);
+    let cfg = VaultPushConfig {
+        skip_attachments: true,
+        ..text_only_config(dir.path(), server.base_url())
+    };
+
+    let report = run(&cfg, None).unwrap();
+
+    assert!(report.ok, "{:?}", report.results);
+    assert_eq!(import.calls(), 1);
+    assert_eq!(assets.calls(), 0, "a text-only push uploads no file");
+    assert_eq!(report.assets_uploaded, 0);
+    assert_eq!(journaled_guids(dir.path()), vec!["guid-1".to_string()]);
+}
+
+/// Each import request carries one backup source, so conversations from two
+/// sources go out in two requests even when both would fit in one.
+#[test]
+fn conversations_from_two_sources_go_out_in_separate_requests() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let sms = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_includes("guid-1")
+            .body_excludes("guid-2");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+    let whatsapp = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_includes("guid-2")
+            .body_excludes("guid-1");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    write_jsonl(dir.path(), &sample_doc());
+    let mut other = sample_doc_for("+15555550102", "guid-2");
+    other.export.source = "whatsapp".into();
+    write_jsonl(dir.path(), &other);
+
+    let report = run(&text_only_config(dir.path(), server.base_url()), None).unwrap();
+
+    assert!(report.ok, "{:?}", report.results);
+    assert_eq!(sms.calls(), 1);
+    assert_eq!(whatsapp.calls(), 1);
+}
+
 /// The journal rows of one kind (`file_ok`, `message_batch_ok`, …).
 fn journal_events(dir: &Path, event: &str) -> Vec<serde_json::Value> {
     fs::read_to_string(dir.join(".vault-import-state.jsonl"))

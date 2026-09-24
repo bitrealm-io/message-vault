@@ -554,6 +554,53 @@ fn resumes_message_batches_from_compacted_journal() {
     assert_eq!(import.calls(), 1);
 }
 
+/// A replace push wipes the source on the vault, so it ignores the journal
+/// even without `force`: every message already sent goes out again.
+/// Otherwise the journaled messages would be skipped and the wipe would
+/// leave them missing.
+#[test]
+fn a_replace_push_ignores_the_journal_and_sends_every_message_again() {
+    let server = MockServer::start();
+    let _auth = server.mock(|when, then| {
+        when.method(GET).path("/v1/session");
+        then.status(200).json_body(json!({
+            "account_id": 1,
+            "username": "alice",
+        }));
+    });
+    let _run = mock_import_run(&server, 7);
+    let import = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_includes("guid-1")
+            .body_includes("guid-2");
+        then.status(200).json_body(json!({
+            "messages": 2,
+            "messages_appended": 2,
+            "conversations": 2
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    write_jsonl(dir.path(), &sample_doc());
+    write_jsonl(dir.path(), &sample_doc_for("+15555550102", "guid-2"));
+    let cfg = text_only_config(dir.path(), server.base_url());
+    assert!(run(&cfg, None).unwrap().ok);
+    assert_eq!(import.calls(), 1);
+
+    let replace = VaultPushConfig {
+        mode: ImportMode::Replace,
+        force: false,
+        ..cfg
+    };
+    let report = run(&replace, None).unwrap();
+
+    assert!(report.ok, "{:?}", report.results);
+    assert_eq!(import.calls(), 2, "the replace push sends both messages");
+    assert_eq!(report.conversations_skipped, 0);
+    assert_eq!(report.messages_attempted, 2);
+}
+
 #[test]
 fn profiles_attachment_upload_phases() {
     const ASSET_BYTES: &[u8] = b"attachment profile fixture";

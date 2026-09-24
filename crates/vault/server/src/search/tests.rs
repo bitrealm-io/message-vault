@@ -1673,6 +1673,39 @@ mod people_words {
                 .await
                 .contains(&f.dup_only_conv)
         );
+        // The duplicate-only conversation has no non-duplicate message, so no
+        // first message: it is not in `first-message:2025`, and so it is in
+        // the negation, which `import:` lets it reach.
+        let q = format!("import:#{run_id} -first-message:2025");
+        assert_eq!(
+            run(&mut conn, ListKind::Conversations, &q).await,
+            sorted(vec![f.bo_direct, f.dup_only_conv])
+        );
+    }
+
+    /// `-import:last` and `-import:#N` are every message not from that run,
+    /// including messages with no run and every message of an account that
+    /// has no Import Runs yet (the seeded vault has none). `import:` lifts
+    /// the duplicate default, so the duplicate is in the answer too.
+    #[tokio::test]
+    async fn import_run_negation_includes_rows_with_no_run() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let mut every_message = run(&mut conn, ListKind::Messages, "").await;
+        every_message.push(f.dup_only_msg);
+        let every_message = sorted(every_message);
+        for q in ["import:last", "import:#7"] {
+            assert_eq!(
+                run(&mut conn, ListKind::Messages, q).await,
+                Vec::<i64>::new(),
+                "{q}"
+            );
+            assert_eq!(
+                run(&mut conn, ListKind::Messages, &format!("-{q}")).await,
+                every_message,
+                "-{q}"
+            );
+        }
     }
 }
 
@@ -2056,20 +2089,51 @@ mod coverage {
         out
     }
 
+    /// A word that lifts one of the list's defaults when it appears: `trashed:`
+    /// shows the trash, and `source:` and `import:` show duplicates (and, on
+    /// Conversations, threads with only duplicates). `q` and `-q` together
+    /// cover the lifted list, not the default one, so the split check below
+    /// leaves these out; `import_run_negation_includes_rows_with_no_run`
+    /// checks `import:` against its own lifted list instead.
+    fn lifts_a_default(word: &str, list: ListKind) -> bool {
+        match word {
+            "trashed" => true,
+            "source" => list == ListKind::Messages,
+            "import" => list != ListKind::Contacts,
+            _ => false,
+        }
+    }
+
+    /// Every word runs on every list it claims, and `q` and `-q` split the
+    /// list: they share no row, and together they are the list's default
+    /// rows. A row with no value for the word, such as a contact with no
+    /// messages under `first-message:`, does not match `q` and so must match
+    /// `-q`; a row missing from both is invisible and cannot be explained.
     #[tokio::test]
     async fn every_word_compiles_and_runs_on_every_list_it_claims() {
         let (pool, _dir, _f) = seeded().await;
         let mut conn = pool.acquire().await.unwrap();
         for spec in FIELDS {
             for list in spec.lists {
+                let all = run(&mut conn, *list, "").await;
                 for value in sample_values(spec.word, spec.value_type, spec.values) {
-                    for q in [
-                        format!("{}:{value}", spec.word),
-                        format!("-{}:{value}", spec.word),
-                        format!("{}:{value} or x", spec.word),
-                    ] {
-                        run(&mut conn, *list, &q).await;
+                    let q = format!("{}:{value}", spec.word);
+                    let not_q = format!("-{q}");
+                    let hits = run(&mut conn, *list, &q).await;
+                    let misses = run(&mut conn, *list, &not_q).await;
+                    run(&mut conn, *list, &format!("{q} or x")).await;
+                    if lifts_a_default(spec.word, *list) {
+                        continue;
                     }
+                    assert!(
+                        hits.iter().all(|id| !misses.contains(id)),
+                        "{q} and {not_q} on {list:?} share a row: {hits:?} / {misses:?}"
+                    );
+                    assert_eq!(
+                        sorted([hits.clone(), misses.clone()].concat()),
+                        all,
+                        "{q} and {not_q} on {list:?} do not cover the list"
+                    );
                 }
             }
         }

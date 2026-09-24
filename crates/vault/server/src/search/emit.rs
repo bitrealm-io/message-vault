@@ -111,10 +111,15 @@ fn emit_expr(ctx: &ListCtx, out: &mut Sql, expr: &Expr) -> Result<(), QueryError
             }
             out.push(")");
         }
+        // `q` and `-q` split the list: a row with no value for a word (a
+        // contact with no messages under `first-message:`, a message under
+        // `import:last` in an account with no Import Runs) makes `q` NULL,
+        // and `NOT NULL` is NULL, which would leave the row out of both.
+        // `IS NOT TRUE` turns that NULL into a match, on SQLite and Postgres.
         Expr::Not(inner) => {
-            out.push("NOT (");
+            out.push("(");
             emit_expr(ctx, out, inner)?;
-            out.push(")");
+            out.push(") IS NOT TRUE");
         }
         Expr::Text(term) => emit_text(ctx, out, term),
         Expr::Field(term) => emit_field(ctx, out, term)?,

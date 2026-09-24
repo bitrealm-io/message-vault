@@ -10,7 +10,7 @@ mod read;
 mod run;
 mod write;
 
-pub use message_vault_io_core::{RunResult, parse_date_range};
+pub use message_vault_io_core::RunResult;
 pub use read::{ReadOptions, ReadReport, read_backup};
 pub use run::run;
 pub use write::SbrArchive;

@@ -2,18 +2,16 @@
 name = "obfuscate"
 version = "0.1.0"
 edition = "2024"
-description = "Stable, non-reversible obfuscation for message-vault-io CSV output"
+description = "Stable, non-reversible obfuscation of names, handles and message text"
 license = "LicenseRef-FCL-1.0-ALv2"
 
 [dependencies]
 anyhow = { workspace = true }
-csv = { workspace = true }
 hex = { workspace = true }
 hmac = "0.13.0"
 media = { path = "../media" }
 rand = "0.10.2"
 regex = { workspace = true }
-serde_json = { workspace = true }
 sha2 = { workspace = true }
 
 [dev-dependencies]

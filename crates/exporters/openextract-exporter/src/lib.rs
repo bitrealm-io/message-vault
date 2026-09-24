@@ -8,7 +8,7 @@ mod emit;
 mod parse;
 mod run;
 
-pub use message_vault_io_core::{RunResult, parse_date_range};
+pub use message_vault_io_core::RunResult;
 pub use run::run;
 
 #[cfg(test)]

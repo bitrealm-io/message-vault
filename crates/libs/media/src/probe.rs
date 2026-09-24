@@ -25,14 +25,6 @@ pub struct MediaProbe {
     pub bitrate: u64,
 }
 
-impl MediaProbe {
-    /// Total pixels in one frame, as a float so ratios do not truncate.
-    #[must_use]
-    pub fn pixels(&self) -> f64 {
-        f64::from(self.width) * f64::from(self.height)
-    }
-}
-
 /// Ask ffprobe about `path`.
 ///
 /// # Errors

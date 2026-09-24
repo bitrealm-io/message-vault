@@ -962,9 +962,7 @@ fn heads_later_assets_after_put_reports_already_present() {
     let head_second = server.mock(|when, then| {
         when.method("HEAD")
             .path(format!("/v1/assets/{second_digest}"));
-        then.status(200).json_body(json!({
-            "already_present": true
-        }));
+        then.status(200);
     });
     let put_second = server.mock(|when, then| {
         when.method(PUT).path(format!("/v1/assets/{second_digest}"));

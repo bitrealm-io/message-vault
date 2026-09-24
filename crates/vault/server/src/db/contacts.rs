@@ -7,6 +7,10 @@ use chrono::Utc;
 use contacts::{ContactsFormat, detect_contacts_format, parse_vcf, read_vcard_csv_rows};
 use sqlx::{AnyConnection, Connection};
 
+use crate::search::emit::NOT_TRASHED_CONTACT;
+
+pub mod read;
+
 /// Bump `contacts.last_modified` after an address-book shape change.
 pub async fn touch_contact(
     conn: &mut AnyConnection,
@@ -332,6 +336,128 @@ pub async fn contact_id_for_handle(
     .fetch_optional(&mut *conn)
     .await?;
     Ok(found)
+}
+
+/// True when the contact belongs to this account and is not in the trash.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn live_contact_exists(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    contact_id: i64,
+) -> Result<bool> {
+    let found: Option<i64> = sqlx::query_scalar(&format!(
+        "SELECT ct.id
+         FROM contacts ct
+         WHERE ct.id = $1 AND ct.account_id = $2
+           AND {NOT_TRASHED_CONTACT}",
+    ))
+    .bind(contact_id)
+    .bind(account_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(found.is_some())
+}
+
+/// Id of the handle row for `raw` that is linked to this contact, if any.
+/// With a service, only that service's row; without one, the phone row
+/// first, then WhatsApp, then anything else.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn linked_handle_id(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    contact_id: i64,
+    raw: &str,
+    service: Option<&str>,
+) -> Result<Option<i64>> {
+    let needle = raw.trim();
+    if needle.is_empty() {
+        return Ok(None);
+    }
+    let mut sql = String::from(
+        "SELECT ch.handle_id
+         FROM contact_handles ch
+         JOIN handles h ON h.id = ch.handle_id
+         WHERE ch.account_id = $1 AND ch.contact_id = $2
+           AND (h.raw = $3 OR h.normalized = $3)",
+    );
+    let id = if let Some(svc) = service.and_then(message_ir::trimmed) {
+        sql.push_str(" AND h.service = $4 LIMIT 1");
+        let platform = message_ir::HandleService::parse(svc);
+        sqlx::query_scalar::<_, i64>(&sql)
+            .bind(account_id)
+            .bind(contact_id)
+            .bind(needle)
+            .bind(platform.as_str())
+            .fetch_optional(&mut *conn)
+            .await?
+    } else {
+        sql.push_str(
+            " ORDER BY CASE h.service WHEN 'phone' THEN 0 WHEN 'whatsapp' THEN 1 ELSE 2 END
+             LIMIT 1",
+        );
+        sqlx::query_scalar::<_, i64>(&sql)
+            .bind(account_id)
+            .bind(contact_id)
+            .bind(needle)
+            .fetch_optional(&mut *conn)
+            .await?
+    };
+    Ok(id)
+}
+
+/// Point the contact's link at `new_handle_id` in place of `old_handle_id`.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn relink_handle(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    contact_id: i64,
+    old_handle_id: i64,
+    new_handle_id: i64,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE contact_handles SET handle_id = $1
+         WHERE account_id = $2 AND contact_id = $3 AND handle_id = $4",
+    )
+    .bind(new_handle_id)
+    .bind(account_id)
+    .bind(contact_id)
+    .bind(old_handle_id)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+/// Drop the link between the contact and the handle. The handle row itself
+/// stays: messages still cite it.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn unlink_handle(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    contact_id: i64,
+    handle_id: i64,
+) -> Result<()> {
+    sqlx::query(
+        "DELETE FROM contact_handles
+         WHERE account_id = $1 AND contact_id = $2 AND handle_id = $3",
+    )
+    .bind(account_id)
+    .bind(contact_id)
+    .bind(handle_id)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
 }
 
 /// Counts from loading an address book into the vault.

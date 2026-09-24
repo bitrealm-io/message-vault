@@ -208,6 +208,69 @@ pub fn page_params(
     Ok(PageParams { limit, offset })
 }
 
+/// The page and sort of a list route that reads the default page size and
+/// caps `offset` at [`MAX_LIST_OFFSET`]: [`page_params`], then [`parse_sort`]
+/// against the keys the route accepts.
+///
+/// # Errors
+///
+/// `validation-failed` for a `limit`, `offset` or `sort` the route refuses.
+pub fn sorted_page<K: Copy + PartialEq>(
+    limit: Option<usize>,
+    offset: Option<usize>,
+    sort: Option<&str>,
+    accepted: &[(&str, K)],
+    default: &[SortKey<K>],
+) -> Result<(PageParams, Vec<SortKey<K>>), ApiError> {
+    let page = page_params(limit, offset, DEFAULT_LIST_LIMIT, Some(MAX_LIST_OFFSET))?;
+    let order = parse_sort(sort, accepted, default)?;
+    Ok((page, order))
+}
+
+/// What a searchable list reads from its [`PageQuery`], validated, and the
+/// account's clock its search compiles against.
+pub struct ListRequest<K> {
+    /// The search query; empty when the caller sent none.
+    pub q: String,
+    /// The validated `limit` and `offset`.
+    pub page: PageParams,
+    /// The parsed `sort`, or the route's default.
+    pub order: Vec<SortKey<K>>,
+    /// The account's time zone and today's date in it.
+    pub clock: (chrono_tz::Tz, chrono::NaiveDate),
+}
+
+impl<K: Copy + PartialEq> ListRequest<K> {
+    /// Validate the page and sort ([`sorted_page`]) and load the account's clock.
+    ///
+    /// # Errors
+    ///
+    /// `validation-failed` for a `limit`, `offset` or `sort` the route
+    /// refuses; `Internal` when the clock cannot be read.
+    pub async fn read(
+        conn: &mut sqlx::AnyConnection,
+        account_id: i64,
+        query: PageQuery,
+        accepted: &[(&str, K)],
+        default: &[SortKey<K>],
+    ) -> Result<Self, ApiError> {
+        let (page, order) = sorted_page(
+            query.limit,
+            query.offset,
+            query.sort.as_deref(),
+            accepted,
+            default,
+        )?;
+        let clock = crate::db::account_profile::account_clock(conn, account_id).await?;
+        Ok(Self {
+            q: query.q.unwrap_or_default(),
+            page,
+            order,
+            clock,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

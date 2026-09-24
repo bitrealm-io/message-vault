@@ -25,6 +25,7 @@ use crate::credentials::{
     change_password_on_conn, check_auth_rate_limit, hash_owner_password, hash_user_password,
     passwords_match, require_username_free, require_valid_username,
 };
+use crate::db::dialect::{begin_immediate_sql, engine_of};
 use crate::db::handles::{self, Identity};
 use crate::db::storage::{self, Scope};
 use crate::db::{account_profile, session_tokens, vault_imports, vault_settings};
@@ -144,37 +145,66 @@ async fn require_account(conn: &mut AnyConnection, account_id: i64) -> Result<Ac
 
 /// What the caller is to the account a member route addresses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Reach {
+pub(crate) enum Reach {
     /// The vault owner, acting on an account that is not its own.
     Owner,
-    /// The account itself, the owner's own row included.
+    /// The vault owner, on its own row.
+    OwnersOwn,
+    /// An ordinary account, on its own row.
     Own,
 }
 
-/// Admit the vault owner to any row and an account to its own, and say
-/// which. A caller addressing a row that is neither answers `403`, whether
-/// or not the row exists, so the refusal says nothing about the vault's
-/// accounts. The owner alone learns that an id is absent.
-async fn require_owner_or_self(
+impl Reach {
+    /// True when the row is the caller's own, the owner's included.
+    pub(crate) fn is_own(self) -> bool {
+        matches!(self, Self::Own | Self::OwnersOwn)
+    }
+}
+
+/// Who a member route admits besides the account itself.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Admits {
+    /// The vault owner too, on any account.
+    Owner,
+    /// Nobody else. The sentence is the refusal everyone else gets.
+    NobodyElse(&'static str),
+}
+
+/// The one answer to "is this row the caller's?" for the routes under
+/// `/v1/accounts/{id}`: admit the account itself, and the vault owner when
+/// `admits` says so, and say which.
+///
+/// A caller addressing a row it may not reach answers `403`, whether or not
+/// the row exists, so the refusal says nothing about the vault's accounts.
+/// The owner alone learns that an id is absent.
+pub(crate) async fn require_account_reach(
     conn: &mut AnyConnection,
     auth: &AuthIdentity,
     target: i64,
+    admits: Admits,
 ) -> Result<Reach, ApiError> {
     if auth.account_id == target {
-        return Ok(Reach::Own);
+        return Ok(if auth.is_owner() {
+            Reach::OwnersOwn
+        } else {
+            Reach::Own
+        });
     }
-    if !auth.is_owner() {
-        return Err(ApiError::NotTheOwner(format!(
+    match admits {
+        Admits::NobodyElse(refusal) => Err(ApiError::InsufficientScope(refusal.into())),
+        Admits::Owner if !auth.is_owner() => Err(ApiError::NotTheOwner(format!(
             "account {target} is not yours, and only the vault owner reaches other accounts"
-        )));
+        ))),
+        Admits::Owner => {
+            if account_profile::username_for_account(conn, target)
+                .await?
+                .is_none()
+            {
+                return Err(ApiError::NotFound(format!("account {target} not found")));
+            }
+            Ok(Reach::Owner)
+        }
     }
-    if account_profile::username_for_account(conn, target)
-        .await?
-        .is_none()
-    {
-        return Err(ApiError::NotFound(format!("account {target} not found")));
-    }
-    Ok(Reach::Owner)
 }
 
 // ---------------------------------------------------------------------------
@@ -207,18 +237,8 @@ pub async fn list_accounts(
 ) -> Result<Json<Page<Account>>, ApiError> {
     let page = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
-    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
-        .fetch_one(&mut *conn)
-        .await?;
-    let ids: Vec<i64> = sqlx::query_scalar(
-        "SELECT id FROM accounts \
-         ORDER BY CASE WHEN id = $1 THEN 0 ELSE 1 END, username LIMIT $2 OFFSET $3",
-    )
-    .bind(account_profile::OWNER_ACCOUNT_ID)
-    .bind(page.limit as i64)
-    .bind(page.offset as i64)
-    .fetch_all(&mut *conn)
-    .await?;
+    let total = account_profile::count_accounts(&mut conn).await?;
+    let ids = account_profile::account_ids_page(&mut conn, page.limit, page.offset).await?;
 
     let mut items = Vec::with_capacity(ids.len());
     for id in ids {
@@ -324,8 +344,13 @@ pub async fn create_account(
 
     // The insert and the marks on the row land together: a failure between
     // them would leave an account whose holder keeps the password the owner
-    // chose, which is the one thing the forced change exists to prevent.
-    let mut tx = conn.begin().await?;
+    // chose, which is the one thing the forced change exists to prevent. On
+    // SQLite the transaction takes the write lock before the username check
+    // (`begin_immediate_sql`, as imports and exports begin), so two
+    // registrations of one name cannot both pass the check and then race to
+    // the insert.
+    let engine = engine_of(&conn);
+    let mut tx = conn.begin_with(begin_immediate_sql(engine)).await?;
     require_username_free(&mut tx, &username).await?;
     let account_id = account_profile::insert_account(
         &mut tx,
@@ -392,7 +417,7 @@ pub async fn get_account(
     LoggedIn(auth): LoggedIn,
 ) -> Result<Json<Account>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_owner_or_self(&mut conn, &auth, target).await?;
+    require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
     Ok(Json(require_account(&mut conn, target).await?))
 }
 
@@ -525,11 +550,7 @@ async fn apply_profile_update(
         } else {
             Some(name)
         };
-        sqlx::query("UPDATE accounts SET preferred_name = $1 WHERE id = $2")
-            .bind(stored_name)
-            .bind(account_id)
-            .execute(&mut *conn)
-            .await?;
+        account_profile::set_preferred_name(conn, account_id, stored_name).await?;
     }
 
     for entry in remove_handles {
@@ -625,22 +646,13 @@ async fn apply_flags(
     account_id: i64,
     req: &UpdateAccountRequest,
 ) -> Result<(), ApiError> {
-    // Column names come from this compile-time array, never from the
-    // request, so formatting them into the SQL is safe; values stay bound.
-    let flags = [
-        ("disabled", req.disabled),
-        ("can_import", req.can_import),
-        ("can_export", req.can_export),
-        ("can_delete", req.can_delete),
-    ];
-    for (column, value) in flags {
-        let Some(value) = value else { continue };
-        sqlx::query(&format!("UPDATE accounts SET {column} = $1 WHERE id = $2"))
-            .bind(i32::from(value))
-            .bind(account_id)
-            .execute(&mut *conn)
-            .await?;
-    }
+    let flags = account_profile::AccountFlags {
+        disabled: req.disabled,
+        can_import: req.can_import,
+        can_export: req.can_export,
+        can_delete: req.can_delete,
+    };
+    account_profile::set_account_flags(conn, account_id, flags).await?;
     Ok(())
 }
 
@@ -672,10 +684,10 @@ pub async fn update_account(
     Json(req): Json<UpdateAccountRequest>,
 ) -> Result<Json<Account>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    match require_owner_or_self(&mut conn, &auth, target).await? {
-        Reach::Own => {
+    match require_account_reach(&mut conn, &auth, target, Admits::Owner).await? {
+        reach @ (Reach::Own | Reach::OwnersOwn) => {
             if req.touches_flags() {
-                return Err(if auth.is_owner() {
+                return Err(if reach == Reach::OwnersOwn {
                     // The owner holds no messages, so its permissions mean
                     // nothing, and it cannot lock itself out.
                     ApiError::validation("the vault owner cannot be disabled or given permissions")
@@ -744,11 +756,11 @@ pub async fn delete_account(
     body: Option<Json<DeleteAccountRequest>>,
 ) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let reach = require_owner_or_self(&mut conn, &auth, target).await?;
+    let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
     if account_profile::is_vault_owner(target) {
         return Err(ApiError::validation("the vault owner cannot be deleted"));
     }
-    if reach == Reach::Own {
+    if reach.is_own() {
         if account_profile::is_demo_account(target) {
             return Err(ApiError::DemoAccountProtected(
                 "the demo account cannot be deleted; use reset-demo to restore it".into(),
@@ -852,12 +864,12 @@ pub async fn replace_account_password(
     Json(req): Json<ReplaceAccountPasswordRequest>,
 ) -> Result<Response, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let reach = require_owner_or_self(&mut conn, &auth, target).await?;
+    let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
 
     // The checks run in a fixed order so the first thing a user is told is the
     // first thing they typed wrong: the current password, then the pair, then
     // that the new one is actually new.
-    if reach == Reach::Own && account_profile::is_vault_owner(target) {
+    if reach == Reach::OwnersOwn {
         let Some(current) = req.current_password.as_deref() else {
             return Err(ApiError::validation(
                 "Current password is required to change the vault owner's password.",
@@ -890,7 +902,7 @@ pub async fn replace_account_password(
     let new_hash = new_hash.as_deref();
 
     match reach {
-        Reach::Own => {
+        Reach::Own | Reach::OwnersOwn => {
             let token = change_password_on_conn(&mut conn, target, new_hash).await?;
             Ok(Json(ReplaceAccountPasswordResponse { token }).into_response())
         }
@@ -985,7 +997,10 @@ pub async fn delete_account_messages(
     body: Option<Json<DeleteMessagesRequest>>,
 ) -> Result<Json<DeleteMessagesResponse>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    if require_owner_or_self(&mut conn, &auth, target).await? == Reach::Own {
+    if require_account_reach(&mut conn, &auth, target, Admits::Owner)
+        .await?
+        .is_own()
+    {
         crate::server::require_delete_access(&auth)?;
         if !body.is_some_and(|Json(req)| req.confirm) {
             return Err(ApiError::validation("confirmation flag must be true"));
@@ -1045,7 +1060,7 @@ pub(crate) async fn get_account_storage(
     LoggedIn(auth): LoggedIn,
 ) -> Result<Json<AccountStorage>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let reach = require_owner_or_self(&mut conn, &auth, target).await?;
+    let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
     let scope = Scope::Account(target);
     let total_bytes = storage::attachment_bytes(&mut conn, scope).await?;
     let attachment_count = storage::attachment_count(&mut conn, scope).await?;
@@ -1100,7 +1115,7 @@ pub(crate) async fn list_account_identities(
 ) -> Result<Json<Page<Identity>>, ApiError> {
     let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
-    require_owner_or_self(&mut conn, &auth, target).await?;
+    require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
     let rows = handles::identities(&mut conn, handles::IdentitiesOf::Account(target)).await?;
     Ok(Json(page_of(rows, params)))
 }
@@ -1208,15 +1223,15 @@ pub(crate) async fn list_account_exports(
     crate::exports_api::exports_page(&state, target, query).await
 }
 
-/// `require_owner_or_self` on a connection of its own, for a handler whose
-/// work then runs on another.
+/// [`require_account_reach`], admitting the owner, on a connection of its
+/// own, for a handler whose work then runs on another.
 async fn require_reach(
     state: &AppState,
     auth: &AuthIdentity,
     target: i64,
 ) -> Result<Reach, ApiError> {
     let mut conn = state.db.acquire().await?;
-    require_owner_or_self(&mut conn, auth, target).await
+    require_account_reach(&mut conn, auth, target, Admits::Owner).await
 }
 
 #[cfg(test)]

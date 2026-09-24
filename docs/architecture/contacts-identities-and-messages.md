@@ -224,4 +224,4 @@ flowchart LR
 | Making, naming, and replacing a contact during import | `crates/vault/server/src/imports_api/contact_name.rs` |
 | Linking identities to contacts, sibling identities | `crates/vault/server/src/db/contacts.rs` |
 | The display name rule | `crates/vault/server/src/db/participant_names.rs` |
-| Which conversations involve a contact | `involves_contact_expr` in `contacts_api.rs`, `conversation_involves` in `search/bridge.rs` |
+| Which conversations involve a contact | `involves_contact_expr` in `db/contacts/read.rs`, `conversation_involves` in `search/bridge.rs` |

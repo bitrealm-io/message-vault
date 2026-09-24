@@ -13,7 +13,7 @@ use sqlx::any::AnyRow;
 use sqlx::{AnyConnection, Row};
 
 use crate::db::dialect::{engine_of, name_eq_ci, order_by_name_ci};
-use crate::named_membership::MAX_NAME_LEN;
+use crate::db::named_membership::MAX_NAME_LEN;
 
 /// How a saved search was created.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

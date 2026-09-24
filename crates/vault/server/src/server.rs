@@ -2,7 +2,7 @@
 //!
 //! Domain handlers live in their own modules: `session_api` (logging in and
 //! out), `accounts_api` (the accounts collection), `api_tokens_api`,
-//! `contacts_api`, `conversations_api`, `exports_api` (messages and counts),
+//! `contacts_api`, `conversations_api`, `exports_api` (Export Runs),
 //! `imports_api` (JSONL ingest and Import Runs), and `assets_api` (asset bytes and
 //! multipart uploads). This module
 //! keeps the pieces they share: [`AppState`], [`ApiError`], Bearer token

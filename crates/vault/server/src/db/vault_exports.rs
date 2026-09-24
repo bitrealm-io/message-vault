@@ -1,13 +1,19 @@
 //! Per-account Export Run records: one row per `POST /v1/exports`, holding
-//! what was asked for and how much matched, never message content.
+//! what was asked for and how much matched, never message content; and the
+//! list of message places each run hands over, which its pages read.
 
 use anyhow::{Context, Result};
 use chrono::Utc;
 use sqlx::any::AnyRow;
-use sqlx::{AnyConnection, Connection, Row};
+use sqlx::{AnyConnection, Connection, Executor, Row};
 use vault_api_types::{ExportRun, ExportScope};
 
-use crate::paging::{Direction, SortKey};
+use crate::db::conversation_messages::{
+    Message, MessageSort, conversation_join_sql, load_messages_from, messages_from_sql,
+};
+use crate::db::sql::{SqlParam, bind_all, renumber_placeholders};
+use crate::paging::{Direction, Page, SortKey};
+use crate::server::ApiError;
 
 /// The values `vault_exports.status` holds, and so the values
 /// `GET /v1/exports?status=` accepts.
@@ -301,4 +307,162 @@ pub async fn list_exports_page(
         .map(export_from_row)
         .collect::<Result<Vec<_>>>()?;
     Ok((items, total))
+}
+
+/// Give each message `filter` matches its place in the run, oldest first, so
+/// a page is a range of places whatever happens to the vault meanwhile.
+///
+/// # Errors
+///
+/// Returns an error when the statement fails.
+pub async fn list_run_messages(
+    conn: &mut AnyConnection,
+    export_id: i64,
+    filter: &crate::search::Filter,
+) -> Result<(), sqlx::Error> {
+    let list_sql = format!(
+        "INSERT INTO vault_export_messages (export_id, row_order, message_id)
+         SELECT ?, ROW_NUMBER() OVER (ORDER BY m.timestamp, m.sort_order, m.id), m.id
+         {messages_from_sql}
+         WHERE {where_sql}",
+        messages_from_sql = messages_from_sql(),
+        where_sql = filter.where_sql(),
+    );
+    let mut params = vec![SqlParam::Int(export_id)];
+    params.extend_from_slice(filter.params());
+    (&mut *conn)
+        .execute(bind_all(&renumber_placeholders(&list_sql), &params))
+        .await?;
+    Ok(())
+}
+
+/// The four counts a run records at creation, over the messages it listed.
+///
+/// Attachment count is unique non-empty SHA-256 fingerprints on those
+/// messages; `total_bytes` sums the known `attachments.size_bytes` for those
+/// fingerprints.
+///
+/// # Errors
+///
+/// Returns an error when a statement fails.
+pub async fn export_counts(
+    conn: &mut AnyConnection,
+    export_id: i64,
+) -> Result<ExportCounts, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT COUNT(*), COUNT(DISTINCT m.conversation_id)
+         FROM vault_export_messages e
+         JOIN messages m ON m.id = e.message_id
+         WHERE e.export_id = $1",
+    )
+    .bind(export_id)
+    .fetch_one(&mut *conn)
+    .await?;
+    let (messages, conversations): (i64, i64) = (row.try_get(0)?, row.try_get(1)?);
+
+    let row = sqlx::query(
+        "SELECT COUNT(*), COALESCE(SUM(sz), 0)
+         FROM (
+           SELECT MAX(a.size_bytes) AS sz
+           FROM vault_export_messages e
+           JOIN attachments a ON a.message_id = e.message_id
+           WHERE e.export_id = $1
+             AND a.sha256 IS NOT NULL
+             AND length(trim(a.sha256)) > 0
+           GROUP BY lower(trim(a.sha256))
+         ) fingerprints",
+    )
+    .bind(export_id)
+    .fetch_one(&mut *conn)
+    .await?;
+    let (attachments, total_bytes): (i64, i64) = (row.try_get(0)?, row.try_get(1)?);
+
+    Ok(ExportCounts {
+        messages: messages.max(0),
+        conversations: conversations.max(0),
+        attachments: attachments.max(0),
+        total_bytes: total_bytes.max(0),
+    })
+}
+
+/// Options for one page of a running Export Run's messages.
+#[derive(Debug, Clone)]
+pub struct ExportPageOpts {
+    /// The run to read, already checked to be the caller's and running.
+    pub export_id: i64,
+    /// How many places the run listed at creation: its `message_count`.
+    pub total: u64,
+    /// Places on the page. Already validated by the handler: `1..=MAX_LIST_LIMIT`.
+    pub limit: usize,
+    /// Places to skip in the run's list.
+    pub offset: usize,
+    /// The parsed `sort`; [`DEFAULT_MESSAGE_SORT`](crate::db::conversation_messages::DEFAULT_MESSAGE_SORT)
+    /// when the caller has none.
+    pub order: Vec<SortKey<MessageSort>>,
+}
+
+/// The first and last place (exclusive, inclusive) a page covers in a run's
+/// list of `total` places, for `offset` and `limit` read in `direction`.
+/// Newest first counts places from the end of the list.
+fn page_places(total: u64, offset: usize, limit: usize, direction: Direction) -> (i64, i64) {
+    let total = i64::try_from(total).unwrap_or(i64::MAX);
+    let offset = i64::try_from(offset).unwrap_or(i64::MAX);
+    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+    match direction {
+        Direction::Asc => (offset, offset.saturating_add(limit)),
+        Direction::Desc => {
+            let last = total.saturating_sub(offset);
+            (last.saturating_sub(limit), last)
+        }
+    }
+}
+
+/// One page of a running Export Run's messages: the places `offset` to
+/// `offset + limit` of the list the run made at creation.
+///
+/// `total` is always the number of places the run listed. A message deleted
+/// since creation leaves its place empty, so that page carries fewer items
+/// than `limit`; a caller steps `offset` by `limit`, not by the items it got.
+/// An offset past the end returns an empty page.
+///
+/// # Errors
+///
+/// Returns an internal error when a database statement fails.
+pub async fn export_messages(
+    conn: &mut AnyConnection,
+    opts: ExportPageOpts,
+) -> Result<Page<Message>, ApiError> {
+    let direction = opts
+        .order
+        .iter()
+        .find(|k| k.key == MessageSort::Date)
+        .map_or(Direction::Asc, |k| k.direction);
+    let (after, through) = page_places(opts.total, opts.offset, opts.limit, direction);
+    let from_sql = format!(
+        "FROM vault_export_messages e
+         JOIN messages m ON m.id = e.message_id
+         {conversation_join_sql}",
+        conversation_join_sql = conversation_join_sql(),
+    );
+    let messages = load_messages_from(
+        conn,
+        &from_sql,
+        "e.export_id = ? AND e.row_order > ? AND e.row_order <= ?",
+        &[
+            SqlParam::Int(opts.export_id),
+            SqlParam::Int(after),
+            SqlParam::Int(through),
+        ],
+        &format!("e.row_order {}", direction.sql()),
+        opts.limit as u32,
+        0,
+    )
+    .await?;
+
+    Ok(Page {
+        items: messages,
+        total: opts.total,
+        limit: opts.limit,
+        offset: opts.offset,
+    })
 }

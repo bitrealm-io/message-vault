@@ -7,7 +7,9 @@
 //! account's id — indistinguishable from outside, which is what makes them
 //! both a 404 rather than one a 404 and the other a 403.
 
-use sqlx::AnyConnection;
+use sqlx::{AnyConnection, Executor, Row};
+
+use crate::db::sql::{SqlParam, bind_all, renumber_placeholders};
 
 /// True when `account_id` owns a `conversations` row with this id.
 ///
@@ -54,6 +56,62 @@ async fn owns_row(
     .fetch_optional(&mut *conn)
     .await?;
     Ok(found.is_some())
+}
+
+/// A table whose rows an account owns by `account_id`, for [`missing_ids`].
+#[derive(Debug, Clone, Copy)]
+pub enum OwnedTable {
+    /// `conversations`.
+    Conversations,
+    /// `messages`.
+    Messages,
+}
+
+impl OwnedTable {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Conversations => "conversations",
+            Self::Messages => "messages",
+        }
+    }
+}
+
+/// The ids in `ids` that `table` does not hold for `account_id`, in the
+/// order given.
+///
+/// # Errors
+///
+/// Returns a database error when the query fails.
+pub async fn missing_ids(
+    conn: &mut AnyConnection,
+    table: OwnedTable,
+    account_id: i64,
+    ids: &[i64],
+) -> Result<Vec<i64>, sqlx::Error> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let sql = format!(
+        "SELECT id FROM {table} WHERE account_id = ? AND id IN ({})",
+        vec!["?"; ids.len()].join(", "),
+        table = table.name(),
+    );
+    let mut params = vec![SqlParam::Int(account_id)];
+    params.extend(ids.iter().map(|id| SqlParam::Int(*id)));
+    let rows = (&mut *conn)
+        .fetch_all(bind_all(&renumber_placeholders(&sql), &params))
+        .await?;
+    let found = rows
+        .iter()
+        .map(|row| row.try_get::<i64, _>(0))
+        .collect::<Result<std::collections::HashSet<_>, _>>()?;
+    let mut missing: Vec<i64> = ids
+        .iter()
+        .copied()
+        .filter(|id| !found.contains(id))
+        .collect();
+    missing.dedup();
+    Ok(missing)
 }
 
 #[cfg(test)]

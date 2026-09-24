@@ -7,7 +7,9 @@
 //! `load_messages` takes an already-compiled `WHERE` fragment and its bound
 //! params, so the caller decides what selects the rows — a search query, a
 //! conversation id — while this module owns only the row shape and how it is
-//! assembled.
+//! assembled. The counts and `WHERE` fragments those callers page with live
+//! here too: the count a search's matches make, a conversation's page, and
+//! the fragment an Export Run's `selection` scope adds.
 
 use std::collections::HashMap;
 
@@ -16,9 +18,10 @@ use sqlx::{Executor, Row};
 
 pub use vault_api_types::{Attachment, Message, MessageConversation, Tapback};
 
+use crate::db::ownership::owns_conversation;
 use crate::db::participant_names::load_for_conversations;
-use crate::db::sql::{SqlParam, bind_all, group_rows_by_id, renumber_placeholders};
-use crate::paging::{Direction, SortKey};
+use crate::db::sql::{SqlParam, bind_all, bind_args, group_rows_by_id, renumber_placeholders};
+use crate::paging::{Direction, Page, SortKey};
 use crate::server::ApiError;
 
 /// Sorted, deduplicated ids for an `IN` list.
@@ -301,4 +304,141 @@ async fn load_tapbacks(
         },
     )
     .await
+}
+
+/// `COUNT(*)` of the messages a compiled filter matches.
+pub(crate) async fn count_matching_messages(
+    conn: &mut AnyConnection,
+    filter: &crate::search::Filter,
+) -> Result<u64, ApiError> {
+    let sql = format!(
+        "SELECT COUNT(*)
+         {messages_from_sql}
+         WHERE {where_sql}",
+        messages_from_sql = messages_from_sql(),
+        where_sql = filter.where_sql(),
+    );
+    let n: i64 = (&mut *conn)
+        .fetch_one(bind_all(&renumber_placeholders(&sql), filter.params()))
+        .await?
+        .try_get(0)?;
+    Ok(n.max(0) as u64)
+}
+
+/// The `WHERE` fragment a `selection` scope adds to the messages it reads:
+/// messages in any of `conversation_ids`, or any of `message_ids`. At least
+/// one of the two lists is non-empty.
+pub(crate) fn selection_where(
+    conversation_ids: &[i64],
+    message_ids: &[i64],
+) -> (String, Vec<SqlParam>) {
+    let placeholders = |n: usize| vec!["?"; n].join(", ");
+    let mut branches = Vec::new();
+    let mut params = Vec::new();
+    if !conversation_ids.is_empty() {
+        branches.push(format!(
+            "m.conversation_id IN ({})",
+            placeholders(conversation_ids.len())
+        ));
+        params.extend(conversation_ids.iter().map(|id| SqlParam::Int(*id)));
+    }
+    if !message_ids.is_empty() {
+        branches.push(format!("m.id IN ({})", placeholders(message_ids.len())));
+        params.extend(message_ids.iter().map(|id| SqlParam::Int(*id)));
+    }
+    (format!("({})", branches.join(" OR ")), params)
+}
+
+/// The `WHERE` a conversation's message page and its `total` share: the
+/// conversation itself, the account scope, Export's not-duplicate filter
+/// (`ListKind::Messages`'s default in `search::emit::compile`), and — when
+/// `year` is given — the same calendar-year bounds `date:YYYY` matches in
+/// the search language, computed by the same
+/// [`crate::search::value::parse_date_span`] the search compiler calls, so a
+/// day cannot fall inside the year for one and outside it for the other.
+/// Trash plays no part here: reading one conversation's messages is not
+/// gated by trash, the same rule [`get_conversation_summary`](crate::db::conversations::get_conversation_summary) follows for
+/// the conversation itself.
+///
+/// # Errors
+///
+/// `BadRequest` when `year` is not a four-digit year.
+fn conversation_messages_where(
+    conversation_id: i64,
+    account_id: i64,
+    year: Option<i32>,
+    zone: chrono_tz::Tz,
+) -> Result<(String, Vec<SqlParam>), ApiError> {
+    let mut sql =
+        "m.conversation_id = ? AND m.account_id = ? AND m.duplicate_of IS NULL".to_string();
+    let mut params = vec![SqlParam::Int(conversation_id), SqlParam::Int(account_id)];
+    if let Some(year) = year {
+        // `today` only matters to the relative-span forms (`7d`, `1y`, …)
+        // `parse_date_span` also understands; a bare `YYYY` ignores it. The
+        // year's edges are the instants it begins and ends in the account's
+        // zone, the same rule `date:YYYY` uses.
+        let today = crate::search::today_in(zone);
+        let span = crate::search::value::parse_date_span(&year.to_string(), today)
+            .ok_or_else(|| ApiError::validation("year must be a four-digit year"))?;
+        sql.push_str(" AND m.timestamp >= ? AND m.timestamp < ?");
+        params.push(SqlParam::Text(crate::search::value::utc_instant(
+            zone, span.start,
+        )));
+        params.push(SqlParam::Text(crate::search::value::utc_instant(
+            zone, span.end,
+        )));
+    }
+    Ok((sql, params))
+}
+
+/// One page of a conversation's messages, ascending by timestamp then
+/// `sort_order`. `None` when the conversation does not exist or belongs to
+/// another account — checked before the message query runs, so an unknown id
+/// and another account's conversation id are indistinguishable from the
+/// outside, the same guarantee [`get_conversation_summary`](crate::db::conversations::get_conversation_summary) gives.
+///
+/// # Errors
+///
+/// `BadRequest` when `year` is not a four-digit year; `Internal` when a
+/// statement fails.
+pub async fn get_conversation_messages(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    conversation_id: i64,
+    year: Option<i32>,
+    order: &[SortKey<MessageSort>],
+    limit: usize,
+    offset: usize,
+) -> Result<Option<Page<Message>>, ApiError> {
+    if !owns_conversation(conn, account_id, conversation_id).await? {
+        return Ok(None);
+    }
+
+    let zone = crate::db::account_profile::load_time_zone(conn, account_id).await?;
+    let (where_sql, params) = conversation_messages_where(conversation_id, account_id, year, zone)?;
+
+    let count_sql = renumber_placeholders(&format!(
+        "SELECT COUNT(*) FROM messages m WHERE {where_sql}"
+    ));
+    let total: i64 = sqlx::query_scalar_with(&count_sql, bind_args(&params))
+        .fetch_one(&mut *conn)
+        .await?;
+    let total = total.max(0) as u64;
+
+    let items = load_messages(
+        conn,
+        &where_sql,
+        &params,
+        order,
+        limit as u32,
+        offset as u32,
+    )
+    .await?;
+
+    Ok(Some(Page {
+        items,
+        total,
+        limit,
+        offset,
+    }))
 }

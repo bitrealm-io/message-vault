@@ -11,22 +11,20 @@ use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::State;
 use serde::Deserialize;
 use sqlx::{AnyConnection, Connection};
-use sqlx::{Executor, Row};
 use vault_api_types::{ExportRun, ExportScope};
 
 use crate::db::conversation_messages::{
-    DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, MessageSort, conversation_join_sql,
-    load_messages_from, messages_from_sql,
+    DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, selection_where,
 };
 use crate::db::dialect::{begin_immediate_sql, engine_of};
-use crate::db::sql::{SqlParam, bind_all, renumber_placeholders};
+use crate::db::ownership::{OwnedTable, missing_ids};
 use crate::db::vault_exports::{
-    self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, EXPORT_STATUSES, ExportCounts, StartExportArgs,
+    self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, EXPORT_STATUSES, ExportPageOpts, StartExportArgs,
+    export_messages,
 };
 use crate::messages_api::message_filter;
 use crate::paging::{
-    DEFAULT_EXPORT_LIMIT, DEFAULT_LIST_LIMIT, Direction, MAX_LIST_OFFSET, Page, SortKey,
-    page_params, parse_sort,
+    DEFAULT_EXPORT_LIMIT, DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, page_params, parse_sort,
 };
 use crate::server::{ApiError, AppState, Created, ExportAccess};
 
@@ -34,21 +32,6 @@ use crate::server::{ApiError, AppState, Created, ExportAccess};
 /// stays under SQLite's variable cap; the same figure `POST /v1/contacts/summaries`
 /// uses.
 pub const MAX_SELECTION_IDS: usize = 500;
-
-/// Options for one page of a running Export Run's messages.
-#[derive(Debug, Clone)]
-pub struct ExportPageOpts {
-    /// The run to read, already checked to be the caller's and running.
-    pub export_id: i64,
-    /// How many places the run listed at creation: its `message_count`.
-    pub total: u64,
-    /// Places on the page. Already validated by the handler: `1..=MAX_LIST_LIMIT`.
-    pub limit: usize,
-    /// Places to skip in the run's list.
-    pub offset: usize,
-    /// The parsed `sort`; [`DEFAULT_MESSAGE_SORT`] when the caller has none.
-    pub order: Vec<SortKey<MessageSort>>,
-}
 
 /// Start an Export Run over `scope`: compile the scope, list the ids of the
 /// messages it matches now, count them, and record the run as `running`, all
@@ -80,23 +63,8 @@ pub async fn start_export_run(
     )
     .await?;
 
-    // Each matched message gets its place in the run, oldest first, so a
-    // page is a range of places whatever happens to the vault meanwhile.
-    let list_sql = format!(
-        "INSERT INTO vault_export_messages (export_id, row_order, message_id)
-         SELECT ?, ROW_NUMBER() OVER (ORDER BY m.timestamp, m.sort_order, m.id), m.id
-         {messages_from_sql}
-         WHERE {where_sql}",
-        messages_from_sql = messages_from_sql(),
-        where_sql = filter.where_sql(),
-    );
-    let mut params = vec![SqlParam::Int(export_id)];
-    params.extend_from_slice(filter.params());
-    (&mut *tx)
-        .execute(bind_all(&renumber_placeholders(&list_sql), &params))
-        .await?;
-
-    let counts = export_counts(&mut tx, export_id).await?;
+    vault_exports::list_run_messages(&mut tx, export_id, &filter).await?;
+    let counts = vault_exports::export_counts(&mut tx, export_id).await?;
     vault_exports::record_counts(&mut tx, export_id, counts).await?;
     let run = vault_exports::get_export(&mut tx, account_id, export_id)
         .await?
@@ -158,9 +126,15 @@ pub async fn scope_filter(
             if !errors.is_empty() {
                 return Err(ApiError::ValidationFailed(errors));
             }
-            let missing_conversations =
-                missing_ids(conn, "conversations", account_id, conversation_ids).await?;
-            let missing_messages = missing_ids(conn, "messages", account_id, message_ids).await?;
+            let missing_conversations = missing_ids(
+                conn,
+                OwnedTable::Conversations,
+                account_id,
+                conversation_ids,
+            )
+            .await?;
+            let missing_messages =
+                missing_ids(conn, OwnedTable::Messages, account_id, message_ids).await?;
             for (field, missing) in [
                 ("scope.conversation_ids", missing_conversations),
                 ("scope.message_ids", missing_messages),
@@ -178,173 +152,10 @@ pub async fn scope_filter(
                 return Err(ApiError::ValidationFailed(errors));
             }
 
-            let mut branches = Vec::new();
-            let mut params = Vec::new();
-            if !conversation_ids.is_empty() {
-                branches.push(format!(
-                    "m.conversation_id IN ({})",
-                    placeholders(conversation_ids.len())
-                ));
-                params.extend(conversation_ids.iter().map(|id| SqlParam::Int(*id)));
-            }
-            if !message_ids.is_empty() {
-                branches.push(format!("m.id IN ({})", placeholders(message_ids.len())));
-                params.extend(message_ids.iter().map(|id| SqlParam::Int(*id)));
-            }
-            let fragment = format!("({})", branches.join(" OR "));
+            let (fragment, params) = selection_where(conversation_ids, message_ids);
             Ok(message_filter(engine, account_id, "", clock)?.and_where(&fragment, params))
         }
     }
-}
-
-/// `?, ?, ?` for an `IN` list of `n` values.
-fn placeholders(n: usize) -> String {
-    vec!["?"; n].join(", ")
-}
-
-/// The ids in `ids` that `table` does not hold for `account_id`, in the
-/// order given.
-async fn missing_ids(
-    conn: &mut AnyConnection,
-    table: &str,
-    account_id: i64,
-    ids: &[i64],
-) -> Result<Vec<i64>, ApiError> {
-    if ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    let sql = format!(
-        "SELECT id FROM {table} WHERE account_id = ? AND id IN ({})",
-        placeholders(ids.len())
-    );
-    let mut params = vec![SqlParam::Int(account_id)];
-    params.extend(ids.iter().map(|id| SqlParam::Int(*id)));
-    let rows = (&mut *conn)
-        .fetch_all(bind_all(&renumber_placeholders(&sql), &params))
-        .await?;
-    let found = rows
-        .iter()
-        .map(|row| row.try_get::<i64, _>(0))
-        .collect::<Result<std::collections::HashSet<_>, _>>()?;
-    let mut missing: Vec<i64> = ids
-        .iter()
-        .copied()
-        .filter(|id| !found.contains(id))
-        .collect();
-    missing.dedup();
-    Ok(missing)
-}
-
-/// The first and last place (exclusive, inclusive) a page covers in a run's
-/// list of `total` places, for `offset` and `limit` read in `direction`.
-/// Newest first counts places from the end of the list.
-fn page_places(total: u64, offset: usize, limit: usize, direction: Direction) -> (i64, i64) {
-    let total = i64::try_from(total).unwrap_or(i64::MAX);
-    let offset = i64::try_from(offset).unwrap_or(i64::MAX);
-    let limit = i64::try_from(limit).unwrap_or(i64::MAX);
-    match direction {
-        Direction::Asc => (offset, offset.saturating_add(limit)),
-        Direction::Desc => {
-            let last = total.saturating_sub(offset);
-            (last.saturating_sub(limit), last)
-        }
-    }
-}
-
-/// One page of a running Export Run's messages: the places `offset` to
-/// `offset + limit` of the list the run made at creation.
-///
-/// `total` is always the number of places the run listed. A message deleted
-/// since creation leaves its place empty, so that page carries fewer items
-/// than `limit`; a caller steps `offset` by `limit`, not by the items it got.
-/// An offset past the end returns an empty page.
-///
-/// # Errors
-///
-/// Returns an internal error when a database statement fails.
-pub async fn export_messages(
-    conn: &mut AnyConnection,
-    opts: ExportPageOpts,
-) -> Result<Page<Message>, ApiError> {
-    let direction = opts
-        .order
-        .iter()
-        .find(|k| k.key == MessageSort::Date)
-        .map_or(Direction::Asc, |k| k.direction);
-    let (after, through) = page_places(opts.total, opts.offset, opts.limit, direction);
-    let from_sql = format!(
-        "FROM vault_export_messages e
-         JOIN messages m ON m.id = e.message_id
-         {conversation_join_sql}",
-        conversation_join_sql = conversation_join_sql(),
-    );
-    let messages = load_messages_from(
-        conn,
-        &from_sql,
-        "e.export_id = ? AND e.row_order > ? AND e.row_order <= ?",
-        &[
-            SqlParam::Int(opts.export_id),
-            SqlParam::Int(after),
-            SqlParam::Int(through),
-        ],
-        &format!("e.row_order {}", direction.sql()),
-        opts.limit as u32,
-        0,
-    )
-    .await?;
-
-    Ok(Page {
-        items: messages,
-        total: opts.total,
-        limit: opts.limit,
-        offset: opts.offset,
-    })
-}
-
-/// The four counts a run records at creation, over the messages it listed.
-///
-/// Attachment count is unique non-empty SHA-256 fingerprints on those
-/// messages; `total_bytes` sums the known `attachments.size_bytes` for those
-/// fingerprints.
-///
-/// # Errors
-///
-/// Returns an internal error when a database statement fails.
-async fn export_counts(conn: &mut AnyConnection, export_id: i64) -> Result<ExportCounts, ApiError> {
-    let row = sqlx::query(
-        "SELECT COUNT(*), COUNT(DISTINCT m.conversation_id)
-         FROM vault_export_messages e
-         JOIN messages m ON m.id = e.message_id
-         WHERE e.export_id = $1",
-    )
-    .bind(export_id)
-    .fetch_one(&mut *conn)
-    .await?;
-    let (messages, conversations): (i64, i64) = (row.try_get(0)?, row.try_get(1)?);
-
-    let row = sqlx::query(
-        "SELECT COUNT(*), COALESCE(SUM(sz), 0)
-         FROM (
-           SELECT MAX(a.size_bytes) AS sz
-           FROM vault_export_messages e
-           JOIN attachments a ON a.message_id = e.message_id
-           WHERE e.export_id = $1
-             AND a.sha256 IS NOT NULL
-             AND length(trim(a.sha256)) > 0
-           GROUP BY lower(trim(a.sha256))
-         ) fingerprints",
-    )
-    .bind(export_id)
-    .fetch_one(&mut *conn)
-    .await?;
-    let (attachments, total_bytes): (i64, i64) = (row.try_get(0)?, row.try_get(1)?);
-
-    Ok(ExportCounts {
-        messages: messages.max(0),
-        conversations: conversations.max(0),
-        attachments: attachments.max(0),
-        total_bytes: total_bytes.max(0),
-    })
 }
 
 /// Body of `POST /v1/exports`: the scope, and the tool that asked.

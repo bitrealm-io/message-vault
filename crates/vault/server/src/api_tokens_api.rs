@@ -10,21 +10,16 @@ use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
 use axum::extract::State;
 use serde::{Deserialize, Serialize};
 
+use crate::accounts_api::{Admits, require_account_reach};
 use crate::db::api_tokens;
 use crate::db::permissions::Permissions;
 use crate::db::schema;
-use crate::server::{ApiError, AppState, AuthIdentity, Created, FullAccess};
+use crate::server::{ApiError, AppState, Created, FullAccess};
 
 /// Admit only the account whose tokens the path names. The refusal reads the
 /// same whether or not the other account exists.
-fn require_own_tokens(auth: &AuthIdentity, target: i64) -> Result<(), ApiError> {
-    if auth.account_id == target {
-        return Ok(());
-    }
-    Err(ApiError::InsufficientScope(
-        "API tokens are managed by the account that holds them".into(),
-    ))
-}
+const HOLDER_ONLY: Admits =
+    Admits::NobodyElse("API tokens are managed by the account that holds them");
 
 /// One named API token as shown in Settings: label, permissions, and masked secret.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -160,10 +155,10 @@ pub async fn list_api_tokens(
     FullAccess(auth): FullAccess,
     Query(query): Query<PageQuery>,
 ) -> Result<Json<Page<ApiToken>>, ApiError> {
-    require_own_tokens(&auth, account_id)?;
+    let mut conn = state.db.acquire().await?;
+    require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
     let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
 
-    let mut conn = state.db.acquire().await?;
     schema::ensure_accounts_schema(&mut conn).await?;
     let rows = api_tokens::list_api_tokens(&mut conn, account_id).await?;
     let items: Vec<ApiToken> = rows.into_iter().map(ApiToken::from).collect();
@@ -198,12 +193,12 @@ pub async fn create_api_token(
     FullAccess(auth): FullAccess,
     Json(req): Json<CreateApiTokenRequest>,
 ) -> Result<Created<CreateApiTokenResponse>, ApiError> {
-    require_own_tokens(&auth, account_id)?;
+    let mut conn = state.db.acquire().await?;
+    require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
     let label = req.label;
     let permissions = Permissions::token(req.can_import, req.can_export);
     let expires_in_days = req.expires_in_days;
 
-    let mut conn = state.db.acquire().await?;
     schema::ensure_accounts_schema(&mut conn).await?;
     let created =
         api_tokens::create_api_token(&mut conn, account_id, &label, permissions, expires_in_days)
@@ -247,9 +242,8 @@ pub async fn delete_api_token(
     Path((account_id, id)): Path<(i64, i64)>,
     FullAccess(auth): FullAccess,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    require_own_tokens(&auth, account_id)?;
-
     let mut conn = state.db.acquire().await?;
+    require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
     schema::ensure_accounts_schema(&mut conn).await?;
     let deleted = api_tokens::delete_api_token(&mut conn, account_id, id).await?;
 
@@ -285,10 +279,10 @@ pub async fn update_api_token(
     FullAccess(auth): FullAccess,
     Json(req): Json<UpdateApiTokenRequest>,
 ) -> Result<Json<UpdateApiTokenResponse>, ApiError> {
-    require_own_tokens(&auth, account_id)?;
+    let mut conn = state.db.acquire().await?;
+    require_account_reach(&mut conn, &auth, account_id, HOLDER_ONLY).await?;
     let label = req.label;
 
-    let mut conn = state.db.acquire().await?;
     schema::ensure_accounts_schema(&mut conn).await?;
     let trimmed = label.trim().to_string();
     let ok = api_tokens::update_api_token_label(&mut conn, account_id, id, &trimmed)

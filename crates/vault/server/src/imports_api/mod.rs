@@ -1222,8 +1222,8 @@ async fn create_import_contact_group(
         }
     };
     let name = import_contact_group_name(row);
-    if let Err(e) = crate::named_membership::set_membership(
-        crate::named_membership::group_spec(),
+    if let Err(e) = crate::db::named_membership::set_membership(
+        crate::db::named_membership::group_spec(),
         conn,
         account_id,
         &touched,

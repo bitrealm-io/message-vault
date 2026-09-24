@@ -13,7 +13,7 @@ use crate::extract::{Json, Query};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
-use crate::named_membership::{self, MembershipSpec};
+use crate::db::named_membership::{self, MembershipSpec};
 use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
 use crate::server::{ApiError, AppState, Created, FullAccess};
 
@@ -156,7 +156,7 @@ pub(crate) async fn members_update(
 /// in `docs/src/assets/openapi.json`.
 ///
 /// Adding a third collection is this macro invoked a third time, plus a
-/// `MembershipSpec` for it in `named_membership.rs` and six
+/// `MembershipSpec` for it in `db/named_membership.rs` and six
 /// `.routes(routes!(..))` lines in `openapi.rs` — `utoipa_axum` needs each
 /// route named there and that cannot be folded in here.
 ///
@@ -334,7 +334,7 @@ macro_rules! named_set_routes {
 }
 
 named_set_routes! {
-    spec: crate::named_membership::group_spec,
+    spec: crate::db::named_membership::group_spec,
     tag: "Contacts",
     id_description: "Contact Group id",
     root_path: "/v1/contact-groups",
@@ -350,7 +350,7 @@ named_set_routes! {
 }
 
 named_set_routes! {
-    spec: crate::named_membership::tag_spec,
+    spec: crate::db::named_membership::tag_spec,
     tag: "Message tags",
     id_description: "Message Tag id",
     root_path: "/v1/message-tags",

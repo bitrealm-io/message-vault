@@ -641,6 +641,8 @@ mod tests {
         assert!(batch.would_overflow(&chunk(10, 2), 3, 100));
         assert!(batch.would_overflow(&chunk(70, 1), 10, 100));
         assert!(!batch.would_overflow(&chunk(10, 1), 3, 100));
+        // A chunk that fills the batch to exactly the byte limit still joins it.
+        assert!(!batch.would_overflow(&chunk(60, 1), 10, 100));
     }
 
     #[test]

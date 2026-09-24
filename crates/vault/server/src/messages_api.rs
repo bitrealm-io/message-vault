@@ -60,9 +60,7 @@ pub(crate) fn message_filter(
     ),
     responses(
         (status = 200, body = crate::paging::Page<Message>),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
+        crate::problem::openapi::SearchQueryInvalid
     )
 )]
 pub(crate) async fn list_messages(
@@ -124,9 +122,6 @@ pub(crate) async fn list_messages(
     params(("id" = i64, Path, description = "Message id")),
     responses(
         (status = 200, body = Message),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn get_message(

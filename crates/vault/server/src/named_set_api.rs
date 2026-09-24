@@ -153,7 +153,7 @@ pub(crate) async fn members_update(
 /// out here rather than written twice.
 ///
 /// The function names and doc comments are load-bearing: `operationId` comes
-/// from the name and `summary` from the first line of the doc, so both appear
+/// from the name and `summary` from the first sentence of the doc, so both appear
 /// in `docs/src/assets/openapi.json`.
 ///
 /// Adding a third collection is this macro invoked a third time, plus a
@@ -191,8 +191,6 @@ macro_rules! named_set_routes {
             ),
             responses(
                 (status = 200, body = crate::paging::Page<NamedSet>),
-                (status = 401, body = crate::problem::Problem),
-                (status = 403, body = crate::problem::Problem)
             )
         )]
         pub(crate) async fn $list_fn(
@@ -216,11 +214,7 @@ macro_rules! named_set_routes {
                     body = NamedSet,
                     headers(("Location" = String, description = "Path of the new set"))
                 ),
-                (status = 400, body = crate::problem::Problem),
-                (status = 422, body = crate::problem::Problem),
-                (status = 401, body = crate::problem::Problem),
-                (status = 403, body = crate::problem::Problem),
-                (status = 409, body = crate::problem::Problem)
+                crate::problem::openapi::NameTaken
             )
         )]
         pub(crate) async fn $create_fn(
@@ -241,12 +235,7 @@ macro_rules! named_set_routes {
             request_body = NamedSetRequest,
             responses(
                 (status = 200, body = NamedSet),
-                (status = 400, body = crate::problem::Problem),
-                (status = 422, body = crate::problem::Problem),
-                (status = 401, body = crate::problem::Problem),
-                (status = 403, body = crate::problem::Problem),
-                (status = 404, body = crate::problem::Problem),
-                (status = 409, body = crate::problem::Problem)
+                crate::problem::openapi::NameTaken
             )
         )]
         pub(crate) async fn $update_fn(
@@ -267,9 +256,6 @@ macro_rules! named_set_routes {
             params(("id" = i64, Path, description = $id_description)),
             responses(
                 (status = 204),
-                (status = 401, body = crate::problem::Problem),
-                (status = 403, body = crate::problem::Problem),
-                (status = 404, body = crate::problem::Problem)
             )
         )]
         pub(crate) async fn $delete_fn(
@@ -293,9 +279,6 @@ macro_rules! named_set_routes {
             ),
             responses(
                 (status = 200, body = crate::paging::Page<i64>),
-                (status = 401, body = crate::problem::Problem),
-                (status = 403, body = crate::problem::Problem),
-                (status = 404, body = crate::problem::Problem)
             )
         )]
         pub(crate) async fn $members_list_fn(
@@ -317,11 +300,6 @@ macro_rules! named_set_routes {
             request_body = UpdateMembersRequest,
             responses(
                 (status = 200, body = UpdateMembersResponse),
-                (status = 400, body = crate::problem::Problem),
-                (status = 422, body = crate::problem::Problem),
-                (status = 401, body = crate::problem::Problem),
-                (status = 403, body = crate::problem::Problem),
-                (status = 404, body = crate::problem::Problem)
             )
         )]
         pub(crate) async fn $members_update_fn(

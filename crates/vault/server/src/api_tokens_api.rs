@@ -145,8 +145,6 @@ pub struct UpdateApiTokenResponse {
     ),
     responses(
         (status = 200, body = crate::paging::Page<ApiToken>),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn list_api_tokens(
@@ -181,10 +179,6 @@ pub async fn list_api_tokens(
             body = CreateApiTokenResponse,
             headers(("Location" = String, description = "Path of the new token"))
         ),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn create_api_token(
@@ -232,9 +226,6 @@ pub async fn create_api_token(
     ),
     responses(
         (status = 204, description = "Token deleted"),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub async fn delete_api_token(
@@ -266,11 +257,6 @@ pub async fn delete_api_token(
     request_body = UpdateApiTokenRequest,
     responses(
         (status = 200, body = UpdateApiTokenResponse),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub async fn update_api_token(

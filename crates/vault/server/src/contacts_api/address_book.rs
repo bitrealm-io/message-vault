@@ -52,12 +52,6 @@ pub(crate) struct CreateContactsResponse {
     ),
     responses(
         (status = 200, body = CreateContactsResponse),
-        (status = 400, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 413, body = crate::problem::Problem),
-        (status = 415, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn create_contacts(

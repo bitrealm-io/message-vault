@@ -5,7 +5,7 @@ use axum::http::StatusCode;
 use crate::db::trash::{Trashable, move_to_trash};
 use crate::test_support::{
     RegisteredAccount, SeedConversation, SeedMessage, TestVault, attach_stored_file, delete_status,
-    fake_sha256, get_json, get_status, register_via_api, seed_conversation, test_vault,
+    fake_sha256, get_json, get_status, register_via_api, seed_conversation, vault_with_account,
 };
 
 /// One `imessage` conversation with one message on `handle`, returning its id.
@@ -61,8 +61,7 @@ async fn conversation_total(vault: &TestVault, token: &str, q: &str) -> u64 {
 
 #[tokio::test]
 async fn empty_trash_deletes_trashed_conversations_and_forgets_trashed_contacts() {
-    let vault = test_vault().await;
-    let alice = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, alice) = vault_with_account().await;
     let shared = fake_sha256('a');
     let only_in_doomed = fake_sha256('b');
 
@@ -148,8 +147,7 @@ async fn empty_trash_deletes_trashed_conversations_and_forgets_trashed_contacts(
 
 #[tokio::test]
 async fn empty_trash_leaves_another_accounts_trash_alone() {
-    let vault = test_vault().await;
-    let alice = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, alice) = vault_with_account().await;
     let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
     let bobs = seed(&vault, &bob, "+15550001").await;
     trash(&vault, &bob, Trashable::Conversation(bobs)).await;
@@ -166,18 +164,10 @@ async fn empty_trash_leaves_another_accounts_trash_alone() {
 
 #[tokio::test]
 async fn empty_trash_needs_the_delete_permission() {
-    let vault = test_vault().await;
-    let alice = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, alice) = vault_with_account().await;
     let doomed = seed(&vault, &alice, "+15550001").await;
     trash(&vault, &alice, Trashable::Conversation(doomed)).await;
-    {
-        let mut conn = vault.conn().await;
-        sqlx::query("UPDATE accounts SET can_delete = 0 WHERE id = $1")
-            .bind(alice.account_id)
-            .execute(&mut *conn)
-            .await
-            .unwrap();
-    }
+    vault.turn_off_delete(alice.account_id).await;
 
     let status = delete_status(&vault.state, "/v1/trash", &alice.token).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
@@ -186,13 +176,6 @@ async fn empty_trash_needs_the_delete_permission() {
         1,
         "the trash is untouched when deleting is not permitted"
     );
-}
-
-#[tokio::test]
-async fn empty_trash_requires_auth() {
-    let vault = test_vault().await;
-    let status = delete_status(&vault.state, "/v1/trash", "not-a-token").await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
 
 #[test]

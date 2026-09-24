@@ -37,9 +37,7 @@ use crate::trash_api::remove_orphaned_files;
     ),
     responses(
         (status = 200, body = crate::paging::Page<ConversationSummary>),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
+        crate::problem::openapi::SearchQueryInvalid
     )
 )]
 pub(crate) async fn list_conversations(
@@ -82,9 +80,6 @@ pub(crate) async fn list_conversations(
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 200, body = ConversationSummary),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn get_conversation(
@@ -113,9 +108,6 @@ pub(crate) async fn get_conversation(
     ),
     responses(
         (status = 200, body = crate::paging::Page<ConversationSource>),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn list_conversation_sources(
@@ -158,10 +150,6 @@ pub(crate) struct ListConversationMessagesQuery {
     ),
     responses(
         (status = 200, body = crate::paging::Page<vault_api_types::Message>),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn list_conversation_messages(
@@ -202,9 +190,6 @@ pub(crate) async fn list_conversation_messages(
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 204, description = "Trashed"),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn trash_conversation(
@@ -236,9 +221,6 @@ pub(crate) async fn trash_conversation(
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 204, description = "Restored"),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn restore_conversation(
@@ -272,10 +254,7 @@ pub(crate) async fn restore_conversation(
     params(("id" = i64, Path, description = "Conversation id")),
     responses(
         (status = 204, description = "Deleted"),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem),
-        (status = 409, body = crate::problem::Problem, description = "The conversation is not in the trash")
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn delete_conversation(

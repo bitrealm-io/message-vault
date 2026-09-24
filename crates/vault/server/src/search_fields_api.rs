@@ -42,9 +42,6 @@ fn search_fields(
     params(ListSearchFieldsQuery),
     responses(
         (status = 200, body = crate::paging::Page<FieldDoc>),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn list_contact_search_fields(
@@ -63,9 +60,6 @@ pub(crate) async fn list_contact_search_fields(
     params(ListSearchFieldsQuery),
     responses(
         (status = 200, body = crate::paging::Page<FieldDoc>),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn list_conversation_search_fields(
@@ -79,7 +73,7 @@ pub(crate) async fn list_conversation_search_fields(
 mod tests {
     use axum::http::StatusCode;
 
-    use crate::test_support::{get_json, get_status, register_via_api, test_vault};
+    use crate::test_support::{get_json, get_status, vault_with_account};
 
     /// The words a list's page names.
     fn words(body: &serde_json::Value) -> Vec<String> {
@@ -93,8 +87,7 @@ mod tests {
 
     #[tokio::test]
     async fn each_list_is_its_own_path_with_its_own_words() {
-        let vault = test_vault().await;
-        let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+        let (vault, account) = vault_with_account().await;
         let contacts: serde_json::Value = get_json(
             &vault.state,
             "/v1/search-fields/contacts?limit=500",

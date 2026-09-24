@@ -826,6 +826,7 @@ pub(crate) fn http_app(state: AppState) -> Router {
     let (auth_small, mut spec) = limited_auth_router();
     let (doc_router, rest) = crate::openapi::api_openapi().split_for_parts();
     spec.merge(rest);
+    crate::openapi::finish(&mut spec);
     let declared_queries =
         std::sync::Arc::new(crate::declared_query::DeclaredQueries::from_spec(&spec));
 

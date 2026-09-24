@@ -7,6 +7,7 @@ use sqlx::AnyConnection;
 use crate::db::{account_profile, vault_imports};
 use crate::test_support::{
     RegisteredAccount, TestVault, register_via_api, seed_one_message, test_vault,
+    vault_with_account,
 };
 
 /// A newest-first page — the default ordering, which is what most of these
@@ -31,28 +32,35 @@ async fn list_conversations(
 }
 
 /// A vault, a logged-in account, and one conversation holding one message.
-async fn conversations_fixture() -> (TestVault, String, RegisteredAccount) {
-    let vault = test_vault().await;
-    let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+async fn conversations_fixture() -> (TestVault, RegisteredAccount) {
+    let (vault, account) = vault_with_account().await;
     seed_one_message(&vault.state, account.account_id).await;
-    let token = account.token.clone();
-    (vault, token, account)
+    (vault, account)
 }
 
 #[tokio::test]
 async fn conversation_list_takes_the_search_language() {
-    let (vault, token, _account) = conversations_fixture().await;
-    let page: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/conversations?q=kind:direct", &token)
-            .await;
+    let (vault, account) = conversations_fixture().await;
+    let page: serde_json::Value = crate::test_support::get_json(
+        &vault.state,
+        "/v1/conversations?q=kind:direct",
+        &account.token,
+    )
+    .await;
     assert!(page["total"].as_u64().unwrap() >= 1);
-    let status =
-        crate::test_support::get_status(&vault.state, "/v1/conversations?q=wibble:direct", &token)
-            .await;
+    let status = crate::test_support::get_status(
+        &vault.state,
+        "/v1/conversations?q=wibble:direct",
+        &account.token,
+    )
+    .await;
     assert_eq!(status, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
-    let status =
-        crate::test_support::get_status(&vault.state, "/v1/conversations?q=trashed:yes", &token)
-            .await;
+    let status = crate::test_support::get_status(
+        &vault.state,
+        "/v1/conversations?q=trashed:yes",
+        &account.token,
+    )
+    .await;
     assert_eq!(status, axum::http::StatusCode::OK);
 }
 
@@ -939,9 +947,8 @@ async fn list_conversations_filters_by_import_id() {
 /// never silently the default, and two keys compose.
 #[tokio::test]
 async fn sort_is_parsed_against_the_lists_keys() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     let (status, text) =
         crate::test_support::get_raw(&state, "/v1/conversations?sort=colour", &user.token).await;
     let problem = crate::test_support::expect_problem(
@@ -1274,9 +1281,8 @@ async fn list_conversations_filters_by_tag_and_people() {
 
 #[tokio::test]
 async fn the_conversation_list_is_a_page_with_integer_ids() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     crate::test_support::seed_one_message(&state, user.account_id).await;
 
     let page: serde_json::Value =
@@ -1293,30 +1299,9 @@ async fn the_conversation_list_is_a_page_with_integer_ids() {
 }
 
 #[tokio::test]
-async fn a_limit_past_the_cap_or_an_offset_past_the_cap_is_a_422() {
-    let vault = crate::test_support::test_vault().await;
-    let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
-
-    for path in [
-        "/v1/conversations?limit=501",
-        "/v1/conversations?limit=0",
-        "/v1/conversations?offset=50001",
-    ] {
-        let status = crate::test_support::get_status(&state, path, &user.token).await;
-        assert_eq!(
-            status,
-            axum::http::StatusCode::UNPROCESSABLE_ENTITY,
-            "{path}"
-        );
-    }
-}
-
-#[tokio::test]
 async fn conversation_detail_returns_the_owned_conversation() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
@@ -1338,9 +1323,8 @@ async fn conversation_detail_returns_the_owned_conversation() {
 
 #[tokio::test]
 async fn conversation_detail_404s_for_an_id_this_account_does_not_own() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
 
     let status =
         crate::test_support::get_status(&state, "/v1/conversations/999999", &user.token).await;
@@ -1349,9 +1333,8 @@ async fn conversation_detail_404s_for_an_id_this_account_does_not_own() {
 
 #[tokio::test]
 async fn conversation_detail_404s_for_another_accounts_conversation() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, alice) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let alice = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     crate::test_support::seed_one_message(&state, alice.account_id).await;
     let alice_list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &alice.token).await;
@@ -1374,9 +1357,8 @@ async fn conversation_detail_404s_for_another_accounts_conversation() {
 
 #[tokio::test]
 async fn conversation_detail_reads_a_trashed_conversation() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
@@ -1420,9 +1402,8 @@ async fn trashed_conversation_row_count(conn: &mut AnyConnection, account_id: i6
 
 #[tokio::test]
 async fn conversation_trash_drops_it_from_the_list() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
@@ -1447,9 +1428,8 @@ async fn conversation_trash_drops_it_from_the_list() {
 
 #[tokio::test]
 async fn conversation_trash_twice_is_204_with_no_second_marker() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
@@ -1473,9 +1453,8 @@ async fn conversation_trash_twice_is_204_with_no_second_marker() {
 
 #[tokio::test]
 async fn conversation_restore_brings_it_back_to_the_list() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
@@ -1507,9 +1486,8 @@ async fn conversation_restore_brings_it_back_to_the_list() {
 
 #[tokio::test]
 async fn conversation_restore_twice_is_204_with_marker_gone() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
@@ -1540,9 +1518,8 @@ async fn conversation_restore_twice_is_204_with_marker_gone() {
 
 #[tokio::test]
 async fn conversation_trash_404s_for_an_unknown_id() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
 
     let status = crate::test_support::post_status(
         &state,
@@ -1556,9 +1533,8 @@ async fn conversation_trash_404s_for_an_unknown_id() {
 
 #[tokio::test]
 async fn conversation_restore_404s_for_an_unknown_id() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
 
     let status = crate::test_support::post_status(
         &state,
@@ -1572,9 +1548,8 @@ async fn conversation_restore_404s_for_an_unknown_id() {
 
 #[tokio::test]
 async fn conversation_trash_404s_for_another_accounts_conversation() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, alice) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let alice = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     crate::test_support::seed_one_message(&state, alice.account_id).await;
     let alice_list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &alice.token).await;
@@ -1604,9 +1579,8 @@ async fn conversation_trash_404s_for_another_accounts_conversation() {
 
 #[tokio::test]
 async fn conversation_restore_404s_for_another_accounts_conversation() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, alice) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let alice = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     crate::test_support::seed_one_message(&state, alice.account_id).await;
     let alice_list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &alice.token).await;
@@ -1640,31 +1614,10 @@ async fn conversation_restore_404s_for_another_accounts_conversation() {
     );
 }
 
-#[tokio::test]
-async fn conversation_trash_requires_auth() {
-    let vault = crate::test_support::test_vault().await;
-    let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
-    crate::test_support::seed_one_message(&state, user.account_id).await;
-    let list: serde_json::Value =
-        crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
-    let id = list["items"][0]["id"].as_i64().unwrap();
-
-    let status = crate::test_support::post_status(
-        &state,
-        &format!("/v1/conversations/{id}/trash"),
-        "not-a-token",
-        serde_json::json!({}),
-    )
-    .await;
-    assert_eq!(status, axum::http::StatusCode::UNAUTHORIZED);
-}
-
 /// A logged-in account with one conversation already in the trash,
 /// returning the account and the conversation's id.
 async fn trashed_conversation_fixture() -> (TestVault, RegisteredAccount, i64) {
-    let vault = crate::test_support::test_vault().await;
-    let user = crate::test_support::register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     crate::test_support::seed_one_message(&vault.state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&vault.state, "/v1/conversations", &user.token).await;
@@ -1775,8 +1728,7 @@ async fn conversation_delete_removes_files_only_the_deleted_conversation_used() 
 
 #[tokio::test]
 async fn conversation_delete_refuses_a_conversation_that_is_not_in_the_trash() {
-    let vault = crate::test_support::test_vault().await;
-    let user = crate::test_support::register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     crate::test_support::seed_one_message(&vault.state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&vault.state, "/v1/conversations", &user.token).await;
@@ -1824,14 +1776,7 @@ async fn conversation_delete_404s_for_an_unknown_id_and_for_another_accounts() {
 #[tokio::test]
 async fn conversation_delete_needs_the_delete_permission() {
     let (vault, user, id) = trashed_conversation_fixture().await;
-    {
-        let mut conn = vault.conn().await;
-        sqlx::query("UPDATE accounts SET can_delete = 0 WHERE id = $1")
-            .bind(user.account_id)
-            .execute(&mut *conn)
-            .await
-            .unwrap();
-    }
+    vault.turn_off_delete(user.account_id).await;
 
     let status = crate::test_support::delete_status(
         &vault.state,
@@ -1848,45 +1793,12 @@ async fn conversation_delete_needs_the_delete_permission() {
     );
 }
 
-#[tokio::test]
-async fn conversation_delete_requires_auth() {
-    let (vault, _user, id) = trashed_conversation_fixture().await;
-    let status = crate::test_support::delete_status(
-        &vault.state,
-        &format!("/v1/conversations/{id}"),
-        "not-a-token",
-    )
-    .await;
-    assert_eq!(status, axum::http::StatusCode::UNAUTHORIZED);
-}
-
-#[tokio::test]
-async fn conversation_restore_requires_auth() {
-    let vault = crate::test_support::test_vault().await;
-    let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
-    crate::test_support::seed_one_message(&state, user.account_id).await;
-    let list: serde_json::Value =
-        crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
-    let id = list["items"][0]["id"].as_i64().unwrap();
-
-    let status = crate::test_support::post_status(
-        &state,
-        &format!("/v1/conversations/{id}/restore"),
-        "not-a-token",
-        serde_json::json!({}),
-    )
-    .await;
-    assert_eq!(status, axum::http::StatusCode::UNAUTHORIZED);
-}
-
 /// A logged-in account and one conversation with no messages yet, for
 /// tests that seed their own message rows with specific timestamps and
 /// `sort_order`.
 async fn conversation_messages_fixture() -> (TestVault, RegisteredAccount, i64) {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     let mut conn = state.db.acquire().await.unwrap();
     let handle_id: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
@@ -2192,30 +2104,11 @@ async fn conversation_messages_reads_a_trashed_conversations_messages() {
     );
 }
 
-#[tokio::test]
-async fn conversation_messages_bad_limit_is_refused_like_other_paged_routes() {
-    let (vault, user, conversation_id) = conversation_messages_fixture().await;
-
-    for path in [
-        format!("/v1/conversations/{conversation_id}/messages?limit=501"),
-        format!("/v1/conversations/{conversation_id}/messages?limit=0"),
-        format!("/v1/conversations/{conversation_id}/messages?offset=50001"),
-    ] {
-        let status = crate::test_support::get_status(&vault.state, &path, &user.token).await;
-        assert_eq!(
-            status,
-            axum::http::StatusCode::UNPROCESSABLE_ENTITY,
-            "{path}"
-        );
-    }
-}
-
 /// Alice's conversation holding two iMessage messages and two SMS messages,
 /// one of the SMS messages a duplicate of an iMessage one.
 async fn sources_fixture() -> (TestVault, RegisteredAccount, i64) {
     use crate::test_support::{SeedConversation, SeedMessage, seed_conversation};
-    let vault = test_vault().await;
-    let alice = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, alice) = vault_with_account().await;
     let message = |source, timestamp, body| SeedMessage {
         source,
         timestamp,

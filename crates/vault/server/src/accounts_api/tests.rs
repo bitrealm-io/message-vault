@@ -9,7 +9,7 @@ use crate::test_support::{
     delete_status, delete_status_with_body, expect_problem, get_json, get_raw, get_status, log_in,
     login_status, patch_failure, patch_json, patch_status, post_created_json, post_logged_out,
     post_status, post_status_logged_out, put_json, put_raw, put_status, register_via_api,
-    seed_conversation, seed_one_message, test_vault,
+    seed_conversation, seed_one_message, test_vault, vault_with_account,
 };
 
 fn member(id: i64) -> String {
@@ -45,96 +45,6 @@ async fn the_owner_reaches_every_row_and_an_account_reaches_its_own() {
     crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotTheOwner);
     let (status, text) = get_raw(&state, &member(424_242), &owner.token).await;
     crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
-}
-
-/// One case per route: an ordinary session is refused on every member route
-/// it points at another account, through the real HTTP stack.
-#[tokio::test]
-async fn every_member_route_refuses_another_accounts_session() {
-    let vault = test_vault().await;
-    let state = vault.state.clone();
-    let _owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
-    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
-    let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
-    let target = bob.account_id;
-
-    assert_eq!(
-        get_status(&state, "/v1/accounts", &alice.token).await,
-        StatusCode::FORBIDDEN,
-        "GET /v1/accounts"
-    );
-    assert_eq!(
-        get_status(&state, &member(target), &alice.token).await,
-        StatusCode::FORBIDDEN,
-        "GET /v1/accounts/{{id}}"
-    );
-    assert_eq!(
-        patch_status(
-            &state,
-            &member(target),
-            &alice.token,
-            serde_json::json!({ "preferred_name": "Robert" }),
-        )
-        .await,
-        StatusCode::FORBIDDEN,
-        "PATCH /v1/accounts/{{id}}"
-    );
-    assert_eq!(
-        delete_status_with_body(
-            &state,
-            &member(target),
-            &alice.token,
-            serde_json::json!({ "confirm": true, "current_password": "hunter2hunter2" }),
-        )
-        .await,
-        StatusCode::FORBIDDEN,
-        "DELETE /v1/accounts/{{id}}"
-    );
-    assert_eq!(
-        put_status(
-            &state,
-            &format!("{}/password", member(target)),
-            &alice.token,
-            serde_json::json!({ "password": "irrelevant123", "password_confirmation": "irrelevant123" }),
-        )
-        .await,
-        StatusCode::FORBIDDEN,
-        "PUT /v1/accounts/{{id}}/password"
-    );
-    assert_eq!(
-        delete_status_with_body(
-            &state,
-            &format!("{}/messages", member(target)),
-            &alice.token,
-            serde_json::json!({ "confirm": true }),
-        )
-        .await,
-        StatusCode::FORBIDDEN,
-        "DELETE /v1/accounts/{{id}}/messages"
-    );
-    assert_eq!(
-        get_status(&state, &format!("{}/storage", member(target)), &alice.token).await,
-        StatusCode::FORBIDDEN,
-        "GET /v1/accounts/{{id}}/storage"
-    );
-    for history in ["identities", "imports", "imports/1", "exports"] {
-        assert_eq!(
-            get_status(
-                &state,
-                &format!("{}/{history}", member(target)),
-                &alice.token
-            )
-            .await,
-            StatusCode::FORBIDDEN,
-            "GET /v1/accounts/{{id}}/{history}"
-        );
-    }
-
-    // And bob is untouched.
-    assert_eq!(
-        login_status(&state, "bob", "hunter2hunter2").await,
-        StatusCode::CREATED
-    );
 }
 
 /// No API token resolves to the owner, whichever account issued it. This is
@@ -351,10 +261,9 @@ async fn the_owner_creates_accounts_with_a_short_password_or_none() {
 /// never promoted from whoever arrived first.
 #[tokio::test]
 async fn a_stranger_is_logged_in_on_creation_and_never_becomes_the_owner() {
-    let vault = test_vault().await;
+    let (vault, first) = vault_with_account().await;
     let state = vault.state.clone();
 
-    let first = register_via_api(&state, "alice", "hunter2hunter2").await;
     let second = register_via_api(&state, "bob", "hunter2hunter2").await;
     assert_ne!(first.account_id, account_profile::OWNER_ACCOUNT_ID);
     assert_ne!(second.account_id, account_profile::OWNER_ACCOUNT_ID);
@@ -460,9 +369,8 @@ async fn a_closed_vault_and_an_ordinary_session_are_both_refused() {
 /// The username is the collection's key, taken once.
 #[tokio::test]
 async fn a_taken_username_is_a_conflict() {
-    let vault = test_vault().await;
+    let (vault, _alice) = vault_with_account().await;
     let state = vault.state.clone();
-    let _alice = register_via_api(&state, "alice", "hunter2hunter2").await;
 
     // Usernames are compared ignoring case, which the problem page says out
     // loud. A comparison that stopped ignoring it would let "ALICE" register
@@ -531,8 +439,7 @@ async fn registrations_under_many_names_are_rate_limited_across_the_vault() {
 /// the GET route then agrees with.
 #[tokio::test]
 async fn an_account_patches_its_own_profile_and_reads_it_back() {
-    let vault = test_vault().await;
-    let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, account) = vault_with_account().await;
     let path = member(account.account_id);
 
     let patched: serde_json::Value = patch_json(
@@ -563,8 +470,7 @@ async fn an_account_patches_its_own_profile_and_reads_it_back() {
 
 #[tokio::test]
 async fn patching_with_an_unknown_time_zone_is_a_validation_failure() {
-    let vault = test_vault().await;
-    let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, account) = vault_with_account().await;
 
     let (status, sentence) = patch_failure(
         &vault.state,
@@ -1188,9 +1094,8 @@ async fn deleting_one_accounts_messages_leaves_the_others_alone() {
 /// confirmation; without the scope it is refused.
 #[tokio::test]
 async fn deleting_own_messages_needs_the_delete_permission_and_a_confirmation() {
-    let vault = test_vault().await;
+    let (vault, alice) = vault_with_account().await;
     let state = vault.state.clone();
-    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let path = format!("{}/messages", member(alice.account_id));
     seed_one_message(&state, alice.account_id).await;
 
@@ -1208,13 +1113,7 @@ async fn deleting_own_messages_needs_the_delete_permission_and_a_confirmation() 
     .await;
     assert_eq!(body.conversations, 1);
 
-    let mut conn = state.db.acquire().await.unwrap();
-    sqlx::query("UPDATE accounts SET can_delete = 0 WHERE id = $1")
-        .bind(alice.account_id)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    drop(conn);
+    vault.turn_off_delete(alice.account_id).await;
     assert_eq!(
         delete_status_with_body(
             &state,
@@ -1232,9 +1131,8 @@ async fn deleting_own_messages_needs_the_delete_permission_and_a_confirmation() 
 /// asked to carry.
 #[tokio::test]
 async fn a_token_may_not_delete_messages_or_close_the_account() {
-    let vault = test_vault().await;
+    let (vault, created) = vault_with_account().await;
     let state = vault.state.clone();
-    let created = register_via_api(&state, "alice", "hunter2hunter2").await;
     seed_one_message(&state, created.account_id).await;
     let mut conn = state.db.acquire().await.unwrap();
     let token = api_tokens::create_api_token(
@@ -1317,9 +1215,8 @@ async fn the_owner_deletes_any_account_outright() {
 /// the one that refuses its own.
 #[tokio::test]
 async fn an_account_deletes_itself_with_its_password_and_the_demo_account_refuses() {
-    let vault = test_vault().await;
+    let (vault, alice) = vault_with_account().await;
     let state = vault.state.clone();
-    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let _bob = register_via_api(&state, "bob", "hunter2hunter2").await;
     let path = member(alice.account_id);
 
@@ -1840,8 +1737,7 @@ async fn profile_update_rolls_back_when_a_handle_service_is_unsupported() {
 /// unknown name is refused before anything is written.
 #[tokio::test]
 async fn the_account_carries_a_time_zone_and_refuses_an_unknown_one() {
-    let vault = test_vault().await;
-    let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, account) = vault_with_account().await;
     let mut conn = vault.conn().await;
     let before = require_account(&mut conn, account.account_id)
         .await

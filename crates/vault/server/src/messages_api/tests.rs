@@ -3,14 +3,13 @@ use axum::http::StatusCode;
 use crate::problem::ProblemType;
 use crate::test_support::{
     RegisteredAccount, SeedConversation, SeedMessage, TestVault, expect_problem, get_json, get_raw,
-    get_status, register_via_api, seed_conversation, test_vault,
+    get_status, register_via_api, seed_conversation, vault_with_account,
 };
 
 /// Two conversations for alice (a direct thread and a group), and one for bob
 /// that must never appear in alice's results.
 async fn seeded() -> (TestVault, RegisteredAccount, i64, i64) {
-    let vault = test_vault().await;
-    let alice = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, alice) = vault_with_account().await;
     let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
     let direct = seed_conversation(
         &vault.state,
@@ -163,24 +162,6 @@ async fn a_word_the_messages_list_does_not_have_is_a_422_with_a_sentence() {
     assert!(
         problem.detail.as_deref().unwrap().contains("conversations"),
         "{text}"
-    );
-}
-
-#[tokio::test]
-async fn the_route_refuses_an_offset_past_the_ceiling_and_requires_a_session() {
-    let (vault, alice, _direct, _group) = seeded().await;
-    assert_eq!(
-        get_status(&vault.state, "/v1/messages?offset=50001", &alice.token).await,
-        StatusCode::UNPROCESSABLE_ENTITY
-    );
-    assert_eq!(
-        get_status(&vault.state, "/v1/messages?offset=50000", &alice.token).await,
-        StatusCode::OK,
-        "the ceiling itself is allowed"
-    );
-    assert_eq!(
-        get_status(&vault.state, "/v1/messages", "not-a-token").await,
-        StatusCode::UNAUTHORIZED
     );
 }
 

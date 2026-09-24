@@ -7,7 +7,7 @@ use crate::problem::ProblemType;
 use crate::test_support::{
     RegisteredAccount, SeedConversation, SeedMessage, TestVault, delete_status, expect_problem,
     get_json, get_raw, get_status, post_created_json, post_json, post_raw, post_status,
-    register_via_api, seed_conversation, test_vault,
+    register_via_api, seed_conversation, test_vault, vault_with_account,
 };
 use axum::http::StatusCode;
 use serde_json::{Value, json};
@@ -493,8 +493,7 @@ async fn export_sql_placeholders_match_params_order() {
 /// menu"; the menu message carries one 13-byte attachment. Returns the vault,
 /// the account, and the two conversation ids.
 async fn vault_with_two_conversations() -> (TestVault, RegisteredAccount, i64, i64) {
-    let vault = test_vault().await;
-    let alice = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, alice) = vault_with_account().await;
     let dinner = seed_conversation(
         &vault.state,
         &SeedConversation {

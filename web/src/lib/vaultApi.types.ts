@@ -29,10 +29,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List the accounts this vault holds, with their flags, message count, and
-         *     storage use. The owner's own account comes first, then the rest by
-         *     username: the owner is an account of this vault too, and reaches its own
-         *     settings from the same list as everyone else's.
+         * List the accounts this vault holds, with their flags, message count, and storage use.
+         * @description The owner's own account comes first, then the rest by username: the owner is an account of this vault too, and reaches its own settings from the same list as everyone else's.
          */
         get: operations["list_accounts"];
         put?: never;
@@ -65,8 +63,7 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Permanently delete an account: login, profile, contacts, and every
-         *     message it owns, with its data directory.
+         * Permanently delete an account: login, profile, contacts, and every message it owns, with its data directory.
          * @description The vault owner deletes any account outright, the demo account included,
          *     which is how a demo vault is cleared into a real one. An account deletes
          *     itself with a body carrying the confirmation and its current password: a
@@ -79,11 +76,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Change an account. Its display name, time zone and handles are set by
-         *     the account itself or by the vault owner; only the vault owner sets an
-         *     account's disabled flag and its import, export and delete permissions. A
-         *     field the caller may not set answers `403 Forbidden`, and the reloaded
-         *     account is the answer.
+         * Change an account.
+         * @description Its display name, time zone and handles are set by the account itself or by the vault owner; only the vault owner sets an account's disabled flag and its import, export and delete permissions. A field the caller may not set answers `403 Forbidden`, and the reloaded account is the answer.
          */
         patch: operations["update_account"];
         trace?: never;
@@ -99,8 +93,8 @@ export interface paths {
         get: operations["list_api_tokens"];
         put?: never;
         /**
-         * Create a named API token. Returns the plaintext secret once, at creation;
-         *     it is never returned again.
+         * Create a named API token.
+         * @description Returns the plaintext secret once, at creation; it is never returned again.
          */
         post: operations["create_api_token"];
         delete?: never;
@@ -119,11 +113,17 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete one named API token. Requests using it start failing on the next call. */
+        /**
+         * Delete one named API token.
+         * @description Requests using it start failing on the next call.
+         */
         delete: operations["delete_api_token"];
         options?: never;
         head?: never;
-        /** Rename one named API token. The label is trimmed before storing. */
+        /**
+         * Rename one named API token.
+         * @description The label is trimmed before storing.
+         */
         patch: operations["update_api_token"];
         trace?: never;
     };
@@ -135,8 +135,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * An account's Export Runs as a page, newest first unless `sort` says
-         *     otherwise. The owner reads any account's; an account reads its own.
+         * An account's Export Runs as a page, newest first unless `sort` says otherwise.
+         * @description The owner reads any account's; an account reads its own.
          */
         get: operations["list_account_exports"];
         put?: never;
@@ -155,8 +155,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * An account's identities, each with the messages held at it. The
-         *     owner reads any account's; an account reads its own.
+         * An account's identities, each with the messages held at it.
+         * @description The owner reads any account's; an account reads its own.
          */
         get: operations["list_account_identities"];
         put?: never;
@@ -175,8 +175,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * An account's Import Runs as a page, newest first unless `sort` says
-         *     otherwise. The owner reads any account's; an account reads its own.
+         * An account's Import Runs as a page, newest first unless `sort` says otherwise.
+         * @description The owner reads any account's; an account reads its own.
          */
         get: operations["list_account_imports"];
         put?: never;
@@ -195,8 +195,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * One of an account's Import Runs: status, timings, counts and issues. A run
-         *     that is another account's is a 404.
+         * One of an account's Import Runs: status, timings, counts and issues.
+         * @description A run that is another account's is a 404.
          */
         get: operations["get_account_import"];
         put?: never;
@@ -218,9 +218,10 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Destroy one account's conversations, messages, and attachments. The
-         *     account itself, its contacts, and its login survive.
-         * @description The vault owner may, on any account. The account itself may with a
+         * Destroy one account's conversations, messages, and attachments.
+         * @description The account itself, its contacts, and its login survive.
+         *
+         *     The vault owner may, on any account. The account itself may with a
          *     session that carries the `delete` permission, and confirms in the body.
          *     An API token is refused whatever its scopes: permanent deletion is a
          *     person's act (`docs/architecture/http-api.md`, "Credentials and reach").
@@ -266,11 +267,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * What an account holds: attachment bytes, the attachment, conversation and
-         *     contact counts, and the 100 largest files. The owner reads any account's;
-         *     an account reads its own. The owner is told each file's name, type and
-         *     size and not the conversation it is in, which says who the account talks
-         *     to (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
+         * What an account holds: attachment bytes, the attachment, conversation and contact counts, and the 100 largest files.
+         * @description The owner reads any account's; an account reads its own. The owner is told each file's name, type and size and not the conversation it is in, which says who the account talks to (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
          */
         get: operations["get_account_storage"];
         put?: never;
@@ -354,10 +352,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Assemble the uploaded parts, verify the SHA-256 fingerprint, and install
-         *     the asset.
-         */
+        /** Assemble the uploaded parts, verify the SHA-256 fingerprint, and install the asset. */
         post: operations["complete_asset_upload"];
         delete?: never;
         options?: never;
@@ -447,9 +442,10 @@ export interface paths {
         get: operations["list_contacts"];
         put?: never;
         /**
-         * Load a VCF or vCard CSV address book into this account. The body is the
-         *     file itself, and `Content-Type` says which: `text/vcard` or `text/csv`.
-         * @description This is a standalone act against the vault, never part of an Import Run:
+         * Load a VCF or vCard CSV address book into this account.
+         * @description The body is the file itself, and `Content-Type` says which: `text/vcard` or `text/csv`.
+         *
+         *     This is a standalone act against the vault, never part of an Import Run:
          *     contacts are vault state, and a person may load them before or after
          *     bringing messages in. Only the rows the address book owns are replaced, so
          *     Contact Groups, names the person typed, and identities an import discovered
@@ -504,19 +500,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Full contact view: per-handle services, message stats, and group
-         *     memberships.
-         */
+        /** Full contact view: per-handle services, message stats, and group memberships. */
         get: operations["get_contact"];
         put?: never;
         post?: never;
         /**
-         * Delete a trashed contact the way a phone's Delete Contact does: the name
-         *     and the person's edits go, the contact becomes Unknown again and leaves
-         *     the trash, and every conversation it was in stays as it is, showing the
-         *     handle. Conversations are never deleted with a contact. A contact that is
-         *     not in the trash answers 409.
+         * Delete a trashed contact the way a phone's Delete Contact does: the name and the person's edits go, the contact becomes Unknown again and leaves the trash, and every conversation it was in stays as it is, showing the handle.
+         * @description Conversations are never deleted with a contact. A contact that is not in the trash answers 409.
          */
         delete: operations["delete_contact"];
         options?: never;
@@ -535,8 +525,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Take a contact out of the trash. Idempotent: restoring a contact that
-         *     was not trashed still answers 204.
+         * Take a contact out of the trash.
+         * @description Idempotent: restoring a contact that was not trashed still answers 204.
          */
         post: operations["restore_contact"];
         delete?: never;
@@ -555,8 +545,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Put a contact in the trash. Idempotent: trashing an already-trashed
-         *     contact still answers 204.
+         * Put a contact in the trash.
+         * @description Idempotent: trashing an already-trashed contact still answers 204.
          */
         post: operations["trash_contact"];
         delete?: never;
@@ -574,7 +564,7 @@ export interface paths {
         };
         /**
          * Page through conversations with participants, message counts, and tags.
-         *     Newest activity first unless `sort` says otherwise.
+         * @description Newest activity first unless `sort` says otherwise.
          */
         get: operations["list_conversations"];
         put?: never;
@@ -593,20 +583,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * One conversation, in the same shape a list row already has — so a caller
-         *     that opens a conversation from a list does not have to convert between two
-         *     shapes, and paging through the whole list to find one id is never
-         *     necessary. Trash is a property the list applies, not a gate on reading:
-         *     a trashed conversation still answers here.
+         * One conversation, in the same shape a list row already has — so a caller that opens a conversation from a list does not have to convert between two shapes, and paging through the whole list to find one id is never necessary.
+         * @description Trash is a property the list applies, not a gate on reading: a trashed conversation still answers here.
          */
         get: operations["get_conversation"];
         put?: never;
         post?: never;
         /**
-         * Permanently delete a trashed conversation: the conversation, its
-         *     messages, and any attachment file no other message still uses. Trash is
-         *     the only door to deletion, so a conversation that is not in the trash
-         *     answers 409 rather than being deleted from wherever it was.
+         * Permanently delete a trashed conversation: the conversation, its messages, and any attachment file no other message still uses.
+         * @description Trash is the only door to deletion, so a conversation that is not in the trash answers 409 rather than being deleted from wherever it was.
          */
         delete: operations["delete_conversation"];
         options?: never;
@@ -622,9 +607,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * A conversation's messages, ascending by timestamp then `sort_order`. The
-         *     read path a screen uses to open a conversation: no search query to compose,
-         *     just the conversation id.
+         * A conversation's messages, ascending by timestamp then `sort_order`.
+         * @description The read path a screen uses to open a conversation: no search query to compose, just the conversation id.
          */
         get: operations["list_conversation_messages"];
         put?: never;
@@ -645,8 +629,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Take a conversation out of the trash. Idempotent: restoring a
-         *     conversation that was not trashed still answers 204.
+         * Take a conversation out of the trash.
+         * @description Idempotent: restoring a conversation that was not trashed still answers 204.
          */
         post: operations["restore_conversation"];
         delete?: never;
@@ -682,8 +666,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Put a conversation in the trash. Idempotent: trashing an
-         *     already-trashed conversation still answers 204.
+         * Put a conversation in the trash.
+         * @description Idempotent: trashing an already-trashed conversation still answers 204.
          */
         post: operations["trash_conversation"];
         delete?: never;
@@ -699,17 +683,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * The account's Export Runs as a page, newest first unless `sort` says
-         *     otherwise, narrowed to one `status` when given.
-         */
+        /** The account's Export Runs as a page, newest first unless `sort` says otherwise, narrowed to one `status` when given. */
         get: operations["list_exports"];
         put?: never;
         /**
-         * Start an Export Run: compile the scope, list and count the messages it
-         *     matches now, and record the run as `running`. Read that list at
-         *     `GET /v1/exports/{id}/messages`, then close the run with `complete` or
-         *     `cancel`.
+         * Start an Export Run: compile the scope, list and count the messages it matches now, and record the run as `running`.
+         * @description Read that list at `GET /v1/exports/{id}/messages`, then close the run with `complete` or `cancel`.
          */
         post: operations["create_export"];
         delete?: never;
@@ -777,12 +756,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The messages a running Export Run matched when it was created, a page at
-         *     a time, oldest first unless `sort` says otherwise. An import, a trash or
-         *     a new day since creation changes nothing here. A message deleted since
-         *     leaves its place empty: `total` stays `message_count`, a page can hold
-         *     fewer than `limit` items, and a client steps `offset` by `limit`. Each
-         *     page read raises the run's `messages_delivered` to the places reached.
+         * The messages a running Export Run matched when it was created, a page at a time, oldest first unless `sort` says otherwise.
+         * @description An import, a trash or a new day since creation changes nothing here. A message deleted since leaves its place empty: `total` stays `message_count`, a page can hold fewer than `limit` items, and a client steps `offset` by `limit`. Each page read raises the run's `messages_delivered` to the places reached.
          */
         get: operations["list_export_messages"];
         put?: never;
@@ -801,14 +776,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The account's Import Runs, newest first, as a page. `status=running`
-         *     finds the one run the desktop app may resume.
+         * The account's Import Runs, newest first, as a page.
+         * @description `status=running` finds the one run the desktop app may resume.
          */
         get: operations["list_imports"];
         put?: never;
         /**
-         * Start an Import Run and return its id. Finish the run at
-         *     POST /v1/imports/{id}/complete.
+         * Start an Import Run and return its id.
+         * @description Finish the run at POST /v1/imports/{id}/complete.
          */
         post: operations["create_import"];
         delete?: never;
@@ -885,8 +860,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List the contacts one import run created or changed, with the reason for
-         *     each, most consequential first.
+         * List the contacts one import run created or changed, with the reason for each, most consequential first.
          * @description The run recorded each reason as it staged (`db::import_contacts`), so the
          *     list is what the import decided, not what timestamps suggest. How many of
          *     each the run made is on the run's own record, `GET /v1/imports/{id}`: a
@@ -980,11 +954,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Messages matching `q`, oldest first unless `sort` says otherwise: the same
-         *     rows an Export Run with a `query` scope would hand over, behind a logged-in
-         *     session with the list defaults and the list's offset ceiling.
-         */
+        /** Messages matching `q`, oldest first unless `sort` says otherwise: the same rows an Export Run with a `query` scope would hand over, behind a logged-in session with the list defaults and the list's offset ceiling. */
         get: operations["list_messages"];
         put?: never;
         post?: never;
@@ -1002,8 +972,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * One message by id: the row the Messages list would show, looked up
-         *     directly.
+         * One message by id: the row the Messages list would show, looked up directly.
          * @description Read-only. A message is never written through this route: an import
          *     writes messages, and trashing is a conversation operation
          *     (`docs/architecture/http-api.md`, "Methods"). The lookup carries the
@@ -1030,10 +999,7 @@ export interface paths {
         /** List the account's saved searches, A–Z. */
         get: operations["list_saved_searches"];
         put?: never;
-        /**
-         * Create a saved search: `201 Created`, `Location: /v1/saved-searches/{id}`,
-         *     and the row.
-         */
+        /** Create a saved search: `201 Created`, `Location: /v1/saved-searches/{id}`, and the row. */
         post: operations["create_saved_search"];
         delete?: never;
         options?: never;
@@ -1106,16 +1072,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The Session the bearer token names: its account, username, and import
-         *     sources. A session token and an API token both answer, because a program
-         *     checking its token needs the same facts as a browser restoring a login.
+         * The Session the bearer token names: its account, username, and import sources.
+         * @description A session token and an API token both answer, because a program checking its token needs the same facts as a browser restoring a login.
          */
         get: operations["get_session"];
         put?: never;
-        /**
-         * Log in: verify a local username and password and answer the Session, a
-         *     `201 Created` whose `Location` is the singleton itself.
-         */
+        /** Log in: verify a local username and password and answer the Session, a `201 Created` whose `Location` is the singleton itself. */
         post: operations["create_session"];
         /**
          * Log out: revoke the presented session token, ending the Session.
@@ -1140,11 +1102,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Empty the trash: every trashed conversation is deleted for good, with
-         *     its messages and any attachment file no other message uses, and every
-         *     trashed contact loses its name and details and becomes Unknown, its
-         *     conversations untouched. Trash is the only door to permanent deletion;
-         *     this is the door for everything in it at once.
+         * Empty the trash: every trashed conversation is deleted for good, with its messages and any attachment file no other message uses, and every trashed contact loses its name and details and becomes Unknown, its conversations untouched.
+         * @description Trash is the only door to permanent deletion; this is the door for everything in it at once.
          */
         delete: operations["empty_trash"];
         options?: never;
@@ -1220,13 +1179,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read what the vault holds. The counts and the attachment bytes are summed
-         *     over every account. The database, messages and full-text search sizes
-         *     are measured on disk. Each account's share of message storage is an
-         *     estimate from its share of text. Counts and totals only, never a name or
-         *     a line of text (`docs/adr/0008-the-vault-owner-holds-no-messages.md`,
-         *     "What the owner may see"). The owner's, because the owner administers the
-         *     vault and nobody else holds more than their own account.
+         * Read what the vault holds.
+         * @description The counts and the attachment bytes are summed over every account. The database, messages and full-text search sizes are measured on disk. Each account's share of message storage is an estimate from its share of text. Counts and totals only, never a name or a line of text (`docs/adr/0008-the-vault-owner-holds-no-messages.md`, "What the owner may see"). The owner's, because the owner administers the vault and nobody else holds more than their own account.
          */
         get: operations["get_vault_storage"];
         put?: never;
@@ -3364,20 +3318,37 @@ export interface operations {
                     "application/json": components["schemas"]["Page_Account"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -3405,47 +3376,84 @@ export interface operations {
                     "application/json": components["schemas"]["CreateAccountResponse"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The vault is closed, or the credential is not the owner's */
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`registration-closed`](https://bitrealm.io/vault/developer/reference/errors/registration-closed): This vault does not let visitors create their own account: its owner has not opened registration, or nobody has claimed the vault yet.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Username taken */
+            /** @description [`username-taken`](https://bitrealm.io/vault/developer/reference/errors/username-taken): The username already belongs to an account on this vault. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited */
+            /** @description [`rate-limited`](https://bitrealm.io/vault/developer/reference/errors/rate-limited): The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault. */
             429: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -3470,28 +3478,46 @@ export interface operations {
                     "application/json": components["schemas"]["Account"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -3520,44 +3546,79 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`invalid-credentials`](https://bitrealm.io/vault/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong.
+             *
+             *     [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.
+             */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`demo-account-protected`](https://bitrealm.io/vault/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             *
+             *     [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -3586,44 +3647,73 @@ export interface operations {
                     "application/json": components["schemas"]["Account"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -3653,20 +3743,44 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ApiToken"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -3697,36 +3811,71 @@ export interface operations {
                     "application/json": components["schemas"]["CreateApiTokenResponse"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -3752,28 +3901,44 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -3804,44 +3969,71 @@ export interface operations {
                     "application/json": components["schemas"]["UpdateApiTokenResponse"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -3875,36 +4067,46 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ExportRun"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -3934,36 +4136,46 @@ export interface operations {
                     "application/json": components["schemas"]["Page_Identity"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -3997,36 +4209,46 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ImportSummary"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4053,28 +4275,46 @@ export interface operations {
                     "application/json": components["schemas"]["ImportRun"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4104,44 +4344,73 @@ export interface operations {
                     "application/json": components["schemas"]["DeleteMessagesResponse"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4178,44 +4447,77 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`invalid-credentials`](https://bitrealm.io/vault/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong.
+             *
+             *     [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.
+             */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4240,28 +4542,46 @@ export interface operations {
                     "application/json": components["schemas"]["AccountStorage"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4289,36 +4609,44 @@ export interface operations {
                     "application/octet-stream": unknown;
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4362,52 +4690,75 @@ export interface operations {
                     "application/json": components["schemas"]["Asset"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             *
+             *     [`asset-upload-invalid`](https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4434,36 +4785,44 @@ export interface operations {
                     "application/json": components["schemas"]["Asset"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4506,36 +4865,75 @@ export interface operations {
                     "application/json": components["schemas"]["CreateAssetUploadResponse"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             *
+             *     [`asset-upload-invalid`](https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4562,28 +4960,48 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             *
+             *     [`asset-upload-invalid`](https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4611,28 +5029,48 @@ export interface operations {
                     "application/json": components["schemas"]["Asset"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             *
+             *     [`asset-upload-invalid`](https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4666,52 +5104,75 @@ export interface operations {
                     "application/json": components["schemas"]["ReplaceAssetUploadPartResponse"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             *
+             *     [`asset-upload-invalid`](https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4738,20 +5199,35 @@ export interface operations {
                     "application/json": components["schemas"]["Page_NamedSet"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4779,44 +5255,71 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`name-taken`](https://bitrealm.io/vault/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4839,28 +5342,44 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4889,52 +5408,80 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`name-taken`](https://bitrealm.io/vault/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4964,28 +5511,44 @@ export interface operations {
                     "application/json": components["schemas"]["Page_i64"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5014,44 +5577,71 @@ export interface operations {
                     "application/json": components["schemas"]["UpdateMembersResponse"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5082,28 +5672,39 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ContactSummary"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             *
+             *     [`search-query-invalid`](https://bitrealm.io/vault/developer/reference/errors/search-query-invalid): The search language refused the query.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5131,52 +5732,62 @@ export interface operations {
                     "application/json": components["schemas"]["CreateContactsResponse"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5202,36 +5813,62 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ContactSelectionSummary"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5257,36 +5894,62 @@ export interface operations {
                     "application/json": components["schemas"]["Page_String"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5311,28 +5974,44 @@ export interface operations {
                     "application/json": components["schemas"]["Contact"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5356,37 +6035,53 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The contact is not in the trash */
+            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5415,44 +6110,71 @@ export interface operations {
                     "application/json": components["schemas"]["Contact"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5476,28 +6198,44 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5521,28 +6259,44 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5573,28 +6327,39 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ConversationSummary"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             *
+             *     [`search-query-invalid`](https://bitrealm.io/vault/developer/reference/errors/search-query-invalid): The search language refused the query.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5619,28 +6384,44 @@ export interface operations {
                     "application/json": components["schemas"]["ConversationSummary"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5664,37 +6445,53 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The conversation is not in the trash */
+            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5726,36 +6523,44 @@ export interface operations {
                     "application/json": components["schemas"]["Page_Message"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5779,28 +6584,44 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5830,28 +6651,44 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ConversationSource"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5875,28 +6712,44 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5927,28 +6780,35 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ExportRun"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5976,36 +6836,66 @@ export interface operations {
                     "application/json": components["schemas"]["ExportRun"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             *
+             *     [`search-query-invalid`](https://bitrealm.io/vault/developer/reference/errors/search-query-invalid): The search language refused the query.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6030,28 +6920,44 @@ export interface operations {
                     "application/json": components["schemas"]["ExportRun"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6076,37 +6982,53 @@ export interface operations {
                     "application/json": components["schemas"]["ExportRun"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The run is already finished */
+            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6131,37 +7053,53 @@ export interface operations {
                     "application/json": components["schemas"]["ExportRun"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The run is already finished */
+            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6193,45 +7131,53 @@ export interface operations {
                     "application/json": components["schemas"]["Page_Message"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The run is no longer running */
+            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6262,28 +7208,35 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ImportSummary"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6311,45 +7264,71 @@ export interface operations {
                     "application/json": components["schemas"]["CreateImportResponse"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The account already has a running Import Run */
+            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6374,28 +7353,44 @@ export interface operations {
                     "application/json": components["schemas"]["ImportRun"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6424,44 +7419,80 @@ export interface operations {
                     "application/json": components["schemas"]["ImportRun"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6492,70 +7523,80 @@ export interface operations {
                     "application/json": components["schemas"]["CreateImportBatchResponse"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The run is not running */
+            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The body is not JSON Lines (multipart/form-data is not accepted) */
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6584,44 +7625,80 @@ export interface operations {
                     "application/json": components["schemas"]["CompleteImportResponse"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6651,28 +7728,44 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ImportContact"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6697,36 +7790,53 @@ export interface operations {
                     "application/json": components["schemas"]["DiscardImportResponse"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6753,20 +7863,35 @@ export interface operations {
                     "application/json": components["schemas"]["Page_NamedSet"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6794,44 +7919,71 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`name-taken`](https://bitrealm.io/vault/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6854,28 +8006,44 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6904,52 +8072,80 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`name-taken`](https://bitrealm.io/vault/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -6979,28 +8175,44 @@ export interface operations {
                     "application/json": components["schemas"]["Page_i64"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7029,44 +8241,71 @@ export interface operations {
                     "application/json": components["schemas"]["UpdateMembersResponse"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7097,28 +8336,39 @@ export interface operations {
                     "application/json": components["schemas"]["Page_Message"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             *
+             *     [`search-query-invalid`](https://bitrealm.io/vault/developer/reference/errors/search-query-invalid): The search language refused the query.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7143,28 +8393,44 @@ export interface operations {
                     "application/json": components["schemas"]["Message"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7191,20 +8457,35 @@ export interface operations {
                     "application/json": components["schemas"]["Page_SavedSearch"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7232,44 +8513,71 @@ export interface operations {
                     "application/json": components["schemas"]["SavedSearch"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`name-taken`](https://bitrealm.io/vault/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7293,28 +8601,44 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7343,52 +8667,80 @@ export interface operations {
                     "application/json": components["schemas"]["SavedSearch"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`name-taken`](https://bitrealm.io/vault/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7415,28 +8767,35 @@ export interface operations {
                     "application/json": components["schemas"]["Page_FieldDoc"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7463,28 +8822,35 @@ export interface operations {
                     "application/json": components["schemas"]["Page_FieldDoc"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7506,20 +8872,35 @@ export interface operations {
                     "application/json": components["schemas"]["Session"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7548,49 +8929,67 @@ export interface operations {
                     "application/json": components["schemas"]["CreateSessionResponse"];
                 };
             };
-            /** @description The body is not JSON */
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Invalid credentials */
+            /** @description [`invalid-credentials`](https://bitrealm.io/vault/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Account is disabled */
+            /** @description [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act. */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description A blank username or password */
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Rate limited */
+            /** @description [`rate-limited`](https://bitrealm.io/vault/developer/reference/errors/rate-limited): The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault. */
             429: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7611,21 +9010,35 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The token is an API token, which is not a Session */
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7646,20 +9059,35 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7679,6 +9107,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Vault"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7707,37 +9144,58 @@ export interface operations {
                     "application/json": components["schemas"]["CreateSessionResponse"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Already claimed */
+            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description [`rate-limited`](https://bitrealm.io/vault/developer/reference/errors/rate-limited): The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault. */
             429: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7759,20 +9217,37 @@ export interface operations {
                     "application/json": components["schemas"]["VaultSettings"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7798,20 +9273,64 @@ export interface operations {
                     "application/json": components["schemas"]["VaultSettings"];
                 };
             };
+            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7833,20 +9352,37 @@ export interface operations {
                     "application/json": components["schemas"]["VaultStorage"];
                 };
             };
+            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /**
+             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *
+             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

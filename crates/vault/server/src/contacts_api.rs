@@ -178,10 +178,6 @@ pub(crate) struct FindUnmatchedIdentitiesRequest {
     request_body = FindUnmatchedIdentitiesRequest,
     responses(
         (status = 200, body = crate::paging::Page<String>),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn find_unmatched_identities(
@@ -214,9 +210,7 @@ pub(crate) async fn find_unmatched_identities(
     ),
     responses(
         (status = 200, body = Page<ContactSummary>),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
+        crate::problem::openapi::SearchQueryInvalid
     )
 )]
 pub(crate) async fn list_contacts(
@@ -255,10 +249,6 @@ pub(crate) async fn list_contacts(
     request_body = SummarizeContactsRequest,
     responses(
         (status = 200, body = crate::paging::Page<ContactSelectionSummary>),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn summarize_contacts(
@@ -286,9 +276,6 @@ pub(crate) async fn summarize_contacts(
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 200, body = Contact),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn get_contact(
@@ -313,11 +300,6 @@ pub(crate) async fn get_contact(
     request_body = UpdateContactRequest,
     responses(
         (status = 200, body = Contact),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn update_contact(
@@ -347,9 +329,6 @@ pub(crate) async fn update_contact(
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 204, description = "Trashed"),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn trash_contact(
@@ -375,9 +354,6 @@ pub(crate) async fn trash_contact(
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 204, description = "Restored"),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn restore_contact(
@@ -406,10 +382,7 @@ pub(crate) async fn restore_contact(
     params(("id" = i64, Path, description = "Contact id")),
     responses(
         (status = 204, description = "Deleted: the contact is Unknown again"),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem),
-        (status = 409, body = crate::problem::Problem, description = "The contact is not in the trash")
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn delete_contact(

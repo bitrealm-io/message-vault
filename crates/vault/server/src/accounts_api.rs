@@ -226,8 +226,6 @@ pub(crate) async fn require_account_reach(
     ),
     responses(
         (status = 200, body = crate::paging::Page<Account>),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn list_accounts(
@@ -305,11 +303,9 @@ pub struct CreateAccountResponse {
             body = CreateAccountResponse,
             headers(("Location" = String, description = "Path of the new account"))
         ),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 403, description = "The vault is closed, or the credential is not the owner's", body = crate::problem::Problem),
-        (status = 409, description = "Username taken", body = crate::problem::Problem),
-        (status = 429, description = "Rate limited", body = crate::problem::Problem)
+        crate::problem::openapi::RegistrationClosed,
+        crate::problem::openapi::UsernameTaken,
+        crate::problem::openapi::RateLimited
     )
 )]
 pub async fn create_account(
@@ -408,9 +404,7 @@ pub async fn create_account(
     params(("id" = i64, Path, description = "Account id")),
     responses(
         (status = 200, body = Account),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
+        crate::problem::openapi::NotTheOwner
     )
 )]
 pub async fn get_account(
@@ -672,11 +666,7 @@ async fn apply_flags(
     request_body = UpdateAccountRequest,
     responses(
         (status = 200, body = Account),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
+        crate::problem::openapi::NotTheOwner
     )
 )]
 pub async fn update_account(
@@ -744,11 +734,9 @@ pub struct DeleteAccountRequest {
     request_body(content = Option<DeleteAccountRequest>, description = "Sent by an account deleting itself; the owner sends no body"),
     responses(
         (status = 204, description = "Account deleted"),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
+        crate::problem::openapi::InvalidCredentials,
+        crate::problem::openapi::DemoAccountProtected,
+        crate::problem::openapi::NotTheOwner
     )
 )]
 pub async fn delete_account(
@@ -852,11 +840,8 @@ pub struct ReplaceAccountPasswordResponse {
     responses(
         (status = 200, description = "Own password changed; the rotated session token", body = ReplaceAccountPasswordResponse),
         (status = 204, description = "Password set by the vault owner"),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
+        crate::problem::openapi::InvalidCredentials,
+        crate::problem::openapi::NotTheOwner
     )
 )]
 pub async fn replace_account_password(
@@ -985,11 +970,6 @@ fn remove_account_asset_trees(
     request_body(content = Option<DeleteMessagesRequest>, description = "Sent by an account deleting its own messages; the owner sends no body"),
     responses(
         (status = 200, body = DeleteMessagesResponse),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub async fn delete_account_messages(
@@ -1051,9 +1031,7 @@ pub(crate) struct AccountStorage {
     params(("id" = i64, Path, description = "Account id")),
     responses(
         (status = 200, body = AccountStorage),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
+        crate::problem::openapi::NotTheOwner
     )
 )]
 pub(crate) async fn get_account_storage(
@@ -1103,10 +1081,7 @@ pub(crate) async fn get_account_storage(
     ),
     responses(
         (status = 200, body = Page<Identity>),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem)
+        crate::problem::openapi::NotTheOwner
     )
 )]
 pub(crate) async fn list_account_identities(
@@ -1150,10 +1125,7 @@ pub(crate) async fn list_account_identities(
     ),
     responses(
         (status = 200, body = Page<vault_imports::ImportSummary>),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem)
+        crate::problem::openapi::NotTheOwner
     )
 )]
 pub(crate) async fn list_account_imports(
@@ -1179,9 +1151,7 @@ pub(crate) async fn list_account_imports(
     ),
     responses(
         (status = 200, body = crate::imports_api::ImportRun),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
+        crate::problem::openapi::NotTheOwner
     )
 )]
 pub(crate) async fn get_account_import(
@@ -1209,10 +1179,7 @@ pub(crate) async fn get_account_import(
     ),
     responses(
         (status = 200, body = Page<vault_api_types::ExportRun>),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem)
+        crate::problem::openapi::NotTheOwner
     )
 )]
 pub(crate) async fn list_account_exports(

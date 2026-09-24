@@ -411,8 +411,7 @@ fn gc_stale_incoming_removes_old_sessions() {
 
 #[tokio::test]
 async fn an_asset_put_then_get_returns_the_same_bytes() {
-    let vault = crate::test_support::test_vault().await;
-    let user = crate::test_support::register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
 
     // Arbitrary non-UTF-8 bytes, to prove the round trip preserves the
     // raw content rather than only text that happens to decode.
@@ -470,8 +469,7 @@ async fn an_asset_put_then_get_returns_the_same_bytes() {
 
 #[tokio::test]
 async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
-    let vault = crate::test_support::test_vault().await;
-    let user = crate::test_support::register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
 
     let unknown = "0".repeat(64);
     let (status, text) = crate::test_support::get_raw(
@@ -480,10 +478,7 @@ async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
         &user.token,
     )
     .await;
-    assert_eq!(status, StatusCode::NOT_FOUND, "{text}");
-    let body: serde_json::Value =
-        serde_json::from_str(&text).unwrap_or_else(|_| panic!("non-JSON body: {text}"));
-    assert!(body["detail"].is_string(), "{body}");
+    crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
 }
 
 /// A part body past `upload_limits.part_size` is a 413. This is the one
@@ -492,12 +487,11 @@ async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
 /// own check is what answers. `docs/architecture/http-api.md`: the status carries the meaning.
 #[tokio::test]
 async fn an_upload_part_over_the_part_size_is_a_json_413() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let mut state = vault.state.clone();
     // `UploadLimits` is `Copy` and `part_size` is public, so a test can lower
     // it without rebuilding the config.
     state.upload_limits.part_size = 16;
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
 
     let sha = "0".repeat(64);
     let (status, text) = crate::test_support::put_raw(
@@ -508,16 +502,15 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
         vec![b'x'; 4096],
     )
     .await;
-    assert_eq!(
+    let problem = crate::test_support::expect_problem(
         status,
-        axum::http::StatusCode::PAYLOAD_TOO_LARGE,
-        "a part over part_size must be 413, got: {text}"
+        &text,
+        crate::problem::ProblemType::PayloadTooLarge,
     );
-    let body: serde_json::Value =
-        serde_json::from_str(&text).unwrap_or_else(|_| panic!("non-JSON body: {text}"));
     assert_eq!(
-        body["detail"], "request body too large",
-        "the sentence must be the handler's own, proving the layer did not answer: {body}"
+        problem.detail.as_deref(),
+        Some("request body too large"),
+        "the sentence must be the handler's own, proving the layer did not answer: {text}"
     );
 }
 
@@ -528,10 +521,9 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
 /// and that `complete` installs bytes the vault then serves.
 #[tokio::test]
 async fn a_multipart_upload_completes_end_to_end_over_http() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let mut state = vault.state.clone();
     state.upload_limits.part_size = 16;
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     let bytes: Vec<u8> = (0u8..40).collect();
     let sha = sha256_hex(&bytes);
     let server = crate::test_support::serve(&state).await;

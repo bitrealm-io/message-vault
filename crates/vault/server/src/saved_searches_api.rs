@@ -33,8 +33,6 @@ pub(crate) struct SavedSearchRequest {
     ),
     responses(
         (status = 200, body = crate::paging::Page<SavedSearch>),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn list_saved_searches(
@@ -62,11 +60,7 @@ pub(crate) async fn list_saved_searches(
             body = SavedSearch,
             headers(("Location" = String, description = "Path of the new saved search"))
         ),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 409, body = crate::problem::Problem)
+        crate::problem::openapi::NameTaken
     )
 )]
 pub(crate) async fn create_saved_search(
@@ -99,12 +93,7 @@ pub(crate) async fn create_saved_search(
     request_body = SavedSearchRequest,
     responses(
         (status = 200, body = SavedSearch),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem),
-        (status = 409, body = crate::problem::Problem)
+        crate::problem::openapi::NameTaken
     )
 )]
 pub(crate) async fn update_saved_search(
@@ -132,9 +121,6 @@ pub(crate) async fn update_saved_search(
     params(("id" = i64, Path, description = "Saved search id")),
     responses(
         (status = 204, description = "Saved search deleted"),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn delete_saved_search(
@@ -152,14 +138,13 @@ mod tests {
     use axum::http::StatusCode;
 
     use crate::test_support::{
-        delete_status, get_json, patch_json, post_created_json, register_via_api, test_vault,
+        delete_status, get_json, patch_json, post_created_json, vault_with_account,
     };
 
     #[tokio::test]
     async fn saved_searches_list_as_items_and_each_write_answers_the_row_or_204() {
-        let vault = test_vault().await;
+        let (vault, user) = vault_with_account().await;
         let state = vault.state.clone();
-        let user = register_via_api(&state, "alice", "hunter2hunter2").await;
 
         let (location, created): (String, serde_json::Value) = post_created_json(
             &state,
@@ -195,9 +180,8 @@ mod tests {
 
     #[tokio::test]
     async fn a_curated_list_is_a_page_like_every_other_list() {
-        let vault = test_vault().await;
+        let (vault, user) = vault_with_account().await;
         let state = vault.state.clone();
-        let user = register_via_api(&state, "alice", "hunter2hunter2").await;
         for name in ["Anna", "Bess", "Cleo"] {
             let _: (String, serde_json::Value) = post_created_json(
                 &state,

@@ -117,8 +117,6 @@ fn remove_if_present(path: &Path) -> Result<(), ApiError> {
     security(("session" = ["delete"])),
     responses(
         (status = 204, description = "Trash emptied"),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn empty_trash(

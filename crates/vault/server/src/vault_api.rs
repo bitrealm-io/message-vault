@@ -104,10 +104,8 @@ pub async fn get_vault(State(state): State<AppState>) -> Result<Json<Vault>, Api
             body = crate::session_api::CreateSessionResponse,
             headers(("Location" = String, description = "`/v1/session`, the Session the claim made"))
         ),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 409, description = "Already claimed", body = crate::problem::Problem),
-        (status = 429, body = crate::problem::Problem)
+        crate::problem::openapi::StateConflict,
+        crate::problem::openapi::RateLimited
     )
 )]
 pub async fn claim_vault(
@@ -180,8 +178,6 @@ pub struct UpdateVaultSettingsRequest {
     security(("session" = ["owner"])),
     responses(
         (status = 200, body = VaultSettings),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn get_vault_settings(
@@ -204,8 +200,6 @@ pub async fn get_vault_settings(
     request_body = UpdateVaultSettingsRequest,
     responses(
         (status = 200, body = VaultSettings),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn update_vault_settings(
@@ -278,8 +272,6 @@ pub struct AccountMessages {
     security(("session" = ["owner"])),
     responses(
         (status = 200, body = VaultStorage),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub async fn get_vault_storage(

@@ -703,10 +703,6 @@ async fn resolve_asset_lookup(
     ),
     responses(
         (status = 200, body = Asset),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn head_asset(
@@ -737,10 +733,6 @@ pub(crate) async fn head_asset(
     ),
     responses(
         (status = 200, description = "Raw asset bytes", content_type = "application/octet-stream"),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn get_asset(
@@ -838,12 +830,7 @@ fn require_content_type(headers: &HeaderMap) -> Result<(), ApiError> {
             headers(("Location" = String, description = "Path of the stored asset"))
         ),
         (status = 200, body = Asset, description = "The vault already held the asset"),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 413, body = crate::problem::Problem),
-        (status = 415, body = crate::problem::Problem)
+        crate::problem::openapi::AssetUploadInvalid
     )
 )]
 pub(crate) async fn replace_asset(
@@ -978,10 +965,7 @@ pub(crate) struct ReplaceAssetUploadPartResponse {
             body = CreateAssetUploadResponse,
             description = "The asset is already stored; nothing was created"
         ),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
+        crate::problem::openapi::AssetUploadInvalid
     )
 )]
 pub(crate) async fn create_asset_upload(
@@ -1048,12 +1032,7 @@ pub(crate) async fn create_asset_upload(
     request_body(content_type = "application/octet-stream", description = "Raw part bytes"),
     responses(
         (status = 200, body = ReplaceAssetUploadPartResponse),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 413, body = crate::problem::Problem),
-        (status = 415, body = crate::problem::Problem)
+        crate::problem::openapi::AssetUploadInvalid
     )
 )]
 pub(crate) async fn replace_asset_upload_part(
@@ -1100,9 +1079,7 @@ pub(crate) async fn replace_asset_upload_part(
     ),
     responses(
         (status = 200, body = Asset),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
+        crate::problem::openapi::AssetUploadInvalid
     )
 )]
 pub(crate) async fn complete_asset_upload(
@@ -1165,9 +1142,7 @@ pub(crate) async fn complete_asset_upload(
     ),
     responses(
         (status = 204, description = "Upload aborted"),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
+        crate::problem::openapi::AssetUploadInvalid
     )
 )]
 pub(crate) async fn delete_asset_upload(

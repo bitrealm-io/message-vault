@@ -93,3 +93,48 @@ pub async fn reset_owner_password(vault: &OpenVault, password: &str) -> Result<S
 
     Ok(username)
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::http::StatusCode;
+
+    use super::*;
+    use crate::test_support::{claim_vault_as_owner, get_status, login_status, test_vault};
+
+    /// A session opened before the reset is refused after it, so whoever
+    /// held the old password is signed out; the new password logs in and the
+    /// old one does not.
+    #[tokio::test]
+    async fn resetting_the_owner_password_signs_out_the_sessions_it_opened() {
+        let vault = test_vault().await;
+        let state = vault.state.clone();
+        let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+        assert_eq!(
+            get_status(&state, "/v1/session", &owner.token).await,
+            StatusCode::OK
+        );
+
+        let shell = OpenVault {
+            cfg: (*state.cfg).clone(),
+            db: state.db.clone(),
+        };
+        let username = reset_owner_password(&shell, "a new owner password")
+            .await
+            .unwrap();
+        assert_eq!(username, "keeper");
+
+        assert_eq!(
+            get_status(&state, "/v1/session", &owner.token).await,
+            StatusCode::UNAUTHORIZED,
+            "the session the old password opened is gone"
+        );
+        assert_eq!(
+            login_status(&state, "keeper", "hunter2hunter2").await,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            login_status(&state, "keeper", "a new owner password").await,
+            StatusCode::CREATED
+        );
+    }
+}

@@ -53,6 +53,83 @@ fn sent_one_to_one() {
     assert_eq!(parsed.decode_quality, "mixed");
 }
 
+/// Parse `bytes` as a PDU file named with a valid timestamp.
+fn parse_bytes(bytes: &[u8]) -> ParsedPdu {
+    let (owners, primary) = test_owners();
+    parse_pdu_bytes(Path::new("I_1609459200_t.pdu"), bytes, &owners, &primary).expect("parsed")
+}
+
+/// A From header naming `number`, or the insert-address token when `None`.
+fn from_header(number: Option<&str>) -> Vec<u8> {
+    let Some(number) = number else {
+        return vec![0x89, 0x01, 0x81];
+    };
+    let address = format!("{number}/TYPE=PLMN\0");
+    let mut h = vec![0x89, (address.len() + 1) as u8, 0x80];
+    h.extend_from_slice(address.as_bytes());
+    h
+}
+
+/// A To header naming `number`.
+fn to_header(number: &str) -> Vec<u8> {
+    let mut h = vec![0x97];
+    h.extend_from_slice(format!("{number}/TYPE=PLMN\0").as_bytes());
+    h
+}
+
+/// A PDU with the given headers and a `text.txt` body.
+fn pdu_with(headers: &[Vec<u8>], body: &[u8]) -> Vec<u8> {
+    let mut bytes = headers.concat();
+    bytes.push(0x8e);
+    bytes.extend_from_slice(b"text.txt\0");
+    bytes.extend_from_slice(body);
+    bytes
+}
+
+#[test]
+fn multi_line_body_survives_and_a_control_byte_ends_it() {
+    let headers = [to_header("+15555550100")];
+    let parsed = parse_bytes(&pdu_with(&headers, b"a\nb\r\nc\td"));
+    assert_eq!(parsed.body, "a\nb\r\nc\td");
+    let parsed = parse_bytes(&pdu_with(&headers, b"kept\x01lost"));
+    assert_eq!(parsed.body, "kept");
+}
+
+#[test]
+fn from_the_owner_is_sent() {
+    let parsed = parse_bytes(&pdu_with(
+        &[from_header(Some("+15555550100")), to_header("+14075551234")],
+        b"sent",
+    ));
+    assert!(parsed.has_from);
+    assert!(parsed.is_sent);
+    assert_eq!(parsed.sender_number, "5555550100");
+}
+
+#[test]
+fn from_another_number_is_received_from_it() {
+    let parsed = parse_bytes(&pdu_with(
+        &[from_header(Some("+14075551234")), to_header("+15555550100")],
+        b"received",
+    ));
+    assert!(parsed.has_from);
+    assert!(!parsed.is_sent);
+    assert_eq!(parsed.sender_number, "4075551234");
+}
+
+#[test]
+fn from_the_insert_address_token_to_the_owner_is_received_from_the_other_party() {
+    // A group MMS whose From the carrier left for the phone to fill in.
+    let mut cc = to_header("+14075551234");
+    cc[0] = 0x82; // Cc
+    let parsed = parse_bytes(&pdu_with(
+        &[from_header(None), to_header("+15555550100"), cc],
+        b"received",
+    ));
+    assert!(!parsed.is_sent);
+    assert_eq!(parsed.sender_number, "4075551234");
+}
+
 #[test]
 fn group_pdu() {
     let (owners, primary) = test_owners();

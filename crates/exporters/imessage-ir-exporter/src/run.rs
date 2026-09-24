@@ -526,4 +526,96 @@ mod tests {
             result.messages
         );
     }
+
+    /// A handwriting message's SVG comes from the program as text, not a
+    /// file. A JSON export writes it under `attachments/`, and an attachment
+    /// with no file says it is missing.
+    #[cfg(unix)]
+    #[test]
+    fn inline_and_missing_attachments_reach_a_file_backed_export() {
+        use crate::helper::tests::{fake_helper, source_line, spawn_fake};
+        use imessage_reader_protocol::{
+            Attachment, AttachmentSource, Conversation, Event, Message, PROTOCOL_VERSION,
+        };
+        use message_ir_format::read_conversation_json;
+
+        const SVG: &str = "<svg></svg>";
+        let attachment = |source| Attachment {
+            original_name: None,
+            mime_type: Some("image/svg+xml".into()),
+            is_sticker: false,
+            transcription: None,
+            sticker_effect: None,
+            source,
+        };
+        let events = [
+            Event::Conversation(Conversation {
+                chat_identifier: "+15555550122".into(),
+                conversation_type: "individual".into(),
+                group_title: None,
+                participants: Vec::new(),
+            }),
+            Event::Message(Box::new(Message {
+                chat_identifier: "+15555550122".into(),
+                guid: "g1".into(),
+                timestamp_unix_ms: 1_609_459_200_000,
+                outgoing: false,
+                service: "iMessage".into(),
+                message_kind: "imessage".into(),
+                sender_handle: Some("+15555550122".into()),
+                sender_display_name: None,
+                subject: None,
+                text: String::new(),
+                owner_handle: "+15555550100".into(),
+                owner_display_name: None,
+                imessage: None,
+                attachments: vec![
+                    attachment(AttachmentSource::Inline { text: SVG.into() }),
+                    attachment(AttachmentSource::Missing),
+                ],
+            })),
+            Event::ExportDone {
+                messages_seen: 1,
+                failures: 0,
+            },
+        ];
+        let mut body = source_line(PROTOCOL_VERSION);
+        for event in &events {
+            body.push_str(&format!(
+                "\necho '{}'",
+                serde_json::to_string(event).unwrap()
+            ));
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let chat = dir.path().join("chat.db");
+        fs::write(&chat, b"sqlite").unwrap();
+        let program = fake_helper(dir.path(), &body);
+        let config = ExporterConfig {
+            output_format: OutputFormat::Json,
+            ..apple_cfg(
+                &chat,
+                AppleConfig {
+                    platform: Some(ApplePlatform::MacOs),
+                    ..AppleConfig::default()
+                },
+            )
+        };
+        let result = run_with(&config, |request, _, _| Ok(spawn_fake(&program, request))).unwrap();
+        assert!(
+            result.messages.iter().any(|l| l == "  saved 1 attachments"),
+            "{:#?}",
+            result.messages
+        );
+
+        let doc = read_conversation_json(&config.output.join("+15555550122.json")).unwrap();
+        let attachments = &doc.messages[0].attachments;
+        let path = attachments[0].path.as_deref().expect("the SVG was staged");
+        assert_eq!(fs::read_to_string(config.output.join(path)).unwrap(), SVG);
+        assert_eq!(attachments[1].path, None);
+        assert_eq!(
+            attachments[1].missing_reason.as_deref(),
+            Some("file_missing")
+        );
+    }
 }

@@ -1090,6 +1090,73 @@ async fn deleting_one_accounts_messages_leaves_the_others_alone() {
     assert_eq!(bob_row.message_count, 1, "bob's vault is untouched");
 }
 
+/// Deleting an account's messages removes the attachment files of every
+/// source it has, originals and browser copies both, and nothing else: a
+/// folder beside them, a file at the account's root and another account's
+/// files all stay. Without this the rows go and every photo stays on disk.
+#[tokio::test]
+async fn deleting_messages_removes_the_accounts_attachment_files_and_only_those() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
+    let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
+    seed_one_message(&state, alice.account_id).await;
+
+    let paths = &state.cfg.paths;
+    let write = |dir: std::path::PathBuf, name: &str| {
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(name);
+        std::fs::write(&path, b"bytes").unwrap();
+        path
+    };
+    let removed = [
+        write(
+            paths.assets_dir_for_account(alice.account_id, "imessage"),
+            "a.jpg",
+        ),
+        write(
+            paths.assets_converted_dir_for_account(alice.account_id, "imessage"),
+            "a.mp4",
+        ),
+        write(
+            paths.assets_dir_for_account(alice.account_id, "whatsapp"),
+            "b.jpg",
+        ),
+        write(
+            paths.assets_converted_dir_for_account(alice.account_id, "whatsapp"),
+            "b.mp4",
+        ),
+    ];
+    let account_root = paths.data_dir.join(alice.account_id.to_string());
+    let kept = [
+        write(account_root.join("imessage").join("other"), "keep.txt"),
+        write(account_root.clone(), "notes.txt"),
+        write(
+            paths.assets_dir_for_account(bob.account_id, "imessage"),
+            "c.jpg",
+        ),
+        write(
+            paths.assets_converted_dir_for_account(bob.account_id, "imessage"),
+            "c.mp4",
+        ),
+    ];
+
+    let _: DeleteMessagesResponse = delete_json(
+        &state,
+        &format!("{}/messages", member(alice.account_id)),
+        &owner.token,
+    )
+    .await;
+
+    for path in &removed {
+        assert!(!path.exists(), "{} should be gone", path.display());
+    }
+    for path in &kept {
+        assert!(path.exists(), "{} should stay", path.display());
+    }
+}
+
 /// An account deletes its own messages with the `delete` scope and a
 /// confirmation; without the scope it is refused.
 #[tokio::test]

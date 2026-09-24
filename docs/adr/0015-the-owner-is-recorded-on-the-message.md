@@ -8,7 +8,13 @@ an account is the holder's own, and the holder is logged in to it, so listing
 them in it says nothing. Instead each message records which of the holder's
 addresses it was sent from or received at, taken from the message where the
 backup records it and from the backup's header where the backup has one owner.
-An identity's counts are the messages held at it.
+An account identity's counts are the messages held at it.
+
+Amended (#913): this decision is about the account's own identities. A
+contact's identity no longer counts the conversations it takes part in; it
+counts the messages the contact sent from it, the same messages every other
+count or date about a contact reads. The number of conversations it takes part
+in is still shown beside it.
 
 ## Considered options
 

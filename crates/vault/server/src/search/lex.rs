@@ -154,16 +154,9 @@ impl Lexer<'_> {
     /// Read one token; the cursor is on a non-whitespace byte.
     fn next_token(&mut self) -> Result<(), QueryError> {
         let start = self.pos;
-        match self.peek() {
-            Some(b'(') => {
-                self.push(TokenKind::LParen, start, start + 1, false);
-                return Ok(());
-            }
-            Some(b')') => {
-                self.push(TokenKind::RParen, start, start + 1, false);
-                return Ok(());
-            }
-            _ => {}
+        if self.peek() == Some(b')') {
+            self.push(TokenKind::RParen, start, start + 1, false);
+            return Ok(());
         }
         // A leading `-` negates the token after it: a word, a phrase, or a
         // group. A `-` with nothing, a space, or `)` after it is a word.
@@ -176,7 +169,7 @@ impl Lexer<'_> {
             self.pos += 1;
         }
         match self.peek() {
-            // `-(a or b)`: the minus applies to the group.
+            // `(`, or `-(a or b)` where the minus applies to the group.
             Some(b'(') => {
                 self.push(TokenKind::LParen, start, self.pos + 1, negated);
                 Ok(())

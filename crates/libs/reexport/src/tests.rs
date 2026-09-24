@@ -430,6 +430,32 @@ fn copy_dir_recursive_copies_nested_files_and_folders() {
     );
 }
 
+/// A converted export keeps its attachment paths, so the files under
+/// `attachments/` must come along or every path points at nothing.
+#[test]
+fn converting_an_export_copies_its_attachments() {
+    let source = tempfile::tempdir().unwrap();
+    write_fixture(source.path(), OutputFormat::Jsonl);
+    let attachments = source.path().join("attachments");
+    fs::create_dir_all(attachments.join("nested")).unwrap();
+    fs::write(attachments.join("x.jpg"), b"\xff\xd8\xffjpeg").unwrap();
+    fs::write(attachments.join("nested/y.bin"), b"nested bytes").unwrap();
+    let destination = tempfile::tempdir().unwrap();
+
+    convert_export(
+        source.path(),
+        &config(source.path(), destination.path(), OutputFormat::Csv),
+    )
+    .unwrap();
+
+    let copied = destination.path().join("attachments");
+    assert_eq!(fs::read(copied.join("x.jpg")).unwrap(), b"\xff\xd8\xffjpeg");
+    assert_eq!(
+        fs::read(copied.join("nested/y.bin")).unwrap(),
+        b"nested bytes"
+    );
+}
+
 #[test]
 fn copy_dir_recursive_refuses_a_missing_source() {
     let dir = tempfile::tempdir().unwrap();

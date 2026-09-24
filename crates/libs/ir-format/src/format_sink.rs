@@ -170,12 +170,7 @@ impl FormatSink {
     /// a merged archive and no [`MergedArchive`] was supplied.
     pub fn finish(mut self, report: &mut ExportReport) -> Result<()> {
         let embeds_media = self.format.is_mail_archive() || self.archive.is_some();
-        let outcome = apply_transforms(
-            &mut self.docs,
-            &self.output_dir,
-            &self.transforms,
-            embeds_media,
-        )?;
+        let outcome = apply_transforms(&mut self.docs, &self.output_dir, &self.transforms)?;
 
         report.obfuscated_docs += outcome.obfuscated_docs as u64;
 
@@ -371,47 +366,56 @@ mod tests {
         assert!(err.contains("merged archive"), "{err}");
     }
 
+    /// A mail archive holds the attachment bytes itself, and the sink then
+    /// deletes the staged `attachments/`. The bytes must have been read from
+    /// the staged file first, or the attachment is lost from both.
     #[test]
-    fn format_sink_eml_embeds_media_and_drops_attachments_dir() {
-        let tmp = tempfile::tempdir().unwrap();
-        let att_dir = tmp.path().join("attachments");
-        fs::create_dir_all(&att_dir).unwrap();
-        let rel = "attachments/photo.jpg";
-        fs::write(tmp.path().join(rel), b"jpeg-bytes").unwrap();
+    fn mail_archives_embed_the_staged_bytes_and_drop_attachments_dir() {
+        for format in [OutputFormat::Eml, OutputFormat::Mbox] {
+            let tmp = tempfile::tempdir().unwrap();
+            let att_dir = tmp.path().join("attachments");
+            fs::create_dir_all(&att_dir).unwrap();
+            let rel = "attachments/photo.jpg";
+            fs::write(tmp.path().join(rel), b"\xff\xd8\xffjpeg-bytes").unwrap();
 
-        let mut doc = message_ir::testutil::sample_document("with media");
-        doc.messages[0].attachments = vec![IrAttachment {
-            path: Some(rel.into()),
-            original_name: Some("photo.jpg".into()),
-            mime_type: Some("image/jpeg".into()),
-            digest_sha256: None,
-            is_sticker: false,
-            transcription: None,
-            sticker_effect: None,
-            size_bytes: None,
-            missing_reason: None,
-            bytes: None,
-        }];
+            let mut doc = message_ir::testutil::sample_document("with media");
+            doc.messages[0].attachments = vec![IrAttachment {
+                path: Some(rel.into()),
+                original_name: Some("photo.jpg".into()),
+                mime_type: Some("image/jpeg".into()),
+                digest_sha256: None,
+                is_sticker: false,
+                transcription: None,
+                sticker_effect: None,
+                size_bytes: None,
+                missing_reason: None,
+                bytes: None,
+            }];
 
-        let transforms = ExportTransforms {
-            media: MediaMode::Clone,
-            ..ExportTransforms::none()
-        };
-        let mut sink = FormatSink::open(tmp.path(), OutputFormat::Eml, transforms).unwrap();
-        sink.write_document(doc).unwrap();
-        sink.finish(&mut ExportReport::default()).unwrap();
+            let transforms = ExportTransforms {
+                media: MediaMode::Clone,
+                ..ExportTransforms::none()
+            };
+            let mut sink = FormatSink::open(tmp.path(), format, transforms).unwrap();
+            sink.write_document(doc).unwrap();
+            sink.finish(&mut ExportReport::default()).unwrap();
 
-        assert!(!tmp.path().join("attachments").exists());
-        let eml_dir = tmp.path().join("+15555550101");
-        assert!(eml_dir.is_dir());
-        let eml = fs::read_dir(&eml_dir)
-            .unwrap()
-            .next()
-            .unwrap()
-            .unwrap()
-            .path();
-        let body = fs::read_to_string(&eml).unwrap();
-        assert!(body.contains("jpeg-bytes") || body.contains("photo.jpg"));
+            assert!(!att_dir.exists(), "{format:?}");
+            let back = match format {
+                OutputFormat::Eml => {
+                    crate::read_conversation_eml_dir(&tmp.path().join("+15555550101"))
+                }
+                _ => crate::read_conversation_mbox(&tmp.path().join("+15555550101.mbox")),
+            }
+            .unwrap();
+            let attachments = &back.messages[0].attachments;
+            assert_eq!(attachments.len(), 1, "{format:?}");
+            assert_eq!(
+                attachments[0].bytes.as_deref(),
+                Some(&b"\xff\xd8\xffjpeg-bytes"[..]),
+                "{format:?}"
+            );
+        }
     }
 
     #[test]

@@ -103,7 +103,7 @@ fn obfuscate_skips_staged_media_and_writes_placeholders() {
         ),
         ..ExportTransforms::none()
     };
-    let outcome = apply_transforms(&mut docs, tmp.path(), &transforms, false).unwrap();
+    let outcome = apply_transforms(&mut docs, tmp.path(), &transforms).unwrap();
     assert_eq!(outcome.obfuscated_docs, 1);
 
     assert!(!att.join("real-photo.jpg").exists());
@@ -128,7 +128,7 @@ fn obfuscate_keeps_mime_when_media_disabled() {
         ),
         ..ExportTransforms::none()
     };
-    apply_transforms(&mut docs, tmp.path(), &transforms, false).unwrap();
+    apply_transforms(&mut docs, tmp.path(), &transforms).unwrap();
     assert_eq!(
         docs[0].messages[0].attachments[0].path.as_deref(),
         Some("attachments/placeholder.jpg")
@@ -147,7 +147,7 @@ fn convert_at_finish_leaves_cloned_file() {
         media: MediaMode::Convert,
         ..ExportTransforms::none()
     };
-    let outcome = apply_transforms(&mut docs, tmp.path(), &transforms, false).unwrap();
+    let outcome = apply_transforms(&mut docs, tmp.path(), &transforms).unwrap();
     assert_eq!(outcome.obfuscated_docs, 0);
     assert_eq!(
         docs[0].messages[0].attachments[0].path.as_deref(),

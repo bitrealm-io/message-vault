@@ -777,6 +777,27 @@ async fn postgres_rebuild_spares_tables_the_vault_does_not_own() {
     assert_eq!(ready, 1, "the rebuild stamps the current marker");
 }
 
+/// The fingerprint changes whenever the schema text does, and only then:
+/// a changed column, and text moved from one file to the next, each give
+/// another value, and the same files give the same one. The known answers
+/// are 32-bit FNV-1a with a zero byte after each file, masked to 31 bits,
+/// worked out apart from this code.
+#[test]
+fn the_fingerprint_follows_the_schema_text() {
+    let before = [
+        "CREATE TABLE a (id INTEGER);",
+        "CREATE TABLE b (id INTEGER);",
+    ];
+    let after = ["CREATE TABLE a (id INTEGER);", "CREATE TABLE b (id TEXT);"];
+    assert_eq!(fingerprint_of(&before), fingerprint_of(&before));
+    assert_ne!(fingerprint_of(&before), fingerprint_of(&after));
+    assert_ne!(fingerprint_of(&["ab", "c"]), fingerprint_of(&["a", "bc"]));
+
+    assert_eq!(fingerprint_of(&[]), 18_652_613);
+    assert_eq!(fingerprint_of(&["a"]), 723_832_900);
+    assert_eq!(fingerprint_of(&["ab", "c"]), 896_568_933);
+}
+
 /// The drop list is read out of the embedded DDL, so it covers every
 /// table the vault installs and nothing else.
 #[test]

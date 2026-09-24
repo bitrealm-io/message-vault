@@ -70,12 +70,18 @@ const fn schema_fingerprint() -> i64 {
         FTS_POSTGRES_DDL,
         DROP_MESSAGES_FTS_TRIGGERS_PG_SQL,
     ];
+    fingerprint_of(&FILES)
+}
+
+/// The fingerprint of `files`, in order: what [`schema_fingerprint`] computes
+/// over the embedded SQL, apart so a test can hand it other text.
+const fn fingerprint_of(files: &[&str]) -> i64 {
     // FNV-1a, 32-bit. Each file is followed by a zero byte so that moving
     // text across a file boundary changes the hash.
     let mut hash: u32 = 0x811c_9dc5;
     let mut f = 0;
-    while f < FILES.len() {
-        let bytes = FILES[f].as_bytes();
+    while f < files.len() {
+        let bytes = files[f].as_bytes();
         let mut i = 0;
         while i < bytes.len() {
             hash ^= bytes[i] as u32;

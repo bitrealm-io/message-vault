@@ -1123,7 +1123,7 @@ mod tests {
     }
 
     #[test]
-    fn a_timestamp_falls_back_to_the_raw_stamp_when_the_date_is_invalid() {
+    fn a_seconds_stamp_from_an_older_database_reads_the_same_as_a_nanoseconds_one() {
         let fixture = FixtureDb::write();
         let session = fixture.session();
         let mut message = FixtureDb::messages(&session).remove(1);
@@ -1136,6 +1136,21 @@ mod tests {
             timestamp_unix_ms(&message, session.offset),
             1_578_307_260_000,
             "a seconds stamp from an older database reads the same"
+        );
+    }
+
+    #[test]
+    fn a_timestamp_falls_back_to_the_raw_stamp_when_the_date_is_invalid() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let mut message = FixtureDb::messages(&session).remove(1);
+        // Ten trillion seconds before 2001 is outside the range chrono can
+        // hold, so `Message::date` fails and the raw stamp is read instead.
+        message.date = -10_000_000_000_000;
+        assert!(message.date(session.offset).is_err());
+        assert_eq!(
+            timestamp_unix_ms(&message, session.offset),
+            (-10_000_000_000_000 + session.offset) * 1000
         );
     }
 }

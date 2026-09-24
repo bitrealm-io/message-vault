@@ -149,10 +149,7 @@ fn options_from_export_config(config: &ExporterConfig) -> Result<ExportOptions> 
         bail!("imessage-ir-exporter requires SourceConfig::Apple");
     };
 
-    let db_path = match config.primary_input() {
-        Some(path) if !path.as_os_str().is_empty() => path.to_path_buf(),
-        _ => default_macos_db_path(),
-    };
+    let db_path = db_path_for(config.primary_input());
     let platform = platform_for(source, &db_path)?;
 
     if source.backup_password.is_some() && platform != Platform::Ios {
@@ -201,6 +198,15 @@ fn options_from_export_config(config: &ExporterConfig) -> Result<ExportOptions> 
         cancel: config.cancel.clone(),
         resume: config.resume,
     })
+}
+
+/// The input the person chose, or this Mac's own Messages database when
+/// they left it empty.
+fn db_path_for(input: Option<&Path>) -> PathBuf {
+    match input {
+        Some(path) if !path.as_os_str().is_empty() => path.to_path_buf(),
+        _ => default_macos_db_path(),
+    }
 }
 
 /// The platform the source names, or the one the backup's layout shows.
@@ -295,6 +301,39 @@ mod tests {
             resume: false,
             source: SourceConfig::Apple(apple),
         }
+    }
+
+    /// A backup password only unlocks an iPhone backup, so a Mac `chat.db`
+    /// with one is refused rather than exported with the password ignored.
+    #[test]
+    fn a_backup_password_is_refused_for_a_mac_chat_db() {
+        let dir = tempfile::tempdir().unwrap();
+        let chat = dir.path().join("chat.db");
+        fs::write(&chat, b"sqlite").unwrap();
+        let err = options_from_export_config(&apple_cfg(
+            &chat,
+            AppleConfig {
+                platform: Some(ApplePlatform::MacOs),
+                backup_password: Some("secret".into()),
+                ..AppleConfig::default()
+            },
+        ))
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("it can only be used with iOS backups"),
+            "{err}"
+        );
+    }
+
+    /// An input left empty means this Mac's own Messages database.
+    #[test]
+    fn an_empty_input_is_the_macs_own_database() {
+        let chat = Path::new("/backups/chat.db");
+        assert_eq!(db_path_for(Some(chat)), chat);
+        assert_eq!(db_path_for(Some(Path::new(""))), default_macos_db_path());
+        assert_eq!(db_path_for(None), default_macos_db_path());
+        assert!(default_macos_db_path().ends_with("Library/Messages/chat.db"));
     }
 
     #[test]

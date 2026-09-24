@@ -63,4 +63,46 @@ fn run_writes_the_conversation_and_counts_the_bad_date_rows() {
         "{:?}",
         result.messages
     );
+    // No owner was given, so the header records none.
+    assert!(written.contains(r#""owner_handle":null"#), "{written}");
+}
+
+/// The number from the form is stamped on the export header, under the
+/// vault's handle key, so every message is held at it (ADR 0015). It is a
+/// header value, not a participant: the holder is never listed there.
+#[test]
+fn run_records_the_form_owner_on_the_header() {
+    let tmp = tempfile::tempdir().unwrap();
+    let json = tmp.path().join("result.json");
+    fs::write(
+        &json,
+        format!(
+            r#"{{ "15555550122@s.whatsapp.net": {{
+    "name": "Sam Example", "type": "ANDROID",
+    "messages": {{ {} }}
+  }} }}"#,
+            message("AAA", "1609459200", "Hello from Sam")
+        ),
+    )
+    .unwrap();
+    let output = tmp.path().join("out");
+    let config = jsonl_run_config(
+        &[],
+        &output,
+        SourceConfig::Whatsapp(WhatsappConfig {
+            json: Some(json),
+            owner_phone: Some("+1 555 555 0100".into()),
+            ..WhatsappConfig::default()
+        }),
+    );
+
+    let result = crate::run(&config).expect("run");
+
+    let written = assert_run_wrote_jsonl(&result, &output, 1);
+    assert!(
+        written.contains(r#""owner_handle":"+15555550100""#),
+        "{written}"
+    );
+    let header = written.lines().next().unwrap();
+    assert!(!header.contains(r#""handle":"+15555550100""#), "{header}");
 }

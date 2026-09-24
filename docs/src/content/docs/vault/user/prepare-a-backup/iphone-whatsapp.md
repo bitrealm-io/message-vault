@@ -20,6 +20,8 @@ WhatsApp-on-iPhone Import points at the Finder/iTunes backup folder. It does not
 
 The desktop app runs `wtsexporter` to extract WhatsApp messages from the backup, then imports the result. Conversation names use a `__whatsapp` suffix so they stay separate from Apple Messages threads.
 
+The backup carries the phone number the WhatsApp account is registered to, in WhatsApp's own preferences file (`group.net.whatsapp.WhatsApp.shared.plist`, key `OwnJabberID`). Import reads it from there and records it on every message as the address it was held at, so the conversations count toward that identity in Settings. When the backup has no such entry, Import uses the **WhatsApp phone number** field under **Processing Options (Advanced)** instead, and stops with a message when that field is empty too.
+
 ## Known limitations
 
 - The desktop app cannot cancel `wtsexporter` mid-run — wait for it to finish or stop it manually

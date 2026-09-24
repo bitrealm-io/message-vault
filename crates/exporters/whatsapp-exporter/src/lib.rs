@@ -6,6 +6,7 @@
 
 mod emit;
 mod jid;
+mod owner;
 mod parse;
 mod run;
 mod wtsexporter;

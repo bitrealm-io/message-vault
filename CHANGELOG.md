@@ -21,6 +21,15 @@ released versions carry their date on the heading.
 
 ### Features
 
+- 2026-09-24 **A WhatsApp import knows which number is yours.** Every
+  imported WhatsApp message now records the phone number your WhatsApp
+  account is registered to, so its conversations count toward that identity
+  in Settings. An iPhone backup carries the number, and Import reads it from
+  there. An Android backup does not, so the Import form asks for it in a
+  **WhatsApp phone number** field, pre-filled from your profile's phone; on
+  iPhone the same field sits under Processing Options as a fallback for a
+  backup without the number. The number is recorded on the messages and is
+  not added to your profile.
 - 2026-09-23 **Search contacts by when you last heard from them.**
   `first-heard:` and `last-heard:` on Contacts find the first and last
   message a contact sent you, in a direct or a group conversation:

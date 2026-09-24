@@ -76,6 +76,17 @@ export const WHATSAPP_ERR_FOLDER_IS_FILE = "Pick the backup folder.";
 export const WHATSAPP_ERR_CRYPT_KEY = "Decryption key is required for an encrypted backup.";
 export const WHATSAPP_ERR_MUST_BE_FILE = "This path must be a file.";
 export const WHATSAPP_ERR_MUST_BE_FOLDER = "This path must be a folder.";
+export const WHATSAPP_ERR_OWNER_PHONE = "Owner's WhatsApp number is required.";
+
+/**
+ * Where the account holder's number comes from. An Android crypt backup
+ * carries no owner, so the form's number is required there. An iPhone
+ * backup carries it in WhatsApp's preferences; the form's number is a
+ * fallback for a backup without that key, so the field is optional.
+ */
+export function whatsappOwnerPhoneRequired(method: WhatsappMethodId): boolean {
+  return method === "whatsapp-android";
+}
 
 type WhatsappCanImportArgs = {
   method: WhatsappMethodId;
@@ -84,10 +95,11 @@ type WhatsappCanImportArgs = {
   contactsDb: string;
   media: string;
   db: string;
+  ownerPhone: string;
   stats: WhatsappPathStats;
 };
 
-type WhatsappImportErrorKey = "backupPath" | "key" | "contactsDb" | "media" | "db";
+type WhatsappImportErrorKey = "backupPath" | "key" | "contactsDb" | "media" | "db" | "ownerPhone";
 
 function checkOptionalPath(
   path: string,
@@ -145,6 +157,10 @@ export function whatsappCanImport(args: WhatsappCanImportArgs): {
     args.key.trim() === ""
   ) {
     errors.key = WHATSAPP_ERR_CRYPT_KEY;
+  }
+
+  if (whatsappOwnerPhoneRequired(args.method) && args.ownerPhone.trim() === "") {
+    errors.ownerPhone = WHATSAPP_ERR_OWNER_PHONE;
   }
 
   if (whatsappShowsContactsDb(args.method)) {

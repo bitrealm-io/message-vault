@@ -15,6 +15,7 @@ describe("whatsappExtractFields", () => {
         media: "/tmp/WhatsApp",
         db: "/tmp/msgstore.db",
         business: true,
+        ownerPhone: " +1 555 555 0100 ",
       }),
     ).toEqual({
       attachment_media: "convert",
@@ -24,7 +25,30 @@ describe("whatsappExtractFields", () => {
       whatsapp_key: "deadbeef",
       whatsapp_media: "/tmp/WhatsApp",
       whatsapp_db: "/tmp/msgstore.db",
+      owner_phones: ["+1 555 555 0100"],
     });
+  });
+
+  // The desktop reads the number as the one-entry owner phone list it already
+  // takes for Android SMS; an empty field sends nothing, so iPhone falls back
+  // to the number in the backup.
+  it("sends the owner's number on iPhone too, and nothing when it is empty", () => {
+    const base = {
+      source: "whatsapp-ios" as const,
+      attachmentMedia: "copy" as const,
+      maxResolution: "720p",
+      maxFps: "30",
+      minSizeMb: "20",
+      key: "",
+      wa: "",
+      media: "",
+      db: "",
+      business: false,
+    };
+    expect(whatsappExtractFields({ ...base, ownerPhone: "+15555550100" }).owner_phones).toEqual([
+      "+15555550100",
+    ]);
+    expect(whatsappExtractFields({ ...base, ownerPhone: "  " }).owner_phones).toBeUndefined();
   });
 
   it("omits leftover Android media and db on iPhone", () => {
@@ -40,6 +64,7 @@ describe("whatsappExtractFields", () => {
         media: "/tmp/WhatsApp",
         db: "/tmp/msgstore.db",
         business: false,
+        ownerPhone: "",
       }),
     ).toEqual({
       attachment_media: "copy",
@@ -63,6 +88,7 @@ describe("whatsappExtractFields", () => {
         media: "",
         db: "",
         business: true,
+        ownerPhone: "",
       }),
     ).toEqual({
       attachment_media: "copy",

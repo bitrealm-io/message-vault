@@ -241,6 +241,7 @@ const baseForm = {
   whatsappMedia: "",
   whatsappDb: "",
   whatsappBusiness: false,
+  whatsappOwnerPhone: "",
   timeZone: "America/New_York",
 };
 
@@ -1295,6 +1296,7 @@ const validSnapshot = {
   whatsappMedia: "",
   whatsappDb: "",
   whatsappBusiness: false,
+  whatsappOwnerPhone: "",
   timeZone: "America/New_York",
 };
 

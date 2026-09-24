@@ -1,4 +1,4 @@
-use crate::emit::convert_json;
+use crate::emit::{ConvertRequest, convert_json};
 use message_vault_io_core::testutil::assert_jsonl_resumes;
 use message_vault_io_core::{ExportTransforms, OutputFormat};
 use std::fs;
@@ -10,15 +10,16 @@ fn convert_fixture_json_individual_and_group() {
     assert!(fixture.is_file(), "missing {}", fixture.display());
 
     let tmp = tempfile::tempdir().expect("tempdir");
-    let report = convert_json(
-        &fixture,
-        tmp.path(),
-        ExportTransforms::none(),
-        &[],
-        OutputFormat::Csv,
-        None,
-        false,
-    )
+    let report = convert_json(ConvertRequest {
+        json_path: &fixture,
+        output: tmp.path(),
+        transforms: ExportTransforms::none(),
+        media_search_roots: &[],
+        owner_handle: None,
+        output_format: OutputFormat::Csv,
+        cancel: None,
+        resume: false,
+    })
     .expect("convert");
 
     assert_eq!(report.conversations, 2);
@@ -78,15 +79,16 @@ fn copies_ios_style_media_true_data_paths() {
     fs::write(&json_path, json.to_string()).expect("write json");
 
     let out = tempfile::tempdir().expect("out");
-    let report = convert_json(
-        &json_path,
-        out.path(),
-        ExportTransforms::none(),
-        &[media_root.path().to_path_buf()],
-        OutputFormat::Csv,
-        None,
-        false,
-    )
+    let report = convert_json(ConvertRequest {
+        json_path: &json_path,
+        output: out.path(),
+        transforms: ExportTransforms::none(),
+        media_search_roots: &[media_root.path().to_path_buf()],
+        owner_handle: None,
+        output_format: OutputFormat::Csv,
+        cancel: None,
+        resume: false,
+    })
     .expect("convert");
 
     assert_eq!(report.attachments_saved, 1);
@@ -120,15 +122,16 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/result.json");
     let tmp = tempfile::tempdir().expect("tempdir");
     let report = assert_jsonl_resumes(tmp.path(), |resume| {
-        convert_json(
-            &fixture,
-            tmp.path(),
-            ExportTransforms::none(),
-            &[],
-            OutputFormat::Jsonl,
-            None,
+        convert_json(ConvertRequest {
+            json_path: &fixture,
+            output: tmp.path(),
+            transforms: ExportTransforms::none(),
+            media_search_roots: &[],
+            owner_handle: None,
+            output_format: OutputFormat::Jsonl,
+            cancel: None,
             resume,
-        )
+        })
     });
     assert_eq!(report.conversations, 2, "one individual chat and one group");
 }
@@ -145,15 +148,16 @@ fn convert_to_documents(
     let json_path = dir.path().join("result.json");
     fs::write(&json_path, json.to_string()).expect("write json");
     let out = dir.path().join("out");
-    let report = convert_json(
-        &json_path,
-        &out,
-        ExportTransforms::none(),
-        &[dir.path().to_path_buf()],
-        OutputFormat::Json,
-        None,
-        false,
-    )
+    let report = convert_json(ConvertRequest {
+        json_path: &json_path,
+        output: &out,
+        transforms: ExportTransforms::none(),
+        media_search_roots: &[dir.path().to_path_buf()],
+        owner_handle: None,
+        output_format: OutputFormat::Json,
+        cancel: None,
+        resume: false,
+    })
     .expect("convert");
     let documents = fs::read_dir(&out)
         .expect("out")
@@ -336,15 +340,16 @@ fn a_media_path_in_the_media_field_is_copied() {
     fs::write(&json_path, json.to_string()).expect("write json");
 
     let out = dir.path().join("out");
-    let report = convert_json(
-        &json_path,
-        &out,
-        ExportTransforms::none(),
-        &[dir.path().to_path_buf()],
-        OutputFormat::Csv,
-        None,
-        false,
-    )
+    let report = convert_json(ConvertRequest {
+        json_path: &json_path,
+        output: &out,
+        transforms: ExportTransforms::none(),
+        media_search_roots: &[dir.path().to_path_buf()],
+        owner_handle: None,
+        output_format: OutputFormat::Csv,
+        cancel: None,
+        resume: false,
+    })
     .expect("convert");
     assert_eq!(report.attachments_saved, 1);
 }

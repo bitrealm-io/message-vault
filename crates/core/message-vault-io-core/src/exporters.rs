@@ -336,6 +336,14 @@ impl Form {
         {
             errors.push("Backup path is required for iOS.".into());
         }
+        // One number: a WhatsApp account has exactly one. Android has no other
+        // source for it, so an empty field stops the form here rather than
+        // running an import that records no owner. iPhone reads the number
+        // from the backup and falls back to this field, so it may be empty.
+        let owner_phone = values(&self.owner_phones).first().map(|p| p.to_string());
+        if self.whatsapp_platform == WhatsappPlatform::Android && owner_phone.is_none() {
+            errors.push("Owner's WhatsApp number is required.".into());
+        }
         let media = self.validate_media(errors);
         ExporterConfig {
             inputs,
@@ -357,6 +365,7 @@ impl Form {
                 media: non_empty_path(&self.whatsapp_media),
                 db: non_empty_path(&self.whatsapp_db),
                 business: self.whatsapp_business,
+                owner_phone,
             }),
         }
     }
@@ -881,6 +890,7 @@ mod tests {
     fn whatsapp_passes_platform_and_media() {
         let form = Form {
             output: "out".into(),
+            owner_phones: "+15555550100".into(),
             whatsapp_platform: WhatsappPlatform::Android,
             whatsapp_key: "abc123".into(),
             whatsapp_backup: "/tmp/backup".into(),
@@ -899,8 +909,10 @@ mod tests {
         assert_eq!(wa.key.as_deref(), Some("abc123"));
         assert_eq!(wa.backup, Some(PathBuf::from("/tmp/backup")));
         assert_eq!(wa.media, Some(PathBuf::from("/tmp/media")));
+        assert_eq!(wa.owner_phone.as_deref(), Some("+15555550100"));
         assert!(wa.business);
 
+        // iPhone reads the number from the backup, so the field may be empty.
         let ios = Form {
             output: "out".into(),
             whatsapp_platform: WhatsappPlatform::Ios,
@@ -914,6 +926,7 @@ mod tests {
         assert_eq!(wa.platform, Some(WhatsappPlatform::Ios));
         assert_eq!(wa.backup, Some(PathBuf::from("/tmp/ios-backup")));
         assert!(wa.key.is_none());
+        assert!(wa.owner_phone.is_none());
 
         let ios_missing = Form {
             output: "out".into(),
@@ -927,12 +940,31 @@ mod tests {
         );
     }
 
+    /// An Android crypt backup does not carry the account holder's number,
+    /// so the form is the only source: an empty field is a validation
+    /// problem, not an import that runs and records no owner.
+    #[test]
+    fn whatsapp_android_requires_the_owner_number() {
+        let form = Form {
+            output: "out".into(),
+            whatsapp_platform: WhatsappPlatform::Android,
+            ..Form::default()
+        };
+        let err = form.to_config(Exporter::Whatsapp).unwrap_err();
+        assert!(
+            err.iter()
+                .any(|e| e == "Owner's WhatsApp number is required."),
+            "{err:?}"
+        );
+    }
+
     #[test]
     fn whatsapp_forwards_existing_input_as_search_root() {
         let dir = tempfile::tempdir().unwrap();
         let form = Form {
             input: dir.path().display().to_string(),
             output: "out".into(),
+            owner_phones: "+15555550100".into(),
             ..Form::default()
         };
         let config = form.to_config(Exporter::Whatsapp).unwrap();
@@ -941,6 +973,7 @@ mod tests {
         let missing = Form {
             input: "/does/not/exist-whatsapp-input".into(),
             output: "out".into(),
+            owner_phones: "+15555550100".into(),
             ..Form::default()
         };
         let err = missing.to_config(Exporter::Whatsapp).unwrap_err();

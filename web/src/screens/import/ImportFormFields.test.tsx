@@ -8,6 +8,7 @@ import {
   emptyWhatsappPathStats,
   WHATSAPP_ERR_CRYPT_KEY,
   WHATSAPP_ERR_FOLDER_IS_FILE,
+  WHATSAPP_ERR_OWNER_PHONE,
   WHATSAPP_SOURCE_ID,
 } from "../../lib/whatsappImport";
 import ImportFormFields, { type ImportFormFieldsProps } from "./ImportFormFields";
@@ -54,6 +55,8 @@ function renderForm(override: Partial<ImportFormFieldsProps> = {}) {
     whatsappDb: "",
     onWhatsappDbChange: vi.fn(),
     whatsappBusiness: false,
+    whatsappOwnerPhone: "",
+    onWhatsappOwnerPhoneChange: vi.fn(),
     onWhatsappBusinessChange: vi.fn(),
     whatsappStats: emptyWhatsappPathStats(),
     attachmentMedia: "copy",
@@ -301,6 +304,67 @@ describe("ImportFormFields WhatsApp methods", () => {
     });
     expect(screen.getByText(WHATSAPP_ERR_CRYPT_KEY)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
+  });
+
+  // An Android crypt backup carries no owner number, so the form asks for it
+  // beside the other required fields and refuses an import without it.
+  it("requires the owner's WhatsApp number on Android", () => {
+    const stats = {
+      backup: presentDir,
+      contactsDb: null,
+      media: null,
+      db: null,
+      hasMsgstoreDb: true,
+      cryptName: null,
+    };
+    renderForm({
+      source: "whatsapp-android",
+      backupPath: "/tmp/wa",
+      whatsappOwnerPhone: "",
+      whatsappStats: stats,
+    });
+    expect(screen.getByLabelText("WhatsApp phone number")).toBeTruthy();
+    expect(screen.getByText(WHATSAPP_ERR_OWNER_PHONE)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
+    cleanup();
+
+    renderForm({
+      source: "whatsapp-android",
+      backupPath: "/tmp/wa",
+      whatsappOwnerPhone: "+15555550100",
+      whatsappStats: stats,
+    });
+    expect((screen.getByLabelText("WhatsApp phone number") as HTMLInputElement).value).toBe(
+      "+15555550100",
+    );
+    expect(screen.queryByText(WHATSAPP_ERR_OWNER_PHONE)).toBeNull();
+    expect(screen.getByRole("button", { name: "Import" })).toBeEnabled();
+  });
+
+  // An iPhone backup carries the number in WhatsApp's preferences, so the
+  // field is a fallback under the advanced section and may stay empty.
+  it("offers the number as an optional fallback under Processing Options on iPhone", () => {
+    renderForm({
+      source: "whatsapp-ios",
+      backupPath: "/backups/iphone",
+      whatsappOwnerPhone: "",
+      whatsappStats: {
+        backup: presentDir,
+        contactsDb: null,
+        media: null,
+        db: null,
+        hasMsgstoreDb: false,
+        cryptName: null,
+      },
+      processingOpen: true,
+    });
+    expect(screen.queryByLabelText("WhatsApp phone number")).toBeNull();
+    expect(screen.getByLabelText("WhatsApp phone number (Optional)")).toBeTruthy();
+    expect(
+      screen.getByText("Fallback, used when the backup does not contain your phone number."),
+    ).toBeTruthy();
+    expect(screen.queryByText(WHATSAPP_ERR_OWNER_PHONE)).toBeNull();
+    expect(screen.getByRole("button", { name: "Import" })).toBeEnabled();
   });
 
   it("shows a folder-kind error when the backup path is a file", () => {

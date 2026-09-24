@@ -34,27 +34,43 @@ fn ext_of(name: &str) -> String {
         .to_string()
 }
 
+/// One conversion of a wtsexporter `result.json`: what to read, where to
+/// write it, and how.
+pub(crate) struct ConvertRequest<'a> {
+    pub json_path: &'a Path,
+    pub output: &'a Path,
+    pub transforms: ExportTransforms,
+    /// Directories tried when resolving relative media paths (typically the
+    /// wtsexporter working directory / process cwd).
+    pub media_search_roots: &'a [PathBuf],
+    /// The account holder's number in E.164, stamped on the export header and
+    /// so on every message as the address it was held at. `None` records no
+    /// owner, which leaves the conversations counted toward no identity.
+    pub owner_handle: Option<String>,
+    pub output_format: OutputFormat,
+    /// Checked between chats (cooperative cancellation).
+    pub cancel: Option<&'a CancelFlag>,
+    pub resume: bool,
+}
+
 /// Convert a wtsexporter `result.json` into the shared conversation structure,
 /// then write the chosen output format.
-///
-/// `media_search_roots` are directories tried when resolving relative media paths
-/// (typically the wtsexporter working directory / process cwd).
-///
-/// When `cancel` is set, it is checked between chats (cooperative cancellation).
 ///
 /// # Errors
 ///
 /// Returns an error when the JSON cannot be read, a conversation cannot be
 /// written, or the user cancels.
-pub(crate) fn convert_json(
-    json_path: &Path,
-    output: &Path,
-    transforms: ExportTransforms,
-    media_search_roots: &[PathBuf],
-    output_format: OutputFormat,
-    cancel: Option<&CancelFlag>,
-    resume: bool,
-) -> Result<ExportReport> {
+pub(crate) fn convert_json(request: ConvertRequest<'_>) -> Result<ExportReport> {
+    let ConvertRequest {
+        json_path,
+        output,
+        transforms,
+        media_search_roots,
+        owner_handle,
+        output_format,
+        cancel,
+        resume,
+    } = request;
     fs::create_dir_all(output).with_context(|| format!("create {}", output.display()))?;
     // Load the chat store BEFORE cleaning the output directory. The JSON may live
     // inside the output dir (e.g. wtsexporter_result.json) and cleaning
@@ -87,7 +103,7 @@ pub(crate) fn convert_json(
             EXPORT_SOURCE,
             EXPORT_TOOL,
             EXPORT_TOOL_VERSION,
-            None,
+            owner_handle,
             None,
         ),
     };

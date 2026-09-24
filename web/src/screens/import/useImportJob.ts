@@ -221,6 +221,8 @@ export type ImportJobFormValues = {
   whatsappMedia: string;
   whatsappDb: string;
   whatsappBusiness: boolean;
+  /** The holder's WhatsApp number: required on Android, a fallback on iPhone. */
+  whatsappOwnerPhone: string;
 };
 
 /** Pick up a session whose staging folder is already complete. */
@@ -947,6 +949,7 @@ function extractFieldsFor(form: ImportJobFormValues) {
       media: form.whatsappMedia,
       db: form.whatsappDb,
       business: form.whatsappBusiness,
+      ownerPhone: form.whatsappOwnerPhone,
     });
   }
   if (form.isAndroidSms) {

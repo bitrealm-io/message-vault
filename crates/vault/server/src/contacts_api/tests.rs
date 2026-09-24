@@ -814,6 +814,123 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
     assert!(empty.handles.is_empty());
 }
 
+/// Add `raw` to `contact_id` with `service`, through the contact edit.
+async fn add_handle(
+    conn: &mut AnyConnection,
+    account: i64,
+    contact_id: i64,
+    raw: &str,
+    service: Option<&str>,
+) {
+    assert!(
+        mutate_contact(
+            conn,
+            account,
+            contact_id,
+            &UpdateContactRequest {
+                name: None,
+                add_handle: Some(AddContactIdentityRequest {
+                    handle: raw.into(),
+                    service: service.map(Into::into),
+                }),
+                update_handle: None,
+                remove_handle: None,
+            },
+        )
+        .await
+        .unwrap()
+    );
+}
+
+/// The stored `(handle_type, service)` of the handle added as `raw`.
+async fn handle_type_and_service(
+    conn: &mut AnyConnection,
+    account: i64,
+    raw: &str,
+) -> (String, Option<String>) {
+    sqlx::query_as("SELECT handle_type, service FROM handles WHERE account_id = $1 AND raw = $2")
+        .bind(account)
+        .bind(raw)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// A number added under a messaging service is a phone, so it matches the
+/// same number from any other source; an address is an email; a bare
+/// username with no service stays Other rather than passing for a phone.
+#[tokio::test]
+async fn a_handle_takes_its_type_from_the_service_it_is_added_under() {
+    let vault = test_vault().await;
+    let account = vault.account_with_id(101, "alice").await;
+    let mut conn = vault.conn().await;
+    let contact_id = insert_contact_with_handle(&mut conn, account, "Sam", "+15555550100").await;
+
+    for (raw, service, expected) in [
+        ("+15555550201", Some("sms"), "phone"),
+        ("+15555550202", Some("imessage"), "phone"),
+        ("+15555550203", Some("whatsapp"), "phone"),
+        ("+15555550204", Some("phone"), "phone"),
+        ("+15555550205", None, "phone"),
+        ("sam@example.com", Some("email"), "email"),
+        ("sam", None, "other"),
+        ("sam#1234", Some("discord"), "other"),
+    ] {
+        add_handle(&mut conn, account, contact_id, raw, service).await;
+        assert_eq!(
+            handle_type_and_service(&mut conn, account, raw).await.0,
+            expected,
+            "{raw} under {service:?}"
+        );
+    }
+}
+
+/// Naming a linked handle again under another transport of the same
+/// platform (`iMessage` for a number added under `sms`) changes nothing: a
+/// handle's service is its platform, `phone` or `whatsapp`, never the
+/// transport. The number stays one row, so the next import or edit that
+/// names it under any phone transport finds that row rather than adding a
+/// second one.
+#[tokio::test]
+async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
+    let vault = test_vault().await;
+    let account = vault.account_with_id(101, "alice").await;
+    let mut conn = vault.conn().await;
+    let contact_id = insert_contact_with_handle(&mut conn, account, "Sam", "+15555550100").await;
+    add_handle(&mut conn, account, contact_id, "+15555550300", Some("sms")).await;
+
+    assert!(
+        mutate_contact(
+            &mut conn,
+            account,
+            contact_id,
+            &UpdateContactRequest {
+                name: None,
+                add_handle: None,
+                update_handle: Some(UpdateContactIdentityRequest {
+                    previous_handle: "+15555550300".into(),
+                    handle: "+15555550300".into(),
+                    service: Some("iMessage".into()),
+                }),
+                remove_handle: None,
+            },
+        )
+        .await
+        .unwrap()
+    );
+    add_handle(&mut conn, account, contact_id, "+15555550300", Some("sms")).await;
+
+    let rows: Vec<(String, Option<String>)> = sqlx::query_as(
+        "SELECT handle_type, service FROM handles WHERE account_id = $1 AND raw = $2",
+    )
+    .bind(account)
+    .bind("+15555550300")
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(rows, [("phone".to_string(), Some("phone".to_string()))]);
+}
+
 #[tokio::test]
 async fn mutate_contact_rejects_trashed_contact() {
     let vault = test_vault().await;

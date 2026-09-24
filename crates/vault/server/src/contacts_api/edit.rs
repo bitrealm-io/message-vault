@@ -224,7 +224,9 @@ impl ContactEditor<'_> {
         };
         let new_id = self.handle_row(next, service).await?;
         if old_id == new_id {
-            return self.retype_handle(new_id, service).await;
+            // Both lookups keyed the row on the same platform, so the edit
+            // names the handle the contact already has: nothing changes.
+            return Ok(true);
         }
         if self.claim(new_id).await? {
             // The new handle is already on this contact, so the edit amounts
@@ -240,19 +242,6 @@ impl ContactEditor<'_> {
             )
             .await?;
         }
-        self.touched().await
-    }
-
-    /// The same handle named twice: only a given service changes.
-    async fn retype_handle(
-        &mut self,
-        handle_id: i64,
-        service: Option<&str>,
-    ) -> Result<bool, ContactEditError> {
-        let Some(service) = service.and_then(message_ir::trimmed) else {
-            return Ok(true);
-        };
-        handles::set_handle_service(&mut *self.conn, handle_id, service).await?;
         self.touched().await
     }
 

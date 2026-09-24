@@ -19,6 +19,52 @@ fn email_detection() {
     );
 }
 
+/// The display name a vCard gives: built from N (given, middle, family),
+/// unless the card is a one-word FN with no family name, which is the
+/// person's nickname. FN differs from "given family" on each card here, so
+/// the name shows which rule built it.
+#[test]
+fn a_vcard_name_is_built_from_n_or_is_a_one_word_nickname() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let vcf = dir.path().join("book.vcf");
+    let cards = [
+        // A family name: FN "Bobby" is not a nickname, N builds the name.
+        ("Bobby", "Smith;Robert;;;", "+15550000001"),
+        // A middle name goes between the given and the family name.
+        ("Bob Smith", "Smith;Robert;James;;", "+15550000002"),
+        // One word and no family name: the nickname.
+        ("Bobby", ";;;;", "+15550000003"),
+        ("Bobby", ";Bobby;;;", "+15550000004"),
+        // One word, no family name, but a different given name: N wins.
+        ("Bobby", ";Robert;;;", "+15550000005"),
+    ];
+    let body: String = cards
+        .iter()
+        .map(|(fn_, n, tel)| {
+            format!("BEGIN:VCARD\nVERSION:3.0\nFN:{fn_}\nN:{n}\nTEL:{tel}\nEND:VCARD\n")
+        })
+        .collect();
+    std::fs::write(&vcf, body).unwrap();
+
+    let names: Vec<Option<String>> = drafts_from_vcf(&vcf)
+        .unwrap()
+        .into_iter()
+        .map(|d| d.preferred_name)
+        .collect();
+
+    assert_eq!(
+        names,
+        [
+            "Robert Smith",
+            "Robert James Smith",
+            "Bobby",
+            "Bobby",
+            "Robert"
+        ]
+        .map(|s| Some(s.to_string()))
+    );
+}
+
 /// One table for the naming rule ADR-0006 sets, read at the seam that
 /// enforces it rather than through the three callers that used to carry
 /// their own copy of it.

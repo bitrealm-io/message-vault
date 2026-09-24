@@ -3,11 +3,13 @@ use std::path::Path;
 use sqlx::AnyConnection;
 use tempfile::TempDir;
 
-use super::is_orphaned_export;
+use super::{is_orphaned_export, store_claimed_or_path};
+use crate::assets_api::{self, AssetStats};
 use crate::imports_api::{
     FixedImportArgs, ImportMode, ImportOptions, ImportSchemaMode, ImportStats,
     import_jsonl_files_on_conn,
 };
+use crate::models::AttachmentRecord;
 
 const TEST_ACCOUNT: i64 = 7;
 
@@ -58,6 +60,58 @@ fn refusal(result: anyhow::Result<ImportStats>) -> String {
         .rsplit_once(".jsonl")
         .expect("the refusal names the file");
     reason.trim_start_matches([':', ' ']).to_string()
+}
+
+/// An attachment record that names only a stored blob by its fingerprint,
+/// with `mime_type` as the export's MIME claim.
+fn claimed(sha256: &str, mime_type: Option<&str>) -> AttachmentRecord {
+    AttachmentRecord {
+        path: None,
+        original_name: None,
+        mime_type: mime_type.map(str::to_string),
+        sha256: Some(sha256.to_string()),
+        is_sticker: false,
+        transcription: None,
+        size_bytes: None,
+        missing_reason: None,
+    }
+}
+
+/// A blob the store already holds under `image/png` is reused when an
+/// attachment claims its sha256. The export's MIME type wins over the stored
+/// one when the record has one, and the stored one stands when it does not,
+/// because the export saw the original file and the store only guessed.
+#[test]
+fn a_reused_blob_takes_the_export_mime_type_when_the_record_has_one() {
+    let tmp = TempDir::new().unwrap();
+    let export_dir = tmp.path().join("export");
+    let assets_dir = tmp.path().join("assets");
+    std::fs::create_dir_all(&export_dir).unwrap();
+    let source = export_dir.join("photo.png");
+    std::fs::write(&source, b"not really a png").unwrap();
+    let sha = assets_api::hash_file(&source).unwrap();
+    assets_api::store_verified(&source, &sha, &assets_dir, Some("image/png"), false, false)
+        .unwrap();
+    let mut stats = AssetStats::default();
+
+    let stored = store_claimed_or_path(
+        &claimed(&sha, Some("image/jpeg")),
+        &export_dir,
+        &assets_dir,
+        &mut stats,
+    )
+    .unwrap()
+    .expect("the stored blob is reused");
+    assert_eq!(stored.sha256, sha);
+    assert_eq!(stored.mime_type.as_deref(), Some("image/jpeg"));
+
+    let stored = store_claimed_or_path(&claimed(&sha, None), &export_dir, &assets_dir, &mut stats)
+        .unwrap()
+        .expect("the stored blob is reused");
+    assert_eq!(stored.mime_type.as_deref(), Some("image/png"));
+    assert_eq!(stats.deduped, 2);
+    assert_eq!(stats.copied, 0);
+    assert_eq!(stats.missing, 0);
 }
 
 #[test]

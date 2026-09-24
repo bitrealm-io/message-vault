@@ -159,7 +159,7 @@ export default function ImportScreen() {
     setIdentityAddError(null);
     try {
       const updated = await updateProfile.mutateAsync({
-        handles: [{ handle: value, service }],
+        identities: [{ address: value, service }],
       });
       if (!identityOnProfile(value, updated)) {
         throw new Error("no-op add");

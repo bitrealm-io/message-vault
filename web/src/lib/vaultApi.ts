@@ -203,7 +203,7 @@ export function getAccountProfile(opts?: VaultRequestOptions): Promise<Schema["A
   return apiClient.get<Schema["Account"]>(ownAccountPath(), opts);
 }
 
-/** Change the logged-in account's display name, time zone or handles. */
+/** Change the logged-in account’s display name, time zone or identities. */
 export function updateAccountProfile(
   body: Schema["UpdateAccountRequest"],
 ): Promise<Schema["Account"]> {
@@ -468,7 +468,7 @@ export function getContact(
 }
 
 /**
- * Change one thing about a contact: its preferred name, or one handle added,
+ * Change one thing about a contact: its preferred name, or one identity added,
  * updated, or removed. The vault answers with the contact as it now stands.
  */
 export function updateContact(

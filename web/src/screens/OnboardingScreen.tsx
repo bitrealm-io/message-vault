@@ -253,12 +253,12 @@ export default function OnboardingScreen() {
       await updateAccountProfile({
         preferred_name: displayName.trim(),
         time_zone: timeZone,
-        handles: filled
+        identities: filled
           .filter((h) => !seededRows.some((original) => sameIdentity(h, original)))
-          .map((h) => ({ handle: h.handle.trim(), service: h.service })),
-        remove_handles: seededRows
+          .map((h) => ({ address: h.handle.trim(), service: h.service })),
+        remove_identities: seededRows
           .filter((original) => !filled.some((h) => sameIdentity(h, original)))
-          .map(({ handle, service }) => ({ handle, service })),
+          .map(({ handle, service }) => ({ address: handle, service })),
       });
       // Log in again so "needs setup" is recomputed from the saved profile.
       await login(serverUrl, token, accountId);

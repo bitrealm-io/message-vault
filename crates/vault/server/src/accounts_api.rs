@@ -51,7 +51,7 @@ pub struct Account {
     /// IANA time zone every message time, day and year is shown in, for
     /// example `America/New_York`. Chosen at profile setup.
     pub time_zone: String,
-    /// Phone handles linked to the account.
+    /// Phone numbers linked to the account.
     pub phones: Vec<String>,
     /// Email addresses linked to the account.
     pub emails: Vec<String>,
@@ -417,17 +417,17 @@ pub async fn get_account(
     Ok(Json(require_account(&mut conn, target).await?))
 }
 
-/// One handle to link or unlink, with its platform service.
+/// One identity to link or unlink, with its platform service.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct AccountIdentityRequest {
-    /// Raw handle value, e.g. `+15555550100` or `alex@example.com`.
-    pub handle: String,
-    /// Platform the handle belongs to: `phone`, `email`, or `whatsapp`.
+    /// The address as typed, e.g. `+15555550100` or `alex@example.com`.
+    pub address: String,
+    /// Platform the address belongs to: `phone`, `email`, or `whatsapp`.
     pub service: String,
 }
 
 /// Body for changing an account. Omitted fields are left alone. The name,
-/// zone and handles are set by the account or by the vault owner; the
+/// zone and identities are set by the account or by the vault owner; the
 /// disabled flag and the three permissions are the vault owner's alone.
 #[derive(Debug, Default, Deserialize, utoipa::ToSchema)]
 pub struct UpdateAccountRequest {
@@ -438,12 +438,12 @@ pub struct UpdateAccountRequest {
     /// the current zone unchanged. An unknown name is a 422.
     #[serde(default)]
     pub time_zone: Option<String>,
-    /// Handles to add/link onto the account profile.
+    /// Identities to link onto the account profile.
     #[serde(default)]
-    pub handles: Vec<AccountIdentityRequest>,
-    /// Handles to unlink from the account profile.
+    pub identities: Vec<AccountIdentityRequest>,
+    /// Identities to unlink from the account profile.
     #[serde(default)]
-    pub remove_handles: Vec<AccountIdentityRequest>,
+    pub remove_identities: Vec<AccountIdentityRequest>,
     /// Disable or re-enable login.
     #[serde(default)]
     pub disabled: Option<bool>,
@@ -459,12 +459,12 @@ pub struct UpdateAccountRequest {
 }
 
 impl UpdateAccountRequest {
-    /// True when the body names the display name, the time zone or a handle.
+    /// True when the body names the display name, the time zone or an identity.
     fn touches_profile(&self) -> bool {
         self.preferred_name.is_some()
             || self.time_zone.is_some()
-            || !self.handles.is_empty()
-            || !self.remove_handles.is_empty()
+            || !self.identities.is_empty()
+            || !self.remove_identities.is_empty()
     }
 
     /// True when the body names a field only the vault owner may set.
@@ -524,14 +524,14 @@ fn parse_profile_service(
     }
 }
 
-/// Apply name, zone and handle changes on an open connection.
+/// Apply name, zone and identity changes on an open connection.
 async fn apply_profile_update(
     conn: &mut AnyConnection,
     account_id: i64,
     preferred_name: Option<&str>,
     time_zone: Option<&str>,
-    handles: &[AccountIdentityRequest],
-    remove_handles: &[AccountIdentityRequest],
+    identities: &[AccountIdentityRequest],
+    remove_identities: &[AccountIdentityRequest],
 ) -> std::result::Result<(), ProfileUpdateError> {
     if let Some(name) = time_zone.map(str::trim).filter(|n| !n.is_empty()) {
         let zone: chrono_tz::Tz = name
@@ -549,8 +549,8 @@ async fn apply_profile_update(
         account_profile::set_preferred_name(conn, account_id, stored_name).await?;
     }
 
-    for entry in remove_handles {
-        let raw = entry.handle.trim();
+    for entry in remove_identities {
+        let raw = entry.address.trim();
         if raw.is_empty() {
             continue;
         }
@@ -566,8 +566,8 @@ async fn apply_profile_update(
         }
     }
 
-    for entry in handles {
-        let raw = entry.handle.trim();
+    for entry in identities {
+        let raw = entry.address.trim();
         if raw.is_empty() {
             continue;
         }
@@ -616,8 +616,8 @@ async fn update_profile_on_conn(
         account_id,
         req.preferred_name.as_deref(),
         req.time_zone.as_deref(),
-        &req.handles,
-        &req.remove_handles,
+        &req.identities,
+        &req.remove_identities,
     )
     .await?;
     // An account saving its own profile is what profile setup is, so it no
@@ -652,7 +652,7 @@ async fn apply_flags(
     Ok(())
 }
 
-/// Change an account. Its display name, time zone and handles are set by
+/// Change an account. Its display name, time zone and identities are set by
 /// the account itself or by the vault owner; only the vault owner sets an
 /// account's disabled flag and its import, export and delete permissions. A
 /// field the caller may not set answers `403 Forbidden`, and the reloaded

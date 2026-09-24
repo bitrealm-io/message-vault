@@ -26,8 +26,8 @@ function profileIncludes(p: AccountProfile, handle: string, service: string): bo
 /** The profile's own identities as placeholder rows, shown until the vault lists them. */
 function placeholderRows(profile: AccountProfile): Identity[] {
   return [
-    ...profile.phones.map((handle) => ({ handle, service: "phone" })),
-    ...profile.emails.map((handle) => ({ handle, service: "email" })),
+    ...profile.phones.map((address) => ({ address, service: "phone" })),
+    ...profile.emails.map((address) => ({ address, service: "email" })),
   ].map((row) => ({
     ...row,
     start_date: null,
@@ -79,11 +79,11 @@ export function IdentitiesSection({
     [rows],
   );
 
-  const confirmAdd = async ({ handle, service }: { handle: string; service: HandleService }) => {
+  const confirmAdd = async ({ address, service }: { address: string; service: HandleService }) => {
     setAddError("");
     try {
-      const updated = await updateProfile.mutateAsync({ handles: [{ handle, service }] });
-      if (!profileIncludes(updated, handle, service)) {
+      const updated = await updateProfile.mutateAsync({ identities: [{ address, service }] });
+      if (!profileIncludes(updated, address, service)) {
         throw new Error("The vault did not add that identity.");
       }
       setAdding(false);
@@ -94,11 +94,13 @@ export function IdentitiesSection({
 
   const confirmRemove = async () => {
     if (!removeTarget) return;
-    const { handle, service } = removeTarget;
+    const { address, service } = removeTarget;
     setRemoveError("");
     try {
-      const updated = await updateProfile.mutateAsync({ remove_handles: [{ handle, service }] });
-      if (profileIncludes(updated, handle, service)) {
+      const updated = await updateProfile.mutateAsync({
+        remove_identities: [{ address, service }],
+      });
+      if (profileIncludes(updated, address, service)) {
         throw new Error("The vault did not remove that identity.");
       }
       setRemoveTarget(null);
@@ -108,7 +110,7 @@ export function IdentitiesSection({
   };
 
   const requestRemove = (row: IdentityRow) => {
-    const target = rows.find((r) => r.handle === row.handle && r.service === row.service);
+    const target = rows.find((r) => r.address === row.address && r.service === row.service);
     if (target) {
       setRemoveError("");
       setRemoveTarget(target);

@@ -17,7 +17,7 @@ import { useVaultCache, useVaultQuery } from "./vaultQuery";
 
 export type ContactDetail = components["schemas"]["Contact"];
 export type ContactHandle = components["schemas"]["Identity"];
-/** One change to a contact: its name, or one handle added, updated or removed. */
+/** One change to a contact: its name, or one identity added, updated or removed. */
 export type ContactChange = components["schemas"]["UpdateContactRequest"];
 
 /** The contact behind an open drawer. Skipped entirely when no contact is open. */

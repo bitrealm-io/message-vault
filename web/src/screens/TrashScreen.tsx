@@ -79,8 +79,8 @@ function appliesOnlyTo(words: readonly string[], list: "contacts" | "conversatio
   return `${words.map((w) => `${w}:`).join(", ")} ${verb} to ${list} only`;
 }
 
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count !== 1 ? "s" : ""}`;
+function plural(count: number, noun: string, many = `${noun}s`): string {
+  return `${count} ${count === 1 ? noun : many}`;
 }
 
 export default function TrashScreen() {
@@ -360,7 +360,7 @@ export default function TrashScreen() {
                           <ContactLabel name={contact.name} handles={contact.handles} />
                         </div>
                         <div className="text-[0.75rem] text-muted">
-                          {plural(contact.handle_count, "handle")}
+                          {plural(contact.identity_count, "identity", "identities")}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">

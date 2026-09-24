@@ -77,7 +77,7 @@ export interface paths {
         head?: never;
         /**
          * Change an account.
-         * @description Its display name, time zone and handles are set by the account itself or by the vault owner; only the vault owner sets an account's disabled flag and its import, export and delete permissions. A field the caller may not set answers `403 Forbidden`, and the reloaded account is the answer.
+         * @description Its display name, time zone and identities are set by the account itself or by the vault owner; only the vault owner sets an account's disabled flag and its import, export and delete permissions. A field the caller may not set answers `403 Forbidden`, and the reloaded account is the answer.
          */
         patch: operations["update_account"];
         trace?: never;
@@ -438,7 +438,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Page through the account's contacts (id, name, handles, groups). */
+        /** Page through the account’s contacts (id, name, identities, groups). */
         get: operations["list_contacts"];
         put?: never;
         /**
@@ -511,7 +511,7 @@ export interface paths {
         delete: operations["delete_contact"];
         options?: never;
         head?: never;
-        /** Rename a contact or change its linked handles. */
+        /** Rename a contact or change its linked identities. */
         patch: operations["update_contact"];
         trace?: never;
     };
@@ -1244,7 +1244,7 @@ export interface components {
              *     data and a second browser.
              */
             must_set_up_profile: boolean;
-            /** @description Phone handles linked to the account. */
+            /** @description Phone numbers linked to the account. */
             phones: string[];
             /** @description Display name, when set. */
             preferred_name?: string | null;
@@ -1261,11 +1261,11 @@ export interface components {
             /** @description Login username. */
             username: string;
         };
-        /** @description One handle to link or unlink, with its platform service. */
+        /** @description One identity to link or unlink, with its platform service. */
         AccountIdentityRequest: {
-            /** @description Raw handle value, e.g. `+15555550100` or `alex@example.com`. */
-            handle: string;
-            /** @description Platform the handle belongs to: `phone`, `email`, or `whatsapp`. */
+            /** @description The address as typed, e.g. `+15555550100` or `alex@example.com`. */
+            address: string;
+            /** @description Platform the address belongs to: `phone`, `email`, or `whatsapp`. */
             service: string;
         };
         /** @description One account's share of the messages held: an id, a username and numbers. */
@@ -1315,10 +1315,10 @@ export interface components {
              */
             total_bytes: number;
         };
-        /** @description A handle value plus optional platform service. */
+        /** @description An address to link plus optional platform service. */
         AddContactIdentityRequest: {
-            /** @description Handle value to link. */
-            handle: string;
+            /** @description The address to link. */
+            address: string;
             /** @description Platform service (`phone`, `email`, or `whatsapp`); inferred when omitted. */
             service?: string | null;
         };
@@ -1428,7 +1428,7 @@ export interface components {
             message_count: number;
             status: string;
         };
-        /** @description Full contact view: every handle with stats, plus totals across them. */
+        /** @description Full contact view: every identity with stats, plus totals across them. */
         Contact: {
             /**
              * Format: int64
@@ -1442,13 +1442,13 @@ export interface components {
             group_conversations: number;
             /** @description Group names on this contact (A–Z). */
             groups?: string[];
-            /** @description Every handle linked to the contact, with per-handle stats. */
-            handles: components["schemas"]["Identity"][];
             /**
              * Format: int64
              * @description Contact id.
              */
             id: number;
+            /** @description Every identity linked to the contact, with per-identity stats. */
+            identities: components["schemas"]["Identity"][];
             /** @description When the contact’s address-book shape last changed (`datetime('now')`). */
             last_modified: string;
             /** @description The contact's preferred name; empty when it has none. */
@@ -1512,11 +1512,6 @@ export interface components {
         ContactSummary: {
             /** @description Group names on this contact (A–Z). */
             groups?: string[];
-            /**
-             * Format: int64
-             * @description Number of handles linked to the contact.
-             */
-            handle_count: number;
             /** @description Normalized (and raw when distinct) handle values for client-side filter. */
             handles?: string[];
             /**
@@ -1524,6 +1519,11 @@ export interface components {
              * @description Contact id.
              */
             id: number;
+            /**
+             * Format: int64
+             * @description Number of identities linked to the contact.
+             */
+            identity_count: number;
             /**
              * @description When the vault last heard from the contact: the newest message one of
              *     the contact's handles sent (RFC 3339, UTC). Null when none of them
@@ -1902,6 +1902,11 @@ export interface components {
          */
         Identity: {
             /**
+             * @description The identity as the vault stores it: E.164 for a number, lower case
+             *     for an address.
+             */
+            address: string;
+            /**
              * Format: int64
              * @description Direct and group conversations holding at least one of the identity's
              *     messages, trashed conversations excluded.
@@ -1920,11 +1925,6 @@ export interface components {
              * @description The identity's messages in group conversations, on the same terms.
              */
             group_messages: number;
-            /**
-             * @description The identity as the vault stores it: E.164 for a number, lower case
-             *     for an address.
-             */
-            handle: string;
             /** @description `phone`, `email`, or `whatsapp`. */
             service: string;
             /**
@@ -2289,7 +2289,7 @@ export interface components {
                  *     data and a second browser.
                  */
                 must_set_up_profile: boolean;
-                /** @description Phone handles linked to the account. */
+                /** @description Phone numbers linked to the account. */
                 phones: string[];
                 /** @description Display name, when set. */
                 preferred_name?: string | null;
@@ -2404,11 +2404,6 @@ export interface components {
             items: {
                 /** @description Group names on this contact (A–Z). */
                 groups?: string[];
-                /**
-                 * Format: int64
-                 * @description Number of handles linked to the contact.
-                 */
-                handle_count: number;
                 /** @description Normalized (and raw when distinct) handle values for client-side filter. */
                 handles?: string[];
                 /**
@@ -2416,6 +2411,11 @@ export interface components {
                  * @description Contact id.
                  */
                 id: number;
+                /**
+                 * Format: int64
+                 * @description Number of identities linked to the contact.
+                 */
+                identity_count: number;
                 /**
                  * @description When the vault last heard from the contact: the newest message one of
                  *     the contact's handles sent (RFC 3339, UTC). Null when none of them
@@ -2604,6 +2604,11 @@ export interface components {
             /** @description The rows on this page. */
             items: {
                 /**
+                 * @description The identity as the vault stores it: E.164 for a number, lower case
+                 *     for an address.
+                 */
+                address: string;
+                /**
                  * Format: int64
                  * @description Direct and group conversations holding at least one of the identity's
                  *     messages, trashed conversations excluded.
@@ -2622,11 +2627,6 @@ export interface components {
                  * @description The identity's messages in group conversations, on the same terms.
                  */
                 group_messages: number;
-                /**
-                 * @description The identity as the vault stores it: E.164 for a number, lower case
-                 *     for an address.
-                 */
-                handle: string;
                 /** @description `phone`, `email`, or `whatsapp`. */
                 service: string;
                 /**
@@ -2978,11 +2978,11 @@ export interface components {
             /** @description `search-query-invalid`: the `word:` the query used. */
             word?: string | null;
         };
-        /** @description The handle to unlink. */
+        /** @description The identity to unlink. */
         RemoveContactIdentityRequest: {
-            /** @description Handle value to unlink. */
-            handle: string;
-            /** @description Platform service, when the handle is linked with one. */
+            /** @description The address to unlink. */
+            address: string;
+            /** @description Platform service, when the identity is linked with one. */
             service?: string | null;
         };
         /** @description The new password. */
@@ -3094,7 +3094,7 @@ export interface components {
         };
         /**
          * @description Body for changing an account. Omitted fields are left alone. The name,
-         *     zone and handles are set by the account or by the vault owner; the
+         *     zone and identities are set by the account or by the vault owner; the
          *     disabled flag and the three permissions are the vault owner's alone.
          */
         UpdateAccountRequest: {
@@ -3106,12 +3106,12 @@ export interface components {
             can_import?: boolean | null;
             /** @description Disable or re-enable login. */
             disabled?: boolean | null;
-            /** @description Handles to add/link onto the account profile. */
-            handles?: components["schemas"]["AccountIdentityRequest"][];
+            /** @description Identities to link onto the account profile. */
+            identities?: components["schemas"]["AccountIdentityRequest"][];
             /** @description Display name to set; `None` (or empty) leaves the current name unchanged. */
             preferred_name?: string | null;
-            /** @description Handles to unlink from the account profile. */
-            remove_handles?: components["schemas"]["AccountIdentityRequest"][];
+            /** @description Identities to unlink from the account profile. */
+            remove_identities?: components["schemas"]["AccountIdentityRequest"][];
             /**
              * @description IANA time zone to set, for example `America/New_York`; `None` leaves
              *     the current zone unchanged. An unknown name is a 422.
@@ -3133,22 +3133,22 @@ export interface components {
             /** @description Stored label after the rename. */
             label: string;
         };
-        /** @description The previous and new handle values for a link change. */
+        /** @description The previous and new addresses for a link change. */
         UpdateContactIdentityRequest: {
-            /** @description Replacement handle value. */
-            handle: string;
-            /** @description Handle value currently linked. */
-            previous_handle: string;
-            /** @description Platform service for the new handle. */
+            /** @description The replacement address. */
+            address: string;
+            /** @description The address currently linked. */
+            previous_address: string;
+            /** @description Platform service for the new address. */
             service?: string | null;
         };
         /** @description Body for `PATCH /v1/contacts/{id}`. Exactly one mutation field should be set. */
         UpdateContactRequest: {
-            add_handle?: null | components["schemas"]["AddContactIdentityRequest"];
+            add_identity?: null | components["schemas"]["AddContactIdentityRequest"];
             /** @description New display name; `None` leaves it unchanged. */
             name?: string | null;
-            remove_handle?: null | components["schemas"]["RemoveContactIdentityRequest"];
-            update_handle?: null | components["schemas"]["UpdateContactIdentityRequest"];
+            remove_identity?: null | components["schemas"]["RemoveContactIdentityRequest"];
+            update_identity?: null | components["schemas"]["UpdateContactIdentityRequest"];
         };
         /** @description New stage for a running Import Run. */
         UpdateImportRequest: {

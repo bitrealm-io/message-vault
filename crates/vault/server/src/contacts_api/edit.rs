@@ -1,5 +1,5 @@
 //! The edits `PATCH /v1/contacts/{id}` makes: rename a contact, and link,
-//! swap or unlink its handles. The queries are in `db::contacts` and
+//! swap or unlink its identities. The queries are in `db::contacts` and
 //! `db::handles`; this module decides which to run and what to refuse.
 
 use anyhow::Result as AnyResult;
@@ -80,12 +80,12 @@ macro_rules! refuse {
 enum ContactEdit<'a> {
     /// Give the contact a name the person typed.
     Rename(&'a str),
-    /// Link a handle.
-    AddHandle(&'a AddContactIdentityRequest),
-    /// Swap one linked handle for another.
-    UpdateHandle(&'a UpdateContactIdentityRequest),
-    /// Unlink a handle.
-    RemoveHandle(&'a RemoveContactIdentityRequest),
+    /// Link an identity.
+    AddIdentity(&'a AddContactIdentityRequest),
+    /// Swap one linked identity for another.
+    UpdateIdentity(&'a UpdateContactIdentityRequest),
+    /// Unlink an identity.
+    RemoveIdentity(&'a RemoveContactIdentityRequest),
 }
 
 impl UpdateContactRequest {
@@ -97,16 +97,22 @@ impl UpdateContactRequest {
     fn edit(&self) -> Result<ContactEdit<'_>, ContactEditError> {
         let mut edits = [
             self.name.as_deref().map(ContactEdit::Rename),
-            self.add_handle.as_ref().map(ContactEdit::AddHandle),
-            self.update_handle.as_ref().map(ContactEdit::UpdateHandle),
-            self.remove_handle.as_ref().map(ContactEdit::RemoveHandle),
+            self.add_identity.as_ref().map(ContactEdit::AddIdentity),
+            self.update_identity
+                .as_ref()
+                .map(ContactEdit::UpdateIdentity),
+            self.remove_identity
+                .as_ref()
+                .map(ContactEdit::RemoveIdentity),
         ]
         .into_iter()
         .flatten();
         match (edits.next(), edits.next()) {
             (Some(edit), None) => Ok(edit),
             _ => {
-                refuse!("exactly one of name, add_handle, update_handle, remove_handle is required")
+                refuse!(
+                    "exactly one of name, add_identity, update_identity, remove_identity is required"
+                )
             }
         }
     }
@@ -154,9 +160,9 @@ impl ContactEditor<'_> {
     async fn apply(&mut self, edit: ContactEdit<'_>) -> Result<bool, ContactEditError> {
         match edit {
             ContactEdit::Rename(name) => self.rename(name).await,
-            ContactEdit::AddHandle(add) => self.add_handle(add).await,
-            ContactEdit::UpdateHandle(upd) => self.update_handle(upd).await,
-            ContactEdit::RemoveHandle(rem) => self.remove_handle(rem).await,
+            ContactEdit::AddIdentity(add) => self.add_identity(add).await,
+            ContactEdit::UpdateIdentity(upd) => self.update_identity(upd).await,
+            ContactEdit::RemoveIdentity(rem) => self.remove_identity(rem).await,
         }
     }
 
@@ -181,14 +187,14 @@ impl ContactEditor<'_> {
         Ok(true)
     }
 
-    /// Link a handle, creating its row when the vault has never seen it.
-    async fn add_handle(
+    /// Link an identity, creating its row when the vault has never seen it.
+    async fn add_identity(
         &mut self,
         add: &AddContactIdentityRequest,
     ) -> Result<bool, ContactEditError> {
-        let raw = add.handle.trim();
+        let raw = add.address.trim();
         if raw.is_empty() {
-            refuse!("handle must not be empty");
+            refuse!("address must not be empty");
         }
         let handle_id = self.handle_row(raw, add.service.as_deref()).await?;
         if self.claim(handle_id).await? {
@@ -208,19 +214,19 @@ impl ContactEditor<'_> {
         self.touched().await
     }
 
-    /// Replace one linked handle with another.
-    async fn update_handle(
+    /// Replace one linked identity with another.
+    async fn update_identity(
         &mut self,
         upd: &UpdateContactIdentityRequest,
     ) -> Result<bool, ContactEditError> {
-        let prev = upd.previous_handle.trim();
-        let next = upd.handle.trim();
+        let prev = upd.previous_address.trim();
+        let next = upd.address.trim();
         if prev.is_empty() || next.is_empty() {
-            refuse!("previous_handle and handle must not be empty");
+            refuse!("previous_address and address must not be empty");
         }
         let service = upd.service.as_deref();
         let Some(old_id) = self.linked_handle(prev, service).await? else {
-            refuse!("previous handle not found on contact");
+            refuse!("previous address not found on contact");
         };
         let new_id = self.handle_row(next, service).await?;
         if old_id == new_id {
@@ -245,17 +251,17 @@ impl ContactEditor<'_> {
         self.touched().await
     }
 
-    /// Unlink a handle. The handle row itself stays: messages still cite it.
-    async fn remove_handle(
+    /// Unlink an identity. The handle row itself stays: messages still cite it.
+    async fn remove_identity(
         &mut self,
         rem: &RemoveContactIdentityRequest,
     ) -> Result<bool, ContactEditError> {
-        let raw = rem.handle.trim();
+        let raw = rem.address.trim();
         if raw.is_empty() {
-            refuse!("handle must not be empty");
+            refuse!("address must not be empty");
         }
         let Some(handle_id) = self.linked_handle(raw, rem.service.as_deref()).await? else {
-            refuse!("handle not found on contact");
+            refuse!("identity not found on contact");
         };
         self.unlink(handle_id).await?;
         self.touched().await
@@ -295,7 +301,7 @@ impl ContactEditor<'_> {
     async fn claim(&mut self, handle_id: i64) -> Result<bool, ContactEditError> {
         match contact_id_for_handle(&mut *self.conn, self.account_id, handle_id).await? {
             Some(owner) if owner == self.contact_id => Ok(true),
-            Some(_) => refuse!("handle already linked to another contact"),
+            Some(_) => refuse!("identity already linked to another contact"),
             None => Ok(false),
         }
     }

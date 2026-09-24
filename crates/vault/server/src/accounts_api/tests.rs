@@ -449,9 +449,9 @@ async fn an_account_patches_its_own_profile_and_reads_it_back() {
         serde_json::json!({
             "preferred_name": "Alex",
             "time_zone": "America/New_York",
-            "handles": [
-                { "handle": "+1 (555) 555-0100", "service": "phone" },
-                { "handle": "Alex@Example.com", "service": "email" }
+            "identities": [
+                { "address": "+1 (555) 555-0100", "service": "phone" },
+                { "address": "Alex@Example.com", "service": "email" }
             ]
         }),
     )
@@ -540,7 +540,7 @@ async fn the_owner_sets_a_managed_accounts_profile() {
         serde_json::json!({
             "preferred_name": "Carol",
             "time_zone": "America/New_York",
-            "handles": [{ "handle": "Carol@Example.com", "service": "email" }],
+            "identities": [{ "address": "Carol@Example.com", "service": "email" }],
             "can_export": false
         }),
     )
@@ -559,7 +559,7 @@ async fn the_owner_sets_a_managed_accounts_profile() {
         &path,
         &owner.token,
         serde_json::json!({
-            "remove_handles": [{ "handle": "carol@example.com", "service": "email" }]
+            "remove_identities": [{ "address": "carol@example.com", "service": "email" }]
         }),
     )
     .await;
@@ -607,7 +607,7 @@ async fn the_owner_sets_each_profile_field_on_its_own() {
         &state,
         &path,
         &owner.token,
-        serde_json::json!({ "handles": [{ "handle": "carol@example.com", "service": "email" }] }),
+        serde_json::json!({ "identities": [{ "address": "carol@example.com", "service": "email" }] }),
     )
     .await;
     let read: serde_json::Value = get_json(&state, &path, &owner.token).await;
@@ -1439,9 +1439,9 @@ async fn the_identities_route_counts_the_direct_and_group_messages_held_at_each_
         &member(account.account_id),
         &account.token,
         serde_json::json!({
-            "handles": [
-                { "handle": "+15555550100", "service": "phone" },
-                { "handle": "Alice@Example.com", "service": "email" }
+            "identities": [
+                { "address": "+15555550100", "service": "phone" },
+                { "address": "Alice@Example.com", "service": "email" }
             ]
         }),
     )
@@ -1569,7 +1569,7 @@ async fn the_identities_route_counts_the_direct_and_group_messages_held_at_each_
         page["items"],
         serde_json::json!([
             {
-                "handle": "+15555550100",
+                "address": "+15555550100",
                 "service": "phone",
                 "start_date": "2020-01-01T00:00:00Z",
                 "end_date": "2020-02-02T00:00:00Z",
@@ -1578,7 +1578,7 @@ async fn the_identities_route_counts_the_direct_and_group_messages_held_at_each_
                 "group_messages": 2
             },
             {
-                "handle": "alice@example.com",
+                "address": "alice@example.com",
                 "service": "email",
                 "start_date": "2020-02-03T00:00:00Z",
                 "end_date": "2020-02-03T00:00:00Z",
@@ -1732,15 +1732,15 @@ async fn apply_profile_update_sets_name_and_handles() {
         None,
         &[
             AccountIdentityRequest {
-                handle: "+1 (555) 555-0100".into(),
+                address: "+1 (555) 555-0100".into(),
                 service: "phone".into(),
             },
             AccountIdentityRequest {
-                handle: "Alex@Example.com".into(),
+                address: "Alex@Example.com".into(),
                 service: "email".into(),
             },
             AccountIdentityRequest {
-                handle: "+15555550199".into(),
+                address: "+15555550199".into(),
                 service: "whatsapp".into(),
             },
         ],
@@ -1821,11 +1821,11 @@ async fn apply_profile_update_removes_handles() {
     let mut conn = vault.conn().await;
     let both = [
         AccountIdentityRequest {
-            handle: "+15555550100".into(),
+            address: "+15555550100".into(),
             service: "phone".into(),
         },
         AccountIdentityRequest {
-            handle: "alex@example.com".into(),
+            address: "alex@example.com".into(),
             service: "email".into(),
         },
     ];
@@ -1852,8 +1852,8 @@ async fn profile_update_rolls_back_when_a_handle_service_is_unsupported() {
         account_id,
         &UpdateAccountRequest {
             preferred_name: Some("Changed Name".into()),
-            handles: vec![AccountIdentityRequest {
-                handle: "alice@example.com".into(),
+            identities: vec![AccountIdentityRequest {
+                address: "alice@example.com".into(),
                 service: "unsupported".into(),
             }],
             ..UpdateAccountRequest::default()

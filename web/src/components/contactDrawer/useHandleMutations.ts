@@ -22,27 +22,27 @@ export function useHandleMutations({ contactId }: { contactId: string }) {
   const requestRemoveHandle = (h: ContactHandle) => {
     if (busy) return;
     setRemoveTarget({
-      handle: h.handle,
+      address: h.address,
       service: h.service ?? null,
-      serviceLabel: formatHandleServiceLabel(h.handle, h.service),
+      serviceLabel: formatHandleServiceLabel(h.address, h.service),
       conversationCount: h.conversations,
     });
   };
 
   const confirmRemoveHandle = () => {
     if (!removeTarget || busy) return;
-    const handle = removeTarget.handle;
-    const service = inferService(handle, removeTarget.service);
+    const address = removeTarget.address;
+    const service = inferService(address, removeTarget.service);
     updateContact.mutate(
-      { contactId, body: { remove_handle: { handle, service } } },
+      { contactId, body: { remove_identity: { address, service } } },
       { onSuccess: () => setRemoveTarget(null) },
     );
   };
 
-  const confirmAdd = (args: { handle: string; service: string }) => {
+  const confirmAdd = (args: { address: string; service: string }) => {
     if (busy) return;
     updateContact.mutate(
-      { contactId, body: { add_handle: { handle: args.handle, service: args.service } } },
+      { contactId, body: { add_identity: { address: args.address, service: args.service } } },
       { onSuccess: () => setAdding(false) },
     );
   };

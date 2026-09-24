@@ -11,7 +11,7 @@ export type ContactPreview = {
   name: string;
   handles?: string[];
   /**
-   * True linked-identity count from the list API (`handle_count`).
+   * True linked-identity count from the list API (`identity_count`).
    * List `handles` may include both raw and normalized forms of one identity;
    * stub rows while loading should match this count, not `handles.length`.
    */
@@ -21,12 +21,12 @@ export type ContactPreview = {
   unknown?: boolean;
 };
 
-/** List-API contact row (snake_case `handle_count`) mapped into `ContactPreview`. */
+/** List-API contact row (snake_case `identity_count`) mapped into `ContactPreview`. */
 export type ContactListPreviewSource = {
   id: string;
   name: string;
   handles?: string[];
-  handle_count?: number;
+  identity_count?: number;
   groups?: string[];
   unknown?: boolean;
 };
@@ -39,7 +39,7 @@ export function contactPreviewFromListRow(c: ContactListPreviewSource): ContactP
     id: c.id,
     name: c.name,
     handles: c.handles,
-    handleCount: c.handle_count,
+    handleCount: c.identity_count,
     groups: c.groups,
     unknown: c.unknown,
   };
@@ -113,9 +113,9 @@ export function formatHandleDate(iso: string | null | undefined): string | null 
   return formatIsoDateOnly(iso);
 }
 
-export function emptyHandleRow(handle: string): ContactHandle {
+export function emptyHandleRow(address: string): ContactHandle {
   return {
-    handle,
+    address,
     service: "",
     start_date: null,
     end_date: null,
@@ -163,7 +163,7 @@ export function previewHandleStubRows(
 }
 
 /** The earliest, the latest, and the sums across a contact's identities. */
-export function sumHandleTotals(handles: ContactDetail["handles"]): {
+export function sumHandleTotals(handles: ContactDetail["identities"]): {
   conversations: number;
   direct_messages: number;
   group_messages: number;

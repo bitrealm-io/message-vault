@@ -27,8 +27,8 @@ pub struct ContactSummary {
     /// True when the contact is in the Unknown Contact Group: it has no
     /// identity, or it has identities and no preferred name.
     pub unknown: bool,
-    /// Number of handles linked to the contact.
-    pub handle_count: u64,
+    /// Number of identities linked to the contact.
+    pub identity_count: u64,
     /// Normalized (and raw when distinct) handle values for client-side filter.
     #[serde(default)]
     pub handles: Vec<String>,
@@ -194,7 +194,7 @@ pub async fn list_contacts_sorted(
                 CASE WHEN {unknown} THEN 1 ELSE 0 END AS is_unknown,
                 (SELECT COUNT(*)
                  FROM contact_handles ch
-                 WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id) AS handle_count,
+                 WHERE ch.account_id = ct.account_id AND ch.contact_id = ct.id) AS identity_count,
                 (SELECT {handles_agg}
                  FROM (
                    SELECT DISTINCT h.normalized AS val
@@ -240,7 +240,7 @@ pub async fn list_contacts_sorted(
                 id,
                 name,
                 is_unknown,
-                handle_count,
+                identity_count,
                 handles_blob,
                 last_modified,
                 last_heard_at,
@@ -265,7 +265,7 @@ pub async fn list_contacts_sorted(
                     id,
                     name,
                     unknown: is_unknown != 0,
-                    handle_count: handle_count.max(0) as u64,
+                    identity_count: identity_count.max(0) as u64,
                     handles,
                     last_modified,
                     last_heard_at,

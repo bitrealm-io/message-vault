@@ -6,7 +6,7 @@ export function handleDateCell(iso: string | null | undefined): string {
 }
 
 export type RemoveIdentityTarget = {
-  handle: string;
+  address: string;
   /** The service the vault recorded, or null when it recorded none. */
   service: string | null;
   serviceLabel: string;
@@ -14,12 +14,12 @@ export type RemoveIdentityTarget = {
 };
 
 export function removeIdentityConfirmBody(target: RemoveIdentityTarget): ReactNode {
-  const { handle, serviceLabel, conversationCount } = target;
+  const { address, serviceLabel, conversationCount } = target;
   const emphasize = "font-medium text-accent";
   const serviceId = (
     <>
       <span className={emphasize}>{serviceLabel}</span>{" "}
-      <span className={`${emphasize} break-all`}>{handle}</span>
+      <span className={`${emphasize} break-all`}>{address}</span>
     </>
   );
   if (conversationCount <= 0) {

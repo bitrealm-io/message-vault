@@ -9,7 +9,7 @@ afterEach(cleanup);
 
 const rows: IdentityRow[] = [
   {
-    handle: "+15555550100",
+    address: "+15555550100",
     service: "phone",
     start_date: "2020-01-01T00:00:00Z",
     end_date: "2020-02-03T00:00:00Z",
@@ -18,7 +18,7 @@ const rows: IdentityRow[] = [
     group_messages: 30,
   },
   {
-    handle: "someone.with.a.long.address@example.com",
+    address: "someone.with.a.long.address@example.com",
     service: "email",
     start_date: null,
     end_date: null,
@@ -27,7 +27,7 @@ const rows: IdentityRow[] = [
     group_messages: 0,
   },
   {
-    handle: "+15555550100",
+    address: "+15555550100",
     service: "whatsapp",
     start_date: "2021-05-05T00:00:00Z",
     end_date: "2021-05-06T00:00:00Z",

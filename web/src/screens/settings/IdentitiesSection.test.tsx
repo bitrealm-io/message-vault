@@ -29,7 +29,7 @@ const profile = {
 /** What the vault lists for `profile`, with the messages held at each identity. */
 const identities: Identity[] = [
   {
-    handle: "+15555550100",
+    address: "+15555550100",
     service: "phone",
     start_date: "2020-01-01T00:00:00Z",
     end_date: "2020-02-03T00:00:00Z",
@@ -38,7 +38,7 @@ const identities: Identity[] = [
     group_messages: 30,
   },
   {
-    handle: "bob@example.com",
+    address: "bob@example.com",
     service: "email",
     start_date: "2021-06-01T00:00:00Z",
     end_date: "2021-06-01T00:00:00Z",
@@ -47,7 +47,7 @@ const identities: Identity[] = [
     group_messages: 0,
   },
   {
-    handle: "archer@example.com",
+    address: "archer@example.com",
     service: "email",
     start_date: null,
     end_date: null,
@@ -147,7 +147,7 @@ describe("IdentitiesSection", () => {
     await user.click(within(dialog).getByRole("button", { name: "Add" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
-      handles: [{ handle: "new@example.com", service: "email" }],
+      identities: [{ address: "new@example.com", service: "email" }],
     });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
@@ -193,7 +193,7 @@ describe("IdentitiesSection", () => {
     const again = await screen.findByRole("dialog", { name: "Remove identity?" });
     await user.click(within(again).getByRole("button", { name: "Remove" }));
     expect(mutateAsync).toHaveBeenCalledWith({
-      remove_handles: [{ handle: "+15555550100", service: "phone" }],
+      remove_identities: [{ address: "+15555550100", service: "phone" }],
     });
   });
 });

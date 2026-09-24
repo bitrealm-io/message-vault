@@ -25,34 +25,34 @@ mod edit;
 
 use edit::mutate_contact;
 
-/// A handle value plus optional platform service.
+/// An address to link plus optional platform service.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct AddContactIdentityRequest {
-    /// Handle value to link.
-    pub handle: String,
+    /// The address to link.
+    pub address: String,
     /// Platform service (`phone`, `email`, or `whatsapp`); inferred when omitted.
     #[serde(default)]
     pub service: Option<String>,
 }
 
-/// The previous and new handle values for a link change.
+/// The previous and new addresses for a link change.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct UpdateContactIdentityRequest {
-    /// Handle value currently linked.
-    pub previous_handle: String,
-    /// Replacement handle value.
-    pub handle: String,
-    /// Platform service for the new handle.
+    /// The address currently linked.
+    pub previous_address: String,
+    /// The replacement address.
+    pub address: String,
+    /// Platform service for the new address.
     #[serde(default)]
     pub service: Option<String>,
 }
 
-/// The handle to unlink.
+/// The identity to unlink.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub struct RemoveContactIdentityRequest {
-    /// Handle value to unlink.
-    pub handle: String,
-    /// Platform service, when the handle is linked with one.
+    /// The address to unlink.
+    pub address: String,
+    /// Platform service, when the identity is linked with one.
     #[serde(default)]
     pub service: Option<String>,
 }
@@ -63,18 +63,18 @@ pub struct UpdateContactRequest {
     /// New display name; `None` leaves it unchanged.
     #[serde(default)]
     pub name: Option<String>,
-    /// Handle link to add.
+    /// Identity to link.
     #[serde(default)]
-    pub add_handle: Option<AddContactIdentityRequest>,
-    /// Handle link to replace.
+    pub add_identity: Option<AddContactIdentityRequest>,
+    /// Identity to replace.
     #[serde(default)]
-    pub update_handle: Option<UpdateContactIdentityRequest>,
-    /// Handle link to remove.
+    pub update_identity: Option<UpdateContactIdentityRequest>,
+    /// Identity to unlink.
     #[serde(default)]
-    pub remove_handle: Option<RemoveContactIdentityRequest>,
+    pub remove_identity: Option<RemoveContactIdentityRequest>,
 }
 
-/// Full contact view: every handle with stats, plus totals across them.
+/// Full contact view: every identity with stats, plus totals across them.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct Contact {
     /// Contact id.
@@ -84,8 +84,8 @@ pub struct Contact {
     /// True when the contact is in the Unknown Contact Group: it has no
     /// identity, or it has identities and no preferred name.
     pub unknown: bool,
-    /// Every handle linked to the contact, with per-handle stats.
-    pub handles: Vec<Identity>,
+    /// Every identity linked to the contact, with per-identity stats.
+    pub identities: Vec<Identity>,
     /// 1:1 conversations the contact appears in.
     pub direct_conversations: u64,
     /// Group conversations the contact appears in.
@@ -107,8 +107,8 @@ pub struct SummarizeContactsRequest {
     pub ids: Vec<i64>,
 }
 
-/// Full contact view: per-handle service + date range + direct message count,
-/// plus conversation and total-message stats across all the contact's handles.
+/// Full contact view: per-identity service + date range + direct message count,
+/// plus conversation and total-message stats across all the contact's identities.
 ///
 /// # Errors
 ///
@@ -123,7 +123,7 @@ pub async fn get_contact_detail(
     else {
         return Ok(None);
     };
-    let handles = handles::identities(
+    let identities = handles::identities(
         conn,
         IdentitiesOf::Contact {
             account_id,
@@ -144,7 +144,7 @@ pub async fn get_contact_detail(
         id: contact_id,
         name,
         unknown,
-        handles,
+        identities,
         direct_conversations: totals.direct,
         group_conversations: totals.groups,
         total_messages: totals.messages,
@@ -196,7 +196,7 @@ pub(crate) async fn find_unmatched_identities(
     Ok(Json(whole_page(unknown, MAX_MATCH_IDENTIFIERS)))
 }
 
-/// Page through the account's contacts (id, name, handles, groups).
+/// Page through the account’s contacts (id, name, identities, groups).
 #[utoipa::path(
     get,
     path = "/v1/contacts",
@@ -290,7 +290,7 @@ pub(crate) async fn get_contact(
         .ok_or_else(|| ApiError::NotFound("contact not found".into()))
 }
 
-/// Rename a contact or change its linked handles.
+/// Rename a contact or change its linked identities.
 #[utoipa::path(
     patch,
     path = "/v1/contacts/{id}",

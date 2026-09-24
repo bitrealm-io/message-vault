@@ -192,16 +192,16 @@ async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
     insert_contact_with_handle(&mut conn, account.account_id, "Grace", "+15555550200").await;
     drop(conn);
 
-    // Taking a handle that is already another contact's.
+    // Taking an identity that is already another contact’s.
     let (status, sentence) = crate::test_support::patch_failure(
         &vault.state,
         &format!("/v1/contacts/{first}"),
         &account.token,
-        serde_json::json!({ "add_handle": { "handle": "+15555550200" } }),
+        serde_json::json!({ "add_identity": { "address": "+15555550200" } }),
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(sentence, "handle already linked to another contact");
+    assert_eq!(sentence, "identity already linked to another contact");
 
     // No edit named at all.
     let status = crate::test_support::patch_status(
@@ -272,7 +272,7 @@ async fn list_contacts_uses_preferred_name_and_handle_ids() {
     assert_eq!(page.total, 1);
     assert_eq!(page.items.len(), 1);
     assert_eq!(page.items[0].name, "Pat");
-    assert_eq!(page.items[0].handle_count, 1);
+    assert_eq!(page.items[0].identity_count, 1);
     assert!(
         page.items[0]
             .handles
@@ -509,16 +509,16 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
     assert_eq!(detail.direct_conversations, 1);
     assert_eq!(detail.group_conversations, 1);
     assert_eq!(detail.total_messages, 3);
-    assert_eq!(detail.handles.len(), 1);
+    assert_eq!(detail.identities.len(), 1);
     assert!(
-        detail.handles[0].handle.contains("5555550200")
-            || detail.handles[0].handle.contains("+15555550200"),
+        detail.identities[0].address.contains("5555550200")
+            || detail.identities[0].address.contains("+15555550200"),
         "handle={:?}",
-        detail.handles[0].handle
+        detail.identities[0].address
     );
-    assert_eq!(detail.handles[0].conversations, 2);
-    assert_eq!(detail.handles[0].direct_messages, 2);
-    assert_eq!(detail.handles[0].group_messages, 1);
+    assert_eq!(detail.identities[0].conversations, 2);
+    assert_eq!(detail.identities[0].direct_messages, 2);
+    assert_eq!(detail.identities[0].group_messages, 1);
 }
 
 #[tokio::test]
@@ -723,12 +723,12 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
             contact_id,
             &UpdateContactRequest {
                 name: None,
-                add_handle: Some(AddContactIdentityRequest {
-                    handle: "+15555550200".into(),
+                add_identity: Some(AddContactIdentityRequest {
+                    address: "+15555550200".into(),
                     service: Some("phone".into()),
                 }),
-                update_handle: None,
-                remove_handle: None,
+                update_identity: None,
+                remove_identity: None,
             },
         )
         .await
@@ -739,8 +739,8 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(detail.handles.len(), 1);
-    assert!(detail.handles[0].handle.contains("5555550200"));
+    assert_eq!(detail.identities.len(), 1);
+    assert!(detail.identities[0].address.contains("5555550200"));
 
     assert!(
         mutate_contact(
@@ -749,9 +749,9 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
             contact_id,
             &UpdateContactRequest {
                 name: Some("Samantha".into()),
-                add_handle: None,
-                update_handle: None,
-                remove_handle: None,
+                add_identity: None,
+                update_identity: None,
+                remove_identity: None,
             },
         )
         .await
@@ -770,13 +770,13 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
             contact_id,
             &UpdateContactRequest {
                 name: None,
-                add_handle: None,
-                update_handle: Some(UpdateContactIdentityRequest {
-                    previous_handle: detail.handles[0].handle.clone(),
-                    handle: "sam@example.com".into(),
+                add_identity: None,
+                update_identity: Some(UpdateContactIdentityRequest {
+                    previous_address: detail.identities[0].address.clone(),
+                    address: "sam@example.com".into(),
                     service: Some("email".into()),
                 }),
-                remove_handle: None,
+                remove_identity: None,
             },
         )
         .await
@@ -786,8 +786,8 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(updated.handles.len(), 1);
-    assert_eq!(updated.handles[0].handle, "sam@example.com");
+    assert_eq!(updated.identities.len(), 1);
+    assert_eq!(updated.identities[0].address, "sam@example.com");
 
     assert!(
         mutate_contact(
@@ -796,10 +796,10 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
             contact_id,
             &UpdateContactRequest {
                 name: None,
-                add_handle: None,
-                update_handle: None,
-                remove_handle: Some(RemoveContactIdentityRequest {
-                    handle: "sam@example.com".into(),
+                add_identity: None,
+                update_identity: None,
+                remove_identity: Some(RemoveContactIdentityRequest {
+                    address: "sam@example.com".into(),
                     service: Some("phone".into()),
                 }),
             },
@@ -811,11 +811,11 @@ async fn mutate_contact_add_update_remove_handle_and_rename() {
         .await
         .unwrap()
         .unwrap();
-    assert!(empty.handles.is_empty());
+    assert!(empty.identities.is_empty());
 }
 
 /// Add `raw` to `contact_id` with `service`, through the contact edit.
-async fn add_handle(
+async fn add_identity(
     conn: &mut AnyConnection,
     account: i64,
     contact_id: i64,
@@ -829,12 +829,12 @@ async fn add_handle(
             contact_id,
             &UpdateContactRequest {
                 name: None,
-                add_handle: Some(AddContactIdentityRequest {
-                    handle: raw.into(),
+                add_identity: Some(AddContactIdentityRequest {
+                    address: raw.into(),
                     service: service.map(Into::into),
                 }),
-                update_handle: None,
-                remove_handle: None,
+                update_identity: None,
+                remove_identity: None,
             },
         )
         .await
@@ -876,7 +876,7 @@ async fn a_handle_takes_its_type_from_the_service_it_is_added_under() {
         ("sam", None, "other"),
         ("sam#1234", Some("discord"), "other"),
     ] {
-        add_handle(&mut conn, account, contact_id, raw, service).await;
+        add_identity(&mut conn, account, contact_id, raw, service).await;
         assert_eq!(
             handle_type_and_service(&mut conn, account, raw).await.0,
             expected,
@@ -897,7 +897,7 @@ async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let contact_id = insert_contact_with_handle(&mut conn, account, "Sam", "+15555550100").await;
-    add_handle(&mut conn, account, contact_id, "+15555550300", Some("sms")).await;
+    add_identity(&mut conn, account, contact_id, "+15555550300", Some("sms")).await;
 
     assert!(
         mutate_contact(
@@ -906,19 +906,19 @@ async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
             contact_id,
             &UpdateContactRequest {
                 name: None,
-                add_handle: None,
-                update_handle: Some(UpdateContactIdentityRequest {
-                    previous_handle: "+15555550300".into(),
-                    handle: "+15555550300".into(),
+                add_identity: None,
+                update_identity: Some(UpdateContactIdentityRequest {
+                    previous_address: "+15555550300".into(),
+                    address: "+15555550300".into(),
                     service: Some("iMessage".into()),
                 }),
-                remove_handle: None,
+                remove_identity: None,
             },
         )
         .await
         .unwrap()
     );
-    add_handle(&mut conn, account, contact_id, "+15555550300", Some("sms")).await;
+    add_identity(&mut conn, account, contact_id, "+15555550300", Some("sms")).await;
 
     let rows: Vec<(String, Option<String>)> = sqlx::query_as(
         "SELECT handle_type, service FROM handles WHERE account_id = $1 AND raw = $2",
@@ -951,9 +951,9 @@ async fn mutate_contact_rejects_trashed_contact() {
         contact_id,
         &UpdateContactRequest {
             name: Some("Changed".into()),
-            add_handle: None,
-            update_handle: None,
-            remove_handle: None,
+            add_identity: None,
+            update_identity: None,
+            remove_identity: None,
         },
     )
     .await
@@ -1034,9 +1034,9 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
             contact_id,
             &UpdateContactRequest {
                 name: Some("Samantha".into()),
-                add_handle: None,
-                update_handle: None,
-                remove_handle: None,
+                add_identity: None,
+                update_identity: None,
+                remove_identity: None,
             },
         )
         .await
@@ -1053,12 +1053,12 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
             contact_id,
             &UpdateContactRequest {
                 name: None,
-                add_handle: Some(AddContactIdentityRequest {
-                    handle: "+15555550200".into(),
+                add_identity: Some(AddContactIdentityRequest {
+                    address: "+15555550200".into(),
                     service: Some("phone".into()),
                 }),
-                update_handle: None,
-                remove_handle: None,
+                update_identity: None,
+                remove_identity: None,
             },
         )
         .await
@@ -1076,12 +1076,12 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
             contact_id,
             &UpdateContactRequest {
                 name: None,
-                add_handle: Some(AddContactIdentityRequest {
-                    handle: "+15555550200".into(),
+                add_identity: Some(AddContactIdentityRequest {
+                    address: "+15555550200".into(),
                     service: Some("phone".into()),
                 }),
-                update_handle: None,
-                remove_handle: None,
+                update_identity: None,
+                remove_identity: None,
             },
         )
         .await
@@ -1100,10 +1100,10 @@ async fn mutate_contact_bumps_last_modified_on_shape_changes() {
             contact_id,
             &UpdateContactRequest {
                 name: None,
-                add_handle: None,
-                update_handle: None,
-                remove_handle: Some(RemoveContactIdentityRequest {
-                    handle: "+15555550200".into(),
+                add_identity: None,
+                update_identity: None,
+                remove_identity: Some(RemoveContactIdentityRequest {
+                    address: "+15555550200".into(),
                     service: Some("phone".into()),
                 }),
             },
@@ -1446,7 +1446,7 @@ async fn list_contacts_filters_no_handle() {
     .unwrap();
     assert_eq!(page.total, 1);
     assert_eq!(page.items[0].name, "Orphan");
-    assert_eq!(page.items[0].handle_count, 0);
+    assert_eq!(page.items[0].identity_count, 0);
 }
 
 #[tokio::test]
@@ -1753,9 +1753,9 @@ async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
         hand_typed,
         &UpdateContactRequest {
             name: Some("My Friend Bob".to_string()),
-            add_handle: None,
-            update_handle: None,
-            remove_handle: None,
+            add_identity: None,
+            update_identity: None,
+            remove_identity: None,
         },
     )
     .await

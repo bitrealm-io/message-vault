@@ -158,7 +158,7 @@ export default function IdentityTable({
         <Column id="service" allowsSorting className={`${headerClass} text-left`}>
           {({ sortDirection }) => <Heading sortDirection={sortDirection}>Service</Heading>}
         </Column>
-        <Column id="handle" isRowHeader allowsSorting className={`${headerClass} text-left`}>
+        <Column id="address" isRowHeader allowsSorting className={`${headerClass} text-left`}>
           {({ sortDirection }) => <Heading sortDirection={sortDirection}>Identity</Heading>}
         </Column>
         <Column id="start_date" allowsSorting className={`${headerClass} text-right`}>
@@ -192,16 +192,16 @@ export default function IdentityTable({
       <TableBody>
         {sorted.map((row) => (
           <Row
-            key={`${row.service ?? ""}-${row.handle}`}
-            id={`${row.service ?? ""}-${row.handle}`}
+            key={`${row.service ?? ""}-${row.address}`}
+            id={`${row.service ?? ""}-${row.address}`}
             className="border-b border-border outline-none"
           >
             <Cell className={`${cellClass} whitespace-nowrap text-left text-muted`}>
-              {formatHandleServiceLabel(row.handle, row.service)}
+              {formatHandleServiceLabel(row.address, row.service)}
             </Cell>
             <Cell className={`${cellClass} w-full min-w-[9rem] max-w-0 text-left`}>
-              <span className="block truncate" title={row.handle}>
-                {row.handle}
+              <span className="block truncate" title={row.address}>
+                {row.address}
               </span>
             </Cell>
             {renderCounts(row, onBrowse ? () => onBrowse(row) : undefined)}
@@ -210,7 +210,7 @@ export default function IdentityTable({
                 variant="ghostDanger"
                 size="icon"
                 isDisabled={busy || loading}
-                aria-label={`Remove ${row.handle} (${formatHandleServiceLabel(row.handle, row.service)})`}
+                aria-label={`Remove ${row.address} (${formatHandleServiceLabel(row.address, row.service)})`}
                 title="Remove identity"
                 onPress={() => onRemove(row)}
               >

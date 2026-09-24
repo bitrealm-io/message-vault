@@ -307,6 +307,50 @@ async fn patch_members_with_a_foreign_member_writes_nothing() {
     );
 }
 
+/// An id to remove that names no member is ignored: the set is already in
+/// the state the caller asked for, and `removed` counts only deleted rows.
+#[tokio::test]
+async fn patch_members_ignores_an_unknown_id_in_remove() {
+    let vault = crate::test_support::test_vault().await;
+    let account = vault.account_with_id(101, "alice").await;
+    let mut conn = vault.conn().await;
+    let a = insert_contact(&mut conn, account, "Ada").await;
+    let b = insert_contact(&mut conn, account, "Ben").await;
+    let (id, _) = create_set(group_spec(), &mut conn, account, "Family")
+        .await
+        .unwrap();
+    patch_members(group_spec(), &mut conn, account, id, &[a], &[])
+        .await
+        .unwrap();
+    // A contact that exists but is not a member, and an id that names no
+    // row at all: both are ignored, and nothing else changes.
+    assert_eq!(
+        patch_members(group_spec(), &mut conn, account, id, &[], &[b, 999_999])
+            .await
+            .unwrap(),
+        (0, 0)
+    );
+    assert_eq!(
+        list_member_ids_of(group_spec(), &mut conn, account, id)
+            .await
+            .unwrap(),
+        vec![a]
+    );
+    // Mixed with a real member, only that one counts.
+    assert_eq!(
+        patch_members(group_spec(), &mut conn, account, id, &[], &[a, 999_999])
+            .await
+            .unwrap(),
+        (0, 1)
+    );
+    assert!(
+        list_member_ids_of(group_spec(), &mut conn, account, id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
 #[tokio::test]
 async fn another_accounts_set_is_not_found() {
     let vault = crate::test_support::test_vault().await;

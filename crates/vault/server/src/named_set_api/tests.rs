@@ -284,6 +284,27 @@ async fn members_patch_with_a_foreign_member_writes_nothing() {
     }
 }
 
+/// An id in `remove` that names no member is not an error: the action ran
+/// and the set is in the state the caller asked for, so the route answers
+/// 200 with `removed: 0` (`docs/architecture/http-api.md`, "Status codes").
+#[tokio::test]
+async fn members_patch_ignores_an_unknown_id_in_remove() {
+    for kind in [Kind::Groups, Kind::Tags] {
+        let vault = test_vault().await;
+        let state = &vault.state;
+        let user = alice(state).await;
+        let a = kind.member(state, user.account_id).await;
+        let id = create(state, kind, &user.token, "Family").await;
+        let members = format!("{}/{id}/members", kind.base());
+        let _: Value = patch_json(state, &members, &user.token, json!({ "add": [a] })).await;
+
+        let changed: Value =
+            patch_json(state, &members, &user.token, json!({ "remove": [999999] })).await;
+        assert_eq!(changed, json!({ "added": 0, "removed": 0 }));
+        assert_eq!(member_ids(state, kind, &user.token, id).await, vec![a]);
+    }
+}
+
 #[tokio::test]
 async fn another_accounts_set_is_not_visible() {
     for kind in [Kind::Groups, Kind::Tags] {

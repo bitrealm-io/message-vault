@@ -147,6 +147,16 @@ current one, because that account reaches every other.
   of its own. A search that does not parse keeps its own type,
   `search-query-invalid`, because the client's remedy differs (rewrite the
   query), and answers `422` like every other.
+- A request that was read, broke no rule, and completed answers a `2xx` even
+  when it changed nothing. The status code says whether the action ran or
+  failed; what the action found or changed is the body's job. An id in the
+  `remove` list of a `{add, remove}` membership patch that names no member is
+  ignored: the set is already in the state the caller asked for, so the route
+  answers `200 OK` with `{added, removed}`, `removed` counts only the rows
+  deleted, and a retried request succeeds. An id in `add` that names no row
+  the caller holds stays `422 Unprocessable Entity`, because adding a row the
+  caller does not hold breaks a rule rather than completing with an empty
+  result.
 - `429 Too Many Requests` carries `Retry-After`.
 - An unknown `/v1` path answers `404` as a problem document, and a wrong method
   `405`, never Axum's plain text.

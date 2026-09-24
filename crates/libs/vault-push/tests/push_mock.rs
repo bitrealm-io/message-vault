@@ -511,6 +511,98 @@ fn failed_combined_request_only_fails_its_files() {
     );
 }
 
+/// Three conversations, the middle one unreadable, in name order.
+fn folder_with_a_bad_middle_file(dir: &Path) {
+    write_jsonl(dir, &sample_doc());
+    let bad = sample_doc_for("+15555550102", "guid-2");
+    fs::write(
+        dir.join(format!("{}.jsonl", bad.filename_stem())),
+        "not a conversation\n",
+    )
+    .unwrap();
+    write_jsonl(dir, &sample_doc_for("+15555550103", "guid-3"));
+}
+
+/// Without `continue_on_error`, a push stops at the first file that fails to
+/// prepare. The batch already packed still lands, so the journal matches the
+/// vault, and nothing after the failure is sent.
+#[test]
+fn a_push_without_continue_on_error_stops_at_the_first_bad_file() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let first = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_includes("guid-1");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+    let after = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_excludes("guid-1");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    folder_with_a_bad_middle_file(dir.path());
+    let cfg = VaultPushConfig {
+        continue_on_error: false,
+        ..text_only_config(dir.path(), server.base_url())
+    };
+
+    let report = run(&cfg, None).unwrap();
+
+    assert!(!report.ok);
+    assert_eq!(
+        first.calls(),
+        1,
+        "the conversation before the failure lands"
+    );
+    assert_eq!(after.calls(), 0, "nothing after the failure is sent");
+    assert_eq!(report.conversations_ok, 1);
+    assert_eq!(report.conversations_failed, 1);
+    assert_eq!(journaled_guids(dir.path()), vec!["guid-1".to_string()]);
+}
+
+/// With `continue_on_error`, a file that fails to prepare is reported and
+/// the push goes on: the good files around it still share one request.
+#[test]
+fn a_push_with_continue_on_error_imports_the_files_after_a_bad_one() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let import = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_includes("guid-1")
+            .body_includes("guid-3");
+        then.status(200).json_body(json!({
+            "messages": 2,
+            "messages_appended": 2,
+            "conversations": 2
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    folder_with_a_bad_middle_file(dir.path());
+
+    let report = run(&text_only_config(dir.path(), server.base_url()), None).unwrap();
+
+    assert!(!report.ok);
+    assert_eq!(import.calls(), 1);
+    assert_eq!(report.conversations_ok, 2);
+    assert_eq!(report.conversations_failed, 1);
+}
+
 #[test]
 fn resumes_message_batches_from_compacted_journal() {
     let server = MockServer::start();

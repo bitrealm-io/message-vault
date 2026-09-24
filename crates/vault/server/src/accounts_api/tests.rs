@@ -566,6 +566,77 @@ async fn the_owner_sets_a_managed_accounts_profile() {
     assert_eq!(patched["emails"], serde_json::json!([]));
 }
 
+/// The owner's PATCH naming one profile field alone saves that field. A
+/// PATCH is not required to carry the name and the zone together, and the
+/// route answers 200 either way, so only a read-back shows the save.
+#[tokio::test]
+async fn the_owner_sets_each_profile_field_on_its_own() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &state,
+        "/v1/accounts",
+        &owner.token,
+        serde_json::json!({ "username": "carol", "password": "hunter2hunter2" }),
+    )
+    .await;
+    let path = member(created["account_id"].as_i64().unwrap());
+
+    let _: serde_json::Value = patch_json(
+        &state,
+        &path,
+        &owner.token,
+        serde_json::json!({ "preferred_name": "Carol" }),
+    )
+    .await;
+    let read: serde_json::Value = get_json(&state, &path, &owner.token).await;
+    assert_eq!(read["preferred_name"], "Carol");
+
+    let _: serde_json::Value = patch_json(
+        &state,
+        &path,
+        &owner.token,
+        serde_json::json!({ "time_zone": "Asia/Tokyo" }),
+    )
+    .await;
+    let read: serde_json::Value = get_json(&state, &path, &owner.token).await;
+    assert_eq!(read["time_zone"], "Asia/Tokyo");
+
+    let _: serde_json::Value = patch_json(
+        &state,
+        &path,
+        &owner.token,
+        serde_json::json!({ "handles": [{ "handle": "carol@example.com", "service": "email" }] }),
+    )
+    .await;
+    let read: serde_json::Value = get_json(&state, &path, &owner.token).await;
+    assert_eq!(read["emails"], serde_json::json!(["carol@example.com"]));
+}
+
+/// A phone given when the owner creates an account is linked to it.
+#[tokio::test]
+async fn a_phone_given_at_creation_is_linked_to_the_account() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        &state,
+        "/v1/accounts",
+        &owner.token,
+        serde_json::json!({
+            "username": "dana",
+            "password": "hunter2hunter2",
+            "phone": "+15555550142"
+        }),
+    )
+    .await;
+    let path = member(created["account_id"].as_i64().unwrap());
+
+    let read: serde_json::Value = get_json(&state, &path, &owner.token).await;
+    assert_eq!(read["phones"], serde_json::json!(["+15555550142"]));
+}
+
 /// Clearing a permission narrows the account, and every token it has already
 /// issued narrows with it, because the two are intersected on each request.
 #[tokio::test]

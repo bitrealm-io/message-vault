@@ -414,3 +414,36 @@ fn writes_conversation_mboxrd() {
     assert_eq!(parsed[0].message.text, "From spoofed\nfirst\nlast");
     assert_eq!(parsed[1].message.text, "second");
 }
+
+#[test]
+fn clean_previous_mail_output_removes_only_mail_archives() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    fs::write(dir.join("+15555550101.mbox"), "From x\n").unwrap();
+    fs::write(dir.join("Old.MBOX"), "From x\n").unwrap();
+    fs::create_dir(dir.join("+15555550102")).unwrap();
+    fs::write(dir.join("+15555550102/0001.eml"), "Subject: x\n").unwrap();
+    // An email kept as an attachment is not a previous export.
+    fs::create_dir(dir.join("attachments")).unwrap();
+    fs::write(dir.join("attachments/forwarded.eml"), "Subject: x\n").unwrap();
+    fs::create_dir(dir.join("photos")).unwrap();
+    fs::write(dir.join("photos/a.jpg"), "jpg").unwrap();
+    fs::write(dir.join("notes.txt"), "mine").unwrap();
+
+    clean_previous_mail_output(dir).unwrap();
+
+    let mut left: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .collect();
+    left.sort();
+    assert_eq!(left, ["attachments", "notes.txt", "photos"]);
+    assert!(dir.join("attachments/forwarded.eml").is_file());
+    assert!(dir.join("photos/a.jpg").is_file());
+}
+
+#[test]
+fn clean_previous_mail_output_accepts_a_missing_folder() {
+    let tmp = tempfile::tempdir().unwrap();
+    clean_previous_mail_output(&tmp.path().join("missing")).unwrap();
+}

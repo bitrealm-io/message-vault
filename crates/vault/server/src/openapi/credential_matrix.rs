@@ -531,10 +531,8 @@ impl<'a> World<'a> {
             rest = &rest[close + 1..];
         }
         path.push_str(rest);
-        match op.path.as_str() {
-            p if p.starts_with("/v1/assets/") => path.push_str("?source=imessage"),
-            "/v1/search-fields" => path.push_str("?list=messages"),
-            _ => {}
+        if op.path.starts_with("/v1/assets/") {
+            path.push_str("?source=imessage");
         }
         path
     }

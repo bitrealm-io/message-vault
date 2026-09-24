@@ -277,7 +277,8 @@ async fn members_patch_with_a_foreign_member_writes_nothing() {
         let members = format!("{}/{id}/members", kind.base());
         assert_eq!(
             patch_status(state, &members, &user.token, json!({ "add": [a, 999999] })).await,
-            StatusCode::NOT_FOUND
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "an id to add that names no row is a body that broke a rule"
         );
         assert!(member_ids(state, kind, &user.token, id).await.is_empty());
     }

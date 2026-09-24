@@ -72,7 +72,8 @@ pub struct PushArgs {
     pub base_url: String,
     /// Vault account name.
     pub username: String,
-    /// API token or account password for the vault.
+    /// Bearer token for the vault: an API token, or the logged-in Session's
+    /// token. Never a password.
     pub key: String,
     /// Folder of conversation files to upload.
     pub input_dir: String,

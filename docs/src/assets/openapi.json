@@ -1532,16 +1532,6 @@
               "application/octet-stream": {}
             }
           },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
           "401": {
             "description": "",
             "content": {
@@ -1601,6 +1591,7 @@
           "Assets"
         ],
         "summary": "Store one asset body under its SHA-256 fingerprint.",
+        "description": "`201 Created` when the vault did not hold the asset and now does, with a\n`Location` naming it; `200 OK` when it already held it, and the body was\nread and dropped.",
         "operationId": "replace_asset",
         "parameters": [
           {
@@ -1622,14 +1613,32 @@
           }
         ],
         "requestBody": {
-          "description": "Raw asset bytes",
+          "description": "Raw asset bytes, sent with the asset's own media type as Content-Type",
           "content": {
             "application/octet-stream": {}
           }
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "The vault already held the asset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Asset"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The asset is new to the vault and is now stored",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Path of the stored asset"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1669,6 +1678,16 @@
             }
           },
           "413": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
             "description": "",
             "content": {
               "application/json": {
@@ -1735,16 +1754,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Asset"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1908,6 +1917,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1961,16 +1980,6 @@
         "responses": {
           "204": {
             "description": "Upload aborted"
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
           },
           "401": {
             "description": "",
@@ -2058,16 +2067,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Asset"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2209,6 +2208,16 @@
             }
           },
           "413": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
             "description": "",
             "content": {
               "application/json": {
@@ -2376,6 +2385,16 @@
             }
           },
           "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "",
             "content": {
               "application/json": {
@@ -2798,16 +2817,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Page_ContactSummary"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3509,16 +3518,6 @@
               }
             }
           },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
           "401": {
             "description": "",
             "content": {
@@ -3562,7 +3561,7 @@
         "tags": [
           "Conversations"
         ],
-        "summary": "One conversation, in the same shape a list row already has — so a caller\nthat opens a thread from a list does not have to convert between two\nshapes, and paging through the whole list to find one id is never\nnecessary. Trash is a property the list applies, not a gate on reading:\na trashed conversation still answers here.",
+        "summary": "One conversation, in the same shape a list row already has — so a caller\nthat opens a conversation from a list does not have to convert between two\nshapes, and paging through the whole list to find one id is never\nnecessary. Trash is a property the list applies, not a gate on reading:\na trashed conversation still answers here.",
         "operationId": "get_conversation",
         "parameters": [
           {
@@ -3701,7 +3700,7 @@
         "tags": [
           "Conversations"
         ],
-        "summary": "A conversation's messages, ascending by timestamp then `sort_order`. The\nread path a screen uses to open a thread: no search query to compose,\njust the conversation id.",
+        "summary": "A conversation's messages, ascending by timestamp then `sort_order`. The\nread path a screen uses to open a conversation: no search query to compose,\njust the conversation id.",
         "operationId": "list_conversation_messages",
         "parameters": [
           {
@@ -3735,16 +3734,6 @@
             }
           },
           {
-            "name": "year",
-            "in": "query",
-            "description": "Narrow to one calendar year, in the vault's stored offset",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "format": "int32"
-            }
-          },
-          {
             "name": "sort",
             "in": "query",
             "description": "`date` or `-date`. Default `date`, oldest first.",
@@ -3761,16 +3750,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Page_Message"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -4491,7 +4470,7 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Page size, default 100, max 500",
+            "description": "Page size, default 40, max 500",
             "required": false,
             "schema": {
               "type": "integer",
@@ -4525,16 +4504,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Page_Message"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -4710,7 +4679,7 @@
         "tags": [
           "Import"
         ],
-        "summary": "Start an import session and return its id. Finish the session at\nPOST /v1/imports/{id}/complete.",
+        "summary": "Start an Import Run and return its id. Finish the run at\nPOST /v1/imports/{id}/complete.",
         "operationId": "create_import",
         "requestBody": {
           "content": {
@@ -4772,7 +4741,17 @@
             }
           },
           "409": {
-            "description": "The account already has an active import session",
+            "description": "The account already has a running Import Run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -4801,13 +4780,13 @@
         "tags": [
           "Import"
         ],
-        "summary": "Status, timings, and issues for one import session.",
+        "summary": "Status, timings, and issues for one Import Run.",
         "operationId": "get_import",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "Import session id",
+            "description": "Import Run id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -4874,14 +4853,14 @@
         "tags": [
           "Import"
         ],
-        "summary": "Move a live import session to another stage.",
+        "summary": "Move a running Import Run to another stage.",
         "description": "The stage is a field of the run, so moving it is a `PATCH` of the run\nrather than a `POST` to a `stage` sub-resource: a path segment names a\nresource, and `stage` is not one (`docs/architecture/http-api.md`,\n\"Naming a route\"). The answer is the run itself, the same shape\n`GET /v1/imports/{id}` returns, so a caller reads one record wherever it\nasks.",
         "operationId": "update_import",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "Import session id",
+            "description": "Import Run id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -5081,6 +5060,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5102,13 +5091,13 @@
         "tags": [
           "Import"
         ],
-        "summary": "Record the outcome of an import session started with POST /v1/imports.",
+        "summary": "Record the outcome of an Import Run started with POST /v1/imports.",
         "operationId": "complete_import",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "Import session id",
+            "description": "Import Run id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -5214,7 +5203,7 @@
           {
             "name": "id",
             "in": "path",
-            "description": "Import session id",
+            "description": "Import Run id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -5303,13 +5292,13 @@
         "tags": [
           "Import"
         ],
-        "summary": "Discard a live import session, freeing the account's single slot.",
+        "summary": "Discard a running Import Run, freeing the account's single slot.",
         "operationId": "discard_import",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "Import session id",
+            "description": "Import Run id",
             "required": true,
             "schema": {
               "type": "integer",
@@ -5324,16 +5313,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DiscardImportResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -5526,6 +5505,16 @@
             }
           },
           "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "",
             "content": {
               "application/json": {
@@ -5952,16 +5941,6 @@
               }
             }
           },
-          "400": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
           "401": {
             "description": "",
             "content": {
@@ -6210,6 +6189,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6387,23 +6376,14 @@
         ]
       }
     },
-    "/v1/search-fields": {
+    "/v1/search-fields/contacts": {
       "get": {
         "tags": [
           "Search"
         ],
-        "summary": "The search words one list accepts.",
-        "operationId": "list_search_fields",
+        "summary": "The search words the Contacts list accepts.",
+        "operationId": "list_contact_search_fields",
         "parameters": [
-          {
-            "name": "list",
-            "in": "query",
-            "description": "`contacts`, `conversations`, or `messages`.",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/ListKind"
-            }
-          },
           {
             "name": "limit",
             "in": "query",
@@ -6442,12 +6422,86 @@
               }
             }
           },
-          "400": {
+          "401": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/search-fields/conversations": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "The search words the Conversations list accepts.",
+        "operationId": "list_conversation_search_fields",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, default 40, max 500.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page offset.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_FieldDoc"
                 }
               }
             }
@@ -6574,7 +6628,7 @@
             }
           },
           "400": {
-            "description": "Invalid input",
+            "description": "The body is not JSON",
             "content": {
               "application/json": {
                 "schema": {
@@ -6595,6 +6649,16 @@
           },
           "403": {
             "description": "Account is disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A blank username or password",
             "content": {
               "application/json": {
                 "schema": {
@@ -6735,8 +6799,16 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "Vault claimed; session issued",
+          "201": {
+            "description": "Vault claimed; the owner's Session is made",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "`/v1/session`, the Session the claim made"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -7432,7 +7504,7 @@
       },
       "CompleteImportResponse": {
         "type": "object",
-        "description": "Stored session status after completion.",
+        "description": "The Import Run that was completed.",
         "required": [
           "id",
           "status",
@@ -8051,7 +8123,7 @@
               "string",
               "null"
             ],
-            "description": "Which install is creating the session."
+            "description": "Which install is creating the Import Run."
           },
           "form": {
             "description": "Import form snapshot, stored so the screen can be restored.\n\nCredentials are stripped before storage: a `backupPassword` or\n`whatsappKey` posted here is dropped rather than persisted."
@@ -8080,7 +8152,7 @@
               "string",
               "null"
             ],
-            "description": "Absolute staging path on the client that owns this session."
+            "description": "Absolute staging path on the client that owns this Import Run."
           },
           "tool": {
             "type": [
@@ -8233,7 +8305,7 @@
       },
       "DiscardImportResponse": {
         "type": "object",
-        "description": "Confirmation that a session was discarded.",
+        "description": "Confirmation that an Import Run was discarded.",
         "required": [
           "id",
           "status"
@@ -8555,7 +8627,7 @@
       },
       "ImportRun": {
         "type": "object",
-        "description": "Full import session record.",
+        "description": "Full Import Run record.",
         "required": [
           "id",
           "source",
@@ -11028,7 +11100,7 @@
       },
       "UpdateImportRequest": {
         "type": "object",
-        "description": "New stage for a live session.",
+        "description": "New stage for a running Import Run.",
         "required": [
           "stage"
         ],
@@ -11037,7 +11109,7 @@
             "type": "string"
           },
           "summary": {
-            "description": "What the user approved at the gate they just passed, when they passed one.\n\nRecorded here rather than at completion so an approval survives a\nreload: the summary shown at a gate is recomputed from the folder, but\nwhat was approved is a different question and only the session\nremembers it. Absent leaves the stored `summary_json` untouched —\nmost stage changes carry nothing, and treating absent as null would\nthrow away the plan the outcome is later judged against."
+            "description": "What the user approved at the gate they just passed, when they passed one.\n\nRecorded here rather than at completion so an approval survives a\nreload: the summary shown at a gate is recomputed from the folder, but\nwhat was approved is a different question and only the run\nremembers it. Absent leaves the stored `summary_json` untouched —\nmost stage changes carry nothing, and treating absent as null would\nthrow away the plan the outcome is later judged against."
           }
         }
       },
@@ -11247,7 +11319,7 @@
     },
     {
       "name": "Import",
-      "description": "JSONL import sessions and ingest"
+      "description": "Import Runs: start one, send JSON Lines batches into it, close it"
     },
     {
       "name": "Export",

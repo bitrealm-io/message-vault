@@ -149,20 +149,6 @@ fn store_verified_processes_share_one_mixed_extension_path() {
 }
 
 #[test]
-fn lookup_by_sha256_keeps_legacy_extension_paths_compatible() {
-    let dir = tempdir().unwrap();
-    let sha = sha256_hex(b"legacy-jpeg");
-    let legacy = dir.path().join(shard_rel_path(&sha, ".jpg"));
-    fs::create_dir_all(legacy.parent().unwrap()).unwrap();
-    fs::write(&legacy, b"legacy-jpeg").unwrap();
-
-    let stored = lookup_by_sha256(dir.path(), &sha).unwrap();
-
-    assert_eq!(stored.assets_path, shard_rel_path(&sha, ".jpg"));
-    assert_eq!(stored.mime_type.as_deref(), Some("image/jpeg"));
-}
-
-#[test]
 fn guess_mime_covers_phone_media_extensions() {
     for (ext, expected) in [
         ("amr", "audio/amr"),
@@ -432,22 +418,45 @@ async fn an_asset_put_then_get_returns_the_same_bytes() {
     // raw content rather than only text that happens to decode.
     let bytes: Vec<u8> = vec![0xff, 0x00, 0xde, 0xad, 0xbe, 0xef, b'\n', b'x'];
     let sha = sha256_hex(&bytes);
-    let path = format!(
-        "/v1/assets/{sha}?source=sms-backup-restore&account={}",
-        user.username
+    let path = format!("/v1/assets/{sha}?source=sms-backup-restore");
+    let server = crate::test_support::serve(&vault.state).await;
+    let put = |content_type: Option<&str>| {
+        let mut request = reqwest::Client::new()
+            .put(format!("{}{path}", server.base()))
+            .bearer_auth(&user.token)
+            .body(bytes.clone());
+        if let Some(content_type) = content_type {
+            request = request.header(reqwest::header::CONTENT_TYPE, content_type);
+        }
+        request.send()
+    };
+
+    // Raw bytes with no Content-Type say nothing about what they are.
+    let response = put(None).await.unwrap();
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::UnsupportedMediaType,
     );
 
-    let (status, text) = crate::test_support::put_raw(
-        &vault.state,
-        &path,
-        &user.token,
-        "application/octet-stream",
-        bytes.clone(),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{text}");
+    // The first PUT stores the asset, a creation that names it; the second
+    // finds it already held and makes nothing.
+    let response = put(Some("application/octet-stream")).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(
+        response
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok()),
+        Some(path.as_str())
+    );
+    let response = put(Some("application/octet-stream")).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let again: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(again["already_present"], true);
 
-    let server = crate::test_support::serve(&vault.state).await;
     let response = reqwest::Client::new()
         .get(format!("{}{path}", server.base()))
         .bearer_auth(&user.token)
@@ -467,10 +476,7 @@ async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
     let unknown = "0".repeat(64);
     let (status, text) = crate::test_support::get_raw(
         &vault.state,
-        &format!(
-            "/v1/assets/{unknown}?source=sms-backup-restore&account={}",
-            user.username
-        ),
+        &format!("/v1/assets/{unknown}?source=sms-backup-restore"),
         &user.token,
     )
     .await;
@@ -496,10 +502,7 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
     let sha = "0".repeat(64);
     let (status, text) = crate::test_support::put_raw(
         &state,
-        &format!(
-            "/v1/assets/{sha}/uploads/upload-1/parts/1?source=sms-backup-restore&account={}",
-            user.username
-        ),
+        &format!("/v1/assets/{sha}/uploads/upload-1/parts/1?source=sms-backup-restore"),
         &user.token,
         "application/octet-stream",
         vec![b'x'; 4096],
@@ -516,4 +519,74 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
         body["detail"], "request body too large",
         "the sentence must be the handler's own, proving the layer did not answer: {body}"
     );
+}
+
+/// The multipart upload over HTTP, the way `vault-push` sends a large file:
+/// open the upload, send each part, complete it, and read the asset back.
+/// Each step is tested alone in `asset_uploads`; this proves the routes join
+/// up, that the part size the vault hands out is the one it holds a part to,
+/// and that `complete` installs bytes the vault then serves.
+#[tokio::test]
+async fn a_multipart_upload_completes_end_to_end_over_http() {
+    let vault = crate::test_support::test_vault().await;
+    let mut state = vault.state.clone();
+    state.upload_limits.part_size = 16;
+    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
+    let bytes: Vec<u8> = (0u8..40).collect();
+    let sha = sha256_hex(&bytes);
+    let server = crate::test_support::serve(&state).await;
+    let url = |rest: &str| format!("{}/v1/assets/{sha}{rest}?source=imessage", server.base());
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(url("/uploads"))
+        .bearer_auth(&user.token)
+        .json(&serde_json::json!({ "bytes": bytes.len(), "mime": "image/png" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let started: serde_json::Value = response.json().await.unwrap();
+    let upload_id = started["upload_id"].as_str().unwrap().to_string();
+    let part_size = started["part_size"].as_u64().unwrap() as usize;
+    assert_eq!(part_size, 16);
+
+    for (index, chunk) in bytes.chunks(part_size).enumerate() {
+        let response = client
+            .put(url(&format!("/uploads/{upload_id}/parts/{}", index + 1)))
+            .bearer_auth(&user.token)
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .body(chunk.to_vec())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "part {}", index + 1);
+    }
+
+    let response = client
+        .post(url(&format!("/uploads/{upload_id}/complete")))
+        .bearer_auth(&user.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let done: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(done["sha256"], sha.as_str());
+    assert_eq!(done["already_present"], false);
+
+    let response = client
+        .get(url(""))
+        .bearer_auth(&user.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok()),
+        Some("image/png")
+    );
+    assert_eq!(response.bytes().await.unwrap().as_ref(), bytes.as_slice());
 }

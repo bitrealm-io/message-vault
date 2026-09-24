@@ -350,45 +350,19 @@ pub(crate) fn selection_where(
 }
 
 /// The `WHERE` a conversation's message page and its `total` share: the
-/// conversation itself, the account scope, Export's not-duplicate filter
-/// (`ListKind::Messages`'s default in `search::emit::compile`), and — when
-/// `year` is given — the same calendar-year bounds `date:YYYY` matches in
-/// the search language, computed by the same
-/// [`crate::search::value::parse_date_span`] the search compiler calls, so a
-/// day cannot fall inside the year for one and outside it for the other.
-/// Trash plays no part here: reading one conversation's messages is not
-/// gated by trash, the same rule [`get_conversation_summary`](crate::db::conversations::get_conversation_summary) follows for
-/// the conversation itself.
-///
-/// # Errors
-///
-/// `BadRequest` when `year` is not a four-digit year.
-fn conversation_messages_where(
-    conversation_id: i64,
-    account_id: i64,
-    year: Option<i32>,
-    zone: chrono_tz::Tz,
-) -> Result<(String, Vec<SqlParam>), ApiError> {
-    let mut sql =
-        "m.conversation_id = ? AND m.account_id = ? AND m.duplicate_of IS NULL".to_string();
-    let mut params = vec![SqlParam::Int(conversation_id), SqlParam::Int(account_id)];
-    if let Some(year) = year {
-        // `today` only matters to the relative-span forms (`7d`, `1y`, …)
-        // `parse_date_span` also understands; a bare `YYYY` ignores it. The
-        // year's edges are the instants it begins and ends in the account's
-        // zone, the same rule `date:YYYY` uses.
-        let today = crate::search::today_in(zone);
-        let span = crate::search::value::parse_date_span(&year.to_string(), today)
-            .ok_or_else(|| ApiError::validation("year must be a four-digit year"))?;
-        sql.push_str(" AND m.timestamp >= ? AND m.timestamp < ?");
-        params.push(SqlParam::Text(crate::search::value::utc_instant(
-            zone, span.start,
-        )));
-        params.push(SqlParam::Text(crate::search::value::utc_instant(
-            zone, span.end,
-        )));
-    }
-    Ok((sql, params))
+/// conversation itself, the account scope, and Export's not-duplicate filter
+/// (`ListKind::Messages`'s default in `search::emit::compile`). There is no
+/// other filter: a read by id takes none, and narrowing a conversation is a
+/// search, `GET /v1/messages?q=in:#{id} …` (`docs/architecture/http-api.md`,
+/// "Methods"). Trash plays no part here: reading one conversation's messages
+/// is not gated by trash, the same rule
+/// [`get_conversation_summary`](crate::db::conversations::get_conversation_summary)
+/// follows for the conversation itself.
+fn conversation_messages_where(conversation_id: i64, account_id: i64) -> (String, Vec<SqlParam>) {
+    (
+        "m.conversation_id = ? AND m.account_id = ? AND m.duplicate_of IS NULL".to_string(),
+        vec![SqlParam::Int(conversation_id), SqlParam::Int(account_id)],
+    )
 }
 
 /// One page of a conversation's messages, ascending by timestamp then
@@ -399,13 +373,11 @@ fn conversation_messages_where(
 ///
 /// # Errors
 ///
-/// `BadRequest` when `year` is not a four-digit year; `Internal` when a
-/// statement fails.
+/// `Internal` when a statement fails.
 pub async fn get_conversation_messages(
     conn: &mut AnyConnection,
     account_id: i64,
     conversation_id: i64,
-    year: Option<i32>,
     order: &[SortKey<MessageSort>],
     limit: usize,
     offset: usize,
@@ -414,8 +386,7 @@ pub async fn get_conversation_messages(
         return Ok(None);
     }
 
-    let zone = crate::db::account_profile::load_time_zone(conn, account_id).await?;
-    let (where_sql, params) = conversation_messages_where(conversation_id, account_id, year, zone)?;
+    let (where_sql, params) = conversation_messages_where(conversation_id, account_id);
 
     let count_sql = renumber_placeholders(&format!(
         "SELECT COUNT(*) FROM messages m WHERE {where_sql}"

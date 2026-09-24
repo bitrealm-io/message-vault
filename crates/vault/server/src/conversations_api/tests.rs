@@ -49,7 +49,7 @@ async fn conversation_list_takes_the_search_language() {
     let status =
         crate::test_support::get_status(&vault.state, "/v1/conversations?q=wibble:direct", &token)
             .await;
-    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+    assert_eq!(status, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
     let status =
         crate::test_support::get_status(&vault.state, "/v1/conversations?q=trashed:yes", &token)
             .await;
@@ -2023,41 +2023,52 @@ async fn conversation_messages_page_and_total_is_the_whole_count() {
     assert_eq!(texts, vec!["msg2", "msg3"]);
 }
 
+/// Opening a conversation takes no filter; narrowing one to a year is the
+/// search `in:#{id} date:{year}`, which the web app's year jump sends. A
+/// `year=` on the read by id is refused, not ignored, so a client still
+/// sending it learns at once instead of reading the whole conversation as
+/// though it were one year.
 #[tokio::test]
-async fn conversation_messages_year_narrows_and_total_is_the_years_count() {
+async fn a_year_is_searched_for_and_never_a_filter_on_the_read_by_id() {
     let (vault, user, conversation_id) = conversation_messages_fixture().await;
     let mut conn = vault.state.db.acquire().await.unwrap();
-    for day in 1..=2 {
+    for (day, year) in [(1, 2023), (2, 2023), (1, 2024), (2, 2024), (3, 2024)] {
         insert_message(
             &mut conn,
             conversation_id,
             user.account_id,
-            &format!("2023-06-0{day}T00:00:00Z"),
+            &format!("{year}-06-0{day}T00:00:00Z"),
             0,
-            "in 2023",
-        )
-        .await;
-    }
-    for day in 1..=3 {
-        insert_message(
-            &mut conn,
-            conversation_id,
-            user.account_id,
-            &format!("2024-06-0{day}T00:00:00Z"),
-            0,
-            "in 2024",
+            &format!("in {year}"),
         )
         .await;
     }
     drop(conn);
 
-    let page: serde_json::Value = crate::test_support::get_json(
+    let (status, text) = crate::test_support::get_raw(
         &vault.state,
         &format!("/v1/conversations/{conversation_id}/messages?year=2024"),
         &user.token,
     )
     .await;
-    assert_eq!(page["total"], 3, "total is the year's count: {page}");
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    let errors = problem.errors.unwrap_or_default().join(" ");
+    assert!(
+        errors.contains("year") && errors.contains("limit"),
+        "names the parameter and the accepted ones: {text}"
+    );
+
+    let page: serde_json::Value = crate::test_support::get_json(
+        &vault.state,
+        &format!("/v1/messages?q=in%3A%23{conversation_id}%20date%3A2024"),
+        &user.token,
+    )
+    .await;
+    assert_eq!(page["total"], 3, "the year's messages: {page}");
     assert!(
         page["items"]
             .as_array()
@@ -2065,67 +2076,6 @@ async fn conversation_messages_year_narrows_and_total_is_the_years_count() {
             .iter()
             .all(|m| m["text"] == "in 2024"),
         "only 2024 messages: {page}"
-    );
-
-    let whole: serde_json::Value = crate::test_support::get_json(
-        &vault.state,
-        &format!("/v1/conversations/{conversation_id}/messages"),
-        &user.token,
-    )
-    .await;
-    assert_eq!(whole["total"], 5, "no year= is the whole conversation");
-}
-
-#[tokio::test]
-async fn a_message_at_31_december_2359_local_is_in_that_year_not_the_next() {
-    let (vault, user, conversation_id) = conversation_messages_fixture().await;
-    let mut conn = vault.state.db.acquire().await.unwrap();
-    // The account lives in New York. A message at 2024-12-31 23:59 there is
-    // the instant 2025-01-01T04:59:00Z, which is what the vault stores. The
-    // year's edges are computed in the account's zone, the same rule
-    // `date:2024` uses, so this message is in 2024 and not in 2025. A
-    // boundary computed in UTC would file it under 2025.
-    crate::db::account_profile::set_time_zone(
-        &mut conn,
-        user.account_id,
-        chrono_tz::America::New_York,
-    )
-    .await
-    .unwrap();
-    sqlx::query(
-        "INSERT INTO messages (
-            conversation_id, account_id, source, timestamp,
-            is_from_me, sort_order, body
-         ) VALUES ($1, $2, 'imessage', $3, 1, 0, 'new year''s eve')",
-    )
-    .bind(conversation_id)
-    .bind(user.account_id)
-    .bind("2025-01-01T04:59:00Z")
-    .execute(&mut *conn)
-    .await
-    .unwrap();
-    drop(conn);
-
-    let this_year: serde_json::Value = crate::test_support::get_json(
-        &vault.state,
-        &format!("/v1/conversations/{conversation_id}/messages?year=2024"),
-        &user.token,
-    )
-    .await;
-    assert_eq!(
-        this_year["total"], 1,
-        "31 Dec 23:59 local belongs to its own year: {this_year}"
-    );
-
-    let next_year: serde_json::Value = crate::test_support::get_json(
-        &vault.state,
-        &format!("/v1/conversations/{conversation_id}/messages?year=2025"),
-        &user.token,
-    )
-    .await;
-    assert_eq!(
-        next_year["total"], 0,
-        "31 Dec 23:59 local does not leak into the next year: {next_year}"
     );
 }
 

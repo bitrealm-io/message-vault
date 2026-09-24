@@ -7,9 +7,9 @@ use crate::problem::ProblemType;
 use crate::test_support::{
     SeedConversation, SeedMessage, claim_vault_as_owner, delete_json, delete_json_with_body,
     delete_status, delete_status_with_body, expect_problem, get_json, get_raw, get_status, log_in,
-    login_status, patch_failure, patch_json, patch_status, post_created_json, post_status,
-    post_status_logged_out, put_json, put_raw, put_status, register_via_api, seed_conversation,
-    seed_one_message, test_vault,
+    login_status, patch_failure, patch_json, patch_status, post_created_json, post_logged_out,
+    post_status, post_status_logged_out, put_json, put_raw, put_status, register_via_api,
+    seed_conversation, seed_one_message, test_vault,
 };
 
 fn member(id: i64) -> String {
@@ -442,16 +442,19 @@ async fn a_closed_vault_and_an_ordinary_session_are_both_refused() {
     }
 
     let body = serde_json::json!({ "username": "stranger", "password": "hunter2hunter2" });
-    assert_eq!(
-        post_status_logged_out(&state, "/v1/accounts", body.clone()).await,
-        StatusCode::FORBIDDEN,
-        "a stranger on a closed vault"
-    );
-    assert_eq!(
-        post_status(&state, "/v1/accounts", &alice.token, body).await,
-        StatusCode::FORBIDDEN,
-        "an ordinary session, open or closed"
-    );
+    // Two types, because the remedies differ: a stranger asks the owner for
+    // an account, and an account asking for another is not the owner.
+    let (status, text) = post_logged_out(&state, "/v1/accounts", body.clone()).await;
+    expect_problem(status, &text, ProblemType::RegistrationClosed);
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        "/v1/accounts",
+        &alice.token,
+        "application/json",
+        body.to_string(),
+    )
+    .await;
+    expect_problem(status, &text, ProblemType::NotTheOwner);
 }
 
 /// The username is the collection's key, taken once.
@@ -494,37 +497,29 @@ async fn a_taken_username_is_a_conflict() {
 /// limit it is an offer to fill the disk. The limiter itself is unit-tested in
 /// `credentials/tests.rs` and the status mapping in `server/tests.rs`, but
 /// nothing put the two together: a route that stopped consulting the limiter
-/// passed both.
+/// passed both. The count is one for the whole vault, like `claim`: a count
+/// per username lets a script that tries a new name each time straight
+/// through, which is the flood the limit exists to stop.
 #[tokio::test]
-async fn creating_an_account_is_rate_limited_by_username() {
+async fn registrations_under_many_names_are_rate_limited_across_the_vault() {
     let vault = test_vault().await;
     let state = vault.state.clone();
     let body =
         |username: &str| serde_json::json!({ "username": username, "password": "hunter2hunter2" });
 
     for attempt in 0..crate::credentials::AUTH_RATE_MAX {
-        let status = post_status_logged_out(&state, "/v1/accounts", body("flood")).await;
-        // The first attempt creates the account and the rest collide with it.
-        // Either way the attempt counts against the bucket.
-        assert!(
-            status == StatusCode::CREATED || status == StatusCode::CONFLICT,
-            "attempt {attempt} inside the limit answered {status}"
+        let status =
+            post_status_logged_out(&state, "/v1/accounts", body(&format!("flood{attempt}"))).await;
+        assert_eq!(
+            status,
+            StatusCode::CREATED,
+            "attempt {attempt} inside the limit"
         );
     }
 
-    assert_eq!(
-        post_status_logged_out(&state, "/v1/accounts", body("flood")).await,
-        StatusCode::TOO_MANY_REQUESTS,
-        "the attempt past the limit must be refused"
-    );
-
-    // The bucket is named by username, so one client spraying a single name
-    // must not shut the vault to everybody else.
-    assert_eq!(
-        post_status_logged_out(&state, "/v1/accounts", body("bystander")).await,
-        StatusCode::CREATED,
-        "an unrelated username must still be able to register"
-    );
+    let (status, text) = post_logged_out(&state, "/v1/accounts", body("one-more-name")).await;
+    let problem = expect_problem(status, &text, ProblemType::RateLimited);
+    assert!(problem.retry_after.is_some(), "{text}");
 }
 
 // ---------------------------------------------------------------------------
@@ -1330,7 +1325,7 @@ async fn an_account_deletes_itself_with_its_password_and_the_demo_account_refuse
 
     assert_eq!(
         delete_status(&state, &path, &alice.token).await,
-        StatusCode::BAD_REQUEST,
+        StatusCode::UNPROCESSABLE_ENTITY,
         "no body: nothing confirmed and no password"
     );
     assert_eq!(

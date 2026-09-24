@@ -12,7 +12,9 @@
  * This is the check, and it needs no expected path of its own: the document is
  * the expectation. Each function is called with plausible arguments through a
  * faked `apiClient`, and the method and path it asked for must appear in
- * `openapi.json`. Renaming a route on the server side, regenerating the
+ * `openapi.json`, and every query parameter it sent must be one that
+ * operation declares, because the vault refuses any other with a 422.
+ * Renaming a route or a parameter on the server side, regenerating the
  * document, and forgetting to update this module fails here.
  *
  * `EXERCISED` must name every exported function, which the last test enforces,
@@ -41,7 +43,8 @@ vi.mock("./api", () => ({
   VaultApiError: Error,
 }));
 
-type OpenApiDocument = { paths: Record<string, Record<string, unknown>> };
+type OpenApiOperation = { parameters?: { name: string; in: string }[] };
+type OpenApiDocument = { paths: Record<string, Record<string, OpenApiOperation>> };
 
 const OPENAPI_PATH = fileURLToPath(
   new URL("../../../docs/src/assets/openapi.json", import.meta.url),
@@ -57,6 +60,13 @@ const DOCUMENTED = Object.entries(openapi.paths).map(([template, item]) => ({
   template,
   methods: new Set(Object.keys(item).map((m) => m.toUpperCase())),
   matches: new RegExp(`^${template.replace(/\{[^}]+\}/g, "[^/]+")}$`),
+  /** The query parameters each method's operation declares. */
+  queryParams: (method: string) =>
+    new Set(
+      (item[method.toLowerCase()]?.parameters ?? [])
+        .filter((p) => p.in === "query")
+        .map((p) => p.name),
+    ),
 }));
 
 /** `postRaw` is a POST that carries its own media type. */
@@ -69,8 +79,8 @@ const VERB_METHOD: Record<string, string> = {
   delete: "DELETE",
 };
 
-/** The method and path of the single call the function under test made. */
-function calledRoute(): { method: string; path: string } {
+/** The method, path and query parameter names of the single call the function under test made. */
+function calledRoute(): { method: string; path: string; query: string[] } {
   const calls = Object.entries(VERB_METHOD).flatMap(([verb, method]) =>
     vi
       .mocked(apiClient[verb as keyof typeof apiClient])
@@ -78,7 +88,8 @@ function calledRoute(): { method: string; path: string } {
   );
   expect(calls).toHaveLength(1);
   const { method, path } = calls[0];
-  return { method, path: path.split("?")[0] };
+  const [bare, search = ""] = path.split("?");
+  return { method, path: bare, query: [...new URLSearchParams(search).keys()] };
 }
 
 /** Plausible arguments for every route function, one call each. */
@@ -208,7 +219,7 @@ describe("every route function asks for a documented address", () => {
   for (const [name, call] of Object.entries(EXERCISED)) {
     it(`${name} matches a path in openapi.json`, async () => {
       await call();
-      const { method, path } = calledRoute();
+      const { method, path, query } = calledRoute();
       const documented = DOCUMENTED.find((p) => p.matches.test(path));
       expect(
         documented,
@@ -219,6 +230,11 @@ describe("every route function asks for a documented address", () => {
         `${name} asked for ${method} ${path}; openapi.json documents ` +
           `${[...(documented?.methods ?? [])].join(", ")} on ${documented?.template}`,
       ).toBe(true);
+      const declared = documented?.queryParams(method) ?? new Set<string>();
+      expect(
+        query.filter((name) => !declared.has(name)),
+        `${name} sent query parameters ${documented?.template} does not declare`,
+      ).toEqual([]);
     });
   }
 });

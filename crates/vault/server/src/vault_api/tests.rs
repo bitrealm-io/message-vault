@@ -3,8 +3,7 @@ use axum::http::StatusCode;
 use super::*;
 use crate::test_support::{
     SeedConversation, SeedMessage, claim_vault_as_owner, get_json, get_status, patch_status,
-    post_json, post_status, post_status_logged_out, register_via_api, seed_conversation,
-    test_vault,
+    post_status, post_status_logged_out, register_via_api, seed_conversation, test_vault,
 };
 
 /// Turn public registration off, the way a real vault ships.
@@ -101,13 +100,23 @@ async fn claiming_an_unowned_vault_creates_the_owner_and_signs_them_in() {
     let vault = test_vault().await;
     let state = vault.state.clone();
 
-    let body: serde_json::Value = post_json(
-        &state,
-        "/v1/vault/claim",
-        "",
-        serde_json::json!({ "username": "keeper", "password": "hunter2hunter2" }),
-    )
-    .await;
+    let server = crate::test_support::serve(&state).await;
+    let response = reqwest::Client::new()
+        .post(format!("{}/v1/vault/claim", server.base()))
+        .json(&serde_json::json!({ "username": "keeper", "password": "hunter2hunter2" }))
+        .send()
+        .await
+        .unwrap();
+    // A claim makes the owner's Session, so it is a creation that names it.
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(
+        response
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok()),
+        Some("/v1/session")
+    );
+    let body: serde_json::Value = response.json().await.unwrap();
 
     assert_eq!(body["account_id"], account_profile::OWNER_ACCOUNT_ID);
     assert_eq!(body["username"], "keeper");
@@ -180,7 +189,45 @@ async fn claiming_needs_a_password_of_one_character_or_more() {
         serde_json::json!({ "username": "keeper", "password": "k" }),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "one character is enough");
+    assert_eq!(status, StatusCode::CREATED, "one character is enough");
+}
+
+/// Claiming takes no credential and makes the most powerful one the vault
+/// has, so it is rate limited, and once for the whole vault: a count per
+/// username would let a script trying a new name each time straight through.
+#[tokio::test]
+async fn claiming_is_rate_limited_across_the_vault() {
+    let vault = test_vault().await;
+    let state = vault.state.clone();
+    // An empty password is refused after the limiter has counted the
+    // attempt, so every try counts and none claims the vault.
+    for attempt in 0..crate::credentials::AUTH_RATE_MAX {
+        let status = post_status_logged_out(
+            &state,
+            "/v1/vault/claim",
+            serde_json::json!({ "username": format!("keeper{attempt}"), "password": "" }),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "attempt {attempt} inside the limit"
+        );
+    }
+    let (status, text) = crate::test_support::post_logged_out(
+        &state,
+        "/v1/vault/claim",
+        serde_json::json!({ "username": "keeper", "password": "hunter2hunter2" }),
+    )
+    .await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::RateLimited,
+    );
+    assert!(problem.retry_after.is_some(), "{text}");
+    let after: Vault = get_json(&state, "/v1/vault", "").await;
+    assert_eq!(after.state, VaultState::Unclaimed);
 }
 
 #[tokio::test]

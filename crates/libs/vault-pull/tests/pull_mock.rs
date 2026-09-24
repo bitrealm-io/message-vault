@@ -213,7 +213,9 @@ fn mock_pages<'a>(
     (first, second)
 }
 
-/// `GET /v1/assets/{sha256}` for `source`, answering `bytes`.
+/// `GET /v1/assets/{sha256}` for `source`, answering `bytes`. The key names
+/// the account, and the vault refuses a parameter a route does not declare,
+/// so a download that still sent `account=` would not match.
 fn mock_asset<'a>(
     server: &'a MockServer,
     sha256: &str,
@@ -224,7 +226,7 @@ fn mock_asset<'a>(
         when.method(GET)
             .path(format!("/v1/assets/{sha256}"))
             .query_param("source", source)
-            .query_param("account", "1");
+            .query_param_missing("account");
         then.status(200)
             .header("content-type", "application/octet-stream")
             .body(bytes);

@@ -71,7 +71,7 @@ pub struct ImportOptions<'a> {
     pub account_id: i64,
     /// Fill missing `content_key` values during promote (needed before cross-source dedupe).
     pub fill_content_keys: bool,
-    /// Optional vault import session id (messages stamped on promote).
+    /// Optional Import Run id (messages stamped on promote).
     pub import_id: Option<i64>,
     /// When true, stamp `messages.source` from each conversation's IR `export.source`.
     pub source_from_jsonl: bool,
@@ -102,7 +102,7 @@ pub struct FixedImportArgs<'a> {
     pub account_id: i64,
     /// Fill missing `content_key` values during promote.
     pub fill_content_keys: bool,
-    /// Optional vault import session id (messages stamped on promote).
+    /// Optional Import Run id (messages stamped on promote).
     pub import_id: Option<i64>,
 }
 
@@ -660,10 +660,10 @@ pub(crate) struct CreateImportRequest {
     /// Stage the run opens at. Defaults to `parse`.
     #[serde(default)]
     pub(crate) stage: Option<String>,
-    /// Absolute staging path on the client that owns this session.
+    /// Absolute staging path on the client that owns this Import Run.
     #[serde(default)]
     pub(crate) staging_dir: Option<String>,
-    /// Which install is creating the session.
+    /// Which install is creating the Import Run.
     #[serde(default)]
     pub(crate) device_id: Option<String>,
     /// Import form snapshot, stored so the screen can be restored.
@@ -780,7 +780,7 @@ fn optional_json_string(
     }
 }
 
-/// Stored session status after completion.
+/// The Import Run that was completed.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct CompleteImportResponse {
     id: i64,
@@ -814,7 +814,7 @@ pub(crate) struct ImportIssue {
     reason: String,
 }
 
-/// Full import session record.
+/// Full Import Run record.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct ImportRun {
     pub(crate) id: i64,
@@ -919,13 +919,13 @@ pub(crate) async fn imports_page(
     }))
 }
 
-/// Status, timings, and issues for one import session.
+/// Status, timings, and issues for one Import Run.
 #[utoipa::path(
     get,
     path = "/v1/imports/{id}",
     tag = "Import",
     security(("session" = ["import"]), ("api-token" = ["import"])),
-    params(("id" = i64, Path, description = "Import session id")),
+    params(("id" = i64, Path, description = "Import Run id")),
     responses(
         (status = 200, body = ImportRun),
         (status = 401, body = crate::problem::Problem),
@@ -958,7 +958,7 @@ pub(crate) async fn import_detail(
     Ok(Json(import_detail_response(detail, contacts)))
 }
 
-/// Start an import session and return its id. Finish the session at
+/// Start an Import Run and return its id. Finish the run at
 /// POST /v1/imports/{id}/complete.
 #[utoipa::path(
     post,
@@ -973,12 +973,13 @@ pub(crate) async fn import_detail(
             headers(("Location" = String, description = "Path of the new import"))
         ),
         (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (
             status = 409,
             body = crate::problem::Problem,
-            description = "The account already has an active import session"
+            description = "The account already has a running Import Run"
         )
     )
 )]
@@ -988,9 +989,8 @@ pub(crate) async fn create_import(
     Json(body): Json<CreateImportRequest>,
 ) -> Result<Created<CreateImportResponse>, ApiError> {
     if body.source.trim().is_empty() {
-        return Err(ApiError::MissingParameter(
-            "body field source is required".into(),
-        ));
+        // Blank answers as missing does: one validation failure.
+        return Err(ApiError::validation("source is required"));
     }
     validate_source_id(&body.source).map_err(|e| ApiError::validation(e.to_string()))?;
     let account = resolve_import_account(&auth);
@@ -1033,13 +1033,13 @@ pub(crate) async fn create_import(
     })
 }
 
-/// Record the outcome of an import session started with POST /v1/imports.
+/// Record the outcome of an Import Run started with POST /v1/imports.
 #[utoipa::path(
     post,
     path = "/v1/imports/{id}/complete",
     tag = "Import",
     security(("session" = ["import"]), ("api-token" = ["import"])),
-    params(("id" = i64, Path, description = "Import session id")),
+    params(("id" = i64, Path, description = "Import Run id")),
     request_body = CompleteImportRequest,
     responses(
         (status = 200, body = CompleteImportResponse),
@@ -1160,7 +1160,7 @@ async fn create_import_saved_search(
     tag = "Import",
     security(("session" = ["import"]), ("api-token" = ["import"])),
     params(
-        ("id" = i64, Path, description = "Import session id"),
+        ("id" = i64, Path, description = "Import Run id"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
         ("offset" = Option<usize>, Query, description = "Page offset")
     ),
@@ -1309,7 +1309,7 @@ fn import_detail_response(
     }
 }
 
-/// New stage for a live session.
+/// New stage for a running Import Run.
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 pub(crate) struct UpdateImportRequest {
     pub(crate) stage: String,
@@ -1317,7 +1317,7 @@ pub(crate) struct UpdateImportRequest {
     ///
     /// Recorded here rather than at completion so an approval survives a
     /// reload: the summary shown at a gate is recomputed from the folder, but
-    /// what was approved is a different question and only the session
+    /// what was approved is a different question and only the run
     /// remembers it. Absent leaves the stored `summary_json` untouched —
     /// most stage changes carry nothing, and treating absent as null would
     /// throw away the plan the outcome is later judged against.
@@ -1325,7 +1325,7 @@ pub(crate) struct UpdateImportRequest {
     pub(crate) summary: Option<serde_json::Value>,
 }
 
-/// Move a live import session to another stage.
+/// Move a running Import Run to another stage.
 ///
 /// The stage is a field of the run, so moving it is a `PATCH` of the run
 /// rather than a `POST` to a `stage` sub-resource: a path segment names a
@@ -1338,7 +1338,7 @@ pub(crate) struct UpdateImportRequest {
     path = "/v1/imports/{id}",
     tag = "Import",
     security(("session" = ["import"]), ("api-token" = ["import"])),
-    params(("id" = i64, Path, description = "Import session id")),
+    params(("id" = i64, Path, description = "Import Run id")),
     request_body = UpdateImportRequest,
     responses(
         (status = 200, body = ImportRun),
@@ -1381,23 +1381,22 @@ pub(crate) async fn update_import(
     Ok(Json(import_detail_response(detail, contacts)))
 }
 
-/// Confirmation that a session was discarded.
+/// Confirmation that an Import Run was discarded.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub(crate) struct DiscardImportResponse {
     pub(crate) id: i64,
     pub(crate) status: String,
 }
 
-/// Discard a live import session, freeing the account's single slot.
+/// Discard a running Import Run, freeing the account's single slot.
 #[utoipa::path(
     post,
     path = "/v1/imports/{id}/discard",
     tag = "Import",
     security(("session" = ["import"]), ("api-token" = ["import"])),
-    params(("id" = i64, Path, description = "Import session id")),
+    params(("id" = i64, Path, description = "Import Run id")),
     responses(
         (status = 200, body = DiscardImportResponse),
-        (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
@@ -1435,6 +1434,7 @@ pub(crate) async fn discard_import(
     responses(
         (status = 200, body = CreateImportBatchResponse),
         (status = 400, body = crate::problem::Problem),
+        (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
         (status = 404, body = crate::problem::Problem),

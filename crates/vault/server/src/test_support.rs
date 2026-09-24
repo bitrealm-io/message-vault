@@ -449,6 +449,23 @@ pub async fn post_status_logged_out(
     .0
 }
 
+/// POST a JSON body with no credential at all, returning the status and the
+/// response text, so a refusal can be checked with [`expect_problem`].
+pub async fn post_logged_out(
+    state: &AppState,
+    path: &str,
+    body: serde_json::Value,
+) -> (StatusCode, String) {
+    request(
+        state,
+        reqwest::Method::POST,
+        path,
+        None,
+        Some(json_body(body)),
+    )
+    .await
+}
+
 /// PUT a JSON body with a Bearer token, asserting 200 and parsing the body.
 pub async fn put_json<T: DeserializeOwned>(
     state: &AppState,

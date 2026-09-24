@@ -214,7 +214,6 @@ pub(crate) async fn find_unmatched_identities(
     ),
     responses(
         (status = 200, body = Page<ContactSummary>),
-        (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)

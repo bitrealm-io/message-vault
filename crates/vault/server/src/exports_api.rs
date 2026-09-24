@@ -23,9 +23,7 @@ use crate::db::vault_exports::{
     export_messages,
 };
 use crate::messages_api::message_filter;
-use crate::paging::{
-    DEFAULT_EXPORT_LIMIT, DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, page_params, parse_sort,
-};
+use crate::paging::{DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, page_params, parse_sort};
 use crate::server::{ApiError, AppState, Created, ExportAccess};
 
 /// Most ids one `selection` scope may name in either list, so the `IN` list
@@ -395,13 +393,12 @@ pub(crate) async fn get_export(
     security(("session" = ["export"]), ("api-token" = ["export"])),
     params(
         ("id" = i64, Path, description = "Export Run id"),
-        ("limit" = Option<usize>, Query, description = "Page size, default 100, max 500"),
+        ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
         ("offset" = Option<usize>, Query, description = "Places to skip in the run's list; a client steps it by `limit`. No cap, an offset past the end is an empty page"),
         ("sort" = Option<String>, Query, description = "`date` or `-date`. Default `date`, oldest first.")
     ),
     responses(
         (status = 200, body = Page<Message>),
-        (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
@@ -416,7 +413,7 @@ pub(crate) async fn list_export_messages(
     Query(query): Query<ListExportMessagesQuery>,
 ) -> Result<Json<Page<Message>>, ApiError> {
     let account = auth.account_id;
-    let page = page_params(query.limit, query.offset, DEFAULT_EXPORT_LIMIT, None)?;
+    let page = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let order = parse_sort(
         query.sort.as_deref(),
         &MESSAGE_SORT_KEYS,

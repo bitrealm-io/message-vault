@@ -298,7 +298,7 @@ async fn patch_members_with_a_foreign_member_writes_nothing() {
     let err = patch_members(group_spec(), &mut conn, account, id, &[a, 999_999], &[])
         .await
         .unwrap_err();
-    assert!(matches!(err, MembershipError::NotFound(_)));
+    assert!(matches!(err, MembershipError::BadRequest(_)));
     assert!(
         list_member_ids_of(group_spec(), &mut conn, account, id)
             .await

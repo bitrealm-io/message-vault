@@ -124,7 +124,8 @@ async fn load_username(pool: &AnyPool, account_id: i64) -> Result<Option<String>
             body = CreateSessionResponse,
             headers(("Location" = String, description = "`/v1/session`"))
         ),
-        (status = 400, description = "Invalid input", body = crate::problem::Problem),
+        (status = 400, description = "The body is not JSON", body = crate::problem::Problem),
+        (status = 422, description = "A blank username or password", body = crate::problem::Problem),
         (status = 401, description = "Invalid credentials", body = crate::problem::Problem),
         (status = 403, description = "Account is disabled", body = crate::problem::Problem),
         (status = 429, description = "Rate limited", body = crate::problem::Problem)

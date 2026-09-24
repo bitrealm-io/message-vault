@@ -342,7 +342,7 @@ function buildFixtureLines(): string[] {
   // reads as ListKind::Conversations. Every word this form emits today is
   // valid on both lists, so tagging it "messages" would pass while proving
   // nothing; add a Messages-only word to the form (`attachments:>0`,
-  // `from:me`) and this fixture is the thing that catches the 400.
+  // `from:me`) and this fixture is the thing that catches the 422.
   for (const input of messagesInputs) {
     addLines(lines, advancedMessages(input), ["conversations"]);
   }

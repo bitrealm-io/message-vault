@@ -387,8 +387,6 @@ impl<T: Serialize> IntoResponse for Created<T> {
 pub enum ApiError {
     /// `422` — fields that parsed and then broke a rule, every one of them.
     ValidationFailed(Vec<String>),
-    /// `400` — a required query parameter or body field is absent.
-    MissingParameter(String),
     /// `400` — the request cannot be read at all.
     MalformedBody(String),
     /// `415` — `Content-Type` absent or not one the route accepts.
@@ -412,11 +410,13 @@ pub enum ApiError {
     DemoAccountProtected(String),
     /// `403` — the route belongs to the vault owner.
     NotTheOwner(String),
+    /// `403` — the vault does not let strangers create their own account.
+    RegistrationClosed(String),
     /// `403` — the credential is valid but lacks the scope the route needs.
     InsufficientScope(String),
     /// `403` — the account may not log in or act.
     AccountDisabled(String),
-    /// `400` — the search language refused a word.
+    /// `422` — the search language refused a word.
     SearchQueryInvalid {
         /// The sentence, naming the word and the list.
         detail: String,
@@ -427,7 +427,7 @@ pub enum ApiError {
     },
     /// `409` — the resource is not in a state that allows the operation.
     StateConflict(String),
-    /// `400` — a part, upload id or completion does not match the upload.
+    /// `422` — a part, upload id or completion does not match the upload.
     AssetUploadInvalid(String),
     /// `404` — the addressed resource does not exist for this account.
     NotFound(String),
@@ -451,7 +451,6 @@ impl ApiError {
     pub fn problem_type(&self) -> Option<ProblemType> {
         Some(match self {
             Self::ValidationFailed(_) => ProblemType::ValidationFailed,
-            Self::MissingParameter(_) => ProblemType::MissingParameter,
             Self::MalformedBody(_) => ProblemType::MalformedBody,
             Self::UnsupportedMediaType(_) => ProblemType::UnsupportedMediaType,
             Self::PayloadTooLarge(_) => ProblemType::PayloadTooLarge,
@@ -462,6 +461,7 @@ impl ApiError {
             Self::NameTaken(_) => ProblemType::NameTaken,
             Self::DemoAccountProtected(_) => ProblemType::DemoAccountProtected,
             Self::NotTheOwner(_) => ProblemType::NotTheOwner,
+            Self::RegistrationClosed(_) => ProblemType::RegistrationClosed,
             Self::InsufficientScope(_) => ProblemType::InsufficientScope,
             Self::AccountDisabled(_) => ProblemType::AccountDisabled,
             Self::SearchQueryInvalid { .. } => ProblemType::SearchQueryInvalid,
@@ -531,8 +531,7 @@ impl ApiError {
                 problem.word = word.map(str::to_string);
                 problem.did_you_mean = did_you_mean.map(str::to_string);
             }
-            Self::MissingParameter(m)
-            | Self::MalformedBody(m)
+            Self::MalformedBody(m)
             | Self::UnsupportedMediaType(m)
             | Self::PayloadTooLarge(m)
             | Self::InvalidCredentials(m)
@@ -541,6 +540,7 @@ impl ApiError {
             | Self::NameTaken(m)
             | Self::DemoAccountProtected(m)
             | Self::NotTheOwner(m)
+            | Self::RegistrationClosed(m)
             | Self::InsufficientScope(m)
             | Self::AccountDisabled(m)
             | Self::StateConflict(m)
@@ -568,8 +568,7 @@ impl std::fmt::Display for ApiError {
                 "too many authentication attempts; try again in {retry_after_secs} seconds"
             ),
             Self::SearchQueryInvalid { detail, .. } => f.write_str(detail),
-            Self::MissingParameter(m)
-            | Self::MalformedBody(m)
+            Self::MalformedBody(m)
             | Self::UnsupportedMediaType(m)
             | Self::PayloadTooLarge(m)
             | Self::InvalidCredentials(m)
@@ -578,6 +577,7 @@ impl std::fmt::Display for ApiError {
             | Self::NameTaken(m)
             | Self::DemoAccountProtected(m)
             | Self::NotTheOwner(m)
+            | Self::RegistrationClosed(m)
             | Self::InsufficientScope(m)
             | Self::AccountDisabled(m)
             | Self::StateConflict(m)
@@ -826,6 +826,8 @@ pub(crate) fn http_app(state: AppState) -> Router {
     let (auth_small, mut spec) = limited_auth_router();
     let (doc_router, rest) = crate::openapi::api_openapi().split_for_parts();
     spec.merge(rest);
+    let declared_queries =
+        std::sync::Arc::new(crate::declared_query::DeclaredQueries::from_spec(&spec));
 
     let mut api = Router::new()
         .merge(doc_router)
@@ -840,6 +842,12 @@ pub(crate) fn http_app(state: AppState) -> Router {
         // `route_layer`, not `layer`: the `Accept` check belongs to the API
         // routes above and never to the static app served by the fallback.
         .route_layer(axum::middleware::from_fn(require_json_acceptable))
+        // After routing, so the matched path names the operation whose
+        // declared parameters the query is checked against.
+        .route_layer(axum::middleware::from_fn_with_state(
+            declared_queries,
+            crate::declared_query::refuse_undeclared_query,
+        ))
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback_service(ServeDir::new("static"))
         .layer(RequestBodyLimitLayer::new(state.max_body_bytes))

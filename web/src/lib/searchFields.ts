@@ -1,8 +1,8 @@
 /**
  * The search language, as the vault describes it.
  *
- * The browser keeps no list of words of its own: `GET /v1/search-fields` says
- * which words one list accepts, what kind of value each takes, and which values
+ * The browser keeps no list of words of its own: `GET /v1/search-fields/{list}`
+ * says which words one list accepts, what kind of value each takes, and which values
  * a choice word allows, and the search box builds its suggestions from that.
  * What is left here are two rules about the *shape* of a query — whether it
  * carries a `word:` token at all, and what its plain words are — which the
@@ -10,14 +10,14 @@
  * the browser or must ask the vault.
  */
 
-import { listSearchFields } from "./vaultApi";
+import { listSearchFields, type SearchFieldList } from "./vaultApi";
 import type { components } from "./vaultApi.types";
 import { keys } from "./vaultKeys";
 import { useVaultQuery } from "./vaultQuery";
 
 type Schema = components["schemas"];
 export type SearchField = Schema["FieldDoc"];
-export type SearchList = Schema["ListKind"];
+export type SearchList = SearchFieldList;
 
 /**
  * A `word:` token: a field name followed by a colon, at the start or after a
@@ -51,7 +51,7 @@ export function fieldWords(q: string): string[] {
 /**
  * The words in `q` that `fields` (one list's registry) does not carry. A
  * screen that sends one query to two lists uses this to tell which pane a
- * word applies to, instead of letting the other pane answer with a 400.
+ * word applies to, instead of letting the other pane answer with a 422.
  */
 export function unsupportedFieldWords(q: string, fields: readonly SearchField[]): string[] {
   const known = new Set(fields.map((f) => f.word));

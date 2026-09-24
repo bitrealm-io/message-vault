@@ -145,7 +145,7 @@ describe("TrashScreen", () => {
 
   it("explains a word one list refuses instead of asking that list", async () => {
     // `participants:` is a conversations word. The contacts pane must not
-    // send it (the vault would answer 400) and must say who the word is for;
+    // send it (the vault would answer 422) and must say who the word is for;
     // the conversations pane still answers normally (#331).
     renderAt("/trash?tq=participants%3A%3E3");
 

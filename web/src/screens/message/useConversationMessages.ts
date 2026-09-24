@@ -14,8 +14,8 @@ type MessagesResult = { items: Message[]; total: number };
 
 /**
  * Calendar years covered by a conversation's first and last message instants,
- * read in the account's `zone`: the same rule the vault's `year=` filter and
- * `date:2024` use, so every chip names a year that has messages in it.
+ * read in the account's `zone`: the same rule `date:2024` uses, so every chip
+ * names a year that has messages in it.
  */
 export function conversationYears(
   startIso: string | null | undefined,
@@ -58,19 +58,24 @@ export function buildFooterLabel(
 }
 
 /**
- * The search-language query a find in one conversation compiles to: the
- * conversation by id, the active year when one is chosen, and the typed term
- * as free text. Runs on `GET /v1/messages`, so it reaches every message in
- * the conversation, not the page in hand (#313).
+ * The search-language query a narrowed thread compiles to: the conversation
+ * by id, whether or not it is in the trash, the active year when one is
+ * chosen, and the typed find term, when there is one, as free text. Runs on
+ * `GET /v1/messages`, so it reaches every message in the conversation, not
+ * the page in hand (#313). Opening a conversation takes no filter; a year or
+ * a find inside one is a search (`docs/architecture/http-api.md`, "Methods").
+ * A search leaves the trash out unless asked, and a trashed conversation can
+ * still be opened, so the query asks.
  */
-export function findQueryFor(
+export function threadQueryFor(
   conversationId: number,
   activeYear: number | null,
   term: string,
 ): string {
-  const parts = [`in:#${conversationId}`];
+  const parts = [`in:#${conversationId}`, "trashed:any"];
   if (activeYear !== null) parts.push(`date:${activeYear}`);
-  parts.push(quote(term.trim()));
+  const trimmed = term.trim();
+  if (trimmed) parts.push(quote(trimmed));
   return parts.join(" ");
 }
 
@@ -116,24 +121,21 @@ export function useConversationMessages(conversationId: number) {
   }
 
   const finding = findTerm.trim().length > 0;
-  const findQuery = finding ? findQueryFor(conversationId, activeYear, findTerm) : "";
+  // The whole thread is the conversation read by id; a year or a find is a
+  // search scoped to it.
+  const searching = finding || activeYear !== null;
+  const threadQuery = searching ? threadQueryFor(conversationId, activeYear, findTerm) : "";
 
-  const key = finding
-    ? keys.conversations.find(conversationId, findQuery, offset, PAGE_SIZE)
-    : keys.conversations.messages(conversationId, { offset, limit: PAGE_SIZE, year: activeYear });
+  const key = searching
+    ? keys.conversations.find(conversationId, threadQuery, offset, PAGE_SIZE)
+    : keys.conversations.messages(conversationId, { offset, limit: PAGE_SIZE });
 
   const query = useVaultQuery<MessagesResult>(
     key,
     (signal) =>
-      finding
-        ? listMessages({ q: findQuery, offset, limit: PAGE_SIZE }, { signal })
-        : listConversationMessages(
-            conversationId,
-            activeYear !== null
-              ? { offset, limit: PAGE_SIZE, year: activeYear }
-              : { offset, limit: PAGE_SIZE },
-            { signal },
-          ),
+      searching
+        ? listMessages({ q: threadQuery, offset, limit: PAGE_SIZE }, { signal })
+        : listConversationMessages(conversationId, { offset, limit: PAGE_SIZE }, { signal }),
     {
       // Turning a page keeps the current one on screen until the next lands,
       // instead of flashing "0 of 0" and disabling both pager buttons

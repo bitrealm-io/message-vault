@@ -565,7 +565,18 @@ pub async fn patch_members(
             spec.member_label
         )));
     }
-    for member in add.iter().chain(remove.iter()) {
+    // An id to add that names no row the caller holds is a body that broke a
+    // rule, `422`, not an address that is missing (`docs/architecture/http-api.md`,
+    // "Status codes").
+    for member in &add {
+        if !member_exists(spec, conn, account_id, *member).await? {
+            return Err(MembershipError::BadRequest(format!(
+                "{} {member} not found",
+                spec.member_label
+            )));
+        }
+    }
+    for member in &remove {
         if !member_exists(spec, conn, account_id, *member).await? {
             return Err(MembershipError::NotFound(format!(
                 "{} {member} not found",

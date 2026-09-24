@@ -11,4 +11,4 @@ editUrl: false
 | Status | `429 Too Many Requests` |
 | Type | `https://bitrealm.io/vault/developer/reference/errors/rate-limited` |
 
-The vault refused an authentication attempt because the same username has tried too often: more than 20 attempts to log in, register or claim the vault inside 60 seconds. Wait the number of seconds in the `Retry-After` header (repeated as `retry_after` in the body) and try again.
+The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault. Wait the number of seconds in the `Retry-After` header (repeated as `retry_after` in the body) and try again.

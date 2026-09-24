@@ -37,7 +37,6 @@ use crate::trash_api::remove_orphaned_files;
     ),
     responses(
         (status = 200, body = crate::paging::Page<ConversationSummary>),
-        (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem)
@@ -71,7 +70,7 @@ pub(crate) async fn list_conversations(
 }
 
 /// One conversation, in the same shape a list row already has — so a caller
-/// that opens a thread from a list does not have to convert between two
+/// that opens a conversation from a list does not have to convert between two
 /// shapes, and paging through the whole list to find one id is never
 /// necessary. Trash is a property the list applies, not a gate on reading:
 /// a trashed conversation still answers here.
@@ -139,16 +138,12 @@ pub(crate) struct ListConversationMessagesQuery {
     limit: Option<usize>,
     #[serde(default)]
     offset: Option<usize>,
-    /// Narrow to one calendar year in the vault's stored offset — the same
-    /// year `date:YYYY` matches in the search language.
-    #[serde(default)]
-    year: Option<i32>,
     #[serde(default)]
     sort: Option<String>,
 }
 
 /// A conversation's messages, ascending by timestamp then `sort_order`. The
-/// read path a screen uses to open a thread: no search query to compose,
+/// read path a screen uses to open a conversation: no search query to compose,
 /// just the conversation id.
 #[utoipa::path(
     get,
@@ -159,12 +154,10 @@ pub(crate) struct ListConversationMessagesQuery {
         ("id" = i64, Path, description = "Conversation id"),
         ("limit" = Option<usize>, Query, description = "Page size, default 40, max 500"),
         ("offset" = Option<usize>, Query, description = "Page offset, max 50000"),
-        ("year" = Option<i32>, Query, description = "Narrow to one calendar year, in the vault's stored offset"),
         ("sort" = Option<String>, Query, description = "`date` or `-date`. Default `date`, oldest first.")
     ),
     responses(
         (status = 200, body = crate::paging::Page<vault_api_types::Message>),
-        (status = 400, body = crate::problem::Problem),
         (status = 422, body = crate::problem::Problem),
         (status = 401, body = crate::problem::Problem),
         (status = 403, body = crate::problem::Problem),
@@ -189,7 +182,6 @@ pub(crate) async fn list_conversation_messages(
         &mut conn,
         auth.account_id,
         conversation_id,
-        query.year,
         &order,
         page.limit,
         page.offset,

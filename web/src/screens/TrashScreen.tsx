@@ -42,7 +42,7 @@ import { useVaultQuery } from "../lib/vaultQuery";
  * kinds at once. A word only one list accepts (`participants:` is a
  * conversations word, `conversations:` a contacts word) is not sent to the
  * list that would refuse it; that pane says which list the word applies to
- * instead of showing the vault's 400.
+ * instead of showing the vault's 422.
  */
 
 /** How many trashed contacts this pane lists before it stops. */
@@ -91,7 +91,7 @@ export default function TrashScreen() {
 
   // Which typed words each list refuses. The registry is fetched once per
   // session; until it arrives neither pane asks, so a refused word never
-  // reaches the vault as a 400.
+  // reaches the vault as a 422.
   const conversationFields = useSearchFields("conversations");
   const contactFields = useSearchFields("contacts");
   const fieldsLoading = conversationFields.loading || contactFields.loading;

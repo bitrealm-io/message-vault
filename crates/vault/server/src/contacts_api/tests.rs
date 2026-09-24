@@ -1385,6 +1385,49 @@ async fn list_contacts_filters_service_or() {
     assert!(names.contains(&"Sms"));
 }
 
+/// A file that is not the address book it claims to be is the caller's to
+/// fix, so it answers `422`, not the `500` that says the vault broke; and a
+/// book that does parse is still loaded.
+#[tokio::test]
+async fn a_broken_address_book_is_a_422_and_a_good_one_loads() {
+    let vault = test_vault().await;
+    let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (status, text) = crate::test_support::post_raw(
+        &vault.state,
+        "/v1/contacts",
+        &account.token,
+        "text/vcard",
+        "this is not a vCard",
+    )
+    .await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    let errors = problem.errors.unwrap().join(" ");
+    assert!(
+        errors.contains("BEGIN:VCARD"),
+        "says what is wrong: {errors}"
+    );
+    assert!(
+        !errors.contains("address-book.vcf"),
+        "never names the vault's temp file: {errors}"
+    );
+
+    let (status, text) = crate::test_support::post_raw(
+        &vault.state,
+        "/v1/contacts",
+        &account.token,
+        "text/vcard",
+        "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Dana\r\nTEL:+15555550100\r\nEND:VCARD\r\n",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let body: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(body["contacts"], 1, "{text}");
+}
+
 #[test]
 fn the_media_type_alone_decides_the_address_book_format() {
     assert_eq!(
@@ -2132,7 +2175,7 @@ async fn contact_list_refuses_a_word_from_another_list() {
     let (vault, token, _account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let status =
         crate::test_support::get_status(&vault.state, "/v1/contacts?q=from:me", &token).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[test]

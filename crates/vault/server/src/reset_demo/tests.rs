@@ -1283,3 +1283,283 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
     conn.close().await.expect("close");
     pool.close().await;
 }
+
+/// Add a second copy of the tiny bundle's iMessage conversation to the SBR
+/// staging folder, so the two sources carry one message twice and the
+/// dedupe has something to hide.
+fn write_overlap_conversation(bundle: &Path) {
+    let overlap = concat!(
+        r#"{"schema_version":4,"export":{"source":"sms-backup-restore","tool":"t","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550101","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550101","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#,
+        "\n",
+        r#"{"guid":"pg-demo-sbr-overlap","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+15555550101","sender_display_name":null,"subject":null,"text":"hello","attachments":[],"imessage":null,"source":null}"#,
+        "\n",
+    );
+    fs::write(
+        bundle
+            .join("staging")
+            .join(SBR_SOURCE)
+            .join("overlap.jsonl"),
+        overlap,
+    )
+    .expect("write overlap jsonl");
+}
+
+/// Seed the account `demo` had before this reset: a WhatsApp message (the
+/// reset appends WhatsApp, so only the wipe removes it) and a file under its
+/// data folder. Returns the file's path.
+async fn seed_previous_demo(db: &Path, data_dir: &Path) -> PathBuf {
+    let (pool, mut conn) = test_db(db).await;
+    account_profile::ensure_account_row(&mut conn, DEMO_ACCOUNT_ID)
+        .await
+        .expect("seed the previous demo account");
+    let handle_id: i64 = sqlx::query_scalar(
+        "INSERT INTO handles (
+            account_id, raw, normalized, handle_type, service
+         ) VALUES ($1, '+15555550100', '+15555550100', 'phone', 'phone')
+         RETURNING id",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("insert previous handle");
+    let conversation_id: i64 = sqlx::query_scalar(
+        "INSERT INTO conversations (
+            account_id, chat_handle_id, conversation_type, source_file
+         ) VALUES ($1, $2, 'individual', 'previous.jsonl')
+         RETURNING id",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .bind(handle_id)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("insert previous conversation");
+    sqlx::query(
+        "INSERT INTO messages (
+            conversation_id, account_id, source, guid, timestamp,
+            is_from_me, body, sort_order
+         ) VALUES ($1, $2, 'whatsapp', 'previous-demo-message',
+                   '2026-01-01T00:00:00Z', 0, 'from the previous demo', 0)",
+    )
+    .bind(conversation_id)
+    .bind(DEMO_ACCOUNT_ID)
+    .execute(&mut *conn)
+    .await
+    .expect("insert previous message");
+    close_test_db(pool, conn).await;
+    checkpoint_and_clean_sidecars(db, "while seeding the previous demo")
+        .await
+        .expect("checkpoint the previous demo");
+
+    let stale = data_dir
+        .join(DEMO_ACCOUNT_ID.to_string())
+        .join("previous.bin");
+    fs::create_dir_all(stale.parent().expect("account folder")).expect("create account folder");
+    fs::write(&stale, b"previous demo attachment").expect("write previous attachment");
+    stale
+}
+
+/// The wipe removes the demo account's rows and its data folder, and nothing
+/// else. On the SQLite path the folder wiped is the empty work directory, so
+/// this is the one place the folder removal is observed (#780).
+#[tokio::test]
+async fn the_wipe_removes_the_demo_rows_and_folder_and_leaves_other_accounts() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let db = temp.path().join("vault.db");
+    let data_dir = temp.path().join("data");
+    seed_reset_test_database(&db).await;
+    let demo_folder = data_dir.join(DEMO_ACCOUNT_ID.to_string());
+    fs::create_dir_all(demo_folder.join(IMESSAGE_SOURCE).join("assets"))
+        .expect("create demo assets folder");
+    fs::write(
+        demo_folder
+            .join(IMESSAGE_SOURCE)
+            .join("assets")
+            .join("a.bin"),
+        b"demo",
+    )
+    .expect("write demo attachment");
+    let other_folder = data_dir.join("9");
+    fs::create_dir_all(&other_folder).expect("create other account folder");
+    fs::write(other_folder.join("keep.bin"), b"keep").expect("write other attachment");
+    let cfg = Config {
+        paths: PathsConfig {
+            db: db.clone(),
+            data_dir: data_dir.clone(),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: None,
+        database: crate::config::DatabaseConfig::default(),
+    };
+
+    wipe_demo_account(&cfg, DEMO_ACCOUNT_ID, DbTarget::Path(&db))
+        .await
+        .expect("wipe the demo account");
+
+    let (pool, mut conn) = test_db(&db).await;
+    let demo_rows: i64 = sqlx::query_scalar(
+        "SELECT (SELECT COUNT(*) FROM accounts WHERE id = $1)
+              + (SELECT COUNT(*) FROM messages WHERE account_id = $1)
+              + (SELECT COUNT(*) FROM conversations WHERE account_id = $1)
+              + (SELECT COUNT(*) FROM handles WHERE account_id = $1)",
+    )
+    .bind(DEMO_ACCOUNT_ID)
+    .fetch_one(&mut *conn)
+    .await
+    .expect("count demo rows");
+    assert_eq!(demo_rows, 0, "the demo account and its rows are gone");
+    let other_messages: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM messages WHERE account_id = 9 AND guid = 'non-demo-existing'",
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .expect("count other messages");
+    assert_eq!(other_messages, 1, "the other account keeps its message");
+    close_test_db(pool, conn).await;
+    assert!(!demo_folder.exists(), "the demo data folder is removed");
+    assert_eq!(
+        fs::read(other_folder.join("keep.bin")).expect("read other attachment"),
+        b"keep",
+        "the other account's folder is untouched"
+    );
+}
+
+/// A reset on the SQLite path leaves a claimed vault where `demo` logs in
+/// with an empty password and the owner with `admin`/`admin`, holds none of
+/// the previous demo's rows or files, and has deduped the new demo data
+/// across its sources (#780).
+#[tokio::test]
+async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let db = temp.path().join("active").join("vault.db");
+    fs::create_dir_all(db.parent().expect("database parent")).expect("create database parent");
+    let data_dir = temp.path().join("data");
+    let previous_file = seed_previous_demo(&db, &data_dir).await;
+    let bundle = temp.path().join("bundle");
+    write_tiny_reset_bundle(&bundle);
+    write_overlap_conversation(&bundle);
+    let config_dest = temp.path().join("config").join("config.toml");
+    fs::create_dir_all(config_dest.parent().expect("config parent")).expect("create config parent");
+    let prepared_config = temp.path().join("prepared-config.toml");
+    let config_text = format!(
+        "[paths]\ndb = \"{}\"\ndata_dir = \"{}\"\n",
+        db.display(),
+        data_dir.display()
+    );
+    fs::write(&prepared_config, &config_text).expect("write prepared config");
+    let cfg = Config {
+        paths: PathsConfig {
+            db: db.clone(),
+            data_dir: data_dir.clone(),
+            assets_dir: "assets".into(),
+            assets_converted_dir: "assets_converted".into(),
+        },
+        server: None,
+        database: crate::config::DatabaseConfig::default(),
+    };
+    {
+        let (pool, mut conn) = test_db(&db).await;
+        assert!(
+            !account_profile::vault_is_claimed(&mut conn)
+                .await
+                .expect("read claim state"),
+            "the vault starts unclaimed, so the claim below is the reset's doing"
+        );
+        close_test_db(pool, conn).await;
+    }
+
+    let stats = reset_prepared_bundle(
+        &cfg,
+        &bundle,
+        DEMO_ACCOUNT_ID,
+        &config_dest,
+        &prepared_config,
+    )
+    .await
+    .expect("reset the demo");
+
+    assert_eq!(
+        fs::read_to_string(&config_dest).expect("read installed config"),
+        config_text,
+        "the prepared config is installed as the active config"
+    );
+    assert!(
+        !previous_file.exists(),
+        "the previous demo's file is gone: {}",
+        previous_file.display()
+    );
+
+    let (pool, mut conn) = test_db(&db).await;
+    assert!(
+        account_profile::vault_is_claimed(&mut conn)
+            .await
+            .expect("read claim state"),
+        "the reset claims the vault"
+    );
+    let previous_messages: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE guid = 'previous-demo-message'")
+            .fetch_one(&mut *conn)
+            .await
+            .expect("count previous messages");
+    assert_eq!(previous_messages, 0, "the previous demo's message is gone");
+    let previous_conversations: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM conversations WHERE source_file = 'previous.jsonl'",
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .expect("count previous conversations");
+    assert_eq!(
+        previous_conversations, 0,
+        "the previous demo's conversation is gone"
+    );
+    let messages = count(
+        &mut conn,
+        "SELECT COUNT(*) FROM messages WHERE account_id = $1",
+    )
+    .await;
+    assert_eq!(
+        messages, 4,
+        "the three tiny conversations and the overlap copy are imported"
+    );
+    // The import fills content keys as it promotes, so the dedupe has none
+    // left to fill; what shows it ran is the hidden duplicate below.
+    assert_eq!(stats.dedupe_keys_filled, 0);
+    assert_eq!(stats.import.messages, 4);
+    assert_eq!(stats.process_assets.errors, 0);
+    let hidden = count(
+        &mut conn,
+        "SELECT COUNT(*) FROM messages WHERE account_id = $1 AND duplicate_of IS NOT NULL",
+    )
+    .await;
+    assert_eq!(
+        hidden, 1,
+        "the overlap copy is hidden as a duplicate of the iMessage message"
+    );
+    close_test_db(pool, conn).await;
+
+    let pool = engine::open_pool_for_path(&db)
+        .await
+        .expect("open the reset vault");
+    let state = crate::server::test_app_state(pool, &data_dir);
+    let session = crate::test_support::log_in(&state, "demo", "").await;
+    assert_eq!(session["username"], "demo");
+    assert_eq!(session["account_id"], DEMO_ACCOUNT_ID);
+    assert_eq!(
+        crate::test_support::login_status(&state, "demo", "not-empty").await,
+        axum::http::StatusCode::UNAUTHORIZED,
+        "demo has no password, so only the empty password logs in"
+    );
+    let owner = crate::test_support::log_in(&state, DEMO_OWNER_USERNAME, DEMO_OWNER_PASSWORD).await;
+    assert_eq!(owner["account_id"], account_profile::OWNER_ACCOUNT_ID);
+}
+
+#[test]
+fn the_conversion_warning_names_the_failed_attachments_and_is_silent_at_zero() {
+    assert_eq!(conversion_warning(0), None);
+    assert_eq!(
+        conversion_warning(2).as_deref(),
+        Some(
+            "2 demo attachment(s) failed conversion; originals stay in place and reset-demo continues"
+        )
+    );
+}

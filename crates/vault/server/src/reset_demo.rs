@@ -154,13 +154,20 @@ async fn dedupe_and_process_assets(
     .await
     .context("process-assets after prepared demo import")?;
     vault.close().await;
-    if process_stats.errors > 0 {
-        eprintln!(
-            "warning: {} demo attachment(s) failed conversion; originals stay in place and reset-demo continues",
-            process_stats.errors
-        );
+    if let Some(warning) = conversion_warning(process_stats.errors) {
+        eprintln!("warning: {warning}");
     }
     Ok((dedupe_stats, process_stats))
+}
+
+/// The warning printed when `errors` attachments failed conversion, or
+/// `None` when every attachment converted.
+fn conversion_warning(errors: u64) -> Option<String> {
+    (errors > 0).then(|| {
+        format!(
+            "{errors} demo attachment(s) failed conversion; originals stay in place and reset-demo continues"
+        )
+    })
 }
 
 struct ResetPreparedStats {
@@ -580,7 +587,8 @@ fn sqlite_sidecar(db: &Path, suffix: &str) -> PathBuf {
 }
 
 /// Refuse to install the prepared database if any non-demo account's row counts differ from
-/// the active one: a reset must only ever touch the demo account.
+/// the active one: a reset must only ever touch the demo account and the
+/// owner row it claims the vault with.
 async fn verify_non_demo_state_preserved(
     active: &Path,
     prepared: &Path,
@@ -599,7 +607,11 @@ async fn verify_non_demo_state_preserved(
     Ok(())
 }
 
-/// Row counts per table for every account except the demo one, used to prove a reset changed nothing else.
+/// Message counts per account for every account except the demo one and
+/// the owner, used to prove a reset changed nothing else. The owner is left
+/// out because the reset writes its row too ([`seed_demo_owner_on_conn`]),
+/// and an unclaimed vault would otherwise gain an account the active state
+/// never had; the owner holds no messages (ADR 0008), so nothing is lost.
 async fn non_demo_state(db: &Path, demo_id: i64) -> Result<BTreeMap<i64, i64>> {
     let pool = engine::open_pool_for_path(db)
         .await
@@ -623,11 +635,12 @@ async fn non_demo_state(db: &Path, demo_id: i64) -> Result<BTreeMap<i64, i64>> {
         "SELECT a.id, COUNT(m.id)
          FROM accounts a
          LEFT JOIN messages m ON m.account_id = a.id
-         WHERE a.id != $1
+         WHERE a.id != $1 AND a.id != $2
          GROUP BY a.id
          ORDER BY a.id",
     )
     .bind(demo_id)
+    .bind(account_profile::OWNER_ACCOUNT_ID)
     .fetch_all(&mut *conn)
     .await?;
     let mut state = BTreeMap::new();

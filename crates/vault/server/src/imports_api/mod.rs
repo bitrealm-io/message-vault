@@ -38,7 +38,6 @@ pub mod promote;
 pub mod staging;
 
 pub use failure::ImportFailure;
-pub use staging::is_orphaned_export;
 
 use staging::StagingInserts;
 

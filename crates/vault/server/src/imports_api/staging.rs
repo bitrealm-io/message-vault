@@ -279,20 +279,22 @@ fn assets_dir_for_source(opts: &ImportOptions<'_>, source: &str) -> Result<PathB
 }
 
 /// Messages with no conversation of their own live in `orphaned.jsonl`
-/// (older bundles used `orphaned.json`), so they may omit a conversation header.
-pub fn is_orphaned_export(path: &Path) -> bool {
+/// (older bundles used `orphaned.json`). Its header's chat id names the
+/// file's conversation, not a person.
+fn is_orphaned_export(path: &Path) -> bool {
     let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
         return false;
     };
     stem.eq_ignore_ascii_case("orphaned")
 }
 
-/// Stage one JSON Lines file: its conversation header and messages, or its orphaned messages.
+/// Stage one JSON Lines file: each conversation header with the messages
+/// that follow it.
 ///
 /// # Errors
 ///
-/// Returns an error when the file cannot be read, a message precedes its
-/// header, or a conversation cannot be staged.
+/// Returns an error when the file cannot be read or a conversation cannot
+/// be staged.
 pub(super) async fn import_file_to_staging(
     tx: &mut AnyConnection,
     stmts: &mut StagingInserts,
@@ -314,7 +316,8 @@ pub(super) async fn import_file_to_staging(
         media_work,
         stats: ImportStats::default(),
     };
-    let is_orphaned = is_orphaned_export(path);
+    // `jsonl::read_records` refuses a file whose first record is not a
+    // conversation header, so every message here follows one.
     let mut pending: Option<StagedConversation> = None;
     let mut messages: Vec<MessageRecord> = Vec::new();
 
@@ -332,40 +335,14 @@ pub(super) async fn import_file_to_staging(
                 )?;
                 pending = Some(StagedConversation::from_record(c, source));
             }
-            ExportRecord::Message(m) => {
-                if pending.is_none() && !is_orphaned {
-                    bail!(
-                        "{} is missing a conversation header (expected before messages)",
-                        path.display()
-                    );
-                }
-                messages.push(m);
-            }
+            ExportRecord::Message(m) => messages.push(m),
         }
     }
 
-    match pending.take() {
-        Some(header) => staging.stage(header, messages).await?,
-        None if is_orphaned => {
-            if opts.source_from_jsonl {
-                bail!(
-                    "{}: orphaned.jsonl without a conversation header cannot supply export.source",
-                    path.display()
-                );
-            }
-            staging
-                .stage(StagedConversation::orphaned(opts.source), messages)
-                .await?;
-        }
-        None if messages.is_empty() => bail!(
-            "{} has no conversation header and no messages",
-            path.display()
-        ),
-        None => bail!(
-            "{} is missing a conversation header (expected first record)",
-            path.display()
-        ),
-    }
+    let Some(header) = pending else {
+        bail!("{} has no conversation header", path.display());
+    };
+    staging.stage(header, messages).await?;
     Ok(staging.stats)
 }
 
@@ -395,19 +372,6 @@ impl StagedConversation {
                 .map(|p| (p.handle, p.name_alias, p.handle_type))
                 .collect(),
             source,
-        }
-    }
-
-    /// The header for `orphaned.jsonl`: messages with no conversation of their own.
-    fn orphaned(source: &str) -> Self {
-        Self {
-            chat_identifier: "orphaned".to_string(),
-            platform_service: None,
-            conversation_type: "orphaned".to_string(),
-            group_title: None,
-            exported_at: None,
-            participants: Vec::new(),
-            source: source.to_string(),
         }
     }
 }
@@ -995,3 +959,6 @@ async fn flush_tapback_chunks(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

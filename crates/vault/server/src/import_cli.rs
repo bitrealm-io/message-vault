@@ -245,11 +245,9 @@ pub fn list_jsonl_files(dir: &Path) -> Result<Vec<PathBuf>> {
 pub fn discover_sources(paths: &[PathBuf]) -> Result<Vec<String>> {
     let mut set = std::collections::BTreeSet::new();
     for path in paths {
-        let records = jsonl::read_records(path)?;
-        let mut saw_conversation = false;
-        for record in records {
+        // `read_records` refuses a file with no conversation header.
+        for record in jsonl::read_records(path)? {
             if let ExportRecord::Conversation(c) = record {
-                saw_conversation = true;
                 let Some(source) = c.export_source.as_deref().and_then(message_ir::trimmed) else {
                     bail!(
                         "{}: conversation '{}' is missing export.source \
@@ -260,20 +258,6 @@ pub fn discover_sources(paths: &[PathBuf]) -> Result<Vec<String>> {
                 };
                 set.insert(source.to_string());
             }
-        }
-        let is_orphaned = imports_api::is_orphaned_export(path);
-        if !saw_conversation && !is_orphaned {
-            bail!(
-                "{}: no conversation header (cannot determine export.source)",
-                path.display()
-            );
-        }
-        if !saw_conversation && is_orphaned {
-            bail!(
-                "{}: orphaned.jsonl without a conversation header cannot supply export.source; \
-                 pass --source, or add a conversation header with export.source",
-                path.display()
-            );
         }
     }
     Ok(set.into_iter().collect())

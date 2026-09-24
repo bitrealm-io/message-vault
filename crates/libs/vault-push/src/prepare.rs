@@ -22,7 +22,7 @@ use message_ir_format::read_conversation_jsonl;
 use message_vault_io_core::{check_cancel, parallel_for_each};
 
 use crate::folder::{attachment_label, resolve_attachment};
-use crate::http::{AssetPutResponse, AssetUpload};
+use crate::http::{Asset, AssetUpload};
 use crate::journal::{JournalMessage, RunJournal};
 use crate::progress::AttachmentSkip;
 use crate::project::{self, AttachmentProjection};
@@ -761,11 +761,7 @@ fn preflight_existing_asset(ctx: &PrepareContext<'_>, source: &str, digest: &str
 /// # Errors
 ///
 /// Returns the last HTTP error once retries are exhausted.
-fn upload_one_asset(
-    ctx: &PrepareContext<'_>,
-    source: &str,
-    job: &AssetUploadJob,
-) -> Result<AssetPutResponse> {
+fn upload_one_asset(ctx: &PrepareContext<'_>, source: &str, job: &AssetUploadJob) -> Result<Asset> {
     let session = ctx.session;
     vault_http::with_retries(ctx.cfg.max_retries, || {
         if ctx.probe_existing.load(Ordering::Relaxed)

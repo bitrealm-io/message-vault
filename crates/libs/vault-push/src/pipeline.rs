@@ -161,7 +161,7 @@ struct ImportHttpOutcome {
     mebibytes_per_second: f64,
     body_bytes: usize,
     message_count: usize,
-    response: Result<http::ImportResponse, String>,
+    response: Result<http::CreateImportBatchResponse, String>,
 }
 
 /// Owns the import-side state of one push run.

@@ -195,6 +195,24 @@ pub enum ExportScope {
     },
 }
 
+// Every list route answers this shape (`docs/architecture/http-api.md`), and
+// `GET /v1/exports/{id}/messages` answers a `Page<Message>`, which the OpenAPI
+// document names `Page_Message`. The doc comment is the schema description,
+// so it stays one line.
+/// One page of a list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(utoipa::ToSchema))]
+pub struct Page<T> {
+    /// The rows on this page.
+    pub items: Vec<T>,
+    /// Rows matching the query across every page.
+    pub total: u64,
+    /// Page size used.
+    pub limit: usize,
+    /// Page offset used.
+    pub offset: usize,
+}
+
 api_shape! {
     /// One Export Run: what was asked for and how much matched, never what
     /// the messages said. `POST /v1/exports` creates one, every route under

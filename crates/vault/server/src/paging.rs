@@ -4,7 +4,7 @@
 //! A `limit` above the cap or a zero `limit` is a 422, never a silent clamp,
 //! so a caller learns the rule the first time it breaks it.
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::server::ApiError;
 
@@ -19,18 +19,7 @@ pub const MAX_LIST_OFFSET: usize = 50_000;
 /// `IN` list stays under SQLite's variable cap.
 pub const MAX_CONTACT_SUMMARY_IDS: usize = 500;
 
-/// One page of a list.
-#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct Page<T> {
-    /// The rows on this page.
-    pub items: Vec<T>,
-    /// Rows matching the query across every page.
-    pub total: u64,
-    /// Page size used.
-    pub limit: usize,
-    /// Page offset used.
-    pub offset: usize,
-}
+pub use vault_api_types::Page;
 
 /// Cut a page out of rows already in memory.
 ///

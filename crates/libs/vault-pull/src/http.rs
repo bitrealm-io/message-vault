@@ -16,21 +16,11 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use reqwest::Method;
-use serde::Deserialize;
 use vault_http::{VaultHttpError, error_sentence, ok_json, trim_base_url};
 
-use vault_api_types::{ExportRun, ExportScope, Message};
+use vault_api_types::{ExportRun, ExportScope, Message, Page};
 
 pub use vault_http::HttpSession;
-
-/// One page from `GET /v1/exports/{id}/messages`: `{items, total, limit, offset}`.
-#[derive(Debug, Deserialize)]
-pub struct ExportMessagesPage {
-    #[serde(default)]
-    pub items: Vec<Message>,
-    #[serde(default)]
-    pub total: u64,
-}
 
 /// The body of `POST /v1/exports`.
 #[derive(Debug, serde::Serialize)]
@@ -76,15 +66,12 @@ pub(crate) struct ExportMessagesArgs<'a> {
     pub offset: usize,
 }
 
-/// Fetch one page of messages from `GET /v1/exports/{id}/messages`.
+/// Fetch one `Page<Message>` from `GET /v1/exports/{id}/messages`.
 ///
 /// # Errors
 ///
 /// Returns an error when the request fails or the body is not valid JSON.
-pub fn export_messages(
-    http: &HttpSession,
-    args: ExportMessagesArgs<'_>,
-) -> Result<ExportMessagesPage> {
+pub fn export_messages(http: &HttpSession, args: ExportMessagesArgs<'_>) -> Result<Page<Message>> {
     let ExportMessagesArgs {
         base_url,
         key,
@@ -221,7 +208,7 @@ mod tests {
 
     #[test]
     fn a_page_parses_without_an_ok_flag_and_a_failure_body_yields_its_sentence() {
-        let page: ExportMessagesPage =
+        let page: Page<Message> =
             serde_json::from_str(r#"{"items":[],"total":7,"limit":500,"offset":0}"#).unwrap();
         assert_eq!((page.items.len(), page.total), (0, 7));
         assert_eq!(

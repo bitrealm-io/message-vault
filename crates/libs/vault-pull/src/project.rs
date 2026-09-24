@@ -333,7 +333,7 @@ mod tests {
     /// service the vault sent reaches the IR message.
     #[test]
     fn a_real_export_page_parses_with_an_address_less_participant() {
-        let page: crate::http::ExportMessagesPage =
+        let page: vault_api_types::Page<vault_api_types::Message> =
             serde_json::from_str(EXPORT_PAGE_JSON).expect("the vault's own page shape must parse");
         assert_eq!((page.items.len(), page.total), (1, 1));
 
@@ -358,7 +358,8 @@ mod tests {
     /// reading `conversation.service` produced (issue #324).
     #[test]
     fn the_message_service_round_trips_from_a_real_export_page() {
-        let page: crate::http::ExportMessagesPage = serde_json::from_str(EXPORT_PAGE_JSON).unwrap();
+        let page: vault_api_types::Page<vault_api_types::Message> =
+            serde_json::from_str(EXPORT_PAGE_JSON).unwrap();
         assert_eq!(page.items[0].service.as_deref(), Some("iMessage"));
 
         let ir = to_ir_message(&page.items[0], false).unwrap();

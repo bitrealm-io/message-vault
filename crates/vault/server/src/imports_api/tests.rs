@@ -1,7 +1,8 @@
 use super::*;
 use crate::assets_api;
 use crate::test_support::{
-    TestVault, get_json, patch_json, post_created_json, post_json, register_via_api, test_vault,
+    RegisteredAccount, TestVault, get_json, patch_json, post_created_json, post_json, test_vault,
+    vault_with_account,
 };
 use tempfile::TempDir;
 
@@ -16,9 +17,8 @@ fn write_jsonl(dir: &Path, name: &str, body: &str) -> PathBuf {
 /// A vault holding one live import session at `awaiting_gate_1` whose
 /// `summary_json` already carries `summary` — as if an earlier
 /// `PATCH /v1/imports/{id}` recorded a gate approval.
-async fn session_with_summary(summary: serde_json::Value) -> (TestVault, String, i64) {
-    let vault = test_vault().await;
-    let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+async fn session_with_summary(summary: serde_json::Value) -> (TestVault, RegisteredAccount, i64) {
+    let (vault, account) = vault_with_account().await;
     let (_, created): (String, serde_json::Value) = post_created_json(
         &vault.state,
         "/v1/imports",
@@ -37,7 +37,7 @@ async fn session_with_summary(summary: serde_json::Value) -> (TestVault, String,
     )
     .await
     .unwrap();
-    (vault, account.token, import_id)
+    (vault, account, import_id)
 }
 
 /// The session's stored `summary_json`, decoded, or `None` when the
@@ -58,8 +58,7 @@ async fn a_stage_change_with_a_summary_stores_it() {
     // The gate screen posts what the user approved so it survives a
     // reload — recomputing the summary from the folder is a different
     // question from what was actually approved.
-    let vault = test_vault().await;
-    let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, account) = vault_with_account().await;
     let (location, created): (String, serde_json::Value) = post_created_json(
         &vault.state,
         "/v1/imports",
@@ -91,11 +90,11 @@ async fn active_session_reports_the_summary_a_stage_change_stored() {
     // record. But mid-session, between an approval and completion, a
     // reload has nowhere else to read the approved plan back from:
     // the running run on GET /v1/imports?status=running must expose it too.
-    let (vault, token, import_id) =
+    let (vault, account, import_id) =
         session_with_summary(serde_json::json!({"approved": true})).await;
 
     let page: serde_json::Value =
-        get_json(&vault.state, "/v1/imports?status=running", &token).await;
+        get_json(&vault.state, "/v1/imports?status=running", &account.token).await;
     let active = &page["items"][0];
 
     assert_eq!(active["id"], serde_json::json!(import_id));
@@ -106,13 +105,13 @@ async fn active_session_reports_the_summary_a_stage_change_stored() {
 async fn a_stage_change_without_a_summary_does_not_erase_the_stored_one() {
     // Most stage changes carry nothing. Treating absent as null would
     // throw away the plan the outcome is judged against.
-    let (vault, token, import_id) =
+    let (vault, account, import_id) =
         session_with_summary(serde_json::json!({"approved": true})).await;
 
     let run: serde_json::Value = patch_json(
         &vault.state,
         &format!("/v1/imports/{import_id}"),
-        &token,
+        &account.token,
         serde_json::json!({"stage": "pushing"}),
     )
     .await;
@@ -1650,8 +1649,7 @@ async fn a_retried_batch_in_a_replace_run_keeps_every_message_once() {
 /// well formed, it is simply not something this route reads.
 #[tokio::test]
 async fn a_multipart_body_is_an_unsupported_media_type() {
-    let vault = crate::test_support::test_vault().await;
-    let user = crate::test_support::register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
 
     let boundary = "MessageVaultTestBoundary";
     let body = format!(
@@ -1684,9 +1682,7 @@ async fn a_multipart_body_is_an_unsupported_media_type() {
 /// account, so an outsider cannot tell it exists.
 #[tokio::test]
 async fn a_batch_into_another_accounts_run_is_not_found() {
-    let vault = crate::test_support::test_vault().await;
-    let alice =
-        crate::test_support::register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let (vault, alice) = crate::test_support::vault_with_account().await;
     let bob = crate::test_support::register_via_api(&vault.state, "bob", "hunter2hunter2").await;
     let bobs_run = batches_path(&vault.state, &bob.token, "imessage").await;
 

@@ -5,6 +5,7 @@ use crate::problem::ProblemType;
 use crate::test_support::{
     RegisteredAccount, claim_vault_as_owner, delete_status, expect_problem, get_raw, get_status,
     log_in, login_status, post_created_json, post_raw, put_status, register_via_api, test_vault,
+    vault_with_account,
 };
 
 const TEST_ACCOUNT: i64 = 7;
@@ -14,9 +15,8 @@ const TEST_ACCOUNT: i64 = 7;
 /// `ok` flag, and `DELETE` ends it with `204 No Content`.
 #[tokio::test]
 async fn a_session_is_created_read_and_deleted_at_one_path() {
-    let vault = test_vault().await;
+    let (vault, _) = vault_with_account().await;
     let state = vault.state.clone();
-    register_via_api(&state, "alice", "hunter2hunter2").await;
 
     let created = crate::test_support::log_in(&state, "alice", "hunter2hunter2").await;
     assert_eq!(created["username"], "alice");
@@ -48,9 +48,8 @@ async fn a_session_is_created_read_and_deleted_at_one_path() {
 /// had ended something it had not.
 #[tokio::test]
 async fn logging_out_with_an_api_token_is_refused_and_leaves_the_token_working() {
-    let vault = test_vault().await;
+    let (vault, alice) = vault_with_account().await;
     let state = vault.state.clone();
-    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let mut conn = vault.conn().await;
     let token = crate::db::api_tokens::create_api_token(
         &mut conn,
@@ -81,9 +80,8 @@ async fn logging_out_with_an_api_token_is_refused_and_leaves_the_token_working()
 /// every other route.
 #[tokio::test]
 async fn logging_out_with_a_token_that_names_nothing_is_a_401() {
-    let vault = test_vault().await;
+    let (vault, alice) = vault_with_account().await;
     let state = vault.state.clone();
-    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
 
     let (status, text) =
         crate::test_support::delete_raw(&state, "/v1/session", "mv-user-not-a-session").await;
@@ -107,9 +105,8 @@ async fn logging_out_with_a_token_that_names_nothing_is_a_401() {
 /// every other route refuses it.
 #[tokio::test]
 async fn a_disabled_account_can_still_log_out() {
-    let vault = test_vault().await;
+    let (vault, alice) = vault_with_account().await;
     let state = vault.state.clone();
-    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let mut conn = vault.conn().await;
     sqlx::query("UPDATE accounts SET disabled = 1 WHERE id = $1")
         .bind(alice.account_id)
@@ -135,9 +132,8 @@ async fn a_disabled_account_can_still_log_out() {
 /// parameter the route does not take, never obeyed and never quietly dropped.
 #[tokio::test]
 async fn a_session_read_refuses_an_account_parameter() {
-    let vault = test_vault().await;
+    let (vault, alice) = vault_with_account().await;
     let state = vault.state.clone();
-    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
     let (status, text) = crate::test_support::get_raw(
@@ -187,9 +183,8 @@ async fn logout_on_conn_leaves_registered_account() {
 
 #[tokio::test]
 async fn disabled_account_cannot_log_in() {
-    let vault = test_vault().await;
+    let (vault, created) = vault_with_account().await;
     let state = vault.state.clone();
-    let created = register_via_api(&state, "alice", "hunter2hunter2").await;
 
     let mut conn = state.db.acquire().await.unwrap();
     sqlx::query("UPDATE accounts SET disabled = 1 WHERE id = $1")
@@ -221,9 +216,8 @@ async fn assert_refused(state: &crate::server::AppState, path: &str, token: &str
 /// past in the database rather than waited out.
 #[tokio::test]
 async fn an_expired_session_is_refused_on_a_browse_route() {
-    let vault = test_vault().await;
+    let (vault, alice) = vault_with_account().await;
     let state = vault.state.clone();
-    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     assert_eq!(
         get_status(&state, BROWSE, &alice.token).await,
         StatusCode::OK,
@@ -248,9 +242,8 @@ async fn an_expired_session_is_refused_on_a_browse_route() {
 /// Logging out ends the session everywhere, not only at `/v1/session`.
 #[tokio::test]
 async fn a_logged_out_session_is_refused_on_a_browse_route() {
-    let vault = test_vault().await;
+    let (vault, alice) = vault_with_account().await;
     let state = vault.state.clone();
-    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     assert_eq!(
         get_status(&state, BROWSE, &alice.token).await,
         StatusCode::OK
@@ -284,9 +277,8 @@ async fn export_token(
 /// neither page the Export Run it started nor start another.
 #[tokio::test]
 async fn a_deleted_api_token_is_refused_on_the_export_routes() {
-    let vault = test_vault().await;
+    let (vault, alice) = vault_with_account().await;
     let state = vault.state.clone();
-    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let (token_id, api_token) = export_token(&state, &alice).await;
 
     let everything = serde_json::json!({ "scope": { "kind": "everything" } });
@@ -334,9 +326,8 @@ async fn a_deleted_api_token_is_refused_on_the_export_routes() {
 /// one is.
 #[tokio::test]
 async fn an_expired_api_token_is_refused_on_an_export_route() {
-    let vault = test_vault().await;
+    let (vault, alice) = vault_with_account().await;
     let state = vault.state.clone();
-    let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let (token_id, api_token) = export_token(&state, &alice).await;
     assert_eq!(
         get_status(&state, "/v1/exports", &api_token).await,
@@ -360,9 +351,8 @@ async fn an_expired_api_token_is_refused_on_an_export_route() {
 /// is refused.
 #[tokio::test]
 async fn a_second_login_replaces_the_first_session() {
-    let vault = test_vault().await;
+    let (vault, first) = vault_with_account().await;
     let state = vault.state.clone();
-    let first = register_via_api(&state, "alice", "hunter2hunter2").await;
     let second = log_in(&state, "alice", "hunter2hunter2").await;
     let second = second["token"].as_str().unwrap();
     assert_ne!(second, first.token, "a login issues a new token");

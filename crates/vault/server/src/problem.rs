@@ -205,6 +205,62 @@ impl ProblemType {
     }
 }
 
+/// The problem types a handler names in its `#[utoipa::path(responses(...))]`
+/// as failures of its own, beside the success it answers:
+/// `responses((status = 200, body = ImportRun), crate::problem::openapi::StateConflict)`.
+///
+/// A handler never writes an error status out by hand. The failures every
+/// route of a kind shares, such as `401` for a route that takes a credential
+/// or `415` for one that takes a body, are added by
+/// [`crate::openapi::shared_parts`], which also files each type named here
+/// under its status and builds the one problem response for it
+/// (`docs/architecture/http-api.md`, "The reference").
+pub mod openapi {
+    use std::collections::BTreeMap;
+
+    use utoipa::openapi::{RefOr, Response};
+
+    use super::ProblemType;
+
+    /// The response key a named type is held under until the shared parts
+    /// file it under its status.
+    pub(crate) const KEY_PREFIX: &str = "problem:";
+
+    /// The key [`KEY_PREFIX`] makes for `kind`.
+    pub(crate) fn key(kind: ProblemType) -> String {
+        format!("{KEY_PREFIX}{}", kind.slug())
+    }
+
+    macro_rules! named {
+        ($($name:ident),* $(,)?) => {$(
+            #[doc = concat!("A handler's own `", stringify!($name), "` failure.")]
+            pub struct $name;
+
+            impl utoipa::IntoResponses for $name {
+                fn responses() -> BTreeMap<String, RefOr<Response>> {
+                    BTreeMap::from([(key(ProblemType::$name), RefOr::T(Response::new("")))])
+                }
+            }
+        )*};
+    }
+
+    named!(
+        PayloadTooLarge,
+        InvalidCredentials,
+        RateLimited,
+        UsernameTaken,
+        NameTaken,
+        DemoAccountProtected,
+        NotTheOwner,
+        RegistrationClosed,
+        InsufficientScope,
+        AccountDisabled,
+        SearchQueryInvalid,
+        StateConflict,
+        AssetUploadInvalid,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;

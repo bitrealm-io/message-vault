@@ -22,7 +22,7 @@ use crate::server::AppState;
         version = env!("CARGO_PKG_VERSION")
     ),
     modifiers(&BearerAddon),
-    components(schemas(crate::search::ListKind)),
+    components(schemas(crate::search::ListKind, crate::problem::Problem)),
     tags(
         (name = "Health", description = "Process liveness"),
         (name = "Session", description = "The logged-in credential: log in, check it, log out"),
@@ -33,7 +33,9 @@ use crate::server::AppState;
         (name = "Contacts", description = "Address book and contact groups"),
         (name = "Conversations", description = "Conversation list and sources"),
         (name = "Trash", description = "Empty the trash; the one door to permanent deletion, with DELETE on a trashed conversation or contact"),
+        (name = "Messages", description = "Messages, read by search or by id"),
         (name = "Message tags", description = "Tags on conversations"),
+        (name = "Saved searches", description = "Queries in the search language, saved under a name"),
         (name = "Search", description = "The words the search language accepts"),
         (name = "Vault", description = "The vault's own state: claiming it, and what a logged-out visitor may do")
     )
@@ -199,11 +201,20 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::vault_api::get_vault_storage))
 }
 
+/// Finish the assembled document with the parts no handler writes: the
+/// shared error responses and one-sentence summaries ([`shared_parts`]).
+/// The server and the dump both call this, so what `/openapi.json` serves
+/// and what is checked in are one document.
+pub(crate) fn finish(spec: &mut utoipa::openapi::OpenApi) {
+    shared_parts::apply(spec);
+}
+
 /// Pretty OpenAPI JSON. Same string the CLI writes and the stale-spec test compares.
 pub fn dump_openapi_json() -> String {
     let (_a, mut spec) = public_openapi().split_for_parts();
     let (_b, rest) = api_openapi().split_for_parts();
     spec.merge(rest);
+    finish(&mut spec);
     serde_json::to_string_pretty(&spec).expect("OpenAPI document serializes to JSON")
 }
 
@@ -224,71 +235,17 @@ pub fn write_openapi(path: Option<&Path>) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub(crate) mod shared_parts;
+
 #[cfg(test)]
 mod credential_matrix;
 
 #[cfg(test)]
+mod document_rules;
+
+#[cfg(test)]
 mod tests {
     use super::dump_openapi_json;
-
-    #[test]
-    fn dump_includes_session_and_account_paths() {
-        let v: serde_json::Value = serde_json::from_str(&dump_openapi_json()).unwrap();
-        let paths = v["paths"].as_object().unwrap();
-        for p in [
-            "/v1/session",
-            "/v1/accounts",
-            "/v1/accounts/{id}",
-            "/v1/accounts/{id}/password",
-            "/v1/accounts/{id}/messages",
-            "/v1/accounts/{id}/storage",
-            "/v1/accounts/{id}/imports",
-            "/v1/accounts/{id}/imports/{import_id}",
-            "/v1/accounts/{id}/exports",
-            "/v1/accounts/{id}/api-tokens",
-            "/v1/accounts/{id}/api-tokens/{token_id}",
-        ] {
-            assert!(paths.contains_key(p), "missing {p}");
-        }
-        for gone in ["/v1/auth/register", "/v1/account", "/v1/account/profile"] {
-            assert!(!paths.contains_key(gone), "{gone} must be gone");
-        }
-        assert!(
-            !paths.keys().any(|p| p.starts_with("/v1/owner")),
-            "no route carries a role in its path"
-        );
-        assert!(paths["/v1/accounts"]["get"].is_object());
-        assert!(paths["/v1/accounts"]["post"].is_object());
-        assert!(paths["/v1/accounts/{id}"]["get"].is_object());
-        assert!(paths["/v1/accounts/{id}"]["patch"].is_object());
-        assert!(paths["/v1/accounts/{id}"]["delete"].is_object());
-        assert!(paths["/v1/accounts/{id}/password"]["put"].is_object());
-        assert!(paths["/v1/accounts/{id}/messages"]["delete"].is_object());
-        // A stranger creates an account with no credential; the owner with one.
-        let create = &paths["/v1/accounts"]["post"];
-        assert!(
-            create["security"].as_array().is_some_and(|s| s
-                .iter()
-                .any(|entry| entry.as_object().is_some_and(|o| o.is_empty()))),
-            "POST /v1/accounts must admit a request with no credential: {create}"
-        );
-        assert!(
-            operation_needs("session", create),
-            "and the owner's session"
-        );
-        assert!(
-            paths["/v1/session"]["post"]["security"].is_null(),
-            "logging in is public"
-        );
-        assert!(
-            operation_needs("session", &paths["/v1/session"]["get"]),
-            "GET /v1/session must name the session scheme"
-        );
-        assert!(
-            operation_needs("session", &paths["/v1/session"]["delete"]),
-            "DELETE /v1/session must name the session scheme"
-        );
-    }
 
     /// Whether any of the operation's security requirements names `scheme`.
     fn operation_needs(scheme: &str, op: &serde_json::Value) -> bool {

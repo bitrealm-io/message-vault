@@ -44,7 +44,7 @@ const UPLOAD_BYTES: &[u8] = b"an attachment being uploaded in parts";
 
 /// The credentials every operation is called with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Credential {
+pub(super) enum Credential {
     /// Alice's API token with every scope.
     TokenAllScopes,
     /// Alice's API token with no scope.
@@ -152,15 +152,15 @@ impl fmt::Display for Expected {
 
 /// One operation of the document.
 #[derive(Debug, Clone)]
-struct Operation {
-    method: String,
-    path: String,
+pub(super) struct Operation {
+    pub(super) method: String,
+    pub(super) path: String,
     /// `None` when the operation names no `security`: a public route.
-    security: Option<Vec<Value>>,
+    pub(super) security: Option<Vec<Value>>,
 }
 
 impl Operation {
-    fn label(&self) -> String {
+    pub(super) fn label(&self) -> String {
         format!("{} {}", self.method.to_uppercase(), self.path)
     }
 
@@ -190,7 +190,7 @@ impl Operation {
     }
 
     /// Whether a requirement names the owner's role.
-    fn names_owner(&self) -> bool {
+    pub(super) fn names_owner(&self) -> bool {
         self.security.iter().flatten().any(|requirement| {
             requirement["session"]
                 .as_array()
@@ -250,7 +250,7 @@ impl Operation {
 }
 
 /// Every operation in the document the server serves.
-fn operations() -> Vec<Operation> {
+pub(super) fn operations() -> Vec<Operation> {
     let doc: Value = serde_json::from_str(&super::dump_openapi_json()).unwrap();
     let mut operations = Vec::new();
     for (path, item) in doc["paths"].as_object().unwrap() {
@@ -274,14 +274,14 @@ fn operations() -> Vec<Operation> {
 ///
 /// An account holds one Session at a time, so every call shares the owner's.
 /// The one call that ends it, the owner's `DELETE /v1/session`, runs last.
-struct Shared {
+pub(super) struct Shared {
     vault: TestVault,
     server: TestServer,
     owner_session: String,
 }
 
 impl Shared {
-    async fn build() -> Self {
+    pub(super) async fn build() -> Self {
         let vault = crate::test_support::test_vault().await;
         let mut conn = vault.conn().await;
         account_profile::insert_account_at(
@@ -310,7 +310,7 @@ impl Shared {
 /// name, and Bob, a stranger to them. Both are made for this call alone, so a
 /// delete, a password change or a logout cannot change what another call
 /// sees.
-struct World<'a> {
+pub(super) struct World<'a> {
     shared: &'a Shared,
     /// Tells this call's usernames apart from every other call's.
     n: usize,
@@ -360,7 +360,7 @@ fn password_hash() -> &'static str {
 }
 
 impl<'a> World<'a> {
-    async fn build(shared: &'a Shared, n: usize) -> Self {
+    pub(super) async fn build(shared: &'a Shared, n: usize) -> Self {
         let state = &shared.vault.state;
         let mut conn = shared.vault.conn().await;
         let hash = Some(password_hash());
@@ -501,7 +501,7 @@ impl<'a> World<'a> {
         world
     }
 
-    fn url(&self, path: &str) -> String {
+    pub(super) fn url(&self, path: &str) -> String {
         format!("{}{path}", self.shared.server.base())
     }
 
@@ -521,7 +521,7 @@ impl<'a> World<'a> {
     }
 
     /// The operation's path with each parameter filled with Alice's row.
-    fn path_for(&self, op: &Operation) -> String {
+    pub(super) fn path_for(&self, op: &Operation) -> String {
         let mut path = String::new();
         let mut rest = op.path.as_str();
         while let Some(open) = rest.find('{') {
@@ -557,6 +557,11 @@ impl<'a> World<'a> {
             "part" => "1".to_string(),
             _ => panic!("the credential matrix has no row for {{{name}}} in {path}; add one"),
         }
+    }
+
+    /// The bearer token `credential` sends in this call.
+    pub(super) fn token(&self, credential: Credential) -> &str {
+        self.tokens.for_credential(credential)
     }
 
     /// Call `op` with `credential` and return the status.
@@ -598,7 +603,7 @@ impl<'a> World<'a> {
 /// A body that gets the operation past its own validation to the lookup that
 /// decides whose row it is, so a stranger's call reaches the `404`. `n` keeps
 /// usernames apart between calls.
-fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8>)> {
+pub(super) fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8>)> {
     let json = |value: Value| Some(("application/json", serde_json::to_vec(&value).unwrap()));
     match (op.method.as_str(), op.path.as_str()) {
         ("post", "/v1/accounts") => {
@@ -656,12 +661,7 @@ fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8>)> {
 async fn run(shared: &Shared, n: usize, op: Operation, credential: Credential) -> Option<String> {
     let world = World::build(shared, n).await;
     if credential == Credential::SessionWithoutDelete {
-        let mut conn = shared.vault.conn().await;
-        sqlx::query("UPDATE accounts SET can_delete = 0 WHERE id = $1")
-            .bind(world.alice)
-            .execute(&mut *conn)
-            .await
-            .unwrap();
+        shared.vault.turn_off_delete(world.alice).await;
     }
     let expected = op.expected(credential);
     let status = world.call(&op, credential).await;

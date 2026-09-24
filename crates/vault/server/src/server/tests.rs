@@ -307,14 +307,6 @@ async fn cors_preflight_rejects_unknown_origin() {
 }
 
 #[tokio::test]
-async fn health_still_ok() {
-    let (_dir, state, _token, _import_id) = test_state().await;
-    let response = get_path(state, "/health").await;
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(response.text().await.unwrap(), "ok\n");
-}
-
-#[tokio::test]
 async fn openapi_ui_off_does_not_serve_spec() {
     let (_dir, state, _token, _import_id) = test_state().await;
     assert!(!state.cfg.require_server().unwrap().openapi_ui);
@@ -908,14 +900,13 @@ async fn export_endpoint_honors_can_export_flag() {
 /// failure instead of showing the 413 the vault sent.
 #[tokio::test]
 async fn the_fast_413_carries_cors_headers() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     // The default test config's `cors_origins` is empty, which only
     // allows the packaged desktop origins (`build_cors_layer`) — not the
     // browser origin this test sends. Configure it explicitly so the
     // assertion below tests CORS header propagation, not the allow list.
     let mut state = with_cors(vault.state.clone(), &["https://app.example"]);
     state.max_body_bytes = 1024;
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
 
     let (_, created): (String, serde_json::Value) = crate::test_support::post_created_json(
         &state,
@@ -948,17 +939,21 @@ async fn the_fast_413_carries_cors_headers() {
         "the fast 413 must carry CORS headers, got: {:?}",
         response.headers()
     );
-    let body: serde_json::Value = response.json().await.unwrap();
-    assert!(body["detail"].is_string(), "{body}");
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::PayloadTooLarge,
+    );
 }
 
 /// Every response carries an id the server made, a failure repeats it in the
 /// body, and an id the client sends is dropped rather than kept.
 #[tokio::test]
 async fn every_response_carries_a_server_made_request_id_and_a_problem_repeats_it() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
 
@@ -1006,9 +1001,8 @@ async fn every_response_carries_a_server_made_request_id_and_a_problem_repeats_i
 /// the limit is `rate-limited` with a `Retry-After` the body repeats.
 #[tokio::test]
 async fn a_wrong_password_is_401_and_the_limit_answers_429_with_retry_after() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, _) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
     let login = || {
@@ -1121,9 +1115,8 @@ async fn every_operation_refuses_a_query_parameter_it_does_not_declare() {
 /// else: not on the static app, and not on the asset download.
 #[tokio::test]
 async fn accept_is_checked_on_v1_json_routes_only() {
-    let vault = crate::test_support::test_vault().await;
+    let (vault, user) = crate::test_support::vault_with_account().await;
     let state = vault.state.clone();
-    let user = crate::test_support::register_via_api(&state, "alice", "hunter2hunter2").await;
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
 

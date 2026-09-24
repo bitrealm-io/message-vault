@@ -79,8 +79,6 @@ pub(crate) struct Session {
     security(("session" = []), ("api-token" = [])),
     responses(
         (status = 200, body = Session),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn get_session(
@@ -124,11 +122,9 @@ async fn load_username(pool: &AnyPool, account_id: i64) -> Result<Option<String>
             body = CreateSessionResponse,
             headers(("Location" = String, description = "`/v1/session`"))
         ),
-        (status = 400, description = "The body is not JSON", body = crate::problem::Problem),
-        (status = 422, description = "A blank username or password", body = crate::problem::Problem),
-        (status = 401, description = "Invalid credentials", body = crate::problem::Problem),
-        (status = 403, description = "Account is disabled", body = crate::problem::Problem),
-        (status = 429, description = "Rate limited", body = crate::problem::Problem)
+        crate::problem::openapi::InvalidCredentials,
+        crate::problem::openapi::AccountDisabled,
+        crate::problem::openapi::RateLimited
     )
 )]
 pub async fn create_session(
@@ -195,8 +191,6 @@ async fn logout_on_conn(conn: &mut AnyConnection, token: &str) -> anyhow::Result
     security(("session" = [])),
     responses(
         (status = 204, description = "Logged out"),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, description = "The token is an API token, which is not a Session", body = crate::problem::Problem)
     )
 )]
 pub async fn delete_session(

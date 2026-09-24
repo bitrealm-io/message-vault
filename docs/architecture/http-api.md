@@ -385,10 +385,13 @@ when the two differ, and CI checks the web app's generated types against it.
 
 An operation's error responses are built from shared parts, never written out
 by hand. The credential a route accepts brings its `401` and `403`; a request
-body brings `415` and `422`; an id in the path brings `404` and `422`. The
-handler adds only what is its own, such as `409` for a run in the wrong state.
+body brings `400`, `413`, `415` and `422`; an id in the path brings `404` and
+`422`; and every `/v1` route brings `422` for a query parameter it does not
+declare. The handler adds only what is its own, such as `409` for a run in the
+wrong state, by naming the problem type (`crate::problem::openapi`).
 Every error response is declared as `application/problem+json`, names the
-problem types it can carry, and has a description. The first sentence of a
+problem types it can carry (in its description and in `x-problem-types`), and
+has a description. The first sentence of a
 handler's doc comment is the operation's summary, and the rest is its
 description.
 Why: every mismatch between the reference and the handlers that the September

@@ -115,7 +115,35 @@ pub async fn test_vault() -> TestVault {
     TestVault { tmp, state }
 }
 
+/// The password every account the fixtures register is given.
+pub const PASSWORD: &str = "hunter2hunter2";
+
+/// A vault with one account in it, `alice`, registered through the API the
+/// way a stranger does it, and logged in: the fixture a route test starts
+/// from.
+pub async fn vault_with_account() -> (TestVault, RegisteredAccount) {
+    let vault = test_vault().await;
+    let account = register_via_api(&vault.state, "alice", PASSWORD).await;
+    (vault, account)
+}
+
 impl TestVault {
+    /// Turn off `account_id`'s `delete` permission, as the owner would, for a
+    /// test of what an account without it is refused.
+    pub async fn turn_off_delete(&self, account_id: i64) {
+        let mut conn = self.conn().await;
+        crate::db::account_profile::set_account_flags(
+            &mut conn,
+            account_id,
+            crate::db::account_profile::AccountFlags {
+                can_delete: Some(false),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+
     /// A connection from this vault's pool, for a test that seeds or asserts
     /// with SQL directly.
     pub async fn conn(&self) -> sqlx::pool::PoolConnection<sqlx::Any> {
@@ -918,8 +946,7 @@ mod tests {
     /// `TestServer` drops and aborts the task serving it.
     #[tokio::test]
     async fn a_large_response_body_is_read_before_the_server_stops() {
-        let vault = test_vault().await;
-        let user = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+        let (vault, user) = vault_with_account().await;
         for i in 0..300 {
             seed_conversation(
                 &vault.state,

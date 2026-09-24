@@ -254,10 +254,7 @@ async fn close_export(
             body = ExportRun,
             headers(("Location" = String, description = "Path of the new run"))
         ),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem)
+        crate::problem::openapi::SearchQueryInvalid
     )
 )]
 pub(crate) async fn create_export(
@@ -291,9 +288,6 @@ pub(crate) async fn create_export(
     ),
     responses(
         (status = 200, body = Page<ExportRun>),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn list_exports(
@@ -364,9 +358,6 @@ pub(crate) async fn exports_page(
     params(("id" = i64, Path, description = "Export Run id")),
     responses(
         (status = 200, body = ExportRun),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn get_export(
@@ -399,11 +390,7 @@ pub(crate) async fn get_export(
     ),
     responses(
         (status = 200, body = Page<Message>),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem),
-        (status = 409, body = crate::problem::Problem, description = "The run is no longer running")
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn list_export_messages(
@@ -452,10 +439,7 @@ pub(crate) async fn list_export_messages(
     params(("id" = i64, Path, description = "Export Run id")),
     responses(
         (status = 200, body = ExportRun),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem),
-        (status = 409, body = crate::problem::Problem, description = "The run is already finished")
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn complete_export(
@@ -475,10 +459,7 @@ pub(crate) async fn complete_export(
     params(("id" = i64, Path, description = "Export Run id")),
     responses(
         (status = 200, body = ExportRun),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem),
-        (status = 409, body = crate::problem::Problem, description = "The run is already finished")
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn cancel_export(

@@ -855,9 +855,6 @@ pub(crate) struct ImportRun {
     ),
     responses(
         (status = 200, body = Page<crate::db::vault_imports::ImportSummary>),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn list_imports(
@@ -928,9 +925,6 @@ pub(crate) async fn imports_page(
     params(("id" = i64, Path, description = "Import Run id")),
     responses(
         (status = 200, body = ImportRun),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn get_import(
@@ -972,15 +966,7 @@ pub(crate) async fn import_detail(
             body = CreateImportResponse,
             headers(("Location" = String, description = "Path of the new import"))
         ),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (
-            status = 409,
-            body = crate::problem::Problem,
-            description = "The account already has a running Import Run"
-        )
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn create_import(
@@ -1043,11 +1029,7 @@ pub(crate) async fn create_import(
     request_body = CompleteImportRequest,
     responses(
         (status = 200, body = CompleteImportResponse),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn complete_import(
@@ -1166,9 +1148,6 @@ async fn create_import_saved_search(
     ),
     responses(
         (status = 200, body = Page<crate::db::import_contacts::ImportContact>),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
     )
 )]
 pub(crate) async fn list_import_contacts(
@@ -1342,11 +1321,7 @@ pub(crate) struct UpdateImportRequest {
     request_body = UpdateImportRequest,
     responses(
         (status = 200, body = ImportRun),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn update_import(
@@ -1397,10 +1372,7 @@ pub(crate) struct DiscardImportResponse {
     params(("id" = i64, Path, description = "Import Run id")),
     responses(
         (status = 200, body = DiscardImportResponse),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem)
+        crate::problem::openapi::StateConflict
     )
 )]
 pub(crate) async fn discard_import(
@@ -1433,22 +1405,7 @@ pub(crate) async fn discard_import(
     ),
     responses(
         (status = 200, body = CreateImportBatchResponse),
-        (status = 400, body = crate::problem::Problem),
-        (status = 422, body = crate::problem::Problem),
-        (status = 401, body = crate::problem::Problem),
-        (status = 403, body = crate::problem::Problem),
-        (status = 404, body = crate::problem::Problem),
-        (
-            status = 409,
-            body = crate::problem::Problem,
-            description = "The run is not running"
-        ),
-        (status = 413, body = crate::problem::Problem),
-        (
-            status = 415,
-            body = crate::problem::Problem,
-            description = "The body is not JSON Lines (multipart/form-data is not accepted)"
-        )
+        crate::problem::openapi::StateConflict,
     )
 )]
 pub(crate) async fn create_import_batch(

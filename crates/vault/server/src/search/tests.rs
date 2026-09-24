@@ -37,6 +37,7 @@ pub(crate) struct Fixture {
     pub bo_handle: i64,
     pub jane_handle: i64,
     pub sam_handle: i64,
+    pub cy_handle: i64,
     pub nameless_handle: i64,
     // conversations
     pub ana_direct: i64,
@@ -326,11 +327,11 @@ pub(crate) async fn seeded() -> (sqlx::AnyPool, tempfile::TempDir, Fixture) {
     f.jane_handle = handle(&mut conn, a, "jane.doe@gmail.com", "imessage").await;
     f.sam_handle = handle(&mut conn, a, "sam@icloud.com", "imessage").await;
     f.nameless_handle = handle(&mut conn, a, "+15550009", "sms").await;
-    let cy_handle = handle(&mut conn, a, "+15550003", "whatsapp").await;
+    f.cy_handle = handle(&mut conn, a, "+15550003", "whatsapp").await;
 
     f.ana = contact(&mut conn, a, "Ana", &[f.ana_handle]).await;
     f.bo = contact(&mut conn, a, "Bo", &[f.bo_handle]).await;
-    f.cy = contact(&mut conn, a, "Cy", &[cy_handle]).await;
+    f.cy = contact(&mut conn, a, "Cy", &[f.cy_handle]).await;
     f.jane = contact(&mut conn, a, "Jane Doe", &[f.jane_handle]).await;
     f.sam = contact(&mut conn, a, "Sam", &[f.sam_handle]).await;
     f.nameless = contact(&mut conn, a, "", &[f.nameless_handle]).await;
@@ -1931,28 +1932,202 @@ mod measure_words {
         );
     }
 
+    /// `first-heard:` and `last-heard:` are the first and last message the
+    /// contact sent, not the first and last message of a conversation they
+    /// are in. Each case is a row of the table in #718.
     #[tokio::test]
-    async fn first_and_last_message() {
+    async fn first_and_last_heard_on_contacts() {
         let (pool, _dir, f) = seeded().await;
         let mut conn = pool.acquire().await.unwrap();
-        // Spec case 5.
+        let a = ACCOUNT;
+        // Spec case 5, in its heard form: Jane first wrote in 2018 and last
+        // wrote in May 2024.
         assert_eq!(
             run(
                 &mut conn,
                 ListKind::Contacts,
-                "first-message:<2020 last-message:>=2024-01-01 handle:@gmail.com"
+                "first-heard:<2020 last-heard:>=2024-01-01 handle:@gmail.com"
             )
             .await,
             vec![f.jane]
         );
+
+        // You wrote in 2019 and they replied in 2020.
+        let reply_h = handle(&mut conn, a, "+15550101", "sms").await;
+        let reply = contact(&mut conn, a, "Replier", &[reply_h]).await;
+        let reply_c = conversation(&mut conn, a, reply_h, "individual", None, &[reply_h]).await;
+        message(
+            &mut conn,
+            a,
+            msg(reply_c, "2019-04-01T10:00:00Z", true, None, "hi"),
+        )
+        .await;
+        message(
+            &mut conn,
+            a,
+            msg(reply_c, "2020-04-01T10:00:00Z", false, Some(reply_h), "hey"),
+        )
+        .await;
+        // You texted them in 2019 and they never replied.
+        let silent_h = handle(&mut conn, a, "+15550102", "sms").await;
+        let silent = contact(&mut conn, a, "Silent", &[silent_h]).await;
+        let silent_c = conversation(&mut conn, a, silent_h, "individual", None, &[silent_h]).await;
+        message(
+            &mut conn,
+            a,
+            msg(silent_c, "2019-04-02T10:00:00Z", true, None, "hi"),
+        )
+        .await;
+        // A 2015 group chat: one member never spoke, one first spoke in 2018.
+        let lurker_h = handle(&mut conn, a, "+15550103", "sms").await;
+        let lurker = contact(&mut conn, a, "Lurker", &[lurker_h]).await;
+        let late_h = handle(&mut conn, a, "+15550104", "sms").await;
+        let late = contact(&mut conn, a, "Late", &[late_h]).await;
+        let chat = handle(&mut conn, a, "chat400", "sms").await;
+        let old_group = conversation(
+            &mut conn,
+            a,
+            chat,
+            "group",
+            Some("2015"),
+            &[lurker_h, late_h, f.cy_handle],
+        )
+        .await;
+        message(
+            &mut conn,
+            a,
+            msg(
+                old_group,
+                "2015-06-01T10:00:00Z",
+                false,
+                Some(f.cy_handle),
+                "hi all",
+            ),
+        )
+        .await;
+        message(
+            &mut conn,
+            a,
+            msg(
+                old_group,
+                "2018-06-01T10:00:00Z",
+                false,
+                Some(late_h),
+                "finally",
+            ),
+        )
+        .await;
+        // A message Jane sent that a later import marked a duplicate, and one
+        // Ana sent in a trashed conversation: neither is hearing from them.
+        let jane_dup = message(
+            &mut conn,
+            a,
+            msg(
+                f.jane_direct,
+                "2025-06-01T10:00:00Z",
+                false,
+                Some(f.jane_handle),
+                "again",
+            ),
+        )
+        .await;
+        sqlx::query("UPDATE messages SET duplicate_of = $1 WHERE id = $2")
+            .bind(f.jane_2018)
+            .bind(jane_dup)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        message(
+            &mut conn,
+            a,
+            msg(
+                f.trashed_conv,
+                "2025-06-01T10:00:00Z",
+                false,
+                Some(f.ana_handle),
+                "gone",
+            ),
+        )
+        .await;
+
+        // Heard from in 2018: Ana (March), Jane (June), and Late, whose group
+        // began in 2015. Cy wrote first in that group, in 2015.
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "first-message:<2019").await,
-            sorted(vec![f.ana, f.jane])
+            run(&mut conn, ListKind::Contacts, "first-heard:2018").await,
+            sorted(vec![f.ana, f.jane, late])
         );
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "last-message:<2024-03").await,
+            run(&mut conn, ListKind::Contacts, "first-heard:2015").await,
+            vec![f.cy]
+        );
+        // Replier's first message is their 2020 reply, not your 2019 text.
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "first-heard:2020").await,
+            vec![reply]
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "first-heard:2019").await,
+            vec![f.bo]
+        );
+        // Sam is in the 2019 group but first wrote in the book club in 2024.
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "first-heard:2024").await,
+            vec![f.sam]
+        );
+        // Nobody was heard from in 2025: Jane's copy is a duplicate and Ana's
+        // message is in the trash.
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "last-heard:2025").await,
             Vec::<i64>::new()
         );
+        // A busy group chat makes nobody recently heard from: the book club's
+        // March 2024 message is Sam's, so Ana and Bo stay where they were.
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "last-heard:>=2024").await,
+            sorted(vec![f.jane, f.sam])
+        );
+        // Everyone not heard from since 2022, including the contacts who
+        // never sent a message: Silent, Lurker, and the nameless contact.
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "-last-heard:>=2022").await,
+            sorted(vec![f.ana, f.cy, f.nameless, reply, silent, lurker, late])
+        );
+        // A contact who never sent a message has no date to match.
+        for never in [silent, lurker, f.nameless] {
+            for q in ["first-heard:<2100", "last-heard:>=1970"] {
+                assert!(
+                    !run(&mut conn, ListKind::Contacts, q).await.contains(&never),
+                    "{q} matched a contact who never sent a message"
+                );
+            }
+        }
+    }
+
+    /// On Contacts the conversation's first and last message are not the
+    /// question, so the two words are not Contacts words.
+    #[test]
+    fn first_and_last_message_are_not_contacts_words() {
+        use crate::search::error::QueryErrorKind;
+        for q in ["first-message:2019", "last-message:<2022"] {
+            let e = err(ListKind::Contacts, q);
+            assert_eq!(e.kind, QueryErrorKind::WrongList, "{q}");
+            assert_eq!(e.span, 0..q.len(), "{q}");
+        }
+        for q in ["first-heard:2019", "last-heard:<2022"] {
+            for list in [ListKind::Conversations, ListKind::Messages] {
+                assert_eq!(
+                    err(list, q).kind,
+                    QueryErrorKind::WrongList,
+                    "{q} on {list:?}"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn first_and_last_message() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
         assert_eq!(
             run(&mut conn, ListKind::Conversations, "last-message:<2022").await,
             sorted(vec![f.ana_direct, f.archive_group])
@@ -2466,6 +2641,67 @@ mod docs {
         ]
         .into_iter()
         .all(|kind| has(a, kind) == has(b, kind))
+    }
+
+    const RULES_PAGE: &str = include_str!("../../../../../docs/architecture/search.md");
+
+    /// The words `docs/architecture/search.md` describes, each with the
+    /// lists its entry gives a meaning for: a `` ### `word:` `` heading, then
+    /// one `- **List**:` line per list, up to the next heading.
+    fn rules_page_words() -> Vec<(String, Vec<ListKind>)> {
+        let mut words: Vec<(String, Vec<ListKind>)> = Vec::new();
+        for line in RULES_PAGE.lines() {
+            if line.starts_with('#') {
+                if let Some(word) = line
+                    .strip_prefix("### `")
+                    .and_then(|rest| rest.strip_suffix(":`"))
+                {
+                    words.push((word.to_string(), Vec::new()));
+                } else if !words.is_empty() && line.starts_with("## ") {
+                    break;
+                }
+                continue;
+            }
+            let Some((_, lists)) = words.last_mut() else {
+                continue;
+            };
+            for (label, list) in [
+                ("- **Contacts**:", ListKind::Contacts),
+                ("- **Conversations**:", ListKind::Conversations),
+                ("- **Messages**:", ListKind::Messages),
+            ] {
+                if line.starts_with(label) {
+                    lists.push(list);
+                }
+            }
+        }
+        words
+    }
+
+    /// The architecture document says what every word means on every list
+    /// it is on, precisely enough to write its SQL from. A word added to the
+    /// registry with no entry there, or moved to another list without its
+    /// entry following (#718 moved two), would leave a meaning nobody wrote
+    /// down.
+    #[test]
+    fn the_rules_page_gives_every_word_a_meaning_on_exactly_its_lists() {
+        let documented = rules_page_words();
+        let names: Vec<&str> = documented.iter().map(|(w, _)| w.as_str()).collect();
+        let registered: Vec<&str> = FIELDS.iter().map(|f| f.word).collect();
+        assert_eq!(
+            names, registered,
+            "docs/architecture/search.md must have one entry per word, in the registry's order"
+        );
+        for (word, lists) in &documented {
+            let spec = lookup(word).expect("checked above");
+            assert!(
+                lists.len() == spec.lists.len() && is_same_lists(lists, spec.lists),
+                "docs/architecture/search.md gives {word}: a meaning on {}, but fields.rs \
+                 registers it for {}",
+                tiles_str(lists),
+                tiles_str(spec.lists),
+            );
+        }
     }
 
     /// Issue #328: the word-only check above says nothing about *which*

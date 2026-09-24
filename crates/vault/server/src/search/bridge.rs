@@ -259,3 +259,41 @@ pub(crate) fn contact_conversations_link(c2: &str) -> String {
         conversation_involves(c2, "ct.id")
     )
 }
+
+/// Which end of a contact's sent messages [`contact_heard`] reads.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Heard {
+    /// The earliest message the contact sent.
+    First,
+    /// The latest message the contact sent.
+    Last,
+}
+
+/// The timestamp of the first or last message contact `ct` sent: an
+/// incoming message whose sender is one of the contact's handles, in any
+/// conversation, direct or group, that is not in the trash, duplicates left
+/// out. NULL when the contact never sent one, which is how `first-heard:`
+/// matches no such contact and `-first-heard:` matches every one.
+///
+/// Your own messages and other people's messages in a shared group chat are
+/// not hearing from this contact, which is why this is not
+/// [`ListCtx::message_aggregate`]: that reads every message of every
+/// conversation the contact is in. `ix_messages_sender_timestamp` answers
+/// it per handle.
+///
+/// A free function for the same reason as [`contact_conversations_link`]:
+/// it is only meaningful when the base row is a contact.
+pub(crate) fn contact_heard(end: Heard) -> String {
+    let agg = match end {
+        Heard::First => "MIN",
+        Heard::Last => "MAX",
+    };
+    format!(
+        "(SELECT {agg}(mh.timestamp) FROM contact_handles chh \
+           JOIN messages mh ON mh.sender_handle_id = chh.handle_id AND mh.account_id = chh.account_id \
+           JOIN conversations ch ON ch.id = mh.conversation_id \
+           WHERE chh.account_id = ct.account_id AND chh.contact_id = ct.id \
+             AND mh.is_from_me = 0 AND mh.duplicate_of IS NULL AND {})",
+        super::emit::not_trashed_conversation("ch")
+    )
+}

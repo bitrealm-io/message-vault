@@ -94,7 +94,7 @@ Every export route takes the `export` scope on a session or an API token. A prog
 - `service:` — `imessage`, `sms`, `mms`, `rcs`, `whatsapp`.
 - `source:` — the backup family it was imported from: `imessage`, `whatsapp`, `sms`.
 - `import:` — the Import Run that brought it in; `#id` or `last`.
-- `date:`, `first-message:`, `last-message:` — a day, month, year, or relative span, with comparisons and ranges. A message's `timestamp` is a UTC instant. The span's edges are midnight in the account's `time_zone` (`GET /v1/accounts/{id}`), turned into instants before the comparison, so the same rule serves SQLite and Postgres and the `year=` filter on a conversation's messages.
+- `date:`, `first-message:`, `last-message:` — when the message was sent, and when its conversation's first and last message were sent; a day, month, year, or relative span, with comparisons and ranges. A message's `timestamp` is a UTC instant. The span's edges are midnight in the account's `time_zone` (`GET /v1/accounts/{id}`), turned into instants before the comparison, so the same rule serves SQLite and Postgres and the `year=` filter on a conversation's messages.
 - `attachment:` — `image`, `video`, `audio`, `document`, `pdf`, `contact`, `other`, `any`, `none`.
 - `filename:` — an attachment's file name; text or a `pre*` prefix.
 - `size:` — an attachment's size, with comparisons and ranges.

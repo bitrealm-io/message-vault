@@ -382,7 +382,11 @@ fn build_import_chunks(
     doc: &ConversationDocument,
     projections: &[Vec<AttachmentProjection>],
 ) -> Result<Vec<ImportChunk>> {
-    let mut builder = ChunkBuilder::new(project::document_header_line(doc)?, ctx.batch_size);
+    let mut builder = ChunkBuilder::new(
+        project::document_header_line(doc)?,
+        ctx.batch_size,
+        MAX_IMPORT_BODY_BYTES,
+    );
     for (i, msg) in doc.messages.iter().enumerate() {
         check_cancel(ctx.cfg.cancel.as_ref())?;
         let (line, guid) = if ctx.cfg.skip_attachments {
@@ -419,6 +423,8 @@ fn build_import_chunks(
 struct ChunkBuilder {
     header_line: Vec<u8>,
     max_messages: usize,
+    /// Largest body one chunk may reach, header included.
+    max_body_bytes: usize,
     chunks: Vec<ImportChunk>,
     body: Vec<u8>,
     messages: Vec<JournalMessage>,
@@ -426,11 +432,12 @@ struct ChunkBuilder {
 
 impl ChunkBuilder {
     /// Start with an empty chunk that already holds the conversation header.
-    fn new(header_line: Vec<u8>, max_messages: usize) -> Self {
+    fn new(header_line: Vec<u8>, max_messages: usize, max_body_bytes: usize) -> Self {
         Self {
             body: header_line.clone(),
             header_line,
             max_messages,
+            max_body_bytes,
             chunks: Vec::new(),
             messages: Vec::new(),
         }
@@ -440,7 +447,7 @@ impl ChunkBuilder {
     fn push(&mut self, line: &[u8], message: JournalMessage) {
         let full = !self.messages.is_empty()
             && (self.messages.len() >= self.max_messages
-                || self.body.len() + line.len() > MAX_IMPORT_BODY_BYTES);
+                || self.body.len() + line.len() > self.max_body_bytes);
         if full {
             self.seal();
         }
@@ -941,6 +948,7 @@ impl PrepareQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::run::NO_MESSAGE_COUNT_LIMIT;
     use sha2::{Digest, Sha256};
 
     fn resolver(trust_export: bool) -> DigestResolver {
@@ -1018,7 +1026,7 @@ mod tests {
     #[test]
     fn chunk_builder_splits_on_count() {
         let header = b"{\"h\":1}\n".to_vec();
-        let mut builder = ChunkBuilder::new(header.clone(), 2);
+        let mut builder = ChunkBuilder::new(header.clone(), 2, MAX_IMPORT_BODY_BYTES);
         for i in 0..5 {
             builder.push(
                 b"{}\n",
@@ -1032,5 +1040,38 @@ mod tests {
         assert_eq!(chunks.len(), 3);
         assert!(chunks.iter().all(|c| c.body.starts_with(&header)));
         assert_eq!(chunks[2].messages.len(), 1);
+    }
+
+    /// A conversation too big for one request is cut into chunks that each
+    /// stay within the byte limit, header included, and every message lands
+    /// in exactly one of them. A chunk may fill the limit exactly.
+    #[test]
+    fn chunk_builder_splits_on_body_bytes() {
+        let header = b"{\"h\":100}\n".to_vec();
+        assert_eq!(header.len(), 10);
+        let line = b"{\"t\":\"xx\"}\n";
+        assert_eq!(line.len(), 11);
+        // The header plus two lines is exactly 32 bytes.
+        let limit = 32;
+        let mut builder = ChunkBuilder::new(header.clone(), NO_MESSAGE_COUNT_LIMIT, limit);
+        for i in 0..5 {
+            builder.push(
+                line,
+                JournalMessage {
+                    file: "c.jsonl".into(),
+                    guid: format!("g{i}"),
+                },
+            );
+        }
+        let chunks = builder.finish();
+
+        let sizes: Vec<usize> = chunks.iter().map(|c| c.body.len()).collect();
+        assert_eq!(sizes, vec![32, 32, 21]);
+        assert!(chunks.iter().all(|c| c.body.starts_with(&header)));
+        let guids: Vec<&str> = chunks
+            .iter()
+            .flat_map(|c| c.messages.iter().map(|m| m.guid.as_str()))
+            .collect();
+        assert_eq!(guids, vec!["g0", "g1", "g2", "g3", "g4"]);
     }
 }

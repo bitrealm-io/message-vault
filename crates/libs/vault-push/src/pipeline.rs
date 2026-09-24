@@ -645,6 +645,18 @@ mod tests {
         assert!(!batch.would_overflow(&chunk(60, 1), 10, 100));
     }
 
+    /// A batch is sent as soon as it reaches either limit, not one chunk later.
+    #[test]
+    fn import_batch_is_full_at_either_limit() {
+        let mut batch = ImportBatch::new("imessage");
+        batch.push(0, chunk(40, 2));
+
+        assert!(!batch.is_full(3, 100));
+        assert!(batch.is_full(2, 100), "full at the message count");
+        assert!(batch.is_full(10, 40), "full at the byte size");
+        assert!(!batch.is_full(10, 41));
+    }
+
     #[test]
     fn import_batch_does_not_flush_on_count_when_unlimited() {
         let mut batch = ImportBatch::new("imessage");

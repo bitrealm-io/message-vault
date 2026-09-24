@@ -67,6 +67,38 @@ pub(crate) fn conversation_involves(conv: &str, contact_expr: &str) -> String {
     )
 }
 
+/// Whether the rows a search reaches on another list count when they are
+/// in the trash. A search leaves the trash out everywhere it looks unless
+/// the query carries `trashed:`, and then the trash counts everywhere that
+/// search looks: the list's own rows and the rows a word reaches on another
+/// list (#724). `compile` sets it once from the query, so no emitter decides
+/// for itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TrashScope {
+    /// A trashed row on the far side is not there.
+    LeftOut,
+    /// The query carries `trashed:`: a trashed row on the far side counts.
+    Counted,
+}
+
+impl TrashScope {
+    /// ` AND <not trashed>` for conversation alias `conv`, or nothing.
+    pub(crate) fn conversation_clause(self, conv: &str) -> String {
+        match self {
+            Self::LeftOut => format!(" AND {}", super::emit::not_trashed_conversation(conv)),
+            Self::Counted => String::new(),
+        }
+    }
+
+    /// ` AND <not trashed>` for contact alias `ct`, or nothing.
+    pub(crate) fn contact_clause(self, ct: &str) -> String {
+        match self {
+            Self::LeftOut => format!(" AND {}", super::emit::not_trashed_contact(ct)),
+            Self::Counted => String::new(),
+        }
+    }
+}
+
 /// Which list a fragment is for, and what it needs from the request.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ListCtx {
@@ -75,6 +107,8 @@ pub(crate) struct ListCtx {
     pub account_id: i64,
     /// The account's time zone, for the date words' boundaries.
     pub zone: chrono_tz::Tz,
+    /// Whether trashed rows on another list count.
+    pub trash: TrashScope,
 }
 
 impl ListCtx {
@@ -110,8 +144,8 @@ impl ListCtx {
             }
             ListKind::Contacts => {
                 out.push(&format!(
-                    "EXISTS (SELECT 1 FROM conversations c WHERE c.account_id = ct.account_id AND {} AND (",
-                    conversation_involves("c", "ct.id")
+                    "EXISTS (SELECT 1 FROM conversations c WHERE {} AND (",
+                    self.contact_conversations_link("c")
                 ));
                 inner(out);
                 out.push("))");
@@ -121,7 +155,10 @@ impl ListCtx {
 
     /// Wrap `inner`, written against message alias `m` (a non-duplicate
     /// message; conversation alias `c` is also in scope), so it is true of the
-    /// base row.
+    /// base row. On Contacts that is a message the contact sent
+    /// ([`Self::contact_sent_messages`]): a word that dates or counts
+    /// messages on Contacts asks about the person, not about every message
+    /// of every conversation they are in (#726).
     ///
     /// Never nest one wrapper inside another on the same list: two of them
     /// each open their own `FROM conversations c`, and the inner one would
@@ -144,9 +181,8 @@ impl ListCtx {
             }
             ListKind::Contacts => {
                 out.push(&format!(
-                    "EXISTS (SELECT 1 FROM conversations c JOIN messages m ON m.conversation_id = c.id AND m.duplicate_of IS NULL \
-                       WHERE c.account_id = ct.account_id AND {} AND (",
-                    conversation_involves("c", "ct.id")
+                    "EXISTS (SELECT 1 {} AND (",
+                    self.contact_sent_messages()
                 ));
                 inner(out);
                 out.push("))");
@@ -156,6 +192,8 @@ impl ListCtx {
 
     /// Wrap `inner`, written against contact alias `ct`, so it is true of the
     /// base row: the contact itself, or some contact linked to a participant.
+    /// A contact in the trash is reached only when the query carries
+    /// `trashed:` (#724).
     ///
     /// Never nest one wrapper inside another on the same list: two of them
     /// each open their own `FROM conversations c`, and the inner one would
@@ -169,8 +207,9 @@ impl ListCtx {
             }
             ListKind::Conversations => {
                 out.push(&format!(
-                    "EXISTS (SELECT 1 FROM contacts ct WHERE ct.account_id = c.account_id AND {} AND (",
-                    conversation_involves("c", "ct.id")
+                    "EXISTS (SELECT 1 FROM contacts ct WHERE ct.account_id = c.account_id AND {}{} AND (",
+                    conversation_involves("c", "ct.id"),
+                    self.trash.contact_clause("ct")
                 ));
                 inner(out);
                 out.push("))");
@@ -178,8 +217,9 @@ impl ListCtx {
             ListKind::Messages => {
                 out.push(&format!(
                     "EXISTS (SELECT 1 FROM conversations c JOIN contacts ct ON ct.account_id = c.account_id \
-                       WHERE c.id = m.conversation_id AND {} AND (",
-                    conversation_involves("c", "ct.id")
+                       WHERE c.id = m.conversation_id AND {}{} AND (",
+                    conversation_involves("c", "ct.id"),
+                    self.trash.contact_clause("ct")
                 ));
                 inner(out);
                 out.push("))");
@@ -201,22 +241,15 @@ impl ListCtx {
     /// A scalar subquery over the base row's non-duplicate messages: how
     /// many, the earliest timestamp, or the latest. On Messages and
     /// Conversations that is the one conversation's messages, reached
-    /// through the conversation index.
-    ///
-    /// A contact's messages are those of every conversation the contact is
-    /// in, trashed conversations left out, the same answer the contact
-    /// drawer gives, so `messages:>0` and the number in the drawer cannot
-    /// disagree once something is trashed. They are counted per
-    /// conversation in a subquery that mentions no outer alias, so SQLite
-    /// computes it once for the whole list and each contact sums the rows
-    /// of its conversations. The earlier shape counted every message of the
-    /// account again for each contact, with an `EXISTS` per message, and
-    /// `messages:0` took minutes on the demo vault (#413).
+    /// through the conversation index. On Contacts it is the messages the
+    /// contact sent ([`Self::contact_sent_messages`]), so `messages:0` is a
+    /// contact who never wrote and `last-message:` is when they last did,
+    /// the same answer the contact list's "Last heard from" column gives.
     pub fn message_aggregate(&self, agg: MessageAgg) -> String {
-        let (per_conversation, over_conversations) = match agg {
-            MessageAgg::Count => ("COUNT(*)", "COALESCE(SUM(mc.v), 0)"),
-            MessageAgg::First => ("MIN(m2.timestamp)", "MIN(mc.v)"),
-            MessageAgg::Last => ("MAX(m2.timestamp)", "MAX(mc.v)"),
+        let per_conversation = match agg {
+            MessageAgg::Count => "COUNT(*)",
+            MessageAgg::First => "MIN(m2.timestamp)",
+            MessageAgg::Last => "MAX(m2.timestamp)",
         };
         match self.list {
             ListKind::Messages => format!(
@@ -225,15 +258,33 @@ impl ListCtx {
             ListKind::Conversations => format!(
                 "(SELECT {per_conversation} FROM messages m2 WHERE m2.conversation_id = c.id AND m2.duplicate_of IS NULL)"
             ),
-            ListKind::Contacts => format!(
-                "(SELECT {over_conversations} FROM conversations c2 \
-                   JOIN (SELECT m2.conversation_id, {per_conversation} AS v FROM messages m2 WHERE m2.duplicate_of IS NULL GROUP BY m2.conversation_id) mc \
-                     ON mc.conversation_id = c2.id \
-                   WHERE {} AND {})",
-                contact_conversations_link("c2"),
-                super::emit::not_trashed_conversation("c2")
-            ),
+            ListKind::Contacts => {
+                let sent = match agg {
+                    MessageAgg::Count => "COUNT(*)",
+                    MessageAgg::First => "MIN(m.timestamp)",
+                    MessageAgg::Last => "MAX(m.timestamp)",
+                };
+                format!("(SELECT {sent} {})", self.contact_sent_messages())
+            }
         }
+    }
+
+    /// A WHERE fragment tying conversations alias `c2` to the base contact
+    /// `ct`, a conversation in the trash left out unless the query carries
+    /// `trashed:`. Only meaningful when the base row is a contact: on
+    /// another list `ct` is not in scope.
+    pub fn contact_conversations_link(&self, c2: &str) -> String {
+        format!(
+            "{}{}",
+            contact_conversations_link(c2),
+            self.trash.conversation_clause(c2)
+        )
+    }
+
+    /// The messages the base contact `ct` sent, as [`contact_sent_messages`]
+    /// writes them, with the query's trash scope.
+    pub fn contact_sent_messages(&self) -> String {
+        contact_sent_messages(self.trash)
     }
 }
 
@@ -248,7 +299,9 @@ pub(crate) enum MessageAgg {
     Last,
 }
 
-/// A WHERE fragment tying conversations alias `c2` to the base contact `ct`.
+/// A WHERE fragment tying conversations alias `c2` to the base contact `ct`,
+/// with no word about the trash: [`ListCtx::contact_conversations_link`]
+/// adds the query's trash scope.
 ///
 /// A free function rather than a [`ListCtx`] method on purpose: it is only
 /// meaningful when the base row is a contact, and a method would let a call
@@ -260,40 +313,29 @@ pub(crate) fn contact_conversations_link(c2: &str) -> String {
     )
 }
 
-/// Which end of a contact's sent messages [`contact_heard`] reads.
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum Heard {
-    /// The earliest message the contact sent.
-    First,
-    /// The latest message the contact sent.
-    Last,
-}
-
-/// The timestamp of the first or last message contact `ct` sent: an
-/// incoming message whose sender is one of the contact's handles, in any
-/// conversation, direct or group, that is not in the trash, duplicates left
-/// out. NULL when the contact never sent one, which is how `first-heard:`
-/// matches no such contact and `-first-heard:` matches every one.
+/// `FROM … WHERE …` over the messages contact `ct` sent: a received message
+/// (alias `m`) whose sender is one of the contact's handles, in any
+/// conversation (alias `c`), direct or group, duplicates left out, and a
+/// conversation in the trash left out unless `trash` says it counts. The
+/// one definition of "a message the contact sent": `date:`, `messages:`,
+/// `first-message:` and `last-message:` on Contacts, the contact list's
+/// `last_heard_at`, and the contact detail's `total_messages` all read it,
+/// so none of them can drift from the others (#725, #726).
 ///
 /// Your own messages and other people's messages in a shared group chat are
-/// not hearing from this contact, which is why this is not
-/// [`ListCtx::message_aggregate`]: that reads every message of every
+/// not the contact's, which is why this is not every message of every
 /// conversation the contact is in. `ix_messages_sender_timestamp` answers
 /// it per handle.
 ///
 /// A free function for the same reason as [`contact_conversations_link`]:
 /// it is only meaningful when the base row is a contact.
-pub(crate) fn contact_heard(end: Heard) -> String {
-    let agg = match end {
-        Heard::First => "MIN",
-        Heard::Last => "MAX",
-    };
+pub(crate) fn contact_sent_messages(trash: TrashScope) -> String {
     format!(
-        "(SELECT {agg}(mh.timestamp) FROM contact_handles chh \
-           JOIN messages mh ON mh.sender_handle_id = chh.handle_id AND mh.account_id = chh.account_id \
-           JOIN conversations ch ON ch.id = mh.conversation_id \
-           WHERE chh.account_id = ct.account_id AND chh.contact_id = ct.id \
-             AND mh.is_from_me = 0 AND mh.duplicate_of IS NULL AND {})",
-        super::emit::not_trashed_conversation("ch")
+        "FROM contact_handles chs \
+           JOIN messages m ON m.sender_handle_id = chs.handle_id AND m.account_id = chs.account_id \
+           JOIN conversations c ON c.id = m.conversation_id \
+           WHERE chs.account_id = ct.account_id AND chs.contact_id = ct.id \
+             AND m.is_from_me = 0 AND m.duplicate_of IS NULL{}",
+        trash.conversation_clause("c")
     )
 }

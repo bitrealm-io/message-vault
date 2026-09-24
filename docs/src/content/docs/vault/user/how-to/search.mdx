@@ -34,7 +34,7 @@ One language works on all three lists: **Contacts**, **Conversations**, and **Me
 - Dates name a span: `2024` is the year, `2024-05` the month, `2024-05-01` the day, `7d` or `2w` or `3m` or `1y` the last that long, plus `today` and `yesterday`. Add `>=` for from its start, `<` for before its start, `>` for after its end, `<=` for up to its end, or `a..b` for a range: `date:2019`, `date:>=2019`, `date:<1m`, `date:2019..2021`. Days start and end in the account's time zone (Settings → Profile), so a text sent at 11:59 pm on New Year's Eve belongs to the old year wherever the vault runs.
 - Sizes are `500k`, `1M`, `2G`, or plain bytes. Counts are plain numbers. Both take the same `>`, `>=`, `<`, `<=`, and `a..b`.
 - A comma inside a value means either: `service:imessage,sms`. Repeating a word means both: `tag:Work tag:Urgent`.
-- `-` in front of anything means not: `-tag:Work`, `-avocado`, `-(toast or guacamole)`. It includes the rows that have no value for the word, so `-last-heard:2019` includes contacts who never sent a message. `not` does the same as a word of its own: `not tag:Work`.
+- `-` in front of anything means not: `-tag:Work`, `-avocado`, `-(toast or guacamole)`. It includes the rows that have no value for the word, so `-last-message:2019` on Contacts includes contacts who never sent a message. `not` does the same as a word of its own: `not tag:Work`.
 - A space between two terms means both, and so does `and`. `or` means either, and binds looser than both: `a b or c` is `(a b) or c`. Parentheses group: `(toast or guacamole) avocado`.
 - `avoc*` matches words starting with avoc, and `tag:Hol*` a Message Tag whose name starts with Hol; `"exact phrase"` matches the phrase.
 - In message text, punctuation inside a word splits it into words that must come next to each other in that order: `o'brien` finds "O'Brien" and "o brien", and `a&b` finds "a & b" but not "b and a". A word that is only punctuation or emoji finds no message text.
@@ -45,7 +45,9 @@ A word the list does not have is refused with a message that says so, and offers
 
 A search is at most 2,048 bytes, 32 plain words, and 32 levels of parentheses. A very long search with many parts is refused with a message that says so.
 
-Each list leaves some rows out until a search asks for them. Everything in the Trash is left out until the search uses `trashed:`. On Messages, a copy of a message a later import already had is left out until the search uses `source:` or `import:`. On Conversations, a conversation holding only such copies is left out until the search uses `import:`.
+Each list leaves some rows out until a search asks for them. Everything in the Trash is left out until the search uses `trashed:`, and that holds everywhere the search looks: a conversation in the Trash does not count for a contact's `kind:`, `tag:`, `date:`, `messages:` or `conversations:`, and a contact in the Trash does not count for a conversation's `group:` or `name:`. Once the search uses `trashed:`, the Trash counts on both sides. On Messages, a copy of a message a later import already had is left out until the search uses `source:` or `import:`. On Conversations, a conversation holding only such copies is left out until the search uses `import:`.
+
+On Contacts, a word that counts or dates messages counts only the messages the contact sent you, in a direct or a group conversation. Your own messages and other people's messages in a shared group chat do not count, so `messages:0` is everyone who never messaged you, and `date:2019` is everyone who wrote to you in 2019. To find the people who were in a conversation active in 2019, whoever wrote, search Conversations: `with:jane date:2019`.
 
 ### The words
 
@@ -68,15 +70,13 @@ The tiles mark which lists accept the word: <ListTiles on="C" /> Contacts, <List
 | `service:` | how the message travelled | `imessage`, `sms`, `mms`, `rcs`, `whatsapp` | <ListTiles on="C V M" /> |
 | `source:` | which backup it was imported from | `imessage`, `whatsapp`, `sms` | <ListTiles on="V M" /> |
 | `import:` | brought in by this Import Run | `#id`, `last` | <ListTiles on="V M" /> |
-| `date:` | when a message was sent; on Contacts and Conversations, a conversation has a message from then | date | <ListTiles on="C V M" /> |
-| `first-message:` | the date of the conversation's first message | date | <ListTiles on="V M" /> |
-| `last-message:` | the date of the conversation's last message | date | <ListTiles on="V M" /> |
-| `first-heard:` | the date of the first message from this contact | date | <ListTiles on="C" /> |
-| `last-heard:` | the date of the last message from this contact | date | <ListTiles on="C" /> |
+| `date:` | when a message was sent; on Contacts, the contact sent a message then; on Conversations, the conversation has a message from then | date | <ListTiles on="C V M" /> |
+| `first-message:` | the date of the first message: on Contacts, the first the contact sent; elsewhere, the conversation's first | date | <ListTiles on="C V M" /> |
+| `last-message:` | the date of the last message: on Contacts, the last the contact sent; elsewhere, the conversation's last | date | <ListTiles on="C V M" /> |
 | `attachment:` | what is attached | `image`, `video`, `audio`, `document`, `pdf`, `contact`, `other`, `any`, `none` | <ListTiles on="V M" /> |
 | `filename:` | an attachment's file name | text, `pre*` | <ListTiles on="V M" /> |
 | `size:` | an attachment's size | `>1M`, `<500k`, `100k..2M` | <ListTiles on="V M" /> |
-| `messages:` | how many messages; on Contacts, in all the contact's conversations | `>100`, `0`, `1..10` | <ListTiles on="C V" /> |
+| `messages:` | how many messages; on Contacts, how many the contact sent | `>100`, `0`, `1..10` | <ListTiles on="C V" /> |
 | `conversations:` | how many conversations | count | <ListTiles on="C" /> |
 | `groups:` | how many Contact Groups | count | <ListTiles on="C" /> |
 | `participants:` | how many people in the conversation | count | <ListTiles on="V M" /> |
@@ -87,7 +87,7 @@ The tiles mark which lists accept the word: <ListTiles on="C" /> Contacts, <List
 
 <TypedQuery query='from:me to:"Jane Doe" (avocado or "guacamole night")' note="on Messages" />
 
-<TypedQuery query="-last-heard:>=2022" note="on Contacts" />
+<TypedQuery query="-last-message:>=2022" note="on Contacts" />
 
 Everyone you have not heard from since 2022, including people who never messaged you.
 

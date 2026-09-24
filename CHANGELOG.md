@@ -30,16 +30,19 @@ released versions carry their date on the heading.
   iPhone the same field sits under Processing Options as a fallback for a
   backup without the number. The number is recorded on the messages and is
   not added to your profile.
-- 2026-09-23 **Search contacts by when you last heard from them.**
-  `first-heard:` and `last-heard:` on Contacts find the first and last
-  message a contact sent you, in a direct or a group conversation:
-  `-last-heard:>=2022` lists everyone you have not heard from since 2022,
-  including people who never messaged you. They replace `first-message:` and
-  `last-message:` on Contacts, which counted your own messages and everyone
-  else's in a shared group chat. On Conversations and Messages,
-  `first-message:` and `last-message:` still mean the conversation's first
-  and last message. The Advanced Search contacts form's date fields are now
-  First Heard and Last Heard, and Trash's form leaves them out.
+- 2026-09-24 **Search contacts by what they sent you.** On Contacts, every
+  word that counts or dates messages now counts only the messages the
+  contact sent you, in a direct or a group conversation. `messages:0` is
+  everyone who never messaged you, which is what the Advanced Search form's
+  Never messaged always said; `date:2019` is everyone who wrote to you in
+  2019; and `first-message:` and `last-message:` are the first and last
+  message a contact sent, so `-last-message:>=2022` lists everyone you have
+  not heard from since 2022, including people who never messaged you. Your
+  own messages and other people's messages in a shared group chat no longer
+  count towards a contact. On Conversations and Messages the same words
+  still mean the conversation's messages. The contact drawer's message
+  count follows the same rule. The Advanced Search contacts form's date
+  fields are First message and Last message, and Trash's form has them too.
 - 2026-09-22 **One identity table, on the contact drawer and on an account's
   Profile.** An account's identities now show what a contact's do: the
   service, the address, when it was first and last seen, and how many
@@ -103,6 +106,15 @@ released versions carry their date on the heading.
   messages carried a sender that did not match the number on your profile.
   The prefix is now removed the same way for every message and for the list
   of addresses the backup sent from.
+- 2026-09-24 **The Trash stays out of a search everywhere the search looks.**
+  A contact whose only group chat was in the Trash still matched `kind:group`,
+  a conversation whose only Family member was in the Trash still matched
+  `group:Family`, and `conversations:` counted trashed conversations. A
+  search now leaves the Trash out on both sides until it uses `trashed:`,
+  and then the Trash counts on both sides, which is what searching the Trash
+  screen already did. The contact list's Last heard from date and its
+  ordering leave trashed conversations out too, so they agree with
+  `last-message:`.
 - 2026-09-23 **Excluding something from a search no longer hides the rows
   that have nothing to compare.** A search with `-` in front of a word left
   out every row with no value for that word, so those rows appeared under

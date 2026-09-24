@@ -1010,26 +1010,42 @@ mod free_text {
     /// for the list. The earlier shape scanned every message of the
     /// account again for each contact (#413).
     #[test]
-    fn contact_message_counts_come_from_one_grouped_count() {
+    /// The Contacts words that count or date messages, the contact list's
+    /// `last_heard_at`, and the contact drawer's count all read the one
+    /// `contact_sent_messages` fragment, so they cannot drift apart (#725).
+    /// This pins the words to it: an emitter that wrote its own idea of "a
+    /// message the contact sent" would compile to something else.
+    fn contact_message_words_read_the_one_sent_messages_query() {
+        use crate::search::bridge::{TrashScope, contact_sent_messages};
         for engine in [DbEngine::Sqlite, DbEngine::Postgres] {
-            let f = compile(CompileRequest {
-                list: ListKind::Contacts,
-                query: "messages:0",
-                account_id: ACCOUNT,
-                engine,
-                today: today(),
-                zone: chrono_tz::UTC,
-            })
-            .unwrap();
-            let sql = f.where_sql();
-            assert!(
-                sql.contains("(SELECT m2.conversation_id, COUNT(*) AS v FROM messages m2 WHERE m2.duplicate_of IS NULL GROUP BY m2.conversation_id) mc"),
-                "{engine:?}: {sql}"
-            );
-            assert!(
-                !sql.contains("COUNT(*) FROM messages m2 WHERE m2.account_id = ct.account_id"),
-                "{engine:?}: messages are counted per contact again: {sql}"
-            );
+            for (query, trash) in [
+                ("messages:0", TrashScope::LeftOut),
+                ("first-message:2019", TrashScope::LeftOut),
+                ("last-message:2019", TrashScope::LeftOut),
+                ("date:2019", TrashScope::LeftOut),
+                ("trashed:any messages:0", TrashScope::Counted),
+            ] {
+                let f = compile(CompileRequest {
+                    list: ListKind::Contacts,
+                    query,
+                    account_id: ACCOUNT,
+                    engine,
+                    today: today(),
+                    zone: chrono_tz::UTC,
+                })
+                .unwrap();
+                let sql = f.where_sql();
+                assert!(
+                    sql.contains(&contact_sent_messages(trash)),
+                    "{engine:?}: {query} does not read contact_sent_messages: {sql}"
+                );
+                if trash == TrashScope::Counted {
+                    assert!(
+                        !sql.contains(&contact_sent_messages(TrashScope::LeftOut)),
+                        "{engine:?}: {query} still leaves the trash out: {sql}"
+                    );
+                }
+            }
         }
     }
 
@@ -2103,6 +2119,155 @@ mod kind_words {
     }
 }
 
+/// A search leaves the trash out everywhere it looks, the rows a word
+/// reaches on another list included, unless the query carries `trashed:`;
+/// then the trash counts everywhere that search looks (#724).
+mod trash_across_lists {
+    use super::*;
+
+    /// A contact whose only conversation, and only message, is in the trash
+    /// is a contact with no conversation and no message until the query asks
+    /// for the trash.
+    #[tokio::test]
+    async fn a_contacts_words_leave_its_trashed_conversations_out() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        let a = ACCOUNT;
+        let binned_h = handle(&mut conn, a, "+15550201", "sms").await;
+        let binned = contact(&mut conn, a, "Binned", &[binned_h]).await;
+        sqlx::query(
+            "INSERT INTO participants (conversation_id, handle_id, contact_id) VALUES ($1, $2, $3)",
+        )
+        .bind(f.trashed_conv)
+        .bind(binned_h)
+        .bind(binned)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+        message(
+            &mut conn,
+            a,
+            Msg {
+                service: "sms",
+                ..msg(
+                    f.trashed_conv,
+                    "2019-03-01T10:00:00Z",
+                    false,
+                    Some(binned_h),
+                    "from the bin",
+                )
+            },
+        )
+        .await;
+        tag(&mut conn, a, "Bin", &[f.trashed_conv]).await;
+
+        for q in [
+            "kind:group",
+            "tag:Bin",
+            "service:sms",
+            "date:2019",
+            "conversations:>0",
+            "messages:>0",
+            "first-message:2019",
+            "last-message:2019",
+        ] {
+            assert!(
+                !run(&mut conn, ListKind::Contacts, q)
+                    .await
+                    .contains(&binned),
+                "{q} reached the trashed conversation"
+            );
+            let lifted = format!("trashed:any {q}");
+            assert!(
+                run(&mut conn, ListKind::Contacts, &lifted)
+                    .await
+                    .contains(&binned),
+                "{lifted} left the trashed conversation out"
+            );
+        }
+        // The complements follow: with the trash left out Binned has no
+        // conversation, and with it counted they have one.
+        assert!(
+            run(&mut conn, ListKind::Contacts, "conversations:0")
+                .await
+                .contains(&binned)
+        );
+        assert!(
+            !run(&mut conn, ListKind::Contacts, "trashed:any conversations:0")
+                .await
+                .contains(&binned)
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "tag:Bin").await,
+            Vec::<i64>::new()
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "trashed:any tag:Bin").await,
+            sorted(vec![f.ana, f.bo, binned])
+        );
+    }
+
+    /// A contact in the trash is not reached from a conversation or a
+    /// message: not by its Contact Group, not by its name, and not by its
+    /// id, until the query asks for the trash. Its handle still matches as
+    /// text, because the handle is the conversation's own row.
+    #[tokio::test]
+    async fn a_conversations_words_leave_a_trashed_contact_out() {
+        let (pool, _dir, f) = seeded().await;
+        let mut conn = pool.acquire().await.unwrap();
+        sqlx::query("INSERT INTO trashed_contacts (account_id, contact_id) VALUES ($1, $2)")
+            .bind(ACCOUNT)
+            .bind(f.ana)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        let anas = sorted(vec![f.ana_direct, f.archive_group, f.big_group]);
+        let with_id = format!("with:#{}", f.ana);
+        for q in [
+            "group:Family",
+            "name:ana",
+            "with:ana",
+            with_id.as_str(),
+            "ana",
+        ] {
+            assert_eq!(
+                run(&mut conn, ListKind::Conversations, q).await,
+                Vec::<i64>::new(),
+                "{q} reached the trashed contact"
+            );
+            let lifted = format!("trashed:no {q}");
+            assert_eq!(
+                run(&mut conn, ListKind::Conversations, &lifted).await,
+                anas,
+                "{lifted} left the trashed contact out"
+            );
+        }
+        assert_eq!(
+            run(&mut conn, ListKind::Conversations, "with:+15550001").await,
+            anas
+        );
+        // `group:none` is the complement: Ana's conversations are in it now.
+        assert!(
+            run(&mut conn, ListKind::Conversations, "group:none")
+                .await
+                .contains(&f.ana_direct)
+        );
+        // On Messages the sender is read the same way.
+        let from_id = format!("from:#{}", f.ana);
+        for q in ["from:ana", from_id.as_str(), "group:Family"] {
+            assert_eq!(
+                run(&mut conn, ListKind::Messages, q).await,
+                Vec::<i64>::new(),
+                "{q} reached the trashed contact"
+            );
+        }
+        assert_eq!(
+            run(&mut conn, ListKind::Messages, "trashed:no from:ana").await,
+            vec![f.ana_2018]
+        );
+    }
+}
+
 mod measure_words {
     use super::*;
 
@@ -2140,6 +2305,16 @@ mod measure_words {
             run(&mut conn, ListKind::Contacts, "date:2023").await,
             vec![f.bo]
         );
+        // On Contacts the message is one the contact sent: Sam's only
+        // February message is yours, and Ana never wrote in the 2019 group.
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "date:2024-02").await,
+            vec![f.jane]
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "date:2019").await,
+            vec![f.bo]
+        );
         assert_eq!(
             run(&mut conn, ListKind::Conversations, "date:2019").await,
             vec![f.archive_group]
@@ -2155,21 +2330,21 @@ mod measure_words {
         );
     }
 
-    /// `first-heard:` and `last-heard:` are the first and last message the
-    /// contact sent, not the first and last message of a conversation they
-    /// are in. Each case is a row of the table in #718.
+    /// On Contacts, `first-message:`, `last-message:`, `date:` and
+    /// `messages:` are about the messages the contact sent, not the messages
+    /// of a conversation they are in (#726). Each case is a row of the table
+    /// in #718.
     #[tokio::test]
-    async fn first_and_last_heard_on_contacts() {
+    async fn contacts_words_count_the_messages_the_contact_sent() {
         let (pool, _dir, f) = seeded().await;
         let mut conn = pool.acquire().await.unwrap();
         let a = ACCOUNT;
-        // Spec case 5, in its heard form: Jane first wrote in 2018 and last
-        // wrote in May 2024.
+        // Spec case 5: Jane first wrote in 2018 and last wrote in May 2024.
         assert_eq!(
             run(
                 &mut conn,
                 ListKind::Contacts,
-                "first-heard:<2020 last-heard:>=2024-01-01 handle:@gmail.com"
+                "first-message:<2020 last-message:>=2024-01-01 handle:@gmail.com"
             )
             .await,
             vec![f.jane]
@@ -2273,74 +2448,101 @@ mod measure_words {
         )
         .await;
 
-        // Heard from in 2018: Ana (March), Jane (June), and Late, whose group
-        // began in 2015. Cy wrote first in that group, in 2015.
+        // First wrote in 2018: Ana (March), Jane (June), and Late, whose
+        // group began in 2015. Cy wrote first in that group, in 2015.
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "first-heard:2018").await,
+            run(&mut conn, ListKind::Contacts, "first-message:2018").await,
             sorted(vec![f.ana, f.jane, late])
         );
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "first-heard:2015").await,
+            run(&mut conn, ListKind::Contacts, "first-message:2015").await,
             vec![f.cy]
         );
         // Replier's first message is their 2020 reply, not your 2019 text.
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "first-heard:2020").await,
+            run(&mut conn, ListKind::Contacts, "first-message:2020").await,
             vec![reply]
         );
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "first-heard:2019").await,
+            run(&mut conn, ListKind::Contacts, "first-message:2019").await,
             vec![f.bo]
         );
         // Sam is in the 2019 group but first wrote in the book club in 2024.
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "first-heard:2024").await,
+            run(&mut conn, ListKind::Contacts, "first-message:2024").await,
             vec![f.sam]
         );
-        // Nobody was heard from in 2025: Jane's copy is a duplicate and Ana's
-        // message is in the trash.
+        // Nobody wrote in 2025: Jane's copy is a duplicate and Ana's message
+        // is in the trash.
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "last-heard:2025").await,
+            run(&mut conn, ListKind::Contacts, "last-message:2025").await,
             Vec::<i64>::new()
         );
         // A busy group chat makes nobody recently heard from: the book club's
         // March 2024 message is Sam's, so Ana and Bo stay where they were.
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "last-heard:>=2024").await,
+            run(&mut conn, ListKind::Contacts, "last-message:>=2024").await,
             sorted(vec![f.jane, f.sam])
         );
         // Everyone not heard from since 2022, including the contacts who
         // never sent a message: Silent, Lurker, and the nameless contact.
         assert_eq!(
-            run(&mut conn, ListKind::Contacts, "-last-heard:>=2022").await,
+            run(&mut conn, ListKind::Contacts, "-last-message:>=2022").await,
             sorted(vec![f.ana, f.cy, f.nameless, reply, silent, lurker, late])
         );
         // A contact who never sent a message has no date to match.
         for never in [silent, lurker, f.nameless] {
-            for q in ["first-heard:<2100", "last-heard:>=1970"] {
+            for q in ["first-message:<2100", "last-message:>=1970"] {
                 assert!(
                     !run(&mut conn, ListKind::Contacts, q).await.contains(&never),
                     "{q} matched a contact who never sent a message"
                 );
             }
         }
+        // `date:` is the same question for one span: Replier wrote in 2020,
+        // and the 2019 text in their conversation is yours. Silent's 2019
+        // conversation and Lurker's busy group count for nothing.
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "date:2019").await,
+            vec![f.bo]
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "date:2020").await,
+            vec![reply]
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "date:2015").await,
+            vec![f.cy]
+        );
+        // `messages:0` is "never messaged" as the Advanced Search form says:
+        // Silent and Lurker have conversations with messages in them, none
+        // their own. Replier sent exactly one.
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "messages:0").await,
+            sorted(vec![f.nameless, silent, lurker])
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "messages:1").await,
+            sorted(vec![f.ana, f.cy, f.sam, reply, late])
+        );
     }
 
-    /// On Contacts the conversation's first and last message are not the
-    /// question, so the two words are not Contacts words.
+    /// `first-heard:` and `last-heard:` were replaced by `first-message:`
+    /// and `last-message:` on Contacts (#726). The language keeps no
+    /// spelling it used to have: an alias would be a second word for one
+    /// concept.
     #[test]
-    fn first_and_last_message_are_not_contacts_words() {
+    fn the_heard_words_are_gone_without_an_alias() {
         use crate::search::error::QueryErrorKind;
-        for q in ["first-message:2019", "last-message:<2022"] {
-            let e = err(ListKind::Contacts, q);
-            assert_eq!(e.kind, QueryErrorKind::WrongList, "{q}");
-            assert_eq!(e.span, 0..q.len(), "{q}");
-        }
         for q in ["first-heard:2019", "last-heard:<2022"] {
-            for list in [ListKind::Conversations, ListKind::Messages] {
+            for list in [
+                ListKind::Contacts,
+                ListKind::Conversations,
+                ListKind::Messages,
+            ] {
                 assert_eq!(
                     err(list, q).kind,
-                    QueryErrorKind::WrongList,
+                    QueryErrorKind::UnknownWord,
                     "{q} on {list:?}"
                 );
             }
@@ -2363,7 +2565,8 @@ mod measure_words {
 
     /// `messages:` on Contacts and the number in the contact drawer must
     /// agree once something is trashed: both leave trashed conversations
-    /// out (#328). Messages in the trashed group change nobody's count.
+    /// out (#328, #724). Ana's messages in the trashed group change her
+    /// count only when the query asks for the trash.
     #[tokio::test]
     async fn a_contacts_message_count_leaves_trashed_conversations_out() {
         let (pool, _dir, f) = seeded().await;
@@ -2416,6 +2619,16 @@ mod measure_words {
         assert_eq!(
             run(&mut conn, ListKind::Contacts, "conversations:>=3").await,
             sorted(vec![f.ana, f.bo, f.sam])
+        );
+        // Ana and Bo are in the trashed group too: it counts only when the
+        // query asks for the trash (#724).
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "conversations:4").await,
+            Vec::<i64>::new()
+        );
+        assert_eq!(
+            run(&mut conn, ListKind::Contacts, "trashed:any conversations:4").await,
+            sorted(vec![f.ana, f.bo])
         );
         assert_eq!(
             run(&mut conn, ListKind::Contacts, "groups:>0").await,

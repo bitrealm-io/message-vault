@@ -26,10 +26,13 @@ Each rule holds on every list, and each has its reason.
 - **A word is shared between lists only when it answers the same question on
   each.** `group:Family` asks "is this in the Contact Group" on every list it
   is on, reaching the contact from a conversation or a message. A word whose
-  question differs on one list gets its own word there: on Contacts the
-  question is when the contact wrote, so it is `last-heard:`, while
-  Conversations and Messages ask when the conversation's last message was,
-  which is `last-message:` (#718). Why: a shared word that answers different
+  question has no answer on a list is not on that list: `from:` is a
+  Messages word, because "who sent it" is a question about one message. A
+  word that counts or dates messages asks about the base row's own messages:
+  on Conversations and Messages those are the conversation's, and on
+  Contacts they are the messages the contact sent, so `last-message:` is when
+  the conversation last had a message on one list and when the contact last
+  wrote on the other (#726). Why: a shared word that answers different
   questions is read by its most natural meaning, and on the other list that
   reading is wrong.
 - **A word the list does not have is refused.** The query is refused whole,
@@ -49,11 +52,12 @@ Each rule holds on every list, and each has its reason.
   depends on the moment it was parsed.
 - **`q` and `-q` split the list.** `-q` is every row of the list that `q` does
   not match. A row with no value for the word does not match `q`, so it
-  matches `-q`: `-last-heard:>=2022` includes the contacts who never sent a
-  message. The one exception is a word that lifts a default (below), where
-  `q` and `-q` together cover the lifted list. Positive words stay strict: a
-  date word matches only rows that have that date. Why: a row missing from
-  both answers is invisible to every search and cannot be explained (#698).
+  matches `-q`: `-last-message:>=2022` on Contacts includes the contacts who
+  never sent a message. The one exception is a word that lifts a default
+  (below), where `q` and `-q` together cover the lifted list. Positive words
+  stay strict: a date word matches only rows that have that date. Why: a row
+  missing from both answers is invisible to every search and cannot be
+  explained (#698).
 - **An id that names nothing matches nothing, and is not refused.** `group:#99`
   for a Contact Group that does not exist, or that belongs to another account,
   matches no row, and `-group:#99` matches every row. Why: a Saved Search that
@@ -172,6 +176,9 @@ finds no message text.
 ## Lists
 
 Each list has one base row, and every word is written as a question about it.
+Some words have their answer on another list's rows: `kind:` on Contacts
+looks at the contact's conversations, and `group:` on Conversations looks at
+the conversation's contacts. `bridge.rs` is the code that reaches those rows.
 The three lists reach one another in the same few ways, and the word entries
 below use these phrases for them:
 
@@ -183,6 +190,16 @@ below use these phrases for them:
 - **The conversation's contacts** are the contacts of the conversation's
   participants, found the same way.
 - **The conversation's messages** are its messages that are not duplicates.
+- **The messages the contact sent** are the received messages whose sender
+  identity is one of the contact's, in any conversation, direct or group,
+  duplicates left out. The account holder's own messages and other people's
+  messages in a shared group are not among them. On Contacts every word that
+  counts or dates messages (`date:`, `messages:`, `first-message:`,
+  `last-message:`) asks about these, and so do the contact list's "Last heard
+  from" column and the contact detail's `total_messages`; all of them read
+  the one `contact_sent_messages` query in `bridge.rs`, so none can drift
+  from the others (#725, #726). Whether a contact took part in a conversation
+  active in a span is a Conversations question: `with:jane date:2019`.
 
 | List | Base row | Plain text searches | Defaults | Lifted by |
 |---|---|---|---|---|
@@ -200,12 +217,23 @@ else the name the source gave them in that conversation. The link through the
 identity is read at search time, so a name is found the moment an identity is
 linked to a contact.
 
-What the trash on the far side of a bridge does is not decided yet. A
-Contacts word that reaches the contact's conversations (`date:`, `kind:`,
-`tag:`, `service:`, `conversations:`) counts a conversation in the trash, while
-`messages:`, `first-heard:`, and `last-heard:` leave it out. A Conversations or
-Messages word that reaches the conversation's contacts counts a contact in the
-trash (#724).
+**A search leaves the trash out everywhere it looks, unless the query carries
+`trashed:`.** The table's defaults cover the list's own rows, and the same
+rule covers the rows a word reaches on another list: a conversation in the
+trash is not one of the contact's conversations, a message in it is not one
+the contact sent, and a contact in the trash is not one of the conversation's
+contacts, so a contact whose only group conversation is in the trash does not
+match `kind:group`, and a conversation whose only Family member is in the
+trash does not match `group:Family`. When the query carries `trashed:`, with
+any value, the trash counts everywhere that search looks, on both sides. The
+Trash screen searches with `trashed:yes`, so searching there is the same rule
+(#724). Why: a person who set a conversation aside does not expect it to
+answer for a contact, and a person looking in the trash expects to see
+everything that belongs there.
+
+The contact list's "Last heard from" column is not part of a search and is
+never asked for the trash, so it leaves trashed conversations out whatever
+the query says (#725).
 
 ## Words
 
@@ -329,35 +357,25 @@ and `-import:last` matches every row.
 
 Date.
 
-- **Contacts**: one of the messages of the contact's conversations, by anyone, was sent in the span. Whether it should be a message the contact sent is open (#726).
+- **Contacts**: one of the messages the contact sent was sent in the span.
 - **Conversations**: one of the conversation's messages was sent in the span.
 - **Messages**: the message was sent in the span.
 
 ### `first-message:`
 
-Date. No value when the conversation has no message that is not a duplicate.
+Date. No value when the contact never sent a message, or when the conversation has no message that is not a duplicate.
 
+- **Contacts**: the first message the contact sent was sent in the span.
 - **Conversations**: the conversation's first message was sent in the span.
 - **Messages**: the first message of the message's conversation was sent in the span.
 
 ### `last-message:`
 
-Date. No value when the conversation has no message that is not a duplicate.
+Date. No value on the same terms as `first-message:`.
 
+- **Contacts**: the last message the contact sent was sent in the span. The contact list's "Last heard from" column shows this date and `sort=last_heard` orders by it.
 - **Conversations**: the conversation's last message was sent in the span.
 - **Messages**: the last message of the message's conversation was sent in the span.
-
-### `first-heard:`
-
-Date. No value when the contact never sent a message.
-
-- **Contacts**: the first message the contact sent was sent in the span. A message the contact sent is one whose sender identity is one of the contact's, in any conversation, direct or group, that is not in the trash, duplicates left out. The account holder's own messages and other people's messages in a shared group do not count.
-
-### `last-heard:`
-
-Date. No value when the contact never sent a message.
-
-- **Contacts**: the last message the contact sent, counted as for `first-heard:`, was sent in the span. The contact list's "Last heard from" column counts a conversation in the trash (#725).
 
 ### `attachment:`
 
@@ -389,14 +407,14 @@ Size.
 
 Count.
 
-- **Contacts**: how many messages the contact's conversations hold, by anyone, conversations in the trash left out, so the count agrees with the contact drawer (#328). Whether it should count the messages the contact sent is open (#726).
+- **Contacts**: how many messages the contact sent. `messages:0` is a contact who never wrote, whatever was said to them; the contact detail's `total_messages` is the same number.
 - **Conversations**: how many messages the conversation holds.
 
 ### `conversations:`
 
 Count.
 
-- **Contacts**: how many conversations the contact is in.
+- **Contacts**: how many of the contact's conversations there are.
 
 ### `groups:`
 

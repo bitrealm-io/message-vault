@@ -56,7 +56,9 @@ const SEARCH_TARGETS: Record<
     scope: "trash",
     list: "conversations",
     placeholder: "Search Trash",
-    advancedMode: "trash",
+    // Trash sends one query to both the contacts and the conversations
+    // list; the contacts form offers only words both lists accept.
+    advancedMode: "contacts",
   },
 };
 

@@ -428,16 +428,28 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
     ] {
         sqlx::query(
             "INSERT INTO messages (
-                conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
-             ) VALUES (1, $1, 'imessage', $2, 0, 0, $3)",
+                conversation_id, account_id, source, timestamp, is_from_me,
+                sender_handle_id, sort_order, body
+             ) VALUES (1, $1, 'imessage', $2, 0, $3, 0, $4)",
         )
         .bind(account)
         .bind(ts)
+        .bind(peer)
         .bind(body)
         .execute(&mut *conn)
         .await
         .unwrap();
     }
+    // A reply of yours: not a message Sam sent, so not in `total_messages`.
+    sqlx::query(
+        "INSERT INTO messages (
+            conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
+         ) VALUES (1, $1, 'imessage', '2024-06-01T14:00:00Z', 1, 0, 'back at you')",
+    )
+    .bind(account)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
 
     // Group conversation that includes Sam, with 1 message.
     let group_chat = account_profile::link_account_handle(
@@ -468,10 +480,12 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
     .unwrap();
     sqlx::query(
         "INSERT INTO messages (
-            conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
-         ) VALUES (2, $1, 'imessage', '2024-07-01T12:00:00Z', 0, 0, 'group hi')",
+            conversation_id, account_id, source, timestamp, is_from_me,
+            sender_handle_id, sort_order, body
+         ) VALUES (2, $1, 'imessage', '2024-07-01T12:00:00Z', 0, $2, 0, 'group hi')",
     )
     .bind(account)
+    .bind(peer)
     .execute(&mut *conn)
     .await
     .unwrap();
@@ -517,7 +531,10 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
         detail.identities[0].address
     );
     assert_eq!(detail.identities[0].conversations, 2);
-    assert_eq!(detail.identities[0].direct_messages, 2);
+    // The identity table counts the messages held in the identity's
+    // conversations, your reply included (ADR-0015); `total_messages` above
+    // is the three Sam sent.
+    assert_eq!(detail.identities[0].direct_messages, 3);
     assert_eq!(detail.identities[0].group_messages, 1);
 }
 
@@ -1190,16 +1207,19 @@ async fn insert_direct_conversation(
     .execute(&mut *conn)
     .await
     .unwrap();
+    // Received messages, so the peer is their sender, as an import records.
     for (i, ts) in timestamps.iter().enumerate() {
         sqlx::query(
             "INSERT INTO messages (
-                conversation_id, account_id, source, service, timestamp, is_from_me, sort_order, body
-             ) VALUES ($1, $2, $3, $3, $4, 0, $5, 'hi')",
+                conversation_id, account_id, source, service, timestamp, is_from_me,
+                sender_handle_id, sort_order, body
+             ) VALUES ($1, $2, $3, $3, $4, 0, $5, $6, 'hi')",
         )
         .bind(conversation_id)
         .bind(account)
         .bind(service)
         .bind(ts)
+        .bind(handle_id)
         .bind(i as i64)
         .execute(&mut *conn)
         .await
@@ -1352,6 +1372,36 @@ async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
         true,
     )
     .await;
+    // Older wrote again this year, in a group chat now in the trash: the
+    // column leaves the trash out, as `last-message:` does (#725).
+    let binned_chat =
+        account_profile::link_account_handle(&mut conn, account, "chat-binned", HandleType::Other)
+            .await
+            .unwrap();
+    sqlx::query(
+        "INSERT INTO conversations (
+            id, account_id, chat_handle_id, conversation_type, group_title, source_file
+         ) VALUES (4, $1, $2, 'group', 'Binned', 'b.jsonl')",
+    )
+    .bind(account)
+    .bind(binned_chat)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    insert_message_from(
+        &mut conn,
+        account,
+        4,
+        "+15555550200",
+        "2025-02-01T00:00:00Z",
+        false,
+    )
+    .await;
+    sqlx::query("INSERT INTO trashed_conversations (account_id, conversation_id) VALUES ($1, 4)")
+        .bind(account)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
 
     let newest_first = names_and_last_heard(&mut conn, account, "-last_heard").await;
     assert_eq!(

@@ -30,15 +30,14 @@ export default function ContactsSearchFields({
   onNoHandleChange,
   services,
   onServicesChange,
-  firstHeardBound,
-  onFirstHeardBoundChange,
-  lastHeardBound,
-  onLastHeardBoundChange,
+  firstMessageBound,
+  onFirstMessageBoundChange,
+  lastMessageBound,
+  onLastMessageBoundChange,
   activity,
   onActivityChange,
   lockedByNoHandle,
   onLockedByNoHandleChange,
-  showHeard,
 }: {
   contactName: string;
   onContactNameChange: (value: string) => void;
@@ -54,28 +53,26 @@ export default function ContactsSearchFields({
   onNoHandleChange: (value: boolean) => void;
   services: Key[];
   onServicesChange: (value: Key[]) => void;
-  firstHeardBound: DateBoundFilter;
-  onFirstHeardBoundChange: (value: DateBoundFilter) => void;
-  lastHeardBound: DateBoundFilter;
-  onLastHeardBoundChange: (value: DateBoundFilter) => void;
+  firstMessageBound: DateBoundFilter;
+  onFirstMessageBoundChange: (value: DateBoundFilter) => void;
+  lastMessageBound: DateBoundFilter;
+  onLastMessageBoundChange: (value: DateBoundFilter) => void;
   activity: ActivityFilter;
   onActivityChange: (value: ActivityFilter) => void;
   lockedByNoHandle: {
     services: Key[];
-    firstHeardBound: DateBoundFilter;
-    lastHeardBound: DateBoundFilter;
+    firstMessageBound: DateBoundFilter;
+    lastMessageBound: DateBoundFilter;
     activity: ActivityFilter;
   } | null;
   onLockedByNoHandleChange: (
     value: {
       services: Key[];
-      firstHeardBound: DateBoundFilter;
-      lastHeardBound: DateBoundFilter;
+      firstMessageBound: DateBoundFilter;
+      lastMessageBound: DateBoundFilter;
       activity: ActivityFilter;
     } | null,
   ) => void;
-  /** False in Trash, whose query also runs on Conversations, where the heard words do not exist. */
-  showHeard: boolean;
 }) {
   const activityId = useId();
 
@@ -130,13 +127,13 @@ export default function ContactsSearchFields({
               onHandleChange("");
               onLockedByNoHandleChange({
                 services,
-                firstHeardBound,
-                lastHeardBound,
+                firstMessageBound,
+                lastMessageBound,
                 activity,
               });
               onServicesChange([]);
-              onFirstHeardBoundChange(EMPTY_DATE_BOUND);
-              onLastHeardBoundChange(EMPTY_DATE_BOUND);
+              onFirstMessageBoundChange(EMPTY_DATE_BOUND);
+              onLastMessageBoundChange(EMPTY_DATE_BOUND);
               onActivityChange("any");
               onNoHandleChange(true);
             } else {
@@ -144,8 +141,8 @@ export default function ContactsSearchFields({
               onHandleSavedChange("");
               if (lockedByNoHandle) {
                 onServicesChange(lockedByNoHandle.services);
-                onFirstHeardBoundChange(lockedByNoHandle.firstHeardBound);
-                onLastHeardBoundChange(lockedByNoHandle.lastHeardBound);
+                onFirstMessageBoundChange(lockedByNoHandle.firstMessageBound);
+                onLastMessageBoundChange(lockedByNoHandle.lastMessageBound);
                 onActivityChange(lockedByNoHandle.activity);
                 onLockedByNoHandleChange(null);
               }
@@ -157,22 +154,18 @@ export default function ContactsSearchFields({
         </Checkbox>
       </div>
       <ServiceMultiSelect value={services} onChange={onServicesChange} isDisabled={noHandle} />
-      {showHeard ? (
-        <>
-          <DateBoundField
-            label="First Heard"
-            value={firstHeardBound}
-            onChange={onFirstHeardBoundChange}
-            isDisabled={noHandle}
-          />
-          <DateBoundField
-            label="Last Heard"
-            value={lastHeardBound}
-            onChange={onLastHeardBoundChange}
-            isDisabled={noHandle}
-          />
-        </>
-      ) : null}
+      <DateBoundField
+        label="First message"
+        value={firstMessageBound}
+        onChange={onFirstMessageBoundChange}
+        isDisabled={noHandle}
+      />
+      <DateBoundField
+        label="Last message"
+        value={lastMessageBound}
+        onChange={onLastMessageBoundChange}
+        isDisabled={noHandle}
+      />
       <div className={`min-w-0 ${noHandle ? "opacity-40" : ""}`}>
         <label htmlFor={activityId} className={labelClass}>
           Activity

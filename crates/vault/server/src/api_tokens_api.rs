@@ -412,4 +412,76 @@ mod tests {
             StatusCode::FORBIDDEN
         );
     }
+
+    /// A rename answers the new label, trimmed, and the list shows it; an id
+    /// the account does not hold is a 404.
+    #[tokio::test]
+    async fn renaming_a_token_answers_and_stores_the_new_label() {
+        use crate::test_support::{
+            get_json, patch_json, patch_status, post_created_json, vault_with_account,
+        };
+        use axum::http::StatusCode;
+
+        let (vault, alice) = vault_with_account().await;
+        let state = vault.state.clone();
+        let collection = format!("/v1/accounts/{}/api-tokens", alice.account_id);
+        let (_, created): (String, serde_json::Value) = post_created_json(
+            &state,
+            &collection,
+            &alice.token,
+            serde_json::json!({ "label": "old name" }),
+        )
+        .await;
+        let id = created["id"].as_i64().unwrap();
+
+        let renamed: serde_json::Value = patch_json(
+            &state,
+            &format!("{collection}/{id}"),
+            &alice.token,
+            serde_json::json!({ "label": "  new name  " }),
+        )
+        .await;
+        assert_eq!(
+            renamed,
+            serde_json::json!({ "id": id, "label": "new name" })
+        );
+        let listed: serde_json::Value = get_json(&state, &collection, &alice.token).await;
+        assert_eq!(listed["items"][0]["label"], "new name", "{listed}");
+
+        assert_eq!(
+            patch_status(
+                &state,
+                &format!("{collection}/{}", id + 1000),
+                &alice.token,
+                serde_json::json!({ "label": "nobody" })
+            )
+            .await,
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    /// A token created without naming `can_export` may export: the default is
+    /// on, and the export route admits it.
+    #[tokio::test]
+    async fn a_token_created_without_can_export_may_export() {
+        use crate::test_support::{get_status, post_created_json, vault_with_account};
+        use axum::http::StatusCode;
+
+        let (vault, alice) = vault_with_account().await;
+        let state = vault.state.clone();
+        let (_, created): (String, serde_json::Value) = post_created_json(
+            &state,
+            &format!("/v1/accounts/{}/api-tokens", alice.account_id),
+            &alice.token,
+            serde_json::json!({ "label": "pull" }),
+        )
+        .await;
+        assert_eq!(created["can_export"], true);
+
+        let token = created["token"].as_str().unwrap();
+        assert_eq!(
+            get_status(&state, "/v1/exports", token).await,
+            StatusCode::OK
+        );
+    }
 }

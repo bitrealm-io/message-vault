@@ -7,13 +7,14 @@ import PathPicker from "../../components/PathPicker";
 import PhoneTokenField, { type PhoneTokenFieldHandle } from "../../components/PhoneTokenField";
 import Select, { ListBoxItem, selectItemClassName } from "../../components/Select";
 import TextField from "../../components/TextField";
+import TimeZoneField from "../../components/TimeZoneField";
 import {
   backupFolderHint,
   isAndroidSmsSource,
   needsOwnerEmails,
   splitEmails,
 } from "../../lib/androidSmsSources";
-import { EXPORT_SOURCES } from "../../lib/exportSources";
+import { EXPORT_SOURCES, IMAZING_SOURCE_ID } from "../../lib/exportSources";
 import {
   IMESSAGE_SOURCE_ID,
   type ImessagePathStats,
@@ -106,6 +107,9 @@ export type ImportFormFieldsProps = {
   onForceChange: (value: boolean) => void;
   obfuscate: boolean;
   onObfuscateChange: (value: boolean) => void;
+  /** The IANA zone iMazing dates are read in; shown only for that source. */
+  timeZone: string;
+  onTimeZoneChange: (zone: string) => void;
   running: boolean;
   /** Optional flushed owner phones (SBR commits draft before import). */
   onImport: (ownerPhones?: string[]) => void;
@@ -226,6 +230,7 @@ function AttachmentFields(props: {
 
 export default function ImportFormFields(props: ImportFormFieldsProps) {
   const isIos = props.source === "imessage-ios";
+  const isImazing = props.source === IMAZING_SOURCE_ID;
   const isAndroidSms = isAndroidSmsSource(props.source);
   const wantsEmails = needsOwnerEmails(props.source);
   const hasOwnerEmail = !wantsEmails || splitEmails(props.ownerEmails).length > 0;
@@ -679,6 +684,19 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
             >
               Obfuscate - All message data is anonymized.
             </Checkbox>
+          ) : null}
+          {isImazing ? (
+            <div className="w-full max-w-[28rem]">
+              <TimeZoneField
+                label="Time zone of the messages"
+                value={props.timeZone}
+                onChange={props.onTimeZoneChange}
+              />
+              <p className={hintStyle}>
+                Pre-filled from your profile. iMazing writes each message time without a zone, so
+                pick the one the phone was in.
+              </p>
+            </div>
           ) : null}
         </div>
       </CollapsibleSection>

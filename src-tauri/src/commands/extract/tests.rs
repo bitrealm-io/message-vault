@@ -11,6 +11,7 @@ fn test_options(owner_phones: Vec<String>) -> ExtractOptions {
         media_max_fps: "30".into(),
         media_min_size: "20M".into(),
         obfuscate: false,
+        timezone: String::new(),
         owner_phones,
         owner_emails: Vec::new(),
         attachment_root: String::new(),
@@ -372,4 +373,38 @@ fn whatsapp_ios_sets_backup_from_folder_and_business() {
         }
         other => panic!("{other:?}"),
     }
+}
+
+#[test]
+fn imazing_reads_dates_in_the_zone_the_screen_sent() {
+    // iMazing dates carry no zone. Dropping this field leaves
+    // `ExporterConfig.timezone` as None and the exporter reads every date in
+    // the machine's zone, so the same folder exports differently on
+    // different machines (#689).
+    let mut options = test_options(Vec::new());
+    options.timezone = "America/New_York".into();
+    let folder = tempfile::tempdir().unwrap();
+    let config = build_exporter_config(
+        "imazing",
+        folder.path().to_str().unwrap(),
+        "/tmp/out",
+        &options,
+    )
+    .unwrap();
+    assert!(matches!(config.source, SourceConfig::Imazing(_)));
+    assert_eq!(config.timezone.as_deref(), Some("America/New_York"));
+}
+
+#[test]
+fn imazing_with_no_zone_leaves_the_exporter_its_fallback() {
+    let options = test_options(Vec::new());
+    let folder = tempfile::tempdir().unwrap();
+    let config = build_exporter_config(
+        "imazing",
+        folder.path().to_str().unwrap(),
+        "/tmp/out",
+        &options,
+    )
+    .unwrap();
+    assert_eq!(config.timezone, None);
 }

@@ -55,6 +55,7 @@ export function restoreFormFromSnapshot(raw: unknown): ImportJobFormValues | nul
   const ownerEmails = isStringArray(r.ownerEmails) ? r.ownerEmails : [];
   if (typeof r.force !== "boolean") return null;
   if (typeof r.obfuscate !== "boolean") return null;
+  if (typeof r.timeZone !== "string") return null;
   if (typeof r.isAndroidSms !== "boolean") return null;
   if (typeof r.attachmentRoot !== "string") return null;
   if (typeof r.appleContacts !== "string") return null;
@@ -75,6 +76,7 @@ export function restoreFormFromSnapshot(raw: unknown): ImportJobFormValues | nul
     ownerEmails,
     force: r.force,
     obfuscate: r.obfuscate,
+    timeZone: r.timeZone,
     isAndroidSms: r.isAndroidSms,
     attachmentRoot: r.attachmentRoot,
     appleContacts: r.appleContacts,

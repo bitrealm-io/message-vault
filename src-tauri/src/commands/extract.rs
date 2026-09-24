@@ -147,6 +147,10 @@ pub struct ExtractArgs {
     pub media_min_size: Option<String>,
     /// When true, replace names and phone numbers with fake ones.
     pub obfuscate: Option<bool>,
+    /// Zone iMazing dates are read in: an IANA name (`America/New_York`) or a
+    /// fixed offset (`UTC-05:00`). The screen sends the account's zone unless
+    /// the person picked another in the advanced section.
+    pub timezone: Option<String>,
     /// Owner phone numbers for Android SMS exporters (SMS Backup & Restore).
     pub owner_phones: Option<Vec<String>>,
     /// Owner email addresses for SMS Backup+, whose archive is Gmail-backed
@@ -198,6 +202,7 @@ pub fn extract(
         obfuscate: args.obfuscate.unwrap_or(false),
         // `Form` trims and drops empty values itself, so the raw strings can
         // pass through unchanged.
+        timezone: args.timezone.unwrap_or_default(),
         owner_phones: args.owner_phones.unwrap_or_default(),
         owner_emails: args.owner_emails.unwrap_or_default(),
         attachment_root: args.attachment_root.unwrap_or_default(),
@@ -283,6 +288,7 @@ struct ExtractOptions {
     media_max_fps: String,
     media_min_size: String,
     obfuscate: bool,
+    timezone: String,
     owner_phones: Vec<String>,
     owner_emails: Vec<String>,
     attachment_root: String,
@@ -465,6 +471,11 @@ fn build_exporter_config(
         }
         "imazing" => {
             form.input = path.to_string();
+            // iMazing dates carry no zone, so the exporter reads them in this
+            // one. Without it the exporter falls back to the machine's zone,
+            // and the same folder gives different instants on different
+            // machines.
+            form.timezone.clone_from(&options.timezone);
             Exporter::Imazing
         }
         "whatsapp-android" => {

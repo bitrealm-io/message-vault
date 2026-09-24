@@ -58,6 +58,13 @@ for arg in "$@"; do
   fi
 done
 
+# Every test process runs under a memory cap, so a mutant that allocates
+# without end fails its test instead of exhausting the machine; why and how
+# much: scripts/mutants-test-runner.sh.
+HOST="$(rustc -vV | sed -n 's/^host: //p')"
+RUNNER_VAR="CARGO_TARGET_$(tr 'a-z-' 'A-Z_' <<<"${HOST}")_RUNNER"
+export "${RUNNER_VAR}=${SCRIPT_DIR}/mutants-test-runner.sh"
+
 echo "==> cargo mutants"
 status=0
 env -u MV_TEST_POSTGRES_URL cargo mutants "${CONFIG[@]}" --output "${OUT}" "$@" || status=$?

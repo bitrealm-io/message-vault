@@ -17,6 +17,11 @@ name: Mutants
 # The summary job joins the shards into one table on the run's summary page
 # and keeps every missed mutant, with its log and diff, as a workflow
 # artifact.
+#
+# Every test runs under a memory cap (scripts/mutants-test-runner.sh). A
+# mutant that allocates without end once took the whole runner down with it,
+# and the shard's results were lost; now its test fails and it counts as
+# caught.
 
 on:
   workflow_dispatch:

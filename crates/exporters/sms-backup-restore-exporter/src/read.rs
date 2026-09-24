@@ -729,4 +729,72 @@ mod tests {
         assert!(!stage.exists(), "no attachment files were written");
         assert_eq!(report.attachments_saved, 0);
     }
+
+    /// Read `messages` wrapped in `<smses>` with +15555550100 as the owner.
+    fn read_xml(messages: &str) -> Vec<ConversationDocument> {
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("input.xml");
+        fs::write(&input, format!("<smses>{messages}</smses>")).unwrap();
+        let owner = vec!["+15555550100".to_string()];
+        let (docs, report) = read_backup(&input, opts(&owner, None, false)).unwrap();
+        assert!(report.errors.is_empty(), "{:?}", report.errors);
+        docs
+    }
+
+    fn roster(doc: &ConversationDocument) -> Vec<(&str, Option<&str>)> {
+        doc.conversation
+            .participants
+            .iter()
+            .map(|p| (p.handle.as_deref().unwrap(), p.display_name.as_deref()))
+            .collect()
+    }
+
+    #[test]
+    fn a_contact_name_names_the_peer_of_a_direct_conversation() {
+        // Only sent messages, which name the peer but carry no sender.
+        let docs = read_xml(
+            r#"<sms protocol="0" address="+15555550101" date="1400773261000" type="2" body="hi" contact_name="Sam"/>"#,
+        );
+        assert_eq!(roster(&docs[0]), [("+15555550101", Some("Sam"))]);
+    }
+
+    #[test]
+    fn a_group_sender_name_names_only_that_sender() {
+        let docs = read_xml(
+            r#"<mms date="1400773400000" msg_box="1" address="+15555550101~+15555550102~+15555550100" contact_name="Lee"><parts><part ct="text/plain" text="hi"/></parts><addrs><addr address="+15555550102" type="137"/><addr address="+15555550101" type="151"/><addr address="+15555550100" type="151"/></addrs></mms>"#,
+        );
+        assert_eq!(
+            roster(&docs[0]),
+            [("+15555550101", None), ("+15555550102", Some("Lee"))]
+        );
+        assert_eq!(
+            docs[0].messages[0].sender_display_name.as_deref(),
+            Some("Lee")
+        );
+    }
+
+    #[test]
+    fn a_subject_is_kept_and_a_null_one_dropped() {
+        let docs = read_xml(
+            r#"<sms protocol="0" address="+15555550101" date="1400773261000" type="1" body="one" subject="Plans"/><sms protocol="0" address="+15555550101" date="1400773262000" type="1" body="two" subject="null"/>"#,
+        );
+        let subjects: Vec<_> = docs[0]
+            .messages
+            .iter()
+            .map(|m| m.subject.as_deref())
+            .collect();
+        assert_eq!(subjects, [Some("Plans"), None]);
+    }
+
+    #[test]
+    fn an_attachment_carries_its_payload_digest() {
+        let docs = read_xml(
+            r#"<mms date="1400773400000" msg_box="1" address="+15555550101"><parts><part ct="image/jpeg" name="pic.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550101" type="137"/></addrs></mms>"#,
+        );
+        assert_eq!(
+            docs[0].messages[0].attachments[0].digest_sha256.as_deref(),
+            // SHA-256 of "hello", the decoded payload.
+            Some("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
+        );
+    }
 }

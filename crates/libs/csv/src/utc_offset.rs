@@ -97,4 +97,41 @@ mod tests {
         assert!(parse_utc_offset("America/New_York").is_err());
         assert!(parse_utc_offset("Not/AZone").is_err());
     }
+
+    #[test]
+    fn parses_every_accepted_shape() {
+        for (raw, secs) in [
+            ("UTC", 0),
+            ("utc", 0),
+            ("Z", 0),
+            ("z", 0),
+            ("UTC-5", -5 * 3600),
+            ("UTC+9", 9 * 3600),
+            ("UTC+05:30", 5 * 3600 + 30 * 60),
+            ("UTC-14:00", -14 * 3600),
+            ("UTC+14:00", 14 * 3600),
+        ] {
+            assert_eq!(
+                parse_utc_offset(raw).unwrap().local_minus_utc(),
+                secs,
+                "{raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn refuses_offsets_past_fourteen_hours_and_bad_minutes() {
+        for raw in [
+            "UTC+14:30",
+            "UTC+14:01",
+            "UTC+15",
+            "UTC-15:00",
+            "UTC+05:60",
+            "UTC+5:5:5",
+            "UTC5",
+            "",
+        ] {
+            assert!(parse_utc_offset(raw).is_err(), "{raw}");
+        }
+    }
 }

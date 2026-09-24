@@ -671,3 +671,147 @@ fn every_kind_of_sidecar_is_skipped() {
         "sidecars must not count as an export: {err}"
     );
 }
+
+#[test]
+fn an_mbox_export_is_detected_and_converts() {
+    let source = tempfile::tempdir().unwrap();
+    write_fixture(source.path(), OutputFormat::Mbox);
+    assert_eq!(
+        detect_ir_export(source.path()).unwrap().format,
+        OutputFormat::Mbox
+    );
+    let destination = tempfile::tempdir().unwrap();
+
+    let report = convert_export(
+        source.path(),
+        &config(source.path(), destination.path(), OutputFormat::Jsonl),
+    )
+    .unwrap();
+
+    assert_eq!(report.detected_format, "mbox");
+    let jsonl = find_file(destination.path(), "jsonl");
+    assert_eq!(
+        read_conversation_jsonl(&jsonl).unwrap().messages[0].text,
+        "hello reexport"
+    );
+}
+
+/// A link to nothing is neither a file nor a folder, and must not stop
+/// detection: reading it as an EML folder would fail the whole conversion.
+#[cfg(unix)]
+#[test]
+fn a_dangling_link_in_the_folder_is_passed_over() {
+    let dir = tempfile::tempdir().unwrap();
+    write_fixture(dir.path(), OutputFormat::Jsonl);
+    std::os::unix::fs::symlink(dir.path().join("gone"), dir.path().join("link")).unwrap();
+
+    assert_eq!(
+        detect_ir_export(dir.path()).unwrap().format,
+        OutputFormat::Jsonl
+    );
+    assert_eq!(
+        list_artifacts(dir.path(), OutputFormat::Eml)
+            .unwrap_err()
+            .to_string(),
+        format!("no eml artifacts found in {}", dir.path().display())
+    );
+}
+
+/// Only a conversation file of the detected format counts: a sidecar, a
+/// file of another type, or a folder named like a conversation file is not
+/// one.
+#[test]
+fn list_artifacts_takes_only_conversation_files_of_the_format() {
+    for format in [
+        OutputFormat::Json,
+        OutputFormat::Jsonl,
+        OutputFormat::Csv,
+        OutputFormat::Mbox,
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        write_fixture(dir.path(), format);
+        let ext = format.as_str();
+        let real = find_file(dir.path(), ext);
+        let body = fs::read(&real).unwrap();
+        // The same bytes under names that are not conversation files.
+        for name in [
+            format!(".hidden.{ext}"),
+            format!("conversation.{ext}.tmp"),
+            "conversation.meta.json".to_string(),
+            format!("conversation.{ext}.txt"),
+        ] {
+            fs::write(dir.path().join(name), &body).unwrap();
+        }
+        fs::create_dir(dir.path().join(format!("folder.{ext}"))).unwrap();
+        // Every other format's conversation file, which this format must skip.
+        for other in [
+            OutputFormat::Json,
+            OutputFormat::Jsonl,
+            OutputFormat::Csv,
+            OutputFormat::Mbox,
+        ] {
+            if other != format {
+                let side = tempfile::tempdir().unwrap();
+                write_fixture(side.path(), other);
+                let file = find_file(side.path(), other.as_str());
+                fs::copy(&file, dir.path().join(format!("other.{}", other.as_str()))).unwrap();
+            }
+        }
+
+        assert_eq!(
+            list_artifacts(dir.path(), format).unwrap(),
+            [real],
+            "{format:?}"
+        );
+    }
+}
+
+/// Sidecars are skipped by name, folders included: a half-written EML
+/// folder is not a conversation.
+#[test]
+fn an_eml_folder_with_a_temporary_name_is_skipped() {
+    let dir = tempfile::tempdir().unwrap();
+    write_fixture(dir.path(), OutputFormat::Jsonl);
+    fs::create_dir(dir.path().join("+15555550101.tmp")).unwrap();
+    fs::write(dir.path().join("+15555550101.tmp/0001.eml"), "From: x\n").unwrap();
+
+    assert_eq!(
+        detect_ir_export(dir.path()).unwrap().format,
+        OutputFormat::Jsonl
+    );
+}
+
+/// An SMS Backup & Restore file counts when it is named `smses.xml` or its
+/// first line opens `<smses`. No other file does.
+#[test]
+fn list_artifacts_takes_an_smses_file_by_name_or_by_first_line() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("smses.xml"), "<?xml version=\"1.0\"?>\n").unwrap();
+    fs::write(
+        dir.path().join("backup.xml"),
+        "<smses count=\"0\"></smses>\n",
+    )
+    .unwrap();
+    fs::write(dir.path().join("settings.xml"), "<map></map>\n").unwrap();
+    write_fixture(&dir.path().join("json"), OutputFormat::Json);
+    let json = find_file(&dir.path().join("json"), "json");
+    fs::copy(&json, dir.path().join("other.json")).unwrap();
+
+    assert_eq!(
+        list_artifacts(dir.path(), OutputFormat::Xml).unwrap(),
+        [dir.path().join("backup.xml"), dir.path().join("smses.xml")]
+    );
+}
+
+#[test]
+fn a_jsonl_file_with_a_json_name_is_not_a_jsonl_conversation() {
+    let dir = tempfile::tempdir().unwrap();
+    write_fixture(dir.path(), OutputFormat::Jsonl);
+    let real = find_file(dir.path(), "jsonl");
+    fs::copy(&real, dir.path().join("renamed.json")).unwrap();
+
+    assert_eq!(
+        list_artifacts(dir.path(), OutputFormat::Jsonl).unwrap(),
+        [real]
+    );
+}

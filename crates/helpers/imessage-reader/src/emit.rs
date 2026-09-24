@@ -785,6 +785,36 @@ mod tests {
         assert_eq!(pointed.in_reply_to_guid.as_deref(), Some("guid-1"));
     }
 
+    /// A poll is exported; a vote on it and a row that adds an option are
+    /// noise Apple's own export skips. Messages writes a vote as reaction
+    /// type 4000, and an update as a poll balloon that points at another
+    /// row's poll.
+    #[test]
+    fn a_poll_is_kept_and_its_votes_and_updates_are_noise() {
+        const POLLS: &str = "com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.messages.Polls";
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let base = || FixtureDb::messages(&session).remove(1);
+
+        assert!(!is_poll_noise(&base()), "a plain message");
+
+        let mut poll = base();
+        poll.balloon_bundle_id = Some(POLLS.to_string());
+        assert!(poll.is_poll());
+        assert!(!is_poll_noise(&poll), "the poll itself");
+
+        let mut vote = base();
+        vote.associated_message_type = Some(4000);
+        vote.associated_message_guid = Some(poll.guid.clone());
+        assert!(is_poll_noise(&vote), "a vote");
+
+        let mut update = base();
+        update.guid = "guid-update".to_string();
+        update.balloon_bundle_id = Some(POLLS.to_string());
+        update.associated_message_guid = Some(poll.guid.clone());
+        assert!(is_poll_noise(&update), "an added option");
+    }
+
     /// A tapback row read off the message's own fields: reaction 2000 is a
     /// heart added, 3000 a heart removed, and the target guid is the part
     /// prefix stripped off `associated_message_guid`.
@@ -881,6 +911,64 @@ mod tests {
         assert_eq!(handles, vec![FRIEND_PHONE, FRIEND_EMAIL]);
         assert_eq!(message.text, "Saturday works");
         assert_eq!(message.sender_display_name.as_deref(), Some("Robin"));
+    }
+
+    /// A chat is a group when it has more than one other member, or when
+    /// someone named it, and a one-to-one chat with no name is not.
+    #[test]
+    fn a_chat_is_a_group_by_its_members_or_its_name() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+        let chat = |rowid: i32, display_name: Option<&str>| Chat {
+            rowid,
+            chat_identifier: String::new(),
+            service_name: None,
+            display_name: display_name.map(str::to_string),
+        };
+        // Chat 1 has one other member, chat 2 has two.
+        assert_eq!(participants_for(&session, &chat(1, None)).1, "individual");
+        assert_eq!(participants_for(&session, &chat(2, None)).1, "group");
+        assert_eq!(
+            participants_for(&session, &chat(1, Some("Just us"))).1,
+            "group"
+        );
+        assert_eq!(
+            participants_for(&session, &chat(1, Some(""))).1,
+            "individual"
+        );
+    }
+
+    /// Fields a row carries through to its record: the subject when it has
+    /// one, the reply count on a thread's first message, and MMS for a
+    /// non-iMessage row with an attachment.
+    #[test]
+    fn a_record_keeps_the_subject_the_reply_count_and_the_mms_kind() {
+        let fixture = FixtureDb::write();
+        let session = fixture.session();
+
+        let mut messages = FixtureDb::messages(&session);
+        let mut reply = messages.remove(1);
+        reply.subject = Some("Plans".to_string());
+        reply.num_replies = 3;
+        let (_, record) = build_record(&session, &reply).unwrap();
+        assert_eq!(record.subject.as_deref(), Some("Plans"));
+        assert_eq!(record.imessage.unwrap().num_replies, Some(3));
+
+        reply.subject = Some(String::new());
+        reply.num_replies = 0;
+        let (_, record) = build_record(&session, &reply).unwrap();
+        assert_eq!(record.subject, None);
+        assert_eq!(record.imessage.unwrap().num_replies, None);
+
+        reply.service = Some("SMS".to_string());
+        let (_, record) = build_record(&session, &reply).unwrap();
+        assert_eq!(record.message_kind, "sms");
+
+        let mut photo = messages.remove(0);
+        photo.service = Some("SMS".to_string());
+        let (_, record) = build_record(&session, &photo).unwrap();
+        assert_eq!(record.attachments.len(), 1);
+        assert_eq!(record.message_kind, "mms");
     }
 
     /// The owner's address rides on each row as `destination_caller_id`

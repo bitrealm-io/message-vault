@@ -1775,3 +1775,66 @@ fn an_unreadable_2xx_answer_is_not_retried() {
     );
     assert!(journal_events(dir.path(), "file_ok").is_empty());
 }
+
+/// When a conversation's chunk would overflow the pending batch, the batch
+/// goes first and the chunk starts the next one: every message still reaches
+/// the vault, and no request carries more than `batch_size` messages.
+///
+/// Guards the flush-then-add step in `queue_chunk`. A chunk dropped after
+/// the forced flush never reaches the vault, yet its conversation would be
+/// journaled as done, so a later push would never send it.
+#[test]
+fn a_chunk_that_overflows_the_pending_batch_is_sent_in_the_next_one() {
+    let server = MockServer::start();
+    let _auth = mock_session(&server);
+    let _run = mock_import_run(&server, 7);
+    let first = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_includes("guid-a1")
+            .body_excludes("guid-b1")
+            .body_excludes("guid-b2");
+        then.status(200).json_body(json!({
+            "messages": 1,
+            "messages_appended": 1,
+            "conversations": 1
+        }));
+    });
+    let second = server.mock(|when, then| {
+        when.method(POST)
+            .path("/v1/imports/7/batches")
+            .body_includes("guid-b1")
+            .body_includes("guid-b2")
+            .body_excludes("guid-a1");
+        then.status(200).json_body(json!({
+            "messages": 2,
+            "messages_appended": 2,
+            "conversations": 1
+        }));
+    });
+
+    let dir = tempdir().unwrap();
+    write_jsonl(dir.path(), &sample_doc_for("+15555550101", "guid-a1"));
+    let mut two_messages = sample_doc_for("+15555550102", "guid-b1");
+    let mut reply = two_messages.messages[0].clone();
+    reply.guid = "guid-b2".into();
+    reply.timestamp_unix_ms += 1_000;
+    two_messages.messages.push(reply);
+    write_jsonl(dir.path(), &two_messages);
+    let cfg = VaultPushConfig {
+        batch_size: 2,
+        ..text_only_config(dir.path(), server.base_url())
+    };
+
+    let report = run(&cfg, None).unwrap();
+
+    assert!(report.ok, "{:?}", report.results);
+    assert_eq!(first.calls(), 1, "the one-message batch goes out alone");
+    assert_eq!(second.calls(), 1, "the two-message chunk goes out next");
+    assert_eq!(report.conversations_ok, 2);
+    assert_eq!(report.messages_attempted, 3);
+    assert_eq!(report.messages_inserted, 3);
+    let mut guids = journaled_guids(dir.path());
+    guids.sort();
+    assert_eq!(guids, vec!["guid-a1", "guid-b1", "guid-b2"]);
+}

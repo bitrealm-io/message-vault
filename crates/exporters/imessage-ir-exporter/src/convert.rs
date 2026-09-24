@@ -778,6 +778,49 @@ mod tests {
         }
     }
 
+    /// Every Apple-specific field the program sends lands on the document
+    /// under the same name, with the same value.
+    #[test]
+    fn apple_fields_are_copied_field_for_field() {
+        let json = |value: &str| Some(serde_json::json!([value]));
+        let text = |value: &str| Some(value.to_string());
+        let record = ImessageRecord {
+            is_reply: true,
+            in_reply_to_guid: text("parent"),
+            thread_originator_part: Some(1),
+            num_replies: Some(2),
+            is_deleted: true,
+            send_effect: text("Slam"),
+            shared_location: text("started"),
+            announcement: text("renamed"),
+            read_receipt_rfc3339: text("2021-01-01T00:00:00+00:00"),
+            parts: json("part"),
+            edits: json("edit"),
+            tapbacks: json("tapback"),
+            app: json("app"),
+            balloon_bundle_id: text("com.example.app"),
+            balloon_kind: text("app"),
+            associated_guid: text("target"),
+            associated_part: Some(3),
+            tapback_kind: text("loved"),
+            tapback_emoji: text("🔥"),
+            tapback_action: text("add"),
+        };
+        let expected = serde_json::to_value(&record).unwrap();
+        assert_eq!(
+            serde_json::to_value(imessage_to_ir(record)).unwrap(),
+            expected
+        );
+
+        let mut with_fields = message_record("+15555550122", "g1", false);
+        with_fields.imessage = Some(ImessageRecord {
+            is_reply: true,
+            ..ImessageRecord::default()
+        });
+        let (message, _) = message_to_ir(with_fields, AttachmentEmbed::Embed, true);
+        assert!(message.imessage.is_some_and(|fields| fields.is_reply));
+    }
+
     #[test]
     fn outgoing_rows_take_the_owner_as_sender() {
         let (incoming, _) = message_to_ir(

@@ -743,3 +743,23 @@ fn audio_becomes_mp3_and_a_small_mp3_is_left_alone() {
         assert_eq!(fs::read(&mp3).unwrap(), b"ID3 small mp3", "{mode:?}");
     }
 }
+
+#[test]
+fn collect_media_files_keeps_media_and_leaves_everything_else() {
+    let dir = tempfile::tempdir().unwrap();
+    let nested = dir.path().join("attachments").join("a1");
+    fs::create_dir_all(&nested).unwrap();
+    fs::write(dir.path().join("photo.png"), b"png").unwrap();
+    fs::write(dir.path().join("receipt.pdf"), b"pdf").unwrap();
+    fs::write(nested.join("clip.mp4"), b"mp4").unwrap();
+    fs::write(nested.join("clip.msgmedia.tmp.mp4"), b"partial").unwrap();
+
+    let files = collect_media_files(dir.path()).unwrap();
+
+    assert_eq!(
+        files,
+        vec![nested.join("clip.mp4"), dir.path().join("photo.png")],
+        "only media, found in subfolders too, sorted; never a PDF or an \
+         ffmpeg temp file"
+    );
+}

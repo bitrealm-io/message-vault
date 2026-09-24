@@ -75,6 +75,87 @@ impl ExportTransforms {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{FormatConfig, MediaConfig, ObfuscateConfig, OutputFormat, SourceConfig};
+    use media::MaxResolution;
+    use std::path::PathBuf;
+
+    fn config(obfuscate: ObfuscateConfig, media: MediaConfig) -> ExporterConfig {
+        ExporterConfig {
+            inputs: Vec::new(),
+            output: PathBuf::from("out"),
+            timezone: None,
+            obfuscate,
+            media,
+            cancel: None,
+            log: None,
+            progress: None,
+            output_format: OutputFormat::Json,
+            resume: false,
+            source: SourceConfig::Format(FormatConfig {}),
+        }
+    }
+
+    #[test]
+    fn from_config_obfuscates_when_the_flag_is_set_without_a_seed() {
+        let t = ExportTransforms::from_config(&config(
+            ObfuscateConfig {
+                enabled: true,
+                seed: None,
+            },
+            MediaConfig::default(),
+        ));
+        assert!(t.obfuscate);
+        assert_eq!(t.obfuscate_seed, None);
+    }
+
+    #[test]
+    fn from_config_obfuscates_when_only_a_seed_is_given() {
+        let t = ExportTransforms::from_config(&config(
+            ObfuscateConfig {
+                enabled: false,
+                seed: Some("abc123".to_string()),
+            },
+            MediaConfig::default(),
+        ));
+        assert!(t.obfuscate);
+        assert_eq!(t.obfuscate_seed.as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn from_config_leaves_obfuscation_off_without_flag_or_seed() {
+        let t = ExportTransforms::from_config(&config(
+            ObfuscateConfig::default(),
+            MediaConfig::default(),
+        ));
+        assert!(!t.obfuscate);
+    }
+
+    #[test]
+    fn from_config_carries_the_media_mode_compress_options_and_sinks() {
+        let compress = CompressOptions {
+            max_resolution: MaxResolution::P720,
+            max_fps: 24.0,
+            min_size_bytes: 1234,
+            skip_efficient: false,
+        };
+        let mut cfg = config(
+            ObfuscateConfig::default(),
+            MediaConfig {
+                mode: MediaMode::Compress,
+                compress: compress.clone(),
+            },
+        );
+        cfg.log = Some(LogSink::new(|_| {}));
+        cfg.progress = Some(ProgressSink::new(|_| {}));
+
+        let t = ExportTransforms::from_config(&cfg);
+
+        assert_eq!(t.media, MediaMode::Compress);
+        assert_eq!(t.compress, compress);
+        assert!(t.log.is_some());
+        assert!(t.progress.is_some());
+        assert!(t.needs_media_tools());
+    }
 
     #[test]
     fn obfuscate_disables_copy_and_media_tools() {

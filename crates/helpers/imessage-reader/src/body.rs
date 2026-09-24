@@ -23,7 +23,6 @@ pub(crate) struct AttachmentResolver {
     /// Attachment indices that have a GUID (prefer GUID matching for these).
     has_guid: HashSet<usize>,
     claimed: HashSet<usize>,
-    next_positional: usize,
     len: usize,
 }
 
@@ -42,7 +41,6 @@ impl AttachmentResolver {
             by_guid,
             has_guid,
             claimed: HashSet::new(),
-            next_positional: 0,
             len: attachments.len(),
         }
     }
@@ -58,22 +56,16 @@ impl AttachmentResolver {
             self.claimed.insert(idx);
             return idx;
         }
-        // Prefer unclaimed rows that have no GUID — those are the ones the
-        // positional fallback is meant for. Never reuse a GUID-claimed index.
-        if let Some(idx) =
-            (0..self.len).find(|i| !self.claimed.contains(i) && !self.has_guid.contains(i))
-        {
-            self.claimed.insert(idx);
-            if idx >= self.next_positional {
-                self.next_positional = idx + 1;
-            }
-            return idx;
-        }
-        while self.next_positional < self.len && self.claimed.contains(&self.next_positional) {
-            self.next_positional += 1;
-        }
-        let idx = self.next_positional;
-        self.next_positional += 1;
+        // Take the first unclaimed row, preferring rows that have no GUID,
+        // which are the ones the positional fallback is meant for. A claimed
+        // row is never reused; with none left the index runs past the rows,
+        // and callers drop it.
+        let unclaimed = |i: &usize| !self.claimed.contains(i);
+        let idx = (0..self.len)
+            .filter(unclaimed)
+            .find(|i| !self.has_guid.contains(i))
+            .or_else(|| (0..self.len).find(unclaimed))
+            .unwrap_or(self.len);
         self.claimed.insert(idx);
         idx
     }
@@ -181,5 +173,74 @@ mod tests {
         assert_eq!(resolver.resolve(&att_range(None)), 2);
         // Third range resolves the remaining GUID attachment.
         assert_eq!(resolver.resolve(&att_range(Some("guid-b"))), 1);
+    }
+
+    /// With every GUID-less row taken, a range with no GUID falls back to
+    /// the next row nobody has claimed, stepping over the ones already
+    /// matched by GUID.
+    #[test]
+    fn positional_takes_the_next_unclaimed_row_when_every_row_has_a_guid() {
+        let attachments = vec![
+            stub_attachment(Some("guid-a")),
+            stub_attachment(Some("guid-b")),
+            stub_attachment(Some("guid-c")),
+        ];
+        let mut resolver = AttachmentResolver::new(&attachments);
+        assert_eq!(resolver.resolve(&att_range(Some("guid-a"))), 0);
+        assert_eq!(resolver.resolve(&att_range(None)), 1);
+        assert_eq!(resolver.resolve(&att_range(Some("guid-c"))), 2);
+        // Nothing is left, so the index runs past the rows.
+        assert_eq!(resolver.resolve(&att_range(None)), 3);
+        assert_eq!(resolver.resolve(&att_range(None)), 3);
+    }
+
+    /// A row with a GUID that no range names is still the message's, so a
+    /// range with no GUID takes it once the GUID-less rows are gone, even
+    /// when it comes before them.
+    #[test]
+    fn positional_takes_an_earlier_unclaimed_guid_row_before_running_out() {
+        let attachments = vec![stub_attachment(Some("guid-a")), stub_attachment(None)];
+        let mut resolver = AttachmentResolver::new(&attachments);
+        assert_eq!(resolver.resolve(&att_range(None)), 1);
+        assert_eq!(resolver.resolve(&att_range(None)), 0);
+    }
+
+    /// A message body whose ranges refer to one attachment by GUID and one
+    /// by position keeps both, and a body with more attachment ranges than
+    /// the message has rows keeps only the rows that exist.
+    #[test]
+    fn referenced_indices_keep_every_row_the_body_refers_to_and_no_more() {
+        let fixture = crate::test_support::FixtureDb::write();
+        let session = fixture.session();
+        let mut message = crate::test_support::FixtureDb::messages(&session).remove(1);
+        let attachments = vec![stub_attachment(None), stub_attachment(Some("guid-b"))];
+
+        message.components = vec![BubbleComponent::Run(vec![
+            att_range(Some("guid-b")),
+            att_range(None),
+        ])];
+        assert_eq!(
+            referenced_attachment_indices(&message, &attachments),
+            vec![0, 1]
+        );
+
+        message.components = vec![BubbleComponent::Run(vec![
+            att_range(None),
+            att_range(None),
+            att_range(None),
+        ])];
+        assert_eq!(
+            referenced_attachment_indices(&message, &attachments),
+            vec![0, 1],
+            "the third range has no row to point at"
+        );
+
+        // A body that never parsed refers to every row.
+        message.components = Vec::new();
+        assert_eq!(
+            referenced_attachment_indices(&message, &attachments),
+            vec![0, 1]
+        );
+        assert!(referenced_attachment_indices(&message, &[]).is_empty());
     }
 }

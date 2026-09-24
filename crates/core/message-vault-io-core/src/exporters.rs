@@ -971,20 +971,142 @@ mod tests {
         }
     }
 
+    const SEED: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    /// Every case that needs ffmpeg hidden lives in this one test, because
+    /// the tools folder is process-wide and `cargo test` runs tests on
+    /// threads: another test restoring it would show ffmpeg again mid-case.
     #[test]
-    fn imessage_convert_without_ffmpeg_uses_locked_copy() {
+    fn without_ffmpeg_only_unobfuscated_convert_and_compress_are_refused() {
         let dir = tempfile::tempdir().unwrap();
         let _restore = RestoreToolsDir;
         media::set_tools_dir(Some(dir.path().to_path_buf()));
-        let form = Form {
+        assert!(!media::ffmpeg_available());
+
+        let form = |attachment_media, obfuscate, seed: &str| Form {
+            input: std::env::current_dir().unwrap().display().to_string(),
             output: "out".into(),
-            attachment_media: AttachmentMedia::Convert,
+            owner_phones: "+15555550100".into(),
+            attachment_media,
+            obfuscate,
+            obfuscate_seed: seed.into(),
             ..Form::default()
         };
-        let err = form.to_config(Exporter::Imessage).unwrap_err();
+
+        for exporter in [Exporter::Imessage, Exporter::GoSmsPro] {
+            for media in [AttachmentMedia::Convert, AttachmentMedia::Compress] {
+                let err = form(media, false, "").to_config(exporter).unwrap_err();
+                assert!(
+                    err.iter().any(|e| e.contains("ffmpeg")),
+                    "{exporter:?} {media:?}: {err:?}"
+                );
+                // Obfuscation replaces media with placeholders, so no ffmpeg.
+                form(media, true, "")
+                    .to_config(exporter)
+                    .unwrap_or_else(|e| panic!("{exporter:?} {media:?} obfuscated: {e:?}"));
+                form(media, false, SEED)
+                    .to_config(exporter)
+                    .unwrap_or_else(|e| panic!("{exporter:?} {media:?} seeded: {e:?}"));
+            }
+            for media in [AttachmentMedia::Clone, AttachmentMedia::Disabled] {
+                form(media, false, "")
+                    .to_config(exporter)
+                    .unwrap_or_else(|e| panic!("{exporter:?} {media:?}: {e:?}"));
+            }
+        }
+
+        let err = form(AttachmentMedia::Convert, false, "")
+            .to_config(Exporter::Imessage)
+            .unwrap_err();
         assert!(
             err.iter().any(|e| e == CONVERT_COMPRESS_FFMPEG_REQUIRED),
             "{err:?}"
         );
+    }
+
+    #[test]
+    fn imessage_with_attachments_disabled_does_not_copy_them() {
+        let form = Form {
+            output: "out".into(),
+            attachment_media: AttachmentMedia::Disabled,
+            ..Form::default()
+        };
+        let config = form.to_config(Exporter::Imessage).unwrap();
+        let SourceConfig::Apple(apple) = config.source else {
+            panic!("expected Apple");
+        };
+        assert_eq!(apple.copy_method, "disabled");
+        assert_eq!(config.media.mode, MediaMode::Disabled);
+    }
+
+    #[test]
+    fn attachment_media_parses_every_wire_name() {
+        for (wire, media) in [
+            ("clone", AttachmentMedia::Clone),
+            ("convert", AttachmentMedia::Convert),
+            ("compress", AttachmentMedia::Compress),
+            ("disabled", AttachmentMedia::Disabled),
+        ] {
+            assert_eq!(AttachmentMedia::parse(wire), Some(media));
+        }
+        assert_eq!(AttachmentMedia::parse("copy-everything"), None);
+    }
+
+    #[test]
+    fn compress_options_reject_bad_values() {
+        let form = |fps: &str, min_size: &str| Form {
+            media_max_fps: fps.into(),
+            media_min_size: min_size.into(),
+            ..Form::default()
+        };
+        assert_eq!(
+            form("abc", "20M").compress_options().unwrap_err(),
+            "Max fps must be a number."
+        );
+        assert_eq!(
+            form("", "20M").compress_options().unwrap_err(),
+            "Max fps is required for Compress."
+        );
+        assert_eq!(
+            form("30", " ").compress_options().unwrap_err(),
+            "Min size is required for Compress."
+        );
+        assert!(form("30", "lots").compress_options().is_err());
+    }
+
+    #[test]
+    fn compress_settings_reach_the_config() {
+        let form = Form {
+            input: std::env::current_dir().unwrap().display().to_string(),
+            output: "out".into(),
+            owner_phones: "+15555550100".into(),
+            attachment_media: AttachmentMedia::Compress,
+            // Obfuscated, so the test does not depend on ffmpeg being installed.
+            obfuscate: true,
+            media_max_resolution: MaxResolution::P720,
+            media_max_fps: "24".into(),
+            media_min_size: "5M".into(),
+            media_skip_efficient: false,
+            ..Form::default()
+        };
+        let expected = media::CompressOptions {
+            max_resolution: MaxResolution::P720,
+            max_fps: 24.0,
+            min_size_bytes: 5 * 1024 * 1024,
+            skip_efficient: false,
+        };
+        assert_eq!(form.compress_options().unwrap(), expected);
+        for exporter in [Exporter::Imessage, Exporter::GoSmsPro] {
+            let config = form.to_config(exporter).unwrap();
+            assert_eq!(config.media.mode, MediaMode::Compress);
+            assert_eq!(config.media.compress, expected, "{exporter:?}");
+        }
+
+        let bad = Form {
+            media_max_fps: "abc".into(),
+            ..form
+        };
+        let err = bad.to_config(Exporter::GoSmsPro).unwrap_err();
+        assert_eq!(err, vec!["Max fps must be a number.".to_string()]);
     }
 }

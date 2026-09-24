@@ -149,10 +149,7 @@ fn options_from_export_config(config: &ExporterConfig) -> Result<ExportOptions> 
         bail!("imessage-ir-exporter requires SourceConfig::Apple");
     };
 
-    let db_path = match config.primary_input() {
-        Some(path) if !path.as_os_str().is_empty() => path.to_path_buf(),
-        _ => default_macos_db_path(),
-    };
+    let db_path = db_path_for(config.primary_input());
     let platform = platform_for(source, &db_path)?;
 
     if source.backup_password.is_some() && platform != Platform::Ios {
@@ -201,6 +198,15 @@ fn options_from_export_config(config: &ExporterConfig) -> Result<ExportOptions> 
         cancel: config.cancel.clone(),
         resume: config.resume,
     })
+}
+
+/// The input the person chose, or this Mac's own Messages database when
+/// they left it empty.
+fn db_path_for(input: Option<&Path>) -> PathBuf {
+    match input {
+        Some(path) if !path.as_os_str().is_empty() => path.to_path_buf(),
+        _ => default_macos_db_path(),
+    }
 }
 
 /// The platform the source names, or the one the backup's layout shows.
@@ -295,6 +301,39 @@ mod tests {
             resume: false,
             source: SourceConfig::Apple(apple),
         }
+    }
+
+    /// A backup password only unlocks an iPhone backup, so a Mac `chat.db`
+    /// with one is refused rather than exported with the password ignored.
+    #[test]
+    fn a_backup_password_is_refused_for_a_mac_chat_db() {
+        let dir = tempfile::tempdir().unwrap();
+        let chat = dir.path().join("chat.db");
+        fs::write(&chat, b"sqlite").unwrap();
+        let err = options_from_export_config(&apple_cfg(
+            &chat,
+            AppleConfig {
+                platform: Some(ApplePlatform::MacOs),
+                backup_password: Some("secret".into()),
+                ..AppleConfig::default()
+            },
+        ))
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("it can only be used with iOS backups"),
+            "{err}"
+        );
+    }
+
+    /// An input left empty means this Mac's own Messages database.
+    #[test]
+    fn an_empty_input_is_the_macs_own_database() {
+        let chat = Path::new("/backups/chat.db");
+        assert_eq!(db_path_for(Some(chat)), chat);
+        assert_eq!(db_path_for(Some(Path::new(""))), default_macos_db_path());
+        assert_eq!(db_path_for(None), default_macos_db_path());
+        assert!(default_macos_db_path().ends_with("Library/Messages/chat.db"));
     }
 
     #[test]
@@ -485,6 +524,98 @@ mod tests {
                 .any(|line| line.contains(convert::SKIPPED_UNREADABLE_MESSAGE)),
             "{:#?}",
             result.messages
+        );
+    }
+
+    /// A handwriting message's SVG comes from the program as text, not a
+    /// file. A JSON export writes it under `attachments/`, and an attachment
+    /// with no file says it is missing.
+    #[cfg(unix)]
+    #[test]
+    fn inline_and_missing_attachments_reach_a_file_backed_export() {
+        use crate::helper::tests::{fake_helper, source_line, spawn_fake};
+        use imessage_reader_protocol::{
+            Attachment, AttachmentSource, Conversation, Event, Message, PROTOCOL_VERSION,
+        };
+        use message_ir_format::read_conversation_json;
+
+        const SVG: &str = "<svg></svg>";
+        let attachment = |source| Attachment {
+            original_name: None,
+            mime_type: Some("image/svg+xml".into()),
+            is_sticker: false,
+            transcription: None,
+            sticker_effect: None,
+            source,
+        };
+        let events = [
+            Event::Conversation(Conversation {
+                chat_identifier: "+15555550122".into(),
+                conversation_type: "individual".into(),
+                group_title: None,
+                participants: Vec::new(),
+            }),
+            Event::Message(Box::new(Message {
+                chat_identifier: "+15555550122".into(),
+                guid: "g1".into(),
+                timestamp_unix_ms: 1_609_459_200_000,
+                outgoing: false,
+                service: "iMessage".into(),
+                message_kind: "imessage".into(),
+                sender_handle: Some("+15555550122".into()),
+                sender_display_name: None,
+                subject: None,
+                text: String::new(),
+                owner_handle: "+15555550100".into(),
+                owner_display_name: None,
+                imessage: None,
+                attachments: vec![
+                    attachment(AttachmentSource::Inline { text: SVG.into() }),
+                    attachment(AttachmentSource::Missing),
+                ],
+            })),
+            Event::ExportDone {
+                messages_seen: 1,
+                failures: 0,
+            },
+        ];
+        let mut body = source_line(PROTOCOL_VERSION);
+        for event in &events {
+            body.push_str(&format!(
+                "\necho '{}'",
+                serde_json::to_string(event).unwrap()
+            ));
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let chat = dir.path().join("chat.db");
+        fs::write(&chat, b"sqlite").unwrap();
+        let program = fake_helper(dir.path(), &body);
+        let config = ExporterConfig {
+            output_format: OutputFormat::Json,
+            ..apple_cfg(
+                &chat,
+                AppleConfig {
+                    platform: Some(ApplePlatform::MacOs),
+                    ..AppleConfig::default()
+                },
+            )
+        };
+        let result = run_with(&config, |request, _, _| Ok(spawn_fake(&program, request))).unwrap();
+        assert!(
+            result.messages.iter().any(|l| l == "  saved 1 attachments"),
+            "{:#?}",
+            result.messages
+        );
+
+        let doc = read_conversation_json(&config.output.join("+15555550122.json")).unwrap();
+        let attachments = &doc.messages[0].attachments;
+        let path = attachments[0].path.as_deref().expect("the SVG was staged");
+        assert_eq!(fs::read_to_string(config.output.join(path)).unwrap(), SVG);
+        assert_eq!(attachments[1].path, None);
+        assert_eq!(
+            attachments[1].missing_reason.as_deref(),
+            Some("file_missing")
         );
     }
 }

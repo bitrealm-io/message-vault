@@ -1,6 +1,5 @@
 //! Media convert/compress and obfuscation applied before writing files.
 
-use crate::util::read_attachment_file;
 use anyhow::Result;
 use media::MediaMode;
 use message_ir::{ConversationDocument, IrAttachment, IrDirection, IrImessage, IrParticipant};
@@ -11,19 +10,6 @@ use obfuscate::{
 };
 use serde_json::{Map, Value};
 use std::path::Path;
-
-/// Load each attachment's bytes from the output folder into the document; unreadable
-/// files are left without bytes so packaging can continue.
-pub(crate) fn reload_attachment_bytes(doc: &mut ConversationDocument, output_dir: &Path) {
-    for msg in &mut doc.messages {
-        for att in &mut msg.attachments {
-            // Lenient: IO failures leave bytes unset so packaging can continue.
-            if let Ok(Some(bytes)) = read_attachment_file(att, output_dir) {
-                att.bytes = Some(bytes);
-            }
-        }
-    }
-}
 
 /// Drop attachment paths and bytes when the media mode is disabled, keeping the metadata.
 pub fn clear_attachments_when_disabled(doc: &mut ConversationDocument, mode: MediaMode) {
@@ -164,13 +150,15 @@ pub(crate) struct TransformOutcome {
     pub obfuscated_docs: usize,
 }
 
-/// Apply the export transforms (media mode, obfuscation) to every document, optionally
-/// loading attachment bytes first.
+/// Apply the export transforms (media mode, obfuscation) to every document.
+///
+/// Attachment bytes are not loaded here. Every writer that embeds them reads
+/// each file through [`crate::load_attachment_bytes`] before the sink removes
+/// the staged `attachments/`.
 pub(crate) fn apply_transforms(
     docs: &mut [ConversationDocument],
     output_dir: &Path,
     transforms: &ExportTransforms,
-    load_bytes: bool,
 ) -> Result<TransformOutcome> {
     // Keep MIME/path for placeholder classification when obfuscating.
     if !transforms.obfuscate {
@@ -190,12 +178,6 @@ pub(crate) fn apply_transforms(
         for doc in docs.iter_mut() {
             obfuscate_document(doc, &mut anon);
             obfuscated_docs += 1;
-        }
-    }
-
-    if load_bytes {
-        for doc in docs.iter_mut() {
-            reload_attachment_bytes(doc, output_dir);
         }
     }
 

@@ -197,3 +197,78 @@ async fn one_message_is_read_by_id_and_only_by_the_account_that_owns_it() {
     let (status, text) = get_raw(&vault.state, "/v1/messages/abc", &alice.token).await;
     expect_problem(status, &text, ProblemType::ValidationFailed);
 }
+
+/// `date:today` means today on the account's clock, not UTC's. The account
+/// is on Kiritimati, 14 hours ahead of UTC, so the local day starts at 10:00
+/// UTC the day before. A message half an hour into the local day is today; one
+/// half an hour before it is not, whatever day it is in UTC. A message stamped
+/// now is today in every zone.
+#[tokio::test]
+async fn date_today_is_the_day_on_the_accounts_clock() {
+    use chrono::TimeZone;
+
+    let (vault, alice) = vault_with_account().await;
+    let zone = chrono_tz::Pacific::Kiritimati;
+    let _: serde_json::Value = crate::test_support::patch_json(
+        &vault.state,
+        &format!("/v1/accounts/{}", alice.account_id),
+        &alice.token,
+        serde_json::json!({ "time_zone": zone.name() }),
+    )
+    .await;
+
+    let today = chrono::Utc::now().with_timezone(&zone).date_naive();
+    let local = |day: chrono::NaiveDate, h: u32, m: u32| {
+        zone.from_local_datetime(&day.and_hms_opt(h, m, 0).unwrap())
+            .single()
+            .unwrap()
+            .with_timezone(&chrono::Utc)
+            .format("%Y-%m-%dT%H:%M:%SZ")
+            .to_string()
+    };
+    let early_today = local(today, 0, 30);
+    let late_yesterday = local(today.pred_opt().unwrap(), 23, 30);
+    let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    seed_conversation(
+        &vault.state,
+        &SeedConversation {
+            account_id: alice.account_id,
+            handle: "+15555550100",
+            conversation_type: "individual",
+            group_title: None,
+            source_file: "t.json",
+            messages: &[
+                SeedMessage {
+                    source: "imessage",
+                    timestamp: &late_yesterday,
+                    is_from_me: false,
+                    body: "late yesterday",
+                },
+                SeedMessage {
+                    source: "imessage",
+                    timestamp: &early_today,
+                    is_from_me: false,
+                    body: "early today",
+                },
+                SeedMessage {
+                    source: "imessage",
+                    timestamp: &now,
+                    is_from_me: true,
+                    body: "right now",
+                },
+            ],
+        },
+    )
+    .await;
+
+    let page: serde_json::Value =
+        get_json(&vault.state, "/v1/messages?q=date%3Atoday", &alice.token).await;
+    let mut bodies: Vec<&str> = page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["text"].as_str().unwrap())
+        .collect();
+    bodies.sort_unstable();
+    assert_eq!(bodies, ["early today", "right now"], "{page}");
+}

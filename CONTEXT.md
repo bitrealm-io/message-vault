@@ -90,6 +90,16 @@ conversations and the contact becomes Unknown again, the way deleting a card
 from a phone's address book leaves its text threads in place.
 _Avoid_: Card, Identity, Person record
 
+**Address Book**:
+The vault's own CSV of contacts and their identities, one row per identity,
+written by Export on the Contacts screen and read by Load under Settings. It
+is for taking contacts out to a spreadsheet, correcting them, and putting them
+back; contacts themselves arrive with message imports. A load is Append,
+which adds and renames and removes nothing, or Edit, which makes each contact
+in the file match its rows. A phone's vCard is not an address book the vault
+reads.
+_Avoid_: Contacts file, VCF, vCard
+
 **Identity**:
 One address a person can be reached at: a phone number, an email address,
 or a username on a service. An identity belongs to at most one contact. The

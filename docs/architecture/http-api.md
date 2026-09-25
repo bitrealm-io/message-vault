@@ -74,7 +74,8 @@ lists.
 
 A read whose selector is too large for a query string is a `POST` named for
 what it returns, never for the verb that computes it:
-`POST /v1/contacts/summaries`, `POST /v1/contacts/unmatched-identities`.
+`POST /v1/contacts/summaries`, `POST /v1/contacts/unmatched-identities`,
+`POST /v1/contacts/address-book`.
 
 A choice between two different lists is a path segment, never a parameter:
 `/v1/search-fields/contacts` and `/v1/search-fields/conversations` are two
@@ -111,6 +112,19 @@ Why: opening and searching answer different questions. The read by id answers
 trash; a search answers an empty page and leaves the trash out. A filter on the
 read by id is a second search that can drift from the first, as `?year=` beside
 `date:` did.
+
+A file the vault reads is the request body, with `Content-Type` naming its
+format, and anything about how to apply it is a declared query parameter.
+`POST /v1/contacts` takes the address book as a `text/csv` body and
+`mode=append|edit`; any other `Content-Type` is `415 Unsupported Media Type`.
+The file the vault writes is answered by a `POST` named for it,
+`POST /v1/contacts/address-book`, whose body `{q, ids}` selects the contacts
+and whose answer is `text/csv` with a `Content-Disposition` filename.
+Why: a body that is the file cannot carry a mode field, and a JSON envelope
+around a file base64-encodes it for nothing. Rejected: `?format=csv` on
+`GET /v1/contacts`, which cannot carry the checked ids and is the `fields=`
+idea in another coat; `Accept: text/csv` on the list, which makes one list
+negotiate where every other answers JSON.
 
 Behaviour that differs by caller lives inside one handler, not in two routes.
 `PUT /v1/accounts/{id}/password` is one route: the owner sets another
@@ -265,8 +279,9 @@ the drift the one-shape rule exists to stop.
 `406 Not Acceptable` is answered only when an `Accept` header is present and no
 member of it matches `application/json`, `application/problem+json`, or `*/*`.
 A missing `Accept` is a request for JSON. The check runs on every `/v1` route
-but `GET /v1/assets/{sha256}`, which streams the asset's own bytes. Nothing
-outside `/v1` is checked.
+but the two that answer bytes: `GET /v1/assets/{sha256}`, which streams the
+asset's own contents, and `POST /v1/contacts/address-book`, which answers the
+address book as `text/csv`. Nothing outside `/v1` is checked.
 
 Rejected: requiring `Accept: application/json`. None of the vault's own clients
 send one, and the rule would refuse the web app on its first request.

@@ -99,22 +99,74 @@ person types or loads from an address book replaces an imported one. A later
 backup with a different spelling does not. See
 [ADR 0006](../adr/0006-an-import-names-the-contact.md).
 
-**Reloading an address book updates its contacts in place.** A contact the
-book created (`origin = 'address_book'`) is matched to a card in the new file
-by phone number. A match keeps its row and its id: the name and the phone
-numbers change to what the card says, and the Contact Groups the person put
-it in, the conversations it takes part in, and the record of the import that
-met it all stay attached. A card that matches nothing becomes a new contact.
-A book contact that no card matches is deleted, memberships included, because
-the person is out of the file. A card whose number changed between two loads
-matches nothing, so it reads as one contact gone and one arrived. Why: three
-things hang off `contacts.id` (`contact_group_members`, `participants`,
-`vault_import_contacts`), and deleting the row and making a new one would
-drop all three every time the book is refreshed. A card whose phone is on a
-contact an import discovered or the person typed joins that contact instead
-and never makes a book contact. An identity the book dropped stays in the
-vault while a conversation, a message, or the account's own profile uses it;
-a stale identity nothing uses goes with the link.
+**The address book is a file for editing contacts, not a source of them.**
+Contacts and identities arrive with message imports; the address book is
+how a person takes what the vault holds out to a spreadsheet, corrects it,
+and puts it back. The file is the vault's own CSV, one row per identity:
+`contact_id, display_name, groups, service, handle_type, identity`. Export
+fills `contact_id` from `contacts.id`; on load, rows that share an id are one
+contact, a blank id makes a new contact, and any other text groups new rows
+under a key of the person's choosing. `display_name` and `groups` (Contact
+Group names, separated by `;`) describe the contact, so they repeat on each
+of its rows and must agree or be blank; two rows of one contact that disagree
+refuse the load. `service` and `handle_type` take the values the `handles`
+table stores. Why: an address book from a phone puts every number and email
+on the card into the vault as a text-message identity whether or not a
+message ever used it, cannot say which service an address belongs to, and
+carries numbers formatted every way at once. A file the vault writes itself
+has none of those problems, and a spreadsheet is the right tool for naming
+fifty Unknowns at once. Rejected: reading vCard or a vendor's CSV directly.
+A conversion from vCard to this file, for editing before a load, is
+separate work.
+
+**A load is Append or Edit, and touches only the contacts in the file.**
+Append creates the contacts the file names, renames the ones it holds,
+and adds the identities and Contact Group memberships it lists; it removes
+nothing. Edit does the same and then makes each contact in the file hold
+exactly the identities and memberships its rows list, so a row taken out of
+the file takes that identity off the contact: the identity stays in its
+conversations and the person is Unknown for it again, as after a contact
+delete. A contact absent from the file is left alone in both modes, and no
+mode deletes a contact, except one left with neither a name nor an identity,
+which nothing could ever reach. A loaded name replaces one an import
+supplied, as a typed name does, because the file is the person typing. A
+group name that matches no Contact Group creates one. Why: the export can be
+a subset (a search, the checked rows), so a file that spoke for the whole
+vault would delete everyone it did not mention, and a file that could only
+add would leave a wrongly linked address unfixable from the sheet.
+
+**A load is strict, and refuses whole.** A phone is keyed by the one rule
+above, an email is lowercased and must be one `@` with text on both sides,
+and an unknown `service` or `handle_type` is an error. Any bad row refuses
+the whole load, naming each row and its reason, and nothing is stored as
+"needs a look". Why: the file is edited before it is loaded, so a refused row
+is a fix made in the sheet in seconds, while a stored bad key is a contact
+that matches no message and has to be found later. A partial load would leave
+the person unsure which rows went in, and a load is cheap to repeat.
+
+**An identity moves only from a contact the load may change.** When a row
+puts an identity on one contact and the vault has it on another, it moves to
+the file's contact if the current holder is nameless (an Unknown an import
+made) or is itself in the file. Taking an identity from a named contact the
+file does not mention refuses the load, naming the row, the identity and
+both contacts. The same identity under two ids in one file refuses the load
+too. Why: naming the Unknowns is the job the file exists for, so that move
+must be free; a silent move off a named person is the one outcome the person
+cannot see happen, and asking for both contacts in the file makes it
+deliberate. Rejected: refusing whenever the holder has other identities. An
+Unknown holder often has two handles for one number (iMessage and SMS), and
+that rule would refuse the commonest cleanup.
+
+**Export writes the current Contacts list; load lives under Settings.** The
+export is on the Contacts screen and writes the rows the person is looking
+at: the search words and the checked contacts pick what goes in the file, and
+an empty search is everything, nameless contacts included. The load answers
+how many contacts it created, updated and deleted, how many identities it
+added, moved and removed, and how many groups it created. Why: the job is
+nearly always "the Unknown ones", "this group" or "these ten", which the
+Contacts screen already expresses and a Settings button cannot. A durable
+record of each load, in the Settings table beside message imports, is
+deferred, not rejected.
 
 **A person has one seat in a conversation.** A participant with an
 identity is keyed on the conversation and that identity. A participant with

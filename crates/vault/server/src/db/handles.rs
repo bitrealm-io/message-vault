@@ -7,6 +7,8 @@ use message_ir::{HandleService, HandleType};
 use serde::Serialize;
 use sqlx::AnyConnection;
 
+use crate::search::bridge::{TrashScope, contact_sent_messages_from};
+
 /// `(account_id, normalized, handle_type, service)` → handle id for one import.
 pub type HandleIdCache = HashMap<(String, String, String, String), i64>;
 
@@ -108,10 +110,10 @@ pub async fn upsert_handle_row_cached(
 }
 
 /// One identity of a contact or an account, and its messages: for a contact,
-/// the messages in the conversations it takes part in; for an account, the
-/// messages held at it, sent from or received at that address (ADR-0015). The
-/// contact drawer and the Profile screen show the same table, so they read the
-/// same row.
+/// the messages the contact sent from it; for an account, the messages held
+/// at it, sent from or received at that address (ADR-0015). The contact
+/// drawer and the Profile screen show the same table, so they read the same
+/// row.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct Identity {
     /// The identity as the vault stores it: E.164 for a number, lower case
@@ -124,8 +126,10 @@ pub struct Identity {
     pub start_date: Option<String>,
     /// When the newest such message was sent, or null when there is none.
     pub end_date: Option<String>,
-    /// Direct and group conversations holding at least one of the identity's
-    /// messages, trashed conversations excluded.
+    /// Direct and group conversations: for a contact, those the identity
+    /// takes part in, whoever wrote in them; for an account, those holding
+    /// at least one of the identity's messages. Trashed conversations are
+    /// excluded.
     pub conversations: u64,
     /// The identity's messages in one-to-one conversations, trashed
     /// conversations and duplicates excluded.
@@ -159,32 +163,45 @@ type IdentityRow = (
 /// phones before emails and each in order.
 pub async fn identities(conn: &mut AnyConnection, of: IdentitiesOf) -> Result<Vec<Identity>> {
     let not_trashed = crate::search::emit::NOT_TRASHED_CONVERSATION;
+    // `messages` is a `FROM … WHERE …` over identity `l`'s messages. It ends
+    // in its WHERE clause, so a column can narrow it by conversation type.
+    //
     // The account holder is never a participant, so an account's identity
-    // counts the messages held at it (ADR-0015); a contact's counts the
-    // conversations it takes part in.
-    let (account_id, linked, messages) = match of {
-        IdentitiesOf::Account(account_id) => (
-            account_id,
-            "SELECT handle_id FROM account_handles WHERE account_id = $1",
-            format!(
-                "LEFT JOIN (messages m
-                   JOIN conversations c ON c.id = m.conversation_id AND {not_trashed})
-                   ON m.owner_handle_id = l.handle_id AND m.account_id = $1
+    // counts the messages held at it and the conversations holding them
+    // (ADR-0015). A contact's identity counts the messages it sent, by the
+    // one definition every contact count reads, and the conversations it
+    // takes part in, whoever wrote in them (#913).
+    let (account_id, linked, scope, messages, conversations) = match of {
+        IdentitiesOf::Account(account_id) => {
+            let messages = format!(
+                "FROM messages m
+                   JOIN conversations c ON c.id = m.conversation_id AND {not_trashed}
+                 WHERE m.owner_handle_id = l.handle_id AND m.account_id = $1
                    AND m.duplicate_of IS NULL"
-            ),
-        ),
+            );
+            let conversations = format!("(SELECT COUNT(DISTINCT c.id) {messages})");
+            (
+                account_id,
+                "SELECT handle_id FROM account_handles WHERE account_id = $1",
+                "",
+                messages,
+                conversations,
+            )
+        }
         IdentitiesOf::Contact { account_id, .. } => (
             account_id,
             "SELECT handle_id FROM contact_handles WHERE account_id = $1 AND contact_id = $2",
+            "JOIN contacts ct ON ct.account_id = $1 AND ct.id = $2",
+            contact_sent_messages_from("l.handle_id", TrashScope::LeftOut),
             format!(
-                "LEFT JOIN conversations c ON c.account_id = $1
-                   AND (c.chat_handle_id = l.handle_id
-                        OR EXISTS (
-                          SELECT 1 FROM participants p
-                          WHERE p.conversation_id = c.id AND p.handle_id = l.handle_id
-                        ))
-                   AND {not_trashed}
-                 LEFT JOIN messages m ON m.conversation_id = c.id AND m.duplicate_of IS NULL"
+                "(SELECT COUNT(*) FROM conversations c
+                  WHERE c.account_id = $1
+                    AND (c.chat_handle_id = l.handle_id
+                         OR EXISTS (
+                           SELECT 1 FROM participants p
+                           WHERE p.conversation_id = c.id AND p.handle_id = l.handle_id
+                         ))
+                    AND {not_trashed})"
             ),
         ),
     };
@@ -194,15 +211,14 @@ pub async fn identities(conn: &mut AnyConnection, of: IdentitiesOf) -> Result<Ve
                 CASE WHEN h.handle_type = 'email' THEN 'email'
                      WHEN h.service = 'whatsapp' THEN 'whatsapp'
                      ELSE 'phone' END AS service,
-                MIN(m.timestamp),
-                MAX(m.timestamp),
-                COUNT(DISTINCT c.id),
-                COUNT(DISTINCT CASE WHEN c.conversation_type = 'individual' THEN m.id END),
-                COUNT(DISTINCT CASE WHEN c.conversation_type = 'group' THEN m.id END)
+                (SELECT MIN(m.timestamp) {messages}),
+                (SELECT MAX(m.timestamp) {messages}),
+                {conversations},
+                (SELECT COUNT(*) {messages} AND c.conversation_type = 'individual'),
+                (SELECT COUNT(*) {messages} AND c.conversation_type = 'group')
          FROM linked l
          JOIN handles h ON h.id = l.handle_id
-         {messages}
-         GROUP BY l.handle_id, h.normalized, h.handle_type, h.service
+         {scope}
          ORDER BY CASE WHEN h.handle_type = 'email' THEN 1 ELSE 0 END, h.normalized",
     );
     let mut query = sqlx::query_as::<_, IdentityRow>(&sql).bind(account_id);

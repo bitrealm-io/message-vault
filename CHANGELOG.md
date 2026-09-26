@@ -85,6 +85,17 @@ released versions carry their date on the heading.
 
 ### Fixes
 
+- 2026-09-24 **A contact's identities and selected contacts count what the
+  contact sent.** The identity table on the contact drawer, and the summary
+  shown when you select contacts, counted every message in the contact's
+  conversations, your own replies and everyone else in a group chat
+  included. So a friend who sent 40 of the 100 messages in your chat showed
+  100 there and 40 on the drawer's message count. First seen, last seen,
+  direct messages and group messages now count only the messages the contact
+  sent, the same way a search and the drawer's message count do, and a
+  conversation in the Trash is left out. The conversation count still counts
+  every conversation the contact is in. Your own identities on Profile still
+  count every message sent from or received at them.
 - 2026-09-24 **GO SMS Pro picture messages import whole, and the ones you
   sent import at all.** An import read only the picture messages you received
   and, for most of them, mistook bytes inside the picture for phone numbers,

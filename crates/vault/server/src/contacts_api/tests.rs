@@ -531,11 +531,18 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
         detail.identities[0].address
     );
     assert_eq!(detail.identities[0].conversations, 2);
-    // The identity table counts the messages held in the identity's
-    // conversations, your reply included (ADR-0015); `total_messages` above
-    // is the three Sam sent.
-    assert_eq!(detail.identities[0].direct_messages, 3);
+    // The identity table counts what Sam sent from the identity, as
+    // `total_messages` does: your reply is not Sam's (#913).
+    assert_eq!(detail.identities[0].direct_messages, 2);
     assert_eq!(detail.identities[0].group_messages, 1);
+    assert_eq!(
+        detail.identities[0].start_date.as_deref(),
+        Some("2024-06-01T12:00:00Z")
+    );
+    assert_eq!(
+        detail.identities[0].end_date.as_deref(),
+        Some("2024-07-01T12:00:00Z")
+    );
 }
 
 #[tokio::test]
@@ -589,11 +596,13 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
     ] {
         sqlx::query(
             "INSERT INTO messages (
-                conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
-             ) VALUES (1, $1, 'imessage', $2, 0, 0, $3)",
+                conversation_id, account_id, source, timestamp, is_from_me,
+                sender_handle_id, sort_order, body
+             ) VALUES (1, $1, 'imessage', $2, 0, $3, 0, $4)",
         )
         .bind(account)
         .bind(ts)
+        .bind(sam_handle)
         .bind(body)
         .execute(&mut *conn)
         .await
@@ -627,10 +636,12 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
     .unwrap();
     sqlx::query(
         "INSERT INTO messages (
-            conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
-         ) VALUES (2, $1, 'imessage', '2024-07-01T12:00:00Z', 0, 0, 'group hi')",
+            conversation_id, account_id, source, timestamp, is_from_me,
+            sender_handle_id, sort_order, body
+         ) VALUES (2, $1, 'imessage', '2024-07-01T12:00:00Z', 0, $2, 0, 'group hi')",
     )
     .bind(account)
+    .bind(sam_handle)
     .execute(&mut *conn)
     .await
     .unwrap();
@@ -676,10 +687,12 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
     .unwrap();
     sqlx::query(
         "INSERT INTO messages (
-            conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
-         ) VALUES (3, $1, 'imessage', '2024-05-01T09:00:00Z', 0, 0, 'hey')",
+            conversation_id, account_id, source, timestamp, is_from_me,
+            sender_handle_id, sort_order, body
+         ) VALUES (3, $1, 'imessage', '2024-05-01T09:00:00Z', 0, $2, 0, 'hey')",
     )
     .bind(account)
+    .bind(pat_handle)
     .execute(&mut *conn)
     .await
     .unwrap();
@@ -718,6 +731,262 @@ async fn get_contact_summaries_counts_two_contacts_in_one_query() {
         summaries[1].end_date.as_deref(),
         Some("2024-05-01T09:00:00Z")
     );
+}
+
+/// A conversation of `kind` with `participants`, in the trash when `trashed`.
+async fn insert_conversation(
+    conn: &mut AnyConnection,
+    account: i64,
+    id: i64,
+    kind: &str,
+    chat_handle: i64,
+    participants: &[i64],
+    trashed: bool,
+) {
+    sqlx::query(
+        "INSERT INTO conversations (
+            id, account_id, chat_handle_id, conversation_type, source_file
+         ) VALUES ($1, $2, $3, $4, 'c.jsonl')",
+    )
+    .bind(id)
+    .bind(account)
+    .bind(chat_handle)
+    .bind(kind)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    for handle in participants {
+        sqlx::query(
+            "INSERT INTO participants (conversation_id, handle_id, name_alias)
+             VALUES ($1, $2, NULL)",
+        )
+        .bind(id)
+        .bind(handle)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    }
+    if trashed {
+        sqlx::query(
+            "INSERT INTO trashed_conversations (account_id, conversation_id) VALUES ($1, $2)",
+        )
+        .bind(account)
+        .bind(id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    }
+}
+
+/// One message in `conversation` at minute `minute` of `day`, held at the
+/// account's `owner` identity: sent by the account holder when `sender` is
+/// `None`, else received from `sender`.
+async fn insert_held_message(
+    conn: &mut AnyConnection,
+    account: i64,
+    conversation: i64,
+    day: &str,
+    minute: usize,
+    owner: i64,
+    sender: Option<i64>,
+) {
+    let ts = format!("{day}T{:02}:{:02}:00Z", minute / 60, minute % 60);
+    sqlx::query(
+        "INSERT INTO messages (
+            conversation_id, account_id, source, timestamp, is_from_me,
+            owner_handle_id, sender_handle_id, sort_order, body
+         ) VALUES ($1, $2, 'imessage', $3, $4, $5, $6, $7, 'm')",
+    )
+    .bind(conversation)
+    .bind(account)
+    .bind(ts)
+    .bind(i64::from(sender.is_none()))
+    .bind(owner)
+    .bind(sender)
+    .bind(minute as i64)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+}
+
+/// Jane sent 40 of the 100 messages in her direct conversation with the
+/// account holder and 10 of the 60 in a group with Bob. Her identity row and
+/// her selection summary both read 40 direct and 10 group, with her own
+/// first and last message as the dates: the holder's replies and Bob's
+/// messages are not hers, and a conversation in the trash is left out, as
+/// `messages:` leaves it out (#913). The account's own identity still counts
+/// every message held at it (ADR-0015).
+#[tokio::test]
+async fn a_contacts_identity_and_summary_count_the_messages_it_sent() {
+    let vault = test_vault().await;
+    let account = vault.account_with_id(101, "alice").await;
+    let mut conn = vault.conn().await;
+
+    let mine =
+        account_profile::link_account_handle(&mut conn, account, "+15555550001", HandleType::Phone)
+            .await
+            .unwrap();
+    let jane = insert_contact_with_handle(&mut conn, account, "Jane", "+15555550100").await;
+    let jane_phone: i64 =
+        sqlx::query_scalar("SELECT handle_id FROM contact_handles WHERE contact_id = $1")
+            .bind(jane)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    // Jane's second identity takes part in the group and sent nothing: its
+    // row must not borrow the messages her phone sent.
+    let (jane_email, _) = handles::upsert_handle_row(
+        &mut conn,
+        account,
+        "jane@example.com",
+        HandleType::Email,
+        Some("email"),
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO contact_handles (account_id, handle_id, contact_id) VALUES ($1, $2, $3)",
+    )
+    .bind(account)
+    .bind(jane_email)
+    .bind(jane)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    let bob = insert_contact_with_handle(&mut conn, account, "Bob", "+15555550200").await;
+    let bob_phone: i64 =
+        sqlx::query_scalar("SELECT handle_id FROM contact_handles WHERE contact_id = $1")
+            .bind(bob)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    let (group_chat, _) =
+        handles::upsert_handle_row(&mut conn, account, "chat-jane-bob", HandleType::Other, None)
+            .await
+            .unwrap();
+
+    // Direct: Jane sends when minute % 5 is 1 or 2 (40 of 100); the holder
+    // writes the first and the last message.
+    insert_conversation(
+        &mut conn,
+        account,
+        1,
+        "individual",
+        jane_phone,
+        &[jane_phone],
+        false,
+    )
+    .await;
+    for minute in 0..100 {
+        let sender = matches!(minute % 5, 1 | 2).then_some(jane_phone);
+        insert_held_message(&mut conn, account, 1, "2024-01-01", minute, mine, sender).await;
+    }
+    // Group: Jane sends when minute % 6 is 1 (10 of 60), Bob when it is 2,
+    // 3 or 4, the holder otherwise, the last message included.
+    insert_conversation(
+        &mut conn,
+        account,
+        2,
+        "group",
+        group_chat,
+        &[jane_phone, jane_email, bob_phone],
+        false,
+    )
+    .await;
+    for minute in 0..60 {
+        let sender = match minute % 6 {
+            1 => Some(jane_phone),
+            2..=4 => Some(bob_phone),
+            _ => None,
+        };
+        insert_held_message(&mut conn, account, 2, "2024-02-01", minute, mine, sender).await;
+    }
+    // A later group in the trash, where Jane sent 5 more.
+    let (trashed_chat, _) =
+        handles::upsert_handle_row(&mut conn, account, "chat-trashed", HandleType::Other, None)
+            .await
+            .unwrap();
+    insert_conversation(
+        &mut conn,
+        account,
+        3,
+        "group",
+        trashed_chat,
+        &[jane_phone],
+        true,
+    )
+    .await;
+    for minute in 0..5 {
+        insert_held_message(
+            &mut conn,
+            account,
+            3,
+            "2024-03-01",
+            minute,
+            mine,
+            Some(jane_phone),
+        )
+        .await;
+    }
+
+    let detail = get_contact_detail(&mut conn, account, jane)
+        .await
+        .unwrap()
+        .expect("Jane exists");
+    assert_eq!(detail.total_messages, 50);
+    let [phone, email] = detail.identities.as_slice() else {
+        panic!("two identities: {:?}", detail.identities);
+    };
+    assert_eq!(phone.address, "+15555550100");
+    assert_eq!(phone.conversations, 2, "the trashed group is left out");
+    assert_eq!(phone.direct_messages, 40);
+    assert_eq!(phone.group_messages, 10);
+    assert_eq!(phone.start_date.as_deref(), Some("2024-01-01T00:01:00Z"));
+    assert_eq!(phone.end_date.as_deref(), Some("2024-02-01T00:55:00Z"));
+    assert_eq!(email.address, "jane@example.com");
+    assert_eq!(email.conversations, 1, "it takes part in the group");
+    assert_eq!(email.direct_messages, 0);
+    assert_eq!(email.group_messages, 0);
+    assert_eq!(email.start_date, None);
+    assert_eq!(email.end_date, None);
+
+    let summaries = get_contact_summaries(&mut conn, account, &[jane, bob])
+        .await
+        .unwrap();
+    let [jane_summary, bob_summary] = summaries.as_slice() else {
+        panic!("two summaries: {summaries:?}");
+    };
+    assert_eq!(jane_summary.id, jane);
+    assert_eq!(jane_summary.individual_conversations, 1);
+    assert_eq!(jane_summary.group_conversations, 1);
+    assert_eq!(jane_summary.individual_message_count, 40);
+    assert_eq!(jane_summary.group_message_count, 10);
+    assert_eq!(
+        jane_summary.start_date.as_deref(),
+        Some("2024-01-01T00:01:00Z")
+    );
+    assert_eq!(
+        jane_summary.end_date.as_deref(),
+        Some("2024-02-01T00:55:00Z")
+    );
+    assert_eq!(bob_summary.id, bob);
+    assert_eq!(bob_summary.individual_message_count, 0);
+    assert_eq!(bob_summary.group_message_count, 30);
+
+    // The holder's identity counts every message held at it, sent or
+    // received, in both kept conversations.
+    let own = handles::identities(&mut conn, IdentitiesOf::Account(account))
+        .await
+        .unwrap();
+    let held = own
+        .iter()
+        .find(|identity| identity.address == "+15555550001")
+        .expect("the holder's identity");
+    assert_eq!(held.conversations, 2);
+    assert_eq!(held.direct_messages, 100);
+    assert_eq!(held.group_messages, 60);
+    assert_eq!(held.start_date.as_deref(), Some("2024-01-01T00:00:00Z"));
+    assert_eq!(held.end_date.as_deref(), Some("2024-02-01T00:59:00Z"));
 }
 
 #[tokio::test]

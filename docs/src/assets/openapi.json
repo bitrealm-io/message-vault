@@ -9980,7 +9980,7 @@
       },
       "ContactSelectionSummary": {
         "type": "object",
-        "description": "Contact-level first/last seen and message counts for the selection table.",
+        "description": "Contact-level first/last seen and message counts for the selection table.\nEvery date and message count is over the messages the contact sent, the\nsame messages `messages:` counts on Contacts; the conversation counts are\nover the conversations the contact takes part in. Trashed conversations\nare left out of both.",
         "required": [
           "id",
           "name",
@@ -9995,7 +9995,7 @@
               "string",
               "null"
             ],
-            "description": "Date of the contact's last message."
+            "description": "When the contact sent its last message; absent when it sent none."
           },
           "group_conversations": {
             "type": "integer",
@@ -10006,7 +10006,7 @@
           "group_message_count": {
             "type": "integer",
             "format": "int64",
-            "description": "Messages in group conversations with the contact.",
+            "description": "Messages the contact sent in group conversations.",
             "minimum": 0
           },
           "id": {
@@ -10023,7 +10023,7 @@
           "individual_message_count": {
             "type": "integer",
             "format": "int64",
-            "description": "Messages in 1:1 conversations with the contact.",
+            "description": "Messages the contact sent in 1:1 conversations.",
             "minimum": 0
           },
           "name": {
@@ -10035,7 +10035,7 @@
               "string",
               "null"
             ],
-            "description": "Date of the contact's first message."
+            "description": "When the contact sent its first message; absent when it sent none."
           }
         }
       },
@@ -10887,7 +10887,7 @@
       },
       "Identity": {
         "type": "object",
-        "description": "One identity of a contact or an account, and its messages: for a contact,\nthe messages in the conversations it takes part in; for an account, the\nmessages held at it, sent from or received at that address (ADR-0015). The\ncontact drawer and the Profile screen show the same table, so they read the\nsame row.",
+        "description": "One identity of a contact or an account, and its messages: for a contact,\nthe messages the contact sent from it; for an account, the messages held\nat it, sent from or received at that address (ADR-0015). The contact\ndrawer and the Profile screen show the same table, so they read the same\nrow.",
         "required": [
           "address",
           "service",
@@ -10903,7 +10903,7 @@
           "conversations": {
             "type": "integer",
             "format": "int64",
-            "description": "Direct and group conversations holding at least one of the identity's\nmessages, trashed conversations excluded.",
+            "description": "Direct and group conversations: for a contact, those the identity\ntakes part in, whoever wrote in them; for an account, those holding\nat least one of the identity's messages. Trashed conversations are\nexcluded.",
             "minimum": 0
           },
           "direct_messages": {
@@ -11801,7 +11801,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "description": "Contact-level first/last seen and message counts for the selection table.",
+              "description": "Contact-level first/last seen and message counts for the selection table.\nEvery date and message count is over the messages the contact sent, the\nsame messages `messages:` counts on Contacts; the conversation counts are\nover the conversations the contact takes part in. Trashed conversations\nare left out of both.",
               "required": [
                 "id",
                 "name",
@@ -11816,7 +11816,7 @@
                     "string",
                     "null"
                   ],
-                  "description": "Date of the contact's last message."
+                  "description": "When the contact sent its last message; absent when it sent none."
                 },
                 "group_conversations": {
                   "type": "integer",
@@ -11827,7 +11827,7 @@
                 "group_message_count": {
                   "type": "integer",
                   "format": "int64",
-                  "description": "Messages in group conversations with the contact.",
+                  "description": "Messages the contact sent in group conversations.",
                   "minimum": 0
                 },
                 "id": {
@@ -11844,7 +11844,7 @@
                 "individual_message_count": {
                   "type": "integer",
                   "format": "int64",
-                  "description": "Messages in 1:1 conversations with the contact.",
+                  "description": "Messages the contact sent in 1:1 conversations.",
                   "minimum": 0
                 },
                 "name": {
@@ -11856,7 +11856,7 @@
                     "string",
                     "null"
                   ],
-                  "description": "Date of the contact's first message."
+                  "description": "When the contact sent its first message; absent when it sent none."
                 }
               }
             },
@@ -12326,7 +12326,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "description": "One identity of a contact or an account, and its messages: for a contact,\nthe messages in the conversations it takes part in; for an account, the\nmessages held at it, sent from or received at that address (ADR-0015). The\ncontact drawer and the Profile screen show the same table, so they read the\nsame row.",
+              "description": "One identity of a contact or an account, and its messages: for a contact,\nthe messages the contact sent from it; for an account, the messages held\nat it, sent from or received at that address (ADR-0015). The contact\ndrawer and the Profile screen show the same table, so they read the same\nrow.",
               "required": [
                 "address",
                 "service",
@@ -12342,7 +12342,7 @@
                 "conversations": {
                   "type": "integer",
                   "format": "int64",
-                  "description": "Direct and group conversations holding at least one of the identity's\nmessages, trashed conversations excluded.",
+                  "description": "Direct and group conversations: for a contact, those the identity\ntakes part in, whoever wrote in them; for an account, those holding\nat least one of the identity's messages. Trashed conversations are\nexcluded.",
                   "minimum": 0
                 },
                 "direct_messages": {

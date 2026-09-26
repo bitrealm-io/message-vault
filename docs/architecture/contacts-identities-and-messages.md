@@ -216,6 +216,18 @@ too; and counting every message in a conversation the identity appears in,
 because a conversation that used two identities would count all its messages
 twice.
 
+**A contact's identity counts the messages the contact sent from it.** Beside
+each of a contact's identities the product shows the first and last message
+sent from it, the number sent from it in direct and in group conversations,
+and the number of conversations the identity takes part in, whoever wrote in
+them. The selection summary for a contact counts the same way across all its
+identities. Why: every count or date of messages about a contact means the
+messages the contact sent, the same messages `messages:` and the contact's
+total count on Contacts read, so the identity table, the summary and a search
+give one number for one person. Rejected: counting every message in the
+conversations the identity takes part in, because that counts the holder's own
+replies and every other member of a group as the contact's (#913).
+
 **An import never adds an account identity.** A backup that names an owner
 address the account does not have records it on the messages and leaves the
 account's identities as they are. Why: the person adds identities themselves,

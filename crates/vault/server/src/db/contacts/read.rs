@@ -48,25 +48,29 @@ pub struct ContactSummary {
 }
 
 /// Contact-level first/last seen and message counts for the selection table.
+/// Every date and message count is over the messages the contact sent, the
+/// same messages `messages:` counts on Contacts; the conversation counts are
+/// over the conversations the contact takes part in. Trashed conversations
+/// are left out of both.
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct ContactSelectionSummary {
     /// Contact id.
     pub id: i64,
     /// The contact's preferred name; empty when it has none.
     pub name: String,
-    /// Date of the contact's first message.
+    /// When the contact sent its first message; absent when it sent none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub start_date: Option<String>,
-    /// Date of the contact's last message.
+    /// When the contact sent its last message; absent when it sent none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_date: Option<String>,
     /// 1:1 conversations with the contact.
     pub individual_conversations: u64,
     /// Group conversations with the contact.
     pub group_conversations: u64,
-    /// Messages in 1:1 conversations with the contact.
+    /// Messages the contact sent in 1:1 conversations.
     pub individual_message_count: u64,
-    /// Messages in group conversations with the contact.
+    /// Messages the contact sent in group conversations.
     pub group_message_count: u64,
 }
 
@@ -374,7 +378,10 @@ pub async fn contact_totals(
     })
 }
 
-/// First/last seen and message counts for many contacts in one grouped query.
+/// First/last seen and message counts for many contacts in one query. The
+/// dates and message counts read the same definition of a message the
+/// contact sent as `messages:` ([`contact_sent_messages`]), so the selection
+/// table and a search agree.
 ///
 /// Unknown, trashed, and duplicate ids are skipped. At most
 /// [`MAX_CONTACT_SUMMARY_IDS`] ids are read so the `IN` list stays under
@@ -423,19 +430,18 @@ pub async fn get_contact_summaries(
               AND {NOT_TRASHED_CONVERSATION}
          )
          SELECT
-            s.id,
-            s.name,
-            MIN(m.timestamp) AS start_date,
-            MAX(m.timestamp) AS end_date,
-            COUNT(DISTINCT CASE WHEN i.conversation_type = 'individual' THEN i.conversation_id END),
-            COUNT(DISTINCT CASE WHEN i.conversation_type = 'group' THEN i.conversation_id END),
-            COUNT(DISTINCT CASE WHEN i.conversation_type = 'individual' THEN m.id END),
-            COUNT(DISTINCT CASE WHEN i.conversation_type = 'group' THEN m.id END)
-         FROM selected s
-         LEFT JOIN involved i ON i.contact_id = s.id
-         LEFT JOIN messages m ON m.conversation_id = i.conversation_id
-           AND m.duplicate_of IS NULL
-         GROUP BY s.id, s.name",
+            ct.id,
+            ct.name,
+            (SELECT MIN(m.timestamp) {sent}) AS start_date,
+            (SELECT MAX(m.timestamp) {sent}) AS end_date,
+            (SELECT COUNT(*) FROM involved i
+             WHERE i.contact_id = ct.id AND i.conversation_type = 'individual'),
+            (SELECT COUNT(*) FROM involved i
+             WHERE i.contact_id = ct.id AND i.conversation_type = 'group'),
+            (SELECT COUNT(*) {sent} AND c.conversation_type = 'individual'),
+            (SELECT COUNT(*) {sent} AND c.conversation_type = 'group')
+         FROM selected ct",
+        sent = contact_sent_messages(TrashScope::LeftOut),
     );
 
     let mut q = sqlx::query_as::<_, ContactSelectionRow>(&sql);

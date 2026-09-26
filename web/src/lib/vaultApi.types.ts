@@ -1478,9 +1478,15 @@ export interface components {
          * @enum {string}
          */
         ContactReason: "replaced_trashed" | "created" | "named" | "handle_added";
-        /** @description Contact-level first/last seen and message counts for the selection table. */
+        /**
+         * @description Contact-level first/last seen and message counts for the selection table.
+         *     Every date and message count is over the messages the contact sent, the
+         *     same messages `messages:` counts on Contacts; the conversation counts are
+         *     over the conversations the contact takes part in. Trashed conversations
+         *     are left out of both.
+         */
         ContactSelectionSummary: {
-            /** @description Date of the contact's last message. */
+            /** @description When the contact sent its last message; absent when it sent none. */
             end_date?: string | null;
             /**
              * Format: int64
@@ -1489,7 +1495,7 @@ export interface components {
             group_conversations: number;
             /**
              * Format: int64
-             * @description Messages in group conversations with the contact.
+             * @description Messages the contact sent in group conversations.
              */
             group_message_count: number;
             /**
@@ -1504,12 +1510,12 @@ export interface components {
             individual_conversations: number;
             /**
              * Format: int64
-             * @description Messages in 1:1 conversations with the contact.
+             * @description Messages the contact sent in 1:1 conversations.
              */
             individual_message_count: number;
             /** @description The contact's preferred name; empty when it has none. */
             name: string;
-            /** @description Date of the contact's first message. */
+            /** @description When the contact sent its first message; absent when it sent none. */
             start_date?: string | null;
         };
         /** @description Contact row for the list: name, addresses, groups. */
@@ -1904,10 +1910,10 @@ export interface components {
         };
         /**
          * @description One identity of a contact or an account, and its messages: for a contact,
-         *     the messages in the conversations it takes part in; for an account, the
-         *     messages held at it, sent from or received at that address (ADR-0015). The
-         *     contact drawer and the Profile screen show the same table, so they read the
-         *     same row.
+         *     the messages the contact sent from it; for an account, the messages held
+         *     at it, sent from or received at that address (ADR-0015). The contact
+         *     drawer and the Profile screen show the same table, so they read the same
+         *     row.
          */
         Identity: {
             /**
@@ -1917,8 +1923,10 @@ export interface components {
             address: string;
             /**
              * Format: int64
-             * @description Direct and group conversations holding at least one of the identity's
-             *     messages, trashed conversations excluded.
+             * @description Direct and group conversations: for a contact, those the identity
+             *     takes part in, whoever wrote in them; for an account, those holding
+             *     at least one of the identity's messages. Trashed conversations are
+             *     excluded.
              */
             conversations: number;
             /**
@@ -2365,7 +2373,7 @@ export interface components {
         Page_ContactSelectionSummary: {
             /** @description The rows on this page. */
             items: {
-                /** @description Date of the contact's last message. */
+                /** @description When the contact sent its last message; absent when it sent none. */
                 end_date?: string | null;
                 /**
                  * Format: int64
@@ -2374,7 +2382,7 @@ export interface components {
                 group_conversations: number;
                 /**
                  * Format: int64
-                 * @description Messages in group conversations with the contact.
+                 * @description Messages the contact sent in group conversations.
                  */
                 group_message_count: number;
                 /**
@@ -2389,12 +2397,12 @@ export interface components {
                 individual_conversations: number;
                 /**
                  * Format: int64
-                 * @description Messages in 1:1 conversations with the contact.
+                 * @description Messages the contact sent in 1:1 conversations.
                  */
                 individual_message_count: number;
                 /** @description The contact's preferred name; empty when it has none. */
                 name: string;
-                /** @description Date of the contact's first message. */
+                /** @description When the contact sent its first message; absent when it sent none. */
                 start_date?: string | null;
             }[];
             /** @description Page size used. */
@@ -2624,8 +2632,10 @@ export interface components {
                 address: string;
                 /**
                  * Format: int64
-                 * @description Direct and group conversations holding at least one of the identity's
-                 *     messages, trashed conversations excluded.
+                 * @description Direct and group conversations: for a contact, those the identity
+                 *     takes part in, whoever wrote in them; for an account, those holding
+                 *     at least one of the identity's messages. Trashed conversations are
+                 *     excluded.
                  */
                 conversations: number;
                 /**

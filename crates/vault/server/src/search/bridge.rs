@@ -319,8 +319,9 @@ pub(crate) fn contact_conversations_link(c2: &str) -> String {
 /// conversation in the trash left out unless `trash` says it counts. The
 /// one definition of "a message the contact sent": `date:`, `messages:`,
 /// `first-message:` and `last-message:` on Contacts, the contact list's
-/// `last_heard_at`, and the contact detail's `total_messages` all read it,
-/// so none of them can drift from the others (#725, #726).
+/// `last_heard_at`, the contact detail's `total_messages`, the selection
+/// summary, and the contact's identity table all read it, so none of them
+/// can drift from the others (#725, #726, #913).
 ///
 /// Your own messages and other people's messages in a shared group chat are
 /// not the contact's, which is why this is not every message of every
@@ -330,11 +331,35 @@ pub(crate) fn contact_conversations_link(c2: &str) -> String {
 /// A free function for the same reason as [`contact_conversations_link`]:
 /// it is only meaningful when the base row is a contact.
 pub(crate) fn contact_sent_messages(trash: TrashScope) -> String {
+    sent_messages_where(
+        "chs.account_id = ct.account_id AND chs.contact_id = ct.id",
+        trash,
+    )
+}
+
+/// [`contact_sent_messages`] narrowed to one of the contact's identities:
+/// the messages contact `ct` sent from handle `handle_expr`. The contact
+/// drawer's identity table reads it, one row per identity.
+pub(crate) fn contact_sent_messages_from(handle_expr: &str, trash: TrashScope) -> String {
+    sent_messages_where(
+        &format!(
+            "chs.account_id = ct.account_id AND chs.contact_id = ct.id \
+             AND chs.handle_id = {handle_expr}"
+        ),
+        trash,
+    )
+}
+
+/// The body both [`contact_sent_messages`] and
+/// [`contact_sent_messages_from`] share; `handles` picks the
+/// `contact_handles chs` rows whose messages count. The fragment ends in
+/// its WHERE clause, so a caller may append ` AND …` to narrow it further.
+fn sent_messages_where(handles: &str, trash: TrashScope) -> String {
     format!(
         "FROM contact_handles chs \
            JOIN messages m ON m.sender_handle_id = chs.handle_id AND m.account_id = chs.account_id \
            JOIN conversations c ON c.id = m.conversation_id \
-           WHERE chs.account_id = ct.account_id AND chs.contact_id = ct.id \
+           WHERE {handles} \
              AND m.is_from_me = 0 AND m.duplicate_of IS NULL{}",
         trash.conversation_clause("c")
     )

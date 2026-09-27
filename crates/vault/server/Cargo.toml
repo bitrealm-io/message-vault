@@ -41,7 +41,7 @@ uuid = { version = "1.18.1", features = ["v4"] }
 vault-api-types = { path = "../../libs/vault-api-types", features = ["schema"] }
 utoipa = { version = "5", features = ["axum_extras"] }
 utoipa-axum = "0.2"
-utoipa-swagger-ui = { version = "9", features = ["axum"] }
+utoipa-swagger-ui = { version = "10", features = ["axum"] }
 thiserror = { workspace = true }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

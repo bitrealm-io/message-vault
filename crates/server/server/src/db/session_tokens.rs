@@ -69,7 +69,7 @@ pub struct ConnectingApp {
 
 impl ConnectingApp {
     /// Pair a stored kind and Build; `None` unless both are present and the
-    /// kind is one the vault knows.
+    /// kind is one the server knows.
     fn from_columns(kind: Option<String>, build: Option<String>) -> Option<Self> {
         let kind = AppKind::parse(kind.as_deref()?)?;
         Some(Self {
@@ -305,7 +305,7 @@ mod tests {
 
     /// Known-answer vectors, not a round trip.
     ///
-    /// Every session and API token in every existing vault is stored as this
+    /// Every session and API token in every existing database is stored as this
     /// hash and looked up by it, so changing the algorithm logs everyone out
     /// and invalidates every issued API token at once. A test that only
     /// checked the length and determinism would pass after such a change —
@@ -317,11 +317,11 @@ mod tests {
         for (token, expected) in [
             (
                 "mc-user-abc",
-                "0df4b3a1f371a0685d2ab53463e293d0a3cf12b3ffa63ccbbf4bdfa9792e5d1e",
+                "2f149722de58d39a2c4c28c6889a5bcdfeef221933624142cc2339411007a7a8",
             ),
             (
                 "mc-tok-abc123",
-                "949cf0bf8e4e42a454c6a16d67f6a6c414ac39ea6bee6003298da8cc90b10273",
+                "892e92b80959400565df97dd4983106d1c7d61ecf6814a4694f8d878d0745cc1",
             ),
             (
                 "",
@@ -332,7 +332,7 @@ mod tests {
                 hash_api_token(token),
                 expected,
                 "the stored hash of {token:?} changed; every session and API \
-                 token in every existing vault is looked up by this digest"
+                 token in every existing database is looked up by this digest"
             );
         }
         assert_ne!(hash_api_token("mc-user-abc"), hash_api_token("mc-user-xyz"));

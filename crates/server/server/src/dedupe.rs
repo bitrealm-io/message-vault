@@ -284,7 +284,7 @@ pub async fn fill_missing_content_keys(conn: &mut AnyConnection, account_id: i64
 /// from what is stored. Returns how many were written.
 ///
 /// A key is first written at import, but a later append import can add
-/// attachments to a message the vault already holds, or participants to a
+/// attachments to a message the database already holds, or participants to a
 /// group, and both are part of the key. A key left as it was stops matching
 /// the same message from another source.
 async fn refresh_content_keys(conn: &mut AnyConnection, account_id: i64) -> Result<u64> {

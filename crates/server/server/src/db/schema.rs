@@ -1,4 +1,4 @@
-//! Schema management for the vault and accounts databases.
+//! Schema management for the database.
 //!
 //! Serve and import open their database connections through
 //! [`crate::db::engine`] pools (shared pragmas for SQLite) and ensure the
@@ -53,7 +53,7 @@ const DROP_MESSAGES_FTS_TRIGGERS_PG_SQL: &str =
 pub const SCHEMA_FINGERPRINT: i64 = schema_fingerprint();
 
 // Fits `user_version`, and is not one of the small hand-kept numbers the old
-// scheme stamped, so a vault from that scheme is rebuilt rather than mistaken
+// scheme stamped, so a database from that scheme is rebuilt rather than mistaken
 // for current.
 const _: () = assert!(SCHEMA_FINGERPRINT > 1000 && SCHEMA_FINGERPRINT <= i32::MAX as i64);
 
@@ -97,7 +97,7 @@ const fn fingerprint_of(files: &[&str]) -> i64 {
 /// Bring the database to [`SCHEMA_FINGERPRINT`].
 ///
 /// A database already stamped with the current fingerprint is left
-/// untouched. Anything else — a fresh file, a pre-fingerprint vault, or one
+/// untouched. Anything else — a fresh file, a pre-fingerprint database, or one
 /// stamped by a server with different SQL — is rebuilt empty and stamped;
 /// the user re-imports afterwards.
 ///
@@ -193,8 +193,8 @@ async fn apply_ddl(conn: &mut AnyConnection) -> Result<()> {
     Ok(())
 }
 
-/// The Postgres DDL that creates the vault's own tables, in the order the
-/// vault installs it — transpiled from the SQLite originals (see
+/// The Postgres DDL that creates the server's own tables, in the order the
+/// server installs it — transpiled from the SQLite originals (see
 /// [`crate::db::pg_ddl`]). The installer, the rebuild's drop list, and the
 /// drift guard all read this one value, so a DDL file cannot reach one of
 /// them and miss the others.
@@ -214,11 +214,11 @@ fn pg_table_ddl() -> &'static crate::db::pg_ddl::PgDdl {
 
 /// Every table name the embedded Postgres DDL creates, as the transpiler
 /// collected them while producing that DDL, so the rebuild's drop list
-/// cannot drift from what the vault installs.
+/// cannot drift from what the server installs.
 ///
-/// A SQLite database file belongs to the vault alone, but a Postgres schema
+/// A SQLite database file belongs to the server alone, but a Postgres schema
 /// may be shared with another application. The rebuild therefore names the
-/// vault's own tables instead of sweeping `current_schema()`.
+/// server's own tables instead of sweeping `current_schema()`.
 fn pg_table_names() -> Vec<&'static str> {
     pg_table_ddl().tables.iter().map(String::as_str).collect()
 }
@@ -232,12 +232,12 @@ fn quote_ident(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 
-/// Drop the vault's own tables in the current schema. Postgres twin of
-/// [`rebuild_schema`]: a vault stamped with an older marker is
+/// Drop the server's own tables in the current schema. Postgres twin of
+/// [`rebuild_schema`]: a database stamped with an older marker is
 /// rebuilt empty rather than patched in place.
 ///
 /// Only the tables [`pg_table_names`] lists are dropped, and each is
-/// schema-qualified, so a vault sharing its schema with another application
+/// schema-qualified, so a server sharing its schema with another application
 /// rebuilds its own data without touching the neighbour's.
 ///
 /// `CASCADE` takes the FTS triggers and foreign keys down with their
@@ -262,7 +262,7 @@ async fn drop_pg_user_tables(conn: &mut AnyConnection) -> Result<()> {
 /// Apply the Postgres DDL variants. The DDL is idempotent (`IF NOT EXISTS`),
 /// so applying it again is a no-op.
 async fn apply_postgres_ddl(conn: &mut AnyConnection) -> Result<()> {
-    // Installed vaults skip straight past this (one marker lookup per
+    // Installed databases skip straight past this (one marker lookup per
     // request instead of re-running the DDL batch).
     if pg_schema_ready(&mut *conn).await? {
         return Ok(());
@@ -276,7 +276,7 @@ async fn apply_postgres_ddl(conn: &mut AnyConnection) -> Result<()> {
         .execute(&mut *tx)
         .await?;
     if !pg_schema_ready(&mut tx).await? {
-        // A vault stamped with another fingerprint (or none, with tables
+        // A database stamped with another fingerprint (or none, with tables
         // present) is rebuilt empty — the same contract SQLite's
         // user_version gives. Re-importing is the migration.
         if table_exists(&mut tx, "imports").await? {
@@ -324,7 +324,7 @@ async fn pg_schema_ready(conn: &mut AnyConnection) -> Result<bool> {
     Ok(stamped == Some(SCHEMA_FINGERPRINT.to_string()))
 }
 
-/// Create every table and index required by a current vault.
+/// Create every table and index required by a current database.
 ///
 /// SQLite carries the fingerprint in `PRAGMA user_version` and is rebuilt
 /// when it does not match; Postgres carries it in a `schema_meta` row (see
@@ -345,10 +345,10 @@ pub async fn ensure_schema(conn: &mut AnyConnection) -> Result<()> {
 pub const MESSAGES_FTS_TRIGGERS_META_KEY: &str = "messages_fts_triggers_v1";
 
 /// The `schema_meta` row holding the installed [`SCHEMA_FINGERPRINT`] on
-/// Postgres. A vault whose row holds another value, or an older
-/// `vault_schema_vN` marker and no such row, is rebuilt empty, matching
+/// Postgres. A database whose row holds another value, or an older
+/// `schema_vN` marker and no such row, is rebuilt empty, matching
 /// SQLite's `user_version` behaviour.
-pub const SCHEMA_META_KEY: &str = "vault_schema";
+pub const SCHEMA_META_KEY: &str = "schema_fingerprint";
 
 /// Advisory lock id serializing the one-time Postgres DDL install so two
 /// concurrent first-touches cannot interleave the trigger drop/create pair
@@ -674,11 +674,11 @@ pub async fn delete_messages_for_source(
     Ok(n.rows_affected())
 }
 
-/// Create current account and vault metadata tables.
+/// Create current account and server metadata tables.
 ///
-/// Account tables live in the same database file as the rest of the vault, so
+/// Account tables live in the same database file as everything else, so
 /// the one `user_version` stamp covers them on SQLite. A stamped database
-/// needs nothing; anything else gets the full vault schema (with the rebuild
+/// needs nothing; anything else gets the full schema (with the rebuild
 /// that implies). On Postgres the one-time DDL install is gated by the
 /// [`SCHEMA_META_KEY`] marker.
 ///
@@ -699,11 +699,11 @@ pub async fn ensure_accounts_schema(conn: &mut AnyConnection) -> Result<()> {
 ///
 /// Branches on the engine: `pg_catalog.pg_tables` for Postgres, `sqlite_master`
 /// for SQLite. Used by [`crate::process_assets::run`] to skip the account
-/// sweep on a database that has no vault schema yet.
+/// sweep on a database that has no schema yet.
 ///
 /// The Postgres lookup is restricted to `current_schema()` — the schema the
-/// vault reads, writes, and rebuilds — so a same-named table in another
-/// schema of the same database never stands in for the vault's own.
+/// server reads, writes, and rebuilds — so a same-named table in another
+/// schema of the same database never stands in for the server's own.
 pub async fn table_exists(conn: &mut AnyConnection, name: &str) -> Result<bool> {
     let found: i64 = if dialect::engine_of(conn) == DbEngine::Postgres {
         sqlx::query_scalar(

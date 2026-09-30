@@ -13,12 +13,12 @@ use crate::test_support::{
 };
 use axum::http::StatusCode;
 
-/// A vault, a logged-in account, and `handles` linked as contacts (one
+/// A fixture, a logged-in account, and `handles` linked as contacts (one
 /// contact per phone, named `Contact 0`, `Contact 1`, ...).
 async fn contacts_fixture_with_handles(handles: &[&str]) -> (TestFixture, RegisteredAccount) {
-    let (vault, account) = fixture_with_account().await;
+    let (fixture, account) = fixture_with_account().await;
     if !handles.is_empty() {
-        let mut conn = vault.state.db.acquire().await.unwrap();
+        let mut conn = fixture.state.db.acquire().await.unwrap();
         for (i, handle) in handles.iter().enumerate() {
             insert_contact_with_handle(
                 &mut conn,
@@ -29,14 +29,14 @@ async fn contacts_fixture_with_handles(handles: &[&str]) -> (TestFixture, Regist
             .await;
         }
     }
-    (vault, account)
+    (fixture, account)
 }
 
-/// A vault, a logged-in account, and one contact linked to `handle` that
+/// A fixture, a logged-in account, and one contact linked to `handle` that
 /// is then trashed.
 async fn contacts_fixture_with_trashed_handle(handle: &str) -> (TestFixture, RegisteredAccount) {
-    let (vault, account) = fixture_with_account().await;
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let (fixture, account) = fixture_with_account().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     let contact_id =
         insert_contact_with_handle(&mut conn, account.account_id, "Trashed", handle).await;
     sqlx::query("INSERT INTO trashed_contacts (account_id, contact_id) VALUES ($1, $2)")
@@ -45,25 +45,25 @@ async fn contacts_fixture_with_trashed_handle(handle: &str) -> (TestFixture, Reg
         .execute(&mut *conn)
         .await
         .unwrap();
-    (vault, account)
+    (fixture, account)
 }
 
-/// A second logged-in account in the same vault, with `handle` linked to
+/// A second logged-in account in the same server, with `handle` linked to
 /// one of its contacts. Used to prove `/v1/contacts/unmatched-identities` is scoped to
-/// the calling account rather than the whole vault database.
-async fn account_with_handle(vault: &TestFixture, handle: &str) -> RegisteredAccount {
-    let account = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
-    let mut conn = vault.state.db.acquire().await.unwrap();
+/// the calling account rather than the whole database.
+async fn account_with_handle(fixture: &TestFixture, handle: &str) -> RegisteredAccount {
+    let account = register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     insert_contact_with_handle(&mut conn, account.account_id, "Other", handle).await;
     account
 }
 
 #[tokio::test]
-async fn contact_match_reports_only_the_identifiers_the_vault_does_not_have() {
-    let (vault, account) = contacts_fixture_with_handles(&["+15550100"]).await;
+async fn contact_match_reports_only_the_identifiers_the_database_does_not_have() {
+    let (fixture, account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let body = serde_json::json!({ "identifiers": ["+15550100", "+15550999"] });
     let response = post_json::<serde_json::Value>(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts/unmatched-identities",
         &account.token,
         body,
@@ -74,10 +74,10 @@ async fn contact_match_reports_only_the_identifiers_the_vault_does_not_have() {
 
 #[tokio::test]
 async fn contact_match_ignores_blank_identifiers_and_de_duplicates() {
-    let (vault, account) = contacts_fixture_with_handles(&[]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&[]).await;
     let body = serde_json::json!({ "identifiers": ["+15550999", "  ", "+15550999", ""] });
     let response = post_json::<serde_json::Value>(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts/unmatched-identities",
         &account.token,
         body,
@@ -89,12 +89,12 @@ async fn contact_match_ignores_blank_identifiers_and_de_duplicates() {
 #[tokio::test]
 async fn contact_match_collapses_duplicates_by_normalized_form() {
     // Two spellings of the same phone number must read as one new
-    // person, not two — otherwise Gate 1's "N new to your vault" count
+    // person, not two — otherwise Gate 1's "N new" count
     // double-counts a single human written two ways.
-    let (vault, account) = contacts_fixture_with_handles(&[]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&[]).await;
     let body = serde_json::json!({ "identifiers": ["+1 (555) 010-0100", "+15550100100"] });
     let response = post_json::<serde_json::Value>(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts/unmatched-identities",
         &account.token,
         body,
@@ -114,10 +114,10 @@ async fn contact_match_matches_a_differently_spelled_identifier_against_the_stor
     // Guards against a regression to matching on `h.raw`: the fixture
     // stores the E.164 form through the normal handle-linking path; the
     // request asks about a spaced-out spelling of the same number.
-    let (vault, account) = contacts_fixture_with_handles(&["+15550100"]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let body = serde_json::json!({ "identifiers": ["+1 555 0100"] });
     let response = post_json::<serde_json::Value>(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts/unmatched-identities",
         &account.token,
         body,
@@ -132,10 +132,10 @@ async fn contact_match_matches_a_differently_spelled_identifier_against_the_stor
 
 #[tokio::test]
 async fn contact_match_preserves_order_across_multiple_unknowns() {
-    let (vault, account) = contacts_fixture_with_handles(&["+15550100"]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let body = serde_json::json!({ "identifiers": ["+15550100", "+15550200", "+15550300"] });
     let response = post_json::<serde_json::Value>(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts/unmatched-identities",
         &account.token,
         body,
@@ -152,10 +152,10 @@ async fn contact_match_counts_a_trashed_contact_as_new() {
     // An import that meets this handle discards the trashed contact and
     // makes a fresh one from the backup (ADR-0013, `imports_api::contact_name`),
     // so the person is about to see a new contact, and the count says so.
-    let (vault, account) = contacts_fixture_with_trashed_handle("+15550100").await;
+    let (fixture, account) = contacts_fixture_with_trashed_handle("+15550100").await;
     let body = serde_json::json!({ "identifiers": ["+15550100"] });
     let response = post_json::<serde_json::Value>(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts/unmatched-identities",
         &account.token,
         body,
@@ -166,11 +166,11 @@ async fn contact_match_counts_a_trashed_contact_as_new() {
 
 #[tokio::test]
 async fn contact_match_is_scoped_to_the_calling_account() {
-    let (vault, mine) = contacts_fixture_with_handles(&[]).await;
-    let _other = account_with_handle(&vault, "+15550100").await;
+    let (fixture, mine) = contacts_fixture_with_handles(&[]).await;
+    let _other = account_with_handle(&fixture, "+15550100").await;
     let body = serde_json::json!({ "identifiers": ["+15550100"] });
     let response = post_json::<serde_json::Value>(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts/unmatched-identities",
         &mine.token,
         body,
@@ -185,8 +185,8 @@ async fn contact_match_is_scoped_to_the_calling_account() {
 /// `ContactEditError` existed.
 #[tokio::test]
 async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
-    let (vault, account) = contacts_fixture_with_handles(&[]).await;
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let (fixture, account) = contacts_fixture_with_handles(&[]).await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     let first =
         insert_contact_with_handle(&mut conn, account.account_id, "Ada", "+15555550100").await;
     insert_contact_with_handle(&mut conn, account.account_id, "Grace", "+15555550200").await;
@@ -194,7 +194,7 @@ async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
 
     // Taking an identity that is already another contact’s.
     let (status, sentence) = crate::test_support::patch_failure(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{first}"),
         &account.token,
         serde_json::json!({ "add_identity": { "address": "+15555550200" } }),
@@ -205,7 +205,7 @@ async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
 
     // No edit named at all.
     let status = crate::test_support::patch_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{first}"),
         &account.token,
         serde_json::json!({}),
@@ -216,12 +216,12 @@ async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
 
 #[tokio::test]
 async fn contact_match_rejects_an_oversized_batch() {
-    let (vault, account) = contacts_fixture_with_handles(&[]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&[]).await;
     let identifiers: Vec<String> = (0..MAX_MATCH_IDENTIFIERS + 1)
         .map(|i| format!("+1555{i:06}"))
         .collect();
     let status = post_status(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts/unmatched-identities",
         &account.token,
         serde_json::json!({ "identifiers": identifiers }),
@@ -232,9 +232,9 @@ async fn contact_match_rejects_an_oversized_batch() {
 
 #[tokio::test]
 async fn list_contacts_uses_preferred_name_and_handle_ids() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let contact_id: i64 = sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Pat') RETURNING id",
     )
@@ -285,9 +285,9 @@ async fn list_contacts_uses_preferred_name_and_handle_ids() {
 
 #[tokio::test]
 async fn list_contacts_filters_and_paginates() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     for (name, phone) in [
         ("Pat", "+15555550100"),
         ("Sam", "+15555550200"),
@@ -378,9 +378,9 @@ async fn list_contacts_filters_and_paginates() {
 
 #[tokio::test]
 async fn get_contact_detail_counts_direct_group_and_messages() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let contact_id: i64 = sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Sam') RETURNING id",
     )
@@ -547,9 +547,9 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
 
 #[tokio::test]
 async fn get_contact_summaries_counts_two_contacts_in_one_query() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
 
     let sam_id: i64 = sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Sam') RETURNING id",
@@ -818,9 +818,9 @@ async fn insert_held_message(
 /// every message held at it (ADR-0015).
 #[tokio::test]
 async fn a_contacts_identity_and_summary_count_the_messages_it_sent() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
 
     let mine =
         account_profile::link_account_handle(&mut conn, account, "+15555550001", HandleType::Phone)
@@ -991,9 +991,9 @@ async fn a_contacts_identity_and_summary_count_the_messages_it_sent() {
 
 #[tokio::test]
 async fn mutate_contact_add_update_remove_handle_and_rename() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let contact_id: i64 = sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Sam') RETURNING id",
     )
@@ -1147,9 +1147,9 @@ async fn handle_type_and_service(
 /// username with no service stays Other rather than passing for a phone.
 #[tokio::test]
 async fn a_handle_takes_its_type_from_the_service_it_is_added_under() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let contact_id = insert_contact_with_handle(&mut conn, account, "Sam", "+15555550100").await;
 
     for (raw, service, expected) in [
@@ -1179,9 +1179,9 @@ async fn a_handle_takes_its_type_from_the_service_it_is_added_under() {
 /// second one.
 #[tokio::test]
 async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let contact_id = insert_contact_with_handle(&mut conn, account, "Sam", "+15555550100").await;
     add_identity(&mut conn, account, contact_id, "+15555550300", Some("sms")).await;
 
@@ -1219,9 +1219,9 @@ async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
 
 #[tokio::test]
 async fn mutate_contact_rejects_trashed_contact() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let contact_id =
         insert_contact_with_handle(&mut conn, account, "Trashed", "+15555550100").await;
     sqlx::query("INSERT INTO trashed_contacts (account_id, contact_id) VALUES ($1, $2)")
@@ -1282,9 +1282,9 @@ async fn set_contact_last_modified(
 
 #[tokio::test]
 async fn mutate_contact_bumps_last_modified_on_shape_changes() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let contact_id: i64 = sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Sam') RETURNING id",
     )
@@ -1498,9 +1498,9 @@ async fn insert_direct_conversation(
 
 #[tokio::test]
 async fn list_contacts_filters_has_messages_and_never_messaged() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     insert_contact_with_handle(&mut conn, account, "Messaged", "+15555550100").await;
     insert_contact_with_handle(&mut conn, account, "Silent", "+15555550200").await;
     insert_direct_conversation(
@@ -1581,9 +1581,9 @@ async fn insert_message_from(
 /// either direction.
 #[tokio::test]
 async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     insert_contact_with_handle(&mut conn, account, "Recent", "+15555550100").await;
     insert_contact_with_handle(&mut conn, account, "Older", "+15555550200").await;
     insert_contact_with_handle(&mut conn, account, "Silent", "+15555550300").await;
@@ -1722,9 +1722,9 @@ async fn names_and_last_heard(
 
 #[tokio::test]
 async fn contacts_route_accepts_last_heard_and_refuses_other_keys() {
-    let (vault, account) = contacts_fixture_with_handles(&["+15555550100"]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&["+15555550100"]).await;
     let page: serde_json::Value = crate::test_support::get_json(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts?sort=-last_heard",
         &account.token,
     )
@@ -1732,18 +1732,21 @@ async fn contacts_route_accepts_last_heard_and_refuses_other_keys() {
     assert_eq!(page["items"][0]["name"], "Contact 0");
     assert!(page["items"][0]["last_heard_at"].is_null());
 
-    let (status, body) =
-        crate::test_support::get_raw(&vault.state, "/v1/contacts?sort=last_seen", &account.token)
-            .await;
+    let (status, body) = crate::test_support::get_raw(
+        &fixture.state,
+        "/v1/contacts?sort=last_seen",
+        &account.token,
+    )
+    .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert!(body.contains("name, last_heard"), "{body}");
 }
 
 #[tokio::test]
 async fn list_contacts_filters_no_handle() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     insert_contact_with_handle(&mut conn, account, "WithHandle", "+15555550100").await;
     sqlx::query("INSERT INTO contacts (account_id, preferred_name) VALUES ($1, $2)")
         .bind(account)
@@ -1770,9 +1773,9 @@ async fn list_contacts_filters_no_handle() {
 
 #[tokio::test]
 async fn list_contacts_filters_service_or() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     insert_contact_with_handle(&mut conn, account, "IMsg", "+15555550100").await;
     insert_contact_with_handle(&mut conn, account, "Sms", "+15555550200").await;
     insert_contact_with_handle(&mut conn, account, "Wa", "+15555550300").await;
@@ -1822,13 +1825,13 @@ async fn list_contacts_filters_service_or() {
 }
 
 /// A file that is not the address book it claims to be is the caller's to
-/// fix, so it answers `422`, not the `500` that says the vault broke; and a
+/// fix, so it answers `422`, not the `500` that says the server broke; and a
 /// book that does parse is still loaded.
 #[tokio::test]
 async fn a_broken_address_book_is_a_422_and_a_good_one_loads() {
-    let (vault, account) = fixture_with_account().await;
+    let (fixture, account) = fixture_with_account().await;
     let (status, text) = crate::test_support::post_raw(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts",
         &account.token,
         "text/vcard",
@@ -1847,11 +1850,11 @@ async fn a_broken_address_book_is_a_422_and_a_good_one_loads() {
     );
     assert!(
         !errors.contains("address-book.vcf"),
-        "never names the vault's temp file: {errors}"
+        "never names the server's temp file: {errors}"
     );
 
     let (status, text) = crate::test_support::post_raw(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts",
         &account.token,
         "text/vcard",
@@ -1884,10 +1887,10 @@ fn address_book_of(len: usize) -> String {
 #[tokio::test]
 async fn an_address_book_at_the_size_cap_loads_and_one_byte_over_is_a_413() {
     use address_book::MAX_ADDRESS_BOOK_BYTES;
-    let (vault, account) = fixture_with_account().await;
+    let (fixture, account) = fixture_with_account().await;
 
     let (status, text) = crate::test_support::post_raw(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts",
         &account.token,
         "text/vcard",
@@ -1899,7 +1902,7 @@ async fn an_address_book_at_the_size_cap_loads_and_one_byte_over_is_a_413() {
     assert_eq!(body["contacts"], 1, "{text}");
 
     let (status, text) = crate::test_support::post_raw(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts",
         &account.token,
         "text/vcard",
@@ -1939,10 +1942,10 @@ fn the_media_type_alone_decides_the_address_book_format() {
 
 #[tokio::test]
 async fn an_address_book_renames_a_contact_an_import_named() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let dir = vault.dir();
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let dir = fixture.dir();
+    let mut conn = fixture.conn().await;
 
     // What an import leaves behind: a contact named by the backup, holding
     // the phone, marked as the import's.
@@ -1995,10 +1998,10 @@ async fn an_address_book_renames_a_contact_an_import_named() {
 
 #[tokio::test]
 async fn a_nameless_card_does_not_blank_an_imported_name() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let dir = vault.dir();
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let dir = fixture.dir();
+    let mut conn = fixture.conn().await;
 
     // An import already named this person; the book only lists their
     // number, nothing more.
@@ -2038,10 +2041,10 @@ async fn a_nameless_card_does_not_blank_an_imported_name() {
 
 #[tokio::test]
 async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let dir = vault.dir();
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let dir = fixture.dir();
+    let mut conn = fixture.conn().await;
 
     // An import discovered this person and gave them the name that backup
     // used, holding the phone the book is about to load a card for.
@@ -2119,7 +2122,7 @@ async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
     assert_eq!(
         ids,
         vec![hand_typed],
-        "the card joins the person the vault already has: {ids:?}"
+        "the card joins the person the database already has: {ids:?}"
     );
 
     // They keep the identity that made them findable.
@@ -2149,12 +2152,12 @@ async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
 
 #[tokio::test]
 async fn loading_an_address_book_replaces_only_its_own_rows() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let dir = vault.dir();
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let dir = fixture.dir();
+    let mut conn = fixture.conn().await;
 
-    // An identity the vault learned from imported messages, and a Contact
+    // An identity the server learned from imported messages, and a Contact
     // Group the person built by hand.
     let discovered =
         insert_contact_with_handle(&mut conn, account, "From Import", "+15555550999").await;
@@ -2185,7 +2188,7 @@ async fn loading_an_address_book_replaces_only_its_own_rows() {
         .unwrap();
 
     // A second load of a book that dropped Ada removes her, because the
-    // vault knows that row was the book's.
+    // server knows that row was the book's.
     let book2 = dir.join("book2.vcf");
     std::fs::write(
         &book2,
@@ -2231,10 +2234,10 @@ async fn loading_an_address_book_replaces_only_its_own_rows() {
 
 #[tokio::test]
 async fn reloading_an_address_book_keeps_a_contact_still_in_the_file() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let dir = vault.dir();
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let dir = fixture.dir();
+    let mut conn = fixture.conn().await;
 
     // Ada exists only because of the book.
     let book = dir.join("book.vcf");
@@ -2362,10 +2365,10 @@ async fn reloading_an_address_book_keeps_a_contact_still_in_the_file() {
 
 #[tokio::test]
 async fn reloading_an_address_book_drops_a_number_the_card_no_longer_lists() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let dir = vault.dir();
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let dir = fixture.dir();
+    let mut conn = fixture.conn().await;
 
     let book = dir.join("book.vcf");
     std::fs::write(
@@ -2433,10 +2436,10 @@ async fn reloading_an_address_book_drops_a_number_the_card_no_longer_lists() {
 
 #[tokio::test]
 async fn a_card_whose_number_changed_is_a_new_contact() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let dir = vault.dir();
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let dir = fixture.dir();
+    let mut conn = fixture.conn().await;
 
     let book = dir.join("book.vcf");
     std::fs::write(
@@ -2503,9 +2506,9 @@ async fn a_card_whose_number_changed_is_a_new_contact() {
 
 #[tokio::test]
 async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
 
     // Knows who and how to reach them: not Unknown.
     insert_contact_with_handle(&mut conn, account, "Ada", "+15555550100").await;
@@ -2566,9 +2569,9 @@ async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
 
 #[tokio::test]
 async fn list_contacts_filters_by_group_and_no_group() {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let family = insert_contact_with_handle(&mut conn, account, "Ada", "+15555550100").await;
     insert_contact_with_handle(&mut conn, account, "Ben", "+15555550200").await;
     crate::db::named_membership::set_membership(
@@ -2628,9 +2631,9 @@ async fn list_contacts_filters_by_group_and_no_group() {
 
 #[tokio::test]
 async fn contact_list_takes_the_search_language() {
-    let (vault, account) = contacts_fixture_with_handles(&["+15550100", "+15550101"]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&["+15550100", "+15550101"]).await;
     {
-        let mut conn = vault.state.db.acquire().await.unwrap();
+        let mut conn = fixture.state.db.acquire().await.unwrap();
         let group_id: i64 = sqlx::query_scalar(
             "INSERT INTO contact_groups (account_id, name) VALUES ($1, 'Family') RETURNING id",
         )
@@ -2650,13 +2653,16 @@ async fn contact_list_takes_the_search_language() {
             .await
             .unwrap();
     }
-    let page: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/contacts?q=group:Family", &account.token)
-            .await;
+    let page: serde_json::Value = crate::test_support::get_json(
+        &fixture.state,
+        "/v1/contacts?q=group:Family",
+        &account.token,
+    )
+    .await;
     assert_eq!(page["total"], 1);
     assert_eq!(page["items"][0]["name"], "Contact 0");
     let page: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/contacts?q=group:none", &account.token)
+        crate::test_support::get_json(&fixture.state, "/v1/contacts?q=group:none", &account.token)
             .await;
     assert_eq!(page["total"], 1);
     assert_eq!(page["items"][0]["name"], "Contact 1");
@@ -2664,9 +2670,9 @@ async fn contact_list_takes_the_search_language() {
 
 #[tokio::test]
 async fn contact_list_refuses_a_word_from_another_list() {
-    let (vault, account) = contacts_fixture_with_handles(&["+15550100"]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let status =
-        crate::test_support::get_status(&vault.state, "/v1/contacts?q=from:me", &account.token)
+        crate::test_support::get_status(&fixture.state, "/v1/contacts?q=from:me", &account.token)
             .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
@@ -2694,8 +2700,8 @@ fn a_refusal_is_the_persons_sentence_and_anything_else_is_internal() {
 
 #[tokio::test]
 async fn the_contact_list_is_a_page_and_summaries_are_items() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
 
     let page: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/contacts?limit=5", &user.token).await;
@@ -2734,8 +2740,8 @@ async fn trashed_contact_row_count(conn: &mut AnyConnection, account_id: i64, id
 /// conversation (id 1) holding two messages, and already in the trash.
 /// Returns the account and the contact's id.
 async fn trashed_contact_fixture() -> (TestFixture, RegisteredAccount, i64) {
-    let (vault, account) = contacts_fixture_with_handles(&["+15550100"]).await;
-    let mut conn = vault.conn().await;
+    let (fixture, account) = contacts_fixture_with_handles(&["+15550100"]).await;
+    let mut conn = fixture.conn().await;
     insert_direct_conversation(
         &mut conn,
         account.account_id,
@@ -2751,14 +2757,14 @@ async fn trashed_contact_fixture() -> (TestFixture, RegisteredAccount, i64) {
         .await
         .unwrap();
     let status = crate::test_support::post_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{id}/trash"),
         &account.token,
         serde_json::json!({}),
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    (vault, account, id)
+    (fixture, account, id)
 }
 
 async fn contact_name_and_origin(conn: &mut AnyConnection, id: i64) -> (String, String) {
@@ -2771,17 +2777,17 @@ async fn contact_name_and_origin(conn: &mut AnyConnection, id: i64) -> (String, 
 
 #[tokio::test]
 async fn contact_delete_makes_it_unknown_and_leaves_its_conversations_alone() {
-    let (vault, account, id) = trashed_contact_fixture().await;
+    let (fixture, account, id) = trashed_contact_fixture().await;
 
     let status = crate::test_support::delete_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{id}"),
         &account.token,
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     assert_eq!(
         contact_name_and_origin(&mut conn, id).await,
         (String::new(), "import".into()),
@@ -2794,15 +2800,18 @@ async fn contact_delete_makes_it_unknown_and_leaves_its_conversations_alone() {
     );
     // Out of the trash and nameless, it opens again — as Unknown — and its
     // conversation counts are what they were.
-    let detail: serde_json::Value =
-        crate::test_support::get_json(&vault.state, &format!("/v1/contacts/{id}"), &account.token)
-            .await;
+    let detail: serde_json::Value = crate::test_support::get_json(
+        &fixture.state,
+        &format!("/v1/contacts/{id}"),
+        &account.token,
+    )
+    .await;
     assert_eq!(detail["name"], "", "{detail}");
     assert_eq!(detail["unknown"], true, "{detail}");
     assert_eq!(detail["direct_conversations"], 1, "{detail}");
     assert_eq!(detail["total_messages"], 2, "{detail}");
     let conversations: serde_json::Value = crate::test_support::get_json(
-        &vault.state,
+        &fixture.state,
         "/v1/conversations?q=trashed:any",
         &account.token,
     )
@@ -2819,20 +2828,20 @@ async fn contact_delete_makes_it_unknown_and_leaves_its_conversations_alone() {
 
 #[tokio::test]
 async fn contact_delete_refuses_a_contact_that_is_not_in_the_trash() {
-    let (vault, account) = contacts_fixture_with_handles(&["+15550100"]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let list: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/contacts", &account.token).await;
+        crate::test_support::get_json(&fixture.state, "/v1/contacts", &account.token).await;
     let id = list["items"][0]["id"].as_i64().unwrap();
 
     let (status, body) = crate::test_support::delete_raw(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{id}"),
         &account.token,
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert!(body.contains("not in the trash"), "{body}");
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     assert_eq!(
         contact_name_and_origin(&mut conn, id).await.0,
         "Contact 0",
@@ -2843,15 +2852,16 @@ async fn contact_delete_refuses_a_contact_that_is_not_in_the_trash() {
 
 #[tokio::test]
 async fn contact_delete_404s_for_an_unknown_id_and_for_another_accounts() {
-    let (vault, alice, alices) = trashed_contact_fixture().await;
-    let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
+    let (fixture, alice, alices) = trashed_contact_fixture().await;
+    let bob = register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
 
     let status =
-        crate::test_support::delete_status(&vault.state, "/v1/contacts/999999", &alice.token).await;
+        crate::test_support::delete_status(&fixture.state, "/v1/contacts/999999", &alice.token)
+            .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 
     let status = crate::test_support::delete_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{alices}"),
         &bob.token,
     )
@@ -2861,7 +2871,7 @@ async fn contact_delete_404s_for_an_unknown_id_and_for_another_accounts() {
         StatusCode::NOT_FOUND,
         "Bob must not learn the id exists"
     );
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     assert_eq!(
         contact_name_and_origin(&mut conn, alices).await.0,
         "Contact 0",
@@ -2871,29 +2881,29 @@ async fn contact_delete_404s_for_an_unknown_id_and_for_another_accounts() {
 
 #[tokio::test]
 async fn contact_delete_needs_the_delete_permission() {
-    let (vault, account, id) = trashed_contact_fixture().await;
-    vault.turn_off_delete(account.account_id).await;
+    let (fixture, account, id) = trashed_contact_fixture().await;
+    fixture.turn_off_delete(account.account_id).await;
 
     let status = crate::test_support::delete_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{id}"),
         &account.token,
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     assert_eq!(contact_name_and_origin(&mut conn, id).await.0, "Contact 0");
 }
 
 #[tokio::test]
 async fn contact_trash_drops_it_from_the_list() {
-    let (vault, account) = contacts_fixture_with_handles(&["+15550100"]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let list: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/contacts", &account.token).await;
+        crate::test_support::get_json(&fixture.state, "/v1/contacts", &account.token).await;
     let id = list["items"][0]["id"].as_i64().unwrap();
 
     let status = crate::test_support::post_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{id}/trash"),
         &account.token,
         serde_json::json!({}),
@@ -2902,7 +2912,7 @@ async fn contact_trash_drops_it_from_the_list() {
     assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
 
     let list_after: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/contacts", &account.token).await;
+        crate::test_support::get_json(&fixture.state, "/v1/contacts", &account.token).await;
     assert_eq!(
         list_after["total"], 0,
         "a trashed contact must leave the contacts list"
@@ -2911,15 +2921,15 @@ async fn contact_trash_drops_it_from_the_list() {
 
 #[tokio::test]
 async fn contact_trash_twice_is_204_with_no_second_marker() {
-    let (vault, account) = contacts_fixture_with_handles(&["+15550100"]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let list: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/contacts", &account.token).await;
+        crate::test_support::get_json(&fixture.state, "/v1/contacts", &account.token).await;
     let id = list["items"][0]["id"].as_i64().unwrap();
     let path = format!("/v1/contacts/{id}/trash");
 
     for _ in 0..2 {
         let status = crate::test_support::post_status(
-            &vault.state,
+            &fixture.state,
             &path,
             &account.token,
             serde_json::json!({}),
@@ -2928,7 +2938,7 @@ async fn contact_trash_twice_is_204_with_no_second_marker() {
         assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
     }
 
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     assert_eq!(
         trashed_contact_row_count(&mut conn, account.account_id, id).await,
         1,
@@ -2938,12 +2948,12 @@ async fn contact_trash_twice_is_204_with_no_second_marker() {
 
 #[tokio::test]
 async fn contact_restore_brings_it_back_to_the_list() {
-    let (vault, account) = contacts_fixture_with_handles(&["+15550100"]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let list: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/contacts", &account.token).await;
+        crate::test_support::get_json(&fixture.state, "/v1/contacts", &account.token).await;
     let id = list["items"][0]["id"].as_i64().unwrap();
     crate::test_support::post_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{id}/trash"),
         &account.token,
         serde_json::json!({}),
@@ -2951,7 +2961,7 @@ async fn contact_restore_brings_it_back_to_the_list() {
     .await;
 
     let status = crate::test_support::post_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{id}/restore"),
         &account.token,
         serde_json::json!({}),
@@ -2960,7 +2970,7 @@ async fn contact_restore_brings_it_back_to_the_list() {
     assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
 
     let list_after: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/contacts", &account.token).await;
+        crate::test_support::get_json(&fixture.state, "/v1/contacts", &account.token).await;
     assert_eq!(
         list_after["total"], 1,
         "a restored contact must come back to the contacts list"
@@ -2969,12 +2979,12 @@ async fn contact_restore_brings_it_back_to_the_list() {
 
 #[tokio::test]
 async fn contact_restore_twice_is_204_with_marker_gone() {
-    let (vault, account) = contacts_fixture_with_handles(&["+15550100"]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let list: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/contacts", &account.token).await;
+        crate::test_support::get_json(&fixture.state, "/v1/contacts", &account.token).await;
     let id = list["items"][0]["id"].as_i64().unwrap();
     crate::test_support::post_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{id}/trash"),
         &account.token,
         serde_json::json!({}),
@@ -2984,7 +2994,7 @@ async fn contact_restore_twice_is_204_with_marker_gone() {
 
     for _ in 0..2 {
         let status = crate::test_support::post_status(
-            &vault.state,
+            &fixture.state,
             &path,
             &account.token,
             serde_json::json!({}),
@@ -2993,7 +3003,7 @@ async fn contact_restore_twice_is_204_with_marker_gone() {
         assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
     }
 
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     assert_eq!(
         trashed_contact_row_count(&mut conn, account.account_id, id).await,
         0,
@@ -3003,10 +3013,10 @@ async fn contact_restore_twice_is_204_with_marker_gone() {
 
 #[tokio::test]
 async fn contact_trash_404s_for_an_unknown_id() {
-    let (vault, account) = contacts_fixture_with_handles(&[]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&[]).await;
 
     let status = crate::test_support::post_status(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts/999999/trash",
         &account.token,
         serde_json::json!({}),
@@ -3017,10 +3027,10 @@ async fn contact_trash_404s_for_an_unknown_id() {
 
 #[tokio::test]
 async fn contact_restore_404s_for_an_unknown_id() {
-    let (vault, account) = contacts_fixture_with_handles(&[]).await;
+    let (fixture, account) = contacts_fixture_with_handles(&[]).await;
 
     let status = crate::test_support::post_status(
-        &vault.state,
+        &fixture.state,
         "/v1/contacts/999999/restore",
         &account.token,
         serde_json::json!({}),
@@ -3031,17 +3041,17 @@ async fn contact_restore_404s_for_an_unknown_id() {
 
 #[tokio::test]
 async fn contact_trash_404s_for_another_accounts_contact() {
-    let (vault, alice) = contacts_fixture_with_handles(&["+15550100"]).await;
+    let (fixture, alice) = contacts_fixture_with_handles(&["+15550100"]).await;
     let alice_list: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/contacts", &alice.token).await;
+        crate::test_support::get_json(&fixture.state, "/v1/contacts", &alice.token).await;
     let alice_contact_id = alice_list["items"][0]["id"].as_i64().unwrap();
 
-    let bob = crate::test_support::register_via_api(&vault.state, "bob", "hunter2hunter2").await;
+    let bob = crate::test_support::register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
 
     // Bob trashing Alice's contact id must 404, not 403 — a 403 would
-    // confirm the id exists in someone else's vault.
+    // confirm the id exists in someone else's account.
     let status = crate::test_support::post_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{alice_contact_id}/trash"),
         &bob.token,
         serde_json::json!({}),
@@ -3049,7 +3059,7 @@ async fn contact_trash_404s_for_another_accounts_contact() {
     .await;
     assert_eq!(status, axum::http::StatusCode::NOT_FOUND);
 
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     assert_eq!(
         trashed_contact_row_count(&mut conn, alice.account_id, alice_contact_id).await,
         0,
@@ -3059,11 +3069,11 @@ async fn contact_trash_404s_for_another_accounts_contact() {
 
 #[tokio::test]
 async fn contact_restore_404s_for_another_accounts_contact() {
-    let (vault, alice) = contacts_fixture_with_handles(&["+15550100"]).await;
+    let (fixture, alice) = contacts_fixture_with_handles(&["+15550100"]).await;
     let alice_list: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/contacts", &alice.token).await;
+        crate::test_support::get_json(&fixture.state, "/v1/contacts", &alice.token).await;
     let alice_contact_id = alice_list["items"][0]["id"].as_i64().unwrap();
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     sqlx::query("INSERT INTO trashed_contacts (account_id, contact_id) VALUES ($1, $2)")
         .bind(alice.account_id)
         .bind(alice_contact_id)
@@ -3072,10 +3082,10 @@ async fn contact_restore_404s_for_another_accounts_contact() {
         .unwrap();
     drop(conn);
 
-    let bob = crate::test_support::register_via_api(&vault.state, "bob", "hunter2hunter2").await;
+    let bob = crate::test_support::register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
 
     let status = crate::test_support::post_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{alice_contact_id}/restore"),
         &bob.token,
         serde_json::json!({}),
@@ -3083,7 +3093,7 @@ async fn contact_restore_404s_for_another_accounts_contact() {
     .await;
     assert_eq!(status, axum::http::StatusCode::NOT_FOUND);
 
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     assert_eq!(
         trashed_contact_row_count(&mut conn, alice.account_id, alice_contact_id).await,
         1,

@@ -26,7 +26,7 @@ pub fn detect_engine(url: &str) -> Result<DbEngine> {
     }
 }
 
-/// The vault's historical pragma set, applied to each new connection:
+/// The server's historical pragma set, applied to each new connection:
 /// busy timeout first (overlapping auth and UI writes wait), foreign keys on,
 /// synchronous NORMAL, `temp_store` MEMORY, `cache_size` -200000.
 fn with_pragmas(pool: AnyPoolOptions) -> AnyPoolOptions {
@@ -61,8 +61,8 @@ fn sqlite_url_from_path(path: &Path) -> String {
         .to_string()
 }
 
-/// Pool options for SQLite: four connections plus the vault pragmas. Every
-/// SQLite pool comes through here, so this is also where the vault's SQL
+/// Pool options for SQLite: four connections plus the pragmas. Every
+/// SQLite pool comes through here, so this is also where the server's SQL
 /// functions are registered for the connections the pool will open
 /// ([`crate::db::sqlite_functions`]).
 fn sqlite_pool_options() -> AnyPoolOptions {
@@ -100,7 +100,7 @@ pub async fn open_pool_for_path(path: &Path) -> Result<AnyPool> {
 ///
 /// The `sqlite://` path matches [`open_pool_for_path`]: the file is created
 /// when missing and WAL is enabled best-effort. A `mode=` in the URL is
-/// overridden on purpose — the vault always reads and writes its database.
+/// overridden on purpose — the server always reads and writes its database.
 /// Postgres has no equivalent.
 pub async fn open_pool_from_url(url: &str) -> Result<AnyPool> {
     sqlx::any::install_default_drivers();
@@ -319,7 +319,7 @@ pub async fn pg_test_schema_url(url: &str) -> String {
                 if !owner_gone {
                     continue;
                 }
-                // A vault schema is about forty-five objects, and one
+                // A schema is about forty-five objects, and one
                 // statement's locks all count against
                 // max_locks_per_transaction, so drop ten schemas at a time.
                 for chunk in schemas.chunks(10) {
@@ -422,23 +422,23 @@ mod tests {
         for (raw, expected) in [
             // The ordinary case: user and password before the host.
             (
-                "postgres://vault:s3cret@db.example:5432/messagecrate",
+                "postgres://app:s3cret@db.example:5432/messagecrate",
                 "postgres://db.example:5432/messagecrate",
             ),
             // A user with no password still has to go.
             (
-                "postgres://vault@db.example/messagecrate",
+                "postgres://app@db.example/messagecrate",
                 "postgres://db.example/messagecrate",
             ),
             // Query parameters carry secrets of their own (sslpassword,
             // options), so the whole string after `?` is dropped.
             (
-                "postgres://vault:s3cret@db.example/messagecrate?sslmode=require&sslpassword=hunter2",
+                "postgres://app:s3cret@db.example/messagecrate?sslmode=require&sslpassword=hunter2",
                 "postgres://db.example/messagecrate",
             ),
             // An `@` inside the password must not end the authority early.
             (
-                "postgres://vault:p@ss@db.example/messagecrate",
+                "postgres://app:p@ss@db.example/messagecrate",
                 "postgres://db.example/messagecrate",
             ),
             // No credentials, nothing to strip.
@@ -447,10 +447,7 @@ mod tests {
                 "sqlite://data/messagecrate.db",
             ),
             // No path component at all.
-            (
-                "postgres://vault:s3cret@db.example",
-                "postgres://db.example",
-            ),
+            ("postgres://app:s3cret@db.example", "postgres://db.example"),
         ] {
             let redacted = redact_db_url(raw);
             assert_eq!(redacted, expected, "redacting {raw}");
@@ -467,7 +464,7 @@ mod tests {
     fn redact_db_url_refuses_to_echo_a_non_url() {
         assert_eq!(redact_db_url("data/messagecrate.db"), "<db url>");
         assert_eq!(redact_db_url(""), "<db url>");
-        assert_eq!(redact_db_url("vault:s3cret@db.example"), "<db url>");
+        assert_eq!(redact_db_url("app:s3cret@db.example"), "<db url>");
     }
 
     /// The redaction is reached through `Display`, which is what the status
@@ -475,7 +472,7 @@ mod tests {
     /// notice the `Display` impl being changed to print the raw URL.
     #[test]
     fn displaying_a_url_source_redacts_it() {
-        let shown = DbTarget::Url("postgres://vault:s3cret@db.example/messagecrate").to_string();
+        let shown = DbTarget::Url("postgres://app:s3cret@db.example/messagecrate").to_string();
         assert_eq!(shown, "postgres://db.example/messagecrate");
         assert!(!shown.contains("s3cret"));
     }
@@ -505,7 +502,7 @@ mod tests {
     #[tokio::test]
     async fn opens_sqlite_pool_and_applies_pragmas() {
         let (pool, _dir) = sqlite_test_pool().await;
-        // All five vault pragmas, read back through their pragma table
+        // All five pragmas, read back through their pragma table
         // functions (values must match with_pragmas).
         let busy_timeout: i64 = sqlx::query_scalar("SELECT timeout FROM pragma_busy_timeout")
             .fetch_one(&pool)

@@ -26,7 +26,7 @@
 //! [`delete_trashed`] refuses a row that is not in the trash, so nothing can
 //! be destroyed without having been set aside first, and both it and
 //! [`empty_trash`] run inside one transaction so a failure part-way leaves
-//! the vault as it was.
+//! the database as it was.
 //!
 //! A conversation is deleted outright: the row goes and the schema's cascades
 //! take its messages, attachments, tapbacks, participants and tag memberships

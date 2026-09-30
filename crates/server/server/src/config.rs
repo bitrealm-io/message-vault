@@ -49,7 +49,7 @@ pub struct ServerConfig {
     /// Cross-Origin Resource Sharing (CORS) origins allowed to call this API,
     /// on top of the packaged desktop app's own origins, which are always
     /// allowed. CORS is the browser rule that decides which other websites may
-    /// call this API. Empty is the right setting for a vault serving its own
+    /// call this API. Empty is the right setting for a server serving its own
     /// website, since that UI is same-origin and needs no header at all.
     /// Use `["*"]` only for local debugging. Example: `["https://app.example.com"]`.
     #[serde(default)]
@@ -220,7 +220,7 @@ fn resolve_path(base: &Path, configured: &Path) -> PathBuf {
 impl Config {
     /// Apply the command line's database flags: `--db` replaces `paths.db`
     /// and `--db-url` replaces `[database] url`. After this the config alone
-    /// says where the vault's database is; see [`Config::db_target`].
+    /// says where the database is; see [`Config::db_target`].
     pub(crate) fn with_db_overrides(mut self, db: Option<PathBuf>, db_url: Option<String>) -> Self {
         if let Some(db) = db {
             self.paths.db = db;
@@ -231,7 +231,7 @@ impl Config {
         self
     }
 
-    /// Where the vault's database is: the connection URL when one is set,
+    /// Where the database is: the connection URL when one is set,
     /// otherwise the SQLite file at `paths.db`. The URL always wins because
     /// it can name a Postgres server, which a path never can.
     pub(crate) fn db_target(&self) -> DbTarget<'_> {
@@ -260,7 +260,7 @@ mod tests {
         Config {
             paths: PathsConfig {
                 db: PathBuf::from(db),
-                data_dir: PathBuf::from("/vault/data"),
+                data_dir: PathBuf::from("/srv/data"),
                 assets_dir: "assets".into(),
                 assets_converted_dir: "assets_converted".into(),
             },
@@ -271,17 +271,17 @@ mod tests {
 
     #[test]
     fn without_overrides_the_database_is_the_configured_sqlite_file() {
-        let cfg = config_at("/vault/messagecrate.db").with_db_overrides(None, None);
+        let cfg = config_at("/srv/messagecrate.db").with_db_overrides(None, None);
 
-        assert_eq!(cfg.paths.db, PathBuf::from("/vault/messagecrate.db"));
+        assert_eq!(cfg.paths.db, PathBuf::from("/srv/messagecrate.db"));
         assert_eq!(cfg.database.url, None);
-        assert_eq!(cfg.db_target().to_string(), "/vault/messagecrate.db");
+        assert_eq!(cfg.db_target().to_string(), "/srv/messagecrate.db");
         assert_eq!(cfg.db_engine().unwrap(), DbEngine::Sqlite);
     }
 
     #[test]
     fn db_override_replaces_the_sqlite_path() {
-        let cfg = config_at("/vault/messagecrate.db")
+        let cfg = config_at("/srv/messagecrate.db")
             .with_db_overrides(Some(PathBuf::from("/elsewhere/other.db")), None);
 
         assert_eq!(cfg.db_target().to_string(), "/elsewhere/other.db");
@@ -289,9 +289,9 @@ mod tests {
 
     #[test]
     fn db_url_override_wins_over_the_path_and_names_the_engine() {
-        let cfg = config_at("/vault/messagecrate.db").with_db_overrides(
+        let cfg = config_at("/srv/messagecrate.db").with_db_overrides(
             Some(PathBuf::from("/elsewhere/other.db")),
-            Some("postgres://vault:secret@db.example:5432/messagecrate".into()),
+            Some("postgres://app:secret@db.example:5432/messagecrate".into()),
         );
 
         assert_eq!(
@@ -303,7 +303,7 @@ mod tests {
 
     #[test]
     fn a_configured_url_is_honoured_without_any_override() {
-        let mut cfg = config_at("/vault/messagecrate.db");
+        let mut cfg = config_at("/srv/messagecrate.db");
         cfg.database.url = Some("sqlite:///elsewhere/other.db".into());
 
         let cfg = cfg.with_db_overrides(None, None);
@@ -314,7 +314,7 @@ mod tests {
 
     #[test]
     fn an_unknown_url_scheme_is_an_error() {
-        let mut cfg = config_at("/vault/messagecrate.db");
+        let mut cfg = config_at("/srv/messagecrate.db");
         cfg.database.url = Some("mysql://db.example/messagecrate".into());
 
         assert!(cfg.db_engine().is_err());

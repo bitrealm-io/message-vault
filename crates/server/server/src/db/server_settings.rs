@@ -1,6 +1,6 @@
-//! Settings that belong to the whole vault rather than to one account.
+//! Settings that belong to the whole server rather than to one account.
 //!
-//! One row, at id 1. A vault that has never been written to has no row at
+//! One row, at id 1. A database that has never been written to has no row at
 //! all, which reads the same as a row of defaults — `public_registration`
 //! off — so nothing has to seed it.
 
@@ -9,16 +9,16 @@ use sqlx::AnyConnection;
 
 use crate::db::schema;
 
-/// The vault's settings.
+/// The server's settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ServerSettings {
-    /// Anyone reaching the vault may create their own account. Off unless the
-    /// vault owner turns it on.
+    /// Anyone reaching the server may create their own account. Off unless the
+    /// owner turns it on.
     pub public_registration: bool,
 }
 
 impl Default for ServerSettings {
-    /// What an unwritten vault reads as: nobody signs themselves up.
+    /// What an unwritten database reads as: nobody signs themselves up.
     fn default() -> Self {
         Self {
             public_registration: false,
@@ -26,7 +26,7 @@ impl Default for ServerSettings {
     }
 }
 
-/// Read the vault's settings, or the defaults when nothing has been written.
+/// Read the server's settings, or the defaults when nothing has been written.
 pub async fn load(conn: &mut AnyConnection) -> Result<ServerSettings> {
     schema::ensure_accounts_schema(conn).await?;
     let row: Option<(i64,)> =
@@ -61,12 +61,12 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn an_unwritten_vault_reads_as_closed() {
+    async fn an_unwritten_database_reads_as_closed() {
         let (pool, _dir) = crate::db::engine::test_pool().await;
         let mut conn = pool.acquire().await.unwrap();
         assert!(
             !load(&mut conn).await.unwrap().public_registration,
-            "a vault nobody has configured admits nobody"
+            "a server nobody has configured admits nobody"
         );
     }
 
@@ -86,6 +86,6 @@ mod tests {
             .fetch_one(&mut *conn)
             .await
             .unwrap();
-        assert_eq!(rows, 1, "the vault has one settings record");
+        assert_eq!(rows, 1, "the database has one settings record");
     }
 }

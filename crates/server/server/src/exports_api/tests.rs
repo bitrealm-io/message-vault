@@ -91,7 +91,7 @@ async fn a_query_scope_takes_the_search_language() {
     );
 }
 
-/// A vault with account `a1` (id 101) and two individual conversations
+/// A fixture with account `a1` (id 101) and two individual conversations
 /// (`+1555`, `+1666`), each holding one SMS message ("hello one" in the
 /// first, "hello two" in the second) with ids 1 and 2. Returns the
 /// conversation ids the seeder made.
@@ -100,10 +100,10 @@ async fn a_query_scope_takes_the_search_language() {
 /// `seed_conversation`, because `SeedMessage` has no `service` field and a
 /// test below asserts `message.service == Some("sms")`.
 async fn seeded_export_fixture() -> (TestFixture, i64, i64) {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
     let conv1 = seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: account,
             handle: "+1555",
@@ -115,7 +115,7 @@ async fn seeded_export_fixture() -> (TestFixture, i64, i64) {
     )
     .await;
     let conv2 = seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: account,
             handle: "+1666",
@@ -127,7 +127,7 @@ async fn seeded_export_fixture() -> (TestFixture, i64, i64) {
     )
     .await;
 
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     sqlx::query(
         "INSERT INTO messages (id, conversation_id, account_id, source, service, timestamp, is_from_me, sort_order, body)
          VALUES (1, $1, 101, 'sms', 'sms', '2020-01-01T00:00:00Z', 0, 0, 'hello one'),
@@ -139,7 +139,7 @@ async fn seeded_export_fixture() -> (TestFixture, i64, i64) {
     .await
     .unwrap();
 
-    (vault, conv1, conv2)
+    (fixture, conv1, conv2)
 }
 
 /// Add message `id` to `conversation` for account 101, dated on `day` of
@@ -162,8 +162,8 @@ async fn add_message(conn: &mut AnyConnection, id: i64, conversation: i64, day: 
 
 #[tokio::test]
 async fn a_selection_scope_matches_by_conversation_or_message_with_the_browse_defaults() {
-    let (vault, conv1, conv2) = seeded_export_fixture().await;
-    let mut conn = vault.conn().await;
+    let (fixture, conv1, conv2) = seeded_export_fixture().await;
+    let mut conn = fixture.conn().await;
     add_message(&mut conn, 3, conv2, 3, "hello three").await;
 
     // Every message of conv1, plus message 3 alone: 1 and 3, never 2.
@@ -213,9 +213,9 @@ async fn a_selection_scope_matches_by_conversation_or_message_with_the_browse_de
 
 #[tokio::test]
 async fn a_selection_refuses_ids_the_account_does_not_hold_naming_them() {
-    let (vault, conv1, _conv2) = seeded_export_fixture().await;
-    vault.account_with_id(102, "bob").await;
-    let mut conn = vault.conn().await;
+    let (fixture, conv1, _conv2) = seeded_export_fixture().await;
+    fixture.account_with_id(102, "bob").await;
+    let mut conn = fixture.conn().await;
     let bob_handle: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
          VALUES (102, '+1777', '+1777', 'phone', 'phone') RETURNING id",
@@ -278,8 +278,8 @@ async fn a_selection_refuses_ids_the_account_does_not_hold_naming_them() {
 
 #[tokio::test]
 async fn export_counts_count_messages_conversations_and_distinct_attachments() {
-    let (vault, conv1, _conv2) = seeded_export_fixture().await;
-    let mut conn = vault.conn().await;
+    let (fixture, conv1, _conv2) = seeded_export_fixture().await;
+    let mut conn = fixture.conn().await;
     add_message(&mut conn, 3, conv1, 3, "third").await;
     // The same file on two messages is one attachment, counted at its
     // largest known size; a file with no fingerprint is not an attachment
@@ -318,8 +318,8 @@ async fn export_counts_count_messages_conversations_and_distinct_attachments() {
 
 #[tokio::test]
 async fn export_includes_attachment_missing_reason() {
-    let (vault, conv1, _conv2) = seeded_export_fixture().await;
-    let mut conn = vault.conn().await;
+    let (fixture, conv1, _conv2) = seeded_export_fixture().await;
+    let mut conn = fixture.conn().await;
     sqlx::query(
         "INSERT INTO attachments (
             message_id, path, original_name, mime_type, sha256, is_sticker,
@@ -345,8 +345,8 @@ async fn export_includes_attachment_missing_reason() {
 
 #[tokio::test]
 async fn export_boolean_queries_preserve_or_and_and_not() {
-    let (vault, conv1, _conv2) = seeded_export_fixture().await;
-    let mut conn = vault.conn().await;
+    let (fixture, conv1, _conv2) = seeded_export_fixture().await;
+    let mut conn = fixture.conn().await;
     sqlx::query("UPDATE messages SET body = 'foo' WHERE id = 1")
         .execute(&mut *conn)
         .await
@@ -373,9 +373,9 @@ async fn export_boolean_queries_preserve_or_and_and_not() {
 /// conversations and no other.
 #[tokio::test]
 async fn a_comma_list_of_conversation_ids_exports_exactly_those_conversations() {
-    let (vault, conv1, conv2) = seeded_export_fixture().await;
+    let (fixture, conv1, conv2) = seeded_export_fixture().await;
     let conv3 = seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: 101,
             handle: "+1777",
@@ -386,7 +386,7 @@ async fn a_comma_list_of_conversation_ids_exports_exactly_those_conversations() 
         },
     )
     .await;
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     add_message(&mut conn, 3, conv3, 3, "hello three").await;
     add_message(&mut conn, 4, conv1, 4, "hello four").await;
 
@@ -415,8 +415,8 @@ async fn a_comma_list_of_conversation_ids_exports_exactly_those_conversations() 
 
 #[tokio::test]
 async fn rejects_an_oversized_query() {
-    let (vault, _conv1, _conv2) = seeded_export_fixture().await;
-    let mut conn = vault.conn().await;
+    let (fixture, _conv1, _conv2) = seeded_export_fixture().await;
+    let mut conn = fixture.conn().await;
     let huge = "x".repeat(crate::search::lex::MAX_QUERY_BYTES + 1);
     let err = page(&mut conn, 101, &query(&huge), 10, 0)
         .await
@@ -429,8 +429,8 @@ async fn rejects_an_oversized_query() {
 
 #[tokio::test]
 async fn export_pages_by_offset_and_reports_the_total() {
-    let (vault, conv1, _conv2) = seeded_export_fixture().await;
-    let mut conn = vault.conn().await;
+    let (fixture, conv1, _conv2) = seeded_export_fixture().await;
+    let mut conn = fixture.conn().await;
     add_message(&mut conn, 3, conv1, 3, "third").await;
 
     let first = page(&mut conn, 101, &ExportScope::Everything, 2, 0)
@@ -458,8 +458,8 @@ async fn export_pages_by_offset_and_reports_the_total() {
 /// selection's own `?` list renumbered after the query's.
 #[tokio::test]
 async fn export_sql_placeholders_match_params_order() {
-    let (vault, conv1, conv2) = seeded_export_fixture().await;
-    let mut conn = vault.conn().await;
+    let (fixture, conv1, conv2) = seeded_export_fixture().await;
+    let mut conn = fixture.conn().await;
     let scope = ExportScope::Selection {
         conversation_ids: vec![conv1, conv2],
         message_ids: vec![1],
@@ -490,12 +490,12 @@ async fn export_sql_placeholders_match_params_order() {
 
 /// An account with two conversations over HTTP: `+15555550100` holding
 /// "pizza tonight" and "salad tomorrow", and `+15555550101` holding "the
-/// menu"; the menu message carries one 13-byte attachment. Returns the vault,
+/// menu"; the menu message carries one 13-byte attachment. Returns the fixture,
 /// the account, and the two conversation ids.
 async fn fixture_with_two_conversations() -> (TestFixture, RegisteredAccount, i64, i64) {
-    let (vault, alice) = fixture_with_account().await;
+    let (fixture, alice) = fixture_with_account().await;
     let dinner = seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: alice.account_id,
             handle: "+15555550100",
@@ -520,7 +520,7 @@ async fn fixture_with_two_conversations() -> (TestFixture, RegisteredAccount, i6
     )
     .await;
     let menu = seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: alice.account_id,
             handle: "+15555550101",
@@ -536,7 +536,7 @@ async fn fixture_with_two_conversations() -> (TestFixture, RegisteredAccount, i6
         },
     )
     .await;
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     sqlx::query(
         "INSERT INTO attachments (message_id, path, original_name, mime_type, sha256, is_sticker, size_bytes)
          SELECT id, 'attachments/menu.pdf', 'menu.pdf', 'application/pdf', 'abc123', 0, 13
@@ -546,12 +546,12 @@ async fn fixture_with_two_conversations() -> (TestFixture, RegisteredAccount, i6
     .execute(&mut *conn)
     .await
     .unwrap();
-    (vault, alice, dinner, menu)
+    (fixture, alice, dinner, menu)
 }
 
 /// The message ids of `conversation`, oldest first.
-async fn message_ids(vault: &TestFixture, conversation: i64) -> Vec<i64> {
-    let mut conn = vault.conn().await;
+async fn message_ids(fixture: &TestFixture, conversation: i64) -> Vec<i64> {
+    let mut conn = fixture.conn().await;
     sqlx::query_scalar("SELECT id FROM messages WHERE conversation_id = $1 ORDER BY sort_order, id")
         .bind(conversation)
         .fetch_all(&mut *conn)
@@ -561,9 +561,9 @@ async fn message_ids(vault: &TestFixture, conversation: i64) -> Vec<i64> {
 
 /// `POST /v1/exports` for `scope`, asserting `201 Created` and that the
 /// `Location` names the run the body carries.
-async fn create_run(vault: &TestFixture, token: &str, scope: Value) -> Value {
+async fn create_run(fixture: &TestFixture, token: &str, scope: Value) -> Value {
     let (location, run): (String, Value) = post_created_json(
-        &vault.state,
+        &fixture.state,
         "/v1/exports",
         token,
         json!({ "scope": scope, "tool": "  tests  " }),
@@ -574,9 +574,9 @@ async fn create_run(vault: &TestFixture, token: &str, scope: Value) -> Value {
 }
 
 /// An API token for `user` with the export scope on or off.
-async fn api_token(vault: &TestFixture, user: &RegisteredAccount, can_export: bool) -> String {
+async fn api_token(fixture: &TestFixture, user: &RegisteredAccount, can_export: bool) -> String {
     let (_location, created): (String, Value) = post_created_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/accounts/{}/api-tokens", user.account_id),
         &user.token,
         json!({ "label": "pull", "can_import": false, "can_export": can_export }),
@@ -587,10 +587,10 @@ async fn api_token(vault: &TestFixture, user: &RegisteredAccount, can_export: bo
 
 #[tokio::test]
 async fn creating_a_run_records_the_scope_the_tool_and_the_counts() {
-    let (vault, alice, dinner, menu) = fixture_with_two_conversations().await;
-    let menu_message = message_ids(&vault, menu).await[0];
+    let (fixture, alice, dinner, menu) = fixture_with_two_conversations().await;
+    let menu_message = message_ids(&fixture, menu).await[0];
 
-    let everything = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
+    let everything = create_run(&fixture, &alice.token, json!({ "kind": "everything" })).await;
     assert_eq!(everything["scope"], json!({ "kind": "everything" }));
     assert_eq!(everything["tool"], "tests");
     assert_eq!(everything["status"], "running");
@@ -603,7 +603,7 @@ async fn creating_a_run_records_the_scope_the_tool_and_the_counts() {
     assert_eq!(everything["messages_delivered"], 0);
 
     let by_query = create_run(
-        &vault,
+        &fixture,
         &alice.token,
         json!({ "kind": "query", "q": "pizza" }),
     )
@@ -614,7 +614,7 @@ async fn creating_a_run_records_the_scope_the_tool_and_the_counts() {
     assert_eq!(by_query["attachment_count"], 0);
 
     let picked = create_run(
-        &vault,
+        &fixture,
         &alice.token,
         json!({ "kind": "selection", "conversation_ids": [dinner], "message_ids": [menu_message] }),
     )
@@ -631,7 +631,7 @@ async fn creating_a_run_records_the_scope_the_tool_and_the_counts() {
     // A selection with one list left out stores the other as given and the
     // missing one as empty.
     let one_list = create_run(
-        &vault,
+        &fixture,
         &alice.token,
         json!({ "kind": "selection", "message_ids": [menu_message] }),
     )
@@ -644,7 +644,7 @@ async fn creating_a_run_records_the_scope_the_tool_and_the_counts() {
 
     // A run with no tool stores null, not an empty string.
     let (_location, untooled): (String, Value) = post_created_json(
-        &vault.state,
+        &fixture.state,
         "/v1/exports",
         &alice.token,
         json!({ "scope": { "kind": "everything" } }),
@@ -654,11 +654,11 @@ async fn creating_a_run_records_the_scope_the_tool_and_the_counts() {
 }
 
 #[tokio::test]
-async fn a_scope_the_vault_cannot_honour_is_refused_and_no_run_is_recorded() {
-    let (vault, alice, _dinner, _menu) = fixture_with_two_conversations().await;
-    let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
-    crate::test_support::seed_one_message(&vault.state, bob.account_id).await;
-    let mut conn = vault.conn().await;
+async fn a_scope_the_server_cannot_honour_is_refused_and_no_run_is_recorded() {
+    let (fixture, alice, _dinner, _menu) = fixture_with_two_conversations().await;
+    let bob = register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
+    crate::test_support::seed_one_message(&fixture.state, bob.account_id).await;
+    let mut conn = fixture.conn().await;
     let bobs_conversation: i64 =
         sqlx::query_scalar("SELECT id FROM conversations WHERE account_id = $1")
             .bind(bob.account_id)
@@ -667,7 +667,7 @@ async fn a_scope_the_vault_cannot_honour_is_refused_and_no_run_is_recorded() {
             .unwrap();
 
     let (status, text) = post_raw(
-        &vault.state,
+        &fixture.state,
         "/v1/exports",
         &alice.token,
         "application/json",
@@ -684,7 +684,7 @@ async fn a_scope_the_vault_cannot_honour_is_refused_and_no_run_is_recorded() {
     );
 
     let (status, text) = post_raw(
-        &vault.state,
+        &fixture.state,
         "/v1/exports",
         &alice.token,
         "application/json",
@@ -694,7 +694,7 @@ async fn a_scope_the_vault_cannot_honour_is_refused_and_no_run_is_recorded() {
     expect_problem(status, &text, ProblemType::ValidationFailed);
 
     let (status, text) = post_raw(
-        &vault.state,
+        &fixture.state,
         "/v1/exports",
         &alice.token,
         "application/json",
@@ -704,7 +704,7 @@ async fn a_scope_the_vault_cannot_honour_is_refused_and_no_run_is_recorded() {
     expect_problem(status, &text, ProblemType::ValidationFailed);
 
     let (status, text) = post_raw(
-        &vault.state,
+        &fixture.state,
         "/v1/exports",
         &alice.token,
         "application/json",
@@ -713,10 +713,10 @@ async fn a_scope_the_vault_cannot_honour_is_refused_and_no_run_is_recorded() {
     .await;
     expect_problem(status, &text, ProblemType::SearchQueryInvalid);
 
-    // A body that parsed as JSON and then named a kind the vault does not
+    // A body that parsed as JSON and then named a kind the server does not
     // have broke a rule, which is 422 like every other field.
     let (status, text) = post_raw(
-        &vault.state,
+        &fixture.state,
         "/v1/exports",
         &alice.token,
         "application/json",
@@ -729,22 +729,22 @@ async fn a_scope_the_vault_cannot_honour_is_refused_and_no_run_is_recorded() {
         "{text}"
     );
 
-    let list: Value = get_json(&vault.state, "/v1/exports", &alice.token).await;
+    let list: Value = get_json(&fixture.state, "/v1/exports", &alice.token).await;
     assert_eq!(list["total"], 0, "a refused scope records nothing: {list}");
 }
 
 #[tokio::test]
 async fn the_list_is_newest_first_filters_by_status_and_refuses_unknown_values() {
-    let (vault, alice, _dinner, _menu) = fixture_with_two_conversations().await;
-    let first = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
+    let (fixture, alice, _dinner, _menu) = fixture_with_two_conversations().await;
+    let first = create_run(&fixture, &alice.token, json!({ "kind": "everything" })).await;
     let second = create_run(
-        &vault,
+        &fixture,
         &alice.token,
         json!({ "kind": "query", "q": "pizza" }),
     )
     .await;
     let cancelled: Value = post_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{}/cancel", first["id"]),
         &alice.token,
         json!({}),
@@ -752,7 +752,7 @@ async fn the_list_is_newest_first_filters_by_status_and_refuses_unknown_values()
     .await;
     assert_eq!(cancelled["status"], "cancelled");
 
-    let list: Value = get_json(&vault.state, "/v1/exports", &alice.token).await;
+    let list: Value = get_json(&fixture.state, "/v1/exports", &alice.token).await;
     assert_eq!(list["total"], 2);
     assert_eq!(list["limit"], 40);
     assert_eq!(list["offset"], 0);
@@ -762,14 +762,14 @@ async fn the_list_is_newest_first_filters_by_status_and_refuses_unknown_values()
     assert_eq!(listed[1]["status"], "cancelled");
 
     let oldest_first: Value =
-        get_json(&vault.state, "/v1/exports?sort=started_at", &alice.token).await;
+        get_json(&fixture.state, "/v1/exports?sort=started_at", &alice.token).await;
     assert_eq!(oldest_first["items"][0]["id"], first["id"]);
 
-    let running: Value = get_json(&vault.state, "/v1/exports?status=running", &alice.token).await;
+    let running: Value = get_json(&fixture.state, "/v1/exports?status=running", &alice.token).await;
     assert_eq!(running["total"], 1);
     assert_eq!(running["items"][0]["id"], second["id"]);
 
-    let (status, text) = get_raw(&vault.state, "/v1/exports?status=bogus", &alice.token).await;
+    let (status, text) = get_raw(&fixture.state, "/v1/exports?status=bogus", &alice.token).await;
     let problem = expect_problem(status, &text, ProblemType::ValidationFailed);
     assert_eq!(
         problem.errors.unwrap(),
@@ -777,30 +777,30 @@ async fn the_list_is_newest_first_filters_by_status_and_refuses_unknown_values()
             "status: unknown value 'bogus'; accepted values are running, completed, failed, cancelled"
         ]
     );
-    let (status, text) = get_raw(&vault.state, "/v1/exports?sort=colour", &alice.token).await;
+    let (status, text) = get_raw(&fixture.state, "/v1/exports?sort=colour", &alice.token).await;
     expect_problem(status, &text, ProblemType::ValidationFailed);
 }
 
 #[tokio::test]
 async fn a_run_belongs_to_its_account() {
-    let (vault, alice, _dinner, _menu) = fixture_with_two_conversations().await;
-    let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
-    let run = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
+    let (fixture, alice, _dinner, _menu) = fixture_with_two_conversations().await;
+    let bob = register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
+    let run = create_run(&fixture, &alice.token, json!({ "kind": "everything" })).await;
     let id = run["id"].as_i64().unwrap();
 
-    let mine: Value = get_json(&vault.state, &format!("/v1/exports/{id}"), &alice.token).await;
+    let mine: Value = get_json(&fixture.state, &format!("/v1/exports/{id}"), &alice.token).await;
     assert_eq!(mine, run);
 
     for path in [
         format!("/v1/exports/{id}"),
         format!("/v1/exports/{id}/messages"),
     ] {
-        let (status, text) = get_raw(&vault.state, &path, &bob.token).await;
+        let (status, text) = get_raw(&fixture.state, &path, &bob.token).await;
         expect_problem(status, &text, ProblemType::NotFound);
     }
     for action in ["complete", "cancel"] {
         let (status, text) = post_raw(
-            &vault.state,
+            &fixture.state,
             &format!("/v1/exports/{id}/{action}"),
             &bob.token,
             "application/json",
@@ -809,18 +809,18 @@ async fn a_run_belongs_to_its_account() {
         .await;
         expect_problem(status, &text, ProblemType::NotFound);
     }
-    let bobs: Value = get_json(&vault.state, "/v1/exports", &bob.token).await;
+    let bobs: Value = get_json(&fixture.state, "/v1/exports", &bob.token).await;
     assert_eq!(bobs["total"], 0);
 }
 
 #[tokio::test]
 async fn paging_a_run_raises_messages_delivered_to_the_rows_handed_over() {
-    let (vault, alice, _dinner, _menu) = fixture_with_two_conversations().await;
-    let run = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
+    let (fixture, alice, _dinner, _menu) = fixture_with_two_conversations().await;
+    let run = create_run(&fixture, &alice.token, json!({ "kind": "everything" })).await;
     let id = run["id"].as_i64().unwrap();
-    let delivered = |vault: &TestFixture| {
+    let delivered = |fixture: &TestFixture| {
         let token = alice.token.clone();
-        let state = vault.state.clone();
+        let state = fixture.state.clone();
         async move {
             let run: Value = get_json(&state, &format!("/v1/exports/{id}"), &token).await;
             run["messages_delivered"].as_i64().unwrap()
@@ -828,7 +828,7 @@ async fn paging_a_run_raises_messages_delivered_to_the_rows_handed_over() {
     };
 
     let first: Value = get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{id}/messages?limit=2"),
         &alice.token,
     )
@@ -841,10 +841,10 @@ async fn paging_a_run_raises_messages_delivered_to_the_rows_handed_over() {
         "oldest first: {first}"
     );
     assert_eq!(first["items"][1]["text"], "salad tomorrow");
-    assert_eq!(delivered(&vault).await, 2);
+    assert_eq!(delivered(&fixture).await, 2);
 
     let second: Value = get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{id}/messages?limit=2&offset=2"),
         &alice.token,
     )
@@ -852,29 +852,29 @@ async fn paging_a_run_raises_messages_delivered_to_the_rows_handed_over() {
     assert_eq!(second["items"].as_array().unwrap().len(), 1);
     assert_eq!(second["items"][0]["text"], "the menu");
     assert_eq!(second["items"][0]["attachments"][0]["sha256"], "abc123");
-    assert_eq!(delivered(&vault).await, 3);
+    assert_eq!(delivered(&fixture).await, 3);
 
     // Reading a page again does not count it twice, and a page past the end
     // is empty rather than an error: export has no offset cap.
     let _again: Value = get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{id}/messages?limit=2"),
         &alice.token,
     )
     .await;
-    assert_eq!(delivered(&vault).await, 3);
+    assert_eq!(delivered(&fixture).await, 3);
     let past: Value = get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{id}/messages?offset=60000"),
         &alice.token,
     )
     .await;
     assert_eq!(past["total"], 3);
     assert!(past["items"].as_array().unwrap().is_empty());
-    assert_eq!(delivered(&vault).await, 3);
+    assert_eq!(delivered(&fixture).await, 3);
 
     let newest_first: Value = get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{id}/messages?sort=-date"),
         &alice.token,
     )
@@ -886,7 +886,7 @@ async fn paging_a_run_raises_messages_delivered_to_the_rows_handed_over() {
     );
 
     let (status, text) = get_raw(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{id}/messages?limit=501"),
         &alice.token,
     )
@@ -896,12 +896,12 @@ async fn paging_a_run_raises_messages_delivered_to_the_rows_handed_over() {
 
 #[tokio::test]
 async fn a_finished_run_refuses_pages_and_a_second_close() {
-    let (vault, alice, _dinner, _menu) = fixture_with_two_conversations().await;
-    let run = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
+    let (fixture, alice, _dinner, _menu) = fixture_with_two_conversations().await;
+    let run = create_run(&fixture, &alice.token, json!({ "kind": "everything" })).await;
     let id = run["id"].as_i64().unwrap();
 
     let completed: Value = post_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{id}/complete"),
         &alice.token,
         json!({}),
@@ -913,7 +913,7 @@ async fn a_finished_run_refuses_pages_and_a_second_close() {
     assert_eq!(completed["message_count"], 3);
 
     let (status, text) = get_raw(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{id}/messages"),
         &alice.token,
     )
@@ -925,7 +925,7 @@ async fn a_finished_run_refuses_pages_and_a_second_close() {
     );
     for action in ["complete", "cancel"] {
         let (status, text) = post_raw(
-            &vault.state,
+            &fixture.state,
             &format!("/v1/exports/{id}/{action}"),
             &alice.token,
             "application/json",
@@ -935,10 +935,10 @@ async fn a_finished_run_refuses_pages_and_a_second_close() {
         expect_problem(status, &text, ProblemType::StateConflict);
     }
 
-    let other = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
+    let other = create_run(&fixture, &alice.token, json!({ "kind": "everything" })).await;
     let other_id = other["id"].as_i64().unwrap();
     let cancelled: Value = post_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{other_id}/cancel"),
         &alice.token,
         json!({}),
@@ -947,7 +947,7 @@ async fn a_finished_run_refuses_pages_and_a_second_close() {
     assert_eq!(cancelled["status"], "cancelled");
     assert!(cancelled["finished_at"].is_string());
     let (status, text) = post_raw(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{other_id}/complete"),
         &alice.token,
         "application/json",
@@ -959,16 +959,21 @@ async fn a_finished_run_refuses_pages_and_a_second_close() {
 
 #[tokio::test]
 async fn an_export_token_reads_messages_only_through_a_run() {
-    let (vault, alice, _dinner, _menu) = fixture_with_two_conversations().await;
-    let token = api_token(&vault, &alice, true).await;
+    let (fixture, alice, _dinner, _menu) = fixture_with_two_conversations().await;
+    let token = api_token(&fixture, &alice, true).await;
 
-    let run = create_run(&vault, &token, json!({ "kind": "query", "q": "pizza" })).await;
+    let run = create_run(&fixture, &token, json!({ "kind": "query", "q": "pizza" })).await;
     let id = run["id"].as_i64().unwrap();
-    let page: Value = get_json(&vault.state, &format!("/v1/exports/{id}/messages"), &token).await;
+    let page: Value = get_json(
+        &fixture.state,
+        &format!("/v1/exports/{id}/messages"),
+        &token,
+    )
+    .await;
     assert_eq!(page["total"], 1);
     assert_eq!(page["items"][0]["text"], "pizza tonight");
     let closed: Value = post_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{id}/complete"),
         &token,
         json!({}),
@@ -984,13 +989,13 @@ async fn an_export_token_reads_messages_only_through_a_run() {
         "/v1/conversations",
         "/v1/conversations/1/messages",
     ] {
-        let (status, text) = get_raw(&vault.state, path, &token).await;
+        let (status, text) = get_raw(&fixture.state, path, &token).await;
         expect_problem(status, &text, ProblemType::InsufficientScope);
     }
 
-    let without_export = api_token(&vault, &alice, false).await;
+    let without_export = api_token(&fixture, &alice, false).await;
     let (status, text) = post_raw(
-        &vault.state,
+        &fixture.state,
         "/v1/exports",
         &without_export,
         "application/json",
@@ -999,7 +1004,7 @@ async fn an_export_token_reads_messages_only_through_a_run() {
     .await;
     expect_problem(status, &text, ProblemType::InsufficientScope);
     assert_eq!(
-        get_status(&vault.state, "/v1/exports", &without_export).await,
+        get_status(&fixture.state, "/v1/exports", &without_export).await,
         StatusCode::FORBIDDEN
     );
 }
@@ -1010,13 +1015,13 @@ async fn an_export_token_reads_messages_only_through_a_run() {
 /// Run when `import_id` is given, and return its id. Stands in for an import
 /// landing while a run is being read.
 async fn insert_message(
-    vault: &TestFixture,
+    fixture: &TestFixture,
     account: i64,
     conversation: i64,
     timestamp: &str,
     import_id: Option<i64>,
 ) -> i64 {
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     sqlx::query_scalar(
         "INSERT INTO messages (
             conversation_id, account_id, source, service, timestamp,
@@ -1034,8 +1039,8 @@ async fn insert_message(
 }
 
 /// Record a completed Import Run for `account` and return its id.
-async fn insert_import(vault: &TestFixture, account: i64) -> i64 {
-    let mut conn = vault.conn().await;
+async fn insert_import(fixture: &TestFixture, account: i64) -> i64 {
+    let mut conn = fixture.conn().await;
     sqlx::query_scalar(
         "INSERT INTO imports (account_id, source, mode, status, started_at)
          VALUES ($1, 'imessage', 'append', 'completed', '2026-01-01T00:00:00Z')
@@ -1048,9 +1053,9 @@ async fn insert_import(vault: &TestFixture, account: i64) -> i64 {
 }
 
 /// The ids on one page of run `id` and the page's `total`.
-async fn run_page_ids(vault: &TestFixture, token: &str, id: i64, query: &str) -> (Vec<i64>, i64) {
+async fn run_page_ids(fixture: &TestFixture, token: &str, id: i64, query: &str) -> (Vec<i64>, i64) {
     let page: Value = get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{id}/messages?{query}"),
         token,
     )
@@ -1065,8 +1070,8 @@ async fn run_page_ids(vault: &TestFixture, token: &str, id: i64, query: &str) ->
 }
 
 /// How many snapshot rows run `id` still holds.
-async fn snapshot_rows(vault: &TestFixture, id: i64) -> i64 {
-    let mut conn = vault.conn().await;
+async fn snapshot_rows(fixture: &TestFixture, id: i64) -> i64 {
+    let mut conn = fixture.conn().await;
     sqlx::query_scalar("SELECT COUNT(*) FROM export_messages WHERE export_id = $1")
         .bind(id)
         .fetch_one(&mut *conn)
@@ -1076,11 +1081,11 @@ async fn snapshot_rows(vault: &TestFixture, id: i64) -> i64 {
 
 #[tokio::test]
 async fn a_run_hands_over_exactly_what_matched_when_it_started() {
-    let (vault, alice, dinner, menu) = fixture_with_two_conversations().await;
+    let (fixture, alice, dinner, menu) = fixture_with_two_conversations().await;
     let account = alice.account_id;
     for day in 4..=6 {
         insert_message(
-            &vault,
+            &fixture,
             account,
             dinner,
             &format!("2020-01-0{day}T00:00:00Z"),
@@ -1088,15 +1093,15 @@ async fn a_run_hands_over_exactly_what_matched_when_it_started() {
         )
         .await;
     }
-    let mut matched = message_ids(&vault, dinner).await;
-    matched.extend(message_ids(&vault, menu).await);
+    let mut matched = message_ids(&fixture, dinner).await;
+    matched.extend(message_ids(&fixture, menu).await);
     matched.sort_unstable();
 
-    let run = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
+    let run = create_run(&fixture, &alice.token, json!({ "kind": "everything" })).await;
     let id = run["id"].as_i64().unwrap();
     assert_eq!(run["message_count"], 6);
 
-    let (mut delivered, total) = run_page_ids(&vault, &alice.token, id, "limit=2").await;
+    let (mut delivered, total) = run_page_ids(&fixture, &alice.token, id, "limit=2").await;
     assert_eq!(total, 6);
 
     // Between pages, an import brings in messages that sort before
@@ -1104,7 +1109,7 @@ async fn a_run_hands_over_exactly_what_matched_when_it_started() {
     // trashed.
     for day in 1..=3 {
         insert_message(
-            &vault,
+            &fixture,
             account,
             dinner,
             &format!("2019-01-0{day}T00:00:00Z"),
@@ -1114,7 +1119,7 @@ async fn a_run_hands_over_exactly_what_matched_when_it_started() {
     }
     assert_eq!(
         post_status(
-            &vault.state,
+            &fixture.state,
             &format!("/v1/conversations/{menu}/trash"),
             &alice.token,
             json!({}),
@@ -1126,7 +1131,7 @@ async fn a_run_hands_over_exactly_what_matched_when_it_started() {
     let mut offset = 2;
     loop {
         let (ids, total) = run_page_ids(
-            &vault,
+            &fixture,
             &alice.token,
             id,
             &format!("limit=2&offset={offset}"),
@@ -1146,7 +1151,7 @@ async fn a_run_hands_over_exactly_what_matched_when_it_started() {
     assert_eq!(unique.len(), delivered.len(), "no repeats: {delivered:?}");
     assert_eq!(unique, matched, "exactly what matched at creation");
     let closed: Value = post_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{id}/complete"),
         &alice.token,
         json!({}),
@@ -1158,20 +1163,20 @@ async fn a_run_hands_over_exactly_what_matched_when_it_started() {
 
 #[tokio::test]
 async fn a_deleted_message_leaves_its_place_empty_and_closing_drops_the_list() {
-    let (vault, alice, dinner, menu) = fixture_with_two_conversations().await;
-    let menu_message = message_ids(&vault, menu).await;
-    let run = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
+    let (fixture, alice, dinner, menu) = fixture_with_two_conversations().await;
+    let menu_message = message_ids(&fixture, menu).await;
+    let run = create_run(&fixture, &alice.token, json!({ "kind": "everything" })).await;
     let id = run["id"].as_i64().unwrap();
-    assert_eq!(snapshot_rows(&vault, id).await, 3);
+    assert_eq!(snapshot_rows(&fixture, id).await, 3);
 
-    let (first, _) = run_page_ids(&vault, &alice.token, id, "limit=2").await;
+    let (first, _) = run_page_ids(&fixture, &alice.token, id, "limit=2").await;
     assert_eq!(first.len(), 2);
 
     // The conversation already read is deleted for good. Its places stay,
     // empty, so the next page still starts where the reader left off.
     assert_eq!(
         post_status(
-            &vault.state,
+            &fixture.state,
             &format!("/v1/conversations/{dinner}/trash"),
             &alice.token,
             json!({}),
@@ -1181,24 +1186,24 @@ async fn a_deleted_message_leaves_its_place_empty_and_closing_drops_the_list() {
     );
     assert_eq!(
         delete_status(
-            &vault.state,
+            &fixture.state,
             &format!("/v1/conversations/{dinner}"),
             &alice.token
         )
         .await,
         StatusCode::NO_CONTENT
     );
-    let (second, total) = run_page_ids(&vault, &alice.token, id, "limit=2&offset=2").await;
+    let (second, total) = run_page_ids(&fixture, &alice.token, id, "limit=2&offset=2").await;
     assert_eq!(second, menu_message);
     assert_eq!(total, 3, "the total is the places listed at creation");
-    let (again, total) = run_page_ids(&vault, &alice.token, id, "limit=2").await;
+    let (again, total) = run_page_ids(&fixture, &alice.token, id, "limit=2").await;
     assert!(again.is_empty(), "deleted messages are gone: {again:?}");
     assert_eq!(total, 3);
-    let (newest_first, _) = run_page_ids(&vault, &alice.token, id, "limit=1&sort=-date").await;
+    let (newest_first, _) = run_page_ids(&fixture, &alice.token, id, "limit=1&sort=-date").await;
     assert_eq!(newest_first, menu_message);
 
     let closed: Value = post_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{id}/complete"),
         &alice.token,
         json!({}),
@@ -1206,23 +1211,23 @@ async fn a_deleted_message_leaves_its_place_empty_and_closing_drops_the_list() {
     .await;
     assert_eq!(closed["message_count"], 3, "the record keeps what matched");
     assert_eq!(
-        snapshot_rows(&vault, id).await,
+        snapshot_rows(&fixture, id).await,
         0,
         "completing drops the list"
     );
 
-    let other = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
+    let other = create_run(&fixture, &alice.token, json!({ "kind": "everything" })).await;
     let other_id = other["id"].as_i64().unwrap();
-    assert_eq!(snapshot_rows(&vault, other_id).await, 1);
+    assert_eq!(snapshot_rows(&fixture, other_id).await, 1);
     let _cancelled: Value = post_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/exports/{other_id}/cancel"),
         &alice.token,
         json!({}),
     )
     .await;
     assert_eq!(
-        snapshot_rows(&vault, other_id).await,
+        snapshot_rows(&fixture, other_id).await,
         0,
         "cancelling drops the list"
     );
@@ -1230,14 +1235,20 @@ async fn a_deleted_message_leaves_its_place_empty_and_closing_drops_the_list() {
 
 #[tokio::test]
 async fn import_last_keeps_meaning_the_import_that_was_last_at_creation() {
-    let (vault, alice, dinner, _menu) = fixture_with_two_conversations().await;
+    let (fixture, alice, dinner, _menu) = fixture_with_two_conversations().await;
     let account = alice.account_id;
-    let first = insert_import(&vault, account).await;
-    let from_first =
-        insert_message(&vault, account, dinner, "2020-02-01T00:00:00Z", Some(first)).await;
+    let first = insert_import(&fixture, account).await;
+    let from_first = insert_message(
+        &fixture,
+        account,
+        dinner,
+        "2020-02-01T00:00:00Z",
+        Some(first),
+    )
+    .await;
 
     let run = create_run(
-        &vault,
+        &fixture,
         &alice.token,
         json!({ "kind": "query", "q": "import:last" }),
     )
@@ -1245,9 +1256,9 @@ async fn import_last_keeps_meaning_the_import_that_was_last_at_creation() {
     let id = run["id"].as_i64().unwrap();
     assert_eq!(run["message_count"], 1);
 
-    let second = insert_import(&vault, account).await;
+    let second = insert_import(&fixture, account).await;
     insert_message(
-        &vault,
+        &fixture,
         account,
         dinner,
         "2020-02-02T00:00:00Z",
@@ -1255,7 +1266,7 @@ async fn import_last_keeps_meaning_the_import_that_was_last_at_creation() {
     )
     .await;
 
-    let (ids, total) = run_page_ids(&vault, &alice.token, id, "").await;
+    let (ids, total) = run_page_ids(&fixture, &alice.token, id, "").await;
     assert_eq!(ids, vec![from_first]);
     assert_eq!(total, 1);
 }

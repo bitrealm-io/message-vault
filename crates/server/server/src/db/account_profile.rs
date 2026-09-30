@@ -212,7 +212,7 @@ pub async fn update_password_hash(
 }
 
 /// Record that the account logged in just now. Called by every route that
-/// opens a Session for a person: login, claiming the vault, and
+/// opens a Session for a person: login, claiming the server, and
 /// registering. Rotating a token on a password change is not a login.
 pub async fn record_login(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
@@ -255,18 +255,18 @@ pub fn is_demo_account(account_id: i64) -> bool {
     account_id == DEMO_ACCOUNT_ID
 }
 
-/// Stable id for the vault owner. A vault has one owner or none, and this id
+/// Stable id for the owner. There is one owner or none, and this id
 /// is what makes "one" structural: there is no flag to set, no second owner to
-/// create, and nothing to promote. A vault holding no row at this id is
+/// create, and nothing to promote. A database holding no row at this id is
 /// unclaimed. See `docs/adr/0008-the-owner-holds-no-messages.md`.
 pub const OWNER_ACCOUNT_ID: i64 = 1;
 
-/// True when `account_id` is the vault owner.
+/// True when `account_id` is the owner.
 pub fn is_server_owner(account_id: i64) -> bool {
     account_id == OWNER_ACCOUNT_ID
 }
 
-/// True when this vault has an owner: the vault is claimed.
+/// True when there is an owner: this Message Crate is claimed.
 pub async fn is_claimed(conn: &mut AnyConnection) -> Result<bool> {
     schema::ensure_accounts_schema(conn).await?;
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts WHERE id = $1")
@@ -313,7 +313,7 @@ pub async fn load_account_auth(
 /// Mark an account as still owing profile setup, or clear the mark once its
 /// holder has saved one.
 ///
-/// The vault says whether setup is owed, rather than each client deciding for
+/// The server says whether setup is owed, rather than each client deciding for
 /// itself from an empty-looking profile. A rule the client owns is a rule that
 /// drifts, and the answer has to survive cleared site data and a second
 /// browser.
@@ -451,7 +451,7 @@ pub async fn set_preferred_name(
     Ok(())
 }
 
-/// The flags only the vault owner sets on an account. `None` leaves a flag
+/// The flags only the owner sets on an account. `None` leaves a flag
 /// as it is.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AccountFlags {
@@ -494,7 +494,7 @@ pub async fn set_account_flags(
     Ok(())
 }
 
-/// How many accounts the vault holds.
+/// How many accounts the server holds.
 ///
 /// # Errors
 ///
@@ -505,7 +505,7 @@ pub async fn count_accounts(conn: &mut AnyConnection) -> Result<i64> {
         .await?)
 }
 
-/// One page of account ids: the vault owner's first, then the rest by
+/// One page of account ids: the owner's first, then the rest by
 /// username.
 ///
 /// # Errors
@@ -540,7 +540,7 @@ pub async fn insert_account(
     // The id is chosen here rather than by the database's own generator,
     // because that generator would hand out 1 on an empty table, and 1 is
     // the owner. Ids below `FIRST_GENERATED_ACCOUNT_ID` belong to the accounts
-    // the vault makes itself; every other account takes the next id above
+    // the server makes itself; every other account takes the next id above
     // both that floor and the highest id present, so a fixed id inserted
     // later never lands on a row that already exists.
     let highest: Option<i64> = sqlx::query_scalar("SELECT MAX(id) FROM accounts")
@@ -554,11 +554,11 @@ pub async fn insert_account(
 }
 
 /// The first id [`insert_account`] hands out. Everything below it is reserved
-/// for accounts the vault makes itself: [`OWNER_ACCOUNT_ID`] and
+/// for accounts the server makes itself: [`OWNER_ACCOUNT_ID`] and
 /// [`DEMO_ACCOUNT_ID`].
 pub const FIRST_GENERATED_ACCOUNT_ID: i64 = 100;
 
-/// Insert an account at a fixed id: the vault owner at [`OWNER_ACCOUNT_ID`],
+/// Insert an account at a fixed id: the owner at [`OWNER_ACCOUNT_ID`],
 /// the demo account at [`DEMO_ACCOUNT_ID`], and a test's chosen row.
 pub async fn insert_account_at(
     conn: &mut AnyConnection,
@@ -670,9 +670,9 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_by_username_case_insensitive() {
-        let vault = crate::test_support::test_fixture().await;
-        vault.account_with_id(ACCOUNT_ID, "Alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        fixture.account_with_id(ACCOUNT_ID, "Alice").await;
+        let mut conn = fixture.conn().await;
         assert_eq!(
             resolve_account_ref(&mut conn, "alice").await.unwrap(),
             ACCOUNT_ID
@@ -685,9 +685,9 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_by_id() {
-        let vault = crate::test_support::test_fixture().await;
-        vault.account_with_id(ACCOUNT_ID, "Alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        fixture.account_with_id(ACCOUNT_ID, "Alice").await;
+        let mut conn = fixture.conn().await;
         assert_eq!(
             resolve_account_ref(&mut conn, &ACCOUNT_ID.to_string())
                 .await
@@ -698,10 +698,10 @@ mod tests {
 
     #[tokio::test]
     async fn a_username_made_of_digits_is_a_username_at_login() {
-        let vault = crate::test_support::test_fixture().await;
-        vault.account_with_id(ACCOUNT_ID, "Alice").await;
-        let digits = vault.account("7").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        fixture.account_with_id(ACCOUNT_ID, "Alice").await;
+        let digits = fixture.account("7").await;
+        let mut conn = fixture.conn().await;
         // `--account 7` names the id; logging in as "7" names the username.
         assert_eq!(
             resolve_account_ref(&mut conn, "7").await.unwrap(),
@@ -715,8 +715,8 @@ mod tests {
 
     #[tokio::test]
     async fn generated_ids_start_above_the_reserved_range_and_climb() {
-        let vault = crate::test_support::test_fixture().await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        let mut conn = fixture.conn().await;
         // On an empty table the first generated id is the floor, never 1.
         let first = insert_account(&mut conn, "alice", None, None)
             .await
@@ -743,9 +743,9 @@ mod tests {
 
     #[tokio::test]
     async fn unknown_username_errors() {
-        let vault = crate::test_support::test_fixture().await;
-        vault.account_with_id(ACCOUNT_ID, "Alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        fixture.account_with_id(ACCOUNT_ID, "Alice").await;
+        let mut conn = fixture.conn().await;
         let err = resolve_account_ref(&mut conn, "nobody")
             .await
             .unwrap_err()
@@ -755,9 +755,9 @@ mod tests {
 
     #[tokio::test]
     async fn an_unknown_id_is_not_found() {
-        let vault = crate::test_support::test_fixture().await;
-        vault.account_with_id(ACCOUNT_ID, "Alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        fixture.account_with_id(ACCOUNT_ID, "Alice").await;
+        let mut conn = fixture.conn().await;
         let err = resolve_account_ref(&mut conn, "4321")
             .await
             .unwrap_err()
@@ -767,9 +767,9 @@ mod tests {
 
     #[tokio::test]
     async fn username_for_account_works() {
-        let vault = crate::test_support::test_fixture().await;
-        vault.account_with_id(ACCOUNT_ID, "Alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        fixture.account_with_id(ACCOUNT_ID, "Alice").await;
+        let mut conn = fixture.conn().await;
         assert_eq!(
             username_for_account(&mut conn, ACCOUNT_ID)
                 .await
@@ -783,18 +783,18 @@ mod tests {
     async fn load_password_hash_returns_none_when_null() {
         // Demo (and any passwordless account) stores password_hash as SQL NULL.
         // Reading that column must not fail with "Invalid column type Null".
-        let vault = crate::test_support::test_fixture().await;
-        vault.account_with_id(ACCOUNT_ID, "Alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        fixture.account_with_id(ACCOUNT_ID, "Alice").await;
+        let mut conn = fixture.conn().await;
         let hash = load_password_hash(&mut conn, ACCOUNT_ID).await.unwrap();
         assert_eq!(hash, None);
     }
 
     #[tokio::test]
     async fn load_password_hash_returns_set_value() {
-        let vault = crate::test_support::test_fixture().await;
-        vault.account_with_id(ACCOUNT_ID, "Alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        fixture.account_with_id(ACCOUNT_ID, "Alice").await;
+        let mut conn = fixture.conn().await;
         update_password_hash(&mut conn, ACCOUNT_ID, Some("$argon2id$example"))
             .await
             .unwrap();
@@ -804,9 +804,9 @@ mod tests {
 
     #[tokio::test]
     async fn load_profile_returns_linked_handles_and_preferred_name() {
-        let vault = crate::test_support::test_fixture().await;
-        vault.account_with_id(ACCOUNT_ID, "Alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        fixture.account_with_id(ACCOUNT_ID, "Alice").await;
+        let mut conn = fixture.conn().await;
         let empty = load_account_profile(&mut conn, ACCOUNT_ID).await.unwrap();
         assert!(empty.phones.is_empty());
         assert!(empty.emails.is_empty());
@@ -833,9 +833,9 @@ mod tests {
 
     #[tokio::test]
     async fn link_account_handle_normalizes_and_dedupes() {
-        let vault = crate::test_support::test_fixture().await;
-        vault.account_with_id(ACCOUNT_ID, "Alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        fixture.account_with_id(ACCOUNT_ID, "Alice").await;
+        let mut conn = fixture.conn().await;
         let a = link_account_handle(
             &mut conn,
             ACCOUNT_ID,
@@ -878,9 +878,9 @@ mod tests {
 
     #[tokio::test]
     async fn delete_all_messages_keeps_account_and_contacts() {
-        let vault = crate::test_support::test_fixture().await;
-        vault.account_with_id(ACCOUNT_ID, "Alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        fixture.account_with_id(ACCOUNT_ID, "Alice").await;
+        let mut conn = fixture.conn().await;
         let handle_id =
             link_account_handle(&mut conn, ACCOUNT_ID, "+15555550100", HandleType::Phone)
                 .await

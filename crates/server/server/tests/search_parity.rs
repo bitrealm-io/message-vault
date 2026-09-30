@@ -1,4 +1,4 @@
-//! Search parity: the same committed message corpus in a fresh vault must
+//! Search parity: the same committed message corpus in a fresh database must
 //! return identical result id sets on SQLite and on Postgres.
 //!
 //! The corpus lives in `tests/fixtures/search/parity-messages.json`; each
@@ -18,7 +18,7 @@ use message_crate_server::{
 use serde::Deserialize;
 use sqlx::AnyConnection;
 
-/// Account used for the corpus vault (the same id the crate's unit tests use).
+/// Account used for the corpus database (the same id the crate's unit tests use).
 const ACCOUNT_ID: i64 = 7;
 
 /// One corpus message; `k` is bound as the message id (both engines accept
@@ -83,13 +83,11 @@ fn corpus() -> Vec<FixtureMessage> {
     .expect("committed parity corpus parses")
 }
 
-/// Create a fresh vault: schema, one account, one conversation (a handle row
+/// Create a fresh database: schema, one account, one conversation (a handle row
 /// is required for `chat_handle_id`), then the corpus messages with their
 /// keys bound as ids.
 async fn setup_fixture(conn: &mut AnyConnection) {
-    ensure_schema(conn)
-        .await
-        .expect("fresh vault schema applies");
+    ensure_schema(conn).await.expect("fresh schema applies");
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
         .bind(ACCOUNT_ID)
         .execute(&mut *conn)

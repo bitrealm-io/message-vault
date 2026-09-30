@@ -7,7 +7,7 @@
 //! failure body is `IntoResponse for ApiError`, which sees no request at all.
 //!
 //! An `x-request-id` a client sends is dropped, never kept: none of the
-//! vault's own clients send one, and an operator grepping the log needs ids
+//! server's own clients send one, and an operator grepping the log needs ids
 //! they know the server made.
 
 use axum::extract::Request;

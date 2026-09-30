@@ -1,4 +1,4 @@
-//! Generate the vault server's CLI reference page for the docs site.
+//! Generate the server's CLI reference page for the docs site.
 //!
 //! The page lives at
 //! `docs/src/content/docs/docs/developer/reference/server-cli.md` and is

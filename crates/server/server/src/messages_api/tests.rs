@@ -9,10 +9,10 @@ use crate::test_support::{
 /// Two conversations for alice (a direct thread and a group), and one for bob
 /// that must never appear in alice's results.
 async fn seeded() -> (TestFixture, RegisteredAccount, i64, i64) {
-    let (vault, alice) = fixture_with_account().await;
-    let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
+    let (fixture, alice) = fixture_with_account().await;
+    let bob = register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
     let direct = seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: alice.account_id,
             handle: "+15555550100",
@@ -37,7 +37,7 @@ async fn seeded() -> (TestFixture, RegisteredAccount, i64, i64) {
     )
     .await;
     let group = seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: alice.account_id,
             handle: "chat100",
@@ -54,7 +54,7 @@ async fn seeded() -> (TestFixture, RegisteredAccount, i64, i64) {
     )
     .await;
     seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: bob.account_id,
             handle: "+15555550999",
@@ -70,13 +70,13 @@ async fn seeded() -> (TestFixture, RegisteredAccount, i64, i64) {
         },
     )
     .await;
-    (vault, alice, direct, group)
+    (fixture, alice, direct, group)
 }
 
 #[tokio::test]
 async fn the_messages_route_is_a_page_across_every_conversation() {
-    let (vault, alice, _direct, _group) = seeded().await;
-    let page: serde_json::Value = get_json(&vault.state, "/v1/messages", &alice.token).await;
+    let (fixture, alice, _direct, _group) = seeded().await;
+    let page: serde_json::Value = get_json(&fixture.state, "/v1/messages", &alice.token).await;
     assert_eq!(page["total"], serde_json::json!(3), "{page}");
     assert_eq!(page["limit"], serde_json::json!(40));
     assert_eq!(page["offset"], serde_json::json!(0));
@@ -93,9 +93,9 @@ async fn the_messages_route_is_a_page_across_every_conversation() {
 
 #[tokio::test]
 async fn a_query_narrows_to_matching_messages_and_never_leaks_another_account() {
-    let (vault, alice, _direct, _group) = seeded().await;
+    let (fixture, alice, _direct, _group) = seeded().await;
     let page: serde_json::Value =
-        get_json(&vault.state, "/v1/messages?q=dentist", &alice.token).await;
+        get_json(&fixture.state, "/v1/messages?q=dentist", &alice.token).await;
     assert_eq!(page["total"], serde_json::json!(2), "{page}");
     let bodies: Vec<&str> = page["items"]
         .as_array()
@@ -114,9 +114,9 @@ async fn a_query_narrows_to_matching_messages_and_never_leaks_another_account() 
 async fn in_narrows_a_find_to_one_conversation() {
     // The thread's find box composes `in:#id <term>`, so a find reaches every
     // message in that conversation and nothing outside it (#313).
-    let (vault, alice, direct, group) = seeded().await;
+    let (fixture, alice, direct, group) = seeded().await;
     let page: serde_json::Value = get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/messages?q=in%3A%23{direct}%20dentist"),
         &alice.token,
     )
@@ -129,7 +129,7 @@ async fn in_narrows_a_find_to_one_conversation() {
     );
 
     let page: serde_json::Value = get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/messages?q=in%3A%23{group}"),
         &alice.token,
     )
@@ -140,9 +140,13 @@ async fn in_narrows_a_find_to_one_conversation() {
 
 #[tokio::test]
 async fn the_route_pages_by_offset_and_reports_the_total() {
-    let (vault, alice, _direct, _group) = seeded().await;
-    let page: serde_json::Value =
-        get_json(&vault.state, "/v1/messages?limit=2&offset=2", &alice.token).await;
+    let (fixture, alice, _direct, _group) = seeded().await;
+    let page: serde_json::Value = get_json(
+        &fixture.state,
+        "/v1/messages?limit=2&offset=2",
+        &alice.token,
+    )
+    .await;
     assert_eq!(page["total"], serde_json::json!(3));
     assert_eq!(page["limit"], serde_json::json!(2));
     assert_eq!(page["offset"], serde_json::json!(2));
@@ -151,9 +155,9 @@ async fn the_route_pages_by_offset_and_reports_the_total() {
 
 #[tokio::test]
 async fn a_word_the_messages_list_does_not_have_is_a_422_with_a_sentence() {
-    let (vault, alice, _direct, _group) = seeded().await;
+    let (fixture, alice, _direct, _group) = seeded().await;
     let (status, text) = get_raw(
-        &vault.state,
+        &fixture.state,
         "/v1/messages?q=conversations%3A0",
         &alice.token,
     )
@@ -170,9 +174,9 @@ async fn a_word_the_messages_list_does_not_have_is_a_422_with_a_sentence() {
 /// reports the sort, as the contact and conversation lists do.
 #[tokio::test]
 async fn a_bad_sort_is_reported_before_a_bad_query() {
-    let (vault, alice) = fixture_with_account().await;
+    let (fixture, alice) = fixture_with_account().await;
     let (status, text) = get_raw(
-        &vault.state,
+        &fixture.state,
         "/v1/messages?q=conversations%3A0&sort=colour",
         &alice.token,
     )
@@ -218,7 +222,7 @@ fn ir_message(
 /// Import, through the whole pipeline, three messages into `account_id`: a
 /// reply carrying a sticker and a tapback array of two, an announcement
 /// carrying a single tapback object, and a plain message with none of these.
-async fn import_reactions_and_flags(vault: &TestFixture, account_id: i64) {
+async fn import_reactions_and_flags(fixture: &TestFixture, account_id: i64) {
     let header = serde_json::json!({
         "schema_version": 4,
         "export": {"source": "imessage", "tool": "test", "tool_version": "0",
@@ -273,7 +277,7 @@ async fn import_reactions_and_flags(vault: &TestFixture, account_id: i64) {
         false,
         serde_json::Value::Null,
     );
-    let dir = vault.dir().join("reactions");
+    let dir = fixture.dir().join("reactions");
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("reactions.jsonl");
     std::fs::write(
@@ -282,7 +286,7 @@ async fn import_reactions_and_flags(vault: &TestFixture, account_id: i64) {
     )
     .unwrap();
     let assets = dir.join("assets");
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     let stats = crate::imports_api::import_jsonl_files_on_conn(
         &mut conn,
         &[path],
@@ -310,10 +314,10 @@ async fn import_reactions_and_flags(vault: &TestFixture, account_id: i64) {
 /// single tapback object is read the same as an array of one.
 #[tokio::test]
 async fn reactions_and_message_flags_are_read_back_as_imported() {
-    let (vault, alice) = fixture_with_account().await;
-    import_reactions_and_flags(&vault, alice.account_id).await;
+    let (fixture, alice) = fixture_with_account().await;
+    import_reactions_and_flags(&fixture, alice.account_id).await;
 
-    let page: serde_json::Value = get_json(&vault.state, "/v1/messages", &alice.token).await;
+    let page: serde_json::Value = get_json(&fixture.state, "/v1/messages", &alice.token).await;
     let by_guid = |guid: &str| {
         page["items"]
             .as_array()
@@ -360,34 +364,34 @@ async fn reactions_and_message_flags_are_read_back_as_imported() {
 
 #[tokio::test]
 async fn one_message_is_read_by_id_and_only_by_the_account_that_owns_it() {
-    let (vault, alice, _direct, _group) = seeded().await;
-    let bob = register_via_api(&vault.state, "carol", "hunter2hunter2").await;
+    let (fixture, alice, _direct, _group) = seeded().await;
+    let bob = register_via_api(&fixture.state, "carol", "hunter2hunter2").await;
     let page: serde_json::Value =
-        get_json(&vault.state, "/v1/messages?q=dentist", &alice.token).await;
+        get_json(&fixture.state, "/v1/messages?q=dentist", &alice.token).await;
     let id = page["items"][0]["id"].as_i64().unwrap();
     let text = page["items"][0]["text"].as_str().unwrap().to_string();
 
     let message: serde_json::Value =
-        get_json(&vault.state, &format!("/v1/messages/{id}"), &alice.token).await;
+        get_json(&fixture.state, &format!("/v1/messages/{id}"), &alice.token).await;
     assert_eq!(message["id"], serde_json::json!(id));
     assert_eq!(message["text"], serde_json::json!(text));
 
     assert_eq!(
-        get_status(&vault.state, &format!("/v1/messages/{id}"), &bob.token).await,
+        get_status(&fixture.state, &format!("/v1/messages/{id}"), &bob.token).await,
         StatusCode::NOT_FOUND,
         "another account's message is absent, not forbidden"
     );
     assert_eq!(
-        get_status(&vault.state, "/v1/messages/999999", &alice.token).await,
+        get_status(&fixture.state, "/v1/messages/999999", &alice.token).await,
         StatusCode::NOT_FOUND
     );
     assert_eq!(
-        get_status(&vault.state, &format!("/v1/messages/{id}"), "not-a-token").await,
+        get_status(&fixture.state, &format!("/v1/messages/{id}"), "not-a-token").await,
         StatusCode::UNAUTHORIZED
     );
     // An id that is not a number is a problem document like every other
     // failure, not Axum's plain-text rejection.
-    let (status, text) = get_raw(&vault.state, "/v1/messages/abc", &alice.token).await;
+    let (status, text) = get_raw(&fixture.state, "/v1/messages/abc", &alice.token).await;
     expect_problem(status, &text, ProblemType::ValidationFailed);
 }
 
@@ -400,10 +404,10 @@ async fn one_message_is_read_by_id_and_only_by_the_account_that_owns_it() {
 async fn date_today_is_the_day_on_the_accounts_clock() {
     use chrono::TimeZone;
 
-    let (vault, alice) = fixture_with_account().await;
+    let (fixture, alice) = fixture_with_account().await;
     let zone = chrono_tz::Pacific::Kiritimati;
     let _: serde_json::Value = crate::test_support::patch_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/accounts/{}", alice.account_id),
         &alice.token,
         serde_json::json!({ "time_zone": zone.name() }),
@@ -423,7 +427,7 @@ async fn date_today_is_the_day_on_the_accounts_clock() {
     let late_yesterday = local(today.pred_opt().unwrap(), 23, 30);
     let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
     seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: alice.account_id,
             handle: "+15555550100",
@@ -455,7 +459,7 @@ async fn date_today_is_the_day_on_the_accounts_clock() {
     .await;
 
     let page: serde_json::Value =
-        get_json(&vault.state, "/v1/messages?q=date%3Atoday", &alice.token).await;
+        get_json(&fixture.state, "/v1/messages?q=date%3Atoday", &alice.token).await;
     let mut bodies: Vec<&str> = page["items"]
         .as_array()
         .unwrap()

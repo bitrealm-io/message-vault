@@ -38,7 +38,7 @@ fn infer_handle_type(raw: &str, service: Option<&str>) -> HandleType {
 /// the person as a 400 wearing an internal sentence.
 #[derive(Debug)]
 pub enum ContactEditError {
-    /// The request asks for something the vault will not do, and the person
+    /// The request asks for something the server will not do, and the person
     /// can fix it by changing the request. The sentence is written for them.
     Refused(String),
     /// Something failed that changing the request would not help. The cause
@@ -187,7 +187,7 @@ impl ContactEditor<'_> {
         Ok(true)
     }
 
-    /// Link an identity, creating its row when the vault has never seen it.
+    /// Link an identity, creating its row when the server has never seen it.
     async fn add_identity(
         &mut self,
         add: &AddContactIdentityRequest,

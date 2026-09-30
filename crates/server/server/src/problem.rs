@@ -40,9 +40,9 @@ pub enum ProblemType {
     NameTaken,
     /// The demo account refuses a destructive operation.
     DemoAccountProtected,
-    /// The account is not the vault owner.
+    /// The account is not the owner.
     NotTheOwner,
-    /// The vault does not let strangers create their own account.
+    /// The server does not let strangers create their own account.
     RegistrationClosed,
     /// The token is valid but lacks the scope the route needs.
     InsufficientScope,
@@ -171,7 +171,7 @@ impl ProblemType {
         format!("{ERRORS_URL}{}", self.slug())
     }
 
-    /// The page's text: when the vault answers this, and what to do about it.
+    /// The page's text: when the server answers this, and what to do about it.
     /// Markdown paragraphs, no heading; the generator adds the frontmatter.
     #[must_use]
     pub fn page(self) -> String {

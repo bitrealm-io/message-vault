@@ -1,9 +1,9 @@
-//! How much an account, or the whole vault, holds: row counts, the bytes its
+//! How much an account, or the whole database, holds: row counts, the bytes its
 //! attachments take, and what the database itself takes on disk. Every
 //! number here describes message data without being it, which is what lets
-//! the vault owner read them
+//! the owner read them
 //! (`docs/adr/0008-the-owner-holds-no-messages.md`, "What the owner
-//! may see"). The per-account and vault-wide figures come from the same
+//! may see"). The per-account and all-account figures come from the same
 //! queries with and without an account filter, so the total on Owner Home
 //! cannot drift from the numbers on an account's Storage tab.
 //!
@@ -24,7 +24,7 @@ pub enum Scope {
     /// One account's rows.
     Account(i64),
     /// Every account's rows.
-    Vault,
+    AllAccounts,
 }
 
 /// Run `SELECT {select} FROM {from}` over the rows `scope` names, where
@@ -45,7 +45,7 @@ async fn scalar(
             .fetch_one(&mut *conn)
             .await?
         }
-        Scope::Vault => {
+        Scope::AllAccounts => {
             sqlx::query_scalar(&format!("SELECT {select} FROM {from}"))
                 .fetch_one(&mut *conn)
                 .await?
@@ -88,7 +88,7 @@ pub async fn attachment_bytes(conn: &mut AnyConnection, scope: Scope) -> Result<
     .await
 }
 
-/// One account's share of the messages held, as the vault owner's Dashboard
+/// One account's share of the messages held, as the owner's Dashboard
 /// lists it: an id, a username and numbers, nothing that names a person or a
 /// conversation.
 #[derive(Debug, Clone, PartialEq, Eq)]

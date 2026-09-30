@@ -1,4 +1,4 @@
-//! Per-account vault import session records (one row per message-crate-push / CLI import run).
+//! Per-account import session records (one row per message-crate-push / CLI import run).
 
 use anyhow::{Result, bail};
 use chrono::Utc;
@@ -28,9 +28,9 @@ pub enum ImportStage {
     AwaitingGate1,
     /// Converting or compressing staged media.
     Transcode,
-    /// Waiting for the user to approve what lands in the vault.
+    /// Waiting for the user to approve what lands in the database.
     AwaitingGate2,
-    /// Uploading to the vault.
+    /// Uploading to the server.
     Pushing,
 }
 
@@ -66,7 +66,7 @@ impl ImportStage {
 pub struct ImportRow {
     /// Import session id.
     pub id: i64,
-    /// Vault account that owns the session.
+    /// Account that owns the session.
     pub account_id: i64,
     /// Source id the session imports.
     pub source: String,
@@ -231,7 +231,7 @@ impl From<sqlx::Error> for ImportLookupError {
 
 /// Everything recorded when a session begins.
 pub struct StartImportArgs<'a> {
-    /// Owning vault account.
+    /// Owning account.
     pub account_id: i64,
     /// IR source family (`imessage`, `whatsapp`, …), not a method id.
     pub source: &'a str,

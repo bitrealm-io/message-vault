@@ -10,13 +10,13 @@ use std::fmt;
 /// A reason an import stopped that the sender can fix by changing the file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportFailure {
-    /// The conversation header's `schema_version` is not the one this vault
+    /// The conversation header's `schema_version` is not the one this server
     /// reads. Nothing is upgraded: the sender re-exports with current tools.
     SchemaVersion {
         refusal: UnsupportedSchemaVersion,
         line: usize,
     },
-    /// A line is not the message-ir JSON the vault expects: not JSON at all,
+    /// A line is not the message-ir JSON the server expects: not JSON at all,
     /// a header or message with the wrong fields, or a message before any
     /// header.
     Parse { line: usize, detail: String },

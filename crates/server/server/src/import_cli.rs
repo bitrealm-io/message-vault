@@ -17,7 +17,7 @@ use media::MediaMode;
 /// Options for a CLI directory import.
 #[derive(Debug, Clone)]
 pub struct CliImportOptions {
-    /// Vault account the import writes into.
+    /// Account the import writes into.
     pub account_id: i64,
     /// Folder of `*.jsonl` conversation files (+ attachments).
     pub input_dir: PathBuf,
@@ -94,14 +94,14 @@ impl SourcePlan {
     }
 }
 
-/// Import a folder of JSON Lines files into the vault, then optionally run
+/// Import a folder of JSON Lines files into the database, then optionally run
 /// cross-source duplicate hiding.
 ///
 /// # Errors
 ///
 /// Returns an error when the input directory is missing, has no `.jsonl`
 /// files, or import / duplicate detection fails.
-pub async fn run(vault: &OpenDb, opts: &CliImportOptions) -> Result<CliImportStats> {
+pub async fn run(opened: &OpenDb, opts: &CliImportOptions) -> Result<CliImportStats> {
     let input = &opts.input_dir;
     if !input.is_dir() {
         bail!("input directory does not exist: {}", input.display());
@@ -111,12 +111,12 @@ pub async fn run(vault: &OpenDb, opts: &CliImportOptions) -> Result<CliImportSta
         bail!("input {} has no .jsonl files", input.display());
     }
     let plan = SourcePlan::resolve(opts, &paths, input)?;
-    print_plan(opts, vault, &plan);
+    print_plan(opts, opened, &plan);
 
-    let mut conn = vault.conn().await?;
+    let mut conn = opened.conn().await?;
     account_profile::ensure_account_row(&mut conn, opts.account_id).await?;
 
-    let import_stats = import_under_session(&vault.cfg, opts, &mut conn, &paths, &plan).await?;
+    let import_stats = import_under_session(&opened.cfg, opts, &mut conn, &paths, &plan).await?;
     let dedupe = if opts.skip_dedupe {
         None
     } else {
@@ -139,11 +139,11 @@ pub async fn run(vault: &OpenDb, opts: &CliImportOptions) -> Result<CliImportSta
 
 /// Echo what the import is about to do so a wrong flag is visible before any
 /// row is written.
-fn print_plan(opts: &CliImportOptions, vault: &OpenDb, plan: &SourcePlan) {
+fn print_plan(opts: &CliImportOptions, opened: &OpenDb, plan: &SourcePlan) {
     println!("Import");
     println!("  account:      {}", opts.account_id);
     println!("  input:        {}", opts.input_dir.display());
-    println!("  db:           {}", vault.location());
+    println!("  db:           {}", opened.location());
     println!("  sources:      {}", plan.sources.join(", "));
     if plan.from_jsonl {
         println!("  source mode:  from JSONL export.source");
@@ -285,11 +285,11 @@ mod tests {
         )
     }
 
-    /// A vault with account alice, an export folder holding one conversation
+    /// A database with account alice, an export folder holding one conversation
     /// with `PHONE`, and a one-card address book naming that number.
     async fn fixture_with_export_and_book(dir: &Path) -> (OpenDb, CliImportOptions) {
-        let vault = OpenDb::open(fresh_config(dir).await).await.unwrap();
-        let mut conn = vault.conn().await.unwrap();
+        let opened = OpenDb::open(fresh_config(dir).await).await.unwrap();
+        let mut conn = opened.conn().await.unwrap();
         account_profile::insert_account_at(&mut conn, ALICE, "alice", None, None)
             .await
             .unwrap();
@@ -317,11 +317,11 @@ mod tests {
             skip_dedupe: true,
             window_secs: 2,
         };
-        (vault, opts)
+        (opened, opts)
     }
 
-    async fn count(vault: &OpenDb, sql: &str) -> i64 {
-        let mut conn = vault.conn().await.unwrap();
+    async fn count(opened: &OpenDb, sql: &str) -> i64 {
+        let mut conn = opened.conn().await.unwrap();
         sqlx::query_scalar(sql)
             .bind(ALICE)
             .fetch_one(&mut *conn)
@@ -333,9 +333,9 @@ mod tests {
     async fn an_import_with_contacts_loads_the_book_and_links_its_phone_to_the_participant() {
         sqlx::any::install_default_drivers();
         let dir = TempDir::new().unwrap();
-        let (vault, opts) = fixture_with_export_and_book(dir.path()).await;
+        let (opened, opts) = fixture_with_export_and_book(dir.path()).await;
 
-        let stats = run(&vault, &opts).await.unwrap();
+        let stats = run(&opened, &opts).await.unwrap();
 
         assert!(!stats.import.contacts_skipped, "the book was loaded");
         assert_eq!(stats.import.contacts, 1);
@@ -346,7 +346,7 @@ mod tests {
         // The card is a contact whose linked handle is the card's number.
         assert_eq!(
             count(
-                &vault,
+                &opened,
                 "SELECT COUNT(*) FROM contacts
                  WHERE account_id = $1 AND preferred_name = 'Ada Lovelace'"
             )
@@ -355,7 +355,7 @@ mod tests {
         );
         assert_eq!(
             count(
-                &vault,
+                &opened,
                 "SELECT COUNT(*) FROM contact_handles ch
                  JOIN contacts c ON c.id = ch.contact_id
                  JOIN handles h ON h.id = ch.handle_id
@@ -370,7 +370,7 @@ mod tests {
         // was loaded before the messages were promoted.
         assert_eq!(
             count(
-                &vault,
+                &opened,
                 "SELECT COUNT(*) FROM participants p
                  JOIN conversations cv ON cv.id = p.conversation_id
                  JOIN contacts c ON c.id = p.contact_id
@@ -379,17 +379,17 @@ mod tests {
             .await,
             1
         );
-        vault.close().await;
+        opened.close().await;
     }
 
     #[tokio::test]
     async fn a_second_import_with_the_same_book_and_no_overwrite_skips_the_contacts() {
         sqlx::any::install_default_drivers();
         let dir = TempDir::new().unwrap();
-        let (vault, opts) = fixture_with_export_and_book(dir.path()).await;
-        run(&vault, &opts).await.unwrap();
+        let (opened, opts) = fixture_with_export_and_book(dir.path()).await;
+        run(&opened, &opts).await.unwrap();
 
-        let stats = run(&vault, &opts).await.unwrap();
+        let stats = run(&opened, &opts).await.unwrap();
 
         assert!(
             stats.import.contacts_skipped,
@@ -399,36 +399,36 @@ mod tests {
         assert_eq!(stats.import.contact_handles, 0);
         assert_eq!(
             count(
-                &vault,
+                &opened,
                 "SELECT COUNT(*) FROM contacts WHERE account_id = $1"
             )
             .await,
             1,
             "the skipped load added no contact"
         );
-        vault.close().await;
+        opened.close().await;
     }
 
     #[tokio::test]
     async fn an_import_without_contacts_reports_the_load_as_skipped() {
         sqlx::any::install_default_drivers();
         let dir = TempDir::new().unwrap();
-        let (vault, mut opts) = fixture_with_export_and_book(dir.path()).await;
+        let (opened, mut opts) = fixture_with_export_and_book(dir.path()).await;
         opts.contacts = None;
 
-        let stats = run(&vault, &opts).await.unwrap();
+        let stats = run(&opened, &opts).await.unwrap();
 
         assert!(stats.import.contacts_skipped, "no address book was given");
         assert_eq!(
             count(
-                &vault,
+                &opened,
                 "SELECT COUNT(*) FROM contacts WHERE account_id = $1"
             )
             .await,
             1,
             "only the conversation's participant became a contact"
         );
-        vault.close().await;
+        opened.close().await;
     }
 
     #[test]

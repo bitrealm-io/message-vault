@@ -159,13 +159,13 @@ async fn reset_demo_db_url_creates_demo_account_on_postgres() {
     pool.close().await;
 }
 
-/// Open `db` with the vault schema applied and one connection checked out.
+/// Open `db` with the schema applied and one connection checked out.
 async fn test_db_conn(db: &Path) -> sqlx::pool::PoolConnection<sqlx::Any> {
     let (_pool, conn) = test_db(db).await;
     conn
 }
 
-/// Open `db` with the vault schema applied; returns the pool alongside the
+/// Open `db` with the schema applied; returns the pool alongside the
 /// connection so the caller can close the pool deterministically before
 /// copying or replacing the database file.
 async fn test_db(db: &Path) -> (sqlx::AnyPool, sqlx::pool::PoolConnection<sqlx::Any>) {
@@ -175,7 +175,7 @@ async fn test_db(db: &Path) -> (sqlx::AnyPool, sqlx::pool::PoolConnection<sqlx::
     let mut conn = pool.acquire().await.expect("acquire test connection");
     schema::ensure_schema(&mut conn)
         .await
-        .expect("create vault schema");
+        .expect("create schema");
     (pool, conn)
 }
 
@@ -265,7 +265,7 @@ async fn the_demo_account_may_import_export_and_delete() {
     assert_eq!(
         (import, export, delete),
         (1, 1, 1),
-        "the demo account is there to try the whole vault, so it may import, export, and delete"
+        "the demo account is there to try all of Message Crate, so it may import, export, and delete"
     );
 
     close_test_db(pool, conn).await;
@@ -389,7 +389,7 @@ async fn failed_preparation_preserves_active_config() {
 }
 
 #[tokio::test]
-async fn vault_db_without_accounts_table_does_not_block_reset_check() {
+async fn a_db_without_accounts_table_does_not_block_reset_check() {
     let temp = tempfile::tempdir().expect("create test directory");
     let active = temp.path().join("messagecrate.db");
     fs::write(&active, []).expect("create empty sqlite file");
@@ -895,7 +895,7 @@ async fn the_database_snapshot_carries_the_active_tables_and_rows() {
 }
 
 #[tokio::test]
-async fn the_snapshot_of_a_missing_database_is_an_empty_vault_with_the_schema() {
+async fn the_snapshot_of_a_missing_database_is_an_empty_database_with_the_schema() {
     let temp = tempfile::tempdir().expect("create test directory");
     let active = temp.path().join("missing/messagecrate.db");
     let prepared = temp.path().join("prepared.db");
@@ -1136,7 +1136,7 @@ async fn count(conn: &mut AnyConnection, sql: &str) -> i64 {
 /// and dedupes what the overlap conversations carry twice. Until now only a
 /// three-line hand-written bundle went through this path in a test, so a
 /// generator change that the import could not read, or a stride the import
-/// dropped, showed up first in the demo vault.
+/// dropped, showed up first in the demo Message Crate.
 ///
 /// Runs on SQLite by file path, and on Postgres by schema URL when
 /// `MC_TEST_POSTGRES_URL` is set, the two transports `reset-demo` takes.
@@ -1198,7 +1198,7 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
         "every tapback imported"
     );
 
-    let pool = target.open().await.expect("open the imported vault");
+    let pool = target.open().await.expect("open the imported database");
     let mut conn = pool.acquire().await.expect("acquire");
     let dedupe = dedupe::dedupe_cross_source(&mut conn, DEMO_ACCOUNT_ID, None, 2)
         .await
@@ -1425,7 +1425,7 @@ async fn the_wipe_removes_the_demo_rows_and_folder_and_leaves_other_accounts() {
     );
 }
 
-/// A reset on the SQLite path leaves a claimed vault where `demo` logs in
+/// A reset on the SQLite path leaves a claimed Message Crate where `demo` logs in
 /// with an empty password and the owner with `admin`/`admin`, holds none of
 /// the previous demo's rows or files, and has deduped the new demo data
 /// across its sources (#780).
@@ -1464,7 +1464,7 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
             !account_profile::is_claimed(&mut conn)
                 .await
                 .expect("read claim state"),
-            "the vault starts unclaimed, so the claim below is the reset's doing"
+            "this Message Crate starts unclaimed, so the claim below is the reset's doing"
         );
         close_test_db(pool, conn).await;
     }
@@ -1495,7 +1495,7 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
         account_profile::is_claimed(&mut conn)
             .await
             .expect("read claim state"),
-        "the reset claims the vault"
+        "the reset claims this Message Crate"
     );
     let previous_messages: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE guid = 'previous-demo-message'")
@@ -1540,7 +1540,7 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
 
     let pool = engine::open_pool_for_path(&db)
         .await
-        .expect("open the reset vault");
+        .expect("open the reset database");
     let state = crate::server::test_app_state(pool, &data_dir);
     let session = crate::test_support::log_in(&state, "demo", "").await;
     assert_eq!(session["username"], "demo");

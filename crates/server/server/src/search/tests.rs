@@ -1,4 +1,4 @@
-//! Tests at the module's interface: seed a SQLite vault, compile a query
+//! Tests at the module's interface: seed a SQLite database, compile a query
 //! for a list, run it, and assert which ids come back.
 
 use chrono::NaiveDate;
@@ -295,7 +295,7 @@ pub(crate) async fn tag(
     id
 }
 
-/// A vault with two accounts and every row the spec's cases need.
+/// A database with two accounts and every row the spec's cases need.
 pub(crate) async fn seeded() -> (sqlx::AnyPool, tempfile::TempDir, Fixture) {
     let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
@@ -954,7 +954,7 @@ mod free_text {
     /// the matching ids, never as an `EXISTS` correlated to the message
     /// row: SQLite cannot drive that from the FTS index, so it ran the
     /// match once per message and an unscoped word took 10 s to minutes
-    /// on the demo vault (#413). Both engines, every term shape.
+    /// on the demo database (#413). Both engines, every term shape.
     #[test]
     fn free_text_on_messages_asks_the_index_once() {
         for engine in [DbEngine::Sqlite, DbEngine::Postgres] {
@@ -1890,7 +1890,7 @@ mod people_words {
 
     /// `-import:last` and `-import:#N` are every message not from that run,
     /// including messages with no run and every message of an account that
-    /// has no Import Runs yet (the seeded vault has none). `import:` lifts
+    /// has no Import Runs yet (the seeded database has none). `import:` lifts
     /// the duplicate default, so the duplicate is in the answer too.
     #[tokio::test]
     async fn import_run_negation_includes_rows_with_no_run() {

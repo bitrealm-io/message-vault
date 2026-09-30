@@ -182,7 +182,7 @@ pub async fn link_handle_to_contact(
 /// discarded a trashed contact (ADR-0013). One number is one person on every
 /// service, the rule [`contact_id_of_sibling_handle`] applies in the other
 /// direction, so the fresh contact takes the number on every service the
-/// vault has met it on rather than leaving half of it Unknown.
+/// server has met it on rather than leaving half of it Unknown.
 ///
 /// # Errors
 ///
@@ -460,11 +460,11 @@ pub async fn unlink_handle(
     Ok(())
 }
 
-/// Counts from loading an address book into the vault.
+/// Counts from loading an address book into the database.
 #[derive(Debug, Default)]
 pub struct ContactLoadStats {
     /// Contacts the book supplied: one per card, whether the card joined a
-    /// contact the vault already had or created a new one.
+    /// contact the database already had or created a new one.
     pub contacts: u64,
     /// Phone handles linked to contacts.
     pub phones: u64,

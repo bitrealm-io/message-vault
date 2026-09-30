@@ -15,7 +15,7 @@ use tempfile::TempDir;
 
 use crate::server::{AppState, http_app};
 
-/// A vault plus its temp directory. Drop the `TempDir` last.
+/// A server state plus its temp directory. Drop the `TempDir` last.
 pub struct TestFixture {
     /// Keeps the temp directory alive for the test's lifetime.
     tmp: TempDir,
@@ -92,11 +92,11 @@ pub fn on_postgres() -> bool {
     crate::pg_test_url().is_some()
 }
 
-/// An empty vault with schema applied and no accounts.
+/// An empty database with schema applied and no accounts.
 ///
 /// Public registration is turned on, because most of the suite reaches the
-/// vault through `register_via_api` and a real vault ships with it off. Tests
-/// whose subject is the closed vault turn it back off and say so.
+/// server through `register_via_api` and a real server ships with it off. Tests
+/// whose subject is the closed server turn it back off and say so.
 pub async fn test_fixture() -> TestFixture {
     let (pool, tmp) = crate::db::engine::test_pool().await;
     {
@@ -116,13 +116,13 @@ pub async fn test_fixture() -> TestFixture {
 /// The password every account the fixtures register is given.
 pub const PASSWORD: &str = "hunter2hunter2";
 
-/// A vault with one account in it, `alice`, registered through the API the
+/// A fixture with one account in it, `alice`, registered through the API the
 /// way a stranger does it, and logged in: the fixture a route test starts
 /// from.
 pub async fn fixture_with_account() -> (TestFixture, RegisteredAccount) {
-    let vault = test_fixture().await;
-    let account = register_via_api(&vault.state, "alice", PASSWORD).await;
-    (vault, account)
+    let fixture = test_fixture().await;
+    let account = register_via_api(&fixture.state, "alice", PASSWORD).await;
+    (fixture, account)
 }
 
 impl TestFixture {
@@ -142,13 +142,13 @@ impl TestFixture {
         .unwrap();
     }
 
-    /// A connection from this vault's pool, for a test that seeds or asserts
+    /// A connection from this fixture's pool, for a test that seeds or asserts
     /// with SQL directly.
     pub async fn conn(&self) -> sqlx::pool::PoolConnection<sqlx::Any> {
         self.state.db.acquire().await.unwrap()
     }
 
-    /// The vault's temp directory, for a test that needs a real path on disk.
+    /// The fixture's temp directory, for a test that needs a real path on disk.
     pub fn dir(&self) -> &std::path::Path {
         self.tmp.path()
     }
@@ -215,11 +215,11 @@ fn expect_ok<T: DeserializeOwned>(what: &str, status: StatusCode, text: &str) ->
 }
 
 /// Register an account as a stranger, `POST /v1/accounts` with no
-/// credential, and return it with the live session token the vault opens on
+/// credential, and return it with the live session token the server opens on
 /// it. Asserts the `201 Created` and the `Location` naming the new row.
 ///
 /// The auth rate limiter lives on `AppState` (`credentials::AuthRateLimits`),
-/// so the hits counted here belong to this vault alone. That matters because
+/// so the hits counted here belong to this fixture alone. That matters because
 /// the suite reuses a handful of literal usernames ("alice", "bob", ...)
 /// across many test functions in one test binary: with a shared limiter,
 /// enough tests registering the same name inside one 60-second window would
@@ -266,7 +266,7 @@ pub async fn register_via_api(
     }
 }
 
-/// Claim the test vault: create its owner directly, then log in as them.
+/// Claim the test server: create its owner directly, then log in as them.
 ///
 /// The row goes in through `insert_account_at` at the well-known owner id,
 /// exactly as `create-owner` does it from a shell; `server_api`'s own tests
@@ -282,7 +282,7 @@ pub async fn claim_as_owner(state: &AppState, username: &str, password: &str) ->
         None,
     )
     .await
-    .expect("insert the vault owner");
+    .expect("insert the owner");
     drop(conn);
 
     let body = log_in(state, username, password).await;
@@ -454,7 +454,7 @@ pub async fn post_status(
 }
 
 /// POST a JSON body with no credential at all, returning only the status.
-/// For the routes a stranger calls: creating an account, claiming the vault.
+/// For the routes a stranger calls: creating an account, claiming the server.
 pub async fn post_status_logged_out(
     state: &AppState,
     path: &str,
@@ -601,7 +601,7 @@ pub async fn patch_status(
 }
 
 /// PATCH a JSON body expecting a failure: the status and the `{error}`
-/// sentence the vault answered with.
+/// sentence the server answered with.
 ///
 /// A route test asserting only a status cannot tell a refusal the person can
 /// act on from a different refusal with the same status, so a route that
@@ -870,11 +870,11 @@ mod tests {
 
     #[tokio::test]
     async fn the_fixture_makes_an_account_with_the_id_a_test_asks_for() {
-        let vault = test_fixture().await;
-        let id = vault.account_with_id(101, "alice").await;
+        let fixture = test_fixture().await;
+        let id = fixture.account_with_id(101, "alice").await;
         assert_eq!(id, 101);
 
-        let mut conn = vault.conn().await;
+        let mut conn = fixture.conn().await;
         let username: String = sqlx::query_scalar("SELECT username FROM accounts WHERE id = $1")
             .bind(id)
             .fetch_one(&mut *conn)
@@ -882,16 +882,16 @@ mod tests {
             .unwrap();
         assert_eq!(username, "alice");
 
-        let other = vault.account("bob").await;
+        let other = fixture.account("bob").await;
         assert_ne!(other, id, "each account must get its own id");
     }
 
     #[tokio::test]
     async fn the_seeder_returns_the_conversation_id_it_made() {
-        let vault = test_fixture().await;
-        let account = vault.account("alice").await;
+        let fixture = test_fixture().await;
+        let account = fixture.account("alice").await;
         let id = seed_conversation(
-            &vault.state,
+            &fixture.state,
             &SeedConversation {
                 account_id: account,
                 handle: "+15555550100",
@@ -916,7 +916,7 @@ mod tests {
         )
         .await;
 
-        let mut conn = vault.conn().await;
+        let mut conn = fixture.conn().await;
         let title: String =
             sqlx::query_scalar("SELECT group_title FROM conversations WHERE id = $1")
                 .bind(id)
@@ -940,10 +940,10 @@ mod tests {
     /// `TestServer` drops and aborts the task serving it.
     #[tokio::test]
     async fn a_large_response_body_is_read_before_the_server_stops() {
-        let (vault, user) = fixture_with_account().await;
+        let (fixture, user) = fixture_with_account().await;
         for i in 0..300 {
             seed_conversation(
-                &vault.state,
+                &fixture.state,
                 &SeedConversation {
                     account_id: user.account_id,
                     handle: &format!("+1555000{i:04}"),
@@ -962,7 +962,7 @@ mod tests {
         }
 
         let (status, text) =
-            get_raw(&vault.state, "/v1/conversations?limit=300", &user.token).await;
+            get_raw(&fixture.state, "/v1/conversations?limit=300", &user.token).await;
         assert_eq!(status, StatusCode::OK, "{text}");
         assert!(
             text.len() > 64 * 1024,

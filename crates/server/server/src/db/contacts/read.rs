@@ -106,7 +106,7 @@ fn involves_contact_sql() -> String {
 pub enum ContactSort {
     /// Display name, case-folded.
     Name,
-    /// When the vault last heard from the contact (`last_heard_at`).
+    /// When the server last heard from the contact (`last_heard_at`).
     LastHeard,
 }
 
@@ -503,7 +503,7 @@ type ContactSelectionRow = (
 ///
 /// Matches on the same normalized form the import pipeline stores in
 /// `handles.normalized` ([`normalize_handle`]), so an export spelling like
-/// `+1 555 0100` is recognized against a vault contact stored as
+/// `+1 555 0100` is recognized against a contact stored as
 /// `+15550100`. Blanks are dropped; duplicates are collapsed by *normalized*
 /// form (two spellings of the same person must not both count as "new"),
 /// keeping the first-seen raw (trimmed) spelling and first-seen order.
@@ -530,7 +530,7 @@ pub async fn unknown_contact_identifiers(
         // from the string's shape instead. The two can diverge: a
         // source-declared phone number whose digits don't look phone-shaped
         // (e.g. a short code) would infer as Other here and normalize
-        // differently than the vault's stored (Phone-typed) form, reading as
+        // differently than the database's stored (Phone-typed) form, reading as
         // "new" even though import would have linked it. Acceptable for a
         // best-effort gate count; not a source of silent data loss.
         let normalized = normalize_handle(trimmed, infer_handle_type_from_shape(trimmed)).0;

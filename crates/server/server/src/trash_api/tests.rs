@@ -10,9 +10,9 @@ use crate::test_support::{
 };
 
 /// One `imessage` conversation with one message on `handle`, returning its id.
-async fn seed(vault: &TestFixture, account: &RegisteredAccount, handle: &str) -> i64 {
+async fn seed(fixture: &TestFixture, account: &RegisteredAccount, handle: &str) -> i64 {
     seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: account.account_id,
             handle,
@@ -31,8 +31,8 @@ async fn seed(vault: &TestFixture, account: &RegisteredAccount, handle: &str) ->
 }
 
 /// A named contact of `account`, returning its id.
-async fn seed_named_contact(vault: &TestFixture, account: &RegisteredAccount, name: &str) -> i64 {
-    let mut conn = vault.conn().await;
+async fn seed_named_contact(fixture: &TestFixture, account: &RegisteredAccount, name: &str) -> i64 {
+    let mut conn = fixture.conn().await;
     sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name, origin) VALUES ($1, $2, 'user') RETURNING id",
     )
@@ -43,8 +43,8 @@ async fn seed_named_contact(vault: &TestFixture, account: &RegisteredAccount, na
     .unwrap()
 }
 
-async fn trash(vault: &TestFixture, account: &RegisteredAccount, target: Trashable) {
-    let mut conn = vault.conn().await;
+async fn trash(fixture: &TestFixture, account: &RegisteredAccount, target: Trashable) {
+    let mut conn = fixture.conn().await;
     assert!(
         move_to_trash(&mut conn, account.account_id, target)
             .await
@@ -54,45 +54,45 @@ async fn trash(vault: &TestFixture, account: &RegisteredAccount, target: Trashab
 
 /// `total` of the conversation list for `q`, already percent-encoded where
 /// it needs to be (`#` would otherwise start a fragment).
-async fn conversation_total(vault: &TestFixture, token: &str, q: &str) -> u64 {
+async fn conversation_total(fixture: &TestFixture, token: &str, q: &str) -> u64 {
     let page: serde_json::Value =
-        get_json(&vault.state, &format!("/v1/conversations?q={q}"), token).await;
+        get_json(&fixture.state, &format!("/v1/conversations?q={q}"), token).await;
     page["total"].as_u64().unwrap()
 }
 
 #[tokio::test]
 async fn empty_trash_deletes_trashed_conversations_and_forgets_trashed_contacts() {
-    let (vault, alice) = fixture_with_account().await;
+    let (fixture, alice) = fixture_with_account().await;
     let shared = fake_sha256('a');
     let only_in_doomed = fake_sha256('b');
 
-    let doomed = seed(&vault, &alice, "+15550001").await;
-    let shared_file = attach_stored_file(&vault.state, alice.account_id, doomed, &shared).await;
+    let doomed = seed(&fixture, &alice, "+15550001").await;
+    let shared_file = attach_stored_file(&fixture.state, alice.account_id, doomed, &shared).await;
     let doomed_file =
-        attach_stored_file(&vault.state, alice.account_id, doomed, &only_in_doomed).await;
-    let kept = seed(&vault, &alice, "+15550002").await;
+        attach_stored_file(&fixture.state, alice.account_id, doomed, &only_in_doomed).await;
+    let kept = seed(&fixture, &alice, "+15550002").await;
     // The kept conversation points at the same stored bytes as `shared`.
-    attach_stored_file(&vault.state, alice.account_id, kept, &shared).await;
+    attach_stored_file(&fixture.state, alice.account_id, kept, &shared).await;
     let sidecar = doomed_file
         .parent()
         .unwrap()
         .join(format!(".{only_in_doomed}.mime"));
 
-    let trashed_contact = seed_named_contact(&vault, &alice, "Grace").await;
-    let kept_contact = seed_named_contact(&vault, &alice, "Ada").await;
-    trash(&vault, &alice, Trashable::Conversation(doomed)).await;
-    trash(&vault, &alice, Trashable::Contact(trashed_contact)).await;
+    let trashed_contact = seed_named_contact(&fixture, &alice, "Grace").await;
+    let kept_contact = seed_named_contact(&fixture, &alice, "Ada").await;
+    trash(&fixture, &alice, Trashable::Conversation(doomed)).await;
+    trash(&fixture, &alice, Trashable::Contact(trashed_contact)).await;
 
-    let status = delete_status(&vault.state, "/v1/trash", &alice.token).await;
+    let status = delete_status(&fixture.state, "/v1/trash", &alice.token).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     assert_eq!(
-        conversation_total(&vault, &alice.token, "trashed:yes").await,
+        conversation_total(&fixture, &alice.token, "trashed:yes").await,
         0,
         "nothing is left in the conversation trash"
     );
     let kept_status = get_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{kept}"),
         &alice.token,
     )
@@ -103,7 +103,7 @@ async fn empty_trash_deletes_trashed_conversations_and_forgets_trashed_contacts(
         "the conversation that was not trashed is still there"
     );
     let doomed_status = get_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{doomed}"),
         &alice.token,
     )
@@ -125,10 +125,10 @@ async fn empty_trash_deletes_trashed_conversations_and_forgets_trashed_contacts(
     );
 
     let contacts: serde_json::Value =
-        get_json(&vault.state, "/v1/contacts?q=trashed:yes", &alice.token).await;
+        get_json(&fixture.state, "/v1/contacts?q=trashed:yes", &alice.token).await;
     assert_eq!(contacts["total"], 0, "nothing is left in the contact trash");
     let forgotten: serde_json::Value = get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{trashed_contact}"),
         &alice.token,
     )
@@ -138,7 +138,7 @@ async fn empty_trash_deletes_trashed_conversations_and_forgets_trashed_contacts(
         "the trashed contact is Unknown again and can be opened: {forgotten}"
     );
     let untouched: serde_json::Value = get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/contacts/{kept_contact}"),
         &alice.token,
     )
@@ -148,16 +148,16 @@ async fn empty_trash_deletes_trashed_conversations_and_forgets_trashed_contacts(
 
 #[tokio::test]
 async fn empty_trash_leaves_another_accounts_trash_alone() {
-    let (vault, alice) = fixture_with_account().await;
-    let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
-    let bobs = seed(&vault, &bob, "+15550001").await;
-    trash(&vault, &bob, Trashable::Conversation(bobs)).await;
+    let (fixture, alice) = fixture_with_account().await;
+    let bob = register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
+    let bobs = seed(&fixture, &bob, "+15550001").await;
+    trash(&fixture, &bob, Trashable::Conversation(bobs)).await;
 
-    let status = delete_status(&vault.state, "/v1/trash", &alice.token).await;
+    let status = delete_status(&fixture.state, "/v1/trash", &alice.token).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
     assert_eq!(
-        conversation_total(&vault, &bob.token, "trashed:yes").await,
+        conversation_total(&fixture, &bob.token, "trashed:yes").await,
         1,
         "Alice emptying her trash must not touch Bob's"
     );
@@ -165,15 +165,15 @@ async fn empty_trash_leaves_another_accounts_trash_alone() {
 
 #[tokio::test]
 async fn empty_trash_needs_the_delete_permission() {
-    let (vault, alice) = fixture_with_account().await;
-    let doomed = seed(&vault, &alice, "+15550001").await;
-    trash(&vault, &alice, Trashable::Conversation(doomed)).await;
-    vault.turn_off_delete(alice.account_id).await;
+    let (fixture, alice) = fixture_with_account().await;
+    let doomed = seed(&fixture, &alice, "+15550001").await;
+    trash(&fixture, &alice, Trashable::Conversation(doomed)).await;
+    fixture.turn_off_delete(alice.account_id).await;
 
-    let status = delete_status(&vault.state, "/v1/trash", &alice.token).await;
+    let status = delete_status(&fixture.state, "/v1/trash", &alice.token).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(
-        conversation_total(&vault, &alice.token, "trashed:yes").await,
+        conversation_total(&fixture, &alice.token, "trashed:yes").await,
         1,
         "the trash is untouched when deleting is not permitted"
     );
@@ -181,7 +181,7 @@ async fn empty_trash_needs_the_delete_permission() {
 
 #[test]
 fn a_stored_path_must_stay_under_its_directory() {
-    let dir = Path::new("/vault/data/acct/imessage/assets");
+    let dir = Path::new("/srv/data/acct/imessage/assets");
     assert_eq!(
         join_under(dir, "ab/abcd.jpg").unwrap(),
         dir.join("ab/abcd.jpg")

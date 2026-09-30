@@ -267,7 +267,7 @@ fn emit_text(ctx: &ListCtx, out: &mut Sql, term: &TextTerm) {
         // One `IN` over the union of both id sets, so the planner walks the
         // matching ids rather than every message of the account: an `OR`
         // between the index and an `EXISTS` on attachments forced that scan
-        // (0.26 s on the demo vault against 2 ms for this shape).
+        // (0.26 s on the demo database against 2 ms for this shape).
         ListKind::Messages => {
             out.push("m.id IN (");
             fts::matching_ids(out, e, term);
@@ -643,7 +643,7 @@ impl NamedSet {
         result
     }
 
-    /// The home row is in no set at all. Unknown is a Contact Group the vault
+    /// The home row is in no set at all. Unknown is a Contact Group the server
     /// computes, so an Unknown contact is in a group and is not in `group:none`.
     fn none(&self, out: &mut Sql) {
         if self.home == ListKind::Contacts {

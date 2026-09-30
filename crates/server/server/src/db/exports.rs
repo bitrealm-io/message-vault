@@ -35,7 +35,7 @@ pub const DEFAULT_EXPORT_SORT: [SortKey<ExportSort>; 1] = [SortKey {
     direction: Direction::Desc,
 }];
 
-/// The four counts the vault computes when a run is created.
+/// The four counts the server computes when a run is created.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ExportCounts {
     /// Messages the scope matches.
@@ -51,7 +51,7 @@ pub struct ExportCounts {
 /// Everything recorded when a run begins, before its messages are listed.
 #[derive(Debug, Clone)]
 pub struct StartExportArgs<'a> {
-    /// Owning vault account.
+    /// Owning account.
     pub account_id: i64,
     /// What the run asked for, stored as given.
     pub scope: &'a ExportScope,
@@ -310,7 +310,7 @@ pub async fn list_exports_page(
 }
 
 /// Give each message `filter` matches its place in the run, oldest first, so
-/// a page is a range of places whatever happens to the vault meanwhile.
+/// a page is a range of places whatever happens to the database meanwhile.
 ///
 /// # Errors
 ///

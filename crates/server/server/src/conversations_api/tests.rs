@@ -31,32 +31,32 @@ async fn list_conversations(
     .await
 }
 
-/// A vault, a logged-in account, and one conversation holding one message.
+/// A fixture, a logged-in account, and one conversation holding one message.
 async fn conversations_fixture() -> (TestFixture, RegisteredAccount) {
-    let (vault, account) = fixture_with_account().await;
-    seed_one_message(&vault.state, account.account_id).await;
-    (vault, account)
+    let (fixture, account) = fixture_with_account().await;
+    seed_one_message(&fixture.state, account.account_id).await;
+    (fixture, account)
 }
 
 #[tokio::test]
 async fn conversation_list_takes_the_search_language() {
-    let (vault, account) = conversations_fixture().await;
+    let (fixture, account) = conversations_fixture().await;
     let page: serde_json::Value = crate::test_support::get_json(
-        &vault.state,
+        &fixture.state,
         "/v1/conversations?q=kind:direct",
         &account.token,
     )
     .await;
     assert!(page["total"].as_u64().unwrap() >= 1);
     let status = crate::test_support::get_status(
-        &vault.state,
+        &fixture.state,
         "/v1/conversations?q=wibble:direct",
         &account.token,
     )
     .await;
     assert_eq!(status, axum::http::StatusCode::UNPROCESSABLE_ENTITY);
     let status = crate::test_support::get_status(
-        &vault.state,
+        &fixture.state,
         "/v1/conversations?q=trashed:yes",
         &account.token,
     )
@@ -64,7 +64,7 @@ async fn conversation_list_takes_the_search_language() {
     assert_eq!(status, axum::http::StatusCode::OK);
 }
 
-/// A vault with account `00000000-0000-4000-8000-0000000000c2` and one
+/// A fixture with account `00000000-0000-4000-8000-0000000000c2` and one
 /// conversation (id 1) on a handle linked through the account profile,
 /// with one participant and one message.
 ///
@@ -76,9 +76,9 @@ async fn conversation_list_takes_the_search_language() {
 /// counterpart in the seeder at all. So this stays as explicit SQL
 /// rather than using the shared seeder.
 async fn conversations_setup() -> (sqlx::AnyPool, TestFixture, i64) {
-    let vault = test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let peer =
         account_profile::link_account_handle(&mut conn, account, "+15555550200", HandleType::Phone)
             .await
@@ -110,13 +110,13 @@ async fn conversations_setup() -> (sqlx::AnyPool, TestFixture, i64) {
     .execute(&mut *conn)
     .await
     .unwrap();
-    let pool = vault.state.db.clone();
-    (pool, vault, account)
+    let pool = fixture.state.db.clone();
+    (pool, fixture, account)
 }
 
 #[tokio::test]
 async fn list_conversations_returns_summary() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
     let page = list_conversations(&mut conn, account, "", DEFAULT_LIST_LIMIT, 0)
         .await
@@ -135,7 +135,7 @@ async fn list_conversations_returns_summary() {
 
 #[tokio::test]
 async fn list_conversations_filters_by_handle() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
     let hit = list_conversations(
         &mut conn,
@@ -163,7 +163,7 @@ async fn list_conversations_filters_by_handle() {
 
 #[tokio::test]
 async fn list_conversations_finds_a_handle_across_platforms() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
     // conversations_setup() already has phone:+15555550200 as conversation 1.
     let wa = account_profile::link_account_handle_with_service(
@@ -222,7 +222,7 @@ async fn list_conversations_finds_a_handle_across_platforms() {
 
 #[tokio::test]
 async fn list_conversations_sorts_by_date_or_message_count() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
 
     // Conversation 1 (from setup) gets two more *older* messages, so it is
@@ -338,7 +338,7 @@ async fn list_conversations_sorts_by_date_or_message_count() {
 
 #[tokio::test]
 async fn list_conversations_paginates() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
     // Second conversation + message.
     let peer2 =
@@ -391,7 +391,7 @@ async fn list_conversations_paginates() {
 
 #[tokio::test]
 async fn list_queries_enforce_search_limits() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
     let oversized = "x".repeat(2_049);
     let too_many_terms = (0..33)
@@ -430,7 +430,7 @@ async fn list_queries_enforce_search_limits() {
 
 #[tokio::test]
 async fn malformed_boolean_queries_are_bad_requests_for_export() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
 
     for query in ["foo OR", "(foo OR bar", "foo OR bar)"] {
@@ -449,7 +449,7 @@ async fn malformed_boolean_queries_are_bad_requests_for_export() {
 
 #[tokio::test]
 async fn list_conversations_filters_by_contact_and_type() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
     // Link peer handle to a contact.
     sqlx::query("INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Sam')")
@@ -603,7 +603,7 @@ fn find_participant<'a>(
 
 #[tokio::test]
 async fn list_conversations_shows_the_contact_name() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
     let contact_id: i64 = sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Sam Preferred')
@@ -638,7 +638,7 @@ async fn list_conversations_shows_the_contact_name() {
 
 #[tokio::test]
 async fn list_conversations_falls_back_to_the_backup_name() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
     // conversations_setup() records the backup name 'Sam' on +15555550200 and links no
     // contact, so the backup's name is what there is to show.
@@ -650,7 +650,7 @@ async fn list_conversations_falls_back_to_the_backup_name() {
 
 #[tokio::test]
 async fn list_conversations_falls_back_to_the_handle() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
     sqlx::query("UPDATE participants SET name_alias = NULL")
         .execute(&mut *conn)
@@ -663,7 +663,7 @@ async fn list_conversations_falls_back_to_the_handle() {
 
 #[tokio::test]
 async fn list_conversations_filters_by_participant_count() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
     // conversations_setup() has conversation 1 with 1 participant.
 
@@ -734,7 +734,7 @@ async fn list_conversations_filters_by_participant_count() {
 
 #[tokio::test]
 async fn list_conversations_participants_eq_three_on_built_fixture() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
     // conversations_setup() already owns conversation 1 with 1 participant, which the
     // `=3` filter below must exclude.
@@ -799,8 +799,8 @@ async fn list_conversations_participants_eq_three_on_built_fixture() {
 #[tokio::test]
 async fn list_conversations_filters_by_import_id() {
     // Fresh db (conversations_setup() already owns conversation 1, which this test inserts itself).
-    let vault = test_fixture().await;
-    let pool = vault.state.db.clone();
+    let fixture = test_fixture().await;
+    let pool = fixture.state.db.clone();
     let account = 101_i64;
     let mut conn = pool.acquire().await.unwrap();
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
@@ -947,8 +947,8 @@ async fn list_conversations_filters_by_import_id() {
 /// never silently the default, and two keys compose.
 #[tokio::test]
 async fn sort_is_parsed_against_the_lists_keys() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     let (status, text) =
         crate::test_support::get_raw(&state, "/v1/conversations?sort=colour", &user.token).await;
     let problem = crate::test_support::expect_problem(
@@ -977,8 +977,8 @@ async fn duplicate_only_threads_sort_last_in_either_date_direction() {
     // duplicate. Those threads are only listed under an `import:` filter,
     // which is the one path where NULL ordering is observable — and the two
     // engines disagree about it unless the query says where NULLs go.
-    let vault = test_fixture().await;
-    let pool = vault.state.db.clone();
+    let fixture = test_fixture().await;
+    let pool = fixture.state.db.clone();
     let account = 101_i64;
     let mut conn = pool.acquire().await.unwrap();
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
@@ -1087,8 +1087,8 @@ async fn duplicate_only_threads_sort_last_in_either_date_direction() {
 async fn list_conversations_import_id_includes_duplicate_only_thread() {
     // Fresh db: conversations_setup() would add a second non-duplicate conversation,
     // which breaks the "all" total assertion below.
-    let vault = test_fixture().await;
-    let pool = vault.state.db.clone();
+    let fixture = test_fixture().await;
+    let pool = fixture.state.db.clone();
     let account = 101_i64;
     let mut conn = pool.acquire().await.unwrap();
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
@@ -1220,7 +1220,7 @@ async fn the_conversation_list_labels_each_thread_by_its_sources() {
     use crate::test_support::{SeedConversation, SeedMessage, get_json, seed_conversation};
     use std::collections::HashMap;
 
-    let (vault, user) = fixture_with_account().await;
+    let (fixture, user) = fixture_with_account().await;
     let message = |source| SeedMessage {
         source,
         timestamp: "2024-01-01T00:00:00Z",
@@ -1237,7 +1237,7 @@ async fn the_conversation_list_labels_each_thread_by_its_sources() {
     ] {
         let messages: Vec<SeedMessage> = sources.iter().map(|s| message(*s)).collect();
         let id = seed_conversation(
-            &vault.state,
+            &fixture.state,
             &SeedConversation {
                 account_id: user.account_id,
                 handle,
@@ -1251,7 +1251,7 @@ async fn the_conversation_list_labels_each_thread_by_its_sources() {
         expected.insert(id, label.to_string());
     }
 
-    let page: serde_json::Value = get_json(&vault.state, "/v1/conversations", &user.token).await;
+    let page: serde_json::Value = get_json(&fixture.state, "/v1/conversations", &user.token).await;
     let labels: HashMap<i64, String> = page["items"]
         .as_array()
         .unwrap()
@@ -1268,7 +1268,7 @@ async fn the_conversation_list_labels_each_thread_by_its_sources() {
 
 #[tokio::test]
 async fn list_conversations_filters_by_tag_and_people() {
-    let (pool, _vault, account) = conversations_setup().await;
+    let (pool, _fixture, account) = conversations_setup().await;
     let mut conn = pool.acquire().await.unwrap();
     crate::db::named_membership::set_membership(
         crate::db::named_membership::tag_spec(),
@@ -1337,8 +1337,8 @@ async fn list_conversations_filters_by_tag_and_people() {
 
 #[tokio::test]
 async fn the_conversation_list_is_a_page_with_integer_ids() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
 
     let page: serde_json::Value =
@@ -1356,8 +1356,8 @@ async fn the_conversation_list_is_a_page_with_integer_ids() {
 
 #[tokio::test]
 async fn conversation_detail_returns_the_owned_conversation() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
@@ -1379,8 +1379,8 @@ async fn conversation_detail_returns_the_owned_conversation() {
 
 #[tokio::test]
 async fn conversation_detail_404s_for_an_id_this_account_does_not_own() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
 
     let status =
         crate::test_support::get_status(&state, "/v1/conversations/999999", &user.token).await;
@@ -1389,8 +1389,8 @@ async fn conversation_detail_404s_for_an_id_this_account_does_not_own() {
 
 #[tokio::test]
 async fn conversation_detail_404s_for_another_accounts_conversation() {
-    let (vault, alice) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, alice) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     crate::test_support::seed_one_message(&state, alice.account_id).await;
     let alice_list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &alice.token).await;
@@ -1400,7 +1400,7 @@ async fn conversation_detail_404s_for_another_accounts_conversation() {
     crate::test_support::seed_one_message(&state, bob.account_id).await;
 
     // Bob asking for Alice's conversation id must 404, not 403 — a 403
-    // would confirm the id exists in someone else's vault, and it must
+    // would confirm the id exists in someone else's account, and it must
     // not come back as Bob's own conversation either.
     let status = crate::test_support::get_status(
         &state,
@@ -1413,8 +1413,8 @@ async fn conversation_detail_404s_for_another_accounts_conversation() {
 
 #[tokio::test]
 async fn conversation_detail_reads_a_trashed_conversation() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
@@ -1458,8 +1458,8 @@ async fn trashed_conversation_row_count(conn: &mut AnyConnection, account_id: i6
 
 #[tokio::test]
 async fn conversation_trash_drops_it_from_the_list() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
@@ -1484,8 +1484,8 @@ async fn conversation_trash_drops_it_from_the_list() {
 
 #[tokio::test]
 async fn conversation_trash_twice_is_204_with_no_second_marker() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
@@ -1509,8 +1509,8 @@ async fn conversation_trash_twice_is_204_with_no_second_marker() {
 
 #[tokio::test]
 async fn conversation_restore_brings_it_back_to_the_list() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
@@ -1542,8 +1542,8 @@ async fn conversation_restore_brings_it_back_to_the_list() {
 
 #[tokio::test]
 async fn conversation_restore_twice_is_204_with_marker_gone() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &user.token).await;
@@ -1574,8 +1574,8 @@ async fn conversation_restore_twice_is_204_with_marker_gone() {
 
 #[tokio::test]
 async fn conversation_trash_404s_for_an_unknown_id() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
 
     let status = crate::test_support::post_status(
         &state,
@@ -1589,8 +1589,8 @@ async fn conversation_trash_404s_for_an_unknown_id() {
 
 #[tokio::test]
 async fn conversation_restore_404s_for_an_unknown_id() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
 
     let status = crate::test_support::post_status(
         &state,
@@ -1604,8 +1604,8 @@ async fn conversation_restore_404s_for_an_unknown_id() {
 
 #[tokio::test]
 async fn conversation_trash_404s_for_another_accounts_conversation() {
-    let (vault, alice) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, alice) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     crate::test_support::seed_one_message(&state, alice.account_id).await;
     let alice_list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &alice.token).await;
@@ -1615,7 +1615,7 @@ async fn conversation_trash_404s_for_another_accounts_conversation() {
     crate::test_support::seed_one_message(&state, bob.account_id).await;
 
     // Bob trashing Alice's conversation id must 404, not 403 — a 403
-    // would confirm the id exists in someone else's vault.
+    // would confirm the id exists in someone else's account.
     let status = crate::test_support::post_status(
         &state,
         &format!("/v1/conversations/{alice_conversation_id}/trash"),
@@ -1635,8 +1635,8 @@ async fn conversation_trash_404s_for_another_accounts_conversation() {
 
 #[tokio::test]
 async fn conversation_restore_404s_for_another_accounts_conversation() {
-    let (vault, alice) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, alice) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     crate::test_support::seed_one_message(&state, alice.account_id).await;
     let alice_list: serde_json::Value =
         crate::test_support::get_json(&state, "/v1/conversations", &alice.token).await;
@@ -1673,20 +1673,20 @@ async fn conversation_restore_404s_for_another_accounts_conversation() {
 /// A logged-in account with one conversation already in the trash,
 /// returning the account and the conversation's id.
 async fn trashed_conversation_fixture() -> (TestFixture, RegisteredAccount, i64) {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    crate::test_support::seed_one_message(&vault.state, user.account_id).await;
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    crate::test_support::seed_one_message(&fixture.state, user.account_id).await;
     let list: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/conversations", &user.token).await;
+        crate::test_support::get_json(&fixture.state, "/v1/conversations", &user.token).await;
     let id = list["items"][0]["id"].as_i64().unwrap();
     let status = crate::test_support::post_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{id}/trash"),
         &user.token,
         serde_json::json!({}),
     )
     .await;
     assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
-    (vault, user, id)
+    (fixture, user, id)
 }
 
 async fn conversation_row_count(conn: &mut AnyConnection, id: i64) -> i64 {
@@ -1699,10 +1699,10 @@ async fn conversation_row_count(conn: &mut AnyConnection, id: i64) -> i64 {
 
 #[tokio::test]
 async fn conversation_delete_removes_a_trashed_conversation_for_good() {
-    let (vault, user, id) = trashed_conversation_fixture().await;
+    let (fixture, user, id) = trashed_conversation_fixture().await;
 
     let status = crate::test_support::delete_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{id}"),
         &user.token,
     )
@@ -1710,17 +1710,20 @@ async fn conversation_delete_removes_a_trashed_conversation_for_good() {
     assert_eq!(status, axum::http::StatusCode::NO_CONTENT);
 
     let detail = crate::test_support::get_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{id}"),
         &user.token,
     )
     .await;
     assert_eq!(detail, axum::http::StatusCode::NOT_FOUND);
-    let trashed: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/conversations?q=trashed:any", &user.token)
-            .await;
+    let trashed: serde_json::Value = crate::test_support::get_json(
+        &fixture.state,
+        "/v1/conversations?q=trashed:any",
+        &user.token,
+    )
+    .await;
     assert_eq!(trashed["total"], 0, "gone from every list, trash included");
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     assert_eq!(
         trashed_conversation_row_count(&mut conn, user.account_id, id).await,
         0,
@@ -1736,9 +1739,9 @@ async fn conversation_delete_removes_a_trashed_conversation_for_good() {
 
 #[tokio::test]
 async fn conversation_delete_removes_files_only_the_deleted_conversation_used() {
-    let (vault, user, doomed) = trashed_conversation_fixture().await;
+    let (fixture, user, doomed) = trashed_conversation_fixture().await;
     let kept = crate::test_support::seed_conversation(
-        &vault.state,
+        &fixture.state,
         &crate::test_support::SeedConversation {
             account_id: user.account_id,
             handle: "+15550002",
@@ -1757,15 +1760,15 @@ async fn conversation_delete_removes_files_only_the_deleted_conversation_used() 
     let shared = crate::test_support::fake_sha256('a');
     let unshared = crate::test_support::fake_sha256('b');
     let shared_file =
-        crate::test_support::attach_stored_file(&vault.state, user.account_id, doomed, &shared)
+        crate::test_support::attach_stored_file(&fixture.state, user.account_id, doomed, &shared)
             .await;
-    crate::test_support::attach_stored_file(&vault.state, user.account_id, kept, &shared).await;
+    crate::test_support::attach_stored_file(&fixture.state, user.account_id, kept, &shared).await;
     let unshared_file =
-        crate::test_support::attach_stored_file(&vault.state, user.account_id, doomed, &unshared)
+        crate::test_support::attach_stored_file(&fixture.state, user.account_id, doomed, &unshared)
             .await;
 
     let status = crate::test_support::delete_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{doomed}"),
         &user.token,
     )
@@ -1784,14 +1787,14 @@ async fn conversation_delete_removes_files_only_the_deleted_conversation_used() 
 
 #[tokio::test]
 async fn conversation_delete_refuses_a_conversation_that_is_not_in_the_trash() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    crate::test_support::seed_one_message(&vault.state, user.account_id).await;
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    crate::test_support::seed_one_message(&fixture.state, user.account_id).await;
     let list: serde_json::Value =
-        crate::test_support::get_json(&vault.state, "/v1/conversations", &user.token).await;
+        crate::test_support::get_json(&fixture.state, "/v1/conversations", &user.token).await;
     let id = list["items"][0]["id"].as_i64().unwrap();
 
     let (status, body) = crate::test_support::delete_raw(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{id}"),
         &user.token,
     )
@@ -1802,46 +1805,49 @@ async fn conversation_delete_refuses_a_conversation_that_is_not_in_the_trash() {
         "trash is the only door to deletion: {body}"
     );
     assert!(body.contains("not in the trash"), "{body}");
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     assert_eq!(conversation_row_count(&mut conn, id).await, 1);
 }
 
 #[tokio::test]
 async fn conversation_delete_404s_for_an_unknown_id_and_for_another_accounts() {
-    let (vault, alice, alices) = trashed_conversation_fixture().await;
-    let bob = crate::test_support::register_via_api(&vault.state, "bob", "hunter2hunter2").await;
+    let (fixture, alice, alices) = trashed_conversation_fixture().await;
+    let bob = crate::test_support::register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
 
-    let status =
-        crate::test_support::delete_status(&vault.state, "/v1/conversations/999999", &alice.token)
-            .await;
+    let status = crate::test_support::delete_status(
+        &fixture.state,
+        "/v1/conversations/999999",
+        &alice.token,
+    )
+    .await;
     assert_eq!(status, axum::http::StatusCode::NOT_FOUND);
 
     // Bob deleting Alice's trashed conversation must 404, not 403 — a 403
     // would confirm the id exists — and must not delete it.
     let status = crate::test_support::delete_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{alices}"),
         &bob.token,
     )
     .await;
     assert_eq!(status, axum::http::StatusCode::NOT_FOUND);
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     assert_eq!(conversation_row_count(&mut conn, alices).await, 1);
 }
 
 #[tokio::test]
 async fn conversation_delete_needs_the_delete_permission() {
-    let (vault, user, id) = trashed_conversation_fixture().await;
-    vault.turn_off_delete(user.account_id).await;
+    let (fixture, user, id) = trashed_conversation_fixture().await;
+    fixture.turn_off_delete(user.account_id).await;
 
     let status = crate::test_support::delete_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{id}"),
         &user.token,
     )
     .await;
     assert_eq!(status, axum::http::StatusCode::FORBIDDEN);
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     assert_eq!(
         conversation_row_count(&mut conn, id).await,
         1,
@@ -1853,8 +1859,8 @@ async fn conversation_delete_needs_the_delete_permission() {
 /// tests that seed their own message rows with specific timestamps and
 /// `sort_order`.
 async fn conversation_messages_fixture() -> (TestFixture, RegisteredAccount, i64) {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     let mut conn = state.db.acquire().await.unwrap();
     let handle_id: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
@@ -1874,7 +1880,7 @@ async fn conversation_messages_fixture() -> (TestFixture, RegisteredAccount, i64
     .fetch_one(&mut *conn)
     .await
     .unwrap();
-    (vault, user, conversation_id)
+    (fixture, user, conversation_id)
 }
 
 /// Insert one message row with an explicit `timestamp` and `sort_order`,
@@ -1904,8 +1910,8 @@ async fn insert_message(
 
 #[tokio::test]
 async fn conversation_messages_are_ascending_by_timestamp_then_sort_order() {
-    let (vault, user, conversation_id) = conversation_messages_fixture().await;
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let (fixture, user, conversation_id) = conversation_messages_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     // Deliberately inserted out of order: the third-in-time message
     // first, and two same-timestamp messages ordered only by sort_order.
     insert_message(
@@ -1938,7 +1944,7 @@ async fn conversation_messages_are_ascending_by_timestamp_then_sort_order() {
     drop(conn);
 
     let page: serde_json::Value = crate::test_support::get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{conversation_id}/messages"),
         &user.token,
     )
@@ -1956,8 +1962,8 @@ async fn conversation_messages_are_ascending_by_timestamp_then_sort_order() {
 /// `sort_order` the same way round.
 #[tokio::test]
 async fn sort_minus_date_lists_messages_newest_first() {
-    let (vault, user, conversation_id) = conversation_messages_fixture().await;
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let (fixture, user, conversation_id) = conversation_messages_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     for (timestamp, sort_order, body) in [
         ("2024-01-01T00:00:00Z", 1, "first"),
         ("2024-01-03T00:00:00Z", 0, "third"),
@@ -1980,7 +1986,7 @@ async fn sort_minus_date_lists_messages_newest_first() {
         "/v1/messages?sort=-date".to_string(),
     ] {
         let page: serde_json::Value =
-            crate::test_support::get_json(&vault.state, &path, &user.token).await;
+            crate::test_support::get_json(&fixture.state, &path, &user.token).await;
         let texts: Vec<&str> = page["items"]
             .as_array()
             .unwrap()
@@ -1993,8 +1999,8 @@ async fn sort_minus_date_lists_messages_newest_first() {
 
 #[tokio::test]
 async fn conversation_messages_page_and_total_is_the_whole_count() {
-    let (vault, user, conversation_id) = conversation_messages_fixture().await;
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let (fixture, user, conversation_id) = conversation_messages_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     for day in 1..=5 {
         insert_message(
             &mut conn,
@@ -2009,7 +2015,7 @@ async fn conversation_messages_page_and_total_is_the_whole_count() {
     drop(conn);
 
     let page: serde_json::Value = crate::test_support::get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{conversation_id}/messages?limit=2&offset=1"),
         &user.token,
     )
@@ -2037,8 +2043,8 @@ async fn conversation_messages_page_and_total_is_the_whole_count() {
 /// though it were one year.
 #[tokio::test]
 async fn a_year_is_searched_for_and_never_a_filter_on_the_read_by_id() {
-    let (vault, user, conversation_id) = conversation_messages_fixture().await;
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let (fixture, user, conversation_id) = conversation_messages_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     for (day, year) in [(1, 2023), (2, 2023), (1, 2024), (2, 2024), (3, 2024)] {
         insert_message(
             &mut conn,
@@ -2053,7 +2059,7 @@ async fn a_year_is_searched_for_and_never_a_filter_on_the_read_by_id() {
     drop(conn);
 
     let (status, text) = crate::test_support::get_raw(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{conversation_id}/messages?year=2024"),
         &user.token,
     )
@@ -2070,7 +2076,7 @@ async fn a_year_is_searched_for_and_never_a_filter_on_the_read_by_id() {
     );
 
     let page: serde_json::Value = crate::test_support::get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/messages?q=in%3A%23{conversation_id}%20date%3A2024"),
         &user.token,
     )
@@ -2095,8 +2101,8 @@ async fn a_year_is_searched_for_and_never_a_filter_on_the_read_by_id() {
 /// now, so both name them.
 #[tokio::test]
 async fn conversation_messages_name_the_person_a_thread_has_no_participants_row_for() {
-    let (vault, user, conversation_id) = conversation_messages_fixture().await;
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let (fixture, user, conversation_id) = conversation_messages_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     insert_message(
         &mut conn,
         conversation_id,
@@ -2116,13 +2122,13 @@ async fn conversation_messages_name_the_person_a_thread_has_no_participants_row_
     drop(conn);
 
     let summary: serde_json::Value = crate::test_support::get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{conversation_id}"),
         &user.token,
     )
     .await;
     let page: serde_json::Value = crate::test_support::get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{conversation_id}/messages"),
         &user.token,
     )
@@ -2141,9 +2147,9 @@ async fn conversation_messages_name_the_person_a_thread_has_no_participants_row_
 
 #[tokio::test]
 async fn conversation_messages_404s_for_an_unknown_id() {
-    let (vault, user, _conversation_id) = conversation_messages_fixture().await;
+    let (fixture, user, _conversation_id) = conversation_messages_fixture().await;
     let status = crate::test_support::get_status(
-        &vault.state,
+        &fixture.state,
         "/v1/conversations/999999/messages",
         &user.token,
     )
@@ -2153,12 +2159,12 @@ async fn conversation_messages_404s_for_an_unknown_id() {
 
 #[tokio::test]
 async fn conversation_messages_404s_for_another_accounts_conversation() {
-    let (vault, _alice, alice_conversation_id) = conversation_messages_fixture().await;
-    let bob = crate::test_support::register_via_api(&vault.state, "bob", "hunter2hunter2").await;
-    crate::test_support::seed_one_message(&vault.state, bob.account_id).await;
+    let (fixture, _alice, alice_conversation_id) = conversation_messages_fixture().await;
+    let bob = crate::test_support::register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
+    crate::test_support::seed_one_message(&fixture.state, bob.account_id).await;
 
     let status = crate::test_support::get_status(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{alice_conversation_id}/messages"),
         &bob.token,
     )
@@ -2168,8 +2174,8 @@ async fn conversation_messages_404s_for_another_accounts_conversation() {
 
 #[tokio::test]
 async fn conversation_messages_reads_a_trashed_conversations_messages() {
-    let (vault, user, conversation_id) = conversation_messages_fixture().await;
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let (fixture, user, conversation_id) = conversation_messages_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     insert_message(
         &mut conn,
         conversation_id,
@@ -2188,7 +2194,7 @@ async fn conversation_messages_reads_a_trashed_conversations_messages() {
     drop(conn);
 
     let page: serde_json::Value = crate::test_support::get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{conversation_id}/messages"),
         &user.token,
     )
@@ -2203,7 +2209,7 @@ async fn conversation_messages_reads_a_trashed_conversations_messages() {
 /// one of the SMS messages a duplicate of an iMessage one.
 async fn sources_fixture() -> (TestFixture, RegisteredAccount, i64) {
     use crate::test_support::{SeedConversation, SeedMessage, seed_conversation};
-    let (vault, alice) = fixture_with_account().await;
+    let (fixture, alice) = fixture_with_account().await;
     let message = |source, timestamp, body| SeedMessage {
         source,
         timestamp,
@@ -2211,7 +2217,7 @@ async fn sources_fixture() -> (TestFixture, RegisteredAccount, i64) {
         body,
     };
     let conversation_id = seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: alice.account_id,
             handle: "+15555550100",
@@ -2227,7 +2233,7 @@ async fn sources_fixture() -> (TestFixture, RegisteredAccount, i64) {
         },
     )
     .await;
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     let original: i64 = sqlx::query_scalar(
         "SELECT id FROM messages WHERE conversation_id = $1 AND source = 'imessage' AND body = 'first'",
     )
@@ -2245,15 +2251,15 @@ async fn sources_fixture() -> (TestFixture, RegisteredAccount, i64) {
     .await
     .unwrap();
     drop(conn);
-    (vault, alice, conversation_id)
+    (fixture, alice, conversation_id)
 }
 
 #[tokio::test]
 async fn conversation_sources_count_each_backup_and_its_share_of_unique_messages() {
-    let (vault, alice, conversation_id) = sources_fixture().await;
+    let (fixture, alice, conversation_id) = sources_fixture().await;
 
     let page: serde_json::Value = crate::test_support::get_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{conversation_id}/sources"),
         &alice.token,
     )
@@ -2272,13 +2278,13 @@ async fn conversation_sources_count_each_backup_and_its_share_of_unique_messages
 
 #[tokio::test]
 async fn conversation_sources_404s_for_another_accounts_conversation_and_an_unknown_id() {
-    let (vault, alice, conversation_id) = sources_fixture().await;
-    let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
-    seed_one_message(&vault.state, bob.account_id).await;
+    let (fixture, alice, conversation_id) = sources_fixture().await;
+    let bob = register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
+    seed_one_message(&fixture.state, bob.account_id).await;
 
-    // A 403 would confirm the id exists in someone else's vault.
+    // A 403 would confirm the id exists in someone else's account.
     let (status, text) = crate::test_support::get_raw(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/conversations/{conversation_id}/sources"),
         &bob.token,
     )
@@ -2290,7 +2296,7 @@ async fn conversation_sources_404s_for_another_accounts_conversation_and_an_unkn
     );
 
     let (status, text) = crate::test_support::get_raw(
-        &vault.state,
+        &fixture.state,
         "/v1/conversations/999999/sources",
         &alice.token,
     )

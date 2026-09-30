@@ -143,8 +143,8 @@ mod tests {
 
     #[tokio::test]
     async fn saved_searches_list_as_items_and_each_write_answers_the_row_or_204() {
-        let (vault, user) = fixture_with_account().await;
-        let state = vault.state.clone();
+        let (fixture, user) = fixture_with_account().await;
+        let state = fixture.state.clone();
 
         let (location, created): (String, serde_json::Value) = post_created_json(
             &state,
@@ -180,8 +180,8 @@ mod tests {
 
     #[tokio::test]
     async fn a_curated_list_is_a_page_like_every_other_list() {
-        let (vault, user) = fixture_with_account().await;
-        let state = vault.state.clone();
+        let (fixture, user) = fixture_with_account().await;
+        let state = fixture.state.clone();
         for name in ["Anna", "Bess", "Cleo"] {
             let _: (String, serde_json::Value) = post_created_json(
                 &state,

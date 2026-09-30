@@ -134,14 +134,14 @@ async fn dedupe_and_process_assets(
         DbTarget::Url(url) => (None, Some(url.to_string())),
         DbTarget::Path(path) => (Some(path.to_path_buf()), None),
     };
-    let vault = OpenDb::open(cfg.clone().with_db_overrides(db, db_url)).await?;
+    let opened = OpenDb::open(cfg.clone().with_db_overrides(db, db_url)).await?;
     let dedupe_stats = {
-        let mut conn = vault.conn().await?;
+        let mut conn = opened.conn().await?;
         dedupe::dedupe_cross_source(&mut conn, account_id, None, 2).await?
     };
     println!("Reset demo — processing prepared assets");
     let process_stats = process_assets::run(
-        &vault,
+        &opened,
         &ProcessAssetsOptions {
             force: false,
             dry_run: false,
@@ -153,7 +153,7 @@ async fn dedupe_and_process_assets(
     )
     .await
     .context("process-assets after prepared demo import")?;
-    vault.close().await;
+    opened.close().await;
     if let Some(warning) = conversion_warning(process_stats.errors) {
         eprintln!("warning: {warning}");
     }
@@ -200,7 +200,7 @@ fn reset_account_work_dir(data_dir: &Path) -> Result<tempfile::TempDir> {
         })
 }
 
-/// Rebuild the demo vault from the bundle at `bundle` and write the active
+/// Rebuild the demo Message Crate from the bundle at `bundle` and write the active
 /// config to `config_dest`.
 ///
 /// # Errors
@@ -588,7 +588,7 @@ fn sqlite_sidecar(db: &Path, suffix: &str) -> PathBuf {
 
 /// Refuse to install the prepared database if any non-demo account's row counts differ from
 /// the active one: a reset must only ever touch the demo account and the
-/// owner row it claims the vault with.
+/// owner row it claims this Message Crate with.
 async fn verify_non_demo_state_preserved(
     active: &Path,
     prepared: &Path,
@@ -610,7 +610,7 @@ async fn verify_non_demo_state_preserved(
 /// Message counts per account for every account except the demo one and
 /// the owner, used to prove a reset changed nothing else. The owner is left
 /// out because the reset writes its row too ([`seed_demo_owner_on_conn`]),
-/// and an unclaimed vault would otherwise gain an account the active state
+/// and an unclaimed Message Crate would otherwise gain an account the active state
 /// never had; the owner holds no messages (ADR 0008), so nothing is lost.
 async fn non_demo_state(db: &Path, demo_id: i64) -> Result<BTreeMap<i64, i64>> {
     let pool = engine::open_pool_for_path(db)
@@ -963,17 +963,17 @@ async fn seed_demo_account(target: DbTarget<'_>, account_id: i64, seed: &DemoSee
     pool.close().await;
     Ok(())
 }
-/// Credentials the demo vault's owner logs in with. A demo vault is
+/// Credentials the demo Message Crate's owner logs in with. A demo Message Crate is
 /// throwaway, so these are the obvious pair rather than a secret; they exist
 /// only here, because the claim route and `create-owner` both run the
 /// password policy and `admin` is five characters.
 pub const DEMO_OWNER_USERNAME: &str = "admin";
 const DEMO_OWNER_PASSWORD: &str = "admin";
 
-/// Claim the demo vault.
+/// Claim the demo Message Crate.
 ///
-/// Without an owner, a seeded vault would be unclaimed and the entry screen
-/// would offer Create Vault Owner and no login at all — so the documented
+/// Without an owner, a seeded Message Crate would be unclaimed and the entry screen
+/// would offer Create Owner and no login at all — so the documented
 /// "log in as `demo`" would reach a screen with nowhere to type it. The row
 /// is written directly, the way the demo account's own row is, which is what
 /// lets the password be shorter than the policy allows.
@@ -1004,7 +1004,7 @@ async fn seed_demo_account_on_conn(
 ) -> Result<()> {
     account_profile::ensure_account_row(conn, account_id).await?;
 
-    // The demo account exists so someone can try the whole vault without
+    // The demo account exists so someone can try all of Message Crate without
     // making an account of their own, so it may import, export, and delete
     // like any other account. Reading a conversation goes through the export
     // route, so a demo account without export cannot open a single thread.
@@ -1059,7 +1059,7 @@ async fn seed_demo_account_on_conn(
     Ok(())
 }
 
-/// Delete the demo account's vault rows (child rows follow via CASCADE) and
+/// Delete the demo account's rows (child rows follow via CASCADE) and
 /// on-disk attachments. Leaves the database and other accounts intact.
 async fn wipe_demo_account(cfg: &Config, account_id: i64, target: DbTarget<'_>) -> Result<()> {
     println!("Reset demo — clearing account data in {target}");

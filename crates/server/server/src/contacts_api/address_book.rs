@@ -80,8 +80,8 @@ pub(crate) async fn create_contacts(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("write address book: {e}")))?;
 
     // A file that does not parse is a body that broke a rule, `422`; only a
-    // failed write after it parsed is the vault's own fault. The reader names
-    // the file it read, which here is the vault's temp copy: the caller is
+    // failed write after it parsed is the server's own fault. The reader names
+    // the file it read, which here is the server's temp copy: the caller is
     // told about "the upload" instead.
     let book = contacts::read_address_book(&path).map_err(|e| {
         let reason = format!("{e:#}").replace(&path.display().to_string(), "the upload");

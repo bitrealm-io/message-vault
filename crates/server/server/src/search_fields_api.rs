@@ -87,9 +87,9 @@ mod tests {
 
     #[tokio::test]
     async fn each_list_is_its_own_path_with_its_own_words() {
-        let (vault, account) = fixture_with_account().await;
+        let (fixture, account) = fixture_with_account().await;
         let contacts: serde_json::Value = get_json(
-            &vault.state,
+            &fixture.state,
             "/v1/search-fields/contacts?limit=500",
             &account.token,
         )
@@ -101,7 +101,7 @@ mod tests {
         assert!(first["help"].is_string() && first["example"].is_string());
 
         let conversations: serde_json::Value = get_json(
-            &vault.state,
+            &fixture.state,
             "/v1/search-fields/conversations?limit=500",
             &account.token,
         )
@@ -113,7 +113,7 @@ mod tests {
         // The list is the path now; the old parameter is refused, not obeyed.
         assert_eq!(
             get_status(
-                &vault.state,
+                &fixture.state,
                 "/v1/search-fields/contacts?list=conversations",
                 &account.token
             )
@@ -122,7 +122,7 @@ mod tests {
         );
         assert_eq!(
             get_status(
-                &vault.state,
+                &fixture.state,
                 "/v1/search-fields/conversations",
                 "not-a-token"
             )

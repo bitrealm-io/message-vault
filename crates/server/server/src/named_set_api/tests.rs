@@ -99,8 +99,8 @@ async fn member_ids(state: &AppState, kind: Kind, token: &str, id: i64) -> Vec<i
 #[tokio::test]
 async fn create_list_update_and_delete_a_set() {
     for kind in [Kind::Groups, Kind::Tags] {
-        let vault = test_fixture().await;
-        let state = &vault.state;
+        let fixture = test_fixture().await;
+        let state = &fixture.state;
         let user = alice(state).await;
 
         let (_, created): (String, Value) = post_created_json(
@@ -154,8 +154,8 @@ async fn create_list_update_and_delete_a_set() {
 #[tokio::test]
 async fn create_and_update_refuse_duplicate_empty_and_reserved_names() {
     for kind in [Kind::Groups, Kind::Tags] {
-        let vault = test_fixture().await;
-        let state = &vault.state;
+        let fixture = test_fixture().await;
+        let state = &fixture.state;
         let user = alice(state).await;
         create(state, kind, &user.token, "Family").await;
         let work = create(state, kind, &user.token, "Work").await;
@@ -198,8 +198,8 @@ async fn create_and_update_refuse_duplicate_empty_and_reserved_names() {
 #[tokio::test]
 async fn an_unknown_id_answers_404_on_every_route() {
     for kind in [Kind::Groups, Kind::Tags] {
-        let vault = test_fixture().await;
-        let state = &vault.state;
+        let fixture = test_fixture().await;
+        let state = &fixture.state;
         let user = alice(state).await;
         let base = kind.base();
         assert_eq!(
@@ -236,8 +236,8 @@ async fn an_unknown_id_answers_404_on_every_route() {
 #[tokio::test]
 async fn members_patch_adds_and_removes_in_one_call() {
     for kind in [Kind::Groups, Kind::Tags] {
-        let vault = test_fixture().await;
-        let state = &vault.state;
+        let fixture = test_fixture().await;
+        let state = &fixture.state;
         let user = alice(state).await;
         let a = kind.member(state, user.account_id).await;
         let b = kind.member(state, user.account_id).await;
@@ -269,8 +269,8 @@ async fn members_patch_adds_and_removes_in_one_call() {
 #[tokio::test]
 async fn members_patch_with_a_foreign_member_writes_nothing() {
     for kind in [Kind::Groups, Kind::Tags] {
-        let vault = test_fixture().await;
-        let state = &vault.state;
+        let fixture = test_fixture().await;
+        let state = &fixture.state;
         let user = alice(state).await;
         let a = kind.member(state, user.account_id).await;
         let id = create(state, kind, &user.token, "Family").await;
@@ -290,8 +290,8 @@ async fn members_patch_with_a_foreign_member_writes_nothing() {
 #[tokio::test]
 async fn members_patch_ignores_an_unknown_id_in_remove() {
     for kind in [Kind::Groups, Kind::Tags] {
-        let vault = test_fixture().await;
-        let state = &vault.state;
+        let fixture = test_fixture().await;
+        let state = &fixture.state;
         let user = alice(state).await;
         let a = kind.member(state, user.account_id).await;
         let id = create(state, kind, &user.token, "Family").await;
@@ -308,8 +308,8 @@ async fn members_patch_ignores_an_unknown_id_in_remove() {
 #[tokio::test]
 async fn another_accounts_set_is_not_visible() {
     for kind in [Kind::Groups, Kind::Tags] {
-        let vault = test_fixture().await;
-        let state = &vault.state;
+        let fixture = test_fixture().await;
+        let state = &fixture.state;
         let user = alice(state).await;
         let bob = register_via_api(state, "bob", "hunter2hunter2").await;
         let id = create(state, kind, &bob.token, "Holiday").await;

@@ -1,5 +1,5 @@
 //! The command line, driven the way `main` drives it: a parsed [`Cli`] in,
-//! effects on the vault out. Each test writes a config file into a temp dir
+//! effects on the database out. Each test writes a config file into a temp dir
 //! and asserts on the database afterwards, never on what was printed.
 
 use std::fs;
@@ -15,7 +15,7 @@ const ALICE: i64 = 7;
 const CONVERSATION_JSONL: &str = r#"{"schema_version":4,"export":{"source":"imessage","tool":"t","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15551230000","conversation_type":"individual","group_title":null,"participants":[],"stats":{"message_count":0,"attachment_count":0,"first_timestamp_unix_ms":null,"last_timestamp_unix_ms":null}}}
 "#;
 
-/// A vault under `dir`: its config file on disk, the way an operator has
+/// A database under `dir`: its config file on disk, the way an operator has
 /// one, with absolute paths so the test does not depend on the working
 /// directory. On a Postgres run the database is a schema of its own on that
 /// server, as every other test's is.
@@ -36,23 +36,23 @@ async fn server_config(dir: &Path) -> PathBuf {
     path
 }
 
-/// The vault the config names, opened the way the commands open it.
+/// The database the config names, opened the way the commands open it.
 async fn open(config: &Path) -> OpenDb {
     OpenDb::open(Config::load(config).unwrap()).await.unwrap()
 }
 
 /// An ordinary account named alice, so `--account alice` resolves.
 async fn with_alice(config: &Path) {
-    let vault = open(config).await;
-    let mut conn = vault.conn().await.unwrap();
+    let opened = open(config).await;
+    let mut conn = opened.conn().await.unwrap();
     account_profile::insert_account_at(&mut conn, ALICE, "alice", None, None)
         .await
         .unwrap();
 }
 
 async fn count(config: &Path, sql: &str) -> i64 {
-    let vault = open(config).await;
-    let mut conn = vault.conn().await.unwrap();
+    let opened = open(config).await;
+    let mut conn = opened.conn().await.unwrap();
     sqlx::query_scalar(sql).fetch_one(&mut *conn).await.unwrap()
 }
 
@@ -75,7 +75,7 @@ fn import_args(config: &Path, input: &Path) -> ImportArgs {
 }
 
 #[tokio::test]
-async fn create_owner_claims_the_vault_once_and_reset_password_needs_the_claim() {
+async fn create_owner_claims_the_server_once_and_reset_password_needs_the_claim() {
     let dir = tempfile::tempdir().unwrap();
     let config = server_config(dir.path()).await;
 
@@ -129,8 +129,8 @@ async fn create_owner_claims_the_vault_once_and_reset_password_needs_the_claim()
     .await
     .unwrap();
 
-    let vault = open(&config).await;
-    let mut conn = vault.conn().await.unwrap();
+    let opened = open(&config).await;
+    let mut conn = opened.conn().await.unwrap();
     assert!(account_profile::is_claimed(&mut conn).await.unwrap());
     assert_eq!(
         account_profile::username_for_account(&mut conn, account_profile::OWNER_ACCOUNT_ID)
@@ -213,8 +213,8 @@ async fn imports_discard_clears_a_stranded_session_so_the_next_import_runs() {
 
     // A session the way a killed `import` leaves it: running, never finished.
     let stranded = {
-        let vault = open(&config).await;
-        let mut conn = vault.conn().await.unwrap();
+        let opened = open(&config).await;
+        let mut conn = opened.conn().await.unwrap();
         crate::db::imports::start_import(
             &mut conn,
             &crate::db::imports::StartImportArgs::new(
@@ -249,8 +249,8 @@ async fn imports_discard_clears_a_stranded_session_so_the_next_import_runs() {
     run(imports_discard_args(&config)).await.unwrap();
 
     let status: String = {
-        let vault = open(&config).await;
-        let mut conn = vault.conn().await.unwrap();
+        let opened = open(&config).await;
+        let mut conn = opened.conn().await.unwrap();
         sqlx::query_scalar("SELECT status FROM imports WHERE id = $1")
             .bind(stranded)
             .fetch_one(&mut *conn)
@@ -362,11 +362,11 @@ async fn import_contacts_loads_the_address_book_for_the_account() {
 }
 
 #[tokio::test]
-async fn the_db_url_flag_moves_the_vault_to_another_file() {
+async fn the_db_url_flag_moves_the_database_to_another_file() {
     let dir = tempfile::tempdir().unwrap();
     let config = server_config(dir.path()).await;
     if crate::pg_test_url().is_some() {
-        // Every vault on a Postgres run is a schema on that server; the
+        // Every database on a Postgres run is a schema on that server; the
         // point here is the SQLite file the flag names.
         return;
     }

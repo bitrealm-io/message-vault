@@ -1,4 +1,4 @@
-//! SQL functions the vault adds to every SQLite connection.
+//! SQL functions the server adds to every SQLite connection.
 //!
 //! SQLite's built-in `lower()` folds only ASCII letters unless it is built
 //! with ICU, and the bundled build is not, so `lower('Élodie')` is

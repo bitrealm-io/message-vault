@@ -2,9 +2,9 @@ use super::*;
 
 #[tokio::test]
 async fn create_trims_and_defaults_to_manual() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let made = create(
         &mut conn,
         account,
@@ -21,9 +21,9 @@ async fn create_trims_and_defaults_to_manual() {
 
 #[tokio::test]
 async fn list_is_alphabetical_not_insertion_order() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     for name in ["zeta", "Alpha", "middle"] {
         create(
             &mut conn,
@@ -46,9 +46,9 @@ async fn list_is_alphabetical_not_insertion_order() {
 
 #[tokio::test]
 async fn names_collide_case_insensitively_within_an_account() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     create(
         &mut conn,
         account,
@@ -72,9 +72,9 @@ async fn names_collide_case_insensitively_within_an_account() {
 
 #[tokio::test]
 async fn saved_searches_are_scoped_per_account() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let other = 102_i64;
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'bob')")
         .bind(other)
@@ -111,9 +111,9 @@ async fn saved_searches_are_scoped_per_account() {
 
 #[tokio::test]
 async fn update_replaces_both_fields_and_keeps_id_and_kind() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let made = create_for_import(&mut conn, account, 7, "imessage", "2026-08-30")
         .await
         .unwrap();
@@ -128,9 +128,9 @@ async fn update_replaces_both_fields_and_keeps_id_and_kind() {
 
 #[tokio::test]
 async fn update_allows_a_row_to_keep_or_recase_its_own_name() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let made = create(
         &mut conn,
         account,
@@ -152,9 +152,9 @@ async fn update_allows_a_row_to_keep_or_recase_its_own_name() {
 
 #[tokio::test]
 async fn update_rejects_a_name_another_row_already_uses() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     create(
         &mut conn,
         account,
@@ -181,9 +181,9 @@ async fn update_rejects_a_name_another_row_already_uses() {
 
 #[tokio::test]
 async fn empty_name_or_query_is_rejected() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let err = create(
         &mut conn,
         account,
@@ -208,9 +208,9 @@ async fn empty_name_or_query_is_rejected() {
 
 #[tokio::test]
 async fn names_over_max_len_are_rejected() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let long = "a".repeat(MAX_NAME_LEN + 1);
     let err = create(
         &mut conn,
@@ -229,10 +229,10 @@ async fn names_over_max_len_are_rejected() {
 
 #[tokio::test]
 async fn any_query_string_is_stored_verbatim() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
-    // Nonsense in both grammars. The vault stores it anyway: the two
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    // Nonsense in both grammars. The server stores it anyway: the two
     // parsers disagree about what is legal, so nothing validates here.
     let made = create(
         &mut conn,
@@ -248,9 +248,9 @@ async fn any_query_string_is_stored_verbatim() {
 
 #[tokio::test]
 async fn import_saved_search_is_named_and_marked() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let made = create_for_import(&mut conn, account, 42, "imessage", "2026-08-30")
         .await
         .unwrap();
@@ -261,9 +261,9 @@ async fn import_saved_search_is_named_and_marked() {
 
 #[tokio::test]
 async fn repeat_imports_on_one_day_get_numbered_names() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let first = create_for_import(&mut conn, account, 1, "imessage", "2026-08-30")
         .await
         .unwrap();
@@ -281,9 +281,9 @@ async fn repeat_imports_on_one_day_get_numbered_names() {
 
 #[tokio::test]
 async fn deleting_a_saved_search_leaves_the_import_record() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     sqlx::query(
         "INSERT INTO imports
          (id, account_id, source, mode, status, started_at, message_count)

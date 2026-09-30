@@ -144,7 +144,7 @@ async fn the_handle_shows_when_nothing_names_the_person() {
 }
 
 /// A backup that recorded the thread's address and nothing about who was
-/// in it leaves no participants rows, but the vault may still have a name
+/// in it leaves no participants rows, but the database may still have a name
 /// for the person on the other end.
 #[tokio::test]
 async fn the_chat_handle_takes_the_contact_name_and_id() {

@@ -3,7 +3,7 @@
 An account's identities counted nothing after an import, because the counts
 looked for the identity among a conversation's participants and no import ever
 put the account holder there (#690). We decided the holder is never a
-participant. The vault is read from the holder's side: every conversation in
+participant. An account is read from the holder's side: every conversation in
 an account is the holder's own, and the holder is logged in to it, so listing
 them in it says nothing. Instead each message records which of the holder's
 addresses it was sent from or received at, taken from the message where the

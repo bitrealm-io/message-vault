@@ -731,7 +731,7 @@ fn require_content_type(headers: &HeaderMap) -> Result<(), ApiError> {
 
 /// Store one asset body under its SHA-256 fingerprint.
 ///
-/// `201 Created` when the vault did not hold the asset and now does, with a
+/// `201 Created` when the server did not hold the asset and now does, with a
 /// `Location` naming it; `200 OK` when it already held it, and the body was
 /// read and dropped.
 #[utoipa::path(
@@ -748,10 +748,10 @@ fn require_content_type(headers: &HeaderMap) -> Result<(), ApiError> {
         (
             status = 201,
             body = Asset,
-            description = "The asset is new to the vault and is now stored",
+            description = "The asset is new to the server and is now stored",
             headers(("Location" = String, description = "Path of the stored asset"))
         ),
-        (status = 200, body = Asset, description = "The vault already held the asset"),
+        (status = 200, body = Asset, description = "The server already held the asset"),
         crate::problem::openapi::AssetUploadInvalid
     )
 )]
@@ -1005,10 +1005,10 @@ pub(crate) async fn replace_asset_upload_part(
         (
             status = 201,
             body = Asset,
-            description = "The asset is new to the vault and is now stored",
+            description = "The asset is new to the server and is now stored",
             headers(("Location" = String, description = "Path of the stored asset"))
         ),
-        (status = 200, body = Asset, description = "The vault already held the asset"),
+        (status = 200, body = Asset, description = "The server already held the asset"),
         crate::problem::openapi::AssetUploadInvalid
     )
 )]

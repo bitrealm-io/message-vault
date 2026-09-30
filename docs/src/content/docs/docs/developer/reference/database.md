@@ -1,9 +1,9 @@
 ---
 title: Database tables
-description: SQLite tables in Message Vault and how chats, contacts, and messages link through typed handles.
+description: SQLite tables in Message Crate and how chats, contacts, and messages link through typed handles.
 ---
 
-The Message Vault SQLite database falls into four groups:
+The Message Crate SQLite database falls into four groups:
 
 1. **Chats and texts** — threads, participants, messages, files, reactions
 2. **People and groups** — handles, address book, contact groups, accounts
@@ -91,7 +91,7 @@ number on Text message and WhatsApp is two rows. SMS / iMessage / RCS are
 E.164 only when unambiguous. Ambiguous values (e.g. a trunk-zero national
 number like `020 7946 0000` without a country code) keep their digits as
 `normalized` — never a fabricated `+0…` — and carry a human-readable reason
-in `normalized_note` so the vault UI can surface them for review.
+in `normalized_note` so the UI can surface them for review.
 
 ### `contacts` / `contact_handles`
 
@@ -144,7 +144,7 @@ deleting underlying rows.
 
 ## How storage sizes are measured
 
-The vault owner's Dashboard reports what the database takes on disk. Every
+The owner's Dashboard reports what the database takes on disk. Every
 figure is measured from the database on both engines. The queries are in
 `crates/vault/server/src/db/storage.rs`, branched on the engine like the rest
 of the database layer.
@@ -173,7 +173,7 @@ messages-on-disk figure times the account's share of all text bytes. The
 shares are computed so they add up to the measured figure exactly, with the
 last account that has any text absorbing the rounding. An account with no
 messages reports zero. The full-text search index is one shared structure on
-SQLite, so it is reported once for the vault and never per account.
+SQLite, so it is reported once for the whole database and never per account.
 
 ## Quick map
 

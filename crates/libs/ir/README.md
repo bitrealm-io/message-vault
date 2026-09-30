@@ -1,8 +1,8 @@
 # message-ir
 
-Shared conversation types for Message Vault: `ConversationDocument`, messages, attachments, and participants. This crate has no I/O and no formatting. Attachment bytes are never serialized to JSON; paths and hashes point at sidecar files.
+Shared conversation types for Message Crate: `ConversationDocument`, messages, attachments, and participants. This crate has no I/O and no formatting. Attachment bytes are never serialized to JSON; paths and hashes point at sidecar files.
 
-Exporters, `message-ir-format`, `vault-push`, `vault-pull`, and the vault server use this crate.
+Exporters, `message-ir-format`, `vault-push`, `vault-pull`, and the server use this crate.
 
 ## Build and test
 

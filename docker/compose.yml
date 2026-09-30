@@ -1,5 +1,5 @@
 # Published vault image. Save this file and run: docker compose up -d
-# Docs: https://messagecrate.app/docs/user/get-started/try-the-vault/
+# Docs: https://messagecrate.app/docs/user/get-started/try-message-crate/
 #
 # Pin a release: change :latest to :0.8.3 (no "v").
 # Empty vault: DEMO_DATA=false docker compose up -d

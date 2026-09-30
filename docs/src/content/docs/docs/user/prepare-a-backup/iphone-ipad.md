@@ -42,4 +42,4 @@ The desktop app reads SMS, iMessage, and attachments. For an iPhone backup it us
 
 ## Next step
 
-Open the desktop app, log in to the vault, and go to **Import**. Choose **iMessage**, then the **Platform** that matches the files. See [Import from a backup](/docs/user/import-from-a-backup/).
+Open the desktop app, log in to Message Crate, and go to **Import**. Choose **iMessage**, then the **Platform** that matches the files. See [Import from a backup](/docs/user/import-from-a-backup/).

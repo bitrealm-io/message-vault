@@ -14,8 +14,8 @@ Group chats appear in the same list as one-to-one threads. Search with `kind:gro
 | **Conversations** | Message threads |
 | **Contacts** | People and handles from imports |
 | **Trash** | Soft-deleted items ([Trash](/docs/user/how-to/trash/)) |
-| **Import** | Push a backup into the vault (desktop app only) |
-| **Export** | Pull messages to disk (desktop app only) — [Export from the vault](/docs/user/how-to/export-from-the-vault/) |
+| **Import** | Push a backup into Message Crate (desktop app only) |
+| **Export** | Pull messages to disk (desktop app only) — [Export your messages](/docs/user/how-to/export-your-messages/) |
 | **Settings** | Account, profile, storage, appearance |
 | **Log out** | End the session (in the account menu, the circle at the top right) |
 

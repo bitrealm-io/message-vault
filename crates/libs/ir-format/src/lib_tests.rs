@@ -396,7 +396,7 @@ fn json_refuses_a_version_3_file_by_name() {
     assert_eq!(refusal.found, 3);
     assert_eq!(
         refusal.to_string(),
-        "This file is schema version 3; the vault reads version 4"
+        "This file is schema version 3; Message Crate reads version 4"
     );
 }
 

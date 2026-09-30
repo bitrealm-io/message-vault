@@ -2,7 +2,7 @@
 name = "vault-api-types"
 version = "0.1.0"
 edition = "2024"
-description = "The response shapes the Message Vault HTTP API sends and its client crates read"
+description = "The response shapes the Message Crate HTTP API sends and its client crates read"
 license = "LicenseRef-FCL-1.0-ALv2"
 
 [dependencies]

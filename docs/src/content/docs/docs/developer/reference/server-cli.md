@@ -1,5 +1,5 @@
 ---
-title: Vault server CLI
+title: Server CLI
 description: Cargo subcommands for import, dedupe, contacts, demo reset, and serve.
 editUrl: false
 ---
@@ -45,8 +45,8 @@ Import and view messages in SQLite
 * `dump-cli-docs` — Write this CLI's docs-site reference page (Markdown) to stdout or --output. Does not open the database
 * `dump-error-docs` — Write one docs-site page per HTTP problem type (Markdown) into the --output directory, or all of them to stdout. Does not open the database
 * `process-assets` — Convert media under assets/ into browser previews under `assets_converted/`
-* `create-owner` — Claim an unclaimed vault by creating its owner. Refuses a vault that already has one
-* `reset-owner-password` — Set a new password for the vault owner, ending their sessions. Refuses a vault that has no owner yet
+* `create-owner` — Claim an unclaimed Message Crate by creating its owner. Refuses one that already has an owner
+* `reset-owner-password` — Set a new password for the owner, ending their sessions. Refuses a Message Crate that has no owner yet
 
 
 
@@ -78,7 +78,7 @@ Import a message-ir JSONL folder (source from export.source unless --source)
 * `--window-secs <WINDOW_SECS>` — Near-time window in seconds for dedupe Pass B (default 2)
 
   Default value: `2`
-* `--account <ACCOUNT>` — Account username or id (scopes import to this vault tenant)
+* `--account <ACCOUNT>` — Account username or id (scopes import to this account)
 
 
 
@@ -127,7 +127,7 @@ Soft-hide the same SMS when it appears under more than one import source
 * `--window-secs <WINDOW_SECS>` — Near-time window in seconds for Pass B (default 2)
 
   Default value: `2`
-* `--account <ACCOUNT>` — Account username or id (scopes dedupe to this vault tenant)
+* `--account <ACCOUNT>` — Account username or id (scopes dedupe to this account)
 
 
 
@@ -145,7 +145,7 @@ Import an address book (VCF or vCard CSV) into an existing database
 * `--contacts <CONTACTS>` — Address book: VCF, or vCard CSV (First Name, Last Name, Phone columns)
 * `--db <DB>` — Output SQLite database path (overrides config)
 * `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
-* `--account <ACCOUNT>` — Account username or id (scopes contacts to this vault tenant)
+* `--account <ACCOUNT>` — Account username or id (scopes contacts to this account)
 
 
 
@@ -241,14 +241,14 @@ Convert media under assets/ into browser previews under `assets_converted/`
 
 ## `message-vault-server create-owner`
 
-Claim an unclaimed vault by creating its owner. Refuses a vault that already has one
+Claim an unclaimed Message Crate by creating its owner. Refuses one that already has an owner
 
 **Usage:** `message-vault-server create-owner [OPTIONS] --username <USERNAME> --password <PASSWORD>`
 
 ###### **Options:**
 
-* `--username <USERNAME>` — Login username for the vault owner
-* `--password <PASSWORD>` — Password for the vault owner; must satisfy the vault's password policy
+* `--username <USERNAME>` — Login username for the owner
+* `--password <PASSWORD>` — Password for the owner; must satisfy the server's password policy
 * `--config <CONFIG>` — Path to config.toml
 
   Default value: `config/config.toml`
@@ -258,13 +258,13 @@ Claim an unclaimed vault by creating its owner. Refuses a vault that already has
 
 ## `message-vault-server reset-owner-password`
 
-Set a new password for the vault owner, ending their sessions. Refuses a vault that has no owner yet
+Set a new password for the owner, ending their sessions. Refuses a Message Crate that has no owner yet
 
 **Usage:** `message-vault-server reset-owner-password [OPTIONS] --password <PASSWORD>`
 
 ###### **Options:**
 
-* `--password <PASSWORD>` — New password for the vault owner; must satisfy the password policy
+* `--password <PASSWORD>` — New password for the owner; must satisfy the password policy
 * `--config <CONFIG>` — Path to config.toml
 
   Default value: `config/config.toml`

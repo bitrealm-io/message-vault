@@ -1,8 +1,8 @@
 # vault-pull
 
-Download messages from a running vault server into a local JSON Lines folder (`*.jsonl` plus `attachments/`).
+Download messages from a running server into a local JSON Lines folder (`*.jsonl` plus `attachments/`).
 
-The desktop app **Export** screen uses this crate as a library. The `vault-pull` command is the same exporter from a terminal. Create an API token under **Settings → Account** in the vault website.
+The desktop app **Export** screen uses this crate as a library. The `vault-pull` command is the same exporter from a terminal. Create an API token under **Settings → Account** in the website.
 
 ## Build and test
 

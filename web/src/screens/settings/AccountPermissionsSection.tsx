@@ -83,7 +83,7 @@ export function AccountPermissionsSection({
         ))}
         {managed ? null : (
           <p className="m-0 text-[0.813rem] text-muted">
-            The vault owner sets your status and permissions.
+            The owner sets your status and permissions.
           </p>
         )}
         {updateAccount.error ? (

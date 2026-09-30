@@ -7,7 +7,7 @@
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AuthError {
     /// The vault URL could not be parsed as a valid HTTP URL.
-    #[error("invalid vault URL {url}: {detail}")]
+    #[error("invalid server URL {url}: {detail}")]
     InvalidUrl {
         /// The vault URL that failed to parse.
         url: String,
@@ -44,7 +44,7 @@ pub enum AuthError {
     },
     /// The endpoint returned HTML instead of the vault API.
     #[error(
-        "GET /v1/session returned HTML from {url} (HTTP {status}). Vault URL must point at the vault host (TLS site or port 8080), not the Next.js browse UI alone (port 3000)"
+        "GET /v1/session returned HTML from {url} (HTTP {status}). The server URL must point at the Message Crate server (TLS site or port 8080), not the Next.js browse UI alone (port 3000)"
     )]
     WrongHostHtml {
         /// The endpoint that returned HTML.
@@ -54,14 +54,14 @@ pub enum AuthError {
     },
     /// Requested `http://…` but the vault redirected to `https://…` (auth header dropped).
     #[error(
-        "vault URL {url} redirected from http to https; use https:// so the API key is sent (http redirects drop Authorization)"
+        "server URL {url} redirected from http to https; use https:// so the API key is sent (http redirects drop Authorization)"
     )]
     HttpsRequired {
         /// The `http://` URL that the vault redirected to `https://`.
         url: String,
     },
     /// The API key was rejected as invalid.
-    #[error("invalid vault key")]
+    #[error("invalid API key")]
     InvalidKey,
     /// The API key does not have permission for this vault.
     #[error("session check failed (HTTP {status}): {body}")]
@@ -151,58 +151,58 @@ impl AuthError {
     pub fn user_message(&self) -> String {
         match self {
             Self::InvalidUrl { .. } => {
-                "This Vault URL is not valid. Enter the full URL, including `https://`.".into()
+                "This server URL is not valid. Enter the full URL, including `https://`.".into()
             }
             Self::Timeout { .. } => {
-                "The vault did not respond within 15 seconds. Check the URL and try again.".into()
+                "The server did not respond within 15 seconds. Check the URL and try again.".into()
             }
             Self::Network { .. } => {
-                "Could not connect to the vault. Check the URL, your network connection, and whether the vault is running.".into()
+                "Could not connect to the server. Check the URL, your network connection, and whether the server is running.".into()
             }
             Self::Client { .. } => {
-                "Could not start a secure connection to the vault. Restart the app and try again."
+                "Could not start a secure connection to the server. Restart the app and try again."
                     .into()
             }
             Self::ReadResponse { .. } => {
-                "Connected to the vault, but could not read its response. Try again.".into()
+                "Connected to the server, but could not read its response. Try again.".into()
             }
             Self::WrongHostHtml { .. } => {
-                "This URL points to the Message Vault website, not the vault API. Use the vault server URL (the TLS vault host or port 8080, not port 3000).".into()
+                "This URL points to the Message Crate website, not the API. Use the server URL (the TLS host or port 8080, not port 3000).".into()
             }
             Self::HttpsRequired { .. } => {
-                "This Vault requires https:// but http:// was specified.".into()
+                "This server requires https:// but http:// was specified.".into()
             }
             Self::InvalidKey => {
-                "This API key is not valid for the specified vault. Paste a valid key and try again."
+                "This API key is not valid for this server. Paste a valid key and try again."
                     .into()
             }
             Self::Forbidden { .. } => {
-                "This API key does not have permission to access the specified vault.".into()
+                "This API key does not have permission to access this server.".into()
             }
             Self::ApiNotFound { .. } => {
-                "The vault API was not found at this URL. Enter the vault’s base URL without `/v1/session`.".into()
+                "The API was not found at this URL. Enter the server’s base URL without `/v1/session`.".into()
             }
             Self::RateLimited { .. } => {
                 "Too many verification attempts. Wait a moment, then try again.".into()
             }
             Self::ServerError { status, .. } => {
                 format!(
-                    "The vault could not verify your credentials right now (HTTP {status}). Try again later."
+                    "The server could not verify your credentials right now (HTTP {status}). Try again later."
                 )
             }
             Self::HttpStatus { status, .. } => {
                 format!(
-                    "The vault rejected the verification request (HTTP {status}). Open the Log tab for details."
+                    "The server rejected the verification request (HTTP {status}). Open the Log tab for details."
                 )
             }
             Self::BadJson { .. } => {
-                "Connected to the vault, but its response was not recognized. Confirm that the vault server is compatible with this app.".into()
+                "Connected to the server, but its response was not recognized. Confirm that the server is compatible with this app.".into()
             }
             Self::Rejected { .. } => {
-                "The vault rejected these credentials. Check the Vault URL and API key.".into()
+                "The server rejected these credentials. Check the server URL and API key.".into()
             }
             Self::MissingAccountId => {
-                "The API key was accepted, but the vault did not return an account. Contact your vault administrator.".into()
+                "The API key was accepted, but the server did not return an account. Contact the owner of this Message Crate.".into()
             }
         }
     }

@@ -14,7 +14,7 @@ import { VaultContentsSection } from "./dashboard/VaultContentsSection";
  * storage query, so the page shows one loading line and one error line. The
  * figures are counts and bytes and nothing else: no message, contact or
  * conversation is named here, and an account appears only as a username
- * beside numbers (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
+ * beside numbers (`docs/adr/0008-the-owner-holds-no-messages.md`).
  */
 export function OwnerDashboardPanel() {
   const { data, isPending, error } = useVaultQuery(keys.vaultStorage.all, (signal) =>
@@ -25,14 +25,14 @@ export function OwnerDashboardPanel() {
     <section>
       <h3 className="m-0 text-text">Dashboard</h3>
       <p className="mt-[0.35rem] text-[0.875rem] text-muted">
-        What this vault holds, across every account.
+        What this Message Crate holds, across every account.
       </p>
 
       {isPending ? (
         <p className="mt-4 text-[0.875rem] text-muted">Loading totals…</p>
       ) : error ? (
         <p className="mt-4 text-[0.875rem] text-danger" role="alert">
-          {apiErrorMessage(error, "Could not load the vault's totals.")}
+          {apiErrorMessage(error, "Could not load the totals.")}
         </p>
       ) : (
         <>

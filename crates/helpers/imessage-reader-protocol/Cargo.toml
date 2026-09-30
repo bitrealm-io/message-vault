@@ -7,7 +7,7 @@ edition = "2024"
 # licence: GPL code may not absorb FCL terms and FCL code may not absorb GPL
 # terms. The wire types are the only thing the two sides share.
 license = "MIT OR Apache-2.0"
-description = "Line-delimited JSON protocol between the Message Vault desktop app and the imessage-reader helper process"
+description = "Line-delimited JSON protocol between the Message Crate desktop app and the imessage-reader helper process"
 repository = "https://github.com/messagecrate/message-crate"
 
 [dependencies]

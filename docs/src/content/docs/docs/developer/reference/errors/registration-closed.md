@@ -11,4 +11,4 @@ editUrl: false
 | Status | `403 Forbidden` |
 | Type | `https://messagecrate.app/docs/developer/reference/errors/registration-closed` |
 
-This vault does not let visitors create their own account: its owner has not opened registration, or nobody has claimed the vault yet. Ask the owner for an account.
+This Message Crate does not let visitors create their own account: its owner has not opened registration, or nobody has claimed it yet. Ask the owner for an account.

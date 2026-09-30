@@ -3,7 +3,7 @@ name = "message-vault-io-core"
 version = "0.1.0"
 edition = "2024"
 license = "LicenseRef-FCL-1.0-ALv2"
-description = "Shared export pipeline, jobs, and form model for the Message Vault desktop app"
+description = "Shared export pipeline, jobs, and form model for the Message Crate desktop app"
 
 [dependencies]
 anyhow = { workspace = true }

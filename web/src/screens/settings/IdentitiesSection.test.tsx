@@ -163,7 +163,7 @@ describe("IdentitiesSection", () => {
     await user.click(within(dialog).getByRole("button", { name: "Add" }));
 
     expect(
-      await within(dialog).findByText("The vault did not add that identity."),
+      await within(dialog).findByText("The server did not add that identity."),
     ).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Add identity" })).toBeInTheDocument();
   });

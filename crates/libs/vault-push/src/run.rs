@@ -366,7 +366,7 @@ fn start_import_run(
     }
     let id = session
         .start_import(&source, cfg.mode, Some("vault-push"))
-        .context("start the Import Run on the vault")?;
+        .context("start the Import Run on the server")?;
     out.show_as(
         &format!("Import Run id={id} source={source}"),
         format!("Recording Import Run {id} ({source})"),
@@ -589,9 +589,9 @@ fn complete_import_session(
         },
     );
     match completed {
-        Ok(()) => out.log(&format!("vault import session {import_id} completed")),
+        Ok(()) => out.log(&format!("import session {import_id} completed")),
         Err(error) => out.log(&format!(
-            "warning: could not complete vault import session {import_id}: {error}"
+            "warning: could not complete import session {import_id}: {error}"
         )),
     }
 }

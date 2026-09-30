@@ -27,7 +27,7 @@ describe("VaultSettingsScreen", () => {
   it("names itself and the field without repeating the word vault", () => {
     renderScreen();
 
-    expect(screen.getByRole("heading", { name: "Message Vault Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Server Address" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Address" })).toHaveValue("http://127.0.0.1:8080");
     expect(screen.getByText("Connection Status")).toBeInTheDocument();
   });
@@ -63,7 +63,7 @@ describe("VaultSettingsScreen", () => {
     const user = userEvent.setup();
     const props = renderScreen();
 
-    const apply = screen.getByRole("button", { name: "Change vault address" });
+    const apply = screen.getByRole("button", { name: "Use this address" });
     expect(apply).toBeEnabled();
     await user.click(apply);
     expect(props.onSubmit).toHaveBeenCalledOnce();
@@ -73,7 +73,7 @@ describe("VaultSettingsScreen", () => {
     const user = userEvent.setup();
     const props = renderScreen({ canSubmit: false });
 
-    const apply = screen.getByRole("button", { name: "Change vault address" });
+    const apply = screen.getByRole("button", { name: "Use this address" });
     expect(apply).toBeDisabled();
     await user.click(apply);
     expect(props.onSubmit).not.toHaveBeenCalled();

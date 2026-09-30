@@ -11,4 +11,4 @@ editUrl: false
 | Status | `422 Unprocessable Entity` |
 | Type | `https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid` |
 
-Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived. `detail` says which. Start the upload again.
+Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived. `detail` says which. Start the upload again.

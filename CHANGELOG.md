@@ -1,6 +1,6 @@
 # Changelog
 
-What changed in Message Vault, written for the people who use it.
+What changed in Message Crate, written for the people who use it.
 
 Each release is grouped three ways:
 

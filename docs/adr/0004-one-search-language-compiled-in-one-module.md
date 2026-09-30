@@ -1,7 +1,7 @@
 # One search language, compiled in one module
 
 The search language a person types on the Contacts, Conversations, and
-Messages lists is one language, owned by one module in the vault server
+Messages lists is one language, owned by one module in the server
 (`crates/vault/server/src/search/`). That module parses every word and
 compiles it to SQL for whichever list asked. The three list routes call it;
 none of them parses a query string or builds a filter of its own.
@@ -35,15 +35,15 @@ current.
   parameters, not words in the string.
 - **Compile is pure.** The module turns a string into SQL with no database
   connection and no clock. Anything that once needed a lookup first is a
-  subquery. Its tests run query strings against a seeded test vault and
+  subquery. Its tests run query strings against a seeded test database and
   assert which rows come back.
 
 The word table is `crates/vault/server/src/search/fields.rs`, the registry
 every list compiles against and the source the API reference is generated
 from. The grammar and every word's meaning are in
 `docs/architecture/search.md`; the guide a person reads is
-`docs/src/content/docs/vault/user/how-to/search.mdx`; the words each list
-accepts are in the [HTTP API reference](/vault/developer/reference/api/).
+`docs/src/content/docs/docs/user/how-to/search.mdx`; the words each list
+accepts are in the [HTTP API reference](/docs/developer/reference/api/).
 
 ## Why
 

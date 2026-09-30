@@ -14,14 +14,14 @@ LAYOUT_TOP_DOWN()
 LAYOUT_WITH_LEGEND()
 
 
-title Container Diagram: Message Vault
+title Container Diagram: Message Crate
 
 Person(user, "User", "A person who wants to store messages from a device or platform.")
 Container_Ext(data, "Raw Message Data", "device backup, .json, .xml, .csv", "Extracted messages from a device or service")
 ' Container_Ext($alias, $label, $techn="", $descr="", $sprite="", $tags="", $link="", $baseShape="rectangle")
 
 ' !unquoted procedure Container_Boundary($alias, $label, $tags="", $link="", $descr = "")
-Container_Boundary(vault_system, "Message Vault System") {
+Container_Boundary(vault_system, "Message Crate System") {
     Container(web, "Static Web Content", "html, css, javscript")
     
     Container_Boundary(ui, "User Interface") {

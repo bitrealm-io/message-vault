@@ -11,4 +11,4 @@ editUrl: false
 | Status | `429 Too Many Requests` |
 | Type | `https://messagecrate.app/docs/developer/reference/errors/rate-limited` |
 
-The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault. Wait the number of seconds in the `Retry-After` header (repeated as `retry_after` in the body) and try again.
+The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim Message Crate, which count once for the whole server. Wait the number of seconds in the `Retry-After` header (repeated as `retry_after` in the body) and try again.

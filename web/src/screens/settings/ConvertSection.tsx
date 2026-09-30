@@ -87,7 +87,7 @@ export function ConvertSection() {
       intro={
         <p className="mb-6 text-[0.875rem] text-muted">
           Convert rewrites a folder of exported files into another format. The input format is read
-          from the folder. Convert touches neither a backup nor your vault.
+          from the folder. Convert touches neither a backup nor your Message Crate.
         </p>
       }
       success={

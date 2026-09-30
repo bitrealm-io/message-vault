@@ -1,9 +1,9 @@
 ---
 title: "Mail archives"
-description: "EML and MBOX layout and X-ME headers used when Message Vault writes a mail archive."
+description: "EML and MBOX layout and X-ME headers used when Message Crate writes a mail archive."
 ---
 
-Design for a human-viewable export: **one folder per conversation**, **one `.eml` per message**, with structured `X-ME-*` headers for machine fidelity. Intended as an archive / interchange path before vault exists. Mail clients can open individual messages; translators can recover SMS, group MMS, and (later) iMessage semantics without relying on CSV.
+Design for a human-viewable export: **one folder per conversation**, **one `.eml` per message**, with structured `X-ME-*` headers for machine fidelity. Intended as an archive / interchange path before the server exists. Mail clients can open individual messages; translators can recover SMS, group MMS, and (later) iMessage semantics without relying on CSV.
 
 **Status:** Writer in [`message-mail`](https://github.com/messagecrate/message-crate/blob/main/crates/libs/mail/). Every exporter's output can be rewritten as EML or MBOX through [Convert](/docs/developer/formats/convert/). All exporters (including iMessage via [`imessage-ir-exporter`](https://github.com/messagecrate/message-crate/blob/main/crates/exporters/imessage-ir-exporter/)) go backup → [shared conversation structure](/docs/developer/reference/export-structure/) ([`message-ir`](https://github.com/messagecrate/message-crate/blob/main/crates/libs/ir/)) → output format (see [message-ir architecture](/docs/developer/architecture/common-message/)). JSON is the default format. iMessage writes extension headers; handwriting attaches SVG. See also [CSV columns](/docs/developer/reference/csv-columns/).
 
@@ -17,7 +17,7 @@ Design for a human-viewable export: **one folder per conversation**, **one `.eml
 
 ## Non-goals (this document)
 
-- Vault import/export
+- Server import/export
 - Replacing CSV as the default exporter output
 - IMAP sync or SMS Backup+ wire compatibility
 - Treating `.mbox` as the preferred packaging (derived export is available; folders of `.eml` remain preferred)
@@ -115,7 +115,7 @@ Reverse import (EML/MBOX → common-message JSON) is available via [`message-ir-
 
 ## Core `X-ME-*` headers (SMS / MMS / shared)
 
-Prefix: **`X-ME-`** (Message Vault). JSON header values are compact single-line JSON.
+Prefix: **`X-ME-`** (Message Crate). JSON header values are compact single-line JSON.
 
 | Header | Values | Notes |
 |--------|----------------|-------|

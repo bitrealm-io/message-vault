@@ -102,7 +102,7 @@ export function logout(opts?: VaultRequestOptions): Promise<void> {
  *
  * The vault reports one value rather than the facts behind it, so the rule
  * joining "does an owner exist" to "is registration open" is stated once, on
- * the server. See `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
+ * the server. See `docs/adr/0008-the-owner-holds-no-messages.md`.
  */
 export function getVaultState(opts?: VaultRequestOptions): Promise<Schema["Vault"]> {
   return apiClient.get<Schema["Vault"]>("/v1/vault", opts);
@@ -183,7 +183,7 @@ export function getVaultSettings(opts?: VaultRequestOptions): Promise<Schema["Va
 /**
  * What the whole vault holds, summed over every account: message,
  * conversation, contact and attachment counts, and attachment bytes. The
- * owner's, and counts only (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).
+ * owner's, and counts only (`docs/adr/0008-the-owner-holds-no-messages.md`).
  */
 export function getVaultStorage(opts?: VaultRequestOptions): Promise<Schema["VaultStorage"]> {
   return apiClient.get<Schema["VaultStorage"]>("/v1/vault/storage", opts);

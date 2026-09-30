@@ -11,4 +11,4 @@ editUrl: false
 | Status | `401 Unauthorized` |
 | Type | `https://messagecrate.app/docs/developer/reference/errors/invalid-credentials` |
 
-The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong. The vault does not say which half failed. Check both and try again; repeated attempts are rate limited.
+The username or password did not match an account, or the current password given to confirm deleting an account or changing the owner's password was wrong. The server does not say which half failed. Check both and try again; repeated attempts are rate limited.

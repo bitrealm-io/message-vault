@@ -6,19 +6,19 @@ LAYOUT_TOP_DOWN()
 AddRelTag("web", $textColor="#C45C26", $lineColor="#C45C26", $lineThickness="2.5", $legendText="Web call (GET /)")
 AddRelTag("api", $textColor="#0B5CAB", $lineColor="#0B5CAB", $lineThickness="2.5", $legendText="API call")
 
-title Deployment: Message Vault from source (developer workstation)
+title Deployment: Message Crate from source (developer workstation)
 
 Deployment_Node(workstation, "Developer workstation", "Linux, macOS, or Windows") {
     Deployment_Node(browser, "Web browser", "Chrome, Firefox, Safari, or WebKit") {
-        Container(spa, "Webpage", "React SPA", "GET / from the vault server. API calls go to the API on the same origin.")
+        Container(spa, "Webpage", "React SPA", "GET / from the server. API calls go to the API on the same origin.")
     }
 
     Deployment_Node(tauri, "Desktop process", "cargo tauri dev") {
-        Container(desktop, "Desktop App", "Tauri v2 native window", "Extract and Format. UI from Vite, vault data from the API.")
+        Container(desktop, "Desktop App", "Tauri v2 native window", "Extract and Format. UI from Vite, data from the API.")
         Container(vite, "Vite", "Node.js, localhost:5173", "Dev server for the Tauri WebView. Serves web/ live.")
     }
 
-    Deployment_Node(backend, "Message Vault backend", "cargo run -p message-vault-server -- serve") {
+    Deployment_Node(backend, "Message Crate backend", "cargo run -p message-vault-server -- serve") {
         Deployment_Node(proc, "Server process", "One OS process on 127.0.0.1:8080") {
             Container(web, "Web", "HTTP GET /", "Returns the webpage compiled from web/. Same origin as the API.")
             Container(api, "API", "HTTP API", "Auth, import, browse, export, assets. Used by the browser and the desktop app.")
@@ -32,7 +32,7 @@ Deployment_Node(workstation, "Developer workstation", "Linux, macOS, or Windows"
     }
 }
 
-System_Ext(backups, "Phone backup files", "Anywhere on local disk. Desktop reads them during Extract. Import uploads into the vault.")
+System_Ext(backups, "Phone backup files", "Anywhere on local disk. Desktop reads them during Extract. Import uploads into Message Crate.")
 
 Rel(spa, web, "GET /", $tags="web")
 Rel(spa, api, "API", $tags="api")

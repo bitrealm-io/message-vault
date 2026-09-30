@@ -35,7 +35,7 @@ pub struct ContactSummary {
     pub addresses: Vec<String>,
     /// When the contact’s address-book shape last changed (`datetime('now')`).
     pub last_modified: String,
-    /// When the vault last heard from the contact: the newest message one of
+    /// When the account last heard from the contact: the newest message one of
     /// the contact's identities sent (RFC 3339, UTC), conversations in the
     /// trash and duplicate messages left out. Null when none of them ever
     /// sent a message. Not the contact's last activity: a message the

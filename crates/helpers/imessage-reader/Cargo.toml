@@ -8,7 +8,7 @@ edition = "2024"
 # and talks to it over pipes (see crates/helpers/imessage-reader-protocol).
 # Why: docs/adr/0014-gpl-code-only-behind-a-process-boundary.md.
 license = "GPL-3.0-or-later"
-description = "Reads Apple Messages (chat.db or an iPhone backup) for the Message Vault desktop app, as a separate process"
+description = "Reads Apple Messages (chat.db or an iPhone backup) for the Message Crate desktop app, as a separate process"
 repository = "https://github.com/messagecrate/message-crate"
 # Every other workspace crate is a library (docs/adr/0001). This one is a
 # program because a process boundary is what keeps the GPL on this side of it.

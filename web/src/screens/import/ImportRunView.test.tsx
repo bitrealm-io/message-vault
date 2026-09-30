@@ -317,12 +317,12 @@ describe("ImportRunView", () => {
     expect(names).toEqual(["big.mov", "small.mov"]);
     // What becomes of them is said beside the label, not in a sentence above the list.
     expect(review.getByRole("button", { name: /Files over the limit/ })).toHaveTextContent(
-      "Skip vault upload",
+      "Skip upload",
     );
     expect(review.queryByText(/stay out of the vault/)).not.toBeInTheDocument();
     expect(review.getByText("Awaiting approval")).toBeInTheDocument();
 
-    await user.click(review.getByRole("button", { name: "Upload to vault" }));
+    await user.click(review.getByRole("button", { name: "Upload to Message Crate" }));
     expect(onApprove).toHaveBeenCalledTimes(1);
     await user.click(review.getByRole("button", { name: "Cancel this import" }));
     expect(onCancelRun).toHaveBeenCalledTimes(1);
@@ -422,7 +422,7 @@ describe("ImportRunView", () => {
 
     const review = within(stageRow(WAITING_MEDIA));
     expect(review.getByRole("button", { name: /Files over the limit/ })).toHaveTextContent("1");
-    expect(review.getByRole("button", { name: "Upload to vault" })).toBeInTheDocument();
+    expect(review.getByRole("button", { name: "Upload to Message Crate" })).toBeInTheDocument();
     expect(screen.queryByText(/since you approved/)).not.toBeInTheDocument();
   });
 

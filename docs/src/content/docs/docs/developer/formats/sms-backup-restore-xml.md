@@ -1,6 +1,6 @@
 ---
 title: "SMS Backup & Restore XML output"
-description: "How Message Vault writes a SyncTech smses.xml file from the shared conversation structure."
+description: "How Message Crate writes a SyncTech smses.xml file from the shared conversation structure."
 ---
 
 Exporters can project the common message into a **single** SyncTech-style backup file:

@@ -258,7 +258,7 @@ describe("OwnerHome", () => {
 
     expect(sectionLinks().map((b) => b.textContent)).toEqual([
       "Dashboard",
-      "Vault Settings",
+      "Server Settings",
       "User Accounts",
       "Activity",
       "Logs",
@@ -270,7 +270,7 @@ describe("OwnerHome", () => {
 
     expect(selectedSection()).toBe("Dashboard");
     expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Vault contents" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Contents" })).toBeInTheDocument();
     expect(screen.getByText("3.0 MB")).toBeInTheDocument();
     expect(screen.getByText(/5,678 messages, 21 attachments/)).toBeInTheDocument();
     expect(screen.getByText(/90 conversations, 120 contacts/)).toBeInTheDocument();
@@ -311,7 +311,7 @@ describe("OwnerHome", () => {
     expect(cells(rows[1])).toEqual(["root", "0", "0 B", "0 B"]);
     expect(cells(rows[2])).toEqual(["alice", "5,000", "6.0 MB", "300 MB"]);
     expect(cells(rows[3])).toEqual(["bob", "678", "2.0 MB", "100 MB"]);
-    expect(cells(rows[4])).toEqual(["Whole vault", "5,678", "8.0 MB", "400 MB"]);
+    expect(cells(rows[4])).toEqual(["All accounts", "5,678", "8.0 MB", "400 MB"]);
   });
 
   it.each([
@@ -330,7 +330,7 @@ describe("OwnerHome", () => {
   it("has the header every account sees: the product name, a search bar, the account button", () => {
     renderHome();
 
-    expect(screen.getByText("Message Vault")).toBeInTheDocument();
+    expect(screen.getByText("Message Crate")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Search accounts" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
   });
@@ -381,9 +381,7 @@ describe("OwnerHome", () => {
     await user.click(await screen.findByRole("menuitem", { name: "Settings" }));
 
     // The owner's own row in User Accounts is the owner's Settings.
-    expect(
-      await screen.findByRole("heading", { name: "Settings for Vault Owner" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Settings for Owner" })).toBeInTheDocument();
     expect(await screen.findByText("Change Password")).toBeInTheDocument();
     expect(selectedSection()).toBe("User Accounts");
     // It was opened from User Accounts, so it links back there as any account does.
@@ -395,7 +393,7 @@ describe("OwnerHome", () => {
 
     const rows = (await screen.findAllByRole("row")).slice(1);
     expect(within(rows[0]).getByRole("button", { name: "Settings for root" })).toBeInTheDocument();
-    expect(within(rows[0]).getByText("Vault owner")).toBeInTheDocument();
+    expect(within(rows[0]).getByText("Owner")).toBeInTheDocument();
     // The owner cannot be disabled and holds no messages to import, export or delete.
     expect(within(rows[0]).queryByRole("button", { name: /Status of/ })).not.toBeInTheDocument();
     expect(within(rows[0]).queryByRole("checkbox")).not.toBeInTheDocument();
@@ -496,7 +494,7 @@ describe("OwnerHome", () => {
     expect(lastLogin.nextElementSibling).toHaveTextContent("2026");
     const app = screen.getByRole("heading", { name: "App" }).nextElementSibling as HTMLElement;
     expect(app).toHaveTextContent("Desktop app 0.9.0+aaaa1111");
-    await waitFor(() => expect(app).toHaveTextContent("This vault is 0.10.0"));
+    await waitFor(() => expect(app).toHaveTextContent("The server is 0.10.0"));
   });
 
   it("says Never and not connected on Profile for an account that has done neither", async () => {
@@ -659,7 +657,7 @@ describe("OwnerHome", () => {
     renderHome();
 
     expect(await screen.findByRole("status")).toHaveTextContent(
-      `This vault is 0.10.0. This app is ${productVersionOf(APP_BUILD)}.`,
+      `The server is 0.10.0. This app is ${productVersionOf(APP_BUILD)}.`,
     );
     // It blocks nothing: the screen under it still loads and works.
     expect(await screen.findByText("bob")).toBeInTheDocument();
@@ -814,9 +812,7 @@ describe("OwnerHome", () => {
     renderHome(["/owner/accounts/101"]);
 
     expect(await screen.findByText("Loading…")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Settings for Vault Owner" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Settings for Owner" })).not.toBeInTheDocument();
   });
 
   it("says Invalid username when the username already belongs to an account", async () => {
@@ -851,9 +847,9 @@ describe("OwnerHome", () => {
   it("opens the section named in the address", async () => {
     renderHome(["/owner/settings"]);
 
-    expect(selectedSection()).toBe("Vault Settings");
+    expect(selectedSection()).toBe("Server Settings");
     expect(
-      await screen.findByText(/Let anyone reaching this vault create their own account/),
+      await screen.findByText(/Let anyone who can reach this server create their own account/),
     ).toBeInTheDocument();
   });
 
@@ -871,10 +867,10 @@ describe("OwnerHome", () => {
     const user = userEvent.setup({ delay: null });
     renderHome();
 
-    await user.click(screen.getByRole("button", { name: "Vault Settings" }));
-    expect(selectedSection()).toBe("Vault Settings");
+    await user.click(screen.getByRole("button", { name: "Server Settings" }));
+    expect(selectedSection()).toBe("Server Settings");
     expect(
-      await screen.findByText(/Let anyone reaching this vault create their own account/),
+      await screen.findByText(/Let anyone who can reach this server create their own account/),
     ).toBeInTheDocument();
   });
 
@@ -883,7 +879,7 @@ describe("OwnerHome", () => {
     renderHome(["/owner/settings"]);
 
     const box = await screen.findByRole("checkbox", {
-      name: /Let anyone reaching this vault create their own account/,
+      name: /Let anyone who can reach this server create their own account/,
     });
     expect(box).not.toBeChecked();
 

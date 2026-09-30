@@ -112,7 +112,7 @@ async fn migrate_vault_schema(conn: &mut AnyConnection) -> Result<()> {
         tracing::warn!(
             stamped = %stamped,
             expected = %SCHEMA_FINGERPRINT,
-            "vault schema differs from this server's; rebuilding empty (re-import your data)"
+            "database schema differs from this server's; rebuilding empty (re-import your data)"
         );
     }
     rebuild_vault_schema(conn).await?;
@@ -286,7 +286,7 @@ async fn apply_postgres_vault_ddl(conn: &mut AnyConnection) -> Result<()> {
         if table_exists(&mut tx, "vault_imports").await? {
             tracing::warn!(
                 expected = %SCHEMA_FINGERPRINT,
-                "vault schema differs from this server's; rebuilding empty (re-import your data)"
+                "database schema differs from this server's; rebuilding empty (re-import your data)"
             );
             drop_pg_user_tables(&mut tx).await?;
         }

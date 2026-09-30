@@ -1,7 +1,7 @@
 //! Generate the vault server's CLI reference page for the docs site.
 //!
 //! The page lives at
-//! `docs/src/content/docs/vault/developer/reference/server-cli.md` and is
+//! `docs/src/content/docs/docs/developer/reference/server-cli.md` and is
 //! regenerated with
 //! `cargo run -p message-vault-server -- dump-cli-docs --output <path>`.
 //!
@@ -14,7 +14,7 @@ use std::io::Write;
 use std::path::Path;
 
 /// Starlight frontmatter title for the generated page.
-const TITLE: &str = "Vault server CLI";
+const TITLE: &str = "Server CLI";
 /// Starlight frontmatter description for the generated page.
 const DESCRIPTION: &str = "Cargo subcommands for import, dedupe, contacts, demo reset, and serve.";
 
@@ -87,12 +87,12 @@ mod tests {
         // marker, fails here instead of publishing a stale page.
         let generated = page_markdown();
         let committed = include_str!(
-            "../../../../docs/src/content/docs/vault/developer/reference/server-cli.md"
+            "../../../../docs/src/content/docs/docs/developer/reference/server-cli.md"
         );
         assert_eq!(
             generated.trim_end(),
             committed.trim_end(),
-            "run: cargo run -p message-vault-server -- dump-cli-docs --output docs/src/content/docs/vault/developer/reference/server-cli.md"
+            "run: cargo run -p message-vault-server -- dump-cli-docs --output docs/src/content/docs/docs/developer/reference/server-cli.md"
         );
     }
 }

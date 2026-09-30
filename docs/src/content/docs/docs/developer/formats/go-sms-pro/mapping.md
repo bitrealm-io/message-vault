@@ -45,7 +45,7 @@ Each `<SMS>` becomes one message in a shared conversation. `chat_identifier` hol
 
 | XML child | Shared field(s) | Notes |
 |-----------|------------------|--------|
-| `<address>` | `chat_identifier`, `sender_handle` | Digits sanitized then E.164. For sent (`type=2`), address is the peer (not the sender). For received (`type=1`), address is also `sender_handle`. A voicemail notice from Google Voice is an SMS from the Google Voice number like any other; the vault does not read who called out of its body. |
+| `<address>` | `chat_identifier`, `sender_handle` | Digits sanitized then E.164. For sent (`type=2`), address is the peer (not the sender). For received (`type=1`), address is also `sender_handle`. A voicemail notice from Google Voice is an SMS from the Google Voice number like any other; Message Crate does not read who called out of its body. |
 | `<contactName>` | `sender_display_name` | Display name filled for incoming when present. |
 | `<date>` | `timestamp_unix_ms`, `timestamp`, `timestamp_utc`, `timestamp_display` | Raw ms in `timestamp_unix_ms`. Converted to local/UTC RFC3339 and a human display string. |
 | `<type>` | `android_type`, `direction` | `1` → `incoming`, `2` → `outgoing`. Other values are skipped. |

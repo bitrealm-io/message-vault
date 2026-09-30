@@ -1,13 +1,13 @@
 ---
 title: Export structure
-description: The JSONL format the vault imports — schema version 4, one file per conversation.
+description: The JSONL format Message Crate imports — schema version 4, one file per conversation.
 ---
 
-The vault imports JSONL (JSON Lines) exports at schema version 4. Version 3 is refused, never upgraded. This page describes the format for CLI users and tool authors.
+Message Crate imports JSONL (JSON Lines) exports at schema version 4. Version 3 is refused, never upgraded. This page describes the format for CLI users and tool authors.
 
 ## Happy path
 
-**Phone backup → JSONL export → vault CLI `import` or `POST /v1/imports/{id}/batches` → SQLite**
+**Phone backup → JSONL export → server CLI `import` or `POST /v1/imports/{id}/batches` → SQLite**
 
 The JSONL files are plain text — one JSON object per line. The format is the same whether you import through the desktop app or post to the import API directly.
 
@@ -29,7 +29,7 @@ Attachment records may include `digest_sha256` so clients can upload by hash (`P
 
 ## Schema compatibility
 
-The vault reads one schema version, currently 4. A file written at any other version is refused, with an error naming both the file's version and the version the vault expects. To import an older export, re-export it with the current desktop app.
+The server reads one schema version, currently 4. A file written at any other version is refused, with an error naming both the file's version and the version the server expects. To import an older export, re-export it with the current desktop app.
 
 ## Related
 

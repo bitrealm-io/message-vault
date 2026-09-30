@@ -80,12 +80,12 @@ describe("AddIdentityDialog", () => {
       <AddIdentityDialog
         open
         busy
-        error="The vault did not add that identity."
+        error="The server did not add that identity."
         onClose={() => {}}
         onConfirm={() => {}}
       />,
     );
-    expect(screen.getByText("The vault did not add that identity.")).toBeInTheDocument();
+    expect(screen.getByText("The server did not add that identity.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Working…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
   });

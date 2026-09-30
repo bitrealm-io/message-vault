@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Message Vault HTTP API",
-    "description": "HTTP API for a local Message Vault. Bearer session tokens come from login. API tokens come from Settings → Account.",
+    "title": "Message Crate HTTP API",
+    "description": "HTTP API for a Message Crate server. Bearer session tokens come from login. API tokens come from Settings → Account.",
     "license": {
       "name": "Fair Core License 1.0 (ALv2 future)",
       "url": "https://github.com/messagecrate/message-crate/blob/main/LICENSE.md"
@@ -36,8 +36,8 @@
         "tags": [
           "Accounts"
         ],
-        "summary": "List the accounts this vault holds, with their flags, message count, and storage use.",
-        "description": "The owner's own account comes first, then the rest by username: the owner is an account of this vault too, and reaches its own settings from the same list as everyone else's.",
+        "summary": "List the accounts this Message Crate holds, with their flags, message count, and storage use.",
+        "description": "The owner's own account comes first, then the rest by username: the owner is an account too, and reaches its own settings from the same list as everyone else's.",
         "operationId": "list_accounts",
         "parameters": [
           {
@@ -86,7 +86,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -127,7 +127,7 @@
           "Accounts"
         ],
         "summary": "Create an account.",
-        "description": "The vault owner may always: the owner picks the first password and the\naccount holder replaces it at first login, so the owner's choice survives\none session and no longer. A stranger with no credential may while the\nvault is open, and is logged in on creation. Registering is the vault's\nonly self-service door, shut unless the owner has opened it; an unclaimed\nvault is shut too, because its first act is being claimed, not being\njoined.",
+        "description": "The owner may always: the owner picks the first password and the\naccount holder replaces it at first login, so the owner's choice survives\none session and no longer. A stranger with no credential may while\nregistration is open, and is logged in on creation. Registering is the\nonly self-service door, shut unless the owner has opened it; an unclaimed\nMessage Crate is shut too, because its first act is being claimed, not\nbeing joined.",
         "operationId": "create_account",
         "requestBody": {
           "content": {
@@ -159,7 +159,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -185,7 +185,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`registration-closed`](https://messagecrate.app/docs/developer/reference/errors/registration-closed): This vault does not let visitors create their own account: its owner has not opened registration, or nobody has claimed the vault yet.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`registration-closed`](https://messagecrate.app/docs/developer/reference/errors/registration-closed): This Message Crate does not let visitors create their own account: its owner has not opened registration, or nobody has claimed it yet.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -201,7 +201,7 @@
             ]
           },
           "409": {
-            "description": "[`username-taken`](https://messagecrate.app/docs/developer/reference/errors/username-taken): The username already belongs to an account on this vault.",
+            "description": "[`username-taken`](https://messagecrate.app/docs/developer/reference/errors/username-taken): The username already belongs to an account on this server.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -214,7 +214,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -253,7 +253,7 @@
             ]
           },
           "429": {
-            "description": "[`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault.",
+            "description": "[`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim Message Crate, which count once for the whole server.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -320,7 +320,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -372,7 +372,7 @@
           "Accounts"
         ],
         "summary": "Permanently delete an account: login, profile, contacts, and every message it owns, with its data directory.",
-        "description": "The vault owner deletes any account outright, the demo account included,\nwhich is how a demo vault is cleared into a real one. An account deletes\nitself with a body carrying the confirmation and its current password: a\ncredential belongs in a body, not in a URL or a header of the vault's own\ninvention, and a DELETE body has no defined meaning in RFC 9110 but is not\nforbidden. The demo account refuses its own deletion, and nobody deletes\nthe owner.",
+        "description": "The owner deletes any account outright, the demo account included,\nwhich is how a demo Message Crate is cleared into a real one. An account deletes\nitself with a body carrying the confirmation and its current password: a\ncredential belongs in a body, not in a URL or a header of the server's own\ninvention, and a DELETE body has no defined meaning in RFC 9110 but is not\nforbidden. The demo account refuses its own deletion, and nobody deletes\nthe owner.",
         "operationId": "delete_account",
         "parameters": [
           {
@@ -408,7 +408,7 @@
             "description": "Account deleted"
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -421,7 +421,7 @@
             ]
           },
           "401": {
-            "description": "[`invalid-credentials`](https://messagecrate.app/docs/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong.\n\n[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
+            "description": "[`invalid-credentials`](https://messagecrate.app/docs/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the owner's password was wrong.\n\n[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -435,7 +435,7 @@
             ]
           },
           "403": {
-            "description": "[`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.\n\n[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.\n\n[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -464,7 +464,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -514,7 +514,7 @@
           "Accounts"
         ],
         "summary": "Change an account.",
-        "description": "Its display name, time zone and identities are set by the account itself or by the vault owner; only the vault owner sets an account's disabled flag and its import, export and delete permissions. A field the caller may not set answers `403 Forbidden`, and the reloaded account is the answer.",
+        "description": "Its display name, time zone and identities are set by the account itself or by the owner; only the owner sets an account's disabled flag and its import, export and delete permissions. A field the caller may not set answers `403 Forbidden`, and the reloaded account is the answer.",
         "operationId": "update_account",
         "parameters": [
           {
@@ -550,7 +550,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -576,7 +576,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -604,7 +604,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -714,7 +714,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -809,7 +809,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -835,7 +835,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -862,7 +862,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -956,7 +956,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1053,7 +1053,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1079,7 +1079,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1106,7 +1106,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1235,7 +1235,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1348,7 +1348,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1479,7 +1479,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1582,7 +1582,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1636,7 +1636,7 @@
           "Accounts"
         ],
         "summary": "Destroy one account's conversations, messages, and attachments.",
-        "description": "The account itself, its contacts, and its login survive.\n\nThe vault owner may, on any account. The account itself may with a\nsession that carries the `delete` permission, and confirms in the body.\nAn API token is refused whatever its scopes: permanent deletion is a\nperson's act (`docs/architecture/http-api.md`, \"Credentials and reach\").",
+        "description": "The account itself, its contacts, and its login survive.\n\nThe owner may, on any account. The account itself may with a\nsession that carries the `delete` permission, and confirms in the body.\nAn API token is refused whatever its scopes: permanent deletion is a\nperson's act (`docs/architecture/http-api.md`, \"Credentials and reach\").",
         "operationId": "delete_account_messages",
         "parameters": [
           {
@@ -1679,7 +1679,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1705,7 +1705,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1733,7 +1733,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1792,7 +1792,7 @@
           "Accounts"
         ],
         "summary": "Set an account's password.",
-        "description": "For a user account the session is the credential, and the current\npassword is not asked for. The vault owner changing its own must send\n`current_password`: that account reaches every other, so a session left\nopen on a shared machine must not be enough to take it over.\nAn account changing its own has its API tokens revoked and gets\n`200` with a rotated session token. The vault owner setting another\naccount's answers `204`. That is the whole of it: the account's sessions carry on,\nand its holder keeps the new password until they change it themselves.",
+        "description": "For a user account the session is the credential, and the current\npassword is not asked for. The owner changing its own must send\n`current_password`: that account reaches every other, so a session left\nopen on a shared machine must not be enough to take it over.\nAn account changing its own has its API tokens revoked and gets\n`200` with a rotated session token. The owner setting another\naccount's answers `204`. That is the whole of it: the account's sessions carry on,\nand its holder keeps the new password until they change it themselves.",
         "operationId": "replace_account_password",
         "parameters": [
           {
@@ -1828,10 +1828,10 @@
             }
           },
           "204": {
-            "description": "Password set by the vault owner"
+            "description": "Password set by the owner"
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1844,7 +1844,7 @@
             ]
           },
           "401": {
-            "description": "[`invalid-credentials`](https://messagecrate.app/docs/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong.\n\n[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
+            "description": "[`invalid-credentials`](https://messagecrate.app/docs/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the owner's password was wrong.\n\n[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1858,7 +1858,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1886,7 +1886,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1938,7 +1938,7 @@
           "Accounts"
         ],
         "summary": "What an account holds: attachment bytes, the attachment, conversation and contact counts, and the 100 largest files.",
-        "description": "The owner reads any account's; an account reads its own. The owner is told each file's name, type and size and not the conversation it is in, which says who the account talks to (`docs/adr/0008-the-vault-owner-holds-no-messages.md`).",
+        "description": "The owner reads any account's; an account reads its own. The owner is told each file's name, type and size and not the conversation it is in, which says who the account talks to (`docs/adr/0008-the-owner-holds-no-messages.md`).",
         "operationId": "get_account_storage",
         "parameters": [
           {
@@ -1977,7 +1977,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2073,7 +2073,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2131,7 +2131,7 @@
           "Assets"
         ],
         "summary": "Store one asset body under its SHA-256 fingerprint.",
-        "description": "`201 Created` when the vault did not hold the asset and now does, with a\n`Location` naming it; `200 OK` when it already held it, and the body was\nread and dropped.",
+        "description": "`201 Created` when the server did not hold the asset and now does, with a\n`Location` naming it; `200 OK` when it already held it, and the body was\nread and dropped.",
         "operationId": "replace_asset",
         "parameters": [
           {
@@ -2160,7 +2160,7 @@
         },
         "responses": {
           "200": {
-            "description": "The vault already held the asset",
+            "description": "The server already held the asset",
             "content": {
               "application/json": {
                 "schema": {
@@ -2170,7 +2170,7 @@
             }
           },
           "201": {
-            "description": "The asset is new to the vault and is now stored",
+            "description": "The asset is new to the server and is now stored",
             "headers": {
               "Location": {
                 "schema": {
@@ -2188,7 +2188,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2214,7 +2214,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2241,7 +2241,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2267,7 +2267,7 @@
             ]
           },
           "422": {
-            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.\n\n[`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.",
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.\n\n[`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2345,7 +2345,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2475,7 +2475,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2501,7 +2501,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2528,7 +2528,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2554,7 +2554,7 @@
             ]
           },
           "422": {
-            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.\n\n[`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.",
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.\n\n[`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2634,7 +2634,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2661,7 +2661,7 @@
             ]
           },
           "422": {
-            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.\n\n[`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.",
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.\n\n[`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2725,7 +2725,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The vault already held the asset",
+            "description": "The server already held the asset",
             "content": {
               "application/json": {
                 "schema": {
@@ -2735,7 +2735,7 @@
             }
           },
           "201": {
-            "description": "The asset is new to the vault and is now stored",
+            "description": "The asset is new to the server and is now stored",
             "headers": {
               "Location": {
                 "schema": {
@@ -2766,7 +2766,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2793,7 +2793,7 @@
             ]
           },
           "422": {
-            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.\n\n[`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.",
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.\n\n[`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2883,7 +2883,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2909,7 +2909,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2936,7 +2936,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2962,7 +2962,7 @@
             ]
           },
           "422": {
-            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.\n\n[`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.",
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.\n\n[`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the server expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3044,7 +3044,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3113,7 +3113,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3139,7 +3139,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3166,7 +3166,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3249,7 +3249,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3335,7 +3335,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3361,7 +3361,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3401,7 +3401,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3511,7 +3511,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3597,7 +3597,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3623,7 +3623,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3650,7 +3650,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3736,7 +3736,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Comma-separated keys from `name` and `last_heard`, a leading `-` for descending. `last_heard` is when the vault last heard from the contact; contacts it never heard from sort last either way. Default `name`.",
+            "description": "Comma-separated keys from `name` and `last_heard`, a leading `-` for descending. `last_heard` is when the account last heard from the contact; contacts it never heard from sort last either way. Default `name`.",
             "required": false,
             "schema": {
               "type": "string"
@@ -3768,7 +3768,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3807,7 +3807,7 @@
           "Contacts"
         ],
         "summary": "Load a VCF or vCard CSV address book into this account.",
-        "description": "The body is the file itself, and `Content-Type` says which: `text/vcard` or `text/csv`.\n\nThis is a standalone act against the vault, never part of an Import Run:\ncontacts are vault state, and a person may load them before or after\nbringing messages in. Only the rows the address book owns are replaced, so\nContact Groups, names the person typed, and identities an import discovered\nall survive. How the file is read is the open question in #270; this route\nis where that answer lands.",
+        "description": "The body is the file itself, and `Content-Type` says which: `text/vcard` or `text/csv`.\n\nThis is a standalone act, never part of an Import Run: contacts are the\naccount's own state, and a person may load them before or after\nbringing messages in. Only the rows the address book owns are replaced, so\nContact Groups, names the person typed, and identities an import discovered\nall survive. How the file is read is the open question in #270; this route\nis where that answer lands.",
         "operationId": "create_contacts",
         "requestBody": {
           "description": "The address book file: a vCard file as text/vcard, or a vCard CSV export as text/csv.",
@@ -3828,7 +3828,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3854,7 +3854,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3868,7 +3868,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3943,7 +3943,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3969,7 +3969,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3983,7 +3983,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4034,7 +4034,7 @@
         "tags": [
           "Contacts"
         ],
-        "summary": "Report which identifiers this account has no vault contact for.",
+        "summary": "Report which identifiers this account has no contact for.",
         "operationId": "find_unmatched_identities",
         "requestBody": {
           "content": {
@@ -4058,7 +4058,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4084,7 +4084,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4098,7 +4098,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4188,7 +4188,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4271,7 +4271,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4298,7 +4298,7 @@
             ]
           },
           "409": {
-            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed.",
+            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4372,7 +4372,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4398,7 +4398,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4425,7 +4425,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4509,7 +4509,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4594,7 +4594,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4714,7 +4714,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4794,7 +4794,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4877,7 +4877,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4904,7 +4904,7 @@
             ]
           },
           "409": {
-            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed.",
+            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5013,7 +5013,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5098,7 +5098,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5209,7 +5209,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5294,7 +5294,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5413,7 +5413,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5490,7 +5490,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5516,7 +5516,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5530,7 +5530,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5628,7 +5628,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5726,7 +5726,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5753,7 +5753,7 @@
             ]
           },
           "409": {
-            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed.",
+            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5837,7 +5837,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5864,7 +5864,7 @@
             ]
           },
           "409": {
-            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed.",
+            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5978,7 +5978,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6005,7 +6005,7 @@
             ]
           },
           "409": {
-            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed.",
+            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6118,7 +6118,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6195,7 +6195,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6221,7 +6221,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6235,7 +6235,7 @@
             ]
           },
           "409": {
-            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed.",
+            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6248,7 +6248,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6345,7 +6345,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6439,7 +6439,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6465,7 +6465,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6492,7 +6492,7 @@
             ]
           },
           "409": {
-            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed.",
+            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6505,7 +6505,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6563,7 +6563,7 @@
         "tags": [
           "Import"
         ],
-        "summary": "Import one message-ir JSONL body into the vault.",
+        "summary": "Import one message-ir JSONL body.",
         "operationId": "create_import_batch",
         "parameters": [
           {
@@ -6596,7 +6596,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6622,7 +6622,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6649,7 +6649,7 @@
             ]
           },
           "409": {
-            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed.",
+            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6662,7 +6662,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6756,7 +6756,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6782,7 +6782,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6809,7 +6809,7 @@
             ]
           },
           "409": {
-            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed.",
+            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6822,7 +6822,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6940,7 +6940,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7038,7 +7038,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7065,7 +7065,7 @@
             ]
           },
           "409": {
-            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed.",
+            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7159,7 +7159,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7228,7 +7228,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7254,7 +7254,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7281,7 +7281,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7364,7 +7364,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7450,7 +7450,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7476,7 +7476,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7516,7 +7516,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7626,7 +7626,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7712,7 +7712,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7738,7 +7738,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7765,7 +7765,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7883,7 +7883,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7963,7 +7963,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8064,7 +8064,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8133,7 +8133,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8159,7 +8159,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8186,7 +8186,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8270,7 +8270,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8356,7 +8356,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8382,7 +8382,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8422,7 +8422,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8528,7 +8528,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8622,7 +8622,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8689,7 +8689,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8761,7 +8761,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8774,7 +8774,7 @@
             ]
           },
           "401": {
-            "description": "[`invalid-credentials`](https://messagecrate.app/docs/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong.",
+            "description": "[`invalid-credentials`](https://messagecrate.app/docs/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the owner's password was wrong.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8787,7 +8787,7 @@
             ]
           },
           "403": {
-            "description": "[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8800,7 +8800,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8839,7 +8839,7 @@
             ]
           },
           "429": {
-            "description": "[`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault.",
+            "description": "[`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim Message Crate, which count once for the whole server.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8878,7 +8878,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8938,7 +8938,7 @@
             ]
           },
           "403": {
-            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8979,7 +8979,7 @@
         "tags": [
           "Vault"
         ],
-        "summary": "Report whether this vault is unclaimed, closed, or open.",
+        "summary": "Report whether this Message Crate is unclaimed, closed, or open.",
         "operationId": "get_vault",
         "responses": {
           "200": {
@@ -9013,8 +9013,8 @@
         "tags": [
           "Vault"
         ],
-        "summary": "Claim an unclaimed vault by creating its owner.",
-        "description": "Unauthenticated, because a vault with no owner has no credential that\ncould authorize this. Whoever reaches an unclaimed vault first may claim\nit: the vault is self-hosted, so its operator installs the software,\nclaims the vault, and publishes the port, in that order and at times of\ntheir choosing. An unclaimed vault is also empty, so a lost race destroys\nnothing and announces itself at once.",
+        "summary": "Claim an unclaimed Message Crate by creating its owner.",
+        "description": "Unauthenticated, because a Message Crate with no owner has no credential\nthat could authorize this. Whoever reaches an unclaimed one first may\nclaim it: Message Crate is self-hosted, so its operator installs the\nsoftware, claims it, and publishes the port, in that order and at times\nof their choosing. An unclaimed one is also empty, so a lost race\ndestroys nothing and announces itself at once.",
         "operationId": "claim_vault",
         "requestBody": {
           "content": {
@@ -9028,7 +9028,7 @@
         },
         "responses": {
           "201": {
-            "description": "Vault claimed; the owner's Session is made",
+            "description": "Claimed; the owner's Session is made",
             "headers": {
               "Location": {
                 "schema": {
@@ -9046,7 +9046,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9059,7 +9059,7 @@
             ]
           },
           "409": {
-            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed.",
+            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9072,7 +9072,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9111,7 +9111,7 @@
             ]
           },
           "429": {
-            "description": "[`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault.",
+            "description": "[`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim Message Crate, which count once for the whole server.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9131,7 +9131,7 @@
         "tags": [
           "Vault"
         ],
-        "summary": "Read the vault's settings.",
+        "summary": "Read the server settings.",
         "operationId": "get_vault_settings",
         "responses": {
           "200": {
@@ -9158,7 +9158,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9198,7 +9198,7 @@
         "tags": [
           "Vault"
         ],
-        "summary": "Change the vault's settings.",
+        "summary": "Change the server settings.",
         "operationId": "update_vault_settings",
         "requestBody": {
           "content": {
@@ -9222,7 +9222,7 @@
             }
           },
           "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive.",
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9248,7 +9248,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9263,7 +9263,7 @@
             ]
           },
           "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9316,8 +9316,8 @@
         "tags": [
           "Vault"
         ],
-        "summary": "Read what the vault holds.",
-        "description": "The counts and the attachment bytes are summed over every account. The database, messages and full-text search sizes are measured on disk. Each account's share of message storage is an estimate from its share of text. Counts and totals only, never a name or a line of text (`docs/adr/0008-the-vault-owner-holds-no-messages.md`, \"What the owner may see\"). The owner's, because the owner administers the vault and nobody else holds more than their own account.",
+        "summary": "Read what the database holds.",
+        "description": "The counts and the attachment bytes are summed over every account. The database, messages and full-text search sizes are measured on disk. Each account's share of message storage is an estimate from its share of text. Counts and totals only, never a name or a line of text (`docs/adr/0008-the-owner-holds-no-messages.md`, \"What the owner may see\"). The owner's, because the owner administers this Message Crate and nobody else holds more than their own account.",
         "operationId": "get_vault_storage",
         "responses": {
           "200": {
@@ -9344,7 +9344,7 @@
             ]
           },
           "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.",
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9456,14 +9456,14 @@
           },
           "is_owner": {
             "type": "boolean",
-            "description": "True for the vault owner: manages accounts, holds no messages."
+            "description": "True for the owner: manages accounts, holds no messages."
           },
           "last_login_at": {
             "type": [
               "string",
               "null"
             ],
-            "description": "When the account last logged in (RFC 3339, UTC), or `null` if it never\nhas. Logging in, claiming the vault and registering all count; a\npassword change does not."
+            "description": "When the account last logged in (RFC 3339, UTC), or `null` if it never\nhas. Logging in, claiming Message Crate and registering all count; a\npassword change does not."
           },
           "message_count": {
             "type": "integer",
@@ -9472,7 +9472,7 @@
           },
           "must_set_up_profile": {
             "type": "boolean",
-            "description": "The account holder has not set up their profile yet, so profile setup\nis owed before the account can be used. The vault decides this, not the\nclient: the same answer reaches every app, and it survives cleared site\ndata and a second browser."
+            "description": "The account holder has not set up their profile yet, so profile setup\nis owed before the account can be used. The server decides this, not the\nclient: the same answer reaches every app, and it survives cleared site\ndata and a second browser."
           },
           "phones": {
             "type": "array",
@@ -9580,7 +9580,7 @@
           "conversation_count": {
             "type": "integer",
             "format": "int64",
-            "description": "Conversations. A count and never a title: how many an account has is\na measure of the vault, and who they are with is the holder's."
+            "description": "Conversations. A count and never a title: how many an account has is\na measure of the database, and who they are with is the holder's."
           },
           "top_attachments": {
             "type": "array",
@@ -9675,7 +9675,7 @@
       },
       "AppKind": {
         "type": "string",
-        "description": "Which app a session's requests come from. The vault records it beside the\napp's Build and shows both to the vault owner; it never refuses a request\non account of either.",
+        "description": "Which app a session's requests come from. The server records it beside the\napp's Build and shows both to the owner; it never refuses a request\non account of either.",
         "enum": [
           "desktop",
           "website"
@@ -9755,7 +9755,7 @@
       },
       "ClaimVaultRequest": {
         "type": "object",
-        "description": "Body for claiming a vault.",
+        "description": "Body for claiming a Message Crate.",
         "required": [
           "username",
           "password"
@@ -9763,11 +9763,11 @@
         "properties": {
           "password": {
             "type": "string",
-            "description": "Password for the vault owner. Must satisfy the vault's password policy."
+            "description": "Password for the owner. Must satisfy the server's password policy."
           },
           "username": {
             "type": "string",
-            "description": "Login username for the vault owner."
+            "description": "Login username for the owner."
           }
         }
       },
@@ -10080,7 +10080,7 @@
               "string",
               "null"
             ],
-            "description": "When the vault last heard from the contact: the newest message one of\nthe contact's identities sent (RFC 3339, UTC), conversations in the\ntrash and duplicate messages left out. Null when none of them ever\nsent a message. Not the contact's last activity: a message the\naccount owner sent, or another member of a group chat, does not\ncount. The same question `last-message:` asks on Contacts."
+            "description": "When the account last heard from the contact: the newest message one of\nthe contact's identities sent (RFC 3339, UTC), conversations in the\ntrash and duplicate messages left out. Null when none of them ever\nsent a message. Not the contact's last activity: a message the\naccount owner sent, or another member of a group chat, does not\ncount. The same question `last-message:` asks on Contacts."
           },
           "last_modified": {
             "type": "string",
@@ -10204,7 +10204,7 @@
       },
       "CreateAccountRequest": {
         "type": "object",
-        "description": "Body for creating an account, by the vault owner or by a stranger.",
+        "description": "Body for creating an account, by the owner or by a stranger.",
         "required": [
           "username"
         ],
@@ -10228,7 +10228,7 @@
               "string",
               "null"
             ],
-            "description": "Display name shown in the vault."
+            "description": "Display name shown in Message Crate."
           },
           "username": {
             "type": "string",
@@ -10898,7 +10898,7 @@
         "properties": {
           "address": {
             "type": "string",
-            "description": "The identity as the vault stores it: E.164 for a number, lower case\nfor an address."
+            "description": "The identity as the database stores it: E.164 for a number, lower case\nfor an address."
           },
           "conversations": {
             "type": "integer",
@@ -11474,7 +11474,7 @@
           },
           "timestamp": {
             "type": "string",
-            "description": "The instant the message was sent: RFC 3339 in UTC with a `Z`\nsuffix. A caller shows it in the account's time zone\n(`AccountProfileResponse.time_zone`); the vault stores nothing\nabout where the phone was."
+            "description": "The instant the message was sent: RFC 3339 in UTC with a `Z`\nsuffix. A caller shows it in the account's time zone\n(`AccountProfileResponse.time_zone`); the database stores nothing\nabout where the phone was."
           }
         }
       },
@@ -11630,14 +11630,14 @@
                 },
                 "is_owner": {
                   "type": "boolean",
-                  "description": "True for the vault owner: manages accounts, holds no messages."
+                  "description": "True for the owner: manages accounts, holds no messages."
                 },
                 "last_login_at": {
                   "type": [
                     "string",
                     "null"
                   ],
-                  "description": "When the account last logged in (RFC 3339, UTC), or `null` if it never\nhas. Logging in, claiming the vault and registering all count; a\npassword change does not."
+                  "description": "When the account last logged in (RFC 3339, UTC), or `null` if it never\nhas. Logging in, claiming Message Crate and registering all count; a\npassword change does not."
                 },
                 "message_count": {
                   "type": "integer",
@@ -11646,7 +11646,7 @@
                 },
                 "must_set_up_profile": {
                   "type": "boolean",
-                  "description": "The account holder has not set up their profile yet, so profile setup\nis owed before the account can be used. The vault decides this, not the\nclient: the same answer reaches every app, and it survives cleared site\ndata and a second browser."
+                  "description": "The account holder has not set up their profile yet, so profile setup\nis owed before the account can be used. The server decides this, not the\nclient: the same answer reaches every app, and it survives cleared site\ndata and a second browser."
                 },
                 "phones": {
                   "type": "array",
@@ -11933,7 +11933,7 @@
                     "string",
                     "null"
                   ],
-                  "description": "When the vault last heard from the contact: the newest message one of\nthe contact's identities sent (RFC 3339, UTC), conversations in the\ntrash and duplicate messages left out. Null when none of them ever\nsent a message. Not the contact's last activity: a message the\naccount owner sent, or another member of a group chat, does not\ncount. The same question `last-message:` asks on Contacts."
+                  "description": "When the account last heard from the contact: the newest message one of\nthe contact's identities sent (RFC 3339, UTC), conversations in the\ntrash and duplicate messages left out. Null when none of them ever\nsent a message. Not the contact's last activity: a message the\naccount owner sent, or another member of a group chat, does not\ncount. The same question `last-message:` asks on Contacts."
                 },
                 "last_modified": {
                   "type": "string",
@@ -12337,7 +12337,7 @@
               "properties": {
                 "address": {
                   "type": "string",
-                  "description": "The identity as the vault stores it: E.164 for a number, lower case\nfor an address."
+                  "description": "The identity as the database stores it: E.164 for a number, lower case\nfor an address."
                 },
                 "conversations": {
                   "type": "integer",
@@ -12731,7 +12731,7 @@
                 },
                 "timestamp": {
                   "type": "string",
-                  "description": "The instant the message was sent: RFC 3339 in UTC with a `Z`\nsuffix. A caller shows it in the account's time zone\n(`AccountProfileResponse.time_zone`); the vault stores nothing\nabout where the phone was."
+                  "description": "The instant the message was sent: RFC 3339 in UTC with a `Z`\nsuffix. A caller shows it in the account's time zone\n(`AccountProfileResponse.time_zone`); the database stores nothing\nabout where the phone was."
                 }
               }
             },
@@ -12829,7 +12829,7 @@
                 "id": {
                   "type": "integer",
                   "format": "int64",
-                  "description": "Saved search id, unique across the vault."
+                  "description": "Saved search id, unique across the database."
                 },
                 "kind": {
                   "type": "string",
@@ -12949,7 +12949,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "Linked vault contact id: when the handle is on a Contact, or — for a\nparticipant with no handle — the contact the vault bound the name to\ndirectly, since that is the only place the link is recorded for\nthem. Matches the `id` every other contact shape uses, so a caller\ncan compare the two without converting either."
+            "description": "Linked contact id: when the handle is on a Contact, or — for a\nparticipant with no handle — the contact the server bound the name to\ndirectly, since that is the only place the link is recorded for\nthem. Matches the `id` every other contact shape uses, so a caller\ncan compare the two without converting either."
           },
           "handle": {
             "type": [
@@ -12960,7 +12960,7 @@
           },
           "name": {
             "type": "string",
-            "description": "What to show for this person. Never empty — the vault falls back to\nthe handle when nothing else names them, and to the name alone for\nsomeone a backup named without recording any address."
+            "description": "What to show for this person. Never empty — the server falls back to\nthe handle when nothing else names them, and to the name alone for\nsomeone a backup named without recording any address."
           },
           "service": {
             "type": [
@@ -12973,7 +12973,7 @@
       },
       "Problem": {
         "type": "object",
-        "description": "An RFC 7807 problem document: the body of every failure the vault answers,\nserved as `application/problem+json` (`docs/architecture/http-api.md`).\n\n`type` is the URL of the page describing this kind of failure, one page per\ntype, or `about:blank` for an internal error. A validation failure carries\n`errors`, every field that failed, in place of `detail`. Every problem\nrepeats the response's `x-request-id` as `request_id`, so the person\nreading the failure and the operator reading the log are looking at the\nsame request.\n\nThe extension members belong to one type each: `word` and `did_you_mean`\nto `search-query-invalid`, `retry_after` to `rate-limited`.",
+        "description": "An RFC 7807 problem document: the body of every failure the server answers,\nserved as `application/problem+json` (`docs/architecture/http-api.md`).\n\n`type` is the URL of the page describing this kind of failure, one page per\ntype, or `about:blank` for an internal error. A validation failure carries\n`errors`, every field that failed, in place of `detail`. Every problem\nrepeats the response's `x-request-id` as `request_id`, so the person\nreading the failure and the operator reading the log are looking at the\nsame request.\n\nThe extension members belong to one type each: `word` and `did_you_mean`\nto `search-query-invalid`, `retry_after` to `rate-limited`.",
         "required": [
           "type",
           "title",
@@ -13076,15 +13076,15 @@
               "string",
               "null"
             ],
-            "description": "The password being replaced. Required when the vault owner changes its\nown; nobody else sends it."
+            "description": "The password being replaced. Required when the owner changes its\nown; nobody else sends it."
           },
           "password": {
             "type": "string",
-            "description": "The new password. Empty clears a user account's password; the vault\nowner's must be one character or more."
+            "description": "The new password. Empty clears a user account's password; the\nowner's must be one character or more."
           },
           "password_confirmation": {
             "type": "string",
-            "description": "The new password typed a second time. The vault, not the screen,\nrefuses a pair that differs, so the checks run in one fixed order:\ncurrent password, then the pair, then that the new one differs from the\ncurrent one."
+            "description": "The new password typed a second time. The server, not the screen,\nrefuses a pair that differs, so the checks run in one fixed order:\ncurrent password, then the pair, then that the new one differs from the\ncurrent one."
           }
         }
       },
@@ -13134,7 +13134,7 @@
           "id": {
             "type": "integer",
             "format": "int64",
-            "description": "Saved search id, unique across the vault."
+            "description": "Saved search id, unique across the database."
           },
           "kind": {
             "type": "string",
@@ -13267,7 +13267,7 @@
               "null"
             ],
             "format": "int64",
-            "description": "Conversation that holds the attachment. Like the two fields after it,\nabsent when the vault owner reads another account's storage: which\nconversation a file is in, and who it is with, is the holder's."
+            "description": "Conversation that holds the attachment. Like the two fields after it,\nabsent when the owner reads another account's storage: which\nconversation a file is in, and who it is with, is the holder's."
           },
           "conversation_title": {
             "type": [
@@ -13304,7 +13304,7 @@
       },
       "UpdateAccountRequest": {
         "type": "object",
-        "description": "Body for changing an account. Omitted fields are left alone. The name,\nzone and identities are set by the account or by the vault owner; the\ndisabled flag and the three permissions are the vault owner's alone.",
+        "description": "Body for changing an account. Omitted fields are left alone. The name,\nzone and identities are set by the account or by the owner; the\ndisabled flag and the three permissions are the owner's alone.",
         "properties": {
           "can_delete": {
             "type": [
@@ -13524,14 +13524,14 @@
       },
       "UpdateVaultSettingsRequest": {
         "type": "object",
-        "description": "Body for changing the vault's settings. Omitted fields are left alone.",
+        "description": "Body for changing the server settings. Omitted fields are left alone.",
         "properties": {
           "public_registration": {
             "type": [
               "boolean",
               "null"
             ],
-            "description": "Let anyone reaching the vault create their own account, or stop them."
+            "description": "Let anyone reaching the server create their own account, or stop them."
           }
         }
       },
@@ -13551,7 +13551,7 @@
       },
       "Vault": {
         "type": "object",
-        "description": "The vault's state, for the screen a logged-out person sees.",
+        "description": "The state of this Message Crate, for the screen a logged-out person sees.",
         "required": [
           "state",
           "version",
@@ -13561,34 +13561,34 @@
           "schema_fingerprint": {
             "type": "integer",
             "format": "int64",
-            "description": "The Schema Fingerprint, the number this vault stamps into its database."
+            "description": "The Schema Fingerprint, the number this server stamps into its database."
           },
           "state": {
             "$ref": "#/components/schemas/VaultState",
-            "description": "`unclaimed` shows Create Vault Owner alone; `closed` shows Login alone;\n`open` shows Login and Create Account."
+            "description": "`unclaimed` shows Create Owner alone; `closed` shows Login alone;\n`open` shows Login and Create Account."
           },
           "version": {
             "type": "string",
-            "description": "This vault's Build: its Product Version, plus the commit it was built\nfrom unless it is a release. An app compares the Product Version with\nits own and says so when they differ; the vault serves it either way."
+            "description": "The server's Build: its Product Version, plus the commit it was built\nfrom unless it is a release. An app compares the Product Version with\nits own and says so when they differ; the server serves it either way."
           }
         }
       },
       "VaultSettings": {
         "type": "object",
-        "description": "The vault settings the owner controls.",
+        "description": "The server settings the owner controls.",
         "required": [
           "public_registration"
         ],
         "properties": {
           "public_registration": {
             "type": "boolean",
-            "description": "Anyone reaching the vault may create their own account."
+            "description": "Anyone reaching the server may create their own account."
           }
         }
       },
       "VaultState": {
         "type": "string",
-        "description": "What state a vault is in, from outside.",
+        "description": "What state a Message Crate is in, from outside.",
         "enum": [
           "unclaimed",
           "closed",
@@ -13597,7 +13597,7 @@
       },
       "VaultStorage": {
         "type": "object",
-        "description": "What the whole vault holds, summed over every account.",
+        "description": "What the whole database holds, summed over every account.",
         "required": [
           "message_count",
           "conversation_count",
@@ -13640,7 +13640,7 @@
           "fts_bytes": {
             "type": "integer",
             "format": "int64",
-            "description": "Bytes the full-text search index takes, measured, for the whole\nvault. It is one shared structure, so there is no per-account figure."
+            "description": "Bytes the full-text search index takes, measured, for the whole\ndatabase. It is one shared structure, so there is no per-account figure."
           },
           "message_count": {
             "type": "integer",
@@ -13684,7 +13684,7 @@
     },
     {
       "name": "Accounts",
-      "description": "The vault's accounts: the owner manages them, and each account reads and writes its own, API tokens included"
+      "description": "The accounts: the owner manages them, and each account reads and writes its own, API tokens included"
     },
     {
       "name": "Import",
@@ -13728,7 +13728,7 @@
     },
     {
       "name": "Vault",
-      "description": "The vault's own state: claiming it, and what a logged-out visitor may do"
+      "description": "The state of this Message Crate: claiming it, and what a logged-out visitor may do"
     }
   ]
 }

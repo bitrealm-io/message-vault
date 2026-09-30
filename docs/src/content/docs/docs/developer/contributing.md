@@ -1,9 +1,9 @@
 ---
 title: Contributing
-description: Set up a development environment, run tests, and open pull requests for Message Vault.
+description: Set up a development environment, run tests, and open pull requests for Message Crate.
 ---
 
-Thanks for helping out. This page covers the development environment, running the code, and how pull requests work. It assumes basic Git. For how the code fits together, start with [Vault Design](/docs/developer/vault-design/); the [User Guide](/docs/user/) explains the product itself.
+Thanks for helping out. This page covers the development environment, running the code, and how pull requests work. It assumes basic Git. For how the code fits together, start with [System Design](/docs/developer/design/); the [User Guide](/docs/user/) explains the product itself.
 
 ## Report bugs or request features
 
@@ -77,21 +77,21 @@ pipx install sqlite-web
 
 ### Fork and clone
 
-Fork the [Message Vault repo](https://github.com/messagecrate/message-crate) on GitHub and clone your fork. If you have never forked a repo before, GitHub has [a guide](https://docs.github.com/en/pull-requests/how-tos/work-with-forks/fork-a-repo).
+Fork the [Message Crate repo](https://github.com/messagecrate/message-crate) on GitHub and clone your fork. If you have never forked a repo before, GitHub has [a guide](https://docs.github.com/en/pull-requests/how-tos/work-with-forks/fork-a-repo).
 
 When forking, you only need the default `main` branch.
 
 ## Build and run
 
-You run two processes at the same time: the vault, and a UI that talks to it. The vault is the HTTP API and the SQLite database; it has to be running before anyone can log in.
+You run two processes at the same time: the server, and a UI that talks to it. The server is the HTTP API and the SQLite database; it has to be running before anyone can log in.
 
 Work from the repository root in two terminals. The first server compile takes several minutes.
 
-### Start the vault (terminal 1)
+### Start the server (terminal 1)
 
 `--reset-demo` deletes `data/` and loads a sample inbox. Use it on the first run, or whenever you want a fresh sample inbox.
 
-```bash title="Start the vault"
+```bash title="Start the server"
 ./scripts/run-vault-dev.sh --reset-demo
 ```
 
@@ -99,24 +99,24 @@ Leave this terminal running. The API listens at **http://127.0.0.1:8080**.
 
 To browse the tables while developing, add `--sqlweb` (needs `sqlite-web` from the previous step). That UI is **http://127.0.0.1:8081**.
 
-### Vault flags
+### Server flags
 
 The first run uses `--reset-demo`. Later sessions, start with no flags so `data/` stays:
 
-```bash title="Start the vault, keep data"
+```bash title="Start the server, keep data"
 ./scripts/run-vault-dev.sh
 ```
 
 `--reset` wipes `data/` and starts empty (no sample inbox). Don't combine `--reset` and `--reset-demo`. `--sqlweb` works with any of these.
 
-`--reset` alone leaves the vault **unclaimed**, so the first screen is Create Vault Owner — which is the only way to reach that screen in dev. Add `--owner` to claim it as `admin`/`admin` instead and land on the login. `--reset-demo` claims the vault itself, so it rejects `--owner`.
+`--reset` alone leaves Message Crate **unclaimed**, so the first screen is Create Owner — which is the only way to reach that screen in dev. Add `--owner` to claim it as `admin`/`admin` instead and land on the login. `--reset-demo` claims it itself, so it rejects `--owner`.
 
-### Start the vault on Postgres (optional)
+### Start the server on Postgres (optional)
 
 Same flags as the SQLite script, against the compose Postgres on
 `127.0.0.1:5432`. Needs Docker. There is no `--sqlweb`.
 
-```bash title="Start the vault on Postgres"
+```bash title="Start the server on Postgres"
 ./scripts/run-vault-pg-dev.sh --reset-demo
 ```
 
@@ -135,7 +135,7 @@ Install the frontend packages once, then start the Vite UI. Vite is the local we
 cd web && npm ci && npm run dev
 ```
 
-Open **http://localhost:5173**. Log in as username `demo` with an empty password. That account holds invented messages and can do everything a real account can, so import and other writes are testable on it; `./scripts/run-vault-dev.sh --reset-demo` puts it back. Logging in as `admin` with the password `admin` reaches the same vault as its owner, which manages accounts and reads no messages.
+Open **http://localhost:5173**. Log in as username `demo` with an empty password. That account holds invented messages and can do everything a real account can, so import and other writes are testable on it; `./scripts/run-vault-dev.sh --reset-demo` puts it back. Logging in as `admin` with the password `admin` reaches the same Message Crate as its owner, which manages accounts and reads no messages.
 
 Later sessions, skip `npm ci` unless `web/package-lock.json` changed.
 
@@ -158,25 +158,25 @@ For a release-shaped desktop binary (faster on real backups, or when packaging i
 
 The script runs `cargo tauri build` and then renames the installers under `src-tauri/target/release/bundle/` from `Message Vault_…` to `message_vault_<version>_<arch>`, the same names a release carries. It is not for day-to-day UI work — it doesn't reload. Use `cargo tauri dev` for that.
 
-### Serve the website from the vault (optional)
+### Serve the website from the server (optional)
 
-Vite is the usual UI. To have the vault itself serve the website at **http://127.0.0.1:8080**:
+Vite is the usual UI. To have the server itself serve the website at **http://127.0.0.1:8080**:
 
 ```bash title="Build the website into static/"
 ./scripts/build-static.sh
 ```
 
-That copies `web/dist` into `static/`. Don't run the host vault and the [Docker](/docs/developer/docker/) Compose stack at the same time; both use port 8080.
+That copies `web/dist` into `static/`. Don't run the host server and the [Docker](/docs/developer/docker/) Compose stack at the same time; both use port 8080.
 
 ### Stopping and restarting
 
-Ctrl+C in terminal 1 stops the vault (and the SQLite UI if it was started). Ctrl+C in terminal 2 stops the website or the desktop app.
+Ctrl+C in terminal 1 stops the server (and the SQLite UI if it was started). Ctrl+C in terminal 2 stops the website or the desktop app.
 
 After edits under `crates/vault/server/`, restart terminal 1. After edits under `web/` or `src-tauri/`, the UI usually reloads on its own. Restart `cargo tauri dev` if it doesn't.
 
 ## Make code changes
 
-Rust doc comments and utoipa annotations follow the [Rust doc style](/docs/developer/rustdoc-style/) guide. If you change the vault server's command line, regenerate its reference page:
+Rust doc comments and utoipa annotations follow the [Rust doc style](/docs/developer/rustdoc-style/) guide. If you change the server's command line, regenerate its reference page:
 
 ```bash title="regenerate the server CLI page"
 cargo run -p message-vault-server -- dump-cli-docs --output docs/src/content/docs/docs/developer/reference/server-cli.md
@@ -200,7 +200,7 @@ Each commit should be one idea. Don't mix a bug fix with a rename, or a feature 
 
 Prefer `feat:`, `fix:`, or `docs:` at the start of the subject when it fits; other prefixes are fine too. The subject should say what changed. Add a short body when the reason isn't obvious, and mention the issue (`Ref: #123`).
 
-Never commit passwords, vault keys, certificates, credential `.env` files, or real message backups. Tests use committed fixtures under `crates/*/tests/fixtures/`.
+Never commit passwords, API tokens, certificates, credential `.env` files, or real message backups. Tests use committed fixtures under `crates/*/tests/fixtures/`.
 
 ### Example
 
@@ -220,22 +220,22 @@ Add `upstream` once. For later branches: `git fetch upstream`, then `git checkou
 
 Most first PRs touch one of these:
 
-- **Vault API or database** — `crates/vault/server/` and `schema/sql/`
+- **Server API or database** — `crates/vault/server/` and `schema/sql/`
 - **Website or desktop screens** — `web/`
 - **Import from a phone backup** — `crates/exporters/` and, for the native file dialogs, `src-tauri/`
 - **This guidebook** — `docs/src/content/docs/`
 
 Don't start in `web-next/`; that's an old UI still in the tree.
 
-The full folder list is on [Vault Design → Directory map](/docs/developer/vault-design/#directory-map).
+The full folder list is on [System Design → Directory map](/docs/developer/design/#directory-map).
 
-Once the vault is running, [Vault Design](/docs/developer/vault-design/) also lists the programs a build creates and shows how the website and the vault talk to each other.
+Once the server is running, [System Design](/docs/developer/design/) also lists the programs a build creates and shows how the website and the server talk to each other.
 
-Phone backups do not go into the vault as raw files. A converter reads the backup and writes a folder of chat files (one file per conversation, one message per line). Import loads that folder into the vault. [Message Transfer](/docs/developer/message-transfer/) explains that path and which converters are ready to use.
+Phone backups do not go into Message Crate as raw files. A converter reads the backup and writes a folder of chat files (one file per conversation, one message per line). Import loads that folder into the running server. [Message Transfer](/docs/developer/message-transfer/) explains that path and which converters are ready to use.
 
 ### Preview the guidebook
 
-Guidebook pages live under `docs/src/content/docs/vault/` and show up at paths like `/docs/user/` and `/docs/developer/`. The home page at `/` comes from `docs/src/pages/index.astro`. The published site is **https://messagecrate.app/**.
+Guidebook pages live under `docs/src/content/docs/docs/` and show up at paths like `/docs/user/` and `/docs/developer/`. The home page at `/` comes from `docs/src/pages/index.astro`. The published site is **https://messagecrate.app/**.
 
 To preview locally:
 
@@ -307,7 +307,7 @@ gh pr create --base main --title "feat: add support for x" --body "Ref: #123"
 
 ## License
 
-Message Vault is source-available, not open source. It is distributed under the Fair Core License 1.0 (`FCL-1.0-ALv2`), which lets you read, change, and self-host the code but not sell a competing product built on it; each version becomes Apache 2.0 two years after release. Contributions are made under that same license. See [LICENSE.md](https://github.com/messagecrate/message-crate/blob/main/LICENSE.md) for the full text.
+Message Crate is source-available, not open source. It is distributed under the Fair Core License 1.0 (`FCL-1.0-ALv2`), which lets you read, change, and self-host the code but not sell a competing product built on it; each version becomes Apache 2.0 two years after release. Contributions are made under that same license. See [LICENSE.md](https://github.com/messagecrate/message-crate/blob/main/LICENSE.md) for the full text.
 
 ## Release
 

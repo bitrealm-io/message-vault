@@ -24,7 +24,7 @@ You can also provide a folder of multiple XML files. The desktop app combines th
 
 ## What Import does with it
 
-The desktop app reads SMS and MMS from the XML, resolves contacts when you provide them, and stores messages in the vault. MMS attachments — photos, videos, audio — follow the attachment setting on the Import form.
+The desktop app reads SMS and MMS from the XML, resolves contacts when you provide them, and stores messages in Message Crate. MMS attachments — photos, videos, audio — follow the attachment setting on the Import form.
 
 ## Known limitations
 

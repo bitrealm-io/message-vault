@@ -162,7 +162,7 @@ pub fn run(
     mut on_progress: Option<&mut ProgressFn<'_>>,
 ) -> Result<PullReport> {
     if cfg.key.trim().is_empty() {
-        bail!("vault key is required");
+        bail!("API key is required");
     }
     if cfg.out_dir.as_os_str().is_empty() {
         bail!("output directory is required");

@@ -1,8 +1,8 @@
 # One way to fetch data in the web app
 
-The web app fetches vault data through one mechanism: TanStack Query, calling
+The web app fetches server data through one mechanism: TanStack Query, calling
 route functions that live in `web/src/lib/vaultApi.ts`. Those functions do
-nothing but talk to the vault — no caching, no cross-component notification, no
+nothing but talk to the server — no caching, no cross-component notification, no
 React hooks inside them. Their response types are generated from
 `docs/src/assets/openapi.json` rather than written by hand. Every cache entry is
 named with the logged-in account, so one account cannot be served another
@@ -15,7 +15,7 @@ this decision exists to prevent.
 ## Why
 
 Before this decision the web app had six separate mechanisms for fetching and
-remembering vault data, and each one solved the same four problems its own way:
+remembering server data, and each one solved the same four problems its own way:
 remember an answer, avoid firing an identical request twice at once, tell other
 components when the answer changed, and track loading and error state.
 
@@ -39,7 +39,7 @@ whenever the logged-in account changed. It did that in two places — lines
 205–208 when someone logs in, lines 255–258 when someone logs out — and both
 copies of the list named the same four mechanisms and omitted the fifth.
 `savedSearches.ts` holds its list in a module-level `cached` variable and
-returns it without asking the vault whenever a caller passes no abort signal,
+returns it without asking the server whenever a caller passes no abort signal,
 which `useSavedSearches` does. The result: log in as one account, view the
 sidebar, log out, log in as a different account, and the sidebar shows the
 first account's Saved Searches until someone adds, renames, or deletes one, or
@@ -105,7 +105,7 @@ passing, because the comparison stops matching rather than failing.
 
 Running the real route functions against a fake HTTP server, such as MSW, would
 have caught that. It was rejected because the fake server is a second
-description of the API to keep in step with the vault. Tests fake the named
+description of the API to keep in step with the server. Tests fake the named
 route functions instead, and the URLs those functions build are asserted in
 `vaultApi.test.ts` — one file to keep honest rather than eleven.
 
@@ -117,7 +117,7 @@ nothing — the opposite of the pattern this decision removes.
 
 ## Consequences
 
-- `web/src/lib/vaultApi.ts` holds one function per vault route. Its generated
+- `web/src/lib/vaultApi.ts` holds one function per server route. Its generated
   companion, `web/src/lib/vaultApi.types.ts`, is checked in. `scripts/check-pr.sh`
   regenerates the types and fails on any diff, mirroring what
   `crates/vault/server/src/openapi.rs:337` already does for the JSON document.
@@ -126,7 +126,7 @@ nothing — the opposite of the pattern this decision removes.
 - `web/src/lib/api.ts` keeps `apiClient`, the base URL, and the Bearer header.
   It is the transport that `vaultApi.ts` uses and is not called from screens.
 - Response shapes are deleted from `web/src/lib/types.ts` and come from the
-  generated file. Shapes that describe the interface rather than a vault
+  generated file. Shapes that describe the interface rather than a server
   response stay.
 - `useResource`, `usePagedList`, `nameCollection`, `contactDetailCache`, and the
   four `mv-*-changed` events are removed. `savedSearches.ts`, `contactGroups.ts`,
@@ -166,7 +166,7 @@ nothing — the opposite of the pattern this decision removes.
   generated file, because formatting it would make it differ from what the
   generator produces and the drift check compares the two byte for byte.
 - No part of this work keeps an existing interface for compatibility. Message
-  Vault has no users, so routes, types, and module layouts change wherever a
+  Crate has no users, so routes, types, and module layouts change wherever a
   simpler result follows, and tests are rewritten to fit rather than preserved.
 - `CONTEXT.md` is unchanged. It holds the product's language and no
   implementation detail, and nothing here introduces a product concept.

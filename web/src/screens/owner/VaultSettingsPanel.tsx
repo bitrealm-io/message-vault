@@ -30,16 +30,16 @@ export function VaultSettingsPanel() {
   if (error) {
     return (
       <p className="text-[0.875rem] text-danger">
-        {apiErrorMessage(error, "Could not load vault settings.")}
+        {apiErrorMessage(error, "Could not load server settings.")}
       </p>
     );
   }
 
   return (
     <section>
-      <h3 className="m-0 text-text">Vault Settings</h3>
+      <h3 className="m-0 text-text">Server Settings</h3>
       <p className="mt-[0.35rem] text-[0.875rem] text-muted">
-        How this vault behaves, whoever is logged in.
+        How this Message Crate behaves, whoever is logged in.
       </p>
 
       <div className="mt-4 rounded-xl border border-border bg-elevated p-4">
@@ -48,7 +48,7 @@ export function VaultSettingsPanel() {
           disabled={save.isPending}
           onChange={(checked) => save.mutate(checked)}
         >
-          Let anyone reaching this vault create their own account
+          Let anyone who can reach this server create their own account
         </Checkbox>
         <p className="mt-2 text-[0.75rem] text-muted">
           Off: you create every account yourself, and the login screen offers only Login. On: the

@@ -1,14 +1,14 @@
 ---
 title: Developer
-description: Environment setup, releasing, vault design, message transfer, Docker, CLI tools, the HTTP API, formats, and instance internals.
+description: Environment setup, releasing, system design, message transfer, Docker, CLI tools, the HTTP API, formats, and instance internals.
 ---
 
-These pages are for people who compile the vault, run Compose, or call the HTTP API. The [User Guide](/docs/user/) is the try-it and import path.
+These pages are for people who compile the server, run Compose, or call the HTTP API. The [User Guide](/docs/user/) is the try-it and import path.
 
 - [Contributing](/docs/developer/contributing/) — environment setup, tests, pull requests
 - [Release](/docs/developer/release/) — how product versions ship
-- **Architecture** — [Vault Design](/docs/developer/vault-design/), [Message Transfer](/docs/developer/message-transfer/), [Common message](/docs/developer/architecture/common-message/)
-- [Docker](/docs/developer/docker/) — build the vault image from a checkout, and how that relates to the Docker Hub image
+- **Architecture** — [System Design](/docs/developer/design/), [Message Transfer](/docs/developer/message-transfer/), [Common message](/docs/developer/architecture/common-message/)
+- [Docker](/docs/developer/docker/) — build the server image from a checkout, and how that relates to the Docker Hub image
 - [HTTP API](/docs/developer/reference/api/) — tokens and import flow; [route reference](/docs/developer/rustdoc/http/)
 - [Rust crate docs](/docs/developer/rustdoc/) — `cargo doc` HTML for workspace crates (not the HTTP route list)
 - [Formats](/docs/developer/formats/) — converter capabilities and mapping tables

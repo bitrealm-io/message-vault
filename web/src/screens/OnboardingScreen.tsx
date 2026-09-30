@@ -372,7 +372,7 @@ export default function OnboardingScreen() {
               disabled={!canSubmit || busy}
               className="w-1/2"
             >
-              {busy ? "Saving…" : "Continue to vault"}
+              {busy ? "Saving…" : "Continue to Message Crate"}
             </AuthSubmitButton>
           </div>
         </div>

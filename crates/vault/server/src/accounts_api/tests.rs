@@ -509,7 +509,7 @@ async fn an_account_does_not_set_its_own_flags() {
         StatusCode::FORBIDDEN,
         "an account does not set its flags"
     );
-    assert!(sentence.contains("vault owner"), "{sentence}");
+    assert!(sentence.contains("only the owner"), "{sentence}");
 
     let row: Account = get_json(&state, &path, &owner.token).await;
     assert_eq!(row.preferred_name, None, "nothing was applied");

@@ -49,7 +49,7 @@ export function MessagesByAccountSection({ storage }: { storage: VaultStorage })
               </tr>
             ))}
             <tr className="border-t border-border">
-              <td className={`${tdClass} whitespace-nowrap font-semibold`}>Whole vault</td>
+              <td className={`${tdClass} whitespace-nowrap font-semibold`}>All accounts</td>
               <td className={`${tdClass} ${numberCell} font-semibold`}>
                 {storage.message_count.toLocaleString()}
               </td>

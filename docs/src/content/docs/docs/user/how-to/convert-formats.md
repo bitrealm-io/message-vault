@@ -1,14 +1,14 @@
 ---
 title: Convert formats
-description: Rewrite a folder of exported files into another format without re-reading the backup or touching the vault.
+description: Rewrite a folder of exported files into another format without re-reading the backup or touching Message Crate.
 ---
 
 **Convert** rewrites a folder of already-exported files into a different format.
-It reads files and writes files. It never opens a phone backup and never reads or changes the vault.
+It reads files and writes files. It never opens a phone backup and never reads or changes anything in Message Crate.
 Convert lives in the desktop app under **Settings → Convert**, because it is a tool most people use rarely rather than a third sidebar entry beside Import and Export.
 
 Happy-path [Import](/docs/user/import-from-a-backup/) never needs this step.
-Convert is for the case where an export already exists in one format and a copy in another format is wanted, for example a JSON Lines export from [Export](/docs/user/how-to/export-from-the-vault/) rewritten as MBOX for a mail client.
+Convert is for the case where an export already exists in one format and a copy in another format is wanted, for example a JSON Lines export from [Export](/docs/user/how-to/export-your-messages/) rewritten as MBOX for a mail client.
 
 ## Before starting
 
@@ -66,6 +66,6 @@ An empty folder, or one holding a previous export, works.
 
 ## Limitations
 
-- Attachments come across only when they are still present in the input folder, because Convert copies them rather than fetching them from the vault
+- Attachments come across only when they are still present in the input folder, because Convert copies them rather than fetching them from the server
 - Android XML can't store Apple-only fields such as message effects and Tapbacks, so JSON or JSON Lines is the right target when iMessage detail matters
-- Convert runs in the desktop app only, because the conversion runs in the desktop process rather than on the vault
+- Convert runs in the desktop app only, because the conversion runs in the desktop process rather than on the server

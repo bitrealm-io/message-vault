@@ -92,7 +92,7 @@ export default function AppHeader({
           className="box-border flex h-12 shrink-0 items-center px-3"
           style={{ width: `var(${LEFT_PANEL_WIDTH_VAR}, ${brandWidth}px)` }}
         >
-          <span className="text-[0.875rem] font-bold text-text">Message Vault</span>
+          <span className="text-[0.875rem] font-bold text-text">Message Crate</span>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-center px-3 py-2">
           <div className="w-full max-w-xl">

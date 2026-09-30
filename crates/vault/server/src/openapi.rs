@@ -13,8 +13,8 @@ use crate::server::AppState;
 #[derive(OpenApi)]
 #[openapi(
     info(
-        title = "Message Vault HTTP API",
-        description = "HTTP API for a local Message Vault. Bearer session tokens come from login. API tokens come from Settings → Account.",
+        title = "Message Crate HTTP API",
+        description = "HTTP API for a Message Crate server. Bearer session tokens come from login. API tokens come from Settings → Account.",
         license(
             name = "Fair Core License 1.0 (ALv2 future)",
             url = "https://github.com/messagecrate/message-crate/blob/main/LICENSE.md"
@@ -26,7 +26,7 @@ use crate::server::AppState;
     tags(
         (name = "Health", description = "Process liveness"),
         (name = "Session", description = "The logged-in credential: log in, check it, log out"),
-        (name = "Accounts", description = "The vault's accounts: the owner manages them, and each account reads and writes its own, API tokens included"),
+        (name = "Accounts", description = "The accounts: the owner manages them, and each account reads and writes its own, API tokens included"),
         (name = "Import", description = "Import Runs: start one, send JSON Lines batches into it, close it"),
         (name = "Export", description = "Export Runs: create one, page its messages, close it"),
         (name = "Assets", description = "Attachment bytes"),
@@ -37,7 +37,7 @@ use crate::server::AppState;
         (name = "Message tags", description = "Tags on conversations"),
         (name = "Saved searches", description = "Queries in the search language, saved under a name"),
         (name = "Search", description = "The words the search language accepts"),
-        (name = "Vault", description = "The vault's own state: claiming it, and what a logged-out visitor may do")
+        (name = "Vault", description = "The state of this Message Crate: claiming it, and what a logged-out visitor may do")
     )
 )]
 /// OpenAPI document definition assembled from the utoipa-annotated handlers.

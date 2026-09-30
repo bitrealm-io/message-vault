@@ -166,7 +166,7 @@ export default function ImportScreen() {
         throw new Error("no-op add");
       }
     } catch {
-      setIdentityAddError("The vault didn't add that address.");
+      setIdentityAddError("The server didn't add that address.");
     }
   };
 

@@ -52,7 +52,7 @@ describe("ResumeImportPanel", () => {
       ),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Upload to vault" }));
+    await user.click(screen.getByRole("button", { name: "Upload to Message Crate" }));
     expect(onResume).toHaveBeenCalledTimes(1);
     expect(onDiscard).not.toHaveBeenCalled();
 
@@ -148,7 +148,9 @@ describe("ResumeImportPanel", () => {
         "This import's folder is no longer at /home/u/message-vault/staging-260830. Discarding it lets you start a new one.",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Upload to vault" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Upload to Message Crate" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Start over" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Discard this import" }));
@@ -195,7 +197,7 @@ describe("ResumeImportPanel", () => {
     expect(screen.getByText("The staged files could not be checked")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Message Vault could not check /home/u/message-vault/staging-260830. Open Import again to check once more, or discard this import to start a new one.",
+        "Message Crate could not check /home/u/message-vault/staging-260830. Open Import again to check once more, or discard this import to start a new one.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/gone/)).not.toBeInTheDocument();
@@ -243,7 +245,9 @@ describe("ResumeImportPanel", () => {
         "The import is still open here, but the settings it was started with are not readable. Discarding it lets you start a new one.",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Upload to vault" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Upload to Message Crate" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Start over" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Discard this import" }));

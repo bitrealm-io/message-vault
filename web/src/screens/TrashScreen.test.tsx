@@ -309,7 +309,7 @@ describe("TrashScreen", () => {
 
       const dialog = await screen.findByRole("dialog", { name: "Delete this conversation?" });
       expect(
-        within(dialog).getByText(/Deletes Ada Lovelace and its 5 messages from your vault/),
+        within(dialog).getByText(/Deletes Ada Lovelace and its 5 messages from your Message Crate/),
       ).toBeTruthy();
       // Nothing is sent until the dialog is confirmed.
       expect(deleteConversationMock).not.toHaveBeenCalled();

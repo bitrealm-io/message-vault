@@ -1,6 +1,6 @@
 # Contacts, identities and messages
 
-The people model: who the vault knows, how they are reached, and how
+The people model: who Message Crate knows, how they are reached, and how
 conversations and messages attach to them.
 
 ## Two words for one thing
@@ -41,7 +41,7 @@ allowed, and a crow's foot means many.
 | Message is held at Identity | The account holder's own address on this message: the one it was sent from, or the one it was received at (`messages.owner_handle_id`). Set from the backup, sent or received. Empty when the backup names no owner. The identity need not be one of the account's. |
 | Message was sent from Identity | Set for a received message. Empty for a message the account owner sent, and for one whose source recorded no sender (`messages.sender_handle_id`). A message never points at a contact; it reaches one through its sender's identity. |
 | Conversation is with Identity | Only a one-to-one conversation is with an identity, and an identity has at most one such conversation. A group is with nobody; its people are its participants. |
-| Contact is a member of Contact Group | Many to many. Unknown is a Contact Group the vault computes; nothing is added to it by hand. |
+| Contact is a member of Contact Group | Many to many. Unknown is a Contact Group the server computes; nothing is added to it by hand. |
 
 ## Rules
 
@@ -61,14 +61,14 @@ is not in "No group". Why: a contact listed under Unknown whose own groups
 read "No groups" says two things at once.
 
 **A contact with no preferred name goes by its first identity, in italics.**
-The vault sends the name empty rather than a placeholder such as `(unknown)`,
+The server sends the name empty rather than a placeholder such as `(unknown)`,
 and sends `unknown` beside it, computed by the one rule above. The screen
 shows the identity where the name would be. Why: a list of rows that all read
 `(unknown)` cannot be told apart, and the italics keep an address from reading
 as a name someone gave the contact.
 
 **A group conversation is not a person.** A source gives a group an id of its
-own, such as `chat1000000005`. The vault stores it as the conversation's chat
+own, such as `chat1000000005`. The server stores it as the conversation's chat
 handle (`conversations.chat_handle_id`) so the same group is recognised on
 the next import. It gets no contact and is nobody's identity. The same holds
 for the `orphaned` conversation. Only a one-to-one conversation's chat handle
@@ -101,8 +101,8 @@ backup with a different spelling does not. See
 
 **The address book is a file for editing contacts, not a source of them.**
 Contacts and identities arrive with message imports; the address book is
-how a person takes what the vault holds out to a spreadsheet, corrects it,
-and puts it back. The file is the vault's own CSV, one row per identity:
+how a person takes what the account holds out to a spreadsheet, corrects it,
+and puts it back. The file is Message Crate's own CSV, one row per identity:
 `contact_id, display_name, groups, service, handle_type, identity`. Export
 fills `contact_id` from `contacts.id`; on load, rows that share an id are one
 contact, a blank id makes a new contact, and any other text groups new rows
@@ -111,9 +111,9 @@ Group names, separated by `;`) describe the contact, so they repeat on each
 of its rows and must agree or be blank; two rows of one contact that disagree
 refuse the load. `service` and `handle_type` take the values the `handles`
 table stores. Why: an address book from a phone puts every number and email
-on the card into the vault as a text-message identity whether or not a
+on the card into the database as a text-message identity whether or not a
 message ever used it, cannot say which service an address belongs to, and
-carries numbers formatted every way at once. A file the vault writes itself
+carries numbers formatted every way at once. A file Message Crate writes itself
 has none of those problems, and a spreadsheet is the right tool for naming
 fifty Unknowns at once. Rejected: reading vCard or a vendor's CSV directly.
 A conversion from vCard to this file, for editing before a load, is
@@ -132,7 +132,7 @@ which nothing could ever reach. A loaded name replaces one an import
 supplied, as a typed name does, because the file is the person typing. A
 group name that matches no Contact Group creates one. Why: the export can be
 a subset (a search, the checked rows), so a file that spoke for the whole
-vault would delete everyone it did not mention, and a file that could only
+account would delete everyone it did not mention, and a file that could only
 add would leave a wrongly linked address unfixable from the sheet.
 
 **A load is strict, and refuses whole.** A phone is keyed by the one rule
@@ -145,7 +145,7 @@ that matches no message and has to be found later. A partial load would leave
 the person unsure which rows went in, and a load is cheap to repeat.
 
 **An identity moves only from a contact the load may change.** When a row
-puts an identity on one contact and the vault has it on another, it moves to
+puts an identity on one contact and the database has it on another, it moves to
 the file's contact if the current holder is nameless (an Unknown an import
 made) or is itself in the file. Taking an identity from a named contact the
 file does not mention refuses the load, naming the row, the identity and
@@ -186,9 +186,9 @@ applies it for the conversation list, the message pane, and Export.
 **Deleting a contact keeps its conversations.** The name and details go. The
 identities stay in their conversations and the person becomes Unknown again.
 
-**The account holder is never a participant.** The vault is always read from
+**The account holder is never a participant.** An account is always read from
 the account holder's side: every conversation in an account is the holder's
-own, so the vault knows they are in it without listing them. Participants are
+own, so the server knows they are in it without listing them. Participants are
 the other people. Which of the holder's identities a message used is recorded
 on the message itself, as the identity it is held at, taken from the message
 when the backup records it per message (iMessage) and from the backup's header
@@ -251,7 +251,7 @@ clutter the person never asked for.
 ## One group chat, drawn out
 
 A group called Trip with two other people. Ada has a phone number and an
-email address on one contact. The second person has no name yet, so the vault
+email address on one contact. The second person has no name yet, so the server
 counts them in Unknown. The group's id stays on the conversation and touches
 nothing else.
 

@@ -140,7 +140,7 @@ mod tests {
         assert!(classified(classify_retry(&e)));
         let e = anyhow::Error::from(VaultHttpError::new(413, "import rejected: HTTP 413"));
         assert!(classified(classify_retry(&e)));
-        let e = anyhow::Error::from(VaultHttpError::new(401, "invalid vault key"));
+        let e = anyhow::Error::from(VaultHttpError::new(401, "invalid API key"));
         assert!(classified(classify_retry(&e)));
     }
 
@@ -148,7 +148,7 @@ mod tests {
     fn an_unreadable_2xx_is_permanent_because_the_vault_did_the_work() {
         let e = anyhow::Error::from(VaultHttpError::new(
             200,
-            "could not read the vault's answer to import batch",
+            "could not read the server's answer to import batch",
         ));
         assert!(classified(classify_retry(&e)));
     }
@@ -167,7 +167,7 @@ mod tests {
         assert!(classified(classify_retry(&anyhow::Error::from(
             AuthError::Forbidden {
                 status: 403,
-                body: "username does not match vault key".into(),
+                body: "username does not match API key".into(),
             }
         ))));
         assert!(classified(classify_retry(&anyhow::Error::from(

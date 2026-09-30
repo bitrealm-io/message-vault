@@ -10,13 +10,13 @@ Administrators also see a **Users** tab, and the desktop app adds **System** and
 
 - **Username** — read-only account id used for login
 - **Password** — change password when local auth is enabled
-- **API tokens** — named Bearer secrets for programs that call the vault's [HTTP API](/docs/developer/reference/api/). When creating one, choose **import**, **export**, or **both**. Each secret is shown once at creation; revoke when finished. Logging in to the website uses a separate session token that changes on each login and does not revoke these tokens. Desktop **Import** and **Export** do not need an API token; they use the logged-in session.
+- **API tokens** — named Bearer secrets for programs that call the server's [HTTP API](/docs/developer/reference/api/). When creating one, choose **import**, **export**, or **both**. Each secret is shown once at creation; revoke when finished. Logging in to the website uses a separate session token that changes on each login and does not revoke these tokens. Desktop **Import** and **Export** do not need an API token; they use the logged-in session.
 - **Danger zone** — delete all messages for the account, or delete the account (the demo account cannot be deleted)
 
 ## Profile
 
 - **Display name** — name shown for messages you sent
-- **Time zone** — the zone every message time, day and year is shown in, and the one `date:` searches count days in. It is chosen at profile setup, starting from the browser's zone or from the zone the vault owner set for the account, and can be changed here at any time. Typing in the field finds a zone by city, country, abbreviation or offset: `dallas`, `germany`, `cst` and `utc-6` all work
+- **Time zone** — the zone every message time, day and year is shown in, and the one `date:` searches count days in. It is chosen at profile setup, starting from the browser's zone or from the zone the owner set for the account, and can be changed here at any time. Typing in the field finds a zone by city, country, abbreviation or offset: `dallas`, `germany`, `cst` and `utc-6` all work
 - **My Identities** — your phone numbers and emails. Import uses them to determine which messages belong to you
 
 ## Storage
@@ -36,7 +36,7 @@ Desktop app only.
 ## Convert
 
 Desktop app only.
-Convert rewrites a folder of exported files into another format, without reading a backup or the vault: an input folder, a different output folder, and the output format.
+Convert rewrites a folder of exported files into another format, without reading a backup or the server: an input folder, a different output folder, and the output format.
 Steps and the formats it reads and writes: [Convert formats](/docs/user/how-to/convert-formats/).
 
 ## Appearance

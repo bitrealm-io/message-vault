@@ -1,33 +1,33 @@
 ---
 title: Message Transfer
-description: How a phone backup becomes chat files, how those files load into the vault, and which converters to use.
+description: How a phone backup becomes chat files, how those files load into Message Crate, and which converters to use.
 ---
 
-A phone backup is a copy of chats sitting on a computer. The vault is a separate program with its own database. The backup does not become vault data until a converter reads it and import loads the result.
+A phone backup is a copy of chats sitting on a computer. The server is a separate program with its own database. The backup does not become data in that database until a converter reads it and import loads the result.
 
-[Vault Design](/docs/developer/vault-design/) shows the folders in this project and how the website talks to the vault. Which fields each converter fills in is on [Converter capabilities](/docs/developer/formats/). Every column in the chat files is on [Export structure](/docs/developer/reference/export-structure/).
+[System Design](/docs/developer/design/) shows the folders in this project and how the website talks to the server. Which fields each converter fills in is on [Converter capabilities](/docs/developer/formats/). Every column in the chat files is on [Export structure](/docs/developer/reference/export-structure/).
 
-## How chats get into the vault
+## How chats get into Message Crate
 
 1. A converter reads the backup. In the desktop app this runs as the first step of **Import**.
 2. The converter writes a folder of chat files, plus photos and other attachments in an `attachments/` folder.
-3. Import loads that folder into a vault that is already running. In the desktop app this is the **Import** screen, which uses the `vault-push` library.
+3. Import loads that folder into a server that is already running. In the desktop app this is the **Import** screen, which uses the `vault-push` library.
 
 ```mermaid
 flowchart LR
   backups[Phone backup] --> converter[Converter]
   converter --> folder[Chat files folder]
   folder --> import[Import]
-  import --> vault[Vault]
+  import --> server[Message Crate]
 ```
 
 ## How chats come back out
 
-Export copies chats from a running vault into a new folder of the same chat files. In the desktop app this is the **Export** screen, which uses the `vault-pull` library.
+Export copies chats from a running server into a new folder of the same chat files. In the desktop app this is the **Export** screen, which uses the `vault-pull` library.
 
 ```mermaid
 flowchart LR
-  vault[Vault] --> export[Export]
+  server[Message Crate] --> export[Export]
   export --> folder[Chat files folder]
 ```
 
@@ -45,7 +45,7 @@ Pictures and other media sit next to those files in `attachments/`.
 {"guid":"msg-1","timestamp_unix_ms":1400773261000,"direction":"outgoing","service":"sms","text":"Hello"}
 ```
 
-The vault only reads this current layout (schema version 4). A version-3 file is refused by name, never upgraded. The full field list is on [Export structure](/docs/developer/reference/export-structure/).
+The server only reads this current layout (schema version 4). A version-3 file is refused by name, never upgraded. The full field list is on [Export structure](/docs/developer/reference/export-structure/).
 
 ## Converters for full backups
 
@@ -68,12 +68,12 @@ Some files come from tools that were not built for this project, or that drop me
 | OpenExtract | `openextract-exporter` | [Converter capabilities](/docs/developer/formats/) |
 | SMS Backup+ | `sms-backup-plus-exporter` | [File layout](/docs/developer/formats/sms-backup-plus/format/) · [Field mapping](/docs/developer/formats/sms-backup-plus/mapping/) |
 
-## Libraries that talk to a running vault
+## Libraries that talk to a running server
 
-These do not read a phone backup. They load or save the chat-file folder, or change a folder that is already in Message Vault's format. The desktop app links them directly; none is a command a person runs.
+These do not read a phone backup. They load or save the chat-file folder, or change a folder that is already in Message Crate's format. The desktop app links them directly; none is a command a person runs.
 
 | Library | What it does |
 |---------|----------------|
-| `vault-push` | Loads a chat-file folder into a running vault. Used by **Import**. |
-| `vault-pull` | Writes a chat-file folder from a running vault. Used by **Export**. |
-| `message-reexport` | Turns an existing Message Vault export folder into another format, such as CSV or mail. Used by **Export** for any format other than JSON Lines. See [Convert an existing export](/docs/developer/formats/convert/). |
+| `vault-push` | Loads a chat-file folder into a running server. Used by **Import**. |
+| `vault-pull` | Writes a chat-file folder from a running server. Used by **Export**. |
+| `message-reexport` | Turns an existing Message Crate export folder into another format, such as CSV or mail. Used by **Export** for any format other than JSON Lines. See [Convert an existing export](/docs/developer/formats/convert/). |

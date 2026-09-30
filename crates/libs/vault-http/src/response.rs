@@ -59,7 +59,7 @@ pub fn ok_json<T: DeserializeOwned>(
         return serde_json::from_str::<T>(body).map_err(|e| {
             VaultHttpError::new(
                 status.as_u16(),
-                format!("could not read the vault's answer to {what} ({e}): {body}"),
+                format!("could not read the server's answer to {what} ({e}): {body}"),
             )
             .into()
         });
@@ -147,7 +147,7 @@ mod tests {
             ok_json::<Answer>("export messages", reqwest::StatusCode::OK, "not json").unwrap_err();
         assert!(
             err.to_string()
-                .contains("could not read the vault's answer to export messages"),
+                .contains("could not read the server's answer to export messages"),
             "{err}"
         );
     }

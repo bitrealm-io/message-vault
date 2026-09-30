@@ -1,6 +1,6 @@
 # message-reexport
 
-Convert an existing Message Vault output folder from one packaging format to another (JSON Lines, JSON, CSV, EML, MBOX, or XML).
+Convert an existing Message Crate output folder from one packaging format to another (JSON Lines, JSON, CSV, EML, MBOX, or XML).
 
 The desktop app's Export screen uses this crate to write any format other than JSON Lines.
 

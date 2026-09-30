@@ -897,7 +897,7 @@ pub struct TopAttachment {
     /// Attachment byte size.
     pub size_bytes: i64,
     /// Conversation that holds the attachment. Like the two fields after it,
-    /// absent when the vault owner reads another account's storage: which
+    /// absent when the owner reads another account's storage: which
     /// conversation a file is in, and who it is with, is the holder's.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<i64>,

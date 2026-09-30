@@ -265,7 +265,7 @@ fn detect_ir_export(input_dir: &Path) -> Result<DetectedExport> {
     match present.as_slice() {
         [format] => Ok(DetectedExport { format: *format }),
         [] => bail!(
-            "unsupported input: no Message Vault IR export found in {} \
+            "unsupported input: no Message Crate IR export found in {} \
              (expected smses.xml, *.json, *.jsonl, *.csv, *.mbox, or EML folders)",
             input_dir.display()
         ),

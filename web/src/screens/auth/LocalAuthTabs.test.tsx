@@ -28,10 +28,10 @@ function renderTabs(vaultState: "unclaimed" | "closed" | "open") {
  * value rather than the facts behind it: the mapping lives in one place.
  */
 describe("LocalAuthTabs", () => {
-  it("offers only Create Vault Owner on an unclaimed vault", () => {
+  it("offers only Create Owner on an unclaimed vault", () => {
     renderTabs("unclaimed");
 
-    expect(screen.getByRole("button", { name: "Create Vault Owner" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create Owner" })).toBeInTheDocument();
     // No login: there is no account to log into yet.
     expect(screen.queryByRole("button", { name: "Log in" })).not.toBeInTheDocument();
     // And no way to join a vault that has nobody to decide who may join it.
@@ -44,7 +44,7 @@ describe("LocalAuthTabs", () => {
 
     expect(screen.getByRole("button", { name: "Log in" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Create Account" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Create Vault Owner" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Owner" })).not.toBeInTheDocument();
   });
 
   it("offers Login and Create Account on an open vault, Login first", () => {
@@ -53,7 +53,7 @@ describe("LocalAuthTabs", () => {
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
     expect(tabs).toEqual(["Login", "Create Account"]);
     expect(screen.getByRole("button", { name: "Log in" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Create Vault Owner" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Owner" })).not.toBeInTheDocument();
   });
 
   it("asks the vault owner for a username and the password twice", () => {

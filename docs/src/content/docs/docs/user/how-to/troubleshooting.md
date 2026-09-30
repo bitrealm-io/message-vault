@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-description: Fix common problems with the desktop app and reaching the vault in the browser.
+description: Fix common problems with the desktop app and reaching Message Crate in the browser.
 ---
 
 ## Desktop app
@@ -35,9 +35,9 @@ pipx install "whatsapp-chat-exporter[android_backup,crypt15]"
 
 **Some messages are missing from a rescue import.** Limited formats cannot preserve everything. See [Rescue imports](/docs/user/how-to/rescue-imports/).
 
-## Reaching the vault
+## Reaching the server
 
-### Cannot reach the vault from the browser or desktop app
+### Cannot reach the server from the browser or desktop app
 
 The website and API share **port 8080**. Use `http://localhost:8080`. Confirm the container is running (`docker ps`) and that nothing else has taken 8080.
 

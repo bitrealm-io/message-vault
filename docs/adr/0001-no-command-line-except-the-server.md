@@ -1,6 +1,6 @@
-# No command line except the vault server
+# No command line except the server
 
-Message Vault converts phone backups into files, which is command-line shaped
+Message Crate converts phone backups into files, which is command-line shaped
 work, so a reader will reasonably expect the exporters to be commands. They
 are not: every exporter, `message-reexport`, `vault-push`, and `vault-pull` are
 library crates with no binary, and the desktop app calls them in process. The
@@ -30,7 +30,7 @@ a push and a pull.
 ## Considered and rejected: keeping `vault-push` and `vault-pull`
 
 These two were nearly kept, on the reasoning that they are the *server's*
-interface rather than the desktop app's, that a self-hosted vault with no
+interface rather than the desktop app's, that a self-hosted server with no
 desktop machine would otherwise have no terminal route for its data, and that
 they already worked and cost nothing to leave alone.
 
@@ -80,6 +80,6 @@ is one `message-vault` command, not a reader that happens to be executable.
   the exporting.
 - The documentation pages for these commands were deleted without redirects.
   Before a stable release this project keeps no compatibility path — not for
-  database schemas, not for stored vault data, and not for URLs — so those
+  database schemas, not for stored data, and not for URLs — so those
   addresses return 404 rather than pointing somewhere that does not answer the
   question they were bookmarked for.

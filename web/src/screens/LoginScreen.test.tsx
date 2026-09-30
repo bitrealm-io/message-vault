@@ -87,7 +87,7 @@ describe("LoginScreen", () => {
     renderScreen();
 
     expect(await screen.findByText("Connected")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Message Vault" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Message Crate" })).toBeInTheDocument();
     expect(setServer).toHaveBeenCalledWith("");
   });
 
@@ -181,7 +181,7 @@ describe("LoginScreen", () => {
     expect(screen.getByRole("button", { name: "Log in" })).toBeDisabled();
     // No vault has said it takes new accounts, so the card does not offer one.
     expect(screen.queryByRole("tab", { name: "Create Account" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Change vault settings" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Change server address" })).toBeEnabled();
   });
 
   it("shows the placeholder form only while it is still connecting", async () => {
@@ -208,11 +208,11 @@ describe("LoginScreen", () => {
     renderScreen();
 
     expect(await screen.findByText("Connecting")).toBeInTheDocument();
-    const link = screen.getByRole("button", { name: "Change vault settings" });
+    const link = screen.getByRole("button", { name: "Change server address" });
     expect(link).toBeEnabled();
 
     await user.click(link);
-    expect(screen.getByRole("heading", { name: "Message Vault Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Server Address" })).toBeInTheDocument();
   });
 
   it("keeps the way out of a red card live", async () => {
@@ -220,7 +220,7 @@ describe("LoginScreen", () => {
     renderScreen();
 
     await screen.findByText("Disconnected");
-    expect(screen.getByRole("button", { name: "Change vault settings" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Change server address" })).toBeEnabled();
   });
 
   it("disables Log in while the vault is unreachable", async () => {
@@ -229,29 +229,29 @@ describe("LoginScreen", () => {
     renderScreen();
 
     await screen.findByText("Connected");
-    await user.click(screen.getByRole("button", { name: "Change vault settings" }));
+    await user.click(screen.getByRole("button", { name: "Change server address" }));
 
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
     const field = screen.getByRole("textbox", { name: "Address" });
     await user.clear(field);
     await user.type(field, "http://127.0.0.1:9999");
-    await user.click(screen.getByRole("button", { name: "Change vault address" }));
+    await user.click(screen.getByRole("button", { name: "Use this address" }));
 
     expect(await screen.findByText("Disconnected")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Login" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Log in" })).toBeDisabled();
   });
 
-  it("offers Change vault address only for an address that is a change", async () => {
+  it("offers Use this address only for an address that is a change", async () => {
     stubVault();
     const user = setupUser();
     renderScreen();
 
     await screen.findByText("Connected");
-    await user.click(screen.getByRole("button", { name: "Change vault settings" }));
+    await user.click(screen.getByRole("button", { name: "Change server address" }));
 
     const field = screen.getByRole("textbox", { name: "Address" });
-    const apply = () => screen.getByRole("button", { name: "Change vault address" });
+    const apply = () => screen.getByRole("button", { name: "Use this address" });
 
     // The card connected to the address the field already holds, so there is
     // nothing to apply.
@@ -275,7 +275,7 @@ describe("LoginScreen", () => {
 
     // Back on the settings screen, the applied address is now the connected
     // one, so it is no longer a change — and editing it makes it one again.
-    await user.click(screen.getByRole("button", { name: "Change vault settings" }));
+    await user.click(screen.getByRole("button", { name: "Change server address" }));
     expect(screen.getByRole("textbox", { name: "Address" })).toHaveValue("http://127.0.0.1:8080");
     expect(apply()).toBeDisabled();
 
@@ -283,15 +283,15 @@ describe("LoginScreen", () => {
     expect(apply()).toBeEnabled();
   });
 
-  it("opens Message Vault Settings from the link and comes back on Cancel", async () => {
+  it("opens Server Address from the link and comes back on Cancel", async () => {
     stubVault();
     const user = setupUser();
     renderScreen();
 
     await screen.findByRole("tab", { name: "Login" });
-    await user.click(screen.getByRole("button", { name: "Change vault settings" }));
+    await user.click(screen.getByRole("button", { name: "Change server address" }));
 
-    expect(screen.getByRole("heading", { name: "Message Vault Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Server Address" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Address" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Test" })).toBeInTheDocument();
     // The settings screen replaces the card body rather than opening beside it.
@@ -307,7 +307,7 @@ describe("LoginScreen", () => {
     renderScreen();
 
     await screen.findByRole("tab", { name: "Login" });
-    await user.click(screen.getByRole("button", { name: "Change vault settings" }));
+    await user.click(screen.getByRole("button", { name: "Change server address" }));
 
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
     const field = screen.getByRole("textbox", { name: "Address" });
@@ -326,7 +326,7 @@ describe("LoginScreen", () => {
     renderScreen();
 
     await screen.findByRole("tab", { name: "Login" });
-    await user.click(screen.getByRole("button", { name: "Change vault settings" }));
+    await user.click(screen.getByRole("button", { name: "Change server address" }));
     // Opened on the address the card is connected to, so that connection is
     // this address's and saying so is true.
     expect(screen.getByRole("status")).toHaveTextContent("Connected");
@@ -353,7 +353,7 @@ describe("LoginScreen", () => {
     renderScreen();
 
     await screen.findByText("Disconnected");
-    await user.click(screen.getByRole("button", { name: "Change vault settings" }));
+    await user.click(screen.getByRole("button", { name: "Change server address" }));
 
     // Only the address being typed answers healthy — the disconnected card's
     // own background self-heal probe (`useVaultHealth`) keeps polling the
@@ -388,7 +388,7 @@ describe("LoginScreen", () => {
     const field = screen.getByRole("textbox", { name: "Address" });
     await user.clear(field);
     await user.type(field, "http://127.0.0.1:8080");
-    await user.click(screen.getByRole("button", { name: "Change vault address" }));
+    await user.click(screen.getByRole("button", { name: "Use this address" }));
 
     expect(await screen.findByRole("tab", { name: "Login" })).toBeInTheDocument();
     await waitFor(() => {
@@ -419,11 +419,11 @@ describe("LoginScreen", () => {
     renderScreen();
 
     expect(await screen.findByText("Connecting")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Change vault settings" }));
+    await user.click(screen.getByRole("button", { name: "Change server address" }));
     const field = screen.getByRole("textbox", { name: "Address" });
     await user.clear(field);
     await user.type(field, "http://127.0.0.1:8080");
-    await user.click(screen.getByRole("button", { name: "Change vault address" }));
+    await user.click(screen.getByRole("button", { name: "Use this address" }));
 
     await waitFor(() => {
       expect(setServer).toHaveBeenCalledWith("http://127.0.0.1:8080");
@@ -443,7 +443,7 @@ describe("LoginScreen", () => {
 
     // Reopening reads the address back out of the card, which is what the
     // late probe would have rewritten.
-    await user.click(screen.getByRole("button", { name: "Change vault settings" }));
+    await user.click(screen.getByRole("button", { name: "Change server address" }));
     expect(screen.getByRole("textbox", { name: "Address" })).toHaveValue("http://127.0.0.1:8080");
   });
 

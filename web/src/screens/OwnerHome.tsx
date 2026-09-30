@@ -22,7 +22,7 @@ const SECTIONS = ["dashboard", "settings", "accounts", "activity", "logs"] as co
 const SECTION_LABELS: Record<(typeof SECTIONS)[number], string> = {
   dashboard: "Dashboard",
   // Not "Settings": that is the screen an account is managed from, here and in the app.
-  settings: "Vault Settings",
+  settings: "Server Settings",
   accounts: "User Accounts",
   activity: "Activity",
   logs: "Logs",
@@ -54,7 +54,7 @@ function sectionLinkClass(active: boolean): string {
  * opens the owner's own Settings, which is also where the account button's
  * Settings goes. `/owner/accounts/new` is the same screen for an account that
  * does not exist yet, which Add account opens in place of the table. See
- * `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
+ * `docs/adr/0008-the-owner-holds-no-messages.md`.
  */
 export default function OwnerHome() {
   const { section: raw, accountId: rawAccountId } = useParams();

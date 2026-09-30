@@ -219,7 +219,7 @@ export function SystemSection() {
 
   return (
     <div>
-      <h3 className={sectionHeading}>Vault</h3>
+      <h3 className={sectionHeading}>Staging</h3>
       <div className={settingsGrid}>
         <label htmlFor={stagingId} className={settingsLabel}>
           Staging directory

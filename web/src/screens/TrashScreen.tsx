@@ -406,7 +406,7 @@ export default function TrashScreen() {
         title="Delete this conversation?"
         body={
           pending?.kind === "conversation"
-            ? `Deletes ${pending.name} and its ${plural(pending.messageCount, "message")} from your vault. Attachments only these messages use go with them.`
+            ? `Deletes ${pending.name} and its ${plural(pending.messageCount, "message")} from your Message Crate. Attachments only these messages use go with them.`
             : ""
         }
         confirmLabel="Delete"

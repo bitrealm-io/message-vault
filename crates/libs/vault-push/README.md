@@ -1,8 +1,8 @@
 # vault-push
 
-Import a Message Vault JSON Lines export folder into a running vault server.
+Import a Message Crate JSON Lines export folder into a running server.
 
-The desktop app **Import** screen uses this crate as a library. The `vault-push` command is the same importer from a terminal. Create an API token under **Settings → Account** in the vault website.
+The desktop app **Import** screen uses this crate as a library. The `vault-push` command is the same importer from a terminal. Create an API token under **Settings → Account** in the website.
 
 ## Build and test
 

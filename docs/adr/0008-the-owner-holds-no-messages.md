@@ -1,15 +1,15 @@
-# The vault owner holds no messages
+# The owner holds no messages
 
-A vault has exactly one vault owner, at a fixed well-known account id, and
-that owner has no vault of its own: no conversations, no contacts, no import,
-no export, no trash, and no API tokens. The owner is the vault's
-administrator. It sets the vault's global settings, creates, disables and
+A Message Crate has exactly one owner, at a fixed well-known account id, and
+that owner has no store of its own: no conversations, no contacts, no import,
+no export, no trash, and no API tokens. The owner is the
+administrator. It sets the server settings, creates, disables and
 deletes accounts, resets their passwords, deletes their message data, and
-decides whether strangers may create an account. It monitors the vault: how much each
+decides whether strangers may create an account. It monitors the installation: how much each
 account holds and what each account has been doing. It never reads a
-message. A vault
-with no owner is unclaimed and offers only the Create Vault Owner screen; a
-claimed vault is closed or open depending on whether public registration is
+message. A Message Crate
+with no owner is unclaimed and offers only the Create Owner screen; a
+claimed one is closed or open depending on whether public registration is
 on.
 
 ## Why
@@ -20,20 +20,20 @@ non-demo account to register was promoted to it automatically, and an
 administrator could import, export, browse and delete message data like anyone
 else, because the flag granted extra powers without removing any. The only
 protection on the role was `is_last_admin`, which refused the change that would
-leave the vault with no usable administrator — so an administrator could
+leave the installation with no usable administrator — so an administrator could
 still be deleted whenever a second one existed.
 
-Three properties of that model were wrong for a self-hosted vault.
+Three properties of that model were wrong for a self-hosted product.
 
 The person who installs the software is not automatically the person whose
-messages the vault holds, and silently promoting whoever registered first
+messages it holds, and silently promoting whoever registered first
 conflated the two. Making the owner an explicit, separate act — a screen that
-says Create Vault Owner, on a vault that offers nothing else until it is
+says Create Owner, on a Message Crate that offers nothing else until it is
 claimed — states which one is happening.
 
 An administrator who can also import, export and read can reach another
 person's messages the moment a second account is created for them. Removing
-the vault rather than restricting access to it is the only version of the
+the owner's store rather than restricting access to it is the only version of the
 restriction that cannot be undone by flipping a flag.
 
 An arbitrary number of administrators is an invariant to police forever. One
@@ -76,7 +76,7 @@ The owner sees metadata and never content. (Revised 2026-09-19. Until then
 the rule was narrower: a message count and a storage total per account, and
 nothing else.)
 
-The owner administers the vault, and administering it means knowing how much
+The owner administers the installation, and administering it means knowing how much
 data it holds and what its accounts have been doing. A count and a byte total
 per account answer neither question well: they do not say which import
 doubled an account's size, whether an account has exported everything it
@@ -84,7 +84,7 @@ holds, or which files fill the disk. So the owner may read anything that
 describes an account's data without being that data:
 
 - counts and totals: messages, conversations, contacts, attachments, and the
-  bytes each takes, per account and for the whole vault;
+  bytes each takes, per account and for the whole database;
 - activity: each import and export an account has run, with its source,
   format, time, outcome and the counts it reported, and when the account last
   logged in;
@@ -98,10 +98,10 @@ The owner may not read what a person wrote or whom they wrote to:
   between.
 
 An attachment's file name sits on the permitted side on purpose. A name can
-say something about its file, and the owner needs it anyway: "the vault is
+say something about its file, and the owner needs it anyway: "the disk is
 full" is answered by naming the files that fill it, and a size with no name
 cannot be acted on. Contacts sit on the other side. How many contacts an
-account has is a measure of the vault; who they are is the account holder's
+account has is a measure of the database; who they are is the account holder's
 address book.
 
 Nothing in the owner's routes reads `messages.body`,
@@ -123,16 +123,16 @@ largest attachments by name and size. The owner reads them at
 on that screen say who the account talks to, and the owner gets neither: an
 import's detail gives the owner how many contacts it created and changed and
 not who they are, and a large attachment comes to the owner as a name, a type
-and a size, without the conversation it is in. The vault-wide totals are
+and a size, without the conversation it is in. The installation-wide totals are
 `GET /v1/vault/storage`, the owner's alone, and Owner Home's Dashboard shows
-them. The per-account and vault-wide numbers come from the same queries
+them. The per-account and installation-wide numbers come from the same queries
 (`crates/vault/server/src/db/storage.rs`), with and without an account
 filter, so the Dashboard cannot disagree with the sum of the Storage tabs.
 
-## The three states of a vault
+## The three states of a Message Crate
 
 `GET /v1/vault` is unauthenticated and reports one value: `unclaimed`,
-`closed`, or `open`. The logged-out screen follows from it — Create Vault
+`closed`, or `open`. The logged-out screen follows from it — Create
 Owner, Login alone, or Login plus Create Account.
 
 The server reports the state rather than the two facts behind it (whether an
@@ -141,14 +141,14 @@ the rule joining them is stated once. A browser and a desktop app that each
 derived the screen from raw fields would be two copies of one rule, free to
 drift apart.
 
-Whoever reaches an unclaimed vault first may claim it. The vault is
-self-hosted: its operator installs the software, claims the vault, and
+Whoever reaches an unclaimed Message Crate first may claim it. It is
+self-hosted: its operator installs the software, claims it, and
 publishes the port,
 in that order and at times of their choosing. A race that requires exposing an
-unconfigured vault to a hostile network and then walking away is a
-configuration the operator chose. An unclaimed vault is also empty, so a lost
+unconfigured server to a hostile network and then walking away is a
+configuration the operator chose. An unclaimed Message Crate is also empty, so a lost
 race destroys nothing and announces itself immediately — the operator finds
-they cannot claim their own vault.
+they cannot claim their own installation.
 
 ## Considered and rejected: a separate `vault_owner` table
 
@@ -174,8 +174,8 @@ database access can change, rather than a property of the design.
 ## Considered and rejected: a claim token
 
 Printing a token to the server log on first start and requiring it to claim
-the vault defends against a silent compromise. Claiming is not silent: the
-operator discovers it immediately, on an empty vault, and wipes the volume.
+the installation defends against a silent compromise. Claiming is not silent: the
+operator discovers it immediately, on an empty database, and wipes the volume.
 The token would add a `docker logs` step to a quickstart that currently has
 none, in exchange for closing a window whose width the operator sets.
 
@@ -185,36 +185,36 @@ Letting the owner issue a code the new person redeems, choosing their own
 password, means the owner never learns anyone's password. Invites need a
 table, an unauthenticated redeem route, and a code handed over out of band
 anyway. They are deferred, not rejected, and become the better answer once
-the vault can send mail. Until then the owner chooses the password, hands it
-over, and the person keeps it until they change it under Settings; the vault
+the server can send mail. Until then the owner chooses the password, hands it
+over, and the person keeps it until they change it under Settings; the server
 does not force that change. (An earlier version marked the account with
 `must_change_password` and made the holder replace the owner's password at
 first login; that mark was removed as more ceremony than a self-hosted
-vault needs.)
+product needs.)
 
 ## Consequences
 
 - `POST /v1/auth/register` succeeds only while
   `vault_settings.public_registration` is set. It defaults to off, so a
-  fresh vault admits nobody the owner has not admitted.
+  fresh installation admits nobody the owner has not admitted.
 - Because registration is off by default, the owner creating accounts is not a
-  convenience: without it a claimed vault could never gain a user.
+  convenience: without it a claimed Message Crate could never gain a user.
 - The demo seed creates an owner as well as the demo account, with the
   credentials `admin` / `admin`. Those are reachable only through the seed,
   which writes the row directly. The owner must have a password, of one
   character or more, and cannot clear it; a user account has no minimum and
   may have no password at all. Without
-  the seeded owner a demo vault would be unclaimed, and the documented
+  the seeded owner a demo would be unclaimed, and the documented
   "log in as `demo`" instruction would reach a screen that offers no login.
 - The owner can delete the demo account and its data. The demo account still
   cannot delete itself.
 - The owner leads the account list they manage, ahead of the rest by
-  username. The owner is an account of the vault too, and its row is how the
+  username. The owner is an account too, and its row is how the
   owner reaches its own Settings, the same way it reaches anyone else's. The
   row has no status and no permissions to set: the owner cannot be disabled,
   and holds no messages to import, export or delete. (Until 2026-09-19 the
   owner was left out of the list, on the grounds that it is not one of the
-  vault's users.)
+  users.)
 - An account's name in that list opens the account's Settings, laid out as
   its holder sees them. The owner sets the account's password there, its
   status and its import, export and delete permissions, and deletes its
@@ -236,19 +236,19 @@ vault needs.)
   System and Convert work on messages, and Profile has no handles and no
   address book, for the same reason: there are no messages for a handle to
   claim. Changing the owner's password takes the current one, checked by the
-  vault, because that account reaches every other and an open session must
+  server, because that account reaches every other and an open session must
   not be enough to take it over. A user account changes its own on its
   session alone.
 - A forgotten owner password cannot be reset from inside the product, because
   no account stands above the owner. `vault reset-owner-password` resets it
   from a shell on the server, which is the credential the owner already holds
-  as the operator. `vault create-owner` claims an unclaimed vault from the same
-  shell; each command refuses the state it is not for, so setting up a vault
+  as the operator. `vault create-owner` claims an unclaimed Message Crate from the same
+  shell; each command refuses the state it is not for, so setting one up
   cannot silently overwrite a live owner's password.
 - The administrator surface is renamed throughout: `/v1/owner/accounts`, the
   `Owner` OpenAPI tag, `owner_api.rs`, and the `Owner` guard. The interface
   says accounts because it returns account records; the screen says User
-  Accounts because it lists the people who use the vault.
+  Accounts because it lists the people who use the installation.
 - The owner logs in to Owner Home, a screen of their own, not to the
   message-browsing shell. The account-management screen leaves Settings, and an ordinary
   account loses it entirely, because an ordinary account can no longer be an

@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicoverbruggen/tauri-v2-schema/refs/heads/main/schema.json",
-  "productName": "Message Vault",
+  "productName": "Message Crate",
   "version": "0.9.0",
   "identifier": "io.bitrealm.message-vault",
   "build": {
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Message Vault",
+        "title": "Message Crate",
         "width": 1024,
         "height": 768,
         "resizable": true,

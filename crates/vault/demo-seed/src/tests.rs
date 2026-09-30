@@ -308,7 +308,7 @@ fn generate_replaces_an_earlier_bundle_and_removes_its_backup() {
     );
     let readme = fs::read_to_string(out.join("README.md")).expect("read README.md");
     assert!(
-        readme.starts_with("# Message Vault demo dataset"),
+        readme.starts_with("# Message Crate demo dataset"),
         "{readme}"
     );
     assert!(!out.join(".previous-active").exists());

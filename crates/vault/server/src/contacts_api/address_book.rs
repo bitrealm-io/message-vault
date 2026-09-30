@@ -33,8 +33,8 @@ pub(crate) struct CreateContactsResponse {
 /// Load a VCF or vCard CSV address book into this account. The body is the
 /// file itself, and `Content-Type` says which: `text/vcard` or `text/csv`.
 ///
-/// This is a standalone act against the vault, never part of an Import Run:
-/// contacts are vault state, and a person may load them before or after
+/// This is a standalone act, never part of an Import Run: contacts are the
+/// account's own state, and a person may load them before or after
 /// bringing messages in. Only the rows the address book owns are replaced, so
 /// Contact Groups, names the person typed, and identities an import discovered
 /// all survive. How the file is read is the open question in #270; this route

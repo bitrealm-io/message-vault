@@ -102,7 +102,7 @@ fn payload_too_large_message(kind: &str, bytes: Option<usize>) -> String {
          Cloudflare Free/Pro caps proxied uploads at ~100 MB. \
          vault-push chunks message imports under 64 MiB and large assets via multipart; \
          if this still fails, raise nginx client_max_body_size for /v1 (need ≥100m for 64 MiB parts) \
-         or tunnel to vault :8080."
+         or tunnel to the server on :8080."
     )
 }
 
@@ -111,9 +111,10 @@ fn payload_too_large_message(kind: &str, bytes: Option<usize>) -> String {
 /// parameter: the API key names it.
 fn asset_url(base_url: &str, segments: &[&str], source: &str) -> Result<reqwest::Url> {
     let base = trim_base_url(base_url);
-    let mut url = reqwest::Url::parse(base).with_context(|| format!("invalid vault URL {base}"))?;
+    let mut url =
+        reqwest::Url::parse(base).with_context(|| format!("invalid server URL {base}"))?;
     url.path_segments_mut()
-        .map_err(|()| anyhow!("invalid vault URL {base}"))?
+        .map_err(|()| anyhow!("invalid server URL {base}"))?
         .pop_if_empty()
         .extend(["v1", "assets"].into_iter().chain(segments.iter().copied()));
     url.query_pairs_mut().append_pair("source", source);
@@ -145,9 +146,9 @@ impl Session {
         let status = response.status();
         match status.as_u16() {
             404 => return Ok(false),
-            401 => return Err(VaultHttpError::new(401, "invalid vault key").into()),
+            401 => return Err(VaultHttpError::new(401, "invalid API key").into()),
             403 => {
-                return Err(VaultHttpError::new(403, "username does not match vault key").into());
+                return Err(VaultHttpError::new(403, "username does not match API key").into());
             }
             _ => {}
         }
@@ -348,7 +349,7 @@ impl Session {
         let closed: CompleteImportResponse = ok_json("import run complete", status, &text)?;
         if closed.id != import_id {
             return Err(anyhow!(
-                "import run complete: the vault closed run {} for run {import_id}",
+                "import run complete: the server closed run {} for run {import_id}",
                 closed.id
             ));
         }

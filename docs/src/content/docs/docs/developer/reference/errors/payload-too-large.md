@@ -11,4 +11,4 @@ editUrl: false
 | Status | `413 Payload Too Large` |
 | Type | `https://messagecrate.app/docs/developer/reference/errors/payload-too-large` |
 
-The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. Auth routes cap at 32 KiB; other routes at `[server] max_body_bytes`. Send less, or raise the cap on the vault.
+The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading. Auth routes cap at 32 KiB; other routes at `[server] max_body_bytes`. Send less, or raise the cap on the server.

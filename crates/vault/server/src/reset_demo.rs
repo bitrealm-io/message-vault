@@ -237,7 +237,7 @@ pub async fn run_reset_demo(
 fn refuse_url_config(cfg: &Config) -> Result<()> {
     if let Some(url) = cfg.database.url.as_deref() {
         bail!(
-            "reset-demo replaces the on-disk vault at paths.db, but this config serves the database from {}; URL-served databases cannot be reset this way — run reset-demo on the host that owns the database file, or pass --db-url",
+            "reset-demo replaces the on-disk database at paths.db, but this config serves the database from {}; URL-served databases cannot be reset this way — run reset-demo on the host that owns the database file, or pass --db-url",
             engine::redact_db_url(url)
         );
     }
@@ -543,7 +543,7 @@ async fn checkpoint_and_clean_sidecars(db: &Path, operation: &str) -> Result<()>
     pool.close().await;
     if busy != 0 {
         bail!(
-            "cannot replace {} because its WAL could not be checkpointed; stop every process using the vault and run reset-demo offline",
+            "cannot replace {} because its WAL could not be checkpointed; stop every process using the database and run reset-demo offline",
             db.display()
         );
     }
@@ -555,7 +555,7 @@ async fn checkpoint_and_clean_sidecars(db: &Path, operation: &str) -> Result<()>
             .len();
         if length != 0 {
             bail!(
-                "cannot replace {} because {} still contains {length} bytes after WAL checkpoint; stop every process using the vault and run reset-demo offline",
+                "cannot replace {} because {} still contains {length} bytes after WAL checkpoint; stop every process using the database and run reset-demo offline",
                 db.display(),
                 wal.display()
             );
@@ -571,7 +571,7 @@ async fn checkpoint_and_clean_sidecars(db: &Path, operation: &str) -> Result<()>
     if shm.exists() {
         fs::remove_file(&shm).with_context(|| {
             format!(
-                "remove SQLite shared-memory sidecar {}; stop every process using the vault and run reset-demo offline",
+                "remove SQLite shared-memory sidecar {}; stop every process using the database and run reset-demo offline",
                 shm.display()
             )
         })?;

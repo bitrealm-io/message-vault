@@ -45,7 +45,7 @@ export default function VaultSettingsScreen({
 }: VaultSettingsScreenProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <h1 className={`${authScreenTitle} mb-6`}>Message Vault Settings</h1>
+      <h1 className={`${authScreenTitle} mb-6`}>Server Address</h1>
 
       <div className="flex items-end gap-2">
         <TextField
@@ -71,7 +71,7 @@ export default function VaultSettingsScreen({
           Cancel
         </Button>
         <Button variant="primary" onPress={onSubmit} disabled={!canSubmit}>
-          Change vault address
+          Use this address
         </Button>
       </div>
     </div>

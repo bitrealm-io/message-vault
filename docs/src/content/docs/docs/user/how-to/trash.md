@@ -25,7 +25,7 @@ The search box narrows both lists at once while you are in Trash, so `ada` finds
 
 Every trashed item also has a **Delete** button, and the pane has **Empty Trash** at the top. Each asks you to confirm first, and the dialog says what will happen, because Delete means two different things for the two kinds of item.
 
-Deleting a conversation removes it and its messages from the vault. An attachment is stored once however many messages share it, so a photo that also appears in another conversation stays; a file only the deleted messages used goes with them.
+Deleting a conversation removes it and its messages from the database. An attachment is stored once however many messages share it, so a photo that also appears in another conversation stays; a file only the deleted messages used goes with them.
 
 Deleting a contact works the way Delete Contact works on a phone. The name and details you gave the person go, along with their Contact Group memberships, and the contact becomes Unknown again. The messages stay. Their conversations are untouched and now show the phone number or address instead of the name. A conversation is never deleted with a contact — to remove one, trash and delete it as a conversation.
 

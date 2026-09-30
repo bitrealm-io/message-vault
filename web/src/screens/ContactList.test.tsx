@@ -35,13 +35,13 @@ const listContactsMock = vi.mocked(listContacts);
 const listContactGroupsMock = vi.mocked(listContactGroups);
 const updateMembersMock = vi.mocked(updateContactGroupMembers);
 
-/** True once the vault has actually dropped Alice's Family membership. */
+/** True once the server has actually dropped Alice's Family membership. */
 let familyRemoved = false;
 
 beforeEach(() => {
   vi.clearAllMocks();
   familyRemoved = false;
-  // Mirrors what the vault would answer: the write below flips this, and the
+  // Mirrors what the server would answer: the write below flips this, and the
   // invalidate the mutation issues on settling refetches this same mock, so
   // the test also proves the optimistic patch and the server truth agree —
   // not just the moment right after the click.

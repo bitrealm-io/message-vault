@@ -74,7 +74,7 @@ export function useMessageTagActions() {
   return useNameCollectionActions(messageTags);
 }
 
-/** Put conversations in or out of one Message Tag, drawn before the vault answers. */
+/** Put conversations in or out of one Message Tag, drawn before the server answers. */
 export function useSetMessageTagMembers() {
   return useSetNamedSetMembers(messageTags);
 }

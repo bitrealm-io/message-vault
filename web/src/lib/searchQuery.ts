@@ -1,8 +1,8 @@
 /**
- * Every place in the app that composes a vault search string, in one leaf
+ * Every place in the app that composes a server search string, in one leaf
  * module.
  *
- * The vault's search language (`crates/server/server/src/search/`) reads a
+ * The server's search language (`crates/server/server/src/search/`) reads a
  * quoted value by scanning to the next unescaped `"`, and a doubled `""`
  * inside a quoted value is one literal quote
  * (`crates/server/server/src/search/lex.rs`, `read_quoted`). There is no

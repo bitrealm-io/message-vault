@@ -1,8 +1,8 @@
 /** @vitest-environment jsdom */
 
-// Entering Import must ask the vault whether a session is already live
+// Entering Import must ask the server whether a session is already live
 // before showing anything: neither the blank form nor the resume panel
-// may flash on screen while that check is in flight, and a vault that
+// may flash on screen while that check is in flight, and a server that
 // can't answer falls through to the form rather than blocking it.
 
 import { act, cleanup, screen } from "@testing-library/react";
@@ -90,7 +90,7 @@ vi.mock("../lib/deviceId", () => ({
   getDeviceId: () => "this-device",
 }));
 
-// The three vault calls this screen makes, faked by name. The rest of
+// The three server calls this screen makes, faked by name. The rest of
 // serverApi stays real, since other modules in this graph import from it.
 vi.mock("../lib/serverApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/serverApi")>()),
@@ -281,7 +281,7 @@ describe("ImportScreen entering Import", () => {
     expect(screen.queryByTestId("resume-panel")).not.toBeInTheDocument();
   });
 
-  it("falls through to the form when the vault cannot answer", async () => {
+  it("falls through to the form when the server cannot answer", async () => {
     getActiveImportSessionMock.mockRejectedValue(new Error("network down"));
     renderWithProviders(<ImportScreen />);
 

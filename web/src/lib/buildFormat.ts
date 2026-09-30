@@ -5,7 +5,7 @@
  * alone.
  *
  * `vite.config.ts` imports this to embed the SPA's Build, so nothing here may
- * touch the DOM or the embedded value. The vault server and the desktop app
+ * touch the DOM or the embedded value. The server and the desktop app
  * format theirs in `crates/libs/build-version`, under the same rules: change
  * the two together.
  */

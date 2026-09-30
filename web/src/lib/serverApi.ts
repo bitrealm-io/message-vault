@@ -1,16 +1,16 @@
 /**
- * Every vault route the web app calls, one named function each.
+ * Every server route the web app calls, one named function each.
  *
- * This is the only module that knows a vault URL. Screens call
+ * This is the only module that knows a server URL. Screens call
  * `listConversations` rather than writing `/v1/conversations?…`, so renaming a
  * route is a change here and nowhere else, and no test has to match on a path.
  *
  * Request and response types come from `serverApi.types.ts`, which is generated
- * from `docs/src/assets/openapi.json` — the document a vault-side test pins to
+ * from `docs/src/assets/openapi.json` — the document a server-side test pins to
  * the running server. Regenerate with `npm run gen:api`; `scripts/check-pr.sh`
  * fails when the checked-in file is out of date.
  *
- * These functions only talk to the vault. Caching, request deduplication, and
+ * These functions only talk to the server. Caching, request deduplication, and
  * telling the rest of the app that something changed all belong to TanStack
  * Query above this layer. See
  * `docs/adr/0002-one-way-to-fetch-data-in-the-web-app.md`.
@@ -29,9 +29,11 @@ import {
   problemFromBody,
 } from "./api";
 import { buildAssetPath } from "./assetUrl";
-import type { components } from "./serverApi.types";
+import type { components, paths } from "./serverApi.types";
 
 type Schema = components["schemas"];
+/** What `GET /v1/server` answers, named by its route so a renamed schema changes nothing here. */
+type ServerInfo = paths["/v1/server"]["get"]["responses"][200]["content"]["application/json"];
 
 /** Options every read accepts, so a caller can cancel an in-flight request. */
 export type RequestOptions = ApiRequestOptions;
@@ -65,7 +67,7 @@ function accountPath(accountId: number): string {
 /**
  * `/v1/accounts/{id}` for the logged-in account.
  *
- * The vault has no `/v1/account` singleton: an account reads and writes its
+ * The server has no `/v1/account` singleton: an account reads and writes its
  * own row in the same collection the owner manages, addressed by the id the
  * session carries. Logged out, there is no such row, and asking for one is a
  * bug in the caller rather than a request worth sending.
@@ -78,7 +80,7 @@ function ownAccountPath(): string {
 
 // ── Auth ────────────────────────────────────────────────────────────────────
 
-/** Log in. The Session is a singleton, so the vault answers `201` with `Location: /v1/session`. */
+/** Log in. The Session is a singleton, so the server answers `201` with `Location: /v1/session`. */
 export function login(
   body: Schema["CreateSessionRequest"],
 ): Promise<Schema["CreateSessionResponse"]> {
@@ -90,25 +92,25 @@ export function getSession(opts?: RequestOptions): Promise<Schema["Session"]> {
   return apiClient.get<Schema["Session"]>("/v1/session", opts);
 }
 
-/** Log out: end the Session. The vault answers `204`. */
+/** Log out: end the Session. The server answers `204`. */
 export function logout(opts?: RequestOptions): Promise<void> {
   return apiClient.delete<void>("/v1/session", undefined, opts);
 }
 
-// ── The vault itself ────────────────────────────────────────────────────────
+// ── The server itself ────────────────────────────────────────────────────────
 
 /**
- * What state this vault is in, for the screen a logged-out visitor sees.
+ * What state this Message Crate is in, for the screen a logged-out visitor sees.
  *
- * The vault reports one value rather than the facts behind it, so the rule
+ * The server reports one value rather than the facts behind it, so the rule
  * joining "does an owner exist" to "is registration open" is stated once, on
  * the server. See `docs/adr/0008-the-owner-holds-no-messages.md`.
  */
-export function getServerState(opts?: RequestOptions): Promise<Schema["Vault"]> {
-  return apiClient.get<Schema["Vault"]>("/v1/server", opts);
+export function getServerState(opts?: RequestOptions): Promise<ServerInfo> {
+  return apiClient.get<ServerInfo>("/v1/server", opts);
 }
 
-/** Claim an unclaimed vault by creating its owner. Returns their session. */
+/** Claim an unclaimed Message Crate by creating its owner. Returns their session. */
 export function claimServer(
   body: Schema["ClaimRequest"],
 ): Promise<Schema["CreateSessionResponse"]> {
@@ -117,12 +119,12 @@ export function claimServer(
 
 // ── The accounts collection ─────────────────────────────────────────────────
 //
-// One collection for the vault owner and for each account: the owner reaches
+// One collection for the owner and for each account: the owner reaches
 // every row, an account reaches its own. The functions Owner Home calls take
 // the account id; the ones Settings calls address the logged-in
 // account through `ownAccountPath`.
 
-/** The accounts of this vault, for the owner: the owner's own first, then the rest by username. */
+/** The accounts of this Message Crate, for the owner: the owner's own first, then the rest by username. */
 export function listAccounts(opts?: RequestOptions): Promise<Schema["Page_Account"]> {
   return apiClient.get<Schema["Page_Account"]>("/v1/accounts", opts);
 }
@@ -130,7 +132,7 @@ export function listAccounts(opts?: RequestOptions): Promise<Schema["Page_Accoun
 /**
  * Create an account.
  *
- * Logged out, on an open vault, this is registration: the vault opens a
+ * Logged out, on an open Message Crate, this is registration: the server opens a
  * Session on the new account and answers its `token`. Logged in as the owner,
  * it creates an account whose holder must replace the password at first
  * login, and no session is opened.
@@ -172,13 +174,13 @@ export function deleteAccountMessages(accountId: number): Promise<unknown> {
   return apiClient.delete<unknown>(`${accountPath(accountId)}/messages`);
 }
 
-/** Settings that belong to the whole vault. */
+/** Settings that belong to the whole Message Crate. */
 export function getServerSettings(opts?: RequestOptions): Promise<Schema["ServerSettings"]> {
   return apiClient.get<Schema["ServerSettings"]>("/v1/server/settings", opts);
 }
 
 /**
- * What the whole vault holds, summed over every account: message,
+ * What the whole database holds, summed over every account: message,
  * conversation, contact and attachment counts, and attachment bytes. The
  * owner's, and counts only (`docs/adr/0008-the-owner-holds-no-messages.md`).
  */
@@ -186,7 +188,7 @@ export function getServerStorage(opts?: RequestOptions): Promise<Schema["ServerS
   return apiClient.get<Schema["ServerStorage"]>("/v1/server/storage", opts);
 }
 
-/** Change the vault's settings. Omitted fields are left alone. */
+/** Change the server's settings. Omitted fields are left alone. */
 export function updateServerSettings(
   body: Schema["UpdateServerSettingsRequest"],
 ): Promise<Schema["ServerSettings"]> {
@@ -207,7 +209,7 @@ export function updateAccountProfile(
   return apiClient.patch<Schema["Account"]>(ownAccountPath(), body);
 }
 
-/** Change the logged-in account's own password. The vault answers a rotated session token. */
+/** Change the logged-in account's own password. The server answers a rotated session token. */
 export function changePassword(
   body: Schema["ReplaceAccountPasswordRequest"],
 ): Promise<Schema["ReplaceAccountPasswordResponse"]> {
@@ -232,7 +234,7 @@ export function getAccountStorage(
 
 // An account's import and export history, for its Storage screen. These are
 // not `/v1/imports` and `/v1/exports`: those are the pipelines' own routes and
-// ask for a permission, which the vault owner's session never carries.
+// ask for a permission, which the owner's session never carries.
 
 function accountBase(accountId?: number): string {
   return accountId === undefined ? ownAccountPath() : accountPath(accountId);
@@ -422,7 +424,7 @@ export function restoreConversation(conversationId: number): Promise<void> {
 
 /**
  * Permanently delete a trashed conversation: the conversation, its messages,
- * and any attachment file no other message still uses. The vault answers 409
+ * and any attachment file no other message still uses. The server answers 409
  * for a conversation that is not in the trash — trash is the only door.
  */
 export function deleteConversation(conversationId: number): Promise<void> {
@@ -466,7 +468,7 @@ export function getContact(
 
 /**
  * Change one thing about a contact: its preferred name, or one identity added,
- * updated, or removed. The vault answers with the contact as it now stands.
+ * updated, or removed. The server answers with the contact as it now stands.
  */
 export function updateContact(
   contactId: string | number,
@@ -528,7 +530,7 @@ export function restoreContact(contactId: string | number): Promise<void> {
 /**
  * Delete a trashed contact the way a phone's Delete Contact does: the name
  * and details go, the contact becomes Unknown again and leaves the trash, and
- * its conversations stay, showing the handle. The vault answers 409 for a
+ * its conversations stay, showing the handle. The server answers 409 for a
  * contact that is not in the trash.
  */
 export function deleteContact(contactId: string | number): Promise<void> {
@@ -651,7 +653,7 @@ export function deleteSavedSearch(id: number): Promise<void> {
 
 // ── Search ──────────────────────────────────────────────────────────────────
 
-/** The lists whose search words the vault describes, one path each. */
+/** The lists whose search words the server describes, one path each. */
 export type SearchFieldList = "contacts" | "conversations";
 
 /** The words the search language accepts on one list. */
@@ -723,7 +725,7 @@ export function getExport(id: number, opts?: RequestOptions): Promise<Schema["Ex
   return apiClient.get<Schema["ExportRun"]>(`/v1/exports/${id}`, opts);
 }
 
-/** Record an Export Run; the vault answers `201` with the run and its counts. */
+/** Record an Export Run; the server answers `201` with the run and its counts. */
 export function createExport(body: Schema["CreateExportRequest"]): Promise<Schema["ExportRun"]> {
   return apiClient.post<Schema["ExportRun"]>("/v1/exports", body);
 }

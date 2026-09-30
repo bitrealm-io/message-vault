@@ -425,7 +425,7 @@ function setRowByLabel(label: string, patch: Partial<ImportStep>): void {
 }
 
 /**
- * Back to the form. The run's record stays on the vault; only what the
+ * Back to the form. The run's record stays on the server; only what the
  * screen holds goes. `resumeError` is kept on purpose (see the store).
  */
 function returnToForm(): void {
@@ -729,16 +729,16 @@ async function finishImport(args: {
         issues: finalSummary.issues,
       });
     } catch {
-      // Completing the run on the vault is optional. The summary still shows local results.
+      // Completing the run on the server is optional. The summary still shows local results.
     }
   }
-  // Once the vault holds the import, the staging directory is a second,
+  // Once the server holds the import, the staging directory is a second,
   // unprotected copy of the person's messages in a temp folder, so it goes:
-  // the push log, journal and report with it. The vault's own import record
+  // the push log, journal and report with it. The server's own import record
   // (counts, timings, issues) is what stays. A failed or cancelled run keeps
   // its folder, since the staged files are what a retry would read.
   const stagingDir = ok ? await deleteStagingAfterSuccess() : store.get().stagingDir;
-  // The vault writes this run's saved search and Contact Group when the run
+  // The server writes this run's saved search and Contact Group when the run
   // completes, so a window closed mid-import still gets them.
   store.set({ summaryView: finalSummary, phase: "done", running: false, stagingDir });
 }
@@ -762,7 +762,7 @@ async function deleteStagingAfterSuccess(): Promise<string | null> {
 }
 
 /**
- * Upload to the vault and record the outcome: the tail end shared by a
+ * Upload to the server and record the outcome: the tail end shared by a
  * resumed run (jumps straight here), the Staging Review when there is no
  * Media stage, and the Media Review. Never throws: a push failure is
  * folded into the finished summary via `finishImport`, exactly like any
@@ -1139,7 +1139,7 @@ async function runImport(
 }
 
 /**
- * Cancel the run from a review: close the run on the vault and delete
+ * Cancel the run from a review: close the run on the server and delete
  * the staging folder. Both halves run regardless of the other's outcome: a
  * live run with no folder blocks the next import, and a folder with no run
  * is litter nothing will ever clean up.
@@ -1270,7 +1270,7 @@ export function useImportJob() {
   }
 
   /**
-   * Resume a run the vault reports waiting at a review (`awaiting_gate_1`
+   * Resume a run the server reports waiting at a review (`awaiting_gate_1`
    * / `awaiting_gate_2`) or mid Media (`transcode`).
    *
    * `approve` can't do this itself: it depends on what the store holds

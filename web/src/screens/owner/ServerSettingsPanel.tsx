@@ -7,12 +7,12 @@ import { getServerSettings, updateServerSettings } from "../../lib/serverApi";
 import { useServerInfo } from "../../lib/useServerInfo";
 
 /**
- * Settings that belong to the whole vault rather than to one account.
+ * Settings that belong to the whole Message Crate rather than to one account.
  *
- * One so far. Public registration is off on a fresh vault, so a vault admits
+ * One so far. Public registration is off on a fresh Message Crate, so it admits
  * nobody its owner has not admitted until the owner decides otherwise. Under
- * it the vault states which code it runs and which schema its database
- * carries: the Build, and the Schema Fingerprint as the number the vault
+ * it the server states which code it runs and which schema its database
+ * carries: the Build, and the Schema Fingerprint as the number the server
  * stamps into the database and names in its startup warning.
  */
 export function ServerSettingsPanel() {

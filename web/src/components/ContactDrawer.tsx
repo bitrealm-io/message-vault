@@ -183,7 +183,7 @@ export default function ContactDrawer({
       : loading
         ? null
         : [];
-  // Unknown is the one group the vault computes, so it arrives as a flag
+  // Unknown is the one group the server computes, so it arrives as a flag
   // beside the stored group names and leads them here.
   const isUnknown = detailMatches ? matchedDetail.unknown : previewMatches && !!preview?.unknown;
   const displayGroups =

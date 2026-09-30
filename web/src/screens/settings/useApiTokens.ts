@@ -147,7 +147,7 @@ export function useApiTokens() {
     );
   };
 
-  /** The dialog closes whether or not the vault agreed; the refusal shows in `actionError`. */
+  /** The dialog closes whether or not the server agreed; the refusal shows in `actionError`. */
   const revoke = (item: ApiTokenItem) => {
     revokeToken.mutate(item.id, { onSettled: () => setRevokeTarget(null) });
   };

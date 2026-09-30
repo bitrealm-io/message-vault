@@ -9,7 +9,7 @@ import { type AccountProfileChange, useUpdateAccountProfile } from "./useAccount
  * The account a Settings screen is about.
  *
  * With no id it is the logged-in account, from the entry every other screen
- * reads. With an id it is an account the vault owner has opened from User
+ * reads. With an id it is an account the owner has opened from User
  * Accounts, read from the same `/v1/accounts/{id}` row under the owner's list
  * entry, so a change to the list refreshes it.
  */
@@ -32,9 +32,9 @@ export function useSettingsAccount(managedAccountId?: number): {
 
 /**
  * Change the name, time zone or identities of the account a Settings screen
- * is about: the logged-in one, or one the vault owner opened.
+ * is about: the logged-in one, or one the owner opened.
  *
- * The vault answers with the account as it now stands, which goes into the
+ * The server answers with the account as it now stands, which goes into the
  * entry the screen reads. The owner's list shows an account's name, so a
  * managed change refreshes it.
  */

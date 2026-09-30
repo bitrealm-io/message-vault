@@ -39,7 +39,7 @@ vi.mock("./api", () => ({
   setBaseUrl: (...args: unknown[]) => setBaseUrl(...args),
 }));
 
-// The vault calls auth.tsx makes, faked by name. Everything else in serverApi
+// The server calls auth.tsx makes, faked by name. Everything else in serverApi
 // stays real, since other modules in this graph import from it.
 vi.mock("./serverApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./serverApi")>()),
@@ -101,7 +101,7 @@ describe("AuthProvider logout", () => {
     });
   });
 
-  it("tells the vault to end the session before clearing the token", async () => {
+  it("tells the server to end the session before clearing the token", async () => {
     seedSession();
     const order: string[] = [];
     post.mockImplementation(async () => {
@@ -133,7 +133,7 @@ describe("AuthProvider logout", () => {
     expect(result.current.token).toBeNull();
   });
 
-  it("clears the saved login when the vault logout request fails", async () => {
+  it("clears the saved login when the server logout request fails", async () => {
     seedSession();
     post.mockRejectedValue(new Error("network down"));
 
@@ -155,7 +155,7 @@ describe("AuthProvider logout", () => {
     expect(result.current.isAuthenticated).toBe(false);
   });
 
-  it("skips the vault logout request when there is no session token", async () => {
+  it("skips the server logout request when there is no session token", async () => {
     const { AuthProvider, useAuth } = await import("./auth");
     const { result } = renderHook(() => useAuth(), {
       wrapper: ({ children }: { children: ReactNode }) => (
@@ -291,7 +291,7 @@ describe("AuthProvider restoring a saved login", () => {
     });
   }
 
-  it("keeps the saved login when the vault gives no answer", async () => {
+  it("keeps the saved login when the server gives no answer", async () => {
     seedSession();
     get.mockRejectedValue(new TypeError("Failed to fetch"));
 
@@ -302,7 +302,7 @@ describe("AuthProvider restoring a saved login", () => {
     expect(localStorage.getItem(STORAGE_KEY)).toContain("session-token");
   });
 
-  it("keeps the saved login when something other than the vault answers", async () => {
+  it("keeps the saved login when something other than the server answers", async () => {
     seedSession();
     const { ApiError } = await import("./api");
     get.mockRejectedValue(new ApiError(502, "Bad Gateway"));
@@ -313,7 +313,7 @@ describe("AuthProvider restoring a saved login", () => {
     expect(localStorage.getItem(STORAGE_KEY)).toContain("session-token");
   });
 
-  it("deletes the saved login when the vault rejects it", async () => {
+  it("deletes the saved login when the server rejects it", async () => {
     seedSession();
     const { ApiError } = await import("./api");
     get.mockRejectedValue(new ApiError(401, "Unauthorized"));
@@ -324,7 +324,7 @@ describe("AuthProvider restoring a saved login", () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it("logs in with the saved login once the vault answers again", async () => {
+  it("logs in with the saved login once the server answers again", async () => {
     seedSession();
     get.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     get.mockResolvedValue({ account_id: 7 });
@@ -352,7 +352,7 @@ describe("AuthProvider restoring a saved login", () => {
     expect(get).not.toHaveBeenCalled();
   });
 
-  it("never sends a saved login to a different vault address", async () => {
+  it("never sends a saved login to a different server address", async () => {
     seedSession();
     get.mockRejectedValueOnce(new TypeError("Failed to fetch"));
 

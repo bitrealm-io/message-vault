@@ -8,7 +8,7 @@ import {
 } from "./serverHealth";
 
 /**
- * Probe vault /health for a server URL with debounce and backoff.
+ * Probe /health for a server URL with debounce and backoff.
  * Pass `null` to stop (login card). An empty string probes this origin.
  */
 export function useServerHealth(serverUrl: string | null): ServerHealthStatus {

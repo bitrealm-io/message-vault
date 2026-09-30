@@ -1,4 +1,4 @@
-/** What every vault login route returns: a session token and the account it belongs to. */
+/** What every login route returns: a session token and the account it belongs to. */
 export interface SessionResponse {
   token: string;
   account_id: number;
@@ -9,7 +9,7 @@ export const DEFAULT_TAURI_SERVER_URL = "http://127.0.0.1:8080";
 
 /**
  * First value for the login server URL field.
- * Replaces the old `http://localhost:8080` default so a saved session still reaches a local Docker vault.
+ * Replaces the old `http://localhost:8080` default so a saved session still reaches a local Docker server.
  */
 export function initialLoginServerUrl(savedUrl: string | undefined, inTauri: boolean): string {
   if (typeof savedUrl === "string" && savedUrl.length > 0) {

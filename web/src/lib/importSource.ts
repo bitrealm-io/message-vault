@@ -1,7 +1,7 @@
 import { IMESSAGE_SOURCE_ID, isImessageMethod } from "./imessageImport";
 import { isWhatsappMethod, WHATSAPP_SOURCE_ID } from "./whatsappImport";
 
-/** Vault session / messages.source slug for a desktop Import method id. */
+/** Import session / messages.source slug for a desktop Import method id. */
 export function sourceForMethod(source: string): string {
   if (isImessageMethod(source)) {
     return IMESSAGE_SOURCE_ID;

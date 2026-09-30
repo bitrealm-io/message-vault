@@ -9,7 +9,7 @@ import { useAuth } from "../../lib/auth";
 import { login as serverLogin } from "../../lib/serverApi";
 import { useAsyncAction } from "../../lib/useAsyncAction";
 
-/** Username and password login for a vault running in local auth mode. */
+/** Username and password login for a server running in local auth mode. */
 export default function LoginForm({
   serverUrl,
   disabled = false,

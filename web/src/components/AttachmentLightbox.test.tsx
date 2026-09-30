@@ -160,7 +160,7 @@ describe("AttachmentLightbox while the file is not there", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
-  it("says the attachment could not be loaded when the vault refuses it", async () => {
+  it("says the attachment could not be loaded when the server refuses it", async () => {
     vi.mocked(fetchAssetObjectUrl).mockRejectedValue(new Error("404"));
     open(0);
 

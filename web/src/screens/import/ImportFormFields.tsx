@@ -97,7 +97,7 @@ export type ImportFormFieldsProps = {
   /** Owner email addresses as typed (SMS Backup+ only); commas separate several. */
   ownerEmails: string;
   onOwnerEmailsChange: (value: string) => void;
-  /** Vault account phones for SBR mismatch checks (empty until loaded). */
+  /** The account's phones for SBR mismatch checks (empty until loaded). */
   profilePhones: string[];
   profilePhonesReady: boolean;
   /** True when the profile request failed (fail open on mismatch gate). */

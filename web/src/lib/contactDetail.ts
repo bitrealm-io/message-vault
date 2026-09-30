@@ -36,7 +36,7 @@ export function useContactDetail(contactId: string | null): {
 /**
  * Change one thing about a contact.
  *
- * The vault answers with the contact as it now stands, so the answer goes
+ * The server answers with the contact as it now stands, so the answer goes
  * straight into the entry the drawer reads and nothing asks for it again. The
  * list pages are marked stale because they show the name too; the contact's
  * own entry is not, because it is already right.

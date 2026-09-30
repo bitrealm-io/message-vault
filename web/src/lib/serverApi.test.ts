@@ -1,5 +1,5 @@
 /**
- * The only place in the suite that names vault URLs.
+ * The only place in the suite that names server URLs.
  *
  * Every other test fakes these functions by name, so nothing else notices when
  * a route is renamed. That makes this file the one thing standing between a

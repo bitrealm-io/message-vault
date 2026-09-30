@@ -29,7 +29,7 @@ export interface ServerSettingsScreenProps {
 }
 
 /**
- * Where the vault address is chosen. It takes over the auth card rather than
+ * Where the server address is chosen. It takes over the auth card rather than
  * opening a dialog, so the frame never changes size, and it answers the one
  * question the address raises — will this work? — in place, before you commit
  * to it.

@@ -10,12 +10,12 @@ import { claimServer } from "../../lib/serverApi";
 import { useAsyncAction } from "../../lib/useAsyncAction";
 
 /**
- * Create the vault owner, which is the only thing an unclaimed vault offers.
+ * Create the owner, which is the only thing an unclaimed Message Crate offers.
  *
  * The owner manages accounts and holds no messages of their own, so this form
  * asks for a username and a password and nothing else: there is no profile to
- * set up, no time zone to pick, and no vault to arrive in. That is why it
- * finishes with "Create Vault Owner" rather than the "Continue" the account
+ * set up, no time zone to pick, and no conversation list to arrive in. That is why it
+ * finishes with "Create Owner" rather than the "Continue" the account
  * form uses — this step is the whole of it.
  */
 export default function ClaimForm({

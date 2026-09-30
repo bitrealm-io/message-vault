@@ -19,7 +19,7 @@ import {
  * Unlike Contact Groups and Message Tags this is not a `nameCollection`:
  * there is no name, no membership, and nothing to look an id up by — the
  * caller already has the conversation or contact id. Each pair is a plain
- * mutation over one vault route, with `onSettled` marking the prefixes the
+ * mutation over one server route, with `onSettled` marking the prefixes the
  * trash state actually touches.
  */
 
@@ -68,7 +68,7 @@ export function useRestoreConversation(): UseMutationResult<void, Error, number>
  *
  * Wider than trash and restore because the conversation itself is gone, not
  * moved: every entry under `conversations` — its detail, its message pages,
- * its Sources panel — now describes a row the vault will 404, so the whole
+ * its Sources panel — now describes a row the server will 404, so the whole
  * prefix is marked rather than the list alone. `storage.all` is marked too,
  * because the attachment files only this conversation used went with it and
  * Settings → Storage counts them.
@@ -145,7 +145,7 @@ export function useDeleteContact(): UseMutationResult<void, Error, string | numb
 
 /**
  * Empty the trash: what `useDeleteConversation` does to every trashed
- * conversation and `useDeleteContact` to every trashed contact, in one vault
+ * conversation and `useDeleteContact` to every trashed contact, in one server
  * call. The response names nothing, so the union of what those two mark is
  * marked, with the whole of `contacts` standing in for the per-id details.
  */

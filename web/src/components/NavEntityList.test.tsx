@@ -3,7 +3,7 @@
 /**
  * `rename` and `remove` on `NavEntityList` navigate away from the renamed or
  * deleted item's own page — to the new slug, or to the collection's fallback
- * route. The vault's write routes are faked by name, the way
+ * route. The server's write routes are faked by name, the way
  * `nameCollection.test.tsx` fakes them, so this never touches a URL string
  * except the one under test.
  */

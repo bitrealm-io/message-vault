@@ -42,7 +42,7 @@ import { useAccountProfile } from "../lib/useAccountProfile";
  * kinds at once. A word only one list accepts (`participants:` is a
  * conversations word, `conversations:` a contacts word) is not sent to the
  * list that would refuse it; that pane says which list the word applies to
- * instead of showing the vault's 422.
+ * instead of showing the server's 422.
  */
 
 /** How many trashed contacts this pane lists before it stops. */
@@ -91,7 +91,7 @@ export default function TrashScreen() {
 
   // Which typed words each list refuses. The registry is fetched once per
   // session; until it arrives neither pane asks, so a refused word never
-  // reaches the vault as a 422.
+  // reaches the server as a 422.
   const conversationFields = useSearchFields("conversations");
   const contactFields = useSearchFields("contacts");
   const fieldsLoading = conversationFields.loading || contactFields.loading;
@@ -147,9 +147,9 @@ export default function TrashScreen() {
   const deleteContact = useDeleteContact();
   const emptyTrash = useEmptyTrash();
 
-  // The vault refuses a delete from an account without the delete grant (the
+  // The server refuses a delete from an account without the delete grant (the
   // demo account, for one) with a 403; the buttons say so up front instead.
-  // Until the profile has loaded the buttons stay live — the vault is the
+  // Until the profile has loaded the buttons stay live — the server is the
   // gate, this is only the explanation.
   const { profile } = useAccountProfile();
   const canDelete = profile?.can_delete ?? true;

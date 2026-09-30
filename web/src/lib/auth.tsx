@@ -26,14 +26,14 @@ interface AuthContextValue extends AuthState {
   login: (serverUrl: string, token: string, accountId: number) => Promise<void>;
   /** Save a new session token after the user changes their password. */
   updateToken: (token: string) => void;
-  /** Revoke the vault session (best-effort) and clear the saved login. */
+  /** Revoke the server session (best-effort) and clear the saved login. */
   logout: () => Promise<void>;
   setServer: (url: string) => void;
   /**
-   * Check the saved login again, after a startup check the vault never
+   * Check the saved login again, after a startup check the server never
    * answered. `serverUrl` is the address just found reachable: a login saved
    * for any other address is left alone, so a token only ever goes to the
-   * vault that issued it. Does nothing when no login is saved.
+   * server that issued it. Does nothing when no login is saved.
    */
   retrySavedLogin: (serverUrl: string) => void;
 }
@@ -42,7 +42,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const STORAGE_KEY = "message-crate-auth";
 
-/** Max time to wait for the vault logout request before clearing local state. */
+/** Max time to wait for the server logout request before clearing local state. */
 const LOGOUT_TIMEOUT_MS = 2000;
 
 /** AbortSignal that fires after {@link LOGOUT_TIMEOUT_MS}. */
@@ -163,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!cancelled) setRestored(true);
       } catch (err) {
-        // Only the vault can say a token is no longer valid, and it says so
+        // Only the server can say a token is no longer valid, and it says so
         // with a 401. A request nothing answered, or a 502 from a proxy, says
         // nothing about the token, so the saved login stays for
         // `retrySavedLogin`. Either way this session shows the login screen.
@@ -209,7 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (serverUrl: string, token: string, accountId: number) => {
       const epoch = ++authEpoch.current;
-      // One call, and it cannot be incomplete: every cached vault entry is named
+      // One call, and it cannot be incomplete: every cached entry is named
       // with the account that filled it, so this only releases memory.
       resetRouteCache();
       setBaseUrl(serverUrl);
@@ -236,7 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRestored(true);
     },
     [
-      // One call, and it cannot be incomplete: every cached vault entry is named
+      // One call, and it cannot be incomplete: every cached entry is named
       // with the account that filled it, so this only releases memory.
       resetRouteCache,
       queryClient,
@@ -261,7 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         await serverLogout({ signal: logoutTimeoutSignal() });
       } catch {
-        // Vault unreachable, 401, or timeout — still clear the local session.
+        // Server unreachable, 401, or timeout — still clear the local session.
       }
     }
     setToken(null);

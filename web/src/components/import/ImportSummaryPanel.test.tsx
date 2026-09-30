@@ -58,7 +58,7 @@ describe("ImportSummaryPanel", () => {
               kind: "error",
               step: "upload",
               item: "thread.jsonl",
-              reason: "HTTP 500 from vault",
+              reason: "HTTP 500 from server",
             },
           ],
         }}

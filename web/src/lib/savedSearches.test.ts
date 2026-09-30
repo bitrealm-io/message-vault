@@ -59,7 +59,7 @@ beforeEach(() => {
 });
 
 describe("useSavedSearches", () => {
-  it("reads the list from the vault, not from browser storage", async () => {
+  it("reads the list from the server, not from browser storage", async () => {
     list.mockResolvedValue({ items: [search(1, "Family")], total: 1, limit: 40, offset: 0 });
     const { result } = renderHook(() => useSavedSearches(), { wrapper });
     await waitFor(() => expect(result.current.savedSearches).toEqual([search(1, "Family")]));
@@ -111,7 +111,7 @@ describe("useSavedSearches", () => {
     expect(second.result.current.savedSearches).not.toContainEqual(search(1, "Alice's Family"));
   });
 
-  it("keeps the kind the vault reports, so import rows stay identifiable", async () => {
+  it("keeps the kind the server reports, so import rows stay identifiable", async () => {
     list.mockResolvedValue({
       items: [search(2, "Backup 1", "import")],
       total: 1,
@@ -196,9 +196,9 @@ describe("useSavedSearchActions", () => {
     const write = result.current.create("Family", "kind:group");
     await waitFor(() => expect(result.current.pending).toBe(true));
 
-    refuse(new Error("vault said no"));
-    await expect(write).rejects.toThrow("vault said no");
-    await waitFor(() => expect(result.current.error?.message).toBe("vault said no"));
+    refuse(new Error("server said no"));
+    await expect(write).rejects.toThrow("server said no");
+    await waitFor(() => expect(result.current.error?.message).toBe("server said no"));
     expect(result.current.pending).toBe(false);
   });
 

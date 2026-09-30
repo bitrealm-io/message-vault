@@ -1,5 +1,5 @@
 /**
- * The one way the web app fetches and remembers vault data.
+ * The one way the web app fetches and remembers server data.
  *
  * TanStack Query does the remembering, the duplicate-request suppression, the
  * loading and error state, and the "this is stale now, refetch whoever is
@@ -47,7 +47,7 @@ export function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        // The vault is usually on the same host or a local network, so a
+        // The server is usually on the same host or a local network, so a
         // refetch is cheap. Half a minute is long enough that moving between
         // screens does not refetch, and short enough that a stale list
         // corrects itself without anyone reloading.
@@ -91,7 +91,7 @@ export function useRouteQuery<TData>(
   });
 }
 
-/** One page of an offset-paged list, with the total the vault reported. */
+/** One page of an offset-paged list, with the total the server reported. */
 export type OffsetPage<T> = {
   items: T[];
   total: number;
@@ -130,9 +130,9 @@ export type PagedListResult<T> = {
 };
 
 /**
- * An offset-paged vault list, account-scoped like every other cache entry.
+ * An offset-paged server list, account-scoped like every other cache entry.
  *
- * The vault pages by `limit` and `offset` and reports a `total`, so the next
+ * The server pages by `limit` and `offset` and reports a `total`, so the next
  * page starts where the pages loaded so far end and there is no next page once
  * they cover the total.
  *
@@ -200,15 +200,15 @@ export type RouteCacheEntries = readonly [readonly unknown[], unknown][];
  * The cache operations a write needs, with the account already in front of
  * every key.
  *
- * A mutation draws its change before the vault answers, puts the old value
- * back when the vault refuses, and says what is stale once it settles. Each of
+ * A mutation draws its change before the server answers, puts the old value
+ * back when the server refuses, and says what is stale once it settles. Each of
  * those is one call on the query client — this is that client with the account
  * rule applied, and nothing else. It is not a cache.
  */
 export type RouteCache = {
   /** What the cache holds under one key, without fetching. */
   read: <T>(key: RouteQueryKey) => T | undefined;
-  /** Ask the vault now and store the answer under the key. */
+  /** Ask the server now and store the answer under the key. */
   fetch: <T>(key: RouteQueryKey, queryFn: (signal: AbortSignal) => Promise<T>) => Promise<T>;
   /** Write one entry, for a mutation that answered with the whole value. */
   set: <T>(key: RouteQueryKey, value: T) => void;

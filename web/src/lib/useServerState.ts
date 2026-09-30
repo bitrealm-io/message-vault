@@ -2,14 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { setBaseUrl } from "./api";
 import { getServerState } from "./serverApi";
 
-/** What the vault reports about itself, plus the shapes a screen must handle. */
+/** What the server reports about itself, plus the shapes a screen must handle. */
 export type ServerState = "unclaimed" | "closed" | "open";
 
 /**
- * What the entry screen should offer, asked of the vault rather than worked
+ * What the entry screen should offer, asked of the server rather than worked
  * out here.
  *
- * The vault answers with one value — `unclaimed`, `closed`, or `open` — so the
+ * The server answers with one value — `unclaimed`, `closed`, or `open` — so the
  * rule joining "does an owner exist" to "is registration open" is stated once,
  * on the server. Deriving it again in the browser, and a third time in the
  * desktop app, would be three copies free to drift apart. See
@@ -27,14 +27,14 @@ export function useServerState(serverUrl: string | null): {
   error: string;
 } {
   const { data, isPending, error } = useQuery({
-    queryKey: ["vault-state", serverUrl ?? ""],
+    queryKey: ["server-state", serverUrl ?? ""],
     enabled: serverUrl !== null,
     queryFn: async ({ signal }) => {
       if (serverUrl) setBaseUrl(serverUrl);
       const res = await getServerState({ signal });
       return res.state as ServerState;
     },
-    // A vault does not change state under a logged-out visitor except by their
+    // A Message Crate does not change state under a logged-out visitor except by their
     // own act, and every act that changes it navigates away from this screen.
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,

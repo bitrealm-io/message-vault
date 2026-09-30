@@ -114,7 +114,7 @@ export default function ConversationList({
     (name: string, enable: boolean) => {
       const ids = targetConversations.map((c) => c.id);
       if (ids.length === 0) return Promise.resolve();
-      // The tags on the rows change in the cache before the vault answers and
+      // The tags on the rows change in the cache before the server answers and
       // go back if it refuses, so nothing here has to remember them. Marking
       // every conversation stale afterwards is what used to need the
       // `membershipRev` counter in the query key.

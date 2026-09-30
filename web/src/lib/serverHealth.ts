@@ -15,7 +15,7 @@ export function healthBackoffMs(failureIndex: number): number {
 export type ServerHealthStatus = "unknown" | "checking" | "ok" | "fail";
 
 /**
- * URL to GET for vault liveness.
+ * URL to GET for server liveness.
  * A blank value means this origin (same as the API client empty base URL).
  * Returns null when the value is not empty and not an absolute http(s) URL.
  */
@@ -34,7 +34,7 @@ export function healthProbeUrl(baseUrl: string): string | null {
 }
 
 /**
- * Probe vault liveness via GET /health (plain text, not JSON).
+ * Probe server liveness via GET /health (plain text, not JSON).
  * Returns true only when the response is OK.
  */
 export async function checkServerHealth(baseUrl: string, signal?: AbortSignal): Promise<boolean> {

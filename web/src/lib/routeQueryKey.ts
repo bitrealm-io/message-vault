@@ -1,5 +1,5 @@
 /**
- * How a vault cache entry is named.
+ * How a cache entry is named.
  *
  * Its own module, importing nothing, because both `routeQuery` and `auth` need
  * it: `routeQuery` reads the logged-in account from `auth`, so `auth` importing
@@ -28,5 +28,5 @@ export type AccountScope = number | typeof ANONYMOUS_ACCOUNT;
  * `docs/adr/0002-one-way-to-fetch-data-in-the-web-app.md`.
  */
 export function routeQueryKey(account: AccountScope, key: RouteQueryKey): unknown[] {
-  return ["vault", account, ...key];
+  return ["server", account, ...key];
 }

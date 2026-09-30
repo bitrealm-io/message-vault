@@ -1,9 +1,9 @@
 import { useAccountProfile } from "./useAccountProfile";
 
 /**
- * Whether the logged-in principal is this vault's owner.
+ * Whether the logged-in principal is this Message Crate's owner.
  *
- * A server fact, read from the profile. The owner has no vault of their own,
+ * A server fact, read from the profile. The owner has no messages of their own,
  * so every screen built around conversations is meaningless to them and the
  * routing has to know it. `loading` matters to the caller: a guard that
  * treated "not loaded yet" as "an ordinary account" would flash the message

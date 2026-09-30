@@ -26,7 +26,7 @@ function matches(account: ManagedAccount, needle: string): boolean {
 }
 
 /**
- * The accounts of this vault, the vault owner's own first.
+ * The accounts of this Message Crate, the owner's own first.
  *
  * A row carries a username, a preferred name, a status and the last login.
  * The gear at the left of a row, shown while the pointer is in the row, opens

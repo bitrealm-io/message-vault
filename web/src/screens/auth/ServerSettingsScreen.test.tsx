@@ -24,7 +24,7 @@ function renderScreen(overrides: Partial<Parameters<typeof ServerSettingsScreen>
 describe("ServerSettingsScreen", () => {
   afterEach(cleanup);
 
-  it("names itself and the field without repeating the word vault", () => {
+  it("names itself Server Address and the field Address", () => {
     renderScreen();
 
     expect(screen.getByRole("heading", { name: "Server Address" })).toBeInTheDocument();
@@ -32,8 +32,8 @@ describe("ServerSettingsScreen", () => {
     expect(screen.getByText("Connection Status")).toBeInTheDocument();
   });
 
-  it("suggests the local vault's address in an empty field", () => {
-    // A vault on this machine is where nearly everyone starts, so the example
+  it("suggests the local server's address in an empty field", () => {
+    // A server on this machine is where nearly everyone starts, so the example
     // is the address that works there rather than a made-up hostname.
     renderScreen({ draft: "" });
 

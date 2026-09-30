@@ -145,7 +145,7 @@ describe("useConversationMessages", () => {
     await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual([1, 2]));
 
     // A year is a search scoped to the conversation, not a filter on the
-    // read by id: the vault refuses `year=` there. The conversation is
+    // read by id: the server refuses `year=` there. The conversation is
     // reached in the trash too, because it can be opened from there.
     expect(searchMessages).toHaveBeenNthCalledWith(
       1,
@@ -165,7 +165,7 @@ describe("useConversationMessages", () => {
     expect(result.current.finding).toBe(false);
   });
 
-  it("runs the find box on the vault, scoped to the conversation and the chosen year", async () => {
+  it("runs the find box on the server, scoped to the conversation and the chosen year", async () => {
     getMessages.mockResolvedValue(page([message(9)]));
     searchMessages.mockResolvedValue({
       items: [message(4), message(5)],

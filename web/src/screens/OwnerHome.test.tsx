@@ -76,7 +76,7 @@ const anAccount = {
   app_version: null,
 };
 
-/** The vault owner's own row, which leads the list and is account 1, the one logged in. */
+/** The owner's own row, which leads the list and is account 1, the one logged in. */
 const theOwner = {
   ...anAccount,
   account_id: 1,
@@ -178,7 +178,7 @@ beforeEach(() => {
       },
     ],
   });
-  // The vault and this app are the same release unless a test says otherwise.
+  // The server and this app are the same release unless a test says otherwise.
   getServerState.mockResolvedValue({
     state: "closed",
     version: APP_BUILD,
@@ -265,7 +265,7 @@ describe("OwnerHome", () => {
     ]);
   });
 
-  it("shows what the whole vault holds on the Dashboard, as counts and a byte total", async () => {
+  it("shows what the whole database holds on the Dashboard, as counts and a byte total", async () => {
     renderHome(["/owner/dashboard"]);
 
     expect(selectedSection()).toBe("Dashboard");
@@ -306,7 +306,7 @@ describe("OwnerHome", () => {
       within(row)
         .getAllByRole("cell")
         .map((cell) => cell.textContent);
-    // A heading row, one row per account in the vault's order, and the totals.
+    // A heading row, one row per account in the server's order, and the totals.
     expect(rows).toHaveLength(5);
     expect(cells(rows[1])).toEqual(["root", "0", "0 B", "0 B"]);
     expect(cells(rows[2])).toEqual(["alice", "5,000", "6.0 MB", "300 MB"]);
@@ -388,7 +388,7 @@ describe("OwnerHome", () => {
     expect(screen.getByRole("link", { name: "← User Accounts" })).toBeInTheDocument();
   });
 
-  it("lists the vault owner first, with no status or permissions to set", async () => {
+  it("lists the owner first, with no status or permissions to set", async () => {
     renderHome();
 
     const rows = (await screen.findAllByRole("row")).slice(1);
@@ -530,7 +530,7 @@ describe("OwnerHome", () => {
     getAccountStorage.mockResolvedValue({
       total_bytes: 3000,
       attachment_count: 1,
-      // What the vault answers the owner: the file, and not where it sits.
+      // What the server answers the owner: the file, and not where it sits.
       top_attachments: [
         { id: 5, original_name: "big.mov", mime_type: "video/quicktime", size_bytes: 3000 },
       ],
@@ -593,7 +593,7 @@ describe("OwnerHome", () => {
     expect(headers).toEqual(["User", "Status", "Last login"]);
     // What an account holds is under its Storage tab, and its app under Profile.
     expect(screen.queryByText("1,234")).not.toBeInTheDocument();
-    expect(screen.queryByText(/The accounts on this vault/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/The accounts on this Message Crate/)).not.toBeInTheDocument();
     // The table sets nothing: status reads as text, and the permissions, like
     // what was the Actions column, are in the account's Settings, behind its gear.
     expect(screen.getByText("Active")).toBeInTheDocument();
@@ -630,7 +630,7 @@ describe("OwnerHome", () => {
     expect(screen.getByText(/2026/)).toBeInTheDocument();
   });
 
-  it("states the vault's version and schema fingerprint in Settings", async () => {
+  it("states the server's version and schema fingerprint in Settings", async () => {
     renderHome(["/owner/settings"]);
 
     const version = await screen.findByText("Version");
@@ -640,7 +640,7 @@ describe("OwnerHome", () => {
     );
   });
 
-  it("says nothing under the header while the vault and the app are one release", async () => {
+  it("says nothing under the header while the server and the app are one release", async () => {
     renderHome();
 
     await screen.findByText("bob");
@@ -648,7 +648,7 @@ describe("OwnerHome", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
-  it("states both versions under the header when the vault is another release", async () => {
+  it("states both versions under the header when the server is another release", async () => {
     getServerState.mockResolvedValue({
       state: "closed",
       version: "0.10.0",
@@ -695,7 +695,7 @@ describe("OwnerHome", () => {
     const user = userEvent.setup({ delay: null });
     renderHome(["/owner/accounts/101"]);
 
-    // The vault judges the pair, so a differing one goes to it and its
+    // The server judges the pair, so a differing one goes to it and its
     // sentence comes back to the screen.
     setAccountPassword.mockRejectedValueOnce(new Error("New passwords do not match."));
     await user.type(await screen.findByLabelText("New password"), "correct horse");
@@ -781,7 +781,7 @@ describe("OwnerHome", () => {
     expect(await screen.findByText("Passwords do not match.")).toBeInTheDocument();
     expect(createAccount).not.toHaveBeenCalled();
 
-    // The vault is never asked for the new row here, so what the screen shows
+    // The server is never asked for the new row here, so what the screen shows
     // can only have come from the answer to Create.
     getAccount.mockImplementation((id: number) =>
       id === 102 ? new Promise(() => {}) : Promise.resolve(anAccount),
@@ -798,7 +798,7 @@ describe("OwnerHome", () => {
       }),
     );
     // The created account's own Settings, with every tab, drawn from the
-    // vault's answer to Create: nothing waits on a fetch, so nothing flickers.
+    // server's answer to Create: nothing waits on a fetch, so nothing flickers.
     expect(
       await screen.findByRole("heading", { name: "User Settings: carol" }),
     ).toBeInTheDocument();

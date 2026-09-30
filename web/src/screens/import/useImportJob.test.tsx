@@ -85,7 +85,7 @@ vi.mock("../../lib/api", () => ({
   getBaseUrl: () => "http://127.0.0.1:8080",
 }));
 
-// The two vault calls this hook makes. Everything else in serverApi stays real,
+// The two server calls this hook makes. Everything else in serverApi stays real,
 // since other modules in this graph import from it.
 vi.mock("../../lib/serverApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../lib/serverApi")>()),
@@ -537,7 +537,7 @@ describe("useImportJob wiring", () => {
     // discard-then-delete (each awaited without independent handling) would
     // let a rejected delete propagate out of cancelRun and skip
     // returnToForm — leaving the screen stuck on Gate 1 with a session the
-    // vault already considers discarded.
+    // server already considers discarded.
     invokeDeleteStagingMock.mockRejectedValueOnce(new Error("disk full"));
     const { result } = renderHook(() => useImportJob());
     await act(() => result.current.startImport(form({ attachmentMedia: "convert" })));
@@ -563,7 +563,7 @@ describe("useImportJob wiring", () => {
     expect(result.current.phase).toBe("form");
   });
 
-  it("a successful import deletes its staging directory once the vault has recorded it", async () => {
+  it("a successful import deletes its staging directory once the server has recorded it", async () => {
     resolveImportStagingDirMock.mockResolvedValue("/staging/run-3");
     runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
     const { result } = renderHook(() => useImportJob());
@@ -573,7 +573,7 @@ describe("useImportJob wiring", () => {
     expect(result.current.phase).toBe("done");
     expect(result.current.summaryView?.status).toBe("completed");
     expect(invokeDeleteStagingMock).toHaveBeenCalledWith({ staging_dir: "/staging/run-3" });
-    // The vault's record is written first; the folder goes after it.
+    // The server's record is written first; the folder goes after it.
     expect(completeImportMock.mock.invocationCallOrder[0]).toBeLessThan(
       invokeDeleteStagingMock.mock.invocationCallOrder[0] ?? 0,
     );

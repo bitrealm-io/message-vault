@@ -21,7 +21,7 @@ const sectionHeading = "m-0 mb-2 text-[12px] font-semibold uppercase tracking-[0
 
 const EXAMPLE_STAGING = "staging-iphone-ios-260809-143022";
 
-/** Shared label + control grid so Vault and Media path fields share one nowrap label column. */
+/** Shared label + control grid so the path fields share one nowrap label column. */
 const settingsGrid = "grid grid-cols-[13.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1";
 const settingsLabel = "whitespace-nowrap text-[0.875rem] font-medium text-text";
 const settingsHelp = "col-start-2 pl-2 text-[0.75rem] text-muted";

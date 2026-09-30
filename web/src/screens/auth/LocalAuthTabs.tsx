@@ -11,15 +11,15 @@ function tabClassName({ isSelected }: { isSelected: boolean }) {
 }
 
 /**
- * The ways into a vault, which depend on what state the vault is in.
+ * The ways into a Message Crate, which depend on what state it is in.
  *
- * An **unclaimed** vault offers one thing: creating its owner. No login,
+ * An **unclaimed** Message Crate offers one thing: creating its owner. No login,
  * because no account exists to log into, and no Create Account, because a
- * vault decides who may join it only once it has an owner to decide.
+ * Message Crate decides who may join it only once it has an owner to decide.
  *
- * A **closed** vault offers Login alone. An **open** one adds Create Account.
+ * A **closed** Message Crate offers Login alone. An **open** one adds Create Account.
  *
- * The vault reports which of the three it is; nothing here recombines the
+ * The server reports which of the three it is; nothing here recombines the
  * facts behind that answer. See
  * `docs/adr/0008-the-owner-holds-no-messages.md`.
  *

@@ -32,7 +32,7 @@ export function normalizePhoneDigits(phone: string): string {
 
 /**
  * US national form for comparison: strip non-digits; if 11 digits starting
- * with `1`, drop the country code. Matches vault `sanitize_number` for US.
+ * with `1`, drop the country code. Matches the server's `sanitize_number` for US.
  */
 export function toUsNationalDigits(phone: string): string {
   let digits = normalizePhoneDigits(phone);

@@ -13,7 +13,7 @@ const numberCell = "whitespace-nowrap text-right";
  * text they are, and the estimated share of the messages' storage. The
  * accounts come in the order the User Accounts table lists them: the owner
  * first, then by username. The totals row at the bottom carries the
- * whole-vault figures, so the split can be seen to add up.
+ * whole-database figures, so the split can be seen to add up.
  *
  * The estimate is the measured messages-on-disk figure split by each
  * account's share of text; the hint says so.

@@ -36,7 +36,7 @@ describe("AccountPermissionsSection", () => {
     expect(screen.getByText("The owner sets your status and permissions.")).toBeInTheDocument();
   });
 
-  it("lets the vault owner change them on an account it opened", () => {
+  it("lets the owner change them on an account it opened", () => {
     render(<AccountPermissionsSection profile={profile} managedAccountId={101} />);
 
     expect(screen.getByRole("button", { name: /Status/ })).toBeEnabled();

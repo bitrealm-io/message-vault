@@ -1,5 +1,5 @@
 /**
- * The import form as the vault stores it on a session, and the way back.
+ * The import form as the server stores it on a session, and the way back.
  *
  * `formSnapshot` writes the record at session creation; `restoreFormFromSnapshot`
  * rebuilds form values from it when Import reopens on that session. They sit

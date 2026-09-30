@@ -152,7 +152,7 @@ describe("apiClient no-content", () => {
  * response, so the URL, the Authorization header, the media type and the body
  * were never looked at. A client that dropped the Bearer token, sent the body
  * as `[object Object]`, or built the URL without the base would have passed
- * every one of them, and every screen would have failed against a real vault.
+ * every one of them, and every screen would have failed against a real server.
  */
 describe("apiClient request shape", () => {
   it("names this app and its Build on every request, logged in or not", async () => {
@@ -172,17 +172,17 @@ describe("apiClient request shape", () => {
 
   it("puts the path after the base URL", async () => {
     const fetchSpy = stubOkFetch();
-    setBaseUrl("https://vault.example.test");
+    setBaseUrl("https://server.example.test");
 
     await apiClient.get("/v1/conversations");
 
     const [url] = lastCall(fetchSpy);
-    expect(url).toBe("https://vault.example.test/v1/conversations");
+    expect(url).toBe("https://server.example.test/v1/conversations");
   });
 
   it("strips trailing slashes off the base URL so the path is not doubled", () => {
-    setBaseUrl("https://vault.example.test///");
-    expect(getBaseUrl()).toBe("https://vault.example.test");
+    setBaseUrl("https://server.example.test///");
+    expect(getBaseUrl()).toBe("https://server.example.test");
   });
 
   it("sends no host of its own when the base URL is empty, so the page's host serves the API", async () => {
@@ -240,7 +240,7 @@ describe("apiClient request shape", () => {
   it("does not claim a JSON body on a request that carries none", async () => {
     const fetchSpy = stubOkFetch();
 
-    // The vault reads a body wherever the media type promises one, and refuses
+    // The server reads a body wherever the media type promises one, and refuses
     // an empty one as unparseable: a DELETE marked as JSON answered 400.
     await apiClient.delete("/v1/accounts/101");
 

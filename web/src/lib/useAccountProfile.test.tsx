@@ -4,7 +4,7 @@
  * The profile is one entry that every screen reads and two screens write.
  *
  * A write answers with the whole profile, so it belongs in that entry
- * directly: asking the vault again would show the old name for as long as the
+ * directly: asking the server again would show the old name for as long as the
  * round trip takes.
  */
 
@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 
 describe("useUpdateAccountProfile", () => {
-  it("shows the answered profile without asking the vault again", async () => {
+  it("shows the answered profile without asking the server again", async () => {
     read.mockResolvedValue(profile("Ada"));
     write.mockResolvedValue(profile("Ada Lovelace"));
 
@@ -66,7 +66,7 @@ describe("useUpdateAccountProfile", () => {
     expect(read).toHaveBeenCalledTimes(1);
   });
 
-  it("leaves the profile alone when the vault refuses", async () => {
+  it("leaves the profile alone when the server refuses", async () => {
     read.mockResolvedValue(profile("Ada"));
     write.mockRejectedValue(new Error("that address is already claimed"));
 

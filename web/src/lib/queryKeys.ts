@@ -25,7 +25,7 @@ export const keys = {
     lists: ["contacts", "list"] as const,
     list: (q: string) => ["contacts", "list", q] as const,
     details: ["contacts", "detail"] as const,
-    /** Ids arrive as numbers from the vault and as strings from the router. */
+    /** Ids arrive as numbers from the server and as strings from the router. */
     detail: (id: string | number) => ["contacts", "detail", String(id)] as const,
     /**
      * The trashed contacts the Trash screen lists.
@@ -67,7 +67,7 @@ export const keys = {
     identities: ["account-profile", "identities"] as const,
   },
   apiTokens: { all: ["api-tokens"] as const },
-  /** The accounts the vault owner manages, and the vault's own settings. */
+  /** The accounts the owner manages, and the server's own settings. */
   ownerAccounts: {
     all: ["owner-accounts"] as const,
     /** One account the owner has opened. Under `all`, so a write to the list refreshes it too. */
@@ -77,11 +77,11 @@ export const keys = {
     importDetail: (accountId: number, id: number | null) =>
       ["owner-accounts", accountId, "storage", "import", String(id)] as const,
   },
-  serverSettings: { all: ["vault-settings"] as const },
-  /** What the whole vault holds, from `GET /v1/server/storage`. */
-  serverStorage: { all: ["vault-storage"] as const },
-  /** The vault's own Build and Schema Fingerprint, from `GET /v1/server`. */
-  serverInfo: { all: ["vault-info"] as const },
+  serverSettings: { all: ["server-settings"] as const },
+  /** What the whole database holds, from `GET /v1/server/storage`. */
+  serverStorage: { all: ["server-storage"] as const },
+  /** The server's own Build and Schema Fingerprint, from `GET /v1/server`. */
+  serverInfo: { all: ["server-info"] as const },
   storage: {
     all: ["storage"] as const,
     overview: ["storage", "overview"] as const,

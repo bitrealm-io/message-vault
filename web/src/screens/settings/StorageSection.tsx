@@ -9,13 +9,13 @@ import { useStorageData } from "./storage/useStorageData";
 /**
  * The Storage tab: what an account holds, and its import and export history.
  *
- * Given `managedAccountId`, the account is one the vault owner opened from
+ * Given `managedAccountId`, the account is one the owner opened from
  * User Accounts. All of this describes the account's data without being it,
  * so the owner reads the same screen
  * (`docs/adr/0008-the-owner-holds-no-messages.md`). Two parts are held
  * back, because they say who the account talks to: which contacts an import
  * created, where the owner reads how many, and which conversation a large
- * attachment is in, which the vault does not send the owner.
+ * attachment is in, which the server does not send the owner.
  */
 export function StorageSection({ managedAccountId }: { managedAccountId?: number }) {
   const { profile } = useSettingsAccount(managedAccountId);

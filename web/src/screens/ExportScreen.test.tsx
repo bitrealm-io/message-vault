@@ -132,7 +132,7 @@ describe("ExportScreen", () => {
   });
 
   it("removes the staging folder even when the conversion fails", async () => {
-    // Otherwise a failed export silently leaves a whole copy of the vault on
+    // Otherwise a failed export silently leaves a whole copy of the conversations on
     // disk, in a folder the person never chose and will not think to look in.
     const staging = "/home/demo/message-crate/staging-export-260831-120000";
     awaitTauriJob.mockImplementationOnce(async (invokeFn: () => Promise<void>) => {

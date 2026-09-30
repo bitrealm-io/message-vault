@@ -122,7 +122,7 @@ export default function OnboardingScreen() {
   const [validationError, setValidationError] = useState("");
   const { busy, error, run } = useAsyncAction();
 
-  // The vault owner may have filled some of this in when making the account.
+  // The owner may have filled some of this in when making the account.
   // What the owner set is shown for the holder to check and correct, once, and
   // never over something the holder has already typed. A new account's zone is
   // UTC until someone chooses one, so only another zone is the owner's choice.
@@ -247,7 +247,7 @@ export default function OnboardingScreen() {
         throw new Error("Not logged in");
       }
       // An identity the owner added that is no longer in its row, edited or
-      // removed, is unlinked; the vault unlinks before it links, so an edit is
+      // removed, is unlinked; the server unlinks before it links, so an edit is
       // the old value out and the new one in. Rows left as they were send nothing.
       const filled = handles.filter((h) => h.handle.trim());
       await updateAccountProfile({

@@ -1,19 +1,19 @@
 /**
- * Every route function, checked against the OpenAPI document the vault
+ * Every route function, checked against the OpenAPI document the server
  * publishes.
  *
  * `serverApi.ts` says at the top that its types come from
- * `docs/src/assets/openapi.json`, and a vault-side test pins that document to
+ * `docs/src/assets/openapi.json`, and a server-side test pins that document to
  * the running server. Nothing checked the *paths* against it. `serverApi.test.ts`
  * pins 25 of the 67 functions by hand, so the other 42 could ask for an address
- * the vault does not serve and no test in the repository would notice — the
+ * the server does not serve and no test in the repository would notice — the
  * screens all fake these functions by name.
  *
  * This is the check, and it needs no expected path of its own: the document is
  * the expectation. Each function is called with plausible arguments through a
  * faked `apiClient`, and the method and path it asked for must appear in
  * `openapi.json`, and every query parameter it sent must be one that
- * operation declares, because the vault refuses any other with a 422.
+ * operation declares, because the server refuses any other with a 422.
  * Renaming a route or a parameter on the server side, regenerating the
  * document, and forgetting to update this module fails here.
  *
@@ -94,7 +94,7 @@ function calledRoute(): { method: string; path: string; query: string[] } {
 
 /** Plausible arguments for every route function, one call each. */
 const EXERCISED: Record<string, () => unknown> = {
-  // Session and vault
+  // Session and server
   login: () => serverApi.login({ username: "matt", password: "hunter2hunter2" }),
   getSession: () => serverApi.getSession(),
   logout: () => serverApi.logout(),

@@ -14,14 +14,14 @@ import {
  * This builds one from a description of the nouns so the two do not drift
  * apart.
  *
- * The vault addresses a set by its id; screens, the sidebar, and the router
+ * The server addresses a set by its id; screens, the sidebar, and the router
  * hold names. The lookup from one to the other lives here and nowhere else:
- * the id comes from the cached list, or from the vault once when the cached
- * list does not hold the name, and a name the vault does not know is an error
+ * the id comes from the cached list, or from the server once when the cached
+ * list does not hold the name, and a name the server does not know is an error
  * before any request is sent. See `docs/architecture/http-api.md`, Identifiers.
  */
 
-/** One set as the vault answers it. */
+/** One set as the server answers it. */
 export type NamedSet = { id: number; name: string };
 
 /** Members to put in and take out of a set, in one request. Either side may be left off. */
@@ -36,7 +36,7 @@ export type SetMembersVars = { name: string; patch: MembersPatch };
 /**
  * A cached shape whose rows carry this collection's names as chips.
  *
- * A membership write patches these before the vault answers, so a ticked box
+ * A membership write patches these before the server answers, so a ticked box
  * shows on a long list without a round trip. The collection describes them;
  * the screen does not, which is why no screen keeps an override map.
  */
@@ -49,7 +49,7 @@ export type ChipTarget = {
   shape: "pages" | "row";
 };
 
-/** The vault calls one of these collections is built from. */
+/** The server calls one of these collections is built from. */
 export type NameCollectionRoutes = {
   list: (opts?: { signal?: AbortSignal }) => Promise<{ items: NamedSet[] }>;
   create: (body: { name: string }) => Promise<NamedSet>;
@@ -71,7 +71,7 @@ export type NameCollectionConfig = {
    * and every search of the contact list.
    */
   invalidates: readonly RouteQueryKey[];
-  /** Cached shapes to patch with this collection's names before the vault answers. */
+  /** Cached shapes to patch with this collection's names before the server answers. */
   chips: readonly ChipTarget[];
   /** What one of these is called in an error, e.g. `group`. */
   label: string;
@@ -117,7 +117,7 @@ export function createNameCollection(config: NameCollectionConfig): NameCollecti
   };
 }
 
-/** The cache holds the vault's list as it came, ids included. */
+/** The cache holds the server's list as it came, ids included. */
 async function fetchSets(collection: NameCollection, signal: AbortSignal): Promise<NamedSet[]> {
   return (await collection.routes.list({ signal })).items;
 }
@@ -176,8 +176,8 @@ export function useNameCollection(collection: NameCollection): {
 }
 
 /**
- * The id behind a name: from the cache, else from the vault once, else an
- * error and no request. The vault-once path covers creating a set and adding
+ * The id behind a name: from the cache, else from the server once, else an
+ * error and no request. The server-once path covers creating a set and adding
  * to it before the invalidated list has come back.
  */
 function useIdOf(collection: NameCollection): (name: string) => Promise<number> {
@@ -254,7 +254,7 @@ export function useDeleteNamedSet(
 export type ChipSnapshot = { entries: RouteCacheEntries };
 
 /**
- * Put rows in or out of one set, drawn before the vault answers.
+ * Put rows in or out of one set, drawn before the server answers.
  *
  * The chips change on the list and on the open contact at once, and every
  * list showing the name is marked stale once it settles. Two of these can be
@@ -262,7 +262,7 @@ export type ChipSnapshot = { entries: RouteCacheEntries };
  * rollback is a whole-entry snapshot: if the earlier of two overlapping
  * writes fails, restoring its snapshot overwrites the later one's optimistic
  * chips too, until the `onSettled` invalidation refetches and the two
- * converge on what the vault actually has.
+ * converge on what the server actually has.
  */
 export function useSetNamedSetMembers(
   collection: NameCollection,

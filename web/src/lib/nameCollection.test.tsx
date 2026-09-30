@@ -3,7 +3,7 @@
 /**
  * The name-based interface over id-addressed routes.
  *
- * Screens hold names; the vault addresses a set by id. Everything about that
+ * Screens hold names; the server addresses a set by id. Everything about that
  * translation — where the id comes from, what happens when the name is not
  * there, and which lists go stale after a write — is this module's, so it is
  * tested here at the interface with the routes faked by name.
@@ -62,9 +62,9 @@ function groupsOver(routes: NameCollectionRoutes) {
   });
 }
 
-const KEY = ["vault", 7, "contact-groups"];
-const PAGE_KEY = ["vault", 7, "contacts", "list", ""];
-const DETAIL_KEY = ["vault", 7, "contacts", "detail", "1"];
+const KEY = ["server", 7, "contact-groups"];
+const PAGE_KEY = ["server", 7, "contacts", "list", ""];
+const DETAIL_KEY = ["server", 7, "contacts", "detail", "1"];
 
 /** A contact list page and an open contact, as the two queries would hold them. */
 function seedContacts(): void {
@@ -119,7 +119,7 @@ beforeEach(() => {
 });
 
 describe("useNameCollection", () => {
-  it("answers the names in the vault's order", async () => {
+  it("answers the names in the server's order", async () => {
     const routes = fakeRoutes();
     routes.list.mockResolvedValue({
       items: [
@@ -148,8 +148,8 @@ describe("useNameCollectionActions", () => {
     const invalidated = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidated).toEqual(
       expect.arrayContaining([
-        ["vault", 7, "contact-groups"],
-        ["vault", 7, "contacts"],
+        ["server", 7, "contact-groups"],
+        ["server", 7, "contacts"],
       ]),
     );
   });
@@ -162,7 +162,7 @@ describe("useNameCollectionActions", () => {
     expect(routes.remove).toHaveBeenCalledWith(12);
   });
 
-  it("asks the vault once when the cache does not hold the name", async () => {
+  it("asks the server once when the cache does not hold the name", async () => {
     const routes = fakeRoutes();
     routes.list.mockResolvedValue({ items: [{ id: 7, name: "Holiday" }] });
     routes.updateMembers.mockResolvedValue({ added: 2, removed: 0 });
@@ -177,7 +177,7 @@ describe("useNameCollectionActions", () => {
     expect(client.getQueryData(KEY)).toEqual([{ id: 7, name: "Holiday" }]);
   });
 
-  it("throws without a request when the vault has no set of that name", async () => {
+  it("throws without a request when the server has no set of that name", async () => {
     const routes = fakeRoutes();
     const { result } = renderHook(() => useNameCollectionActions(groupsOver(routes)), { wrapper });
     await expect(result.current.remove("Nope")).rejects.toThrow("group not found");
@@ -185,7 +185,7 @@ describe("useNameCollectionActions", () => {
     expect(routes.remove).not.toHaveBeenCalled();
   });
 
-  it("refuses a reserved name before asking the vault", async () => {
+  it("refuses a reserved name before asking the server", async () => {
     const routes = fakeRoutes();
     const { result } = renderHook(() => useNameCollectionActions(groupsOver(routes)), { wrapper });
     await expect(result.current.create("Trash")).rejects.toThrow("Trash is reserved");
@@ -223,10 +223,10 @@ describe("useNameCollectionActions", () => {
 
   it("reports the failure a write ended in", async () => {
     const routes = fakeRoutes();
-    routes.create.mockRejectedValue(new Error("vault said no"));
+    routes.create.mockRejectedValue(new Error("server said no"));
     const { result } = renderHook(() => useNameCollectionActions(groupsOver(routes)), { wrapper });
-    await expect(result.current.create("Work")).rejects.toThrow("vault said no");
-    await waitFor(() => expect(result.current.error?.message).toBe("vault said no"));
+    await expect(result.current.create("Work")).rejects.toThrow("server said no");
+    await waitFor(() => expect(result.current.error?.message).toBe("server said no"));
   });
 
   it("clears an earlier failure once a later write succeeds", async () => {
@@ -259,7 +259,7 @@ describe("useNameCollectionActions", () => {
 });
 
 describe("useSetNamedSetMembers", () => {
-  it("draws the chips on the list and the open contact before the vault answers", async () => {
+  it("draws the chips on the list and the open contact before the server answers", async () => {
     const routes = fakeRoutes();
     client.setQueryData(KEY, [{ id: 12, name: "Family" }]);
     seedContacts();
@@ -291,7 +291,7 @@ describe("useSetNamedSetMembers", () => {
     expect(routes.updateMembers).toHaveBeenCalledWith(5, { add: [], remove: [2] });
   });
 
-  it("puts every row back when the vault refuses", async () => {
+  it("puts every row back when the server refuses", async () => {
     const routes = fakeRoutes();
     client.setQueryData(KEY, [{ id: 12, name: "Family" }]);
     seedContacts();
@@ -313,8 +313,8 @@ describe("useSetNamedSetMembers", () => {
     const { result } = renderHook(() => useSetNamedSetMembers(groupsOver(routes)), { wrapper });
     await result.current.mutateAsync({ name: "Family", patch: { add: [1] } });
     expect(invalidate.mock.calls.map((call) => call[0]?.queryKey)).toEqual([
-      ["vault", 7, "contact-groups"],
-      ["vault", 7, "contacts"],
+      ["server", 7, "contact-groups"],
+      ["server", 7, "contacts"],
     ]);
   });
 

@@ -100,7 +100,7 @@ function threadScope(queryKey: readonly unknown[] | undefined): string | null {
 export function useConversationMessages(conversationId: number) {
   /** `offset`, `activeYear`, `findTerm` and `activeMatch` are view state, not
    * server state — a screen's choice of what to look at, not anything the
-   * vault owns. The messages themselves come from `useRouteQuery` below. */
+   * server owns. The messages themselves come from `useRouteQuery` below. */
   const [offset, setOffset] = useState(0);
   /** `null` = all years. Otherwise the thread (or the find) is narrowed to that calendar year. */
   const [activeYear, setActiveYear] = useState<number | null>(null);

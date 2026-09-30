@@ -39,7 +39,7 @@ function formatLabel(id: ExportFormat): string {
 }
 
 /**
- * Desktop export: `message-crate-pull` downloads the vault into a folder, and for any
+ * Desktop export: `message-crate-pull` downloads the account's conversations into a folder, and for any
  * format other than JSONL `message-reexport` rewrites that folder into the
  * chosen format.
  *
@@ -47,7 +47,7 @@ function formatLabel(id: ExportFormat): string {
  * `message-reexport` refuses to convert a folder into itself, so a non-JSONL
  * export pulls into a staging folder first and converts out of it into the
  * folder the person picked. The staging folder is deleted either way, so a
- * failed conversion does not leave a copy of the vault behind.
+ * failed conversion does not leave a copy of the conversations behind.
  *
  * The scope is Everything or Search. The screen opens in Search when its URL
  * carries `?q=`: LeftPanel puts the query the conversation list was browsing

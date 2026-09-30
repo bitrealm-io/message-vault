@@ -12,7 +12,7 @@
  * ADR-0002 makes those keys the whole mechanism by which the app learns that
  * something changed, so they are the part worth pinning.
  *
- * These import `contactGroups` and `messageTags` themselves. Only the vault
+ * These import `contactGroups` and `messageTags` themselves. Only the server
  * routes are faked, at the same boundary the rest of the suite uses.
  */
 
@@ -28,7 +28,7 @@ import * as serverApi from "./serverApi";
 
 /** A cache key as the client sees it: the account, then the key itself. */
 function scoped(key: readonly string[]): unknown[] {
-  return ["vault", 7, ...key];
+  return ["server", 7, ...key];
 }
 
 vi.mock("./auth", () => ({

@@ -1,5 +1,5 @@
 /**
- * Render a component that fetches vault data.
+ * Render a component that fetches server data.
  *
  * Anything using `useRouteQuery` needs two things from the tree: a query client
  * to cache into, and a logged-in account to name the cache entry after. This
@@ -62,13 +62,13 @@ export function Providers({
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-/** `render`, with the query client a vault query needs. */
+/** `render`, with the query client a server query needs. */
 export function renderWithProviders(ui: ReactElement, options?: RenderOptions): RenderResult {
   return render(ui, { wrapper: Providers, ...options });
 }
 
 /**
- * What `vi.mock("<path>/auth")` should return so a vault query has an account
+ * What `vi.mock("<path>/auth")` should return so a server query has an account
  * to name its cache entry after.
  *
  * Any id works; what matters is that it is stable within a test, since a

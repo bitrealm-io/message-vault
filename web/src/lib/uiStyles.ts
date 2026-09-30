@@ -24,7 +24,7 @@ export const pageCenter =
  * Honolulu, East Honolulu") reads on one line.
  *
  * A floor, not a fixed height: a card whose content runs taller grows to fit
- * it. Create Vault Owner is the same three fields plus a line explaining what
+ * it. Create Owner is the same three fields plus a line explaining what
  * the owner is, and with a fixed height that line pushed the submit button
  * out of the form and over the "or" rule below it.
  */
@@ -50,7 +50,7 @@ export const authCardFooter = "mt-auto flex flex-col";
  */
 export const authTitle = "m-0 text-[1.25rem] font-bold text-text mb-6 text-left";
 /**
- * Name at the top of an auth card. The login card and the vault settings
+ * Name at the top of an auth card. The login card and the server settings
  * screen share it, so crossing between them never changes the size of the
  * words at the top of the frame. `m-0` because theme.css leaves out Tailwind's
  * preflight, so a heading still carries the browser's own margins otherwise;

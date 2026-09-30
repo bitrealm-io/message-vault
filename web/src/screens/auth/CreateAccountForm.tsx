@@ -9,9 +9,9 @@ import { useAuth } from "../../lib/auth";
 import { useCreateAccountForm } from "./useCreateAccountForm";
 
 /**
- * New vault account: username plus the password twice.
+ * New account: username plus the password twice.
  *
- * The checks and the request are `useCreateAccountForm`'s, which the vault
+ * The checks and the request are `useCreateAccountForm`'s, which the
  * owner's new-account Settings use too; this is how they look on the Login
  * screen, and what follows here is a login.
  *

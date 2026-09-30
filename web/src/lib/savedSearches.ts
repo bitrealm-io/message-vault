@@ -13,9 +13,9 @@ import type { components } from "./serverApi.types";
 type Schema = components["schemas"];
 
 /**
- * Saved searches live in the vault, not in the browser. They belong to an
+ * Saved searches live on the server, not in the browser. They belong to an
  * account, so they follow a person to another machine and go away when the
- * vault's data does.
+ * server's data does.
  *
  * Unlike Contact Groups and Message Tags this is not a `nameCollection`: a
  * saved search carries a name *and* a query, so it is addressed by id and
@@ -30,7 +30,7 @@ type Schema = components["schemas"];
 
 export type SavedSearch = Schema["SavedSearch"];
 
-/** The account's saved searches, A–Z as the vault orders them. */
+/** The account's saved searches, A–Z as the server orders them. */
 export function useSavedSearches(): {
   savedSearches: SavedSearch[];
   loading: boolean;

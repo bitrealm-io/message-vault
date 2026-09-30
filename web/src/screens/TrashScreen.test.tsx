@@ -145,7 +145,7 @@ describe("TrashScreen", () => {
 
   it("explains a word one list refuses instead of asking that list", async () => {
     // `participants:` is a conversations word. The contacts pane must not
-    // send it (the vault would answer 422) and must say who the word is for;
+    // send it (the server would answer 422) and must say who the word is for;
     // the conversations pane still answers normally (#331).
     renderAt("/trash?tq=participants%3A%3E3");
 
@@ -216,7 +216,7 @@ describe("TrashScreen", () => {
   });
 
   describe("trashed contacts", () => {
-    it("lists trashed contacts, asking the vault for them with trashed:yes", async () => {
+    it("lists trashed contacts, asking the server for them with trashed:yes", async () => {
       listContactsMock.mockResolvedValue(contactPage([contact(7, "Grace Hopper")]));
       renderAt("/trash");
 
@@ -229,7 +229,7 @@ describe("TrashScreen", () => {
 
     it("restores a contact from its row and drops it from the list", async () => {
       const user = userEvent.setup();
-      // The vault, modelled: restoring takes the contact out of the trash, so
+      // The server, modelled: restoring takes the contact out of the trash, so
       // the refetch the mutation triggers answers with an empty page.
       let trashed = [contact(7, "Grace Hopper")];
       listContactsMock.mockImplementation(async () => contactPage(trashed));

@@ -7,7 +7,7 @@ import { useCreateAccountForm } from "../auth/useCreateAccountForm";
 import { inputClassName, sectionTitleClass } from "./profileStyles";
 
 /**
- * The Account section of an account that does not exist yet, which the vault
+ * The Account section of an account that does not exist yet, which the
  * owner opens with Add account under User Accounts.
  *
  * It is laid out as `AccountSettingsPanel` is, with the two differences that
@@ -16,7 +16,7 @@ import { inputClassName, sectionTitleClass } from "./profileStyles";
  * they are not here. Create opens the new account's Settings, where they are.
  *
  * The checks and the request are `useCreateAccountForm`'s, the same ones
- * Create Account on the Login screen runs. The vault opens no session for an
+ * Create Account on the Login screen runs. The server opens no session for an
  * account its owner creates, so the owner stays logged in.
  */
 export function NewAccountPanel() {
@@ -34,7 +34,7 @@ export function NewAccountPanel() {
     submit,
   } = useCreateAccountForm({
     onCreated: async (created) => {
-      // The vault answers with the whole account row, so the account's
+      // The server answers with the whole account row, so the account's
       // Settings draw from it at once instead of showing a loading state and
       // redrawing when the fetch lands. The session token is not the row's.
       const { token: _token, ...account } = created;

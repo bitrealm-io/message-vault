@@ -48,9 +48,9 @@ describe("ChangePasswordSection", () => {
     expect(updateToken).toHaveBeenCalledWith("mc-user-rotated");
   });
 
-  it("sends a differing confirmation to the vault and shows its sentence", async () => {
-    // The vault checks the pair after the current password, so the screen
-    // never judges it: the order of what a user hears is the vault's.
+  it("sends a differing confirmation to the server and shows its sentence", async () => {
+    // The server checks the pair after the current password, so the screen
+    // never judges it: the order of what a user hears is the server's.
     changePassword.mockRejectedValue(new Error("New passwords do not match."));
     const user = userEvent.setup();
     render(<ChangePasswordSection />);
@@ -87,7 +87,7 @@ describe("ChangePasswordSection", () => {
     expect(screen.queryByRole("button", { name: "Reset password" })).not.toBeInTheDocument();
   });
 
-  it("asks the vault owner for the current password and sends it", async () => {
+  it("asks the owner for the current password and sends it", async () => {
     const user = userEvent.setup();
     render(<ChangePasswordSection canReset={false} requireCurrent />);
 

@@ -7,9 +7,9 @@ import { DatabaseSection } from "./dashboard/DatabaseSection";
 import { MessagesByAccountSection } from "./dashboard/MessagesByAccountSection";
 
 /**
- * The Dashboard: a column of headed sections about the whole vault.
+ * The Dashboard: a column of headed sections about the whole Message Crate.
  *
- * The owner administers the vault, and administering it starts with knowing
+ * The owner administers the Message Crate, and administering it starts with knowing
  * how much it holds and where the disk goes. Every section reads the one
  * storage query, so the page shows one loading line and one error line. The
  * figures are counts and bytes and nothing else: no message, contact or

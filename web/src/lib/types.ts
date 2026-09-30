@@ -3,9 +3,9 @@ import type { components } from "./serverApi.types";
 type Schema = components["schemas"];
 
 /*
- * Shapes the vault returns come from the generated types, so a field renamed
+ * Shapes the server returns come from the generated types, so a field renamed
  * on the server is a build error here rather than an empty screen. Shapes
- * below that the vault never sends — desktop command arguments, progress
+ * below that the server never sends — desktop command arguments, progress
  * events, and the per-app extras on a message — stay hand-written.
  */
 

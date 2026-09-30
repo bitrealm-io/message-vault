@@ -144,7 +144,7 @@ export function useContactGroupActions() {
   return useNameCollectionActions(contactGroups);
 }
 
-/** Put contacts in or out of one Contact Group, drawn before the vault answers. */
+/** Put contacts in or out of one Contact Group, drawn before the server answers. */
 export function useSetContactGroupMembers() {
   return useSetNamedSetMembers(contactGroups);
 }

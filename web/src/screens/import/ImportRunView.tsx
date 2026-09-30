@@ -110,7 +110,7 @@ function WaitingBody({ children }: { children: ReactNode }) {
   return <div className="mt-2 flex flex-col gap-3 border-l-2 border-accent pl-3">{children}</div>;
 }
 
-/** What Upload did to the vault's contacts, with the list opened in place. */
+/** What Upload did to the account's contacts, with the list opened in place. */
 function UploadContacts({ importId }: { importId: number }) {
   const detail = useRouteQuery(["imports", importId], (signal) => getImport(importId, { signal }));
   const run = detail.data;

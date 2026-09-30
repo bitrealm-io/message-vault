@@ -1,6 +1,6 @@
 import type { components } from "../../lib/serverApi.types";
 
-/** One identity as the vault lists it, with its messages. */
+/** One identity as the server lists it, with its messages. */
 export type Identity = components["schemas"]["Identity"];
 
 /** "12 direct messages and 30 group messages", "1 direct message", or null when there are none. */

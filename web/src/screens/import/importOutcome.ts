@@ -26,7 +26,7 @@ export function stableStem(path: string): string {
 }
 
 /**
- * Verdicts that predict a file will not make it into the vault at all
+ * Verdicts that predict a file will not make it into Message Crate at all
  * (spec decision 15). `likely_fits`/`may_grow`/`fits_as_is` predict the file
  * lands, so a skip for one of those was not on the approved plan.
  */

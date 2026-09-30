@@ -23,7 +23,7 @@ function profileIncludes(p: AccountProfile, handle: string, service: string): bo
   return p.phones.some((phone) => phonesMatch(handle, phone));
 }
 
-/** The profile's own identities as placeholder rows, shown until the vault lists them. */
+/** The profile's own identities as placeholder rows, shown until the server lists them. */
 function placeholderRows(profile: AccountProfile): Identity[] {
   return [
     ...profile.phones.map((address) => ({ address, service: "phone" })),
@@ -42,7 +42,7 @@ function placeholderRows(profile: AccountProfile): Identity[] {
  * The account's own identities: the addresses whose messages are the account
  * holder's. Import uses them to decide which messages belong to the holder.
  *
- * Given `managedAccountId`, they are an account's the vault owner opened from
+ * Given `managedAccountId`, they are an account's the owner opened from
  * User Accounts, and the owner adds and removes them as the holder does.
  */
 export function IdentitiesSection({
@@ -60,9 +60,9 @@ export function IdentitiesSection({
   const [removeError, setRemoveError] = useState("");
   const busy = updateProfile.isPending;
 
-  // Until the vault answers, the profile's own identities are shown with no
+  // Until the server answers, the profile's own identities are shown with no
   // counts, so the table never waits on a fetch and never shows a number
-  // that is not the vault's.
+  // that is not the server's.
   const identities = useRouteQuery(
     managed ? keys.ownerAccounts.identities(managedAccountId) : keys.accountProfile.identities,
     (signal) => listAccountIdentities({ signal }, managedAccountId),

@@ -323,7 +323,7 @@ describe("ImportRunView", () => {
     expect(review.getByRole("button", { name: /Files over the limit/ })).toHaveTextContent(
       "Skip upload",
     );
-    expect(review.queryByText(/stay out of the vault/)).not.toBeInTheDocument();
+    expect(review.queryByText(/stay out of Message Crate/)).not.toBeInTheDocument();
     expect(review.getByText("Awaiting approval")).toBeInTheDocument();
 
     await user.click(review.getByRole("button", { name: "Upload to Message Crate" }));

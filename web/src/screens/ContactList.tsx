@@ -534,7 +534,7 @@ export default function ContactList({
                   }
                 />
               </div>
-              {/* When the vault last heard from them; blank for a contact that never wrote. */}
+              {/* When the server last heard from them; blank for a contact that never wrote. */}
               {c.last_heard_at ? (
                 <span
                   className="shrink-0 text-[0.75rem] text-muted"

@@ -8,10 +8,10 @@ const APP_NAMES = { desktop: "Desktop app", website: "Website" } as const;
 
 /**
  * When an account last logged in and the app it last connected with, for the
- * vault owner reading an account opened from User Accounts.
+ * owner reading an account opened from User Accounts.
  *
- * The app is marked when it comes from a different release than this vault;
- * the vault serves it all the same, so the mark is for the owner to read, not
+ * The app is marked when it comes from a different release than this server;
+ * the server serves it all the same, so the mark is for the owner to read, not
  * a fault. Only the Product Version is compared.
  */
 export function AccountActivitySection({ profile }: { profile: AccountProfile }) {

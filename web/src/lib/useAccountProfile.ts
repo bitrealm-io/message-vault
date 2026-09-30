@@ -34,7 +34,7 @@ export type AccountProfileChange = Parameters<typeof updateAccountProfile>[0];
 /**
  * Change the account’s own name or identities.
  *
- * The vault answers with the profile as it now stands, so that answer goes
+ * The server answers with the profile as it now stands, so that answer goes
  * into the entry every screen reads. Nothing is marked stale: there is nothing
  * left to refresh.
  */

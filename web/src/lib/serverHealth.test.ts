@@ -36,8 +36,8 @@ describe("healthProbeUrl", () => {
 
   it("strips trailing slashes on absolute http(s) URLs", () => {
     expect(healthProbeUrl("http://127.0.0.1:8080/")).toBe("http://127.0.0.1:8080/health");
-    expect(healthProbeUrl("https://vault.example.com/app/")).toBe(
-      "https://vault.example.com/app/health",
+    expect(healthProbeUrl("https://server.example.com/app/")).toBe(
+      "https://server.example.com/app/health",
     );
   });
 

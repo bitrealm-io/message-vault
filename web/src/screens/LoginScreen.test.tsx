@@ -21,7 +21,7 @@ import { Providers } from "../test/providers";
 import LoginScreen from "./LoginScreen";
 
 /**
- * Answer `/health` as a healthy vault and `/v1/server` with the state given.
+ * Answer `/health` as a healthy server and `/v1/server` with the state given.
  *
  * The state decides which forms the card offers, so a test that says nothing
  * about it gets `open` — the two-tab card, which is what most of these tests
@@ -70,7 +70,7 @@ describe("LoginScreen", () => {
     vi.unstubAllGlobals();
   });
 
-  it("logs in without a vault-selection step", async () => {
+  it("logs in without a server-selection step", async () => {
     stubServer();
     renderScreen();
 
@@ -91,7 +91,7 @@ describe("LoginScreen", () => {
     expect(setServer).toHaveBeenCalledWith("");
   });
 
-  it("never shows the vault's host address", async () => {
+  it("never shows the server's host address", async () => {
     stubServer();
     renderScreen();
 
@@ -172,14 +172,14 @@ describe("LoginScreen", () => {
 
   it("shows the login form, disabled, when nothing answers", async () => {
     // A skeleton reads as "still loading". A card that has its answer — no
-    // vault — has to look finished, or the screen seems to hang.
+    // server — has to look finished, or the screen seems to hang.
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
     renderScreen();
 
     await screen.findByText("Disconnected");
     expect(screen.queryByTestId("auth-form-skeleton")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Log in" })).toBeDisabled();
-    // No vault has said it takes new accounts, so the card does not offer one.
+    // No server has said it takes new accounts, so the card does not offer one.
     expect(screen.queryByRole("tab", { name: "Create Account" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Change server address" })).toBeEnabled();
   });
@@ -196,8 +196,8 @@ describe("LoginScreen", () => {
     expect(screen.queryByRole("button", { name: "Log in" })).not.toBeInTheDocument();
   });
 
-  it("lets the vault be changed while the card is still connecting", async () => {
-    // A vault that never answers holds the card in "connecting": a wrong
+  it("lets the server be changed while the card is still connecting", async () => {
+    // A server that never answers holds the card in "connecting": a wrong
     // address is exactly when you need the settings screen most, so the way
     // to it must not wait for the probe to give up.
     vi.stubGlobal(
@@ -223,7 +223,7 @@ describe("LoginScreen", () => {
     expect(screen.getByRole("button", { name: "Change server address" })).toBeEnabled();
   });
 
-  it("disables Log in while the vault is unreachable", async () => {
+  it("disables Log in while the server is unreachable", async () => {
     stubServer();
     const user = setupUser();
     renderScreen();
@@ -430,7 +430,7 @@ describe("LoginScreen", () => {
     });
 
     // Now the saved address answers healthy, after the typed one has already
-    // been applied. It describes a vault this screen has moved on from, and a
+    // been applied. It describes a server this screen has moved on from, and a
     // probe nobody is waiting on any more may not speak for the card. A real
     // timer gives every pending microtask its chance to write first.
     answerSavedAddress?.();
@@ -447,7 +447,7 @@ describe("LoginScreen", () => {
     expect(screen.getByRole("textbox", { name: "Address" })).toHaveValue("http://127.0.0.1:8080");
   });
 
-  it("reconnects on its own once a probe finds the vault healthy again", async () => {
+  it("reconnects on its own once a probe finds the server healthy again", async () => {
     let healthy = false;
     vi.stubGlobal(
       "fetch",
@@ -474,7 +474,7 @@ describe("LoginScreen", () => {
     expect(await screen.findByText("Connected")).toBeInTheDocument();
   });
 
-  it("tries the saved login again once the vault is healthy again", async () => {
+  it("tries the saved login again once the server is healthy again", async () => {
     let healthy = false;
     vi.stubGlobal(
       "fetch",

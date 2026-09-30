@@ -18,7 +18,7 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use message_vault_io_core::CancelFlag;
+use message_crate_core::CancelFlag;
 use tauri::AppHandle;
 
 use super::events;

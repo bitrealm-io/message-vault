@@ -56,7 +56,7 @@ different reason. Before this decision, 52 call sites across 25 files each wrote
 a URL as a template literal and declared the response shape inline, so a field
 renamed on the server compiled cleanly on both sides and failed when a person
 opened the screen. The server already publishes an accurate description of all
-46 routes: the test at `crates/vault/server/src/openapi.rs:337` compares the
+46 routes: the test at `crates/server/server/src/openapi.rs:337` compares the
 committed `docs/src/assets/openapi.json` against the document the live code
 produces and fails when they differ. Generating the web app's response types
 from that file turns a server-side rename into a web-side compile error.
@@ -120,9 +120,9 @@ nothing — the opposite of the pattern this decision removes.
 - `web/src/lib/vaultApi.ts` holds one function per server route. Its generated
   companion, `web/src/lib/vaultApi.types.ts`, is checked in. `scripts/check-pr.sh`
   regenerates the types and fails on any diff, mirroring what
-  `crates/vault/server/src/openapi.rs:337` already does for the JSON document.
+  `crates/server/server/src/openapi.rs:337` already does for the JSON document.
   Regenerate the JSON with
-  `cargo run -p message-vault-server -- dump-openapi --output docs/src/assets/openapi.json`.
+  `cargo run -p message-crate-server -- dump-openapi --output docs/src/assets/openapi.json`.
 - `web/src/lib/api.ts` keeps `apiClient`, the base URL, and the Bearer header.
   It is the transport that `vaultApi.ts` uses and is not called from screens.
 - Response shapes are deleted from `web/src/lib/types.ts` and come from the

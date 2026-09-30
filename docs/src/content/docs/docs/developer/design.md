@@ -18,8 +18,8 @@ message-crate
 │   ├── core/               # shared import/export job settings used by the desktop app
 │   ├── exporters/          # parse iMessage, WhatsApp, SMS, and other backups into JSONL
 │   ├── libs/               # shared code the exporters and the server use (format, contacts,
-│   │                       #   media, vault-push, vault-pull)
-│   └── vault/              # message-vault-server (API + SQLite) and demo-seed (sample inbox)
+│   │                       #   media, message-crate-push, message-crate-pull)
+│   └── vault/              # message-crate-server (API + SQLite) and demo-seed (sample inbox)
 ├── docker/                 # image and Compose file that look like a published install
 ├── docs/                   # messagecrate.app (User Guide, Developer docs, landing page)
 ├── schema/                 # SQLite CREATE TABLE files the server embeds
@@ -34,8 +34,8 @@ message-crate
 
 `cargo build --workspace` produces these commands. `src-tauri/` is the desktop window. It is not a workspace member. The same exporter libraries run inside that app.
 
-Three binaries are built: `message-vault-server` from `crates/vault/server/`,
-`demo-seed` from `crates/vault/demo-seed/`, and `imessage-reader` from
+Three binaries are built: `message-crate-server` from `crates/server/server/`,
+`demo-seed` from `crates/server/demo-seed/`, and `imessage-reader` from
 `crates/helpers/imessage-reader/`. The last is not a command line. It reads
 Apple Messages for the desktop app as a separate process, because the library
 that parses `chat.db` is GPL and the app is under the Fair Core License; the
@@ -49,7 +49,7 @@ and its amendment.
 | `imessage-ir-exporter`, `sms-backup-restore-exporter`, `whatsapp-exporter` | `crates/exporters/` | Supported extract → JSONL |
 | `go-sms-pro-exporter`, `imazing-exporter`, `openextract-exporter`, `sms-backup-plus-exporter` | `crates/exporters/` | Rescue / experimental extract |
 | `message-reexport` | `crates/libs/reexport/` | Convert an existing export folder |
-| `vault-push` / `vault-pull` | `crates/libs/` | JSONL → running server / server → JSONL |
+| `message-crate-push` / `message-crate-pull` | `crates/libs/` | JSONL → running server / server → JSONL |
 
 C4 PlantUML sources and SVG exports live in [`docs/src/assets/architecture/`](https://github.com/messagecrate/message-crate/tree/main/docs/src/assets/architecture). Edit the `.puml` file, export SVG into the same folder, and commit both in one change.
 
@@ -77,7 +77,7 @@ Host processes:
 
 - **Desktop App (Tauri)** — native desktop window started by `cargo tauri dev`
 - **Vite :5173** — dev server that serves live `web/` source
-- **Server :8080** — `message-vault-server` started by `./scripts/run-vault-dev.sh`
+- **Server :8080** — `message-crate-server` started by `./scripts/run-vault-dev.sh`
 
 ### Start the server
 
@@ -141,7 +141,7 @@ sequenceDiagram
   - Vite is serving webview on `:5173`.
 - User is logged in.
 
-Messages and attachments are uploaded to the server using the `vault-push` library.
+Messages and attachments are uploaded to the server using the `message-crate-push` library.
 
 ```mermaid
 sequenceDiagram
@@ -175,7 +175,7 @@ sequenceDiagram
   - Vite is serving webview on `:5173`.
 - User is logged in.
 
-Messages and attachments are downloaded from the server using the `vault-pull` library.
+Messages and attachments are downloaded from the server using the `message-crate-pull` library.
 
 ```mermaid
 sequenceDiagram

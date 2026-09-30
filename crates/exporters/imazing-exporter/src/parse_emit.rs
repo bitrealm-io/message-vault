@@ -184,7 +184,7 @@ fn resolve_chat_identifier(
             return (peer_handles.join(","), title, false);
         }
         return (
-            message_vault_io_core::name_stem(session),
+            message_crate_core::name_stem(session),
             session.trim().to_string(),
             true,
         );
@@ -209,7 +209,7 @@ fn resolve_chat_identifier(
         return (phone::normalize_lenient(session), String::new(), false);
     }
     (
-        message_vault_io_core::name_stem(session),
+        message_crate_core::name_stem(session),
         session.to_string(),
         true,
     )

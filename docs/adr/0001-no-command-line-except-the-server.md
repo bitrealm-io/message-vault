@@ -2,9 +2,9 @@
 
 Message Crate converts phone backups into files, which is command-line shaped
 work, so a reader will reasonably expect the exporters to be commands. They
-are not: every exporter, `message-reexport`, `vault-push`, and `vault-pull` are
+are not: every exporter, `message-reexport`, `message-crate-push`, and `message-crate-pull` are
 library crates with no binary, and the desktop app calls them in process. The
-only command line in the product belongs to `message-vault-server`, because a
+only command line in the product belongs to `message-crate-server`, because a
 self-hosted server needs one.
 
 ## Why
@@ -27,7 +27,7 @@ command line again. It is deferred, not dismissed. When it returns it should be
 one `message-vault` command with subcommands, not seven exporter binaries plus
 a push and a pull.
 
-## Considered and rejected: keeping `vault-push` and `vault-pull`
+## Considered and rejected: keeping `message-crate-push` and `message-crate-pull`
 
 These two were nearly kept, on the reasoning that they are the *server's*
 interface rather than the desktop app's, that a self-hosted server with no
@@ -37,7 +37,7 @@ they already worked and cost nothing to leave alone.
 That last claim did not survive checking. No workflow, script, or test has ever
 invoked either one as a command. A shell smoke-test script looked like the
 counterexample and was not: it started the server and drove the HTTP API with
-`curl`, never touching the `vault-push` binary, and nothing ran the script
+`curl`, never touching the `message-crate-push` binary, and nothing ran the script
 either — which is also why it was later deleted rather than kept. Keeping the
 binaries would have preserved the appearance of a headless path
 rather than a working one, and drawn the line on a distinction the evidence
@@ -69,9 +69,9 @@ is one `message-vault` command, not a reader that happens to be executable.
 
 ## Consequences
 
-- `crates/cli/` no longer exists. `vault-push` and `vault-pull` live in
+- `crates/cli/` no longer exists. `message-crate-push` and `message-crate-pull` live in
   `crates/libs/` because that is what they are.
-- `dump-cli-docs` is a `message-vault-server` subcommand beside `dump-openapi`,
+- `dump-cli-docs` is a `message-crate-server` subcommand beside `dump-openapi`,
   since the server's own page is the only one left to generate.
 - The exporter crates keep `run` as their entire public entry point. Adding a
   binary back to one of them is a decision about product surface, not a

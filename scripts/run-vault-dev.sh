@@ -140,15 +140,15 @@ start_sqlweb() {
 
 # cargo run with the chosen profile; arguments after -- go to the server binary.
 vault() {
-  cargo run "${CARGO_PROFILE[@]}" -p message-vault-server -- "$@"
+  cargo run "${CARGO_PROFILE[@]}" -p message-crate-server -- "$@"
 }
 
 run_server() {
-  echo "Starting message-vault-server (${PROFILE_NAME}). Restart after server-crate edits."
+  echo "Starting message-crate-server (${PROFILE_NAME}). Restart after server-crate edits."
   if [[ "${SQLWEB}" -eq 1 ]]; then
     vault serve --config "${CONFIG}"
   else
-    exec cargo run "${CARGO_PROFILE[@]}" -p message-vault-server -- serve --config "${CONFIG}"
+    exec cargo run "${CARGO_PROFILE[@]}" -p message-crate-server -- serve --config "${CONFIG}"
   fi
 }
 

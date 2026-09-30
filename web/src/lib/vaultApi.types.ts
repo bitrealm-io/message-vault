@@ -1706,7 +1706,7 @@ export interface components {
         CreateExportRequest: {
             /** @description What to export. */
             scope: components["schemas"]["ExportScope"];
-            /** @description Client/tool name recorded on the run, e.g. `vault-pull`. */
+            /** @description Client/tool name recorded on the run, e.g. `message-crate-pull`. */
             tool?: string | null;
         };
         /** @description Import result: stats plus optional dedupe counts. */
@@ -1858,7 +1858,7 @@ export interface components {
             started_at: string;
             /** @description Lifecycle status: `running`, `completed`, `failed`, or `cancelled`. */
             status: string;
-            /** @description Exporting tool, e.g. `vault-pull`, when the client named one. */
+            /** @description Exporting tool, e.g. `message-crate-pull`, when the client named one. */
             tool?: string | null;
             /**
              * Format: int64
@@ -2165,7 +2165,7 @@ export interface components {
              *     column `PATCH /v1/imports/{id}` writes with its `summary`.
              */
             summary: unknown;
-            /** @description Importing tool, e.g. `vault-push`. */
+            /** @description Importing tool, e.g. `message-crate-push`. */
             tool?: string | null;
         };
         /**
@@ -2578,7 +2578,7 @@ export interface components {
                 started_at: string;
                 /** @description Lifecycle status: `running`, `completed`, `failed`, or `cancelled`. */
                 status: string;
-                /** @description Exporting tool, e.g. `vault-pull`, when the client named one. */
+                /** @description Exporting tool, e.g. `message-crate-pull`, when the client named one. */
                 tool?: string | null;
                 /**
                  * Format: int64
@@ -2761,7 +2761,7 @@ export interface components {
                  *     column `PATCH /v1/imports/{id}` writes with its `summary`.
                  */
                 summary: unknown;
-                /** @description Importing tool, e.g. `vault-push`. */
+                /** @description Importing tool, e.g. `message-crate-push`. */
                 tool?: string | null;
             }[];
             /** @description Page size used. */

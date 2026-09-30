@@ -41,7 +41,7 @@ pub(crate) fn name_only_key(msg: &ParsedMessage) -> Option<String> {
     if name.is_empty() {
         return None;
     }
-    Some(message_vault_io_core::name_stem(name))
+    Some(message_crate_core::name_stem(name))
 }
 
 /// Message time as milliseconds since 1970 (for identity strings).

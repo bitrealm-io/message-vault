@@ -12,7 +12,7 @@ use message_ir::{
     PendingMessage, ProjectionHooks, ensure_conversation, parse_android_type,
 };
 use message_staging::{AttachmentSource, ExportWriter};
-use message_vault_io_core::{
+use message_crate_core::{
     CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
 };
 use phone::{OwnerHandleSet, sanitize_number};
@@ -432,14 +432,14 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
         skips: SkipDetails::default(),
     };
     for xml_path in sorted_files(input_dir, &is_xml_file)? {
-        message_vault_io_core::check_cancel(cancel)?;
+        message_crate_core::check_cancel(cancel)?;
         ingest.ingest_xml(&xml_path);
     }
     for pdu_path in sorted_files(input_dir, &is_pdu_file)? {
-        message_vault_io_core::check_cancel(cancel)?;
+        message_crate_core::check_cancel(cancel)?;
         ingest.ingest_pdu(&pdu_path);
     }
-    message_vault_io_core::check_cancel(cancel)?;
+    message_crate_core::check_cancel(cancel)?;
     let Ingest {
         blob_bytes,
         conversations,
@@ -449,7 +449,7 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
     } = ingest;
 
     let hooks = GoSmsProjection {
-        export: message_vault_io_core::export_meta(
+        export: message_crate_core::export_meta(
             EXPORT_SOURCE,
             EXPORT_TOOL,
             EXPORT_TOOL_VERSION,
@@ -490,7 +490,7 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
 ///
 /// Returns an error when the folder cannot be read.
 fn sorted_files(dir: &Path, predicate: &dyn Fn(&Path) -> bool) -> Result<Vec<PathBuf>> {
-    let mut paths = message_vault_io_core::discover_files(dir, predicate)?;
+    let mut paths = message_crate_core::discover_files(dir, predicate)?;
     paths.sort();
     Ok(paths)
 }

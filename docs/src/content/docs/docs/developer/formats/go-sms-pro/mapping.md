@@ -89,7 +89,7 @@ Always includes `source_kind`: `"xml"` or `"pdu"`.
 
 ## Skipped records
 
-The exporter counts every record it drops on its `ExportReport`, and the run summary in the Import screen's log lists each count that is not zero (`ExportReport::summary_lines` in `crates/core/message-vault-io-core/src/pipeline.rs`).
+The exporter counts every record it drops on its `ExportReport`, and the run summary in the Import screen's log lists each count that is not zero (`ExportReport::summary_lines` in `crates/core/message-crate-core/src/pipeline.rs`).
 Invalid dates have a field of their own on the report and print as `skipped N invalid-date rows`; the other counts live in the report's `extra` map and print as `name: N`.
 The same lines also show `xml_messages_seen`, `pdu_messages`, and `pdu_group_messages`, which are totals rather than skips.
 

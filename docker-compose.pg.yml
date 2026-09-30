@@ -3,7 +3,7 @@
 #
 #   docker compose -f docker-compose.pg.yml up -d
 #   MV_TEST_POSTGRES_URL=postgres://vault:vault@127.0.0.1:5432/vault \
-#     cargo test -p message-vault-server
+#     cargo test -p message-crate-server
 #
 # Data lives in the named volume vault_pg_data. `down -v` deletes it.
 #

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the Vite SPA into static/, which the server hands out at GET /.
 #
-# Used when running message-vault-server on the host (./scripts/run-vault-dev.sh
+# Used when running message-crate-server on the host (./scripts/run-vault-dev.sh
 # or cargo run … serve). `ln -s web/dist static` works too. Not needed for the
 # release image, which builds web/ in its own stage, or for Tauri, which builds
 # it via beforeBuildCommand.
@@ -18,4 +18,4 @@ rm -rf "$REPO_ROOT/static"
 cp -r "$REPO_ROOT/web/dist" "$REPO_ROOT/static"
 
 echo "Done. Served at http://127.0.0.1:8080/ by"
-echo "./scripts/run-vault-dev.sh or cargo run -p message-vault-server -- serve"
+echo "./scripts/run-vault-dev.sh or cargo run -p message-crate-server -- serve"

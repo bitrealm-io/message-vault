@@ -23,7 +23,7 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 use imessage_reader_protocol::{Event, HELPER_NAME, PROTOCOL_VERSION, Progress, Request};
-use message_vault_io_core::{LogSink, ProgressEvent, ProgressSink, emit_log, emit_progress};
+use message_crate_core::{LogSink, ProgressEvent, ProgressSink, emit_log, emit_progress};
 
 /// Names the helper executable outright, bypassing the search.
 pub(crate) const HELPER_PATH_ENV: &str = "MESSAGE_VAULT_IMESSAGE_READER";

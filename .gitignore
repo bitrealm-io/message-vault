@@ -59,7 +59,7 @@ config/contacts.vcf
 /export-*/
 
 # Generated demo conversations and attachment copies (cargo run -p demo-seed)
-/crates/vault/demo-seed/staging/
+/crates/server/demo-seed/staging/
 
 # Frontend (web/) dependencies and build output
 /web/node_modules

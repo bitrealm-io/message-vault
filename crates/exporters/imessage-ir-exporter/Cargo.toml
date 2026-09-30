@@ -18,7 +18,7 @@ path = "src/lib.rs"
 [dependencies]
 anyhow = { workspace = true }
 imessage-reader-protocol = { path = "../../helpers/imessage-reader-protocol" }
-message-vault-io-core = { path = "../../core/message-vault-io-core" }
+message-crate-core = { path = "../../core/message-crate-core" }
 message-ir = { path = "../../libs/ir" }
 message-ir-format = { path = "../../libs/ir-format" }
 message-staging = { path = "../../libs/staging" }

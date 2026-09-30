@@ -10,7 +10,7 @@ Someone who only wants to search should read the user guide,
 language is one module with one registry is
 [ADR 0004](../adr/0004-one-search-language-compiled-in-one-module.md).
 
-The code is `crates/vault/server/src/search/`: `lex.rs` turns the string into
+The code is `crates/server/server/src/search/`: `lex.rs` turns the string into
 tokens, `parse.rs` turns tokens into a tree and resolves every word against
 the registry in `fields.rs`, and `emit.rs` with `bridge.rs` writes the SQL.
 

@@ -15,7 +15,7 @@ export type ImportOutcome = "completed" | "completed_with_issues" | "failed";
  * becomes `attachments/2024-01-15-9f2a3b4c-mv.jpg`. The stem gains a literal
  * `-mv` suffix and the extension changes, but the `{date}-{digest16}` stem in
  * front of it is stable (`attachment_dest_name`,
- * `crates/core/message-vault-io-core/src/attachments.rs`). Match on that, or
+ * `crates/core/message-crate-core/src/attachments.rs`). Match on that, or
  * a converted file reads as a different file from the one that was approved.
  */
 export function stableStem(path: string): string {
@@ -40,7 +40,7 @@ const OMITTABLE_VERDICTS: ReadonlySet<SizeVerdict> = new Set([
  * attachment as `row`, an approved plan's forecast row.
  *
  * A push issue's `item` is `"{conversationFile}:{relativePath}"`
- * (`crates/cli/vault-push/src/run.rs`'s `AttachmentSkipIssue`), not a bare
+ * (`crates/cli/message-crate-push/src/run.rs`'s `AttachmentSkipIssue`), not a bare
  * path, so exact equality against `row.path`/`row.name` only catches the
  * simple case. `item.endsWith(...)` catches the compound form without the
  * conversation-name prefix tripping it up. `stableStem` (Task 9's helper)

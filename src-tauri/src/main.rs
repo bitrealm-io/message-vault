@@ -20,7 +20,7 @@ use std::sync::{Arc, Mutex};
 fn main() {
     // Import and export name this Build to the vault on every request; the SPA
     // does the same for its own requests (`web/src/lib/api.ts`).
-    vault_http::identify_desktop_app(env!("MESSAGE_VAULT_BUILD"));
+    message_crate_http::identify_desktop_app(env!("MESSAGE_VAULT_BUILD"));
 
     let app_state = Arc::new(Mutex::new(AppState::new()));
 

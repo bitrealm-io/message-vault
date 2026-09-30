@@ -23,7 +23,7 @@ docs/public/docs/developer/rustdoc/
 
 # Local vault data and generated demo copies
 /data/
-crates/vault/demo-seed/staging/
+crates/server/demo-seed/staging/
 
 # Scratch, caches, packaging, and local export trees
 .tmp/

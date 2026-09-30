@@ -76,7 +76,7 @@ import {
 
 export type { ImportPhase, ImportStep } from "./importProgressState";
 
-export const PUSH_LOG_NAME = "vault-push.log";
+export const PUSH_LOG_NAME = "message-crate-push.log";
 
 /** Parse/attachments/prepare durations, fixed once extract finishes and read again at finish time. */
 type ExtractDurations = {
@@ -101,7 +101,7 @@ function mediaDoneDetail(mode: AttachmentMediaMode): string {
  * True for the "canceled"/"cancelled" text a cancelled Tauri job's
  * `extract:error` carries. The media pass's own cancellation is spelled
  * "canceled" (one L, `transcode.rs`'s `check_cancel_now`); other layers of
- * the Rust side spell it "cancelled" (two L, `message-vault-io-core`'s
+ * the Rust side spell it "cancelled" (two L, `message-crate-core`'s
  * `check_cancel`) — matched case- and spelling-insensitively so this reads
  * either.
  */
@@ -797,7 +797,7 @@ async function runPush(
         continue_on_error: true,
         skip_attachments: false,
         // Extract (or the Media stage) just wrote these files. Matching
-        // size_bytes lets vault-push skip a second full-file hash.
+        // size_bytes lets message-crate-push skip a second full-file hash.
         trust_export: true,
         import_id: sessionId,
       }),

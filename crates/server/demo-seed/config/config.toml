@@ -1,0 +1,12 @@
+# Instance config restored by `reset-demo`.
+# Demo account identity lives in crates/server/demo-seed/config/seed.toml.
+
+[paths]
+db = "data/vault.db"
+data_dir = "data"
+assets_dir = "assets"
+assets_converted_dir = "assets_converted"
+
+# Optional HTTP import API for local development.
+# [server]
+# bind = "127.0.0.1:8080"

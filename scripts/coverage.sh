@@ -49,7 +49,7 @@ env -u MV_TEST_POSTGRES_URL cargo llvm-cov --workspace --no-report --ignore-file
 
 if [[ -n "${MV_TEST_POSTGRES_URL:-}" ]]; then
   echo "==> cargo llvm-cov (server tests on Postgres, same profile)"
-  cargo llvm-cov -p message-vault-server --no-report --ignore-filename-regex "${IGNORE}"
+  cargo llvm-cov -p message-crate-server --no-report --ignore-filename-regex "${IGNORE}"
 fi
 
 echo "==> reports"

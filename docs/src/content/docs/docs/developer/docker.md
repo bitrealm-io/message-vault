@@ -37,7 +37,7 @@ The container is the server process only. The desktop app stays on the local mac
 
 | Piece | Role |
 |---|---|
-| `message-vault-server` | HTTP API under `/v1/*` and the website on port **8080** |
+| `message-crate-server` | HTTP API under `/v1/*` and the website on port **8080** |
 | SQLite | Database and attachments under `/app/data` |
 | ffmpeg | Converts media so the browser can play it |
 | Sample inbox files | Used on first start when `DEMO_DATA` is true and the data volume is empty |
@@ -49,10 +49,10 @@ The website in the image is the production Vite build from `web/`. There is no V
 The file has three stages. Each stage is a temporary image. Only the last stage is what you run.
 
 1. **Website.** Node 22 installs `web/` dependencies and runs `npm run build`. The output is `web/dist`.
-2. **Server binary.** Rust 1.95 compiles `message-vault-server` in release mode. Then it runs `demo-seed`. That program writes conversation JSONL and config under `crates/vault/demo-seed/`. Those files are not in git. The image must create them so a new volume can load the sample inbox.
+2. **Server binary.** Rust 1.95 compiles `message-crate-server` in release mode. Then it runs `demo-seed`. That program writes conversation JSONL and config under `crates/server/demo-seed/`. Those files are not in git. The image must create them so a new volume can load the sample inbox.
 3. **Runtime.** A slim Node 20 image gets ffmpeg, the server binary, the `demo-seed` output, `config/config.docker.toml`, and the website files copied to `static/`.
 
-The build context is the **repository root**. `.dockerignore` decides what Docker sends into that context. It must ignore the live data folder at the repo root (`/data`) so a personal database is not copied into the image. It must not ignore `crates/vault/demo-seed/data/`. That folder holds the Pride and Prejudice text and the name lists `demo-seed` reads.
+The build context is the **repository root**. `.dockerignore` decides what Docker sends into that context. It must ignore the live data folder at the repo root (`/data`) so a personal database is not copied into the image. It must not ignore `crates/server/demo-seed/data/`. That folder holds the Pride and Prejudice text and the name lists `demo-seed` reads.
 
 `demo-seed` first writes into a temporary directory, then moves `staging/`, `config/`, and `README.md` into place. Docker overlay layers can put those paths on different mounts. A plain `rename` then fails with `Invalid cross-device link`. The crate copies the files and deletes the source when that happens.
 

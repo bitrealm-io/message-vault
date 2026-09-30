@@ -66,7 +66,7 @@ import { parseStoredStagingSummary, useImportJob } from "./import/useImportJob";
 const DEFAULT_SOURCE = IMESSAGE_DEFAULT_METHOD;
 const PATH_PROBE_DEBOUNCE_MS = 200;
 /** The server's own cap on one `/v1/contacts/unmatched-identities` request (`MAX_MATCH_IDENTIFIERS`,
- * `crates/vault/server/src/contacts_api.rs`) — the client batches to it rather than
+ * `crates/server/server/src/contacts_api.rs`) — the client batches to it rather than
  * discovering the limit from a 422. */
 const MAX_MATCH_IDENTIFIERS = 500;
 

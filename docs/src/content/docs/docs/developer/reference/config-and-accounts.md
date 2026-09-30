@@ -45,7 +45,7 @@ Web env overrides (optional): `VAULT_DB`, `VAULT_DATA_DIR`.
 
 ### Logging
 
-The server writes its log to stderr through `tracing`: one `INFO` line per HTTP response with the method, path, status and latency, an `ERROR` line with the full cause chain behind every `500`, and `WARN` lines for work the server could not complete but did not fail the request over. `RUST_LOG` sets the level and accepts the usual filter syntax, for example `RUST_LOG=debug` or `RUST_LOG=message_vault_server=debug,tower_http=info`. Unset, the level is `info`. The `import`, `dedupe`, `process-assets` and `reset-demo` subcommands print their progress to stdout as before; that is their output, not the log.
+The server writes its log to stderr through `tracing`: one `INFO` line per HTTP response with the method, path, status and latency, an `ERROR` line with the full cause chain behind every `500`, and `WARN` lines for work the server could not complete but did not fail the request over. `RUST_LOG` sets the level and accepts the usual filter syntax, for example `RUST_LOG=debug` or `RUST_LOG=message_crate_server=debug,tower_http=info`. Unset, the level is `info`. The `import`, `dedupe`, `process-assets` and `reset-demo` subcommands print their progress to stdout as before; that is their output, not the log.
 
 ## Per-account asset files
 
@@ -86,7 +86,7 @@ from `100` up.
   no messages, and nothing can disable or delete it. `create-owner` and
   `reset-owner-password` on the server CLI are the only ways to make or
   recover the owner's login.
-- Demo seed identity: username `demo` (`crates/vault/demo-seed/config/seed.toml`), always
+- Demo seed identity: username `demo` (`crates/server/demo-seed/config/seed.toml`), always
   no-password. Login stays username `demo` and an empty password.
 
 See [Settings](/docs/user/how-to/settings/).

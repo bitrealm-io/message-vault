@@ -244,15 +244,15 @@ describe("ImportRunView", () => {
     const user = userEvent.setup();
     const staging = "/home/sam/message-vault/staging-iphone";
     const view = renderView({ stagingDir: staging });
-    expect(screen.queryByRole("button", { name: "vault-push.log" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "message-crate-push.log" })).not.toBeInTheDocument();
 
     view.unmount();
     renderView({
       stagingDir: staging,
       steps: stepsAt("convert", { Staging: "done", Media: "done", Upload: "active" }),
     });
-    await user.click(within(stageRow("Upload")).getByRole("button", { name: "vault-push.log" }));
-    expect(openPathInExplorer).toHaveBeenCalledWith(`${staging}/vault-push.log`);
+    await user.click(within(stageRow("Upload")).getByRole("button", { name: "message-crate-push.log" }));
+    expect(openPathInExplorer).toHaveBeenCalledWith(`${staging}/message-crate-push.log`);
   });
 
   it("shows the options group only when a switch is on", () => {

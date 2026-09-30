@@ -10438,7 +10438,7 @@
               "string",
               "null"
             ],
-            "description": "Client/tool name recorded on the run, e.g. `vault-pull`."
+            "description": "Client/tool name recorded on the run, e.g. `message-crate-pull`."
           }
         }
       },
@@ -10753,7 +10753,7 @@
               "string",
               "null"
             ],
-            "description": "Exporting tool, e.g. `vault-pull`, when the client named one."
+            "description": "Exporting tool, e.g. `message-crate-pull`, when the client named one."
           },
           "total_bytes": {
             "type": "integer",
@@ -11343,7 +11343,7 @@
               "string",
               "null"
             ],
-            "description": "Importing tool, e.g. `vault-push`."
+            "description": "Importing tool, e.g. `message-crate-push`."
           }
         }
       },
@@ -12215,7 +12215,7 @@
                     "string",
                     "null"
                   ],
-                  "description": "Exporting tool, e.g. `vault-pull`, when the client named one."
+                  "description": "Exporting tool, e.g. `message-crate-pull`, when the client named one."
                 },
                 "total_bytes": {
                   "type": "integer",
@@ -12577,7 +12577,7 @@
                     "string",
                     "null"
                   ],
-                  "description": "Importing tool, e.g. `vault-push`."
+                  "description": "Importing tool, e.g. `message-crate-push`."
                 }
               }
             },

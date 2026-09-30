@@ -24,7 +24,7 @@ use message_ir_format::{
     read_conversation_csv, read_conversation_eml_dir, read_conversation_jsonl,
     read_conversation_mbox,
 };
-use message_vault_io_core::{
+use message_crate_core::{
     AppleConfig, ApplePlatform, ExporterConfig, MediaConfig, OutputFormat, SourceConfig,
 };
 

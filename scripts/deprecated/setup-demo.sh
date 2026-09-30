@@ -13,10 +13,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 cd "${REPO_ROOT}"
 
-echo "Building message-vault-server (release)…"
-cargo build --release -p message-vault-server
+echo "Building message-crate-server (release)…"
+cargo build --release -p message-crate-server
 
 echo "Regenerating demo bundle, importing, and processing assets…"
-cargo run --release -p message-vault-server -- reset-demo
+cargo run --release -p message-crate-server -- reset-demo
 
 echo "Demo ready. Start the UI: cd web && npm run dev"

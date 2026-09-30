@@ -24,7 +24,7 @@ The JSONL schema version 4 is independent of the product version. Version 3 is r
    - `src-tauri/Cargo.toml`
    - `src-tauri/tauri.conf.json`
    - `web/package.json`
-   - `crates/vault/server/Cargo.toml`
+   - `crates/server/server/Cargo.toml`
 4. Commit and push that bump on `main`.
 5. Tag that commit `v0.8.0` and push the tag.
 

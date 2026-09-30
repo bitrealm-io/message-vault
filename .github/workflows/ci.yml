@@ -194,7 +194,7 @@ jobs:
       - name: Test the server on Postgres
         env:
           MV_TEST_POSTGRES_URL: postgres://vault:vault@127.0.0.1:5432/vault
-        run: cargo test -p message-vault-server
+        run: cargo test -p message-crate-server
 
   # ── Rust: check, lint, and test src-tauri ─────────────────────────────
   # src-tauri is not a workspace member, so the workspace jobs above skip

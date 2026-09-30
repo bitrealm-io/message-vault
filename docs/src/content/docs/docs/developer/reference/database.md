@@ -146,7 +146,7 @@ deleting underlying rows.
 
 The owner's Dashboard reports what the database takes on disk. Every
 figure is measured from the database on both engines. The queries are in
-`crates/vault/server/src/db/storage.rs`, branched on the engine like the rest
+`crates/server/server/src/db/storage.rs`, branched on the engine like the rest
 of the database layer.
 
 | Figure | SQLite | Postgres |
@@ -195,7 +195,7 @@ SQLite, so it is reported once for the whole database and never per account.
 
 Baseline table definitions live in
 [`schema/sql/`](https://github.com/messagecrate/message-crate/blob/main/schema/sql/).
-Rust loads them from [`src/db/schema.rs`](https://github.com/messagecrate/message-crate/blob/main/crates/vault/server/src/db/schema.rs).
+Rust loads them from [`src/db/schema.rs`](https://github.com/messagecrate/message-crate/blob/main/crates/server/server/src/db/schema.rs).
 Every column carries a `--` comment on the line above it; a server test fails
 when one is missing.
 

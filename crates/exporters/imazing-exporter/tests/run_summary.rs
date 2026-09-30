@@ -2,8 +2,8 @@
 //! shows. The smoke tests call `convert_export` directly, so a `run()` that
 //! wrote nothing, or a report that dropped the bad-date count, passed them.
 
-use message_vault_io_core::testutil::{assert_run_wrote_jsonl, jsonl_run_config};
-use message_vault_io_core::{ImazingConfig, SourceConfig};
+use message_crate_core::testutil::{assert_run_wrote_jsonl, jsonl_run_config};
+use message_crate_core::{ImazingConfig, SourceConfig};
 use std::fs;
 
 const MESSAGES_CSV: &str = "\

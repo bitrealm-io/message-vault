@@ -172,14 +172,14 @@ That copies `web/dist` into `static/`. Don't run the host server and the [Docker
 
 Ctrl+C in terminal 1 stops the server (and the SQLite UI if it was started). Ctrl+C in terminal 2 stops the website or the desktop app.
 
-After edits under `crates/vault/server/`, restart terminal 1. After edits under `web/` or `src-tauri/`, the UI usually reloads on its own. Restart `cargo tauri dev` if it doesn't.
+After edits under `crates/server/server/`, restart terminal 1. After edits under `web/` or `src-tauri/`, the UI usually reloads on its own. Restart `cargo tauri dev` if it doesn't.
 
 ## Make code changes
 
 Rust doc comments and utoipa annotations follow the [Rust doc style](/docs/developer/rustdoc-style/) guide. If you change the server's command line, regenerate its reference page:
 
 ```bash title="regenerate the server CLI page"
-cargo run -p message-vault-server -- dump-cli-docs --output docs/src/content/docs/docs/developer/reference/server-cli.md
+cargo run -p message-crate-server -- dump-cli-docs --output docs/src/content/docs/docs/developer/reference/server-cli.md
 ```
 
 Open a GitHub issue before starting the work, so the later pull request can link to it. Use the bug report or feature request form. You don't need to wait for a reply before coding. If there's no reply after 5 business days, comment on the issue.
@@ -220,7 +220,7 @@ Add `upstream` once. For later branches: `git fetch upstream`, then `git checkou
 
 Most first PRs touch one of these:
 
-- **Server API or database** — `crates/vault/server/` and `schema/sql/`
+- **Server API or database** — `crates/server/server/` and `schema/sql/`
 - **Website or desktop screens** — `web/`
 - **Import from a phone backup** — `crates/exporters/` and, for the native file dialogs, `src-tauri/`
 - **This guidebook** — `docs/src/content/docs/`

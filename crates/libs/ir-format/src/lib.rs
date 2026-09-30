@@ -5,7 +5,7 @@
 //! plugs in through [`MergedArchive`].
 //!
 //! The resumable write path lives in `message-staging`, directory convert in
-//! `message-reexport`, the run model in `message-vault-io-core`, and the
+//! `message-reexport`, the run model in `message-crate-core`, and the
 //! schema types in `message-ir`.
 
 mod clean;

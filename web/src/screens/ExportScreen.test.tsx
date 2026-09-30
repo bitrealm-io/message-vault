@@ -102,7 +102,7 @@ describe("ExportScreen", () => {
 
     await waitFor(() => expect(invokePull).toHaveBeenCalledTimes(1));
     // Everything is the scope the screen opens in without a query, and it
-    // sends a blank query, which vault-pull reads as the whole account.
+    // sends a blank query, which message-crate-pull reads as the whole account.
     expect(invokePull.mock.calls[0][0]).toMatchObject({ out_dir: "/home/demo/out", query: "" });
     // JSONL is what pull already writes, so there is nothing to convert and
     // no staging folder to make or remove.
@@ -219,7 +219,7 @@ describe("ExportScreen", () => {
   });
 
   it("will not export a Search scope with a blank query", async () => {
-    // vault-pull reads a blank query as the whole account, which is not what
+    // message-crate-pull reads a blank query as the whole account, which is not what
     // someone who chose Search and left the box empty asked for.
     const user = userEvent.setup();
     renderScreen("from:me");

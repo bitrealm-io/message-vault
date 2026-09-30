@@ -223,7 +223,7 @@ describe("advancedContacts", () => {
 // --- The fixture the vault's search tests read -----------------------
 //
 // This module is the only place the web composes a search query, and the
-// vault's search language (crates/vault/server/src/search/) is the only
+// vault's search language (crates/server/server/src/search/) is the only
 // thing that gets to say whether a query is valid. Nothing on this side
 // checks that agreement — a builder could emit a query the language refuses
 // and nothing here would notice until someone hit it at runtime.
@@ -233,7 +233,7 @@ describe("advancedContacts", () => {
 // to fix (a name with a space, a name with a parenthesis, a name with a
 // quote), and writes one line per result to
 // tests/fixtures/search/web-queries.txt: the list the query is meant for,
-// a tab, then the query text. crates/vault/server/src/search/tests.rs reads
+// a tab, then the query text. crates/server/server/src/search/tests.rs reads
 // that file back and asserts every line parses on the list its first column
 // names.
 //

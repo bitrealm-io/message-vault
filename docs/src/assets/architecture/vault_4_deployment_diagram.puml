@@ -18,7 +18,7 @@ Deployment_Node(workstation, "Developer workstation", "Linux, macOS, or Windows"
         Container(vite, "Vite", "Node.js, localhost:5173", "Dev server for the Tauri WebView. Serves web/ live.")
     }
 
-    Deployment_Node(backend, "Message Crate backend", "cargo run -p message-vault-server -- serve") {
+    Deployment_Node(backend, "Message Crate backend", "cargo run -p message-crate-server -- serve") {
         Deployment_Node(proc, "Server process", "One OS process on 127.0.0.1:8080") {
             Container(web, "Web", "HTTP GET /", "Returns the webpage compiled from web/. Same origin as the API.")
             Container(api, "API", "HTTP API", "Auth, import, browse, export, assets. Used by the browser and the desktop app.")

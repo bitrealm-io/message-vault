@@ -190,7 +190,7 @@ const EXERCISED: Record<string, () => unknown> = {
 
   // Exports
   getExport: () => vaultApi.getExport(2),
-  createExport: () => vaultApi.createExport({ scope: { kind: "everything" }, tool: "vault-pull" }),
+  createExport: () => vaultApi.createExport({ scope: { kind: "everything" }, tool: "message-crate-pull" }),
   completeExport: () => vaultApi.completeExport(2),
   cancelExport: () => vaultApi.cancelExport(2),
 

@@ -126,7 +126,7 @@ not who they are, and a large attachment comes to the owner as a name, a type
 and a size, without the conversation it is in. The installation-wide totals are
 `GET /v1/vault/storage`, the owner's alone, and Owner Home's Dashboard shows
 them. The per-account and installation-wide numbers come from the same queries
-(`crates/vault/server/src/db/storage.rs`), with and without an account
+(`crates/server/server/src/db/storage.rs`), with and without an account
 filter, so the Dashboard cannot disagree with the sum of the Storage tabs.
 
 ## The three states of a Message Crate

@@ -36,7 +36,7 @@ function useConversationTrashWrite(
     //   too.
     // - contacts.details: an open contact's per-handle conversation and
     //   message counts exclude trashed conversations (see
-    //   `crates/vault/server/src/db/participant_names.rs` and
+    //   `crates/server/server/src/db/participant_names.rs` and
     //   `get_contact_detail`'s comment), and the 204 response names no
     //   participant to narrow this to, so every open detail is marked.
     // Nothing under conversations beyond the list needs marking: GET

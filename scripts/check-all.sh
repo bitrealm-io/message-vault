@@ -45,8 +45,8 @@ echo "==> cargo test --workspace (SQLite)"
 env -u MV_TEST_POSTGRES_URL cargo test --workspace
 
 if [[ -n "${MV_TEST_POSTGRES_URL:-}" ]]; then
-  echo "==> cargo test -p message-vault-server (Postgres)"
-  cargo test -p message-vault-server
+  echo "==> cargo test -p message-crate-server (Postgres)"
+  cargo test -p message-crate-server
 fi
 
 echo "==> cargo test src-tauri"

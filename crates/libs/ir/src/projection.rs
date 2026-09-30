@@ -49,7 +49,7 @@ impl SortKeyUnit {
 /// Counters from one projection, for the caller to fold into its report.
 ///
 /// The projection cannot bump an exporter report directly (that type lives in
-/// `message-vault-io-core`, which depends on this crate), so it returns plain
+/// `message-crate-core`, which depends on this crate), so it returns plain
 /// counts and each exporter folds the ones it tracks.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectionTally {

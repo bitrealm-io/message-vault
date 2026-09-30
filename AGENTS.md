@@ -42,11 +42,11 @@ instead of dropping them.
 
 ## Message Crate Repository
 
-This repository is **messagecrate/message-crate**. Cargo package names still say `message-vault` (`message-vault-server`, `message-vault-io-core`): the packages keep the old name until the identifier rename lands. Public docs live at messagecrate.app.
+This repository is **messagecrate/message-crate**. Cargo package names still say `message-vault` (`message-crate-server`, `message-crate-core`): the packages keep the old name until the identifier rename lands. Public docs live at messagecrate.app.
 
 The product has two pieces:
 
-- **The server** — `message-vault-server`. Stores messages in SQLite (`data/vault.db`), serves `/v1/*`, and can host the website from `static/`. Run it with `./scripts/run-vault-dev.sh` (http://127.0.0.1:8080) or Docker. Login is a local account, not a cloud account.
+- **The server** — `message-crate-server`. Stores messages in SQLite (`data/vault.db`), serves `/v1/*`, and can host the website from `static/`. Run it with `./scripts/run-vault-dev.sh` (http://127.0.0.1:8080) or Docker. Login is a local account, not a cloud account.
 - **The desktop app** — Tauri v2 around the Vite SPA in `web/`. Reads phone backups, writes JSONL, and imports into a running server. Browse and search also work in the browser against the server; importing a backup needs the desktop app.
 
 ### Technology stack
@@ -74,8 +74,8 @@ message-crate
 │   ├── exporters/          # backup parsers (iMessage, WhatsApp, SMS, experimental)
 │   ├── helpers/            # imessage-reader (GPL helper process the app spawns) and its protocol
 │   ├── libs/               # shared libraries (ir, ir-format, reexport, contacts, media,
-│   │                       #   vault-push, vault-pull, …)
-│   └── vault/              # message-vault-server (HTTP API + SQLite) and demo-seed
+│   │                       #   message-crate-push, message-crate-pull, …)
+│   └── vault/              # message-crate-server (HTTP API + SQLite) and demo-seed
 ├── docker/                 # Dockerfile and Compose for a release-shaped server image
 ├── docs/                   # Astro Starlight site (messagecrate.app)
 │   ├── img/                # images used in README / docs
@@ -102,7 +102,7 @@ message-crate
 
 ```text
 # ❌ BAD — web-next IS NOT the product; it exists to evaluate what is worth porting into web/
-# ✅ GOOD — product UI is web/ + src-tauri/; the server API is crates/vault/server/
+# ✅ GOOD — product UI is web/ + src-tauri/; the server API is crates/server/server/
 ```
 
 ### First time setup
@@ -186,7 +186,7 @@ Work from the repository root. The server process must be running before the web
 
 API: **http://127.0.0.1:8080**. After `--reset-demo`, log in as username `demo` with an empty password. After `--owner`, log in as `admin` / `admin`. Otherwise create the owner in the UI.
 
-Restart terminal 1 after edits under `crates/vault/server/` (debug `cargo run`; no hot reload).
+Restart terminal 1 after edits under `crates/server/server/` (debug `cargo run`; no hot reload).
 
 **Run on Postgres (optional)** — `./scripts/run-vault-pg-dev.sh` starts
 compose Postgres, runs this checkout's server with `--db-url
@@ -246,7 +246,7 @@ cargo build --manifest-path src-tauri/Cargo.toml
 # this is the run that proves new SQL works on both engines. About 3.5
 # minutes against the compose service; without the variable it is SQLite.
 docker compose -f docker-compose.pg.yml up -d
-MV_TEST_POSTGRES_URL=postgres://vault:vault@127.0.0.1:5432/vault cargo test -p message-vault-server
+MV_TEST_POSTGRES_URL=postgres://vault:vault@127.0.0.1:5432/vault cargo test -p message-crate-server
 
 # Test coverage for the workspace (cargo-llvm-cov). Ends with the count of
 # functions no test calls and the files with the most; every one is named
@@ -325,7 +325,7 @@ The Build asks git for the commit. Where there is no `.git`, which is the case i
 - `src-tauri/Cargo.toml` — the value the other three are compared against
 - `src-tauri/tauri.conf.json` — installer version
 - `web/package.json` — Vite SPA
-- `crates/vault/server/Cargo.toml` — server crate
+- `crates/server/server/Cargo.toml` — server crate
 
 Leave most other `Cargo.toml` files at `0.1.0`. Do not bump `web-next/` (`0.3.0`) for a product release.
 

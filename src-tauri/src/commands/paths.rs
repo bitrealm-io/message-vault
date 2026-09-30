@@ -132,7 +132,7 @@ pub fn home_dir() -> Result<HomeDirInfo, String> {
 ///
 /// Only paths under `staging_root` are allowed. That is the Staging
 /// Directory from Settings (default `{home}/message-vault`), where staging
-/// folders live, each with its `vault-push.log` while the run lasts.
+/// folders live, each with its `message-crate-push.log` while the run lasts.
 ///
 /// # Errors
 ///
@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn accepts_log_file_under_staging_when_missing() {
         let root = "/home/sam/message-vault";
-        let path = "/home/sam/message-vault/staging-x/vault-push.log";
+        let path = "/home/sam/message-vault/staging-x/message-crate-push.log";
         let resolved = resolve_openable_path(path, root).unwrap();
         assert_eq!(resolved, PathBuf::from(path));
     }
@@ -338,7 +338,7 @@ mod tests {
         let root = temp.path().join("message-vault");
         let staging = root.join("staging-test");
         fs::create_dir_all(&staging).unwrap();
-        let log = staging.join("vault-push.log");
+        let log = staging.join("message-crate-push.log");
         fs::write(&log, "ok\n").unwrap();
 
         let resolved =
@@ -363,9 +363,9 @@ mod tests {
     fn missing_log_is_reported_like_any_other_missing_path() {
         // The log is deleted with the staging directory once an import
         // succeeds, so a missing log has nothing special to explain.
-        let log = PathBuf::from("/home/sam/message-vault/staging-x/vault-push.log");
+        let log = PathBuf::from("/home/sam/message-vault/staging-x/message-crate-push.log");
         let err = missing_path_error(&log).unwrap_err();
-        assert_eq!(err, "Nothing exists at vault-push.log yet");
+        assert_eq!(err, "Nothing exists at message-crate-push.log yet");
     }
 
     #[test]
@@ -379,7 +379,7 @@ mod tests {
     #[test]
     fn existing_path_passes_missing_check() {
         let temp = tempfile::tempdir().unwrap();
-        let file = temp.path().join("vault-push.log");
+        let file = temp.path().join("message-crate-push.log");
         fs::write(&file, "ok\n").unwrap();
         missing_path_error(&file).unwrap();
     }

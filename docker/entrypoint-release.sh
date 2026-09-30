@@ -37,10 +37,10 @@ seed_if_needed() {
 
   if demo_data_requested; then
     echo "Seeding demo data (DEMO_DATA=${DEMO_DATA})…"
-    message-vault-server reset-demo --config "${CONFIG}"
+    message-crate-server reset-demo --config "${CONFIG}"
     ensure_docker_config
     echo "Converting demo media…"
-    message-vault-server process-assets --config "${CONFIG}" \
+    message-crate-server process-assets --config "${CONFIG}" \
       || echo "warning: process-assets failed; UI still works"
   else
     echo "DEMO_DATA=${DEMO_DATA}: empty data/ (create an account in the web UI)."
@@ -49,5 +49,5 @@ seed_if_needed() {
 
 seed_if_needed
 
-echo "Starting message-vault-server (API + static files)…"
-exec message-vault-server serve --config "${CONFIG}"
+echo "Starting message-crate-server (API + static files)…"
+exec message-crate-server serve --config "${CONFIG}"

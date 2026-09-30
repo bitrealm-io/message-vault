@@ -8,7 +8,7 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use message_ir::ConversationDocument;
 use message_ir_format::read_conversation_jsonl;
-use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
+use message_crate_core::{ExportReport, ExportTransforms, OutputFormat};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};

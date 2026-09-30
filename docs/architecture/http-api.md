@@ -254,7 +254,7 @@ every rule that broke rather than the first.
 `type` is the URL of a page under
 `messagecrate.app/docs/developer/reference/errors/`, one page per problem type.
 The code is the registry: each type is declared once in
-`crates/vault/server/src/problem.rs`, the pages are generated from it, and a
+`crates/server/server/src/problem.rs`, the pages are generated from it, and a
 test fails when the checked-in pages drift. Only `500 Internal Server Error`
 uses `about:blank`, because a page about it could say nothing a reader could
 act on. The taxonomy is per problem, not per status: the test for a new type
@@ -405,7 +405,7 @@ between pages move the offsets, so pages skipped or repeated messages and
 ## The reference
 
 The generated reference, `docs/src/assets/openapi.json`, is produced from the
-handlers by `message-vault-server dump-openapi` and checked in; a test fails
+handlers by `message-crate-server dump-openapi` and checked in; a test fails
 when the two differ, and CI checks the web app's generated types against it.
 
 An operation's error responses are built from shared parts, never written out

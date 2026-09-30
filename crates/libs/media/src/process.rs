@@ -577,7 +577,7 @@ fn changed(output_dir: &Path, old_rel: &str, new_path: &Path) -> Result<Outcome>
     // Always report Changed — even when the relative path is unchanged (e.g. JPG
     // recompressed in place). Callers must invalidate digest_sha256 for remapped
     // paths; treating same-path rewrites as Skipped left stale fingerprints in
-    // JSON Lines files and caused vault-push sha256 mismatches after upload.
+    // JSON Lines files and caused message-crate-push sha256 mismatches after upload.
     Ok(Outcome::Changed {
         old_rel: old_rel.to_string(),
         new_rel,

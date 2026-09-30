@@ -719,7 +719,7 @@ export function getImportContacts(
 
 // ── Export Runs ─────────────────────────────────────────────────────────────
 //
-// The desktop app pages a run's messages from its Rust side (`vault-pull`),
+// The desktop app pages a run's messages from its Rust side (`message-crate-pull`),
 // so `GET /v1/exports/{id}/messages` has no function here.
 
 export function getExport(id: number, opts?: VaultRequestOptions): Promise<Schema["ExportRun"]> {

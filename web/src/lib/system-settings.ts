@@ -363,7 +363,7 @@ export function joinStagingPath(
 /**
  * Full path for a new export staging folder under the Settings parent.
  *
- * Export stages here only when the chosen format is not JSONL: `vault-pull`
+ * Export stages here only when the chosen format is not JSONL: `message-crate-pull`
  * writes JSONL, and `message-reexport` refuses to convert a folder into
  * itself, so the two steps need separate folders. The folder is deleted once
  * the conversion finishes.

@@ -6,7 +6,7 @@ use message_ir::{
     ConversationDocument, ConversationMeta, ConversationStats, ExportMeta, IrAttachment,
     IrConversationType, IrMessage, IrParticipant, SCHEMA_VERSION, nonempty,
 };
-use message_vault_io_core::discover_files;
+use message_crate_core::discover_files;
 use std::fs;
 use std::path::Path;
 

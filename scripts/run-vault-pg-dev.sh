@@ -138,9 +138,9 @@ wait_postgres() {
 require_cmd cargo
 require_cmd docker
 
-CARGO_RUN=(cargo run -p message-vault-server)
+CARGO_RUN=(cargo run -p message-crate-server)
 if [[ "${RELEASE}" -eq 1 ]]; then
-  CARGO_RUN=(cargo run --release -p message-vault-server)
+  CARGO_RUN=(cargo run --release -p message-crate-server)
 fi
 
 mkdir -p data
@@ -194,8 +194,8 @@ echo "Stop:       Ctrl+C also stops the Postgres container (volume kept)."
 echo
 
 if [[ "${RELEASE}" -eq 1 ]]; then
-  echo "Starting message-vault-server (release). First compile can take several minutes."
+  echo "Starting message-crate-server (release). First compile can take several minutes."
 else
-  echo "Starting message-vault-server (debug). Restart after server-crate edits."
+  echo "Starting message-crate-server (debug). Restart after server-crate edits."
 fi
 "${CARGO_RUN[@]}" -- serve --config "${CONFIG}" --db-url "${DB_URL}"

@@ -1,6 +1,6 @@
 # Multi-stage release image built from the current checkout.
 # Usage (from the repository root):
-#   docker build -f docker/Dockerfile -t message-vault-server .
+#   docker build -f docker/Dockerfile -t message-crate-server .
 # Or:
 #   docker compose -f docker/compose.release.yml up --build
 #
@@ -38,7 +38,7 @@ WORKDIR /src
 COPY rust-toolchain.toml Cargo.toml Cargo.lock ./
 RUN rustup toolchain install
 COPY crates ./crates
-# Required at compile time by crates/vault/server/src/db/schema.rs include_str!(…).
+# Required at compile time by crates/server/server/src/db/schema.rs include_str!(…).
 COPY schema ./schema
 # [patch.crates-io] sqlx-sqlite lives here (see Cargo.toml). Without this
 # copy, cargo build fails: failed to read /src/vendor/sqlx-sqlite/Cargo.toml.
@@ -46,9 +46,9 @@ COPY vendor ./vendor
 
 ARG BUILD_METADATA=unknown
 ENV MESSAGE_VAULT_BUILD_METADATA=$BUILD_METADATA
-RUN cargo build --release -p message-vault-server
+RUN cargo build --release -p message-crate-server
 # Conversation JSONL is not in git. Write it here so the runtime image can seed.
-# Needs crates/vault/demo-seed/data/ (corpus + names). Do not ignore that path.
+# Needs crates/server/demo-seed/data/ (corpus + names). Do not ignore that path.
 RUN cargo run --release -p demo-seed
 
 # -----------------------------------------------------------------------------
@@ -66,12 +66,12 @@ RUN apt-get update \
 WORKDIR /app
 
 # Rust CLI / serve binary
-COPY --from=rust-builder /src/target/release/message-vault-server /usr/local/bin/message-vault-server
+COPY --from=rust-builder /src/target/release/message-crate-server /usr/local/bin/message-crate-server
 
 # Demo bundle (seeded on first start when DEMO_DATA is truthy)
-COPY --from=rust-builder /src/crates/vault/demo-seed/staging ./crates/vault/demo-seed/staging
-COPY --from=rust-builder /src/crates/vault/demo-seed/config ./crates/vault/demo-seed/config
-COPY --from=rust-builder /src/crates/vault/demo-seed/README.md ./crates/vault/demo-seed/README.md
+COPY --from=rust-builder /src/crates/server/demo-seed/staging ./crates/server/demo-seed/staging
+COPY --from=rust-builder /src/crates/server/demo-seed/config ./crates/server/demo-seed/config
+COPY --from=rust-builder /src/crates/server/demo-seed/README.md ./crates/server/demo-seed/README.md
 
 # Container config template
 COPY config/config.docker.toml ./config/config.docker.toml

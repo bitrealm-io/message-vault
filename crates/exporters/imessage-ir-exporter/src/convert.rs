@@ -29,7 +29,7 @@ use message_ir_format::FormatSink;
 use message_staging::{
     AttachmentSource, ConversationUnit, ExportWriter, ExportWriterParts, WriteQueueOptions,
 };
-use message_vault_io_core::{
+use message_crate_core::{
     ExportReport, MediaConfig, OutputFormat, ProgressEvent, stage_conversation_attachments,
 };
 

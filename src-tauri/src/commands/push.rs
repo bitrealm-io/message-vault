@@ -2,9 +2,9 @@
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use vault_push::ImportMode;
+use message_crate_push::ImportMode;
 
-use vault_push::{ProgressEvent, VaultPushConfig, run as run_push};
+use message_crate_push::{ProgressEvent, VaultPushConfig, run as run_push};
 
 use super::events;
 use super::events::ExtractProgressEvent;
@@ -26,7 +26,7 @@ fn as_usize(value: u64) -> usize {
 
 /// Progress bar update and finished JSON payload after a push completes.
 fn finished_push_events(
-    report: &vault_push::PushReport,
+    report: &message_crate_push::PushReport,
 ) -> (ExtractProgressEvent, serde_json::Value) {
     let progress = ExtractProgressEvent {
         step: "upload".into(),
@@ -137,15 +137,15 @@ fn push_config(args: PushArgs) -> VaultPushConfig {
         trust_export: args.trust_export,
         verify_digests: false,
         max_retries: 3,
-        // Pack until vault_push::MAX_IMPORT_BODY_BYTES (64 MiB); do not stop at a message count.
-        batch_size: vault_push::NO_MESSAGE_COUNT_LIMIT,
+        // Pack until message_crate_push::MAX_IMPORT_BODY_BYTES (64 MiB); do not stop at a message count.
+        batch_size: message_crate_push::NO_MESSAGE_COUNT_LIMIT,
         // Above the CLI default (8): desktop imports are often many small files.
         asset_upload_workers: 16,
         // Above the CLI default (3): hide more hashing behind in-flight imports.
         prepare_ahead: 8,
         // Above the CLI default (2): more of the prepare-ahead queue runs at once.
         prepare_workers: 4,
-        // Below the CLI default (vault_push::MAX_PROXY_BODY_BYTES, 90 MiB):
+        // Below the CLI default (message_crate_push::MAX_PROXY_BODY_BYTES, 90 MiB):
         // desktop uploads switch to multipart sooner so a large attachment
         // moves in small parts instead of one long PUT.
         asset_multipart_threshold: 5 * 1024 * 1024,
@@ -213,7 +213,7 @@ fn forward_push_event(app: &tauri::AppHandle, event: ProgressEvent) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vault_push::{FileResult, PushReport};
+    use message_crate_push::{FileResult, PushReport};
 
     #[test]
     fn finished_push_event_reports_complete_upload_and_totals() {

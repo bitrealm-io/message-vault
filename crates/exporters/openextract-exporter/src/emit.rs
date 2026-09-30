@@ -9,7 +9,7 @@ use message_ir::{
     PendingMessage, ProjectionHooks, ensure_conversation,
 };
 use message_staging::{AttachmentSource, ExportWriter};
-use message_vault_io_core::{
+use message_crate_core::{
     CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
 };
 use phone::sanitize_number;
@@ -57,10 +57,10 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
 
     let mut ingest = Ingest::default();
     for path in discover_csv_files(input)? {
-        message_vault_io_core::check_cancel(cancel)?;
+        message_crate_core::check_cancel(cancel)?;
         ingest.ingest_file(&path);
     }
-    message_vault_io_core::check_cancel(cancel)?;
+    message_crate_core::check_cancel(cancel)?;
     let Ingest {
         conversations,
         mut report,
@@ -68,7 +68,7 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
     } = ingest;
 
     let hooks = OpenExtractProjection {
-        export: message_vault_io_core::export_meta(
+        export: message_crate_core::export_meta(
             EXPORT_SOURCE,
             EXPORT_TOOL,
             EXPORT_TOOL_VERSION,
@@ -269,7 +269,7 @@ fn resolve_chat(peer: &str) -> (String, String, bool) {
         return (phone::normalize_lenient(peer), String::new(), false);
     }
     (
-        message_vault_io_core::name_stem(peer),
+        message_crate_core::name_stem(peer),
         peer.to_string(),
         true,
     )

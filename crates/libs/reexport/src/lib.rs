@@ -8,8 +8,8 @@ use message_ir_format::{
     read_conversation_eml_dir, read_conversation_json, read_conversation_jsonl,
     read_conversation_mbox,
 };
-pub use message_vault_io_core::RunResult;
-use message_vault_io_core::{
+pub use message_crate_core::RunResult;
+use message_crate_core::{
     ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat, document_messages,
     stage_conversation_attachments,
 };

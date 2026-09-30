@@ -1,7 +1,7 @@
 //! The one extension ↔ MIME table for attachment files.
 //!
 //! Every place that maps a file extension to a MIME type (exporters, the
-//! export pipeline, the vault server) or a MIME type back to an extension
+//! export pipeline, the server) or a MIME type back to an extension
 //! (asset uploads, EML attachment naming) goes through this module, so the
 //! mappings cannot drift apart. [`classify`](crate::classify) reads the same
 //! table, keeping "what is an image/video/audio file" and "what MIME does
@@ -19,7 +19,7 @@ pub enum Kind {
 }
 
 /// One row per extension: dotted lowercase extension, MIME type, media kind
-/// (`None` for non-media formats the vault still wants MIME types for).
+/// (`None` for non-media formats the server still wants MIME types for).
 ///
 /// The **first** row carrying a given MIME type is the canonical extension
 /// [`ext_for_mime`] returns for it.

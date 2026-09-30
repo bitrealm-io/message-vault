@@ -18,7 +18,7 @@ use std::sync::{Arc, Mutex};
 
 /// Start the desktop window and wait until the user quits.
 fn main() {
-    // Import and export name this Build to the vault on every request; the SPA
+    // Import and export name this Build to the server on every request; the SPA
     // does the same for its own requests (`web/src/lib/api.ts`).
     message_crate_http::identify_desktop_app(env!("MESSAGE_CRATE_BUILD"));
 

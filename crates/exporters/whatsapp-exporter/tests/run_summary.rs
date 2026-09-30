@@ -68,7 +68,7 @@ fn run_writes_the_conversation_and_counts_the_bad_date_rows() {
 }
 
 /// The number from the form is stamped on the export header, under the
-/// vault's handle key, so every message is held at it (ADR 0015). It is a
+/// server's handle key, so every message is held at it (ADR 0015). It is a
 /// header value, not a participant: the holder is never listed there.
 #[test]
 fn run_records_the_form_owner_on_the_header() {

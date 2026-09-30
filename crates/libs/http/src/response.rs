@@ -1,12 +1,12 @@
-//! Reading the vault's answer: the value on success, the vault's own sentence
+//! Reading the server's answer: the value on success, the server's own sentence
 //! on failure.
 //!
-//! Every route the vault serves answers a failure with an RFC 7807 problem
+//! Every route the server serves answers a failure with an RFC 7807 problem
 //! document (`docs/architecture/http-api.md`), and its `detail` is written for the person to read.
 //! Both client crates were reading it themselves — `message-crate-push` with an
 //! `ok_json` helper, `message-crate-pull` with an `error_sentence` one — over two
 //! private copies of the same struct. One copy of the reading lives here, over
-//! the shared [`Problem`] type, so a change to the vault's failure shape is
+//! the shared [`Problem`] type, so a change to the server's failure shape is
 //! one edit rather than a hunt.
 
 use anyhow::Result;
@@ -16,7 +16,7 @@ use serde::de::DeserializeOwned;
 use crate::retry::HttpError;
 use crate::truncate;
 
-/// Longest failure body repeated back to the person. A vault sentence is far
+/// Longest failure body repeated back to the person. A server sentence is far
 /// shorter; a proxy's HTML error page is not, and none of it helps.
 const MAX_BODY_SNIPPET: usize = 300;
 
@@ -36,7 +36,7 @@ pub fn error_sentence(body: &str) -> String {
     }
 }
 
-/// Parse a vault JSON response body, or fail with what the vault said went
+/// Parse a server JSON response body, or fail with what the server said went
 /// wrong.
 ///
 /// A 2xx status is a success and the body is `T`. Anything else is a
@@ -48,7 +48,7 @@ pub fn error_sentence(body: &str) -> String {
 /// # Errors
 ///
 /// Returns an error for any non-2xx status, and for a 2xx body that is not the
-/// JSON `T` expects. The second kind is never retried: the vault already did
+/// JSON `T` expects. The second kind is never retried: the server already did
 /// the work, and sending the request again would repeat it.
 pub fn ok_json<T: DeserializeOwned>(
     what: &str,
@@ -84,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn the_vaults_own_sentence_is_what_the_person_sees() {
+    fn the_servers_own_sentence_is_what_the_person_sees() {
         let err = ok_json::<Answer>(
             "asset upload",
             reqwest::StatusCode::BAD_REQUEST,
@@ -153,7 +153,7 @@ mod tests {
     }
 
     /// The status has to survive into the error, or a run would give up on a
-    /// 503 the vault meant the client to come back from.
+    /// 503 the server meant the client to come back from.
     #[test]
     fn a_failure_carries_the_status_so_retries_can_classify_it() {
         let err = ok_json::<Answer>(

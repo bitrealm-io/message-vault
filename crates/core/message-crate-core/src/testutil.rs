@@ -19,7 +19,7 @@ pub fn csv_files(root: &Path) -> Vec<PathBuf> {
 
 /// Every data row of `path`, keyed by lower-cased column name.
 ///
-/// This reads the export with the vault's own CSV reader, the one an import
+/// This reads the export with the server's own CSV reader, the one an import
 /// would use, so a test asserts the value in a named column rather than a
 /// substring of the file. The distinction matters: a substring search over the
 /// whole file is satisfied by the header line, so `contains("direction")`

@@ -11,7 +11,7 @@ use crate::transforms::ExportTransforms;
 /// Exporters no longer resolve names from a contacts file. A backup that
 /// carries its own contact data (Apple's address book, WhatsApp's contacts
 /// database) is read by that exporter directly; everything else arrives at the
-/// vault as raw identities and is reconciled there.
+/// server as raw identities and is reconciled there.
 ///
 /// # Errors
 ///

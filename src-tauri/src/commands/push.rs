@@ -13,7 +13,7 @@ use crate::state::AppState;
 
 /// Largest attachment the desktop app will upload.
 ///
-/// The vault's own `asset_max_bytes` defaults higher and is not exposed to
+/// The server's own `asset_max_bytes` defaults higher and is not exposed to
 /// clients, so this is the number the app can actually promise. The size
 /// forecast at the first gate predicts against this same constant — a forecast
 /// against a different limit than the upload uses would be worse than none.
@@ -68,11 +68,11 @@ fn finished_push_events(
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PushArgs {
-    /// Base URL of the vault server, for example `http://127.0.0.1:8080`.
+    /// Base URL of the server, for example `http://127.0.0.1:8080`.
     pub base_url: String,
-    /// Vault account name.
+    /// Account name.
     pub username: String,
-    /// Bearer token for the vault: an API token, or the logged-in Session's
+    /// Bearer token for the server: an API token, or the logged-in Session's
     /// token. Never a password.
     pub key: String,
     /// Folder of conversation files to upload.
@@ -95,7 +95,7 @@ pub struct PushArgs {
     pub import_id: Option<i64>,
 }
 
-/// Ask this process to upload extracted conversations to a vault server.
+/// Ask this process to upload extracted conversations to a server.
 ///
 /// Returns as soon as the background thread starts. Upload progress uses the
 /// same `extract:*` events as Extract so the UI can reuse one progress view.

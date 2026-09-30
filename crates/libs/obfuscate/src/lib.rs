@@ -598,7 +598,7 @@ mod tests {
     ///
     /// These pin what the key actually produces. The obfuscated export is
     /// meant to be reproducible — the same seed on the same backup gives the
-    /// same fake vault, which is what makes it shareable and comparable — so
+    /// same fake data, which is what makes it shareable and comparable — so
     /// the mapping is a contract, not an implementation detail. Regenerate
     /// deliberately if it ever has to change, and say why in the commit.
     #[test]

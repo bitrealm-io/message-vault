@@ -31,7 +31,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     };
     let input = config.primary_input().map(|p| p.to_path_buf());
 
-    // The number typed on the form, under the vault's handle key. Android's
+    // The number typed on the form, under the server's handle key. Android's
     // only source; iPhone's fallback when the backup carries no owner key.
     let form_owner = source
         .owner_phone

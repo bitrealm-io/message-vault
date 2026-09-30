@@ -1,4 +1,4 @@
-//! Map vault export API messages into conversation documents.
+//! Map export API messages into conversation documents.
 //!
 //! The export API is the Message Crate HTTP server's read path. Each document
 //! is later written as JSON Lines (one JSON object per line).
@@ -62,7 +62,7 @@ pub fn build_document(
     }
 }
 
-/// Map one vault export message into the shared conversation message type.
+/// Map one exported message into the shared conversation message type.
 ///
 /// # Errors
 ///
@@ -108,13 +108,13 @@ pub fn to_ir_message(msg: &Message, skip_attachments: bool) -> Result<IrMessage>
         .guid
         .clone()
         .filter(|g| !g.trim().is_empty())
-        .unwrap_or_else(|| format!("vault:{}", msg.id));
+        .unwrap_or_else(|| format!("server:{}", msg.id));
 
-    // Keep the vault row id and vault source name so a later push can trace
-    // each message back to the vault it came from.
+    // Keep the server's row id and source name so a later push can trace
+    // each message back to the server it came from.
     let mut source_fields = serde_json::Map::new();
-    source_fields.insert("vault_message_id".into(), json!(msg.id));
-    source_fields.insert("vault_source".into(), json!(msg.source));
+    source_fields.insert("server_message_id".into(), json!(msg.id));
+    source_fields.insert("server_source".into(), json!(msg.source));
 
     Ok(IrMessage {
         guid,
@@ -157,7 +157,7 @@ fn participants_from_seed(seed: &Message) -> Vec<IrParticipant> {
     participants
 }
 
-/// Map one vault attachment record onto the shared attachment type.
+/// Map one server attachment record onto the shared attachment type.
 fn to_ir_attachment(att: &Attachment) -> IrAttachment {
     let path = att
         .path
@@ -171,7 +171,7 @@ fn to_ir_attachment(att: &Attachment) -> IrAttachment {
         is_sticker: att.is_sticker,
         transcription: att.transcription.clone(),
         sticker_effect: None,
-        // The vault's attachment shape carries no byte length.
+        // The server's attachment shape carries no byte length.
         size_bytes: None,
         missing_reason: att.missing_reason.clone(),
         bytes: None,
@@ -222,9 +222,9 @@ fn infer_kind(msg: &Message, service: IrService) -> IrMessageKind {
     }
 }
 
-/// Parse a vault timestamp into milliseconds since Unix epoch.
+/// Parse a server timestamp into milliseconds since Unix epoch.
 ///
-/// Accepts a millisecond or second integer, RFC 3339, or a few common vault
+/// Accepts a millisecond or second integer, RFC 3339, or a few common server
 /// date strings without a timezone (treated as UTC).
 ///
 /// # Errors
@@ -250,7 +250,7 @@ fn parse_timestamp_unix_ms(raw: &str) -> Result<i64> {
     if let Ok(dt) = DateTime::parse_from_rfc3339(t) {
         return Ok(dt.timestamp_millis());
     }
-    // Common vault form without offset: treat as UTC.
+    // Common server form without offset: treat as UTC.
     if let Ok(ndt) = NaiveDateTime::parse_from_str(t, "%Y-%m-%dT%H:%M:%S%.f") {
         return Ok(ndt.and_utc().timestamp_millis());
     }
@@ -269,7 +269,7 @@ mod tests {
     use super::*;
     use message_crate_api_types::{MessageConversation, Participant, Tapback};
 
-    /// One page of `GET /v1/exports/{id}/messages` exactly as the vault serializes
+    /// One page of `GET /v1/exports/{id}/messages` exactly as the server serializes
     /// it: `service` on the message rather than on the conversation, an
     /// attachment with no byte length, and a participant the source named
     /// without recording an address, whose `handle` and `service` are `null`.
@@ -279,7 +279,7 @@ mod tests {
     /// away from the shape they mirror without the compiler or the suite
     /// noticing: `handle: String` rejected `"handle": null` and aborted every
     /// pull of a conversation holding an address-less participant, and
-    /// `conversation.service` read a field the vault has never sent, so every
+    /// `conversation.service` read a field the server has never sent, so every
     /// pulled message came out `IrService::Unknown`.
     const EXPORT_PAGE_JSON: &str = r#"{
       "items": [
@@ -330,11 +330,11 @@ mod tests {
     }"#;
 
     /// The whole page parses, an address-less participant survives it, and the
-    /// service the vault sent reaches the IR message.
+    /// service the server sent reaches the IR message.
     #[test]
     fn a_real_export_page_parses_with_an_address_less_participant() {
         let page: message_crate_api_types::Page<message_crate_api_types::Message> =
-            serde_json::from_str(EXPORT_PAGE_JSON).expect("the vault's own page shape must parse");
+            serde_json::from_str(EXPORT_PAGE_JSON).expect("the server's own page shape must parse");
         assert_eq!((page.items.len(), page.total), (1, 1));
 
         let participants = participants_from_seed(&page.items[0]);
@@ -344,7 +344,7 @@ mod tests {
             participants[0].display_name.as_deref(),
             Some("Robert Smith")
         );
-        // No address at all: the name is all the vault has for this person, so
+        // No address at all: the name is all the server has for this person, so
         // it carries through as their display name.
         assert_eq!(participants[1].handle, None);
         assert_eq!(participants[1].display_name.as_deref(), Some("Sarah Vale"));
@@ -365,7 +365,7 @@ mod tests {
         let ir = to_ir_message(&page.items[0], false).unwrap();
         assert_eq!(ir.service, IrService::IMessage);
         assert_eq!(ir.message_kind, IrMessageKind::IMessage);
-        // The attachment maps without a byte length: the vault never sends one.
+        // The attachment maps without a byte length: the server never sends one.
         assert_eq!(ir.attachments.len(), 1);
         assert_eq!(ir.attachments[0].size_bytes, None);
     }
@@ -549,7 +549,7 @@ mod tests {
         assert_eq!(participants[0].display_name.as_deref(), Some("Sam"));
     }
 
-    /// When the vault has nothing to name the person, `name` falls back to
+    /// When the server has nothing to name the person, `name` falls back to
     /// the handle (ADR-0006). That must not become a display name here — see
     /// the comment on `participants_from_seed` for why.
     #[test]

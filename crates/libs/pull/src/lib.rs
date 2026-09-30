@@ -1,9 +1,9 @@
-//! Pulls messages out of a running vault as one Export Run: `POST /v1/exports`
+//! Pulls messages out of a running server as one Export Run: `POST /v1/exports`
 //! records what is asked for, `GET /v1/exports/{id}/messages` pages the rows,
 //! and `complete` or `cancel` closes the run. The messages are written as
 //! chat files.
 //!
-//! The `message-crate-pull` command and the desktop app Vault Export screen both call
+//! The `message-crate-pull` command and the desktop app's Export screen both call
 //! this crate.
 
 mod http;

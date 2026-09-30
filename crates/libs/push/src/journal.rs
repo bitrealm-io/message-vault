@@ -70,7 +70,7 @@ pub enum JournalEvent {
 }
 
 impl JournalEvent {
-    /// Vault URL and username this event belongs to.
+    /// Server URL and username this event belongs to.
     fn target(&self) -> (&str, &str) {
         match self {
             Self::AssetOk { url, username, .. }
@@ -82,7 +82,7 @@ impl JournalEvent {
     }
 }
 
-/// In-memory skip sets rebuilt from the journal for one vault URL and username.
+/// In-memory skip sets rebuilt from the journal for one server URL and username.
 #[derive(Debug, Default)]
 pub struct JournalState {
     pub assets: HashSet<String>,
@@ -102,7 +102,7 @@ pub fn journal_path(input: &Path) -> PathBuf {
     input.join(JOURNAL_NAME)
 }
 
-/// Read the journal and keep events that match this vault URL and username.
+/// Read the journal and keep events that match this server URL and username.
 ///
 /// A missing file is treated as an empty journal. A corrupt line is skipped
 /// after a warning; those entries will be uploaded again. The server ignores
@@ -179,7 +179,7 @@ pub fn append(path: &Path, event: &JournalEvent) -> Result<()> {
     jsonl_journal::append("journal", path, event)
 }
 
-/// Rewrite the journal from in-memory `state` for one vault URL and username.
+/// Rewrite the journal from in-memory `state` for one server URL and username.
 ///
 /// Events for other URL and username pairs are kept, so one export folder can
 /// resume against more than one server.
@@ -190,7 +190,7 @@ pub fn append(path: &Path, event: &JournalEvent) -> Result<()> {
 /// cannot be written, or the rename fails.
 pub fn compact(path: &Path, url: &str, username: &str, state: &JournalState) -> Result<()> {
     jsonl_journal::compact_with::<JournalEvent, _>("journal", path, |mut events| {
-        // Preserve other vault targets so one export folder can resume against
+        // Preserve other server targets so one export folder can resume against
         // multiple servers without wiping their skip state.
         events.retain(|event| {
             let (u, a) = event.target();
@@ -230,7 +230,7 @@ pub fn compact(path: &Path, url: &str, username: &str, state: &JournalState) -> 
 }
 
 /// The journal of one push run: the in-memory skip sets plus the file they
-/// are appended to, bound to one vault URL and username.
+/// are appended to, bound to one server URL and username.
 ///
 /// Every write goes through here so callers never repeat the URL, username,
 /// and path that every [`JournalEvent`] carries. Successful events update the
@@ -245,7 +245,7 @@ pub struct RunJournal {
 }
 
 impl RunJournal {
-    /// Load the journal for this vault target, or start empty when `fresh` is
+    /// Load the journal for this server target, or start empty when `fresh` is
     /// set (force mode and replace mode both ignore earlier progress).
     ///
     /// # Errors
@@ -282,7 +282,7 @@ impl RunJournal {
         self.state.assets.contains(sha256)
     }
 
-    /// Record that the vault now holds this attachment.
+    /// Record that the server now holds this attachment.
     ///
     /// # Errors
     ///
@@ -397,15 +397,15 @@ mod tests {
         fs::write(
             &path,
             concat!(
-                "{\"event\":\"message_ok\",\"url\":\"http://vault\",\"username\":\"alice\",",
+                "{\"event\":\"message_ok\",\"url\":\"http://server\",\"username\":\"alice\",",
                 "\"source\":\"sms\",\"file\":\"first.jsonl\",\"guid\":\"guid-1\"}\n",
-                "{\"event\":\"message_batch_ok\",\"url\":\"http://vault\",\"username\":\"alice\",",
+                "{\"event\":\"message_batch_ok\",\"url\":\"http://server\",\"username\":\"alice\",",
                 "\"source\":\"sms\",\"messages\":[{\"file\":\"second.jsonl\",\"guid\":\"guid-2\"}]}\n"
             ),
         )
         .unwrap();
 
-        let state = load(&path, "http://vault", "alice").unwrap();
+        let state = load(&path, "http://server", "alice").unwrap();
 
         assert!(
             state
@@ -419,7 +419,7 @@ mod tests {
         );
     }
 
-    /// One event of each success kind, all for the given vault target.
+    /// One event of each success kind, all for the given server target.
     fn success_events(url: &str, username: &str, tag: &str) -> Vec<JournalEvent> {
         vec![
             JournalEvent::AssetOk {
@@ -454,19 +454,19 @@ mod tests {
     }
 
     #[test]
-    fn load_keeps_only_events_for_this_vault_and_username() {
+    fn load_keeps_only_events_for_this_server_and_username() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(JOURNAL_NAME);
         let events = [
             success_events("http://other", "alice", "other-url"),
-            success_events("http://vault", "bob", "other-user"),
-            success_events("http://vault", "alice", "mine"),
+            success_events("http://server", "bob", "other-user"),
+            success_events("http://server", "alice", "mine"),
         ];
         for event in events.iter().flatten() {
             append(&path, event).unwrap();
         }
 
-        let state = load(&path, "http://vault", "alice").unwrap();
+        let state = load(&path, "http://server", "alice").unwrap();
 
         let expected_assets: HashSet<String> = ["sha-mine".to_string()].into();
         assert_eq!(state.assets, expected_assets);
@@ -484,18 +484,18 @@ mod tests {
     fn a_recorded_asset_is_skipped_after_reopening_the_journal() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(JOURNAL_NAME);
-        let mut journal = RunJournal::open(path.clone(), "http://vault", "alice", false).unwrap();
+        let mut journal = RunJournal::open(path.clone(), "http://server", "alice", false).unwrap();
         assert!(!journal.has_asset("sha-1"));
         journal.asset_ok("sms", "sha-1").unwrap();
         drop(journal);
 
-        let reopened = RunJournal::open(path, "http://vault", "alice", false).unwrap();
+        let reopened = RunJournal::open(path, "http://server", "alice", false).unwrap();
         assert!(reopened.has_asset("sha-1"));
         assert!(!reopened.has_asset("sha-2"));
     }
 
     #[test]
-    fn compact_preserves_other_vault_target_events() {
+    fn compact_preserves_other_server_target_events() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(JOURNAL_NAME);
         fs::write(
@@ -521,9 +521,9 @@ mod tests {
     }
 
     /// Compacting for one account keeps another account's entries on the
-    /// same vault, and the same account's entries on another vault.
+    /// same server, and the same account's entries on another server.
     #[test]
-    fn compact_keeps_other_accounts_on_the_same_vault() {
+    fn compact_keeps_other_accounts_on_the_same_server() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(JOURNAL_NAME);
         for (url, username, file) in [
@@ -572,7 +572,7 @@ mod tests {
                     append(
                         &path,
                         &JournalEvent::MessageBatchOk {
-                            url: "http://vault".into(),
+                            url: "http://server".into(),
                             username: "alice".into(),
                             source: "sms".into(),
                             messages,

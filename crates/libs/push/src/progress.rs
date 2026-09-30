@@ -23,7 +23,7 @@ pub enum ProgressEvent {
     Auth {
         /// Account id the key resolved to.
         account_id: i64,
-        /// Username the vault reports for that account, else the account id.
+        /// Username the server reports for that account, else the account id.
         username: String,
     },
     /// Work on one conversation file began.

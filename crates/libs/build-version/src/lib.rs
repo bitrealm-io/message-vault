@@ -4,7 +4,7 @@
 //! A Build reads `0.9.0+343fe0d8`. Source with uncommitted changes adds
 //! `.dirty`, a build made from a `v*` tag is the Product Version alone, and a
 //! build that can learn nothing about its source reads `0.9.0+unknown`. The
-//! vault server's and the desktop app's build scripts both call [`emit`], so
+//! server's and the desktop app's build scripts both call [`emit`], so
 //! the two cannot format a Build differently. `web/vite.config.ts` follows the
 //! same rules for the SPA and must be changed together with this file.
 //!

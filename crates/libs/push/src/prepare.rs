@@ -64,7 +64,7 @@ impl SharedJournal {
         self.assets_in_flight.remove(digest);
     }
 
-    /// Clear the claim and record the digest as present in the vault.
+    /// Clear the claim and record the digest as present on the server.
     fn asset_uploaded(&mut self, source: &str, digest: &str) -> Result<()> {
         self.assets_in_flight.remove(digest);
         self.journal.asset_ok(source, digest)
@@ -85,7 +85,7 @@ pub(crate) struct PrepareContext<'a> {
     pub journal: &'a Mutex<SharedJournal>,
     pub batch_size: usize,
     digests: DigestResolver,
-    /// Set once any HEAD or PUT reports the vault already has an asset. From
+    /// Set once any HEAD or PUT reports the server already has an asset. From
     /// then on workers HEAD before PUT so a re-import sends no bodies.
     probe_existing: AtomicBool,
     /// Guards the single preflight HEAD so parallel chats do not race it.
@@ -492,7 +492,7 @@ impl DigestResolver {
     ///   since export").
     /// * `verify_digests` — hash from disk and **fail** on mismatch.
     ///
-    /// The vault server is the final verifier on upload; a stale fingerprint
+    /// The server is the final verifier on upload; a stale fingerprint
     /// is self-correcting (the server rejects mismatches).
     ///
     /// # Errors
@@ -729,7 +729,7 @@ fn check_upload_file(ctx: &PrepareContext<'_>, name: &str, rel: &str) -> Result<
     Ok((path, file_len))
 }
 
-/// One HEAD of the first queued digest for this run. If the vault already has
+/// One HEAD of the first queued digest for this run. If the server already has
 /// it, enable HEAD-skip so later files do not send PUT bodies.
 ///
 /// Holding the preflight lock during that HEAD keeps parallel conversations
@@ -757,7 +757,7 @@ fn preflight_existing_asset(ctx: &PrepareContext<'_>, source: &str, digest: &str
     Ok(())
 }
 
-/// HEAD (when the vault is known to have assets already) then PUT one attachment, with retries.
+/// HEAD (when the server is known to have assets already) then PUT one attachment, with retries.
 ///
 /// # Errors
 ///

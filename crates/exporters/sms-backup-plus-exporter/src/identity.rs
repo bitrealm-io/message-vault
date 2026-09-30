@@ -15,7 +15,7 @@ use crate::types::ParsedMessage;
 /// When the mail names the other party but records no address, the chat is
 /// keyed by a stem of that name so each person gets their own conversation.
 /// Collapsing them all into one `unknown` chat would merge unrelated people;
-/// the vault resolves the name against contacts on import.
+/// the server resolves the name against contacts on import.
 pub(crate) fn chat_id_for(msg: &ParsedMessage) -> String {
     if msg.conversation_type == "group" {
         format!("chat-{}", msg.chat_key)

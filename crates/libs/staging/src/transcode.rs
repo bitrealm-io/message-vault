@@ -592,7 +592,7 @@ fn apply_transcode(
                 return Ok(());
             }
             // Decision 29: read the file on disk. A replayed digest can be
-            // stale, and the vault dedupes assets by sha256.
+            // stale, and the server dedupes assets by sha256.
             let digest = media::file_sha256(&marker)?;
             let rel = attachment_rel(&final_path)?;
             let mime = mime_for_rel(&rel);

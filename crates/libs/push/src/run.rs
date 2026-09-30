@@ -5,8 +5,8 @@
 //! An export folder has one `.jsonl` file per conversation, plus an
 //! `attachments/` folder of media files. A push:
 //!
-//! 1. Logs in to the vault with the API key.
-//! 2. For each conversation file, finds attachments, uploads any the vault
+//! 1. Logs in to the server with the API key.
+//! 2. For each conversation file, finds attachments, uploads any the server
 //!    does not already have, then sends the messages in batches.
 //! 3. Remembers progress in a journal file so a later run can skip work that
 //!    already succeeded.
@@ -17,7 +17,7 @@
 //!   content fingerprint (sha256). The server must already have that file, or
 //!   the import would fail. Media is uploaded before message text is sent.
 //! - **Fingerprint = sha256.** Same bytes always produce the same hex string.
-//!   The vault stores one copy per fingerprint, so the same photo shared in
+//!   The server stores one copy per fingerprint, so the same photo shared in
 //!   many chats is uploaded once.
 //! - **Prepare ahead.** Reading a chat and uploading its media can take a long
 //!   time. While the main loop waits on a message-import HTTP request, other
@@ -26,7 +26,7 @@
 //! - **Several attachment uploads at once.** Small files are slow if sent one
 //!   after another (network round trips dominate). Workers upload several at
 //!   the same time.
-//! - **One message-import request at a time.** Imports update shared vault
+//! - **One message-import request at a time.** Imports update shared database
 //!   state; running many imports in parallel is harder to reason about and
 //!   can confuse the journal ([`crate::pipeline`]). Attachments stay parallel;
 //!   message batches do not.
@@ -74,7 +74,7 @@ pub const NO_MESSAGE_COUNT_LIMIT: usize = usize::MAX;
 /// Bigger files use multipart upload (many smaller pieces), which proxies
 /// accept more reliably than one huge body.
 pub const MAX_PROXY_BODY_BYTES: usize = 90 * 1024 * 1024;
-/// Refuse attachments larger than this (must match the vault server setting).
+/// Refuse attachments larger than this (must match the server setting).
 pub const DEFAULT_ASSET_MAX_BYTES: u64 = 512 * 1024 * 1024;
 /// How many attachment uploads may run at the same time.
 pub const DEFAULT_ASSET_UPLOAD_WORKERS: usize = 8;
@@ -90,11 +90,11 @@ pub const DEFAULT_PREPARE_WORKERS: usize = 2;
 pub struct PushConfig {
     /// A folder of JSON Lines conversation files, or one such file.
     pub input: PathBuf,
-    /// Vault base URL, e.g. `http://127.0.0.1:8080`.
+    /// Server base URL, e.g. `http://127.0.0.1:8080`.
     pub base_url: String,
     /// Account username, recorded in the report and progress events.
     pub username: String,
-    /// API token or session token for the vault.
+    /// API token or session token for the server.
     pub key: String,
     /// `Append` adds to existing data; `Replace` clears then imports (with force).
     pub mode: ImportMode,
@@ -141,7 +141,7 @@ pub struct PushConfig {
     pub import_id: Option<i64>,
 }
 
-/// Check the API key against the vault without importing any messages.
+/// Check the API key against the server without importing any messages.
 ///
 /// # Errors
 ///
@@ -340,12 +340,12 @@ fn login(cfg: &PushConfig, out: &mut Reporter<'_, '_>) -> Result<Session> {
 }
 
 /// Create the Import Run every batch is posted into, or reuse the one the
-/// caller already created. There is no run without one: a vault that refuses
+/// caller already created. There is no run without one: a server that refuses
 /// to start it ends the push here, before any file is read.
 ///
 /// # Errors
 ///
-/// Returns the vault's refusal, which includes an account that already has a
+/// Returns the server's refusal, which includes an account that already has a
 /// running Import Run.
 fn start_import_run(
     cfg: &PushConfig,
@@ -569,8 +569,8 @@ fn write_report(path: &Path, report: &PushReport) -> Result<()> {
     .with_context(|| format!("write report {}", path.display()))
 }
 
-/// Tell the vault how the import session ended. Best effort: a failure here
-/// is logged, not returned, because the data is already in the vault.
+/// Tell the server how the import session ended. Best effort: a failure here
+/// is logged, not returned, because the data is already on the server.
 fn complete_import_session(
     session: &Session,
     import_id: i64,

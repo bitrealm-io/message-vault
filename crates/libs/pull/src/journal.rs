@@ -20,7 +20,7 @@ pub const PULL_JOURNAL_NAME: &str = ".message-crate-pull-state.jsonl";
 pub enum PullJournalEvent {
     /// One attachment is on disk, so a later run can skip downloading it.
     AssetOk {
-        /// Vault base URL the attachment came from.
+        /// Server base URL the attachment came from.
         url: String,
         /// Account username the run logged in as.
         username: String,
@@ -29,7 +29,7 @@ pub enum PullJournalEvent {
     },
     /// A whole download finished, with its counts.
     BackupComplete {
-        /// Vault base URL the download came from.
+        /// Server base URL the download came from.
         url: String,
         /// Account username the run logged in as.
         username: String,
@@ -43,7 +43,7 @@ pub enum PullJournalEvent {
 }
 
 #[derive(Debug, Default)]
-/// Skip sets rebuilt from the journal for one vault URL and username.
+/// Skip sets rebuilt from the journal for one server URL and username.
 pub struct PullJournalState {
     /// SHA-256 fingerprints (hex of the file bytes) of attachments already on disk.
     pub assets: HashSet<String>,
@@ -56,7 +56,7 @@ pub fn journal_path(out_dir: &Path) -> PathBuf {
     out_dir.join(PULL_JOURNAL_NAME)
 }
 
-/// Read the journal and keep events that match this vault URL and username.
+/// Read the journal and keep events that match this server URL and username.
 ///
 /// A missing file is treated as an empty journal. A line that cannot be parsed
 /// is skipped so a newer event type does not break an older client.
@@ -101,7 +101,7 @@ pub fn append(path: &Path, event: &PullJournalEvent) -> Result<()> {
     jsonl_journal::append("pull journal", path, event)
 }
 
-/// Rewrite the journal from in-memory `state` for one vault URL and username.
+/// Rewrite the journal from in-memory `state` for one server URL and username.
 ///
 /// # Errors
 ///
@@ -143,17 +143,17 @@ mod tests {
         fs::write(
             &path,
             concat!(
-                "{\"event\":\"asset_ok\",\"url\":\"http://vault\",\"username\":\"alice\",",
+                "{\"event\":\"asset_ok\",\"url\":\"http://server\",\"username\":\"alice\",",
                 "\"sha256\":\"aaabbbccc\",\"path\":\"attachments/aaabbbccc\",\"size_bytes\":12345}\n",
-                "{\"event\":\"asset_ok\",\"url\":\"http://vault\",\"username\":\"alice\",",
+                "{\"event\":\"asset_ok\",\"url\":\"http://server\",\"username\":\"alice\",",
                 "\"sha256\":\"dddeeefff\",\"path\":\"attachments/dddeeefff\",\"size_bytes\":67890}\n",
-                "{\"event\":\"backup_complete\",\"url\":\"http://vault\",\"username\":\"alice\",",
+                "{\"event\":\"backup_complete\",\"url\":\"http://server\",\"username\":\"alice\",",
                 "\"conversations\":2,\"messages\":100,\"assets\":2}\n",
             ),
         )
         .unwrap();
 
-        let state = load(&path, "http://vault", "alice").unwrap();
+        let state = load(&path, "http://server", "alice").unwrap();
 
         assert!(state.assets.contains("aaabbbccc"));
         assert!(state.assets.contains("dddeeefff"));
@@ -167,15 +167,15 @@ mod tests {
         fs::write(
             &path,
             concat!(
-                "{\"event\":\"asset_ok\",\"url\":\"http://vault-a\",\"username\":\"alice\",",
+                "{\"event\":\"asset_ok\",\"url\":\"http://server-a\",\"username\":\"alice\",",
                 "\"sha256\":\"aaa\",\"path\":\"attachments/aaa\",\"size_bytes\":1}\n",
-                "{\"event\":\"asset_ok\",\"url\":\"http://vault-b\",\"username\":\"bob\",",
+                "{\"event\":\"asset_ok\",\"url\":\"http://server-b\",\"username\":\"bob\",",
                 "\"sha256\":\"bbb\",\"path\":\"attachments/bbb\",\"size_bytes\":2}\n",
             ),
         )
         .unwrap();
 
-        let state = load(&path, "http://vault-a", "alice").unwrap();
+        let state = load(&path, "http://server-a", "alice").unwrap();
         assert!(state.assets.contains("aaa"));
         assert!(!state.assets.contains("bbb"));
     }
@@ -190,9 +190,9 @@ mod tests {
         state.assets.insert("bbb".into());
         state.backup_complete = true;
 
-        compact(&path, "http://vault", "alice", &state).unwrap();
+        compact(&path, "http://server", "alice", &state).unwrap();
 
-        let reloaded = load(&path, "http://vault", "alice").unwrap();
+        let reloaded = load(&path, "http://server", "alice").unwrap();
         assert_eq!(reloaded.assets.len(), 3);
         assert!(reloaded.assets.contains("aaa"));
         assert!(reloaded.assets.contains("bbb"));
@@ -212,7 +212,7 @@ mod tests {
         append(
             &path,
             &PullJournalEvent::AssetOk {
-                url: "http://vault".into(),
+                url: "http://server".into(),
                 username: "alice".into(),
                 sha256: "aaa".into(),
             },
@@ -221,21 +221,21 @@ mod tests {
 
         // Loading between the two appends is the resume case: a pull that was
         // interrupted after one asset must find that one asset.
-        let after_first = load(&path, "http://vault", "alice").unwrap();
+        let after_first = load(&path, "http://server", "alice").unwrap();
         assert!(after_first.assets.contains("aaa"));
         assert!(!after_first.backup_complete);
 
         append(
             &path,
             &PullJournalEvent::AssetOk {
-                url: "http://vault".into(),
+                url: "http://server".into(),
                 username: "alice".into(),
                 sha256: "bbb".into(),
             },
         )
         .unwrap();
 
-        let after_second = load(&path, "http://vault", "alice").unwrap();
+        let after_second = load(&path, "http://server", "alice").unwrap();
         assert!(
             after_second.assets.contains("aaa"),
             "the second append must not have replaced the first"
@@ -262,7 +262,7 @@ mod tests {
         append(
             &path,
             &PullJournalEvent::AssetOk {
-                url: "http://vault".into(),
+                url: "http://server".into(),
                 username: "alice".into(),
                 sha256: "aaa".into(),
             },
@@ -271,7 +271,7 @@ mod tests {
 
         assert!(path.is_file());
         assert!(
-            load(&path, "http://vault", "alice")
+            load(&path, "http://server", "alice")
                 .unwrap()
                 .assets
                 .contains("aaa")

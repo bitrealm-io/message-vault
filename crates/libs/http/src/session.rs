@@ -1,6 +1,6 @@
 //! The shared blocking HTTP session and the `GET /v1/session` login call.
 //!
-//! `message-crate-push` and `message-crate-pull` both talk to the vault through one
+//! `message-crate-push` and `message-crate-pull` both talk to the server through one
 //! [`HttpSession`]. The session owns base-URL trimming and bearer-header
 //! construction so no caller formats `Authorization` by hand.
 
@@ -13,13 +13,13 @@ use serde::Deserialize;
 
 use crate::{AuthError, AuthInfo, truncate};
 
-/// Blocking HTTP client shared by every vault call in one run.
+/// Blocking HTTP client shared by every server call in one run.
 #[derive(Debug, Clone)]
 pub struct HttpSession {
     client: Client,
 }
 
-/// `Authorization` header value for a vault API key.
+/// `Authorization` header value for an API key.
 pub fn bearer_header(key: &str) -> String {
     format!("Bearer {}", key.trim())
 }
@@ -125,7 +125,7 @@ impl HttpSession {
     }
 }
 
-/// The vault's `Session`, the answer to `GET /v1/session`. Only the fields
+/// The server's `Session`, the answer to `GET /v1/session`. Only the fields
 /// the clients read are here.
 #[derive(Debug, Deserialize)]
 struct Session {
@@ -178,7 +178,7 @@ fn classify_auth_transport_error(url: &str, error: reqwest::Error) -> AuthError 
         AuthError::InvalidUrl { url, detail }
     } else {
         // Connection refused, DNS failure, and anything else unrecognized all
-        // mean "could not reach the vault".
+        // mean "could not reach the server".
         AuthError::Network { url, detail }
     }
 }
@@ -213,7 +213,7 @@ mod tests {
     /// The doctype and tag names of HTML are case-insensitive, and the
     /// lowercase spelling is the one the HTML5 specification uses and the one
     /// nginx and Cloudflare emit. Matching only `<!DOCTYPE` meant the most
-    /// common error page in front of a vault was reported as a JSON parse
+    /// common error page in front of a server was reported as a JSON parse
     /// failure rather than as the wrong host.
     #[test]
     fn an_html_error_page_is_recognised_whatever_its_case() {

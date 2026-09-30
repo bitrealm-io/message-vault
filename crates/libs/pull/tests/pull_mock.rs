@@ -1,11 +1,11 @@
-//! Mock vault tests for one pull: login, the Export Run it records, two
+//! Mock server tests for one pull: login, the Export Run it records, two
 //! pages of messages, asset download, the journal a second run reads, and
 //! the progress a caller sees.
 //!
 //! The mock answers the five routes `run` calls — `GET /v1/session`,
 //! `POST /v1/exports`, `GET /v1/exports/{id}/messages`,
 //! `POST /v1/exports/{id}/complete` or `/cancel`, and `GET /v1/assets/{sha256}`
-//! — with the JSON the vault serializes (`message-crate-api-types`,
+//! — with the JSON the server serializes (`message-crate-api-types`,
 //! `docs/src/assets/openapi.json`). Every request derives from
 //! `PullConfig::base_url`, so the mock's address is the only seam.
 
@@ -24,7 +24,7 @@ use tempfile::tempdir;
 /// Fingerprint of the menu attachment. The pull never hashes what it
 /// downloads, so any 64 hex characters name an asset.
 const MENU_SHA: &str = "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a";
-/// Fingerprint of the photo attachment, which the vault sends without a path.
+/// Fingerprint of the photo attachment, which the server sends without a path.
 const PHOTO_SHA: &str = "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b";
 /// 13 bytes.
 const MENU_BYTES: &[u8] = b"%PDF-1.4 menu";
@@ -32,10 +32,10 @@ const MENU_BYTES: &[u8] = b"%PDF-1.4 menu";
 const PHOTO_BYTES: &[u8] = b"PNG photo";
 /// The file a pull of `+15555550101` from `sms-backup-restore` writes.
 const CONVERSATION_FILE: &str = "+15555550101__sms-backup-restore.jsonl";
-/// The id the mock vault gives every run it records.
+/// The id the mock server gives every run it records.
 const EXPORT_ID: i64 = 7;
 
-/// The menu attachment as the vault serializes it, at `path`.
+/// The menu attachment as the server serializes it, at `path`.
 fn menu_attachment(path: Value) -> Value {
     json!({
         "path": path,
@@ -96,7 +96,7 @@ fn message(
     })
 }
 
-/// The run the mock vault records for `scope`, in `status`.
+/// The run the mock server records for `scope`, in `status`.
 fn export_run(scope: Value, status: &str) -> Value {
     json!({
         "id": EXPORT_ID,
@@ -214,7 +214,7 @@ fn mock_pages<'a>(
 }
 
 /// `GET /v1/assets/{sha256}` for `source`, answering `bytes`. The key names
-/// the account, and the vault refuses a parameter a route does not declare,
+/// the account, and the server refuses a parameter a route does not declare,
 /// so a download that still sent `account=` would not match.
 fn mock_asset<'a>(
     server: &'a MockServer,
@@ -412,7 +412,7 @@ fn a_file_the_journal_lists_but_the_disk_lost_is_fetched_again() {
 }
 
 #[test]
-fn a_cancel_requested_before_the_run_records_nothing_in_the_vault() {
+fn a_cancel_requested_before_the_run_records_nothing_on_the_server() {
     let server = MockServer::start();
     let auth = mock_auth(&server);
     let (create, complete) = mock_run(&server);
@@ -607,7 +607,7 @@ fn a_query_becomes_the_runs_query_scope_and_progress_narrates_the_run() {
 }
 
 #[test]
-fn an_asset_the_vault_does_not_have_fails_the_run_and_cancels_it_in_the_vault() {
+fn an_asset_the_server_does_not_have_fails_the_run_and_cancels_it_on_the_server() {
     let server = MockServer::start();
     let _auth = mock_auth(&server);
     let (create, complete) = mock_run(&server);
@@ -643,7 +643,7 @@ fn an_asset_the_vault_does_not_have_fails_the_run_and_cancels_it_in_the_vault() 
 }
 
 #[test]
-fn a_scope_the_vault_refuses_fails_the_run_with_the_vaults_sentence() {
+fn a_scope_the_server_refuses_fails_the_run_with_the_servers_sentence() {
     let server = MockServer::start();
     let _auth = mock_auth(&server);
     let create = server.mock(|when, then| {

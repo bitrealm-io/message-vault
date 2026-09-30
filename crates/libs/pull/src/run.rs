@@ -17,9 +17,9 @@ use crate::http::{ExportMessagesArgs, HttpSession};
 use crate::project::{build_document, conversation_key, to_ir_message};
 use message_crate_api_types::{ExportRun, ExportScope, Message};
 
-/// Page size for `GET /v1/exports/{id}/messages`; the vault's maximum.
+/// Page size for `GET /v1/exports/{id}/messages`; the server's maximum.
 pub const DEFAULT_PAGE_LIMIT: usize = 500;
-/// The largest page the vault will hand back for `GET /v1/exports/{id}/messages`.
+/// The largest page the server will hand back for `GET /v1/exports/{id}/messages`.
 pub const MAX_PAGE_LIMIT: usize = 500;
 /// The `tool` every run this crate creates is recorded under.
 pub const TOOL_NAME: &str = "message-crate-pull";
@@ -33,13 +33,13 @@ const MAX_RETRIES: u32 = 3;
 pub struct PullConfig {
     /// Folder the JSON Lines files and attachments are written into.
     pub out_dir: PathBuf,
-    /// Vault base URL, e.g. `http://127.0.0.1:8080`.
+    /// Server base URL, e.g. `http://127.0.0.1:8080`.
     pub base_url: String,
     /// Account username, recorded in the journal and progress events.
     pub username: String,
-    /// API token or session token for the vault.
+    /// API token or session token for the server.
     pub key: String,
-    /// A query in the vault's search language. Blank asks for everything the
+    /// A query in the server's search language. Blank asks for everything the
     /// account holds; anything else is the run's `query` scope.
     pub query: String,
     /// Write messages only; download no attachments.
@@ -58,9 +58,9 @@ pub struct PullConfig {
 pub struct PullReport {
     /// Account id the key resolved to.
     pub account: i64,
-    /// The Export Run the vault recorded for this pull.
+    /// The Export Run the server recorded for this pull.
     pub export_id: i64,
-    /// The query the run asked the vault for.
+    /// The query the run asked the server for.
     pub query: String,
     /// Conversations written.
     pub conversations: u64,
@@ -79,11 +79,11 @@ pub struct PullReport {
 pub enum ProgressEvent {
     /// One line for the log panel.
     Log(String),
-    /// The key was accepted; the run knows whose vault it is reading.
+    /// The key was accepted; the run knows which account it is reading.
     Auth {
         /// Account id the key resolved to.
         account_id: i64,
-        /// Username the vault reports for that account, else the account id.
+        /// Username the server reports for that account, else the account id.
         username: String,
     },
     /// One page of messages arrived.
@@ -179,7 +179,7 @@ pub fn run(cfg: &PullConfig, mut on_progress: Option<&mut ProgressFn<'_>>) -> Re
     check_cancel(cfg.cancel.as_ref())?;
     let export = pull.start_export(&mut on_progress)?;
     let outcome = pull.export_into_folder(&export, &mut on_progress);
-    // The client closes the run either way, so the vault's record says how
+    // The client closes the run either way, so the server's record says how
     // it ended. A close that fails after the files are written is a warning,
     // not a failed export: the folder is complete, only the record is not.
     let action = if outcome.is_ok() {
@@ -191,7 +191,7 @@ pub fn run(cfg: &PullConfig, mut on_progress: Option<&mut ProgressFn<'_>>) -> Re
         emit(
             &mut on_progress,
             ProgressEvent::Log(format!(
-                "warning: could not {action} export run {} in the vault: {error:#}",
+                "warning: could not {action} export run {} on the server: {error:#}",
                 export.id
             )),
         );
@@ -223,7 +223,7 @@ pub fn run(cfg: &PullConfig, mut on_progress: Option<&mut ProgressFn<'_>>) -> Re
     Ok(report)
 }
 
-/// Everything the vault handed back while paging: messages grouped by
+/// Everything the server handed back while paging: messages grouped by
 /// conversation, the attachments they reference, and the running count.
 struct Fetched {
     /// Conversation key → (first message as the metadata seed, converted messages).
@@ -305,7 +305,7 @@ impl<'a> Pull<'a> {
         })
     }
 
-    /// The scope this pull asks the vault for: the trimmed query, or
+    /// The scope this pull asks the server for: the trimmed query, or
     /// everything when it is blank.
     fn scope(&self) -> ExportScope {
         if self.query.is_empty() {
@@ -317,12 +317,12 @@ impl<'a> Pull<'a> {
         }
     }
 
-    /// `POST /v1/exports` for this pull's scope, announcing what the vault
+    /// `POST /v1/exports` for this pull's scope, announcing what the server
     /// counted for it.
     ///
     /// # Errors
     ///
-    /// Returns an error when the vault refuses the scope or the request fails.
+    /// Returns an error when the server refuses the scope or the request fails.
     fn start_export(&self, out: &mut Option<&mut ProgressFn<'_>>) -> Result<ExportRun> {
         let cfg = self.cfg;
         let export = with_retries(MAX_RETRIES, || {
@@ -612,7 +612,7 @@ impl<'a> Pull<'a> {
 /// Remember where each attachment a message references should land on disk.
 ///
 /// The first message to mention a sha256 decides the source and path; the
-/// vault stores one blob per fingerprint, so later mentions are the same file.
+/// server stores one blob per fingerprint, so later mentions are the same file.
 fn note_asset_refs(msg: &Message, assets: &mut HashMap<String, (String, String)>) {
     for att in &msg.attachments {
         let Some(sha) = att.sha256.as_deref().and_then(message_ir::trimmed) else {
@@ -840,7 +840,7 @@ mod asset_ref_tests {
     use serde_json::json;
 
     /// One exported message from `source` carrying `attachments`, with the
-    /// rest of the vault's shape at its plainest.
+    /// rest of the server's shape at its plainest.
     fn message_from(source: &str, attachments: serde_json::Value) -> Message {
         serde_json::from_value(json!({
             "id": 1,

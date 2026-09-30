@@ -2,10 +2,10 @@ import { type UseMutationResult, useMutation, useQueryClient } from "@tanstack/r
 import { useCallback } from "react";
 import type { AccountProfile } from "./account";
 import { useAuth } from "./auth";
-import { getAccountProfile, updateAccountProfile } from "./vaultApi";
-import { keys } from "./vaultKeys";
-import { useVaultCache, useVaultQuery } from "./vaultQuery";
-import { ANONYMOUS_ACCOUNT, vaultQueryKey } from "./vaultQueryKey";
+import { keys } from "./queryKeys";
+import { useRouteCache, useRouteQuery } from "./routeQuery";
+import { ANONYMOUS_ACCOUNT, routeQueryKey } from "./routeQueryKey";
+import { getAccountProfile, updateAccountProfile } from "./serverApi";
 
 /**
  * The logged-in account's profile.
@@ -22,7 +22,7 @@ export function useAccountProfile(): {
   loading: boolean;
   error: string;
 } {
-  const { data, isPending, error } = useVaultQuery(keys.accountProfile.all, (signal) =>
+  const { data, isPending, error } = useRouteQuery(keys.accountProfile.all, (signal) =>
     getAccountProfile({ signal }),
   );
   return { profile: data ?? null, loading: isPending, error: error ? error.message : "" };
@@ -43,7 +43,7 @@ export function useUpdateAccountProfile(): UseMutationResult<
   Error,
   AccountProfileChange
 > {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   return useMutation<AccountProfile, Error, AccountProfileChange>({
     mutationFn: (body) => updateAccountProfile(body),
     onSuccess: (profile) => {
@@ -67,7 +67,7 @@ export function fetchAccountProfileFor(
   accountId: number | null,
   force = false,
 ): Promise<AccountProfile | null> {
-  const key = vaultQueryKey(accountId ?? ANONYMOUS_ACCOUNT, keys.accountProfile.all);
+  const key = routeQueryKey(accountId ?? ANONYMOUS_ACCOUNT, keys.accountProfile.all);
   if (force) client.removeQueries({ queryKey: key });
   return client.fetchQuery({ queryKey: key, queryFn: () => getAccountProfile() }).catch(() => null);
 }

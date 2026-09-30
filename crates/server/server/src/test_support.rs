@@ -16,7 +16,7 @@ use tempfile::TempDir;
 use crate::server::{AppState, http_app};
 
 /// A vault plus its temp directory. Drop the `TempDir` last.
-pub struct TestVault {
+pub struct TestFixture {
     /// Keeps the temp directory alive for the test's lifetime.
     tmp: TempDir,
     /// The server state every helper drives.
@@ -82,7 +82,7 @@ pub async fn serve_router(app: axum::Router) -> TestServer {
     }
 }
 
-/// True when `MV_TEST_POSTGRES_URL` points the suite at Postgres.
+/// True when `MC_TEST_POSTGRES_URL` points the suite at Postgres.
 ///
 /// A test whose subject is SQLite itself (a pragma, the FTS5 table, the
 /// `nocase` collation, `sqlite_stat1`, a trigger written in SQLite's syntax)
@@ -97,22 +97,20 @@ pub fn on_postgres() -> bool {
 /// Public registration is turned on, because most of the suite reaches the
 /// vault through `register_via_api` and a real vault ships with it off. Tests
 /// whose subject is the closed vault turn it back off and say so.
-pub async fn test_vault() -> TestVault {
+pub async fn test_fixture() -> TestFixture {
     let (pool, tmp) = crate::db::engine::test_pool().await;
     {
         let mut conn = pool.acquire().await.unwrap();
-        crate::db::schema::ensure_vault_schema(&mut conn)
-            .await
-            .unwrap();
+        crate::db::schema::ensure_schema(&mut conn).await.unwrap();
         crate::db::schema::ensure_accounts_schema(&mut conn)
             .await
             .unwrap();
-        crate::db::vault_settings::set_public_registration(&mut conn, true)
+        crate::db::server_settings::set_public_registration(&mut conn, true)
             .await
             .unwrap();
     }
     let state = crate::server::test_app_state(pool, tmp.path());
-    TestVault { tmp, state }
+    TestFixture { tmp, state }
 }
 
 /// The password every account the fixtures register is given.
@@ -121,13 +119,13 @@ pub const PASSWORD: &str = "hunter2hunter2";
 /// A vault with one account in it, `alice`, registered through the API the
 /// way a stranger does it, and logged in: the fixture a route test starts
 /// from.
-pub async fn vault_with_account() -> (TestVault, RegisteredAccount) {
-    let vault = test_vault().await;
+pub async fn fixture_with_account() -> (TestFixture, RegisteredAccount) {
+    let vault = test_fixture().await;
     let account = register_via_api(&vault.state, "alice", PASSWORD).await;
     (vault, account)
 }
 
-impl TestVault {
+impl TestFixture {
     /// Turn off `account_id`'s `delete` permission, as the owner would, for a
     /// test of what an account without it is refused.
     pub async fn turn_off_delete(&self, account_id: i64) {
@@ -271,13 +269,9 @@ pub async fn register_via_api(
 /// Claim the test vault: create its owner directly, then log in as them.
 ///
 /// The row goes in through `insert_account_at` at the well-known owner id,
-/// exactly as `create-owner` does it from a shell; `vault_api`'s own tests
-/// cover `POST /v1/vault/claim`.
-pub async fn claim_vault_as_owner(
-    state: &AppState,
-    username: &str,
-    password: &str,
-) -> RegisteredAccount {
+/// exactly as `create-owner` does it from a shell; `server_api`'s own tests
+/// cover `POST /v1/server/claim`.
+pub async fn claim_as_owner(state: &AppState, username: &str, password: &str) -> RegisteredAccount {
     let hash = crate::credentials::hash_password(password).expect("hash the owner password");
     let mut conn = state.db.acquire().await.expect("acquire for claim");
     crate::db::account_profile::insert_account_at(
@@ -876,7 +870,7 @@ mod tests {
 
     #[tokio::test]
     async fn the_fixture_makes_an_account_with_the_id_a_test_asks_for() {
-        let vault = test_vault().await;
+        let vault = test_fixture().await;
         let id = vault.account_with_id(101, "alice").await;
         assert_eq!(id, 101);
 
@@ -894,7 +888,7 @@ mod tests {
 
     #[tokio::test]
     async fn the_seeder_returns_the_conversation_id_it_made() {
-        let vault = test_vault().await;
+        let vault = test_fixture().await;
         let account = vault.account("alice").await;
         let id = seed_conversation(
             &vault.state,
@@ -946,7 +940,7 @@ mod tests {
     /// `TestServer` drops and aborts the task serving it.
     #[tokio::test]
     async fn a_large_response_body_is_read_before_the_server_stops() {
-        let (vault, user) = vault_with_account().await;
+        let (vault, user) = fixture_with_account().await;
         for i in 0..300 {
             seed_conversation(
                 &vault.state,

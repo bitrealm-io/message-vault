@@ -1,6 +1,6 @@
 import { isTauri } from "./tauri-check";
 
-export const FFMPEG_TOOLS_STORAGE_KEY = "mv-ffmpeg-path";
+export const FFMPEG_TOOLS_STORAGE_KEY = "mc-ffmpeg-path";
 
 let initStarted = false;
 

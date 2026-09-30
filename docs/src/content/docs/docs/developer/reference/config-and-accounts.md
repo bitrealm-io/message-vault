@@ -10,7 +10,7 @@ to `config/config.toml` (gitignored).
 
 ```toml title="config/config.toml"
 [paths]
-db = "data/vault.db"
+db = "data/messagecrate.db"
 data_dir = "data"
 assets_dir = "assets"
 assets_converted_dir = "assets_converted"
@@ -41,7 +41,7 @@ cors_origins = [
 | `asset_max_bytes` | `536870912` (512 MiB) | Maximum size for one attachment — a single `PUT /v1/assets/{sha256}` body or the total declared bytes for a multipart upload. Must be greater than 0. |
 | `asset_part_size` | `67108864` (64 MiB) | Chunk size advertised to clients for multipart uploads. Must not exceed `asset_max_bytes`. Keep under ~100 MiB for Cloudflare-proxied setups. |
 
-Web env overrides (optional): `VAULT_DB`, `VAULT_DATA_DIR`.
+Web env overrides (optional): `MC_DB`, `MC_DATA_DIR`.
 
 ### Logging
 
@@ -56,7 +56,7 @@ Created on first use if missing:
 
 ## Accounts
 
-Rows are scoped by `account_id` in a shared `vault.db`. The owner is
+Rows are scoped by `account_id` in a shared `messagecrate.db`. The owner is
 always account `1` and the demo account `2`; every other account takes an id
 from `100` up.
 

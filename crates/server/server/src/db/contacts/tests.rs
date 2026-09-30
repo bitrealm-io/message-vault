@@ -72,9 +72,7 @@ fn a_vcard_name_is_built_from_n_or_is_a_one_word_nickname() {
 async fn who_may_name_a_contact() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    crate::db::schema::ensure_vault_schema(&mut conn)
-        .await
-        .unwrap();
+    crate::db::schema::ensure_schema(&mut conn).await.unwrap();
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 't')")
         .bind(TEST_ACCOUNT_ID)
         .execute(&mut *conn)
@@ -158,9 +156,7 @@ async fn who_may_name_a_contact() {
 async fn trunk_zero_phone_is_flagged_with_note() {
     let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    crate::db::schema::ensure_vault_schema(&mut conn)
-        .await
-        .unwrap();
+    crate::db::schema::ensure_schema(&mut conn).await.unwrap();
     sqlx::query(
         "INSERT INTO accounts (id, username, preferred_name)
          VALUES ($1, 't', 'T')",
@@ -202,7 +198,7 @@ async fn trunk_zero_phone_is_flagged_with_note() {
 #[test]
 fn accepts_vcard_csv_and_vcf_but_rejects_vault_csv() {
     let dir = std::env::temp_dir().join(format!(
-        "mv-contacts-fmt-{}",
+        "mc-contacts-fmt-{}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -244,9 +240,7 @@ fn accepts_vcard_csv_and_vcf_but_rejects_vault_csv() {
 async fn loads_vcard_csv_into_sqlite() {
     let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    crate::db::schema::ensure_vault_schema(&mut conn)
-        .await
-        .unwrap();
+    crate::db::schema::ensure_schema(&mut conn).await.unwrap();
     sqlx::query(
         "INSERT INTO accounts (id, username, preferred_name)
          VALUES ($1, 't', 'T')",
@@ -283,9 +277,7 @@ async fn loads_vcard_csv_into_sqlite() {
 async fn loads_vcf_into_sqlite() {
     let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    crate::db::schema::ensure_vault_schema(&mut conn)
-        .await
-        .unwrap();
+    crate::db::schema::ensure_schema(&mut conn).await.unwrap();
     sqlx::query(
         "INSERT INTO accounts (id, username, preferred_name)
          VALUES ($1, 't', 'T')",

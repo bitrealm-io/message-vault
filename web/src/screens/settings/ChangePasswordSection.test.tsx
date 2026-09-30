@@ -12,15 +12,15 @@ vi.mock("../../lib/auth", () => ({
   useAuth: () => ({ updateToken }),
 }));
 
-vi.mock("../../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/vaultApi")>()),
+vi.mock("../../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/serverApi")>()),
   changePassword: (...a: unknown[]) => changePassword(...a),
 }));
 
 beforeEach(() => {
   changePassword.mockReset();
   updateToken.mockReset();
-  changePassword.mockResolvedValue({ token: "mv-user-rotated" });
+  changePassword.mockResolvedValue({ token: "mc-user-rotated" });
 });
 
 afterEach(cleanup);
@@ -45,7 +45,7 @@ describe("ChangePasswordSection", () => {
     await waitFor(() =>
       expect(changePassword).toHaveBeenCalledWith({ password: "a", password_confirmation: "a" }),
     );
-    expect(updateToken).toHaveBeenCalledWith("mv-user-rotated");
+    expect(updateToken).toHaveBeenCalledWith("mc-user-rotated");
   });
 
   it("sends a differing confirmation to the vault and shows its sentence", async () => {

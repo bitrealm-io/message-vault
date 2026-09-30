@@ -37,7 +37,7 @@ Never write self-contradictory filler, invented terms, or unexplained jargon in 
 
 - `crates/libs/ir/src/lib.rs`, `IrAttachment::missing_reason` — "None when the attachment was imported; set only when bytes were skipped, to one of a closed set: `file_missing`, `too_large`, `not_copied`, `convert_failed: <detail>`, or `unknown: <raw>`." — Good: says exactly when the field is `None` and lists the values it can hold. It replaced "Absent when present", which was self-contradictory and explained nothing.
 - `crates/libs/api-types/src/lib.rs`, `ImportMode::Append` — "Keep existing messages and add only new ones. The default, and what the HTTP API assumes when a request names no mode: it never removes anything." — Good: a plain statement of what the mode does, instead of an invented term such as "resume-safe".
-- `crates/libs/push/src/run.rs`, `VaultPushConfig::mode` — "`Append` adds to existing data; `Replace` clears then imports (with force)." — Bad: "with force" is unexplained; the reader cannot tell what is forced or what the alternative would be.
+- `crates/libs/push/src/run.rs`, `PushConfig::mode` — "`Append` adds to existing data; `Replace` clears then imports (with force)." — Bad: "with force" is unexplained; the reader cannot tell what is forced or what the alternative would be.
 - `crates/libs/ir/src/lib.rs`, `enum HandleService` — "Platform identity stored on `handles.service` (not per-message SMS/iMessage/RCS)." — Good: names the distinction a reader would otherwise get wrong, instead of leaving "service" to mean two things.
 
 ## Handler docs describe the operation, not the route

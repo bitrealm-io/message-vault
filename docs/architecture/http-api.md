@@ -53,7 +53,7 @@ generated types carry the interface's words into the web app's code.
 ## Naming a route
 
 A collection is plural, and a member is `/{collection}/{id}`. A singular path
-is legal only for a singleton: one per installation (`/v1/vault`), or one per logged-in
+is legal only for a singleton: one per installation (`/v1/server`), or one per logged-in
 credential (`/v1/session`). `/v1/trash` is a singleton by the same rule.
 
 A path segment names a resource, never a caller's role. Who may call a route is
@@ -341,8 +341,8 @@ What each reaches:
   them. Each pair answers from one function, so the two lists cannot differ.
   Which contacts a run created is content, so `/v1/imports/{id}/contacts` has
   no twin under the account.
-- `GET /v1/vault` and `POST /v1/vault/claim` take no credential.
-  `/v1/vault/settings` and `GET /v1/vault/storage` are the owner's: the
+- `GET /v1/server` and `POST /v1/server/claim` take no credential.
+  `/v1/server/settings` and `GET /v1/server/storage` are the owner's: the
   storage totals sum every account, and no account holds more than its own.
 
 The credential names the account. No route takes an `account=` parameter.
@@ -350,7 +350,7 @@ The credential names the account. No route takes an `account=` parameter.
 Rate limiting guards the three routes that take no credential and make one,
 over a 60-second window; the limit is documented in the developer reference.
 `POST /v1/session` counts per username, because it guards one account's
-password. `POST /v1/accounts` and `POST /v1/vault/claim` count once for the
+password. `POST /v1/accounts` and `POST /v1/server/claim` count once for the
 whole server, because they guard against a flood of new accounts, and a count
 per name lets a script that tries a new name each time straight through.
 
@@ -434,14 +434,14 @@ routes someone remembered.
 
 A route group is one module named for the route's first path segment, with
 `_api`: `contacts_api`, `conversations_api`, `imports_api`, `exports_api`,
-`assets_api`, `search_fields_api`, `session_api`, `vault_api`, `trash_api`.
+`assets_api`, `search_fields_api`, `session_api`, `server_api`, `trash_api`.
 Contact Groups and Message Tags, one shape served twice, share
 `named_set_api`. Why: a route's code is found from its URL without searching.
 
 A handler is named `verb_noun`, with no `_handler` suffix. The verb is `list`,
 `get`, `create`, `update` (`PATCH`), `replace` (`PUT`) or `delete`, or the
 action's own verb: `list_contacts`, `get_contact`, `update_contact`,
-`claim_vault`, `complete_import`.
+`claim_server`, `complete_import`.
 
 A type on the wire is named one of two ways, and a reader can tell which from
 the name:
@@ -495,10 +495,10 @@ whenever a better design is found, and breaking a client is an accepted cost.
 No compatibility alias, deprecation window or version handshake is ever added.
 
 The server says which code it runs, and an app says which code it is, and
-neither decides anything. `GET /v1/vault` carries the server's Build in
+neither decides anything. `GET /v1/server` carries the server's Build in
 `version` and the Schema Fingerprint in `schema_fingerprint`. The desktop app
-and the website send `x-message-vault-app` (`desktop` or `website`) and
-`x-message-vault-version` (their Build) on every request; the server records
+and the website send `x-message-crate-app` (`desktop` or `website`) and
+`x-message-crate-version` (their Build) on every request; the server records
 the pair on the account's session, rewrites it only when it changes, and shows
 it to the owner. A request that sends neither header, or sends them
 malformed, is served and nothing is recorded, which covers curl, Swagger UI

@@ -4,7 +4,6 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Conversation } from "../lib/types";
 import {
   deleteContact,
   deleteConversation,
@@ -16,14 +15,15 @@ import {
   listSearchFields,
   restoreContact,
   restoreConversation,
-} from "../lib/vaultApi";
-import { mockedAuth, VaultProviders } from "../test/vaultProviders";
+} from "../lib/serverApi";
+import type { Conversation } from "../lib/types";
+import { mockedAuth, Providers } from "../test/providers";
 import TrashScreen from "./TrashScreen";
 
 vi.mock("../lib/auth", () => ({ useAuth: () => mockedAuth }));
 
-vi.mock("../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/vaultApi")>()),
+vi.mock("../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/serverApi")>()),
   listConversations: vi.fn(),
   listContacts: vi.fn(),
   listSearchFields: vi.fn(),
@@ -98,11 +98,11 @@ function contactPage(items: ReturnType<typeof contact>[]) {
 
 function renderAt(path: string) {
   return render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter initialEntries={[path]}>
         <TrashScreen />
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 

@@ -20,6 +20,9 @@ use imessage_reader_protocol::{
     Conversation as ConversationRecord, Event, Imessage as ImessageRecord,
     Message as MessageRecord,
 };
+use message_crate_core::{
+    ExportReport, MediaConfig, OutputFormat, ProgressEvent, stage_conversation_attachments,
+};
 use message_ir::{
     ConversationDocument, ConversationMeta, ExportMeta, HandleType, IrAttachment,
     IrConversationType, IrDirection, IrImessage, IrMessage, IrMessageKind, IrParticipant,
@@ -28,9 +31,6 @@ use message_ir::{
 use message_ir_format::FormatSink;
 use message_staging::{
     AttachmentSource, ConversationUnit, ExportWriter, ExportWriterParts, WriteQueueOptions,
-};
-use message_crate_core::{
-    ExportReport, MediaConfig, OutputFormat, ProgressEvent, stage_conversation_attachments,
 };
 
 use crate::{

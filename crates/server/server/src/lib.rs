@@ -2,7 +2,7 @@
 
 /// This vault's Build: the Product Version plus the commit it was built from,
 /// such as `0.9.0+343fe0d8`. `build.rs` works it out.
-pub const BUILD: &str = env!("MESSAGE_VAULT_BUILD");
+pub const BUILD: &str = env!("MESSAGE_CRATE_BUILD");
 
 pub mod cli;
 pub mod cli_docs;
@@ -30,7 +30,7 @@ pub mod logging;
 pub(crate) mod messages_api;
 pub(crate) mod models;
 pub(crate) mod named_set_api;
-pub(crate) mod open_vault;
+pub(crate) mod open_db;
 pub(crate) mod openapi;
 pub(crate) mod operation_lock;
 pub(crate) mod owner_cli;
@@ -43,11 +43,11 @@ pub(crate) mod saved_searches_api;
 pub(crate) mod search;
 pub(crate) mod search_fields_api;
 pub(crate) mod server;
+pub(crate) mod server_api;
 pub(crate) mod session_api;
 #[cfg(test)]
 pub mod test_support;
 pub(crate) mod trash_api;
-pub(crate) mod vault_api;
 
 pub use db::conversation_messages::{DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, MessageSort};
 pub use server::{ApiError, AppState, AuthCapability, AuthIdentity, resolve_auth, run};
@@ -59,9 +59,9 @@ pub use server::{ApiError, AppState, AuthCapability, AuthIdentity, resolve_auth,
 #[doc(hidden)]
 pub use db::engine::{pg_test_schema_pool, sqlite_test_pool};
 #[doc(hidden)]
-pub use db::schema::ensure_vault_schema;
+pub use db::exports::{ExportPageOpts, export_messages};
 #[doc(hidden)]
-pub use db::vault_exports::{ExportPageOpts, export_messages};
+pub use db::schema::ensure_schema;
 #[doc(hidden)]
 pub use exports_api::start_export_run;
 pub use message_crate_api_types::ExportScope;
@@ -70,7 +70,7 @@ use clap::Command;
 
 /// Postgres test URL when the gated suite should run (CI sets this).
 pub fn pg_test_url() -> Option<String> {
-    std::env::var("MV_TEST_POSTGRES_URL")
+    std::env::var("MC_TEST_POSTGRES_URL")
         .ok()
         .filter(|u| !u.is_empty())
 }

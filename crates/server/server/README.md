@@ -11,7 +11,7 @@ cargo test -p message-crate-server
 cargo run --release -p message-crate-server -- serve
 ```
 
-Docker (release-shaped image from this checkout): `docker compose -f docker/compose.release.yml up --build`. Day-to-day from a clone: `./scripts/run-vault-dev.sh` (see [CONTRIBUTING.md](../../../CONTRIBUTING.md)). Published image: [Try Message Crate](https://messagecrate.app/docs/user/get-started/try-message-crate/).
+Docker (release-shaped image from this checkout): `docker compose -f docker/compose.release.yml up --build`. Day-to-day from a clone: `./scripts/run-dev.sh` (see [CONTRIBUTING.md](../../../CONTRIBUTING.md)). Published image: [Try Message Crate](https://messagecrate.app/docs/user/get-started/try-message-crate/).
 
 ## Docs
 

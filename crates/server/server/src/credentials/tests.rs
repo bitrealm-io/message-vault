@@ -134,7 +134,7 @@ async fn password_change_setup() -> (
 ) {
     let (pool, dir) = engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     let old_hash = hash_password("old-password").unwrap();
     account_profile::insert_account_at(&mut conn, TEST_ACCOUNT, "alice", Some(&old_hash), None)
         .await

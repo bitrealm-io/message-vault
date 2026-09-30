@@ -1,10 +1,10 @@
 import { useState } from "react";
+import { keys } from "../../lib/queryKeys";
+import { useRouteQuery } from "../../lib/routeQuery";
 import { quote } from "../../lib/searchQuery";
+import { listConversationMessages, listMessages } from "../../lib/serverApi";
 import { yearIn } from "../../lib/timeZone";
 import type { Message } from "../../lib/types";
-import { listConversationMessages, listMessages } from "../../lib/vaultApi";
-import { keys } from "../../lib/vaultKeys";
-import { useVaultQuery } from "../../lib/vaultQuery";
 
 /** Page size for the thread, whatever it is showing: all years, one year, or a find. */
 export const PAGE_SIZE = 50;
@@ -100,7 +100,7 @@ function threadScope(queryKey: readonly unknown[] | undefined): string | null {
 export function useConversationMessages(conversationId: number) {
   /** `offset`, `activeYear`, `findTerm` and `activeMatch` are view state, not
    * server state — a screen's choice of what to look at, not anything the
-   * vault owns. The messages themselves come from `useVaultQuery` below. */
+   * vault owns. The messages themselves come from `useRouteQuery` below. */
   const [offset, setOffset] = useState(0);
   /** `null` = all years. Otherwise the thread (or the find) is narrowed to that calendar year. */
   const [activeYear, setActiveYear] = useState<number | null>(null);
@@ -130,7 +130,7 @@ export function useConversationMessages(conversationId: number) {
     ? keys.conversations.find(conversationId, threadQuery, offset, PAGE_SIZE)
     : keys.conversations.messages(conversationId, { offset, limit: PAGE_SIZE });
 
-  const query = useVaultQuery<MessagesResult>(
+  const query = useRouteQuery<MessagesResult>(
     key,
     (signal) =>
       searching

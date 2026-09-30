@@ -1,4 +1,4 @@
-//! Named CLI API tokens (`mv-api-…`); many per account, with per-token permissions.
+//! Named CLI API tokens (`mc-api-…`); many per account, with per-token permissions.
 
 use anyhow::{Context, Result};
 use sqlx::AnyConnection;
@@ -16,7 +16,7 @@ pub struct ApiTokenRow {
     pub label: String,
     /// What this token may do.
     pub permissions: Permissions,
-    /// Masked secret for Settings, e.g. `mv-api-Sd..mE`.
+    /// Masked secret for Settings, e.g. `mc-api-Sd..mE`.
     pub token_hint: String,
     /// Creation time as a Unix-seconds string.
     pub created_at: String,
@@ -31,13 +31,13 @@ pub struct ApiTokenRow {
 /// Default API token lifetime when the client does not pass `expires_in_days` (365 days).
 pub const DEFAULT_API_TOKEN_TTL_SECS: u64 = 365 * 24 * 60 * 60;
 
-const API_TOKEN_PREFIX: &str = "mv-api-";
-const LEGACY_APP_PASSWORD_PREFIX: &str = "mv-app-";
+const API_TOKEN_PREFIX: &str = "mc-api-";
+const LEGACY_APP_PASSWORD_PREFIX: &str = "mc-app-";
 const HINT_HEAD: usize = 2;
 const HINT_TAIL: usize = 2;
 
-/// Mask a plaintext API token for list display (keeps `mv-api-` or legacy `mv-app-` + ends).
-/// Format: `mv-api-xx..yy`.
+/// Mask a plaintext API token for list display (keeps `mc-api-` or legacy `mc-app-` + ends).
+/// Format: `mc-api-xx..yy`.
 pub fn mask_api_token(token: &str) -> String {
     let (prefix, secret) = if let Some(s) = token.strip_prefix(API_TOKEN_PREFIX) {
         (API_TOKEN_PREFIX, s)
@@ -92,13 +92,13 @@ impl From<sqlx::Error> for ApiTokenMutationError {
     }
 }
 
-/// Generate a new API token (`mv-api-` + 32 alphanumeric characters).
+/// Generate a new API token (`mc-api-` + 32 alphanumeric characters).
 ///
 /// # Errors
 ///
 /// Returns an error when random bytes cannot be generated.
 pub fn generate_api_token() -> Result<String> {
-    generate_prefixed_token("mv-api-")
+    generate_prefixed_token("mc-api-")
 }
 
 /// Look up which account owns this API token Bearer value.
@@ -166,7 +166,7 @@ pub struct CreatedApiToken {
     pub created_at: String,
     /// Unix-seconds expiry; `None` means no expiry.
     pub expires_at: Option<String>,
-    /// The plaintext secret (`mv-api-…`), shown to the caller exactly once.
+    /// The plaintext secret (`mc-api-…`), shown to the caller exactly once.
     pub token: String,
 }
 
@@ -366,7 +366,7 @@ mod tests {
     use super::*;
     #[tokio::test]
     async fn create_list_lookup_delete() {
-        let vault = crate::test_support::test_vault().await;
+        let vault = crate::test_support::test_fixture().await;
         let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
         let created = create_api_token(
@@ -384,7 +384,7 @@ mod tests {
         .unwrap();
         let id = created.id;
         let token = created.token;
-        assert!(token.starts_with("mv-api-"));
+        assert!(token.starts_with("mc-api-"));
         assert_eq!(
             created.permissions,
             Permissions {
@@ -394,12 +394,12 @@ mod tests {
             }
         );
         assert_eq!(
-            mask_api_token("mv-api-Sd1abcdefghijklmnopqrsmtuvwxyZmE"),
-            "mv-api-Sd..mE"
+            mask_api_token("mc-api-Sd1abcdefghijklmnopqrsmtuvwxyZmE"),
+            "mc-api-Sd..mE"
         );
         assert_eq!(
-            mask_api_token("mv-app-Sd1abcdefghijklmnopqrsmtuvwxyZmE"),
-            "mv-app-Sd..mE"
+            mask_api_token("mc-app-Sd1abcdefghijklmnopqrsmtuvwxyZmE"),
+            "mc-app-Sd..mE"
         );
 
         let listed = list_api_tokens(&mut conn, account_id).await.unwrap();
@@ -435,7 +435,7 @@ mod tests {
         assert!(listed_after[0].last_accessed_at.is_some());
 
         assert!(
-            lookup_account_for_api_token(&mut conn, "mv-api-nope")
+            lookup_account_for_api_token(&mut conn, "mc-api-nope")
                 .await
                 .unwrap()
                 .is_none()
@@ -458,7 +458,7 @@ mod tests {
 
     #[tokio::test]
     async fn empty_label_rejected() {
-        let vault = crate::test_support::test_vault().await;
+        let vault = crate::test_support::test_fixture().await;
         let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
         assert!(
@@ -470,7 +470,7 @@ mod tests {
 
     #[tokio::test]
     async fn rename_label() {
-        let vault = crate::test_support::test_vault().await;
+        let vault = crate::test_support::test_fixture().await;
         let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
         let id = create_api_token(&mut conn, account_id, "old name", Permissions::all(), None)
@@ -502,7 +502,7 @@ mod tests {
 
     #[tokio::test]
     async fn label_validation_errors_are_typed() {
-        let vault = crate::test_support::test_vault().await;
+        let vault = crate::test_support::test_fixture().await;
         let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
 
@@ -546,7 +546,7 @@ mod tests {
     /// how someone revokes one without deleting the record of it.
     #[tokio::test]
     async fn an_expired_token_is_refused_and_a_live_one_is_not() {
-        let vault = crate::test_support::test_vault().await;
+        let vault = crate::test_support::test_fixture().await;
         let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
 
@@ -597,7 +597,7 @@ mod tests {
     /// turns an unreadable expiry into a credential that never dies.
     #[tokio::test]
     async fn a_token_with_an_unreadable_expiry_is_refused() {
-        let vault = crate::test_support::test_vault().await;
+        let vault = crate::test_support::test_fixture().await;
         let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
 
@@ -623,7 +623,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_disabled_token_is_refused_while_its_row_remains() {
-        let vault = crate::test_support::test_vault().await;
+        let vault = crate::test_support::test_fixture().await;
         let account_id = vault.account_with_id(101, "alice").await;
         let mut conn = vault.conn().await;
 

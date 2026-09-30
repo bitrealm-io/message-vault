@@ -196,7 +196,7 @@ pub enum SourceConfig {
     Apple(AppleConfig),
     /// WhatsApp backup source.
     Whatsapp(WhatsappConfig),
-    /// Existing Message Vault output → another IR format (`message-reexporter`).
+    /// Existing Message Crate output → another IR format (`message-reexporter`).
     Format(FormatConfig),
 }
 

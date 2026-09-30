@@ -1,8 +1,8 @@
 //! Parse iMazing Messages and WhatsApp CSV exports.
 
 use anyhow::{Context, Result, bail};
-use message_csv::{col, field};
 use message_crate_core::discover_files;
+use message_csv::{col, field};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};

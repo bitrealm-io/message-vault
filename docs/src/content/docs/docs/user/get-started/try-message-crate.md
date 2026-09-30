@@ -28,23 +28,23 @@ Already sure you want your own data? Skip to [Use your own messages](/docs/user/
 To start, pull the latest published image `bitrealm/message-crate:latest` from Docker Hub.
 
 ```bash title="Start with docker run"
-docker run -d --name message-vault \
+docker run -d --name message-crate \
   -p 8080:8080 \
   -e DEMO_DATA=true \
-  -v message-vault-data:/app/data \
+  -v message-crate-data:/app/data \
   bitrealm/message-crate:latest
 ```
 
 Or with Compose — save [docker/compose.yml](https://github.com/messagecrate/message-crate/blob/main/docker/compose.yml) and start it:
 
 ```bash title="Start with Compose"
-mkdir message-vault && cd message-vault
+mkdir message-crate && cd message-crate
 curl -fsSL -o compose.yml \
   https://raw.githubusercontent.com/messagecrate/message-crate/main/docker/compose.yml
 docker compose up -d
 ```
 
-Both commands start the server and, on first start, generate sample conversations for the `demo` user. The website and the import API share **port 8080**. The `message-vault-data` Docker volume keeps the database between restarts. Compose and `docker run` use that same volume name, so you can switch methods without copying the database.
+Both commands start the server and, on first start, generate sample conversations for the `demo` user. The website and the import API share **port 8080**. The `message-crate-data` Docker volume keeps the database between restarts. Compose and `docker run` use that same volume name, so you can switch methods without copying the database.
 
 Edit the Compose file to change the published port, set `DEMO_DATA=false` to skip generating sample conversations, or pin `bitrealm/message-crate:0.9.0` instead of `latest`.
 

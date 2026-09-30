@@ -3,17 +3,16 @@ import {
   useNameCollectionActions,
   useSetNamedSetMembers,
 } from "./nameCollection";
-
+import { keys } from "./queryKeys";
 import { forGroup } from "./searchQuery";
-import { UNKNOWN_GROUP } from "./unknownGroup";
 import {
   createContactGroup,
   deleteContactGroup,
   listContactGroups,
   updateContactGroup,
   updateContactGroupMembers,
-} from "./vaultApi";
-import { keys } from "./vaultKeys";
+} from "./serverApi";
+import { UNKNOWN_GROUP } from "./unknownGroup";
 
 /** Names that must not be created as user groups. */
 export const RESERVED_GROUP_NAMES = new Set(

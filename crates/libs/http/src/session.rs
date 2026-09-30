@@ -45,7 +45,7 @@ impl HttpSession {
     ///
     /// `path` must start with `/`. Append query parameters with
     /// [`RequestBuilder::query`], which percent-encodes values.
-    pub fn vault_request(
+    pub fn server_request(
         &self,
         method: Method,
         base_url: &str,
@@ -89,7 +89,7 @@ impl HttpSession {
         };
         let url = format!("{base}/v1/session");
         let response = self
-            .vault_request(Method::GET, base, "/v1/session", key)
+            .server_request(Method::GET, base, "/v1/session", key)
             .timeout(Duration::from_secs(15))
             .send()
             .map_err(|error| classify_auth_transport_error(&url, error))?;
@@ -274,7 +274,7 @@ mod tests {
 
     #[test]
     fn bearer_header_trims_the_key() {
-        assert_eq!(bearer_header("  mv_key \n"), "Bearer mv_key");
+        assert_eq!(bearer_header("  mc_key \n"), "Bearer mc_key");
     }
 
     #[test]

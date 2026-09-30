@@ -19,7 +19,7 @@ export function appKind(): "desktop" | "website" {
  */
 export function appHeaders(): Record<string, string> {
   return {
-    "x-message-vault-app": appKind(),
-    "x-message-vault-version": APP_BUILD,
+    "x-message-crate-app": appKind(),
+    "x-message-crate-version": APP_BUILD,
   };
 }

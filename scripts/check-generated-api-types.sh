@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
-GENERATED="web/src/lib/vaultApi.types.ts"
+GENERATED="web/src/lib/serverApi.types.ts"
 SPEC="docs/src/assets/openapi.json"
 
 if [[ ! -f "${GENERATED}" ]]; then
@@ -28,7 +28,7 @@ if [[ ! -f "${GENERATED}" ]]; then
   exit 1
 fi
 
-tmp="$(mktemp -t vaultApi.types.XXXXXX.ts)"
+tmp="$(mktemp -t serverApi.types.XXXXXX.ts)"
 trap 'rm -f "${tmp}"' EXIT
 
 npx --yes openapi-typescript@7.13.0 "${SPEC}" -o "${tmp}" >/dev/null

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import Button from "../../components/Button";
 import { useAuth } from "../../lib/auth";
-import { changePassword, setAccountPassword } from "../../lib/vaultApi";
+import { changePassword, setAccountPassword } from "../../lib/serverApi";
 import { inputClassName, sectionTitleClass } from "./profileStyles";
 
 /**

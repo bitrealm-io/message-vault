@@ -1,6 +1,6 @@
 //! Page exported messages, download attachments, and write JSON Lines folders.
 //!
-//! JSON Lines means one JSON object per line. Message Vault is the HTTP server
+//! JSON Lines means one JSON object per line. Message Crate is the HTTP server
 //! that stores imported messages.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -8,10 +8,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use message_ir_format::write_export_sentinel;
 use message_crate_core::{CancelFlag, check_cancel, parallel_for_each};
-use serde::Serialize;
 use message_crate_http::{auth_check as authenticate, with_retries};
+use message_ir_format::write_export_sentinel;
+use serde::Serialize;
 
 use crate::http::{ExportMessagesArgs, HttpSession};
 use crate::project::{build_document, conversation_key, to_ir_message};
@@ -30,7 +30,7 @@ const MAX_RETRIES: u32 = 3;
 
 /// Settings for one download run (output folder, URL, search, flags).
 #[derive(Debug, Clone)]
-pub struct VaultPullConfig {
+pub struct PullConfig {
     /// Folder the JSON Lines files and attachments are written into.
     pub out_dir: PathBuf,
     /// Vault base URL, e.g. `http://127.0.0.1:8080`.
@@ -123,7 +123,7 @@ fn next_offset(offset: usize, limit: usize, total: u64) -> Option<usize> {
 }
 
 /// Create the output folder and its `attachments/` child, and mark the folder
-/// as a Message Vault export.
+/// as a Message Crate export.
 ///
 /// The sentinel names this folder as one an export wrote. The desktop app
 /// refuses to clean or transcode a folder without it
@@ -157,10 +157,7 @@ fn prepare_out_dir(out_dir: &Path, skip_attachments: bool) -> Result<()> {
 ///
 /// Returns an error when the key or output folder is missing, login fails, a
 /// page or download fails, or a conversation file cannot be written.
-pub fn run(
-    cfg: &VaultPullConfig,
-    mut on_progress: Option<&mut ProgressFn<'_>>,
-) -> Result<PullReport> {
+pub fn run(cfg: &PullConfig, mut on_progress: Option<&mut ProgressFn<'_>>) -> Result<PullReport> {
     if cfg.key.trim().is_empty() {
         bail!("API key is required");
     }
@@ -253,7 +250,7 @@ struct Written {
 /// One authenticated download run: the connection, the account it resolved
 /// to, and the local journal of files already on disk.
 struct Pull<'a> {
-    cfg: &'a VaultPullConfig,
+    cfg: &'a PullConfig,
     session: HttpSession,
     account: i64,
     username: String,
@@ -269,7 +266,7 @@ impl<'a> Pull<'a> {
     /// # Errors
     ///
     /// Returns an error when login fails or the journal cannot be read.
-    fn login(cfg: &'a VaultPullConfig, out: &mut Option<&mut ProgressFn<'_>>) -> Result<Self> {
+    fn login(cfg: &'a PullConfig, out: &mut Option<&mut ProgressFn<'_>>) -> Result<Self> {
         let auth =
             authenticate(&cfg.base_url, &cfg.key).map_err(|e| anyhow::anyhow!("{}", e.detail()))?;
         let account = auth.account_id;

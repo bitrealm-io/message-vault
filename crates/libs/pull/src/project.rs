@@ -1,6 +1,6 @@
 //! Map vault export API messages into conversation documents.
 //!
-//! The export API is the Message Vault HTTP server's read path. Each document
+//! The export API is the Message Crate HTTP server's read path. Each document
 //! is later written as JSON Lines (one JSON object per line).
 
 use anyhow::{Context, Result, bail};
@@ -40,7 +40,7 @@ pub fn build_document(
         schema_version: SCHEMA_VERSION,
         export: ExportMeta {
             source: source.to_string(),
-            tool: "message-vault".into(),
+            tool: "message-crate".into(),
             tool_version: env!("CARGO_PKG_VERSION").into(),
             owner_handle: None,
             owner_display_name: Some("Me".into()),

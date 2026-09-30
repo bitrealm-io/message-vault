@@ -28,7 +28,7 @@ src-tauri/resources/
 #.idea/
 
 # Local machine export paths / owner identity
-config/export-to-vault.sh
+config/export-to-server.sh
 config/config.toml
 config/contacts.csv
 config/contacts.vcf

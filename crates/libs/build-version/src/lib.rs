@@ -8,7 +8,7 @@
 //! the two cannot format a Build differently. `web/vite.config.ts` follows the
 //! same rules for the SPA and must be changed together with this file.
 //!
-//! The part after the `+` comes from `MESSAGE_VAULT_BUILD_METADATA` when that
+//! The part after the `+` comes from `MESSAGE_CRATE_BUILD_METADATA` when that
 //! variable is set, and from git otherwise. The release Dockerfile sets it,
 //! because `.git` is not in the image's build context. Set and empty means a
 //! release: the Build is the Product Version alone.
@@ -17,11 +17,11 @@ use std::path::Path;
 use std::process::Command;
 
 /// Overrides what git would say; see the module docs.
-pub const METADATA_ENV: &str = "MESSAGE_VAULT_BUILD_METADATA";
+pub const METADATA_ENV: &str = "MESSAGE_CRATE_BUILD_METADATA";
 
 /// The compile-time variable [`emit`] sets; read it with
-/// `env!("MESSAGE_VAULT_BUILD")`.
-pub const BUILD_ENV: &str = "MESSAGE_VAULT_BUILD";
+/// `env!("MESSAGE_CRATE_BUILD")`.
+pub const BUILD_ENV: &str = "MESSAGE_CRATE_BUILD";
 
 /// Join a Product Version and build metadata. Empty metadata is a release.
 pub fn format_build(product_version: &str, metadata: &str) -> String {
@@ -78,7 +78,7 @@ pub fn build_string(product_version: &str, manifest_dir: &Path) -> String {
     format_build(product_version, metadata.trim())
 }
 
-/// Call from a build script: sets `MESSAGE_VAULT_BUILD` for the crate being
+/// Call from a build script: sets `MESSAGE_CRATE_BUILD` for the crate being
 /// built, and asks cargo to run the script again when the commit changes.
 ///
 /// # Panics

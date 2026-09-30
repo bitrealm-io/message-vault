@@ -271,17 +271,17 @@ mod tests {
 
     #[test]
     fn without_overrides_the_database_is_the_configured_sqlite_file() {
-        let cfg = config_at("/vault/vault.db").with_db_overrides(None, None);
+        let cfg = config_at("/vault/messagecrate.db").with_db_overrides(None, None);
 
-        assert_eq!(cfg.paths.db, PathBuf::from("/vault/vault.db"));
+        assert_eq!(cfg.paths.db, PathBuf::from("/vault/messagecrate.db"));
         assert_eq!(cfg.database.url, None);
-        assert_eq!(cfg.db_target().to_string(), "/vault/vault.db");
+        assert_eq!(cfg.db_target().to_string(), "/vault/messagecrate.db");
         assert_eq!(cfg.db_engine().unwrap(), DbEngine::Sqlite);
     }
 
     #[test]
     fn db_override_replaces_the_sqlite_path() {
-        let cfg = config_at("/vault/vault.db")
+        let cfg = config_at("/vault/messagecrate.db")
             .with_db_overrides(Some(PathBuf::from("/elsewhere/other.db")), None);
 
         assert_eq!(cfg.db_target().to_string(), "/elsewhere/other.db");
@@ -289,21 +289,21 @@ mod tests {
 
     #[test]
     fn db_url_override_wins_over_the_path_and_names_the_engine() {
-        let cfg = config_at("/vault/vault.db").with_db_overrides(
+        let cfg = config_at("/vault/messagecrate.db").with_db_overrides(
             Some(PathBuf::from("/elsewhere/other.db")),
-            Some("postgres://vault:secret@db.example:5432/vault".into()),
+            Some("postgres://vault:secret@db.example:5432/messagecrate".into()),
         );
 
         assert_eq!(
             cfg.db_target().to_string(),
-            "postgres://db.example:5432/vault"
+            "postgres://db.example:5432/messagecrate"
         );
         assert_eq!(cfg.db_engine().unwrap(), DbEngine::Postgres);
     }
 
     #[test]
     fn a_configured_url_is_honoured_without_any_override() {
-        let mut cfg = config_at("/vault/vault.db");
+        let mut cfg = config_at("/vault/messagecrate.db");
         cfg.database.url = Some("sqlite:///elsewhere/other.db".into());
 
         let cfg = cfg.with_db_overrides(None, None);
@@ -314,8 +314,8 @@ mod tests {
 
     #[test]
     fn an_unknown_url_scheme_is_an_error() {
-        let mut cfg = config_at("/vault/vault.db");
-        cfg.database.url = Some("mysql://db.example/vault".into());
+        let mut cfg = config_at("/vault/messagecrate.db");
+        cfg.database.url = Some("mysql://db.example/messagecrate".into());
 
         assert!(cfg.db_engine().is_err());
     }
@@ -343,7 +343,7 @@ mod tests {
         "tauri://localhost",
     ];
 
-    /// `scripts/run-vault-dev.sh` only uncomments the `# cors_origins =` line.
+    /// `scripts/run-dev.sh` only uncomments the `# cors_origins =` line.
     /// That line must be a complete array or first-run / `--reset-demo` configs
     /// are invalid TOML.
     #[test]
@@ -361,7 +361,7 @@ mod tests {
         assert_eq!(
             cors_lines.len(),
             1,
-            "run-vault-dev.sh uncomments one cors_origins line"
+            "run-dev.sh uncomments one cors_origins line"
         );
         assert!(
             cors_lines[0].contains('[') && cors_lines[0].contains(']'),
@@ -379,7 +379,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let cfg: Config =
-            toml::from_str(&uncommented).expect("example after run-vault-dev.sh sed must parse");
+            toml::from_str(&uncommented).expect("example after run-dev.sh sed must parse");
         let origins = &cfg
             .server
             .as_ref()

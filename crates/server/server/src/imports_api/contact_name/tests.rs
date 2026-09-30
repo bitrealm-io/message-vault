@@ -7,7 +7,7 @@ const TEST_ACCOUNT: i64 = 7;
 async fn an_import_creates_the_contact_with_the_backup_name() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
         .await
         .unwrap();
@@ -46,7 +46,7 @@ async fn an_import_creates_the_contact_with_the_backup_name() {
 async fn a_later_backup_names_a_contact_an_earlier_one_left_nameless() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
         .await
         .unwrap();
@@ -94,7 +94,7 @@ async fn a_later_backup_names_a_contact_an_earlier_one_left_nameless() {
 async fn an_import_replaces_a_trashed_contact_with_a_fresh_one() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
         .await
         .unwrap();
@@ -208,7 +208,7 @@ async fn an_import_replaces_a_trashed_contact_with_a_fresh_one() {
 async fn a_fresh_contact_takes_the_number_on_every_service() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
         .await
         .unwrap();
@@ -416,7 +416,7 @@ async fn the_orphaned_conversation_is_not_a_person() {
 async fn a_sender_is_never_linked_to_a_trashed_contact() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
         .await
         .unwrap();
@@ -520,7 +520,7 @@ async fn count(conn: &mut sqlx::AnyConnection, sql: &str, id: i64) -> i64 {
 async fn a_second_spelling_does_not_rename_anyone() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
         .await
         .unwrap();
@@ -569,7 +569,7 @@ async fn a_second_spelling_does_not_rename_anyone() {
 async fn an_import_does_not_overwrite_a_name_the_person_typed() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
         .await
         .unwrap();
@@ -623,7 +623,7 @@ async fn an_import_does_not_overwrite_a_name_the_person_typed() {
 async fn sibling_contact_link_bumps_last_modified_only_on_insert() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
         .await
         .unwrap();

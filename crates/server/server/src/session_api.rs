@@ -97,7 +97,7 @@ pub(crate) async fn get_session(
 
 /// Source ids this account has imported, oldest first.
 async fn list_account_sources(pool: &AnyPool, account_id: i64) -> Result<Vec<String>, ApiError> {
-    // Read-only: do not run ensure_vault_schema (avoids write locks on auth).
+    // Read-only: do not run ensure_schema (avoids write locks on auth).
     let mut conn = pool.acquire().await?;
     Ok(dedupe::source_priority_from_db(&mut conn, account_id).await?)
 }

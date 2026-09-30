@@ -1,11 +1,11 @@
-/** Show a stored API-key hint as `mv-api-xx..yy`, including older starred forms. */
+/** Show a stored API-key hint as `mc-api-xx..yy`, including older starred forms. */
 import { formatUnixDate } from "../../lib/formatDate";
 
 export function displayKeyHint(hint: string | null | undefined): string {
   const raw = (hint ?? "").trim();
-  if (!raw) return "mv-api-..";
-  if (/^(mv-api-|mv-app-).{2}\.\..{2}$/.test(raw)) return raw;
-  const stars = raw.match(/^(mv-api-|mv-app-)(.{2}).*\*{2,}(.{2})$/);
+  if (!raw) return "mc-api-..";
+  if (/^(mc-api-|mc-app-).{2}\.\..{2}$/.test(raw)) return raw;
+  const stars = raw.match(/^(mc-api-|mc-app-)(.{2}).*\*{2,}(.{2})$/);
   if (stars) return `${stars[1]}${stars[2]}..${stars[3]}`;
   return raw;
 }
@@ -28,7 +28,7 @@ export type ApiTokenItem = {
   label: string;
   can_import: boolean;
   can_export: boolean;
-  /** Masked secret, e.g. `mv-api-Sd..mE`. */
+  /** Masked secret, e.g. `mc-api-Sd..mE`. */
   token_hint: string;
   created_at: string;
   /** Unix seconds string, or null/absent if never used. */

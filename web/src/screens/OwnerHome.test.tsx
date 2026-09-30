@@ -4,18 +4,18 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { VaultApiError } from "../lib/api";
+import { ApiError } from "../lib/api";
 import { APP_BUILD } from "../lib/build";
 import { productVersionOf } from "../lib/buildFormat";
 import { ThemeProvider } from "../lib/ThemeProvider";
-import { VaultProviders } from "../test/vaultProviders";
+import { Providers } from "../test/providers";
 import OwnerHome from "./OwnerHome";
 
 const listAccounts = vi.hoisted(() => vi.fn());
-const getVaultSettings = vi.hoisted(() => vi.fn());
-const getVaultStorage = vi.hoisted(() => vi.fn());
-const getVaultState = vi.hoisted(() => vi.fn());
-const updateVaultSettings = vi.hoisted(() => vi.fn());
+const getServerSettings = vi.hoisted(() => vi.fn());
+const getServerStorage = vi.hoisted(() => vi.fn());
+const getServerState = vi.hoisted(() => vi.fn());
+const updateServerSettings = vi.hoisted(() => vi.fn());
 const updateAccount = vi.hoisted(() => vi.fn());
 const setAccountPassword = vi.hoisted(() => vi.fn());
 const createAccount = vi.hoisted(() => vi.fn());
@@ -34,13 +34,13 @@ vi.mock("../lib/auth", () => ({
   useAuth: () => ({ logout: vi.fn(), updateToken: vi.fn(), accountId: 1 }),
 }));
 
-vi.mock("../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/vaultApi")>()),
+vi.mock("../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/serverApi")>()),
   listAccounts: (...a: unknown[]) => listAccounts(...a),
-  getVaultSettings: (...a: unknown[]) => getVaultSettings(...a),
-  getVaultStorage: (...a: unknown[]) => getVaultStorage(...a),
-  getVaultState: (...a: unknown[]) => getVaultState(...a),
-  updateVaultSettings: (...a: unknown[]) => updateVaultSettings(...a),
+  getServerSettings: (...a: unknown[]) => getServerSettings(...a),
+  getServerStorage: (...a: unknown[]) => getServerStorage(...a),
+  getServerState: (...a: unknown[]) => getServerState(...a),
+  updateServerSettings: (...a: unknown[]) => updateServerSettings(...a),
   updateAccount: (...a: unknown[]) => updateAccount(...a),
   setAccountPassword: (...a: unknown[]) => setAccountPassword(...a),
   createAccount: (...a: unknown[]) => createAccount(...a),
@@ -96,10 +96,10 @@ beforeEach(() => {
     removeEventListener: () => {},
   }));
   listAccounts.mockReset();
-  getVaultSettings.mockReset();
-  getVaultStorage.mockReset();
-  getVaultState.mockReset();
-  updateVaultSettings.mockReset();
+  getServerSettings.mockReset();
+  getServerStorage.mockReset();
+  getServerState.mockReset();
+  updateServerSettings.mockReset();
   updateAccount.mockReset();
   setAccountPassword.mockReset();
   createAccount.mockReset();
@@ -144,8 +144,8 @@ beforeEach(() => {
   deleteAccountById.mockResolvedValue(undefined);
   deleteAccountMessages.mockResolvedValue(undefined);
   listAccounts.mockResolvedValue({ items: [theOwner, anAccount] });
-  getVaultSettings.mockResolvedValue({ public_registration: false });
-  getVaultStorage.mockResolvedValue({
+  getServerSettings.mockResolvedValue({ public_registration: false });
+  getServerStorage.mockResolvedValue({
     message_count: 5678,
     conversation_count: 90,
     contact_count: 120,
@@ -179,12 +179,12 @@ beforeEach(() => {
     ],
   });
   // The vault and this app are the same release unless a test says otherwise.
-  getVaultState.mockResolvedValue({
+  getServerState.mockResolvedValue({
     state: "closed",
     version: APP_BUILD,
     schema_fingerprint: 1234567890,
   });
-  updateVaultSettings.mockResolvedValue({ public_registration: true });
+  updateServerSettings.mockResolvedValue({ public_registration: true });
   updateAccount.mockResolvedValue({ ...anAccount, disabled: true });
   setAccountPassword.mockResolvedValue(undefined);
   // A new account has no profile yet, so the row comes back with no name.
@@ -202,13 +202,13 @@ afterEach(cleanup);
 function renderHome(entries: string[] = ["/owner/accounts"], { keepUnread = false } = {}) {
   render(
     <ThemeProvider>
-      <VaultProviders keepUnread={keepUnread}>
+      <Providers keepUnread={keepUnread}>
         <MemoryRouter initialEntries={entries}>
           <Routes>
             <Route path="/owner/:section?/:accountId?" element={<OwnerHome />} />
           </Routes>
         </MemoryRouter>
-      </VaultProviders>
+      </Providers>
     </ThemeProvider>,
   );
 }
@@ -275,7 +275,7 @@ describe("OwnerHome", () => {
     expect(screen.getByText(/5,678 messages, 21 attachments/)).toBeInTheDocument();
     expect(screen.getByText(/90 conversations, 120 contacts/)).toBeInTheDocument();
     expect(listAccounts).not.toHaveBeenCalled();
-    expect(getVaultSettings).not.toHaveBeenCalled();
+    expect(getServerSettings).not.toHaveBeenCalled();
   });
 
   it("shows the database's size, the messages' share of it and the search index on the Dashboard", async () => {
@@ -324,7 +324,7 @@ describe("OwnerHome", () => {
     expect(screen.getByRole("heading", { name: label })).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(listAccounts).not.toHaveBeenCalled();
-    expect(getVaultSettings).not.toHaveBeenCalled();
+    expect(getServerSettings).not.toHaveBeenCalled();
   });
 
   it("has the header every account sees: the product name, a search bar, the account button", () => {
@@ -474,7 +474,7 @@ describe("OwnerHome", () => {
   });
 
   it("shows an account's last login and its app on Profile, marking another release", async () => {
-    getVaultState.mockResolvedValue({
+    getServerState.mockResolvedValue({
       state: "closed",
       version: "0.10.0+343fe0d8",
       schema_fingerprint: 1234567890,
@@ -644,12 +644,12 @@ describe("OwnerHome", () => {
     renderHome();
 
     await screen.findByText("bob");
-    await waitFor(() => expect(getVaultState).toHaveBeenCalled());
+    await waitFor(() => expect(getServerState).toHaveBeenCalled());
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("states both versions under the header when the vault is another release", async () => {
-    getVaultState.mockResolvedValue({
+    getServerState.mockResolvedValue({
       state: "closed",
       version: "0.10.0",
       schema_fingerprint: 1234567890,
@@ -818,7 +818,7 @@ describe("OwnerHome", () => {
   it("says Invalid username when the username already belongs to an account", async () => {
     const user = userEvent.setup({ delay: null });
     createAccount.mockRejectedValue(
-      new VaultApiError(409, "username already taken: bob", {
+      new ApiError(409, "username already taken: bob", {
         type: "https://messagecrate.app/docs/developer/reference/errors/username-taken",
         title: "Username taken",
         status: 409,
@@ -886,7 +886,7 @@ describe("OwnerHome", () => {
     await user.click(box);
 
     await waitFor(() =>
-      expect(updateVaultSettings).toHaveBeenCalledWith({
+      expect(updateServerSettings).toHaveBeenCalledWith({
         public_registration: true,
       }),
     );

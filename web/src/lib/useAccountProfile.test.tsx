@@ -12,13 +12,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getAccountProfile, updateAccountProfile } from "./serverApi";
 import { useAccountProfile, useUpdateAccountProfile } from "./useAccountProfile";
-import { getAccountProfile, updateAccountProfile } from "./vaultApi";
 
 vi.mock("./auth", () => ({ useAuth: () => ({ accountId: 7 }) }));
 
-vi.mock("./vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./vaultApi")>()),
+vi.mock("./serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./serverApi")>()),
   getAccountProfile: vi.fn(),
   updateAccountProfile: vi.fn(),
 }));

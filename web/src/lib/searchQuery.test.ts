@@ -239,7 +239,7 @@ describe("advancedContacts", () => {
 //
 // The committed file is generated, not authored — this test fails when it
 // drifts from what the builders produce today, the same way
-// scripts/check-generated-api-types.sh fails when vaultApi.types.ts drifts
+// scripts/check-generated-api-types.sh fails when serverApi.types.ts drifts
 // from the OpenAPI spec.
 
 /** The vault's three searchable lists, spelled the way the fixture and the

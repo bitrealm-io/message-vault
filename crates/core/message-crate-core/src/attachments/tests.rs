@@ -68,7 +68,7 @@ const JUST_BEFORE_MIDNIGHT_UTC: i64 = 1_710_547_199;
 /// would pass against the very bug it guards.
 #[test]
 fn print_the_name_for_the_zone_check() {
-    if std::env::var_os("MV_ZONE_CHECK").is_none() {
+    if std::env::var_os("MC_ZONE_CHECK").is_none() {
         return;
     }
     println!(
@@ -88,7 +88,7 @@ fn the_name_does_not_depend_on_the_machines_zone() {
         let out = std::process::Command::new(&exe)
             .args(["print_the_name_for_the_zone_check", "--nocapture"])
             .env("TZ", tz)
-            .env("MV_ZONE_CHECK", "1")
+            .env("MC_ZONE_CHECK", "1")
             .output()
             .expect("run the test binary");
         assert!(

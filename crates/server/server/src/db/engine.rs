@@ -29,7 +29,7 @@ pub fn detect_engine(url: &str) -> Result<DbEngine> {
 /// The vault's historical pragma set, applied to each new connection:
 /// busy timeout first (overlapping auth and UI writes wait), foreign keys on,
 /// synchronous NORMAL, `temp_store` MEMORY, `cache_size` -200000.
-fn with_vault_pragmas(pool: AnyPoolOptions) -> AnyPoolOptions {
+fn with_pragmas(pool: AnyPoolOptions) -> AnyPoolOptions {
     pool.after_connect(|conn, _meta| {
         Box::pin(async move {
             sqlx::query("PRAGMA busy_timeout = 15000")
@@ -67,7 +67,7 @@ fn sqlite_url_from_path(path: &Path) -> String {
 /// ([`crate::db::sqlite_functions`]).
 fn sqlite_pool_options() -> AnyPoolOptions {
     crate::db::sqlite_functions::register();
-    with_vault_pragmas(AnyPoolOptions::new().max_connections(4))
+    with_pragmas(AnyPoolOptions::new().max_connections(4))
 }
 
 /// Best-effort WAL enablement shared by the path- and URL-based SQLite
@@ -201,7 +201,7 @@ pub fn redact_db_url(url: &str) -> String {
 
 /// Shared test pool, plus a fresh temp dir for the test's files.
 ///
-/// File-backed SQLite in that temp dir by default. When `MV_TEST_POSTGRES_URL`
+/// File-backed SQLite in that temp dir by default. When `MC_TEST_POSTGRES_URL`
 /// is set, a schema of its own on that Postgres server instead, so the same
 /// suite runs against the other engine and a green Postgres job means the
 /// SQL ran on Postgres (#339). A test about SQLite itself takes
@@ -215,7 +215,7 @@ pub(crate) async fn test_pool() -> (AnyPool, tempfile::TempDir) {
     sqlite_test_pool().await
 }
 
-/// File-backed SQLite in a fresh temp dir, whatever `MV_TEST_POSTGRES_URL`
+/// File-backed SQLite in a fresh temp dir, whatever `MC_TEST_POSTGRES_URL`
 /// says: for a test whose subject is SQLite (a pragma, the file on disk,
 /// `sqlite_master`), and for the SQLite half of the search-parity
 /// integration test. Test-support surface, not product API.
@@ -223,7 +223,7 @@ pub(crate) async fn test_pool() -> (AnyPool, tempfile::TempDir) {
 pub async fn sqlite_test_pool() -> (AnyPool, tempfile::TempDir) {
     sqlx::any::install_default_drivers();
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("vault.db");
+    let path = dir.path().join("messagecrate.db");
     let pool = sqlite_pool_options()
         .connect_with(AnyConnectOptions::from_str(&sqlite_url_from_path(&path)).unwrap())
         .await
@@ -248,7 +248,7 @@ pub async fn pg_test_schema_pool(url: &str) -> AnyPool {
 ///
 /// The schema is named `mvtest_<pid>_<n>`, so tests in one process never
 /// share one. The URL carries `options=-csearch_path=<schema>`, so every
-/// table `ensure_vault_schema` creates lands in that schema and every query
+/// table `ensure_schema` creates lands in that schema and every query
 /// reads from it: nothing a test writes outlives its schema, and two
 /// checkouts running the suite against one server never see each other's
 /// rows (#435). A code path that takes a URL rather than a pool (the
@@ -278,7 +278,7 @@ pub async fn pg_test_schema_url(url: &str) -> String {
         .max_connections(1)
         .connect(url)
         .await
-        .expect("connect to MV_TEST_POSTGRES_URL");
+        .expect("connect to MC_TEST_POSTGRES_URL");
     SWEPT
         .get_or_init(|| async {
             // Held before the first schema exists, so another checkout's
@@ -422,27 +422,30 @@ mod tests {
         for (raw, expected) in [
             // The ordinary case: user and password before the host.
             (
-                "postgres://vault:s3cret@db.example:5432/vault",
-                "postgres://db.example:5432/vault",
+                "postgres://vault:s3cret@db.example:5432/messagecrate",
+                "postgres://db.example:5432/messagecrate",
             ),
             // A user with no password still has to go.
             (
-                "postgres://vault@db.example/vault",
-                "postgres://db.example/vault",
+                "postgres://vault@db.example/messagecrate",
+                "postgres://db.example/messagecrate",
             ),
             // Query parameters carry secrets of their own (sslpassword,
             // options), so the whole string after `?` is dropped.
             (
-                "postgres://vault:s3cret@db.example/vault?sslmode=require&sslpassword=hunter2",
-                "postgres://db.example/vault",
+                "postgres://vault:s3cret@db.example/messagecrate?sslmode=require&sslpassword=hunter2",
+                "postgres://db.example/messagecrate",
             ),
             // An `@` inside the password must not end the authority early.
             (
-                "postgres://vault:p@ss@db.example/vault",
-                "postgres://db.example/vault",
+                "postgres://vault:p@ss@db.example/messagecrate",
+                "postgres://db.example/messagecrate",
             ),
             // No credentials, nothing to strip.
-            ("sqlite://data/vault.db", "sqlite://data/vault.db"),
+            (
+                "sqlite://data/messagecrate.db",
+                "sqlite://data/messagecrate.db",
+            ),
             // No path component at all.
             (
                 "postgres://vault:s3cret@db.example",
@@ -462,7 +465,7 @@ mod tests {
     /// echoed, because the redaction below it cannot be trusted to have run.
     #[test]
     fn redact_db_url_refuses_to_echo_a_non_url() {
-        assert_eq!(redact_db_url("data/vault.db"), "<db url>");
+        assert_eq!(redact_db_url("data/messagecrate.db"), "<db url>");
         assert_eq!(redact_db_url(""), "<db url>");
         assert_eq!(redact_db_url("vault:s3cret@db.example"), "<db url>");
     }
@@ -472,15 +475,15 @@ mod tests {
     /// notice the `Display` impl being changed to print the raw URL.
     #[test]
     fn displaying_a_url_source_redacts_it() {
-        let shown = DbTarget::Url("postgres://vault:s3cret@db.example/vault").to_string();
-        assert_eq!(shown, "postgres://db.example/vault");
+        let shown = DbTarget::Url("postgres://vault:s3cret@db.example/messagecrate").to_string();
+        assert_eq!(shown, "postgres://db.example/messagecrate");
         assert!(!shown.contains("s3cret"));
     }
 
     #[test]
     fn detects_engine_from_scheme() {
         assert_eq!(
-            detect_engine("sqlite://data/vault.db").unwrap(),
+            detect_engine("sqlite://data/messagecrate.db").unwrap(),
             DbEngine::Sqlite
         );
         assert_eq!(
@@ -503,7 +506,7 @@ mod tests {
     async fn opens_sqlite_pool_and_applies_pragmas() {
         let (pool, _dir) = sqlite_test_pool().await;
         // All five vault pragmas, read back through their pragma table
-        // functions (values must match with_vault_pragmas).
+        // functions (values must match with_pragmas).
         let busy_timeout: i64 = sqlx::query_scalar("SELECT timeout FROM pragma_busy_timeout")
             .fetch_one(&pool)
             .await

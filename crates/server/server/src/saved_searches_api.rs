@@ -111,7 +111,7 @@ pub(crate) async fn update_saved_search(
 /// Delete a saved search.
 ///
 /// Deleting an import-created saved search removes the shortcut only. The
-/// `vault_imports` row it pointed at is the account's permanent record of that
+/// `imports` row it pointed at is the account's permanent record of that
 /// run and is never touched here.
 #[utoipa::path(
     delete,
@@ -138,12 +138,12 @@ mod tests {
     use axum::http::StatusCode;
 
     use crate::test_support::{
-        delete_status, get_json, patch_json, post_created_json, vault_with_account,
+        delete_status, fixture_with_account, get_json, patch_json, post_created_json,
     };
 
     #[tokio::test]
     async fn saved_searches_list_as_items_and_each_write_answers_the_row_or_204() {
-        let (vault, user) = vault_with_account().await;
+        let (vault, user) = fixture_with_account().await;
         let state = vault.state.clone();
 
         let (location, created): (String, serde_json::Value) = post_created_json(
@@ -180,7 +180,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_curated_list_is_a_page_like_every_other_list() {
-        let (vault, user) = vault_with_account().await;
+        let (vault, user) = fixture_with_account().await;
         let state = vault.state.clone();
         for name in ["Anna", "Bess", "Cleo"] {
             let _: (String, serde_json::Value) = post_created_json(

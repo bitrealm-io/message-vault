@@ -4,7 +4,7 @@
 //! functions here only parse, validate, and print; the work lives in the
 //! module each one calls (`import_cli`, `dedupe`, `reset_demo`, and so on).
 //! Every command that reads the vault opens it the same way: the config with
-//! `--db` and `--db-url` applied, through [`OpenVault`].
+//! `--db` and `--db-url` applied, through [`OpenDb`].
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -16,7 +16,7 @@ use clap::{Args, Command, CommandFactory, Parser, Subcommand};
 use crate::config::{Config, validate_source_id};
 use crate::db::contacts as contacts_db;
 use crate::dedupe::DedupeStats;
-use crate::open_vault::OpenVault;
+use crate::open_db::OpenDb;
 
 #[derive(Debug, Parser)]
 #[command(name = "message-crate-server")]
@@ -357,7 +357,7 @@ pub async fn run(cli: Cli) -> Result<()> {
 /// Claim the vault and report the owner's username.
 async fn run_create_owner(args: CreateOwnerArgs) -> Result<()> {
     let cfg = Config::load(&args.config)?.with_db_overrides(None, args.db_url);
-    let vault = OpenVault::open(cfg).await?;
+    let vault = OpenDb::open(cfg).await?;
     let username = crate::owner_cli::create_owner(&vault, &args.username, &args.password).await?;
     vault.close().await;
     println!("Message Crate claimed. Log in as {username}.");
@@ -367,7 +367,7 @@ async fn run_create_owner(args: CreateOwnerArgs) -> Result<()> {
 /// Set the vault owner's password and report the username to log in with.
 async fn run_reset_owner_password(args: ResetOwnerPasswordArgs) -> Result<()> {
     let cfg = Config::load(&args.config)?.with_db_overrides(None, args.db_url);
-    let vault = OpenVault::open(cfg).await?;
+    let vault = OpenDb::open(cfg).await?;
     let username = crate::owner_cli::reset_owner_password(&vault, &args.password).await?;
     vault.close().await;
     println!("Owner password set. Log in as {username}.");
@@ -395,7 +395,7 @@ async fn run_import(args: ImportArgs) -> Result<()> {
             args.media
         )
     })?;
-    let vault = OpenVault::open(cfg).await?;
+    let vault = OpenDb::open(cfg).await?;
     let account = vault.account_id(&args.account).await?;
 
     let stats = crate::import_cli::run(
@@ -435,10 +435,10 @@ async fn run_import(args: ImportArgs) -> Result<()> {
 /// or that there was none.
 async fn run_imports_discard(args: ImportsDiscardArgs) -> Result<()> {
     let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
-    let vault = OpenVault::open(cfg).await?;
+    let vault = OpenDb::open(cfg).await?;
     let account = vault.account_id(&args.account).await?;
     let mut conn = vault.conn().await?;
-    let discarded = crate::db::vault_imports::discard_running_import(&mut conn, account).await?;
+    let discarded = crate::db::imports::discard_running_import(&mut conn, account).await?;
     drop(conn);
     vault.close().await;
     print!(
@@ -452,7 +452,7 @@ async fn run_imports_discard(args: ImportsDiscardArgs) -> Result<()> {
 /// account had none.
 fn format_discarded_import(
     account: &str,
-    discarded: Option<&crate::db::vault_imports::VaultImportRow>,
+    discarded: Option<&crate::db::imports::ImportRow>,
 ) -> String {
     match discarded {
         Some(row) => format!(
@@ -535,7 +535,7 @@ fn format_dedupe_stats(stats: &DedupeStats) -> String {
 async fn run_dedupe(args: DedupeArgs) -> Result<()> {
     let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
     validate_window_secs(args.window_secs)?;
-    let vault = OpenVault::open(cfg).await?;
+    let vault = OpenDb::open(cfg).await?;
     let account = vault.account_id(&args.account).await?;
     let mut conn = vault.conn().await?;
     let priority = crate::dedupe::source_priority_from_db(&mut conn, account).await?;
@@ -564,7 +564,7 @@ async fn run_dedupe(args: DedupeArgs) -> Result<()> {
 /// Load an address book into an existing vault and print the counts.
 async fn run_import_contacts(args: ImportContactsArgs) -> Result<()> {
     let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
-    let vault = OpenVault::open(cfg).await?;
+    let vault = OpenDb::open(cfg).await?;
     let account = vault.account_id(&args.account).await?;
     let mut conn = vault.conn().await?;
     let stats =
@@ -645,7 +645,7 @@ async fn run_process_assets(args: ProcessAssetsArgs) -> Result<()> {
     if let Some(ref source) = args.source {
         validate_source_id(source)?;
     }
-    let vault = OpenVault::open(cfg).await?;
+    let vault = OpenDb::open(cfg).await?;
     crate::process_assets::run(
         &vault,
         &crate::process_assets::ProcessAssetsOptions {

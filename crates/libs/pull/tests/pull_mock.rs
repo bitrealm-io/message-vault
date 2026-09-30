@@ -7,7 +7,7 @@
 //! `POST /v1/exports/{id}/complete` or `/cancel`, and `GET /v1/assets/{sha256}`
 //! — with the JSON the vault serializes (`message-crate-api-types`,
 //! `docs/src/assets/openapi.json`). Every request derives from
-//! `VaultPullConfig::base_url`, so the mock's address is the only seam.
+//! `PullConfig::base_url`, so the mock's address is the only seam.
 
 use std::collections::HashSet;
 use std::fs;
@@ -16,10 +16,10 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use httpmock::prelude::*;
+use message_crate_pull::{ProgressEvent, PullConfig, PullReport, journal, run};
 use message_ir_format::{EXPORT_SENTINEL, read_conversation_jsonl};
 use serde_json::{Value, json};
 use tempfile::tempdir;
-use message_crate_pull::{ProgressEvent, PullReport, VaultPullConfig, journal, run};
 
 /// Fingerprint of the menu attachment. The pull never hashes what it
 /// downloads, so any 64 hex characters name an asset.
@@ -235,12 +235,12 @@ fn mock_asset<'a>(
 
 /// A pull of every message into `out_dir`: two messages a page, one download
 /// worker so the counts in the log are fixed.
-fn config(out_dir: &Path, base_url: String) -> VaultPullConfig {
-    VaultPullConfig {
+fn config(out_dir: &Path, base_url: String) -> PullConfig {
+    PullConfig {
         out_dir: out_dir.to_path_buf(),
         base_url,
         username: "alice".into(),
-        key: "mv_test".into(),
+        key: "mc_test".into(),
         query: String::new(),
         skip_attachments: false,
         page_limit: 2,
@@ -420,7 +420,7 @@ fn a_cancel_requested_before_the_run_records_nothing_in_the_vault() {
     let (first, _second) = mock_pages(&server, "sms-backup-restore");
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
-    let cfg = VaultPullConfig {
+    let cfg = PullConfig {
         cancel: Some(Arc::new(AtomicBool::new(true))),
         ..config(&out, server.base_url())
     };
@@ -533,7 +533,7 @@ fn skipping_attachments_writes_messages_without_files_or_downloads() {
     let photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
-    let cfg = VaultPullConfig {
+    let cfg = PullConfig {
         skip_attachments: true,
         ..config(&out, server.base_url())
     };
@@ -560,7 +560,7 @@ fn a_query_becomes_the_runs_query_scope_and_progress_narrates_the_run() {
     let _photo = mock_asset(&server, PHOTO_SHA, "sms-backup-restore", PHOTO_BYTES);
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
-    let cfg = VaultPullConfig {
+    let cfg = PullConfig {
         query: " from:sam ".into(),
         ..config(&out, server.base_url())
     };
@@ -660,7 +660,7 @@ fn a_scope_the_vault_refuses_fails_the_run_with_the_vaults_sentence() {
     let (first, _second) = mock_pages(&server, "sms-backup-restore");
     let dir = tempdir().unwrap();
     let out = dir.path().join("pulled");
-    let cfg = VaultPullConfig {
+    let cfg = PullConfig {
         query: "wibble:yes".into(),
         ..config(&out, server.base_url())
     };
@@ -679,11 +679,11 @@ fn a_scope_the_vault_refuses_fails_the_run_with_the_vaults_sentence() {
 fn a_blank_key_or_output_folder_is_refused_before_login() {
     let dir = tempdir().unwrap();
     let base_url = "http://127.0.0.1:1".to_string();
-    let blank_key = VaultPullConfig {
+    let blank_key = PullConfig {
         key: "  ".into(),
         ..config(dir.path(), base_url.clone())
     };
-    let blank_out_dir = VaultPullConfig {
+    let blank_out_dir = PullConfig {
         out_dir: Path::new("").to_path_buf(),
         ..config(dir.path(), base_url)
     };

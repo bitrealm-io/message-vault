@@ -29,7 +29,7 @@ Administrators also see a **Users** tab, and the desktop app adds **System** and
 
 Desktop app only.
 
-- **Staging directory** — where Import and Export write their temporary files, `~/message-vault` by default
+- **Staging directory** — where Import and Export write their temporary files, `~/message-crate` by default
 - **Remember importer paths** — Import restores the last backup path for each import source
 - **ffmpeg directory** — a folder holding `ffmpeg` and `ffprobe` when they aren't on the system PATH. See [Media and privacy](/docs/user/how-to/media-and-privacy/)
 

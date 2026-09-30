@@ -4,21 +4,21 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Conversation } from "../../lib/types";
 import {
   createContactGroup,
   getAccountProfile,
   listContactGroups,
   trashConversation,
   updateContactGroupMembers,
-} from "../../lib/vaultApi";
-import { mockedAuth, VaultProviders } from "../../test/vaultProviders";
+} from "../../lib/serverApi";
+import type { Conversation } from "../../lib/types";
+import { mockedAuth, Providers } from "../../test/providers";
 import ConversationHeader from "./ConversationHeader";
 
 vi.mock("../../lib/auth", () => ({ useAuth: () => mockedAuth }));
 
-vi.mock("../../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/vaultApi")>()),
+vi.mock("../../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/serverApi")>()),
   trashConversation: vi.fn(),
   getAccountProfile: vi.fn(),
   listContactGroups: vi.fn(),
@@ -83,7 +83,7 @@ function conversation(overrides: Partial<Conversation> = {}): Conversation {
 
 function renderHeader(c: Conversation) {
   return render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter initialEntries={["/messages/42"]}>
         <Routes>
           <Route
@@ -106,7 +106,7 @@ function renderHeader(c: Conversation) {
           <Route path="/" element={<div>Conversations list</div>} />
         </Routes>
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 

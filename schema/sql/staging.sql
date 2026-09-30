@@ -73,8 +73,8 @@ CREATE TABLE IF NOT EXISTS staging_messages (
     num_replies INTEGER NOT NULL DEFAULT 0,
     -- Stable order within the conversation when timestamps collide.
     sort_order INTEGER NOT NULL,
-    -- Import run that staged this row (`vault_imports.id`).
-    import_id INTEGER REFERENCES vault_imports(id) ON DELETE SET NULL
+    -- Import run that staged this row (`imports.id`).
+    import_id INTEGER REFERENCES imports(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS ix_staging_messages_conversation_timestamp

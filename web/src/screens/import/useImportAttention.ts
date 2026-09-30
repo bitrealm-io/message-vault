@@ -1,5 +1,5 @@
-import { listImports } from "../../lib/vaultApi";
-import { useVaultQuery } from "../../lib/vaultQuery";
+import { useRouteQuery } from "../../lib/routeQuery";
+import { listImports } from "../../lib/serverApi";
 import { isReviewPhase, useImportRunState } from "./importRunStore";
 
 /** Why the Import sidebar entry carries a badge, or null when it does not. */
@@ -20,7 +20,7 @@ const WAITING_STAGES = new Set(["awaiting_gate_1", "awaiting_gate_2"]);
  */
 export function useImportAttention(enabled: boolean): ImportAttention | null {
   const run = useImportRunState();
-  const vault = useVaultQuery(
+  const vault = useRouteQuery(
     ["imports", "running"],
     (signal) => listImports({ status: "running", limit: 1 }, { signal }),
     { enabled, staleTime: 30_000 },

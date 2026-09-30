@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 
 pub use parse::{mail_message_from_eml_bytes, mail_messages_from_mbox};
 
-const MESSAGE_ID_DOMAIN_DEFAULT: &str = "message-vault-io.local";
+const MESSAGE_ID_DOMAIN_DEFAULT: &str = "message-crate.local";
 const MESSAGE_ID_DOMAIN_IMESSAGE: &str = "imessage.local";
 const SMS_ADDRESS_DOMAIN: &str = "sms.local";
 const HANDLE_ADDRESS_DOMAIN: &str = "handle.local";
@@ -374,7 +374,7 @@ fn envelope_sender(msg: &MailMessage) -> String {
     {
         format!("{handle}@{SMS_ADDRESS_DOMAIN}")
     } else {
-        "MAILER-DAEMON@message-vault-io.local".into()
+        "MAILER-DAEMON@message-crate.local".into()
     }
 }
 
@@ -568,7 +568,7 @@ fn opt_header<'m>(
 }
 
 /// Serialize one message as an RFC 5322 `.eml`: envelope addresses, the
-/// Message Vault headers every source carries, the iMessage-only headers,
+/// Message Crate headers every source carries, the iMessage-only headers,
 /// then the text body and one MIME part per attachment.
 fn build_eml(msg: &MailMessage) -> Result<Vec<u8>> {
     let (from, to) = envelope_addresses(msg);

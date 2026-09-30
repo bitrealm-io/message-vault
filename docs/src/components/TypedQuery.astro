@@ -40,9 +40,9 @@ function split(text: string): Part[] {
 const parts = split(query);
 ---
 
-<div class="mv-query not-content" aria-label={`Example query: ${query}`}>
-  <span class="mv-query__text">{
-    parts.map((p) => (p.kind === 'k' ? <span class="mv-k">{p.text}</span> : p.text))
+<div class="mc-query not-content" aria-label={`Example query: ${query}`}>
+  <span class="mc-query__text">{
+    parts.map((p) => (p.kind === 'k' ? <span class="mc-k">{p.text}</span> : p.text))
   }</span>
-  {note && <span class="mv-query__note">{note}</span>}
+  {note && <span class="mc-query__note">{note}</span>}
 </div>

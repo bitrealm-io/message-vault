@@ -1,4 +1,4 @@
-import type { components } from "../../lib/vaultApi.types";
+import type { components } from "../../lib/serverApi.types";
 
 /** One identity as the vault lists it, with its messages. */
 export type Identity = components["schemas"]["Identity"];

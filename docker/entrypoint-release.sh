@@ -8,8 +8,8 @@ CONFIG_DOCKER="config/config.docker.toml"
 CONFIG="config/config.toml"
 DEMO_DATA="${DEMO_DATA-true}"
 
-export VAULT_DB="${VAULT_DB:-/app/data/vault.db}"
-export VAULT_DATA_DIR="${VAULT_DATA_DIR:-/app/data}"
+export MC_DB="${MC_DB:-/app/data/messagecrate.db}"
+export MC_DATA_DIR="${MC_DATA_DIR:-/app/data}"
 
 ensure_docker_config() {
   mkdir -p config data
@@ -24,10 +24,10 @@ demo_data_requested() {
 }
 
 seed_if_needed() {
-  if [[ ! -f data/vault.db ]]; then
-    rm -f data/vault.ready
+  if [[ ! -f data/messagecrate.db ]]; then
+    rm -f data/server.ready
   fi
-  if [[ -f data/vault.db ]]; then
+  if [[ -f data/messagecrate.db ]]; then
     echo "Vault DB present; skipping seed (DEMO_DATA=${DEMO_DATA})."
     ensure_docker_config
     return

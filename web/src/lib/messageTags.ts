@@ -4,6 +4,7 @@ import {
   useNameCollectionActions,
   useSetNamedSetMembers,
 } from "./nameCollection";
+import { keys } from "./queryKeys";
 import { forTag } from "./searchQuery";
 import {
   createMessageTag,
@@ -11,8 +12,7 @@ import {
   listMessageTags,
   updateMessageTag,
   updateMessageTagMembers,
-} from "./vaultApi";
-import { keys } from "./vaultKeys";
+} from "./serverApi";
 
 /** Names that must not be created as message tags. */
 export const RESERVED_TAG_NAMES = new Set(

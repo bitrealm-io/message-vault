@@ -411,7 +411,7 @@ fn gc_stale_incoming_removes_old_sessions() {
 
 #[tokio::test]
 async fn an_asset_put_then_get_returns_the_same_bytes() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
 
     // Arbitrary non-UTF-8 bytes, to prove the round trip preserves the
     // raw content rather than only text that happens to decode.
@@ -469,7 +469,7 @@ async fn an_asset_put_then_get_returns_the_same_bytes() {
 
 #[tokio::test]
 async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
 
     let unknown = "0".repeat(64);
     let (status, text) = crate::test_support::get_raw(
@@ -487,7 +487,7 @@ async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
 /// own check is what answers. `docs/architecture/http-api.md`: the status carries the meaning.
 #[tokio::test]
 async fn an_upload_part_over_the_part_size_is_a_json_413() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let mut state = vault.state.clone();
     // `UploadLimits` is `Copy` and `part_size` is public, so a test can lower
     // it without rebuilding the config.
@@ -521,7 +521,7 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
 /// and that `complete` installs bytes the vault then serves.
 #[tokio::test]
 async fn a_multipart_upload_completes_end_to_end_over_http() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let mut state = vault.state.clone();
     state.upload_limits.part_size = 16;
     let bytes: Vec<u8> = (0u8..40).collect();
@@ -651,7 +651,7 @@ fn lookup_ignores_a_file_named_with_an_extension() {
 /// body is bytes, so nothing is recorded and the download falls back to it.
 #[tokio::test]
 async fn an_asset_put_keeps_its_media_type_but_not_octet_stream() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let server = crate::test_support::serve(&vault.state).await;
     let client = reqwest::Client::new();
     let url = |sha: &str| format!("{}/v1/assets/{sha}?source=imessage", server.base());
@@ -713,7 +713,7 @@ async fn an_asset_put_keeps_its_media_type_but_not_octet_stream() {
 /// nothing: the answer is 200 with where the bytes are, and no session.
 #[tokio::test]
 async fn starting_an_upload_for_a_stored_blob_answers_200_already_present() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let server = crate::test_support::serve(&vault.state).await;
     let client = reqwest::Client::new();
     let bytes = b"already-stored".to_vec();
@@ -761,7 +761,7 @@ async fn starting_an_upload_for_a_stored_blob_answers_200_already_present() {
 /// manifest and parts included, so an abandoned upload holds no disk.
 #[tokio::test]
 async fn deleting_an_upload_answers_204_and_removes_its_files() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let mut state = vault.state.clone();
     state.upload_limits.part_size = 16;
     let server = crate::test_support::serve(&state).await;
@@ -825,7 +825,7 @@ async fn deleting_an_upload_answers_204_and_removes_its_files() {
 /// does not, and stores nothing.
 #[tokio::test]
 async fn an_asset_put_with_an_empty_body_answers_422() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let server = crate::test_support::serve(&vault.state).await;
     let sha = sha256_hex(b"never-sent");
     let response = reqwest::Client::new()
@@ -857,7 +857,7 @@ async fn an_asset_put_with_an_empty_body_answers_422() {
 /// 200 with no `Location`, like the PUT does, and drops the session.
 #[tokio::test]
 async fn completing_an_upload_for_a_blob_a_put_stored_first_answers_200() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let mut state = vault.state.clone();
     state.upload_limits.part_size = 16;
     let server = crate::test_support::serve(&state).await;

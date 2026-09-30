@@ -6,7 +6,7 @@
  * The cases that used to be here for the module-level cache, the shared
  * in-flight request, and the browser event announcing a change are gone with
  * the code they covered — that is TanStack Query's job now, and
- * `vaultQuery.test.tsx` covers the part of it that is ours. What remains is
+ * `routeQuery.test.tsx` covers the part of it that is ours. What remains is
  * this module's own behaviour: the shape it reads out of a response, the ids it
  * addresses mutations by, and putting a mutation's answer where the sidebar
  * reads it.
@@ -18,17 +18,17 @@ import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type SavedSearch, useSavedSearchActions, useSavedSearches } from "./savedSearches";
 import {
-  createSavedSearch as createVaultSavedSearch,
-  deleteSavedSearch as deleteVaultSavedSearch,
+  createSavedSearch,
+  deleteSavedSearch,
   listSavedSearches,
-  updateSavedSearch as updateVaultSavedSearch,
-} from "./vaultApi";
+  updateSavedSearch,
+} from "./serverApi";
 
 const account = { current: 7 };
 vi.mock("./auth", () => ({ useAuth: () => ({ accountId: account.current }) }));
 
-vi.mock("./vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./vaultApi")>()),
+vi.mock("./serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./serverApi")>()),
   listSavedSearches: vi.fn(),
   createSavedSearch: vi.fn(),
   updateSavedSearch: vi.fn(),
@@ -36,9 +36,9 @@ vi.mock("./vaultApi", async (importOriginal) => ({
 }));
 
 const list = vi.mocked(listSavedSearches);
-const create = vi.mocked(createVaultSavedSearch);
-const update = vi.mocked(updateVaultSavedSearch);
-const remove = vi.mocked(deleteVaultSavedSearch);
+const create = vi.mocked(createSavedSearch);
+const update = vi.mocked(updateSavedSearch);
+const remove = vi.mocked(deleteSavedSearch);
 
 function search(id: number, name: string, kind = "manual"): SavedSearch {
   return { id, name, query: `kind:group ${name}`, kind };

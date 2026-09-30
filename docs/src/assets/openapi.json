@@ -8238,7 +8238,7 @@
           "Saved searches"
         ],
         "summary": "Delete a saved search.",
-        "description": "Deleting an import-created saved search removes the shortcut only. The\n`vault_imports` row it pointed at is the account's permanent record of that\nrun and is never touched here.",
+        "description": "Deleting an import-created saved search removes the shortcut only. The\n`imports` row it pointed at is the account's permanent record of that\nrun and is never touched here.",
         "operationId": "delete_saved_search",
         "parameters": [
           {
@@ -8656,6 +8656,413 @@
         ]
       }
     },
+    "/v1/server": {
+      "get": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Report whether this Message Crate is unclaimed, closed, or open.",
+        "operationId": "get_server",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vault"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/server/claim": {
+      "post": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Claim an unclaimed Message Crate by creating its owner.",
+        "description": "Unauthenticated, because a Message Crate with no owner has no credential\nthat could authorize this. Whoever reaches an unclaimed one first may\nclaim it: Message Crate is self-hosted, so its operator installs the\nsoftware, claims it, and publishes the port, in that order and at times\nof their choosing. An unclaimed one is also empty, so a lost race\ndestroys nothing and announces itself at once.",
+        "operationId": "claim_server",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Claimed; the owner's Session is made",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "`/v1/session`, the Session the claim made"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateSessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/malformed-body"
+            ]
+          },
+          "409": {
+            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/state-conflict"
+            ]
+          },
+          "413": {
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/payload-too-large"
+            ]
+          },
+          "415": {
+            "description": "[`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type"
+            ]
+          },
+          "422": {
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
+            ]
+          },
+          "429": {
+            "description": "[`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim Message Crate, which count once for the whole server.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/rate-limited"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/server/settings": {
+      "get": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Read the server settings.",
+        "operationId": "get_server_settings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/authentication-required"
+            ]
+          },
+          "403": {
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/not-the-owner",
+              "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
+              "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
+            ]
+          },
+          "422": {
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
+            ]
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "owner"
+            ]
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Change the server settings.",
+        "operationId": "update_server_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateServerSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/malformed-body"
+            ]
+          },
+          "401": {
+            "description": "[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/authentication-required"
+            ]
+          },
+          "403": {
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/not-the-owner",
+              "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
+              "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
+            ]
+          },
+          "413": {
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/payload-too-large"
+            ]
+          },
+          "415": {
+            "description": "[`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type"
+            ]
+          },
+          "422": {
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
+            ]
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "owner"
+            ]
+          }
+        ]
+      }
+    },
+    "/v1/server/storage": {
+      "get": {
+        "tags": [
+          "Server"
+        ],
+        "summary": "Read what the database holds.",
+        "description": "The counts and the attachment bytes are summed over every account. The database, messages and full-text search sizes are measured on disk. Each account's share of message storage is an estimate from its share of text. Counts and totals only, never a name or a line of text (`docs/adr/0008-the-owner-holds-no-messages.md`, \"What the owner may see\"). The owner's, because the owner administers this Message Crate and nobody else holds more than their own account.",
+        "operationId": "get_server_storage",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerStorage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/authentication-required"
+            ]
+          },
+          "403": {
+            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/not-the-owner",
+              "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
+              "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
+            ]
+          },
+          "422": {
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
+            ]
+          }
+        },
+        "security": [
+          {
+            "session": [
+              "owner"
+            ]
+          }
+        ]
+      }
+    },
     "/v1/session": {
       "get": {
         "tags": [
@@ -8973,413 +9380,6 @@
           }
         ]
       }
-    },
-    "/v1/vault": {
-      "get": {
-        "tags": [
-          "Server"
-        ],
-        "summary": "Report whether this Message Crate is unclaimed, closed, or open.",
-        "operationId": "get_vault",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Vault"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
-            ]
-          }
-        }
-      }
-    },
-    "/v1/vault/claim": {
-      "post": {
-        "tags": [
-          "Server"
-        ],
-        "summary": "Claim an unclaimed Message Crate by creating its owner.",
-        "description": "Unauthenticated, because a Message Crate with no owner has no credential\nthat could authorize this. Whoever reaches an unclaimed one first may\nclaim it: Message Crate is self-hosted, so its operator installs the\nsoftware, claims it, and publishes the port, in that order and at times\nof their choosing. An unclaimed one is also empty, so a lost race\ndestroys nothing and announces itself at once.",
-        "operationId": "claim_vault",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ClaimVaultRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Claimed; the owner's Session is made",
-            "headers": {
-              "Location": {
-                "schema": {
-                  "type": "string"
-                },
-                "description": "`/v1/session`, the Session the claim made"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreateSessionResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/malformed-body"
-            ]
-          },
-          "409": {
-            "description": "[`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a Message Crate that already has an owner, or a delete on something not yet trashed.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/state-conflict"
-            ]
-          },
-          "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/payload-too-large"
-            ]
-          },
-          "415": {
-            "description": "[`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type"
-            ]
-          },
-          "422": {
-            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
-            ]
-          },
-          "429": {
-            "description": "[`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The server refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim Message Crate, which count once for the whole server.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/rate-limited"
-            ]
-          }
-        }
-      }
-    },
-    "/v1/vault/settings": {
-      "get": {
-        "tags": [
-          "Server"
-        ],
-        "summary": "Read the server settings.",
-        "operationId": "get_vault_settings",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VaultSettings"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/authentication-required"
-            ]
-          },
-          "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/not-the-owner",
-              "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
-              "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
-            ]
-          },
-          "422": {
-            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
-            ]
-          }
-        },
-        "security": [
-          {
-            "session": [
-              "owner"
-            ]
-          }
-        ]
-      },
-      "patch": {
-        "tags": [
-          "Server"
-        ],
-        "summary": "Change the server settings.",
-        "operationId": "update_vault_settings",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateVaultSettingsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VaultSettings"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/malformed-body"
-            ]
-          },
-          "401": {
-            "description": "[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/authentication-required"
-            ]
-          },
-          "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/not-the-owner",
-              "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
-              "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
-            ]
-          },
-          "413": {
-            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/payload-too-large"
-            ]
-          },
-          "415": {
-            "description": "[`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type"
-            ]
-          },
-          "422": {
-            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
-            ]
-          }
-        },
-        "security": [
-          {
-            "session": [
-              "owner"
-            ]
-          }
-        ]
-      }
-    },
-    "/v1/vault/storage": {
-      "get": {
-        "tags": [
-          "Server"
-        ],
-        "summary": "Read what the database holds.",
-        "description": "The counts and the attachment bytes are summed over every account. The database, messages and full-text search sizes are measured on disk. Each account's share of message storage is an estimate from its share of text. Counts and totals only, never a name or a line of text (`docs/adr/0008-the-owner-holds-no-messages.md`, \"What the owner may see\"). The owner's, because the owner administers this Message Crate and nobody else holds more than their own account.",
-        "operationId": "get_vault_storage",
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VaultStorage"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/authentication-required"
-            ]
-          },
-          "403": {
-            "description": "[`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the owner: creating accounts, changing server settings, or anything the owner gates.\n\n[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/not-the-owner",
-              "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
-              "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
-            ]
-          },
-          "422": {
-            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "x-problem-types": [
-              "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
-            ]
-          }
-        },
-        "security": [
-          {
-            "session": [
-              "owner"
-            ]
-          }
-        ]
-      }
     }
   },
   "components": {
@@ -9669,7 +9669,7 @@
           },
           "token_hint": {
             "type": "string",
-            "description": "Masked secret for Settings (e.g. `mv-api-Sd..mE`)."
+            "description": "Masked secret for Settings (e.g. `mc-api-Sd..mE`)."
           }
         }
       },
@@ -9753,7 +9753,7 @@
           }
         }
       },
-      "ClaimVaultRequest": {
+      "ClaimRequest": {
         "type": "object",
         "description": "Body for claiming a Message Crate.",
         "required": [
@@ -11763,7 +11763,7 @@
                 },
                 "token_hint": {
                   "type": "string",
-                  "description": "Masked secret for Settings (e.g. `mv-api-Sd..mE`)."
+                  "description": "Masked secret for Settings (e.g. `mc-api-Sd..mE`)."
                 }
               }
             },
@@ -13166,6 +13166,92 @@
           }
         }
       },
+      "ServerSettings": {
+        "type": "object",
+        "description": "The server settings the owner controls.",
+        "required": [
+          "public_registration"
+        ],
+        "properties": {
+          "public_registration": {
+            "type": "boolean",
+            "description": "Anyone reaching the server may create their own account."
+          }
+        }
+      },
+      "ServerState": {
+        "type": "string",
+        "description": "What state a Message Crate is in, from outside.",
+        "enum": [
+          "unclaimed",
+          "closed",
+          "open"
+        ]
+      },
+      "ServerStorage": {
+        "type": "object",
+        "description": "What the whole database holds, summed over every account.",
+        "required": [
+          "message_count",
+          "conversation_count",
+          "contact_count",
+          "attachment_count",
+          "total_bytes",
+          "database_bytes",
+          "messages_bytes",
+          "fts_bytes",
+          "accounts"
+        ],
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountMessages"
+            },
+            "description": "Every account, including ones with no messages: the owner first, then\nby username, as the User Accounts table lists them."
+          },
+          "attachment_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Attachment rows across every account."
+          },
+          "contact_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contacts across every account."
+          },
+          "conversation_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Conversations across every account."
+          },
+          "database_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes the database takes on disk, measured. Attachment files are not\nin it; `total_bytes` has those."
+          },
+          "fts_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes the full-text search index takes, measured, for the whole\ndatabase. It is one shared structure, so there is no per-account figure."
+          },
+          "message_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Messages across every account."
+          },
+          "messages_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes the messages table and its indexes take, measured, without the\nfull-text search index."
+          },
+          "total_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Attachment bytes across every account, by original file size."
+          }
+        }
+      },
       "Session": {
         "type": "object",
         "description": "The logged-in credential's account, username, and import sources.",
@@ -13522,7 +13608,7 @@
           }
         }
       },
-      "UpdateVaultSettingsRequest": {
+      "UpdateServerSettingsRequest": {
         "type": "object",
         "description": "Body for changing the server settings. Omitted fields are left alone.",
         "properties": {
@@ -13564,98 +13650,12 @@
             "description": "The Schema Fingerprint, the number this server stamps into its database."
           },
           "state": {
-            "$ref": "#/components/schemas/VaultState",
+            "$ref": "#/components/schemas/ServerState",
             "description": "`unclaimed` shows Create Owner alone; `closed` shows Login alone;\n`open` shows Login and Create Account."
           },
           "version": {
             "type": "string",
             "description": "The server's Build: its Product Version, plus the commit it was built\nfrom unless it is a release. An app compares the Product Version with\nits own and says so when they differ; the server serves it either way."
-          }
-        }
-      },
-      "VaultSettings": {
-        "type": "object",
-        "description": "The server settings the owner controls.",
-        "required": [
-          "public_registration"
-        ],
-        "properties": {
-          "public_registration": {
-            "type": "boolean",
-            "description": "Anyone reaching the server may create their own account."
-          }
-        }
-      },
-      "VaultState": {
-        "type": "string",
-        "description": "What state a Message Crate is in, from outside.",
-        "enum": [
-          "unclaimed",
-          "closed",
-          "open"
-        ]
-      },
-      "VaultStorage": {
-        "type": "object",
-        "description": "What the whole database holds, summed over every account.",
-        "required": [
-          "message_count",
-          "conversation_count",
-          "contact_count",
-          "attachment_count",
-          "total_bytes",
-          "database_bytes",
-          "messages_bytes",
-          "fts_bytes",
-          "accounts"
-        ],
-        "properties": {
-          "accounts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AccountMessages"
-            },
-            "description": "Every account, including ones with no messages: the owner first, then\nby username, as the User Accounts table lists them."
-          },
-          "attachment_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Attachment rows across every account."
-          },
-          "contact_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Contacts across every account."
-          },
-          "conversation_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Conversations across every account."
-          },
-          "database_bytes": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Bytes the database takes on disk, measured. Attachment files are not\nin it; `total_bytes` has those."
-          },
-          "fts_bytes": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Bytes the full-text search index takes, measured, for the whole\ndatabase. It is one shared structure, so there is no per-account figure."
-          },
-          "message_count": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Messages across every account."
-          },
-          "messages_bytes": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Bytes the messages table and its indexes take, measured, without the\nfull-text search index."
-          },
-          "total_bytes": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Attachment bytes across every account, by original file size."
           }
         }
       }
@@ -13664,12 +13664,12 @@
       "api-token": {
         "type": "http",
         "scheme": "bearer",
-        "description": "A named API token: the `mv-api-` secret `POST /v1/accounts/{id}/api-tokens` returns once, carrying the import and export scopes it was created with; a token never carries delete. Only the routes listing it accept one; every other route answers 403."
+        "description": "A named API token: the `mc-api-` secret `POST /v1/accounts/{id}/api-tokens` returns once, carrying the import and export scopes it was created with; a token never carries delete. Only the routes listing it accept one; every other route answers 403."
       },
       "session": {
         "type": "http",
         "scheme": "bearer",
-        "description": "A logged-in Session: the `mv-user-` token `POST /v1/session` returns. A route naming a scope needs that permission on the account."
+        "description": "A logged-in Session: the `mc-user-` token `POST /v1/session` returns. A route naming a scope needs that permission on the account."
       }
     }
   },

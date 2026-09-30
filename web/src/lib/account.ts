@@ -1,4 +1,4 @@
-import type { components } from "./vaultApi.types";
+import type { components } from "./serverApi.types";
 
 /**
  * The logged-in account as the vault returns it from `GET /v1/accounts/{id}`:

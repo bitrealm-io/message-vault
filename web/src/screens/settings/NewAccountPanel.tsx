@@ -1,8 +1,8 @@
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import Button from "../../components/Button";
-import { keys } from "../../lib/vaultKeys";
-import { useVaultCache } from "../../lib/vaultQuery";
+import { keys } from "../../lib/queryKeys";
+import { useRouteCache } from "../../lib/routeQuery";
 import { useCreateAccountForm } from "../auth/useCreateAccountForm";
 import { inputClassName, sectionTitleClass } from "./profileStyles";
 
@@ -21,7 +21,7 @@ import { inputClassName, sectionTitleClass } from "./profileStyles";
  */
 export function NewAccountPanel() {
   const navigate = useNavigate();
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   const {
     username,
     setUsername,

@@ -2,9 +2,9 @@
 
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { listConversationMessages, listMessages } from "../../lib/serverApi";
 import type { Message } from "../../lib/types";
-import { listConversationMessages, listMessages } from "../../lib/vaultApi";
-import { mockedAuth, VaultProviders } from "../../test/vaultProviders";
+import { mockedAuth, Providers } from "../../test/providers";
 import {
   buildFooterLabel,
   conversationYears,
@@ -13,8 +13,8 @@ import {
 
 vi.mock("../../lib/auth", () => ({ useAuth: () => mockedAuth }));
 
-vi.mock("../../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/vaultApi")>()),
+vi.mock("../../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/serverApi")>()),
   listConversationMessages: vi.fn(),
   listMessages: vi.fn(),
 }));
@@ -87,7 +87,7 @@ describe("useConversationMessages", () => {
 
     const { result, rerender } = renderHook(
       ({ id }: { id: number }) => useConversationMessages(id),
-      { initialProps: { id: 1 }, wrapper: VaultProviders },
+      { initialProps: { id: 1 }, wrapper: Providers },
     );
 
     rerender({ id: 2 });
@@ -108,7 +108,7 @@ describe("useConversationMessages", () => {
 
     const { result, rerender } = renderHook(
       ({ id }: { id: number }) => useConversationMessages(id),
-      { initialProps: { id: 1 }, wrapper: VaultProviders },
+      { initialProps: { id: 1 }, wrapper: Providers },
     );
 
     rerender({ id: 2 });
@@ -130,7 +130,7 @@ describe("useConversationMessages", () => {
 
     const { result } = renderHook(({ id }: { id: number }) => useConversationMessages(id), {
       initialProps: { id: 7 },
-      wrapper: VaultProviders,
+      wrapper: Providers,
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -176,7 +176,7 @@ describe("useConversationMessages", () => {
 
     const { result } = renderHook(({ id }: { id: number }) => useConversationMessages(id), {
       initialProps: { id: 7 },
-      wrapper: VaultProviders,
+      wrapper: Providers,
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -217,7 +217,7 @@ describe("useConversationMessages", () => {
 
     const { result, rerender } = renderHook(
       ({ id }: { id: number }) => useConversationMessages(id),
-      { initialProps: { id: 1 }, wrapper: VaultProviders },
+      { initialProps: { id: 1 }, wrapper: Providers },
     );
     await waitFor(() => expect(result.current.loading).toBe(false));
 

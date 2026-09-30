@@ -35,7 +35,7 @@ use crate::db::permissions::Permissions;
 use crate::db::schema;
 use crate::db::session_tokens;
 use crate::keyed_locks::KeyedLocks;
-use crate::open_vault::OpenVault;
+use crate::open_db::OpenDb;
 use crate::problem::{Problem, ProblemType};
 
 /// What a Bearer credential is allowed to do.
@@ -339,7 +339,7 @@ impl AppState {
     /// The state every handler shares, over an opened vault. `serve` and the
     /// test harness both come through here, so the locks, the rate limits
     /// and the body cap are assembled in one place.
-    pub fn new(vault: OpenVault, upload_limits: asset_uploads::UploadLimits) -> Self {
+    pub fn new(vault: OpenDb, upload_limits: asset_uploads::UploadLimits) -> Self {
         Self {
             cfg: Arc::new(vault.cfg),
             db: vault.db,
@@ -616,29 +616,29 @@ pub(crate) fn error_chain(err: &anyhow::Error) -> String {
     format!("{err:#}")
 }
 
-impl From<crate::db::vault_imports::ImportLookupError> for ApiError {
-    fn from(e: crate::db::vault_imports::ImportLookupError) -> Self {
+impl From<crate::db::imports::ImportLookupError> for ApiError {
+    fn from(e: crate::db::imports::ImportLookupError) -> Self {
         match e {
-            crate::db::vault_imports::ImportLookupError::NotFound { import_id } => {
+            crate::db::imports::ImportLookupError::NotFound { import_id } => {
                 Self::NotFound(format!("import {import_id} not found for this account"))
             }
-            crate::db::vault_imports::ImportLookupError::InvalidSession { message } => {
+            crate::db::imports::ImportLookupError::InvalidSession { message } => {
                 Self::StateConflict(message)
             }
-            crate::db::vault_imports::ImportLookupError::Db(err) => Self::Internal(err),
+            crate::db::imports::ImportLookupError::Db(err) => Self::Internal(err),
         }
     }
 }
 
-impl From<crate::db::vault_imports::StartImportError> for ApiError {
-    fn from(e: crate::db::vault_imports::StartImportError) -> Self {
+impl From<crate::db::imports::StartImportError> for ApiError {
+    fn from(e: crate::db::imports::StartImportError) -> Self {
         match e {
-            err @ crate::db::vault_imports::StartImportError::AlreadyActive => {
+            err @ crate::db::imports::StartImportError::AlreadyActive => {
                 // One wording for the 409, shared with the CLI paths that
                 // surface the same error through anyhow.
                 Self::StateConflict(err.to_string())
             }
-            crate::db::vault_imports::StartImportError::Db(err) => Self::Internal(err),
+            crate::db::imports::StartImportError::Db(err) => Self::Internal(err),
         }
     }
 }
@@ -908,7 +908,7 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
     let upload_limits =
         asset_uploads::UploadLimits::new(server.asset_part_size, server.asset_max_bytes);
 
-    let vault = OpenVault::open(cfg).await?;
+    let vault = OpenDb::open(cfg).await?;
     if engine == DbEngine::Sqlite {
         crate::operation_lock::mark_ready(&vault.cfg.paths.db)?;
         let mode: String = sqlx::query_scalar("PRAGMA journal_mode")
@@ -1066,7 +1066,9 @@ pub async fn resolve_auth_on_conn(
     // permissions. An API token never does, whichever account issued it, so
     // no token can reach what the owner reaches.
     let capability = match credential {
-        Credential::Session if account_profile::is_vault_owner(account_id) => AuthCapability::Owner,
+        Credential::Session if account_profile::is_server_owner(account_id) => {
+            AuthCapability::Owner
+        }
         Credential::Session => AuthCapability::Session {
             permissions: auth.permissions,
         },
@@ -1189,7 +1191,7 @@ pub(crate) async fn stream_body_to_file(
 }
 
 /// Build the `AppState` every test in this crate drives: a real `Config`
-/// rooted at `data_dir` (with a sibling `vault.db` path that nothing in the
+/// rooted at `data_dir` (with a sibling `messagecrate.db` path that nothing in the
 /// test suite reads from disk — queries go through `pool`), the given pool,
 /// and default upload limits. Goes through [`AppState::new`], the same
 /// assembly `serve` uses. `#[cfg(test)]`-gated so it never ships in a release
@@ -1199,7 +1201,7 @@ pub(crate) async fn stream_body_to_file(
 pub(crate) fn test_app_state(pool: sqlx::AnyPool, data_dir: &Path) -> AppState {
     let cfg = crate::config::Config {
         paths: crate::config::PathsConfig {
-            db: data_dir.join("vault.db"),
+            db: data_dir.join("messagecrate.db"),
             data_dir: data_dir.to_path_buf(),
             assets_dir: "assets".into(),
             assets_converted_dir: "assets_converted".into(),
@@ -1214,7 +1216,7 @@ pub(crate) fn test_app_state(pool: sqlx::AnyPool, data_dir: &Path) -> AppState {
         database: crate::config::DatabaseConfig::default(),
     };
     AppState::new(
-        OpenVault { cfg, db: pool },
+        OpenDb { cfg, db: pool },
         asset_uploads::UploadLimits::default(),
     )
 }

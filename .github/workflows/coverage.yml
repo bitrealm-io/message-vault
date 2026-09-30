@@ -64,7 +64,7 @@ jobs:
 
       - name: Measure coverage
         env:
-          MV_TEST_POSTGRES_URL: postgres://vault:vault@127.0.0.1:5432/vault
+          MC_TEST_POSTGRES_URL: postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate
         run: ./scripts/coverage.sh
 
       - name: Publish summary

@@ -4,7 +4,7 @@ import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccountProfile } from "../../lib/account";
-import { mockedAuth, renderWithVault as render } from "../../test/vaultProviders";
+import { mockedAuth, renderWithProviders as render } from "../../test/providers";
 import { IdentitiesSection } from "./IdentitiesSection";
 import { type Identity, removeBody } from "./identities";
 
@@ -14,8 +14,8 @@ vi.mock("../../lib/useSettingsAccount", () => ({
   useUpdateSettingsProfile: () => ({ mutateAsync, isPending: false }),
 }));
 vi.mock("../../lib/auth", () => ({ useAuth: () => mockedAuth }));
-vi.mock("../../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/vaultApi")>()),
+vi.mock("../../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/serverApi")>()),
   listAccountIdentities: (...a: unknown[]) => listAccountIdentities(...a),
 }));
 

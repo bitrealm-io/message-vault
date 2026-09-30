@@ -2,10 +2,10 @@
 
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getImportContacts } from "../../../lib/vaultApi";
+import { getImportContacts } from "../../../lib/serverApi";
 import ImportContactsPanel from "./ImportContactsPanel";
 
-vi.mock("../../../lib/vaultApi", () => ({
+vi.mock("../../../lib/serverApi", () => ({
   getImportContacts: vi.fn(),
 }));
 

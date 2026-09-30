@@ -1,17 +1,18 @@
 //! Mock HTTP server tests for login, JSON Lines push, and journal skip.
 //!
 //! JSON Lines means one JSON object per line. The journal is
-//! `.vault-import-state.jsonl`, a local log of which conversations and files
+//! `.import-state.jsonl`, a local log of which conversations and files
 //! were already uploaded.
 
+use message_crate_push::ImportMode;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use message_crate_push::ImportMode;
 
 use httpmock::prelude::*;
+use message_crate_push::{AuthError, ProgressEvent, PushConfig, authenticate, run};
 use message_ir::{
     ConversationDocument, ConversationMeta, ConversationStats, ExportMeta, IrAttachment,
     IrConversationType, IrDirection, IrMessage, IrMessageKind, IrParticipant, IrService,
@@ -20,7 +21,6 @@ use message_ir::{
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use tempfile::tempdir;
-use message_crate_push::{AuthError, ProgressEvent, VaultPushConfig, authenticate, run};
 
 /// One SMS conversation used by most mock-server tests.
 fn sample_doc() -> ConversationDocument {
@@ -102,12 +102,12 @@ fn mock_import_run(server: &MockServer, id: i64) -> httpmock::Mock<'_> {
 }
 
 /// Push config that skips attachments, pointed at a mock vault URL.
-fn text_only_config(dir: &Path, base_url: String) -> VaultPushConfig {
-    VaultPushConfig {
+fn text_only_config(dir: &Path, base_url: String) -> PushConfig {
+    PushConfig {
         input: dir.to_path_buf(),
         base_url,
         username: "alice".into(),
-        key: "mv_test".into(),
+        key: "mc_test".into(),
         mode: ImportMode::Append,
         continue_on_error: true,
         force: false,
@@ -124,7 +124,7 @@ fn text_only_config(dir: &Path, base_url: String) -> VaultPushConfig {
         asset_max_bytes: message_crate_push::DEFAULT_ASSET_MAX_BYTES,
         report_path: Some(dir.join("message-crate-push-report.json")),
         log_path: Some(dir.join("message-crate-push.log")),
-        journal_path: Some(dir.join(".vault-import-state.jsonl")),
+        journal_path: Some(dir.join(".import-state.jsonl")),
         cancel: None,
         import_id: None,
     }
@@ -172,7 +172,7 @@ fn authenticate_and_push_text_only_conversation() {
         }));
     });
 
-    let info = authenticate(&server.base_url(), "mv_test").unwrap();
+    let info = authenticate(&server.base_url(), "mc_test").unwrap();
     assert_eq!(info.account_id, 1);
 
     let dir = tempdir().unwrap();
@@ -243,7 +243,7 @@ fn reuses_supplied_import_session_without_starting_or_completing_one() {
     let dir = tempdir().unwrap();
     write_jsonl(dir.path(), &sample_doc());
 
-    let cfg = VaultPushConfig {
+    let cfg = PushConfig {
         import_id: Some(99),
         ..text_only_config(dir.path(), server.base_url())
     };
@@ -336,7 +336,7 @@ fn an_aborted_push_completes_its_import_run_as_failed() {
 
     let dir = tempdir().unwrap();
     write_jsonl(dir.path(), &sample_doc());
-    let cfg = VaultPushConfig {
+    let cfg = PushConfig {
         continue_on_error: false,
         ..text_only_config(dir.path(), server.base_url())
     };
@@ -554,7 +554,7 @@ fn a_push_without_continue_on_error_stops_at_the_first_bad_file() {
 
     let dir = tempdir().unwrap();
     folder_with_a_bad_middle_file(dir.path());
-    let cfg = VaultPushConfig {
+    let cfg = PushConfig {
         continue_on_error: false,
         ..text_only_config(dir.path(), server.base_url())
     };
@@ -629,7 +629,7 @@ fn resumes_message_batches_from_compacted_journal() {
     run(&cfg, None).unwrap();
     assert_eq!(import.calls(), 1);
 
-    let journal_path = dir.path().join(".vault-import-state.jsonl");
+    let journal_path = dir.path().join(".import-state.jsonl");
     let compacted = fs::read_to_string(&journal_path).unwrap();
     assert!(compacted.contains("\"event\":\"message_batch_ok\""));
     let without_file_success = compacted
@@ -680,7 +680,7 @@ fn a_replace_push_ignores_the_journal_and_sends_every_message_again() {
     assert!(run(&cfg, None).unwrap().ok);
     assert_eq!(import.calls(), 1);
 
-    let replace = VaultPushConfig {
+    let replace = PushConfig {
         mode: ImportMode::Replace,
         force: false,
         ..cfg
@@ -752,11 +752,11 @@ fn profiles_attachment_upload_phases() {
 
     let report_path = dir.path().join("message-crate-push-report.json");
     let log_path = dir.path().join("message-crate-push.log");
-    let cfg = VaultPushConfig {
+    let cfg = PushConfig {
         input: dir.path().to_path_buf(),
         base_url: server.base_url(),
         username: "alice".into(),
-        key: "mv_test".into(),
+        key: "mc_test".into(),
         mode: ImportMode::Append,
         continue_on_error: false,
         force: false,
@@ -773,7 +773,7 @@ fn profiles_attachment_upload_phases() {
         asset_max_bytes: message_crate_push::DEFAULT_ASSET_MAX_BYTES,
         report_path: Some(report_path.clone()),
         log_path: Some(log_path.clone()),
-        journal_path: Some(dir.path().join(".vault-import-state.jsonl")),
+        journal_path: Some(dir.path().join(".import-state.jsonl")),
         cancel: None,
         import_id: None,
     };
@@ -1265,7 +1265,7 @@ fn authenticate_maps_html_and_status_failures() {
         then.status(200)
             .body("<!DOCTYPE html><html><body>browse ui</body></html>");
     });
-    let err = authenticate(&server.base_url(), "mv_test").unwrap_err();
+    let err = authenticate(&server.base_url(), "mc_test").unwrap_err();
     assert_eq!(err.kind(), "wrong_host");
     assert!(err.user_message().contains("website"));
     assert!(err.detail().contains("HTML"));
@@ -1276,7 +1276,7 @@ fn authenticate_maps_html_and_status_failures() {
         when.method(GET).path("/v1/session");
         then.status(403).body("username does not match API key");
     });
-    let err = authenticate(&server.base_url(), "mv_test").unwrap_err();
+    let err = authenticate(&server.base_url(), "mc_test").unwrap_err();
     assert_eq!(err.kind(), "forbidden");
     assert!(!err.user_message().contains("username does not match"));
     assert!(err.detail().contains("username does not match API key"));
@@ -1284,7 +1284,7 @@ fn authenticate_maps_html_and_status_failures() {
 
 #[test]
 fn authenticate_rejects_invalid_url() {
-    let err = authenticate("not a url", "mv_test").unwrap_err();
+    let err = authenticate("not a url", "mc_test").unwrap_err();
     assert_eq!(err.kind(), "invalid_url");
     assert!(matches!(err, AuthError::InvalidUrl { .. }));
 }
@@ -1479,7 +1479,7 @@ fn a_failed_upload_frees_a_shared_file_for_the_next_conversation() {
     second.export.source = "whatsapp".into();
     second.messages[0].attachments = vec![ir_attachment("attachments/shared.txt", digest.clone())];
     write_jsonl(dir.path(), &second);
-    let cfg = VaultPushConfig {
+    let cfg = PushConfig {
         prepare_workers: 1,
         ..text_only_config(dir.path(), server.base_url())
     };
@@ -1889,7 +1889,7 @@ fn a_push_that_skips_attachments_sends_text_and_uploads_nothing() {
         hex::encode(Sha256::digest(b"photo bytes")),
     )];
     write_jsonl(dir.path(), &doc);
-    let cfg = VaultPushConfig {
+    let cfg = PushConfig {
         skip_attachments: true,
         ..text_only_config(dir.path(), server.base_url())
     };
@@ -1948,7 +1948,7 @@ fn conversations_from_two_sources_go_out_in_separate_requests() {
 
 /// The journal rows of one kind (`file_ok`, `message_batch_ok`, …).
 fn journal_events(dir: &Path, event: &str) -> Vec<serde_json::Value> {
-    fs::read_to_string(dir.join(".vault-import-state.jsonl"))
+    fs::read_to_string(dir.join(".import-state.jsonl"))
         .unwrap()
         .lines()
         .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
@@ -2000,7 +2000,7 @@ fn a_batch_retried_after_a_503_is_counted_and_journaled_once() {
 
     let dir = tempdir().unwrap();
     write_jsonl(dir.path(), &sample_doc());
-    let cfg = VaultPushConfig {
+    let cfg = PushConfig {
         max_retries: 2,
         ..text_only_config(dir.path(), server.base_url())
     };
@@ -2069,7 +2069,7 @@ fn a_cancelled_push_sends_no_further_batch_and_resumes_later() {
     write_jsonl(dir.path(), &sample_doc_for("+15555550102", "guid-2"));
     write_jsonl(dir.path(), &sample_doc_for("+15555550103", "guid-3"));
     let cancel = Arc::new(AtomicBool::new(false));
-    let cfg = VaultPushConfig {
+    let cfg = PushConfig {
         batch_size: 1,
         prepare_ahead: 1,
         prepare_workers: 1,
@@ -2220,7 +2220,7 @@ fn an_unreadable_2xx_answer_is_not_retried() {
 
     let dir = tempdir().unwrap();
     write_jsonl(dir.path(), &sample_doc());
-    let cfg = VaultPushConfig {
+    let cfg = PushConfig {
         max_retries: 2,
         ..text_only_config(dir.path(), server.base_url())
     };
@@ -2283,7 +2283,7 @@ fn a_chunk_that_overflows_the_pending_batch_is_sent_in_the_next_one() {
     reply.timestamp_unix_ms += 1_000;
     two_messages.messages.push(reply);
     write_jsonl(dir.path(), &two_messages);
-    let cfg = VaultPushConfig {
+    let cfg = PushConfig {
         batch_size: 2,
         ..text_only_config(dir.path(), server.base_url())
     };

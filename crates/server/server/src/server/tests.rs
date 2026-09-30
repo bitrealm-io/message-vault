@@ -49,7 +49,7 @@ const TEST_ACCOUNT: i64 = 7;
 async fn test_conn() -> (TempDir, sqlx::pool::PoolConnection<sqlx::Any>) {
     let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     (dir, conn)
 }
 
@@ -143,7 +143,7 @@ async fn test_state() -> (TempDir, AppState, String, i64) {
     let data_dir = tmp.path().join("data");
     {
         let mut conn = pool.acquire().await.unwrap();
-        schema::ensure_vault_schema(&mut conn).await.unwrap();
+        schema::ensure_schema(&mut conn).await.unwrap();
         schema::ensure_accounts_schema(&mut conn).await.unwrap();
         crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
             .await
@@ -155,9 +155,9 @@ async fn test_state() -> (TempDir, AppState, String, i64) {
     )
     .await
     .unwrap();
-    let import_id = crate::db::vault_imports::start_import(
+    let import_id = crate::db::imports::start_import(
         &mut pool.acquire().await.unwrap(),
-        &crate::db::vault_imports::StartImportArgs::new(
+        &crate::db::imports::StartImportArgs::new(
             TEST_ACCOUNT,
             "ios",
             "append",
@@ -186,7 +186,7 @@ fn auth_headers(token: &str) -> HeaderMap {
 async fn running_import(
     state: &AppState,
     token: &str,
-) -> Option<crate::db::vault_imports::ImportSummary> {
+) -> Option<crate::db::imports::ImportSummary> {
     list_imports(
         State(state.clone()),
         import_access(state, token).await,
@@ -457,7 +457,7 @@ async fn imports_complete_rejects_unknown_status() {
 
     // The session is untouched.
     let mut conn = state.db.acquire().await.unwrap();
-    let status: String = sqlx::query_scalar("SELECT status FROM vault_imports WHERE id = $1")
+    let status: String = sqlx::query_scalar("SELECT status FROM imports WHERE id = $1")
         .bind(import_id)
         .fetch_one(&mut *conn)
         .await
@@ -503,7 +503,7 @@ async fn imports_complete_rejects_invalid_issue_kind_before_db_write() {
         other => panic!("expected validation-failed, got {other:?}"),
     }
 
-    let status: String = sqlx::query_scalar("SELECT status FROM vault_imports WHERE id = $1")
+    let status: String = sqlx::query_scalar("SELECT status FROM imports WHERE id = $1")
         .bind(import_id)
         .fetch_one(&state.db)
         .await
@@ -539,9 +539,9 @@ async fn active_session_is_empty_then_reports_the_live_one() {
         dedupe: false,
         source: "imessage".into(),
         mode: ImportMode::Append,
-        tool: Some("message-vault-io".into()),
+        tool: Some("message-crate".into()),
         stage: Some("write".into()),
-        staging_dir: Some("/home/u/message-vault/staging-260830".into()),
+        staging_dir: Some("/home/u/message-crate/staging-260830".into()),
         device_id: Some("device-a".into()),
         form: Some(serde_json::json!({ "source": "imessage-ios" })),
         source_fingerprint: Some(serde_json::json!({ "size_bytes": 42 })),
@@ -571,7 +571,7 @@ async fn active_session_is_empty_then_reports_the_live_one() {
     assert_eq!(session.stage.as_deref(), Some("write"));
     assert_eq!(
         session.staging_dir.as_deref(),
-        Some("/home/u/message-vault/staging-260830")
+        Some("/home/u/message-crate/staging-260830")
     );
     assert_eq!(session.device_id.as_deref(), Some("device-a"));
     assert_eq!(session.form["source"], "imessage-ios");
@@ -769,7 +769,7 @@ async fn discard_frees_the_slot() {
 /// "matched my route and rejected my body" from "matched the wrong route".
 #[tokio::test]
 async fn literal_contact_routes_are_not_captured_by_the_id_route() {
-    let vault = crate::test_support::test_vault().await;
+    let vault = crate::test_support::test_fixture().await;
     let state = vault.state.clone();
     let user =
         crate::test_support::register_via_api(&state, "contact-routes", "hunter2hunter2").await;
@@ -808,11 +808,10 @@ async fn literal_contact_routes_are_not_captured_by_the_id_route() {
 /// green without this test.
 #[tokio::test]
 async fn import_endpoint_honors_can_import_flag() {
-    let vault = crate::test_support::test_vault().await;
+    let vault = crate::test_support::test_fixture().await;
     let state = vault.state.clone();
     let owner =
-        crate::test_support::claim_vault_as_owner(&state, "import-guard-keeper", "hunter2hunter2")
-            .await;
+        crate::test_support::claim_as_owner(&state, "import-guard-keeper", "hunter2hunter2").await;
     let user =
         crate::test_support::register_via_api(&state, "import-guard-user", "hunter2hunter2").await;
 
@@ -853,11 +852,10 @@ async fn import_endpoint_honors_can_import_flag() {
 /// off, the endpoint refuses; turned back on, it succeeds.
 #[tokio::test]
 async fn export_endpoint_honors_can_export_flag() {
-    let vault = crate::test_support::test_vault().await;
+    let vault = crate::test_support::test_fixture().await;
     let state = vault.state.clone();
     let owner =
-        crate::test_support::claim_vault_as_owner(&state, "export-guard-keeper", "hunter2hunter2")
-            .await;
+        crate::test_support::claim_as_owner(&state, "export-guard-keeper", "hunter2hunter2").await;
     let user =
         crate::test_support::register_via_api(&state, "export-guard-user", "hunter2hunter2").await;
 
@@ -900,7 +898,7 @@ async fn export_endpoint_honors_can_export_flag() {
 /// failure instead of showing the 413 the vault sent.
 #[tokio::test]
 async fn the_fast_413_carries_cors_headers() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     // The default test config's `cors_origins` is empty, which only
     // allows the packaged desktop origins (`build_cors_layer`) — not the
     // browser origin this test sends. Configure it explicitly so the
@@ -952,7 +950,7 @@ async fn the_fast_413_carries_cors_headers() {
 /// body, and an id the client sends is dropped rather than kept.
 #[tokio::test]
 async fn every_response_carries_a_server_made_request_id_and_a_problem_repeats_it() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
@@ -1001,7 +999,7 @@ async fn every_response_carries_a_server_made_request_id_and_a_problem_repeats_i
 /// the limit is `rate-limited` with a `Retry-After` the body repeats.
 #[tokio::test]
 async fn a_wrong_password_is_401_and_the_limit_answers_429_with_retry_after() {
-    let (vault, _) = crate::test_support::vault_with_account().await;
+    let (vault, _) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
@@ -1051,7 +1049,7 @@ async fn a_wrong_password_is_401_and_the_limit_answers_429_with_retry_after() {
 /// follows, so a new route is covered without anyone remembering it.
 #[tokio::test]
 async fn every_operation_refuses_a_query_parameter_it_does_not_declare() {
-    let vault = crate::test_support::test_vault().await;
+    let vault = crate::test_support::test_fixture().await;
     let state = vault.state.clone();
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
@@ -1115,7 +1113,7 @@ async fn every_operation_refuses_a_query_parameter_it_does_not_declare() {
 /// else: not on the static app, and not on the asset download.
 #[tokio::test]
 async fn accept_is_checked_on_v1_json_routes_only() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();

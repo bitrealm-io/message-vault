@@ -10,13 +10,16 @@ use httpmock::prelude::*;
 use message_crate_http::auth_check;
 
 /// Serve one body and status at `GET /v1/session`, then call `auth_check`.
-fn check_against(status: u16, body: &str) -> Result<message_crate_http::AuthInfo, message_crate_http::AuthError> {
+fn check_against(
+    status: u16,
+    body: &str,
+) -> Result<message_crate_http::AuthInfo, message_crate_http::AuthError> {
     let server = MockServer::start();
     server.mock(|when, then| {
         when.method(GET).path("/v1/session");
         then.status(status).body(body);
     });
-    auth_check(&server.base_url(), "mv-user-testkey")
+    auth_check(&server.base_url(), "mc-user-testkey")
 }
 
 /// The vault answers, and the fields the clients read come back.
@@ -98,7 +101,7 @@ fn a_body_that_is_not_json_is_reported_as_such() {
 /// A URL that cannot be parsed never reaches the network.
 #[test]
 fn an_unparsable_url_is_refused_before_the_request() {
-    let err = auth_check("not a url", "mv-user-testkey").expect_err("that is not a URL");
+    let err = auth_check("not a url", "mc-user-testkey").expect_err("that is not a URL");
     assert_eq!(err.kind(), "invalid_url");
 }
 
@@ -106,7 +109,7 @@ fn an_unparsable_url_is_refused_before_the_request() {
 /// rejection by a vault. Port 1 refuses connections.
 #[test]
 fn an_unreachable_vault_is_a_network_failure() {
-    let err = auth_check("http://127.0.0.1:1", "mv-user-testkey")
+    let err = auth_check("http://127.0.0.1:1", "mc-user-testkey")
         .expect_err("nothing is listening on port 1");
     assert_eq!(err.kind(), "network");
 }

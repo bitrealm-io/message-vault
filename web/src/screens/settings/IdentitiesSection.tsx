@@ -6,10 +6,10 @@ import IdentityTable, { type IdentityRow } from "../../components/IdentityTable"
 import type { AccountProfile } from "../../lib/account";
 import type { HandleService } from "../../lib/handleService";
 import { phonesMatch } from "../../lib/phoneTokens";
+import { keys } from "../../lib/queryKeys";
+import { useRouteQuery } from "../../lib/routeQuery";
+import { listAccountIdentities } from "../../lib/serverApi";
 import { useUpdateSettingsProfile } from "../../lib/useSettingsAccount";
-import { listAccountIdentities } from "../../lib/vaultApi";
-import { keys } from "../../lib/vaultKeys";
-import { useVaultQuery } from "../../lib/vaultQuery";
 import { type Identity, removeBody } from "./identities";
 import { sectionTitleClass } from "./profileStyles";
 
@@ -63,7 +63,7 @@ export function IdentitiesSection({
   // Until the vault answers, the profile's own identities are shown with no
   // counts, so the table never waits on a fetch and never shows a number
   // that is not the vault's.
-  const identities = useVaultQuery(
+  const identities = useRouteQuery(
     managed ? keys.ownerAccounts.identities(managedAccountId) : keys.accountProfile.identities,
     (signal) => listAccountIdentities({ signal }, managedAccountId),
   );

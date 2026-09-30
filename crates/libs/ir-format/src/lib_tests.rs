@@ -2,10 +2,10 @@
 
 use super::*;
 use mail::clean_previous_mail_output;
+use message_crate_core::OutputFormat;
 use message_ir::{
     ConversationDocument, IrDirection, IrImessage, IrMessage, IrMessageKind, IrService,
 };
-use message_crate_core::OutputFormat;
 use serde_json::{Value, json};
 use std::fs;
 

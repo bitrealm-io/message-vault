@@ -24,7 +24,7 @@ were documented as a product and distributed as a build artifact of a clone.
 
 Headless and scripted use is a real audience and the eventual reason to have a
 command line again. It is deferred, not dismissed. When it returns it should be
-one `message-vault` command with subcommands, not seven exporter binaries plus
+one `message-crate` command with subcommands, not seven exporter binaries plus
 a push and a pull.
 
 ## Considered and rejected: keeping `message-crate-push` and `message-crate-pull`
@@ -65,7 +65,7 @@ it beside the app and nowhere on `PATH`, and it appears on no documentation
 page as something to run. It is an implementation detail with a process
 around it. The audience question above — who would use a command, and for
 what — has the same answer it had: nobody yet, and when it changes the answer
-is one `message-vault` command, not a reader that happens to be executable.
+is one `message-crate` command, not a reader that happens to be executable.
 
 ## Consequences
 

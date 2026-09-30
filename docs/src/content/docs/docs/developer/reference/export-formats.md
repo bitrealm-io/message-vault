@@ -34,6 +34,6 @@ Folder layout for the formats that use an `attachments/` folder: [Export structu
 
 Every export is written as JSON Lines first, then rewritten into the format you asked for. Only JSON Lines skips the second step.
 
-The intermediate copy goes in the staging directory, `~/message-vault` by default and changeable in [Settings → System](/docs/user/how-to/settings/). It is deleted when the export finishes, including when the conversion fails, so a folder with room for one extra copy of the exported messages is enough.
+The intermediate copy goes in the staging directory, `~/message-crate` by default and changeable in [Settings → System](/docs/user/how-to/settings/). It is deleted when the export finishes, including when the conversion fails, so a folder with room for one extra copy of the exported messages is enough.
 
 Reading an existing export back in is a separate operation with no screen yet — see [issue 275](https://github.com/messagecrate/message-crate/issues/275). The `message-reexport` library still reads all six formats and converts between them; nothing in the app calls it that way today.

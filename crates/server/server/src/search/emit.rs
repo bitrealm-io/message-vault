@@ -798,7 +798,7 @@ fn emit_import(
     if let Some(id) = run {
         out.bind_int(id)
     } else {
-        out.push("(SELECT MAX(vi.id) FROM vault_imports vi WHERE vi.account_id = ");
+        out.push("(SELECT MAX(vi.id) FROM imports vi WHERE vi.account_id = ");
         out.bind_int(ctx.account_id);
         out.push(")");
     }

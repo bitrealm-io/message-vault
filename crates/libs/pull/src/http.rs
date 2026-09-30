@@ -15,8 +15,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use message_crate_http::{HttpError, error_sentence, ok_json, trim_base_url};
 use reqwest::Method;
-use message_crate_http::{VaultHttpError, error_sentence, ok_json, trim_base_url};
 
 use message_crate_api_types::{ExportRun, ExportScope, Message, Page};
 
@@ -45,7 +45,7 @@ pub fn create_export(
 ) -> Result<ExportRun> {
     let body = serde_json::to_vec(&CreateExportBody { scope, tool })?;
     let response = http
-        .vault_request(Method::POST, base_url, "/v1/exports", key)
+        .server_request(Method::POST, base_url, "/v1/exports", key)
         .header("Content-Type", "application/json")
         .body(body)
         .timeout(Duration::from_secs(120))
@@ -81,7 +81,7 @@ pub fn export_messages(http: &HttpSession, args: ExportMessagesArgs<'_>) -> Resu
     } = args;
     let path = format!("/v1/exports/{export_id}/messages");
     let response = http
-        .vault_request(Method::GET, base_url, &path, key)
+        .server_request(Method::GET, base_url, &path, key)
         .query(&[("limit", limit.to_string()), ("offset", offset.to_string())])
         .timeout(Duration::from_secs(120))
         .send()
@@ -108,7 +108,7 @@ pub fn close_export(
 ) -> Result<ExportRun> {
     let path = format!("/v1/exports/{export_id}/{action}");
     let response = http
-        .vault_request(Method::POST, base_url, &path, key)
+        .server_request(Method::POST, base_url, &path, key)
         .timeout(Duration::from_secs(120))
         .send()
         .with_context(|| format!("POST {path}"))?;
@@ -154,15 +154,13 @@ pub fn download_asset(
 
     let status = response.status();
     if status.as_u16() == 404 {
-        return Err(VaultHttpError::new(
-            404,
-            format!("asset not found: {sha256} (source={source})"),
-        )
-        .into());
+        return Err(
+            HttpError::new(404, format!("asset not found: {sha256} (source={source})")).into(),
+        );
     }
     if !status.is_success() {
         let body = response.text().unwrap_or_default();
-        return Err(VaultHttpError::new(
+        return Err(HttpError::new(
             status.as_u16(),
             format!(
                 "asset download failed (HTTP {status}): {}",

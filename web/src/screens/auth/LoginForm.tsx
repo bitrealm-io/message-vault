@@ -6,8 +6,8 @@ import PasswordField from "../../components/PasswordField";
 import TextField from "../../components/TextField";
 import { setBaseUrl } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import { login as serverLogin } from "../../lib/serverApi";
 import { useAsyncAction } from "../../lib/useAsyncAction";
-import { login as vaultLogin } from "../../lib/vaultApi";
 
 /** Username and password login for a vault running in local auth mode. */
 export default function LoginForm({
@@ -39,7 +39,7 @@ export default function LoginForm({
       // leave the client pointed at a bad host while the form still holds
       // the good address.
       setBaseUrl(url);
-      const res = await vaultLogin({ username, password });
+      const res = await serverLogin({ username, password });
       // Awaited so the profile lookup inside `login` has decided where to send
       // the user before this form drops its busy state.
       await login(url, res.token, res.account_id);

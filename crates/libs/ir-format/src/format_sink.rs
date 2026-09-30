@@ -6,8 +6,8 @@ use crate::clean::clean_previous_ir_output;
 use crate::export_transforms::apply_transforms;
 use crate::write::write_format;
 use anyhow::{Context, Result};
-use message_ir::ConversationDocument;
 use message_crate_core::{ExportReport, ExportTransforms, OutputFormat};
+use message_ir::ConversationDocument;
 use std::fs;
 use std::path::{Path, PathBuf};
 

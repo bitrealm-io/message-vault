@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # setup-demo.sh — first-time demo bootstrap without Docker
 #
-# Deprecated: use ./scripts/run-vault-dev.sh --reset-demo from the repo root.
+# Deprecated: use ./scripts/run-dev.sh --reset-demo from the repo root.
 #
 # Usage:
 #   ./scripts/deprecated/setup-demo.sh

@@ -32,7 +32,7 @@ pub struct ApiToken {
     pub can_import: bool,
     /// May call the export endpoints.
     pub can_export: bool,
-    /// Masked secret for Settings (e.g. `mv-api-Sd..mE`).
+    /// Masked secret for Settings (e.g. `mc-api-Sd..mE`).
     pub token_hint: String,
     /// Creation time as a Unix-seconds string.
     pub created_at: String,
@@ -321,7 +321,7 @@ mod tests {
     /// delete token would otherwise find out only when a delete fails.
     #[tokio::test]
     async fn create_token_asking_for_delete_is_refused() {
-        let vault = crate::test_support::test_vault().await;
+        let vault = crate::test_support::test_fixture().await;
         let state = vault.state.clone();
         let account =
             crate::test_support::register_via_api(&state, "token-owner", "hunter2hunter2").await;
@@ -356,14 +356,14 @@ mod tests {
     #[tokio::test]
     async fn only_the_account_itself_reaches_its_tokens() {
         use crate::test_support::{
-            claim_vault_as_owner, delete_status, get_status, patch_status, post_status,
-            register_via_api, test_vault,
+            claim_as_owner, delete_status, get_status, patch_status, post_status, register_via_api,
+            test_fixture,
         };
         use axum::http::StatusCode;
 
-        let vault = test_vault().await;
+        let vault = test_fixture().await;
         let state = vault.state.clone();
-        let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+        let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
         let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
         let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
         let alices = format!("/v1/accounts/{}/api-tokens", alice.account_id);
@@ -418,11 +418,11 @@ mod tests {
     #[tokio::test]
     async fn renaming_a_token_answers_and_stores_the_new_label() {
         use crate::test_support::{
-            get_json, patch_json, patch_status, post_created_json, vault_with_account,
+            fixture_with_account, get_json, patch_json, patch_status, post_created_json,
         };
         use axum::http::StatusCode;
 
-        let (vault, alice) = vault_with_account().await;
+        let (vault, alice) = fixture_with_account().await;
         let state = vault.state.clone();
         let collection = format!("/v1/accounts/{}/api-tokens", alice.account_id);
         let (_, created): (String, serde_json::Value) = post_created_json(
@@ -464,10 +464,10 @@ mod tests {
     /// on, and the export route admits it.
     #[tokio::test]
     async fn a_token_created_without_can_export_may_export() {
-        use crate::test_support::{get_status, post_created_json, vault_with_account};
+        use crate::test_support::{fixture_with_account, get_status, post_created_json};
         use axum::http::StatusCode;
 
-        let (vault, alice) = vault_with_account().await;
+        let (vault, alice) = fixture_with_account().await;
         let state = vault.state.clone();
         let (_, created): (String, serde_json::Value) = post_created_json(
             &state,

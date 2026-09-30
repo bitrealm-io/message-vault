@@ -57,7 +57,7 @@ afterEach(() => {
 
 beforeEach(() => {
   resolveExportStagingDir.mockResolvedValue(
-    "/home/demo/message-vault/staging-export-260831-120000",
+    "/home/demo/message-crate/staging-export-260831-120000",
   );
   // The hook's `run` goes through awaitTauriJob: call the invoke and resolve.
   awaitTauriJob.mockImplementation(async (invokeFn: () => Promise<void>) => {
@@ -112,7 +112,7 @@ describe("ExportScreen", () => {
   });
 
   it("pulls into staging and converts into the chosen folder for CSV", async () => {
-    const staging = "/home/demo/message-vault/staging-export-260831-120000";
+    const staging = "/home/demo/message-crate/staging-export-260831-120000";
     await exportAs("/home/demo/out", "CSV (.csv)");
 
     await waitFor(() => expect(invokeFormat).toHaveBeenCalledTimes(1));
@@ -125,7 +125,7 @@ describe("ExportScreen", () => {
   });
 
   it("removes the staging folder once the conversion finishes", async () => {
-    const staging = "/home/demo/message-vault/staging-export-260831-120000";
+    const staging = "/home/demo/message-crate/staging-export-260831-120000";
     await exportAs("/home/demo/out", "CSV (.csv)");
 
     await waitFor(() => expect(invokeDeleteStaging).toHaveBeenCalledWith({ staging_dir: staging }));
@@ -134,7 +134,7 @@ describe("ExportScreen", () => {
   it("removes the staging folder even when the conversion fails", async () => {
     // Otherwise a failed export silently leaves a whole copy of the vault on
     // disk, in a folder the person never chose and will not think to look in.
-    const staging = "/home/demo/message-vault/staging-export-260831-120000";
+    const staging = "/home/demo/message-crate/staging-export-260831-120000";
     awaitTauriJob.mockImplementationOnce(async (invokeFn: () => Promise<void>) => {
       await invokeFn();
       return { summary: "pulled" };
@@ -159,7 +159,7 @@ describe("ExportScreen", () => {
     });
     resolveExportStagingDir.mockImplementation(async () => {
       await pullStarted;
-      return "/home/demo/message-vault/staging-export-260831-120000";
+      return "/home/demo/message-crate/staging-export-260831-120000";
     });
 
     const user = userEvent.setup();

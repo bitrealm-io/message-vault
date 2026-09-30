@@ -7,12 +7,12 @@
 //! The queries and expected sets are the parity contract committed by the
 //! sqlx Any migration (#148): both engines must return exactly these sets.
 //!
-//! Runs on SQLite always and, when `MV_TEST_POSTGRES_URL` is set (CI and
+//! Runs on SQLite always and, when `MC_TEST_POSTGRES_URL` is set (CI and
 //! the local compose service), on Postgres too, in a schema of its own. Both
 //! pools come from the crate's test-support re-exports.
 
 use message_crate_server::{
-    ExportPageOpts, ExportScope, ensure_vault_schema, export_messages, pg_test_schema_pool,
+    ExportPageOpts, ExportScope, ensure_schema, export_messages, pg_test_schema_pool,
     sqlite_test_pool, start_export_run,
 };
 use serde::Deserialize;
@@ -86,8 +86,8 @@ fn corpus() -> Vec<FixtureMessage> {
 /// Create a fresh vault: schema, one account, one conversation (a handle row
 /// is required for `chat_handle_id`), then the corpus messages with their
 /// keys bound as ids.
-async fn setup_vault(conn: &mut AnyConnection) {
-    ensure_vault_schema(conn)
+async fn setup_fixture(conn: &mut AnyConnection) {
+    ensure_schema(conn)
         .await
         .expect("fresh vault schema applies");
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
@@ -186,7 +186,7 @@ async fn export_ids(conn: &mut AnyConnection, q: &str) -> Vec<i64> {
 /// Run the committed query list through [`export_ids`]. Returns (query, id
 /// set) pairs in `CASES` order.
 async fn run_against(conn: &mut AnyConnection) -> Vec<(&'static str, Vec<i64>)> {
-    setup_vault(conn).await;
+    setup_fixture(conn).await;
     let mut results = Vec::with_capacity(CASES.len());
     for &(query, _expected) in CASES {
         results.push((query, export_ids(conn, query).await));
@@ -239,7 +239,7 @@ async fn search_parity_across_engines() {
     assert_committed_cases(&sqlite, Engine::Sqlite);
     assert_diacritics_exception(&mut conn, Engine::Sqlite).await;
 
-    // Postgres when the gated suite is enabled (CI sets MV_TEST_POSTGRES_URL).
+    // Postgres when the gated suite is enabled (CI sets MC_TEST_POSTGRES_URL).
     let Some(url) = message_crate_server::pg_test_url() else {
         return;
     };

@@ -18,11 +18,11 @@ import {
   handleValidationError,
 } from "../lib/handleService";
 import { parseSelectKey } from "../lib/selectKey";
+import { updateAccountProfile } from "../lib/serverApi";
 import { browserTimeZone } from "../lib/timeZone";
 import { authCard, authCardBody, authCardFooter, authTitle, pageCenter } from "../lib/uiStyles";
 import { useAccountProfile } from "../lib/useAccountProfile";
 import { useAsyncAction } from "../lib/useAsyncAction";
-import { updateAccountProfile } from "../lib/vaultApi";
 
 /** The zone an account has until someone chooses one (`accounts.time_zone`'s default). */
 const DEFAULT_TIME_ZONE = "UTC";

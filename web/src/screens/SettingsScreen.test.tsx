@@ -3,7 +3,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mockedAuth, VaultProviders } from "../test/vaultProviders";
+import { mockedAuth, Providers } from "../test/providers";
 import SettingsScreen from "./SettingsScreen";
 
 /**
@@ -57,11 +57,11 @@ function baseProfile() {
 
 function renderSettings(initialEntries: string[]) {
   return render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter initialEntries={initialEntries}>
         <SettingsScreen />
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 

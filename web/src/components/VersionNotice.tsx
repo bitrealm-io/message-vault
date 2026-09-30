@@ -1,6 +1,6 @@
 import { APP_BUILD } from "../lib/build";
 import { productVersionOf, productVersionsDiffer } from "../lib/buildFormat";
-import { useVaultInfo } from "../lib/useVaultInfo";
+import { useServerInfo } from "../lib/useServerInfo";
 
 /**
  * Says so when this app and its vault come from different releases. It blocks
@@ -9,7 +9,7 @@ import { useVaultInfo } from "../lib/useVaultInfo";
  * Version is compared, so a dev build from another commit shows nothing.
  */
 export default function VersionNotice() {
-  const { data } = useVaultInfo();
+  const { data } = useServerInfo();
   if (!data || !productVersionsDiffer(data.version, APP_BUILD)) return null;
 
   return (

@@ -10,17 +10,17 @@
    The marketing pages (landing.css) are separate and untouched. */
 
 :root {
-  --mv-font-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --mc-font-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
   --sl-font: "IBM Plex Sans", "Segoe UI", Roboto, sans-serif;
   --sl-font-mono: "IBM Plex Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Starlight's default is 45rem. Grow with the window on wide screens so
      trees are not clipped, but never below the default — below 34rem of
      viewport the calc goes negative and collapses the content column.
-     Running text is capped separately (see --mv-measure) so only tables,
+     Running text is capped separately (see --mc-measure) so only tables,
      code, and diagrams use the extra width. */
   --sl-content-width: max(45rem, min(70rem, calc(100vw - 34rem)));
-  --mv-measure: 68ch;
+  --mc-measure: 68ch;
 
   /* Type scale */
   --sl-text-body: 1.0625rem; /* 17px */
@@ -36,55 +36,55 @@
   --sl-text-code-sm: 0.9375rem; /* inline tokens, 0.88 of body */
 
   /* Dark palette. Starlight keeps its dark theme on :root. */
-  --mv-ground: #151a1d;
-  --mv-surface: #1b2124;
-  --mv-ink: #e4e8ea;
-  --mv-muted: #9aa5ae;
-  --mv-accent: #63c7ce;
-  --mv-accent-ink: #8adce1;
-  --mv-token-bg: #1d2b2d;
-  --mv-rule: #2c3539;
-  --mv-rule-soft: #232b2f;
-  --mv-code-bg: #10161a;
-  --mv-warn-bg: #2e2418;
-  --mv-warn-ink: #e4b77a;
-  --mv-ok-bg: #1b2b21;
-  --mv-ok-ink: #8fd1a3;
-  --mv-tile-off: #2c3539;
-  --mv-tile-on-ink: #0f1a1c;
-  --mv-shadow: none;
+  --mc-ground: #151a1d;
+  --mc-surface: #1b2124;
+  --mc-ink: #e4e8ea;
+  --mc-muted: #9aa5ae;
+  --mc-accent: #63c7ce;
+  --mc-accent-ink: #8adce1;
+  --mc-token-bg: #1d2b2d;
+  --mc-rule: #2c3539;
+  --mc-rule-soft: #232b2f;
+  --mc-code-bg: #10161a;
+  --mc-warn-bg: #2e2418;
+  --mc-warn-ink: #e4b77a;
+  --mc-ok-bg: #1b2b21;
+  --mc-ok-ink: #8fd1a3;
+  --mc-tile-off: #2c3539;
+  --mc-tile-on-ink: #0f1a1c;
+  --mc-shadow: none;
 
-  --sl-color-white: var(--mv-ink);
+  --sl-color-white: var(--mc-ink);
   --sl-color-gray-1: #d2d9dd;
   --sl-color-gray-2: #c1c9ce;
-  --sl-color-gray-3: var(--mv-muted);
+  --sl-color-gray-3: var(--mc-muted);
   --sl-color-gray-4: #6b7680;
-  --sl-color-gray-5: var(--mv-rule);
-  --sl-color-gray-6: var(--mv-surface);
-  --sl-color-black: var(--mv-ground);
+  --sl-color-gray-5: var(--mc-rule);
+  --sl-color-gray-6: var(--mc-surface);
+  --sl-color-black: var(--mc-ground);
 
-  --sl-color-accent-low: var(--mv-token-bg);
-  --sl-color-accent: var(--mv-accent);
-  --sl-color-accent-high: var(--mv-accent-ink);
+  --sl-color-accent-low: var(--mc-token-bg);
+  --sl-color-accent: var(--mc-accent);
+  --sl-color-accent-high: var(--mc-accent-ink);
 
-  --sl-color-text: var(--mv-ink);
-  --sl-color-text-accent: var(--mv-accent-ink);
-  --sl-color-text-invert: var(--mv-tile-on-ink);
-  --sl-color-bg: var(--mv-ground);
-  --sl-color-bg-nav: var(--mv-ground);
-  --sl-color-bg-sidebar: var(--mv-ground);
-  --sl-color-bg-inline-code: var(--mv-token-bg);
-  --sl-color-bg-accent: var(--mv-accent);
-  --sl-color-hairline-light: var(--mv-rule);
-  --sl-color-hairline: var(--mv-rule-soft);
-  --sl-color-hairline-shade: var(--mv-rule-soft);
+  --sl-color-text: var(--mc-ink);
+  --sl-color-text-accent: var(--mc-accent-ink);
+  --sl-color-text-invert: var(--mc-tile-on-ink);
+  --sl-color-bg: var(--mc-ground);
+  --sl-color-bg-nav: var(--mc-ground);
+  --sl-color-bg-sidebar: var(--mc-ground);
+  --sl-color-bg-inline-code: var(--mc-token-bg);
+  --sl-color-bg-accent: var(--mc-accent);
+  --sl-color-hairline-light: var(--mc-rule);
+  --sl-color-hairline: var(--mc-rule-soft);
+  --sl-color-hairline-shade: var(--mc-rule-soft);
 
-  --sl-color-orange-low: var(--mv-warn-bg);
-  --sl-color-orange: var(--mv-warn-ink);
-  --sl-color-orange-high: var(--mv-warn-ink);
-  --sl-color-green-low: var(--mv-ok-bg);
-  --sl-color-green: var(--mv-ok-ink);
-  --sl-color-green-high: var(--mv-ok-ink);
+  --sl-color-orange-low: var(--mc-warn-bg);
+  --sl-color-orange: var(--mc-warn-ink);
+  --sl-color-orange-high: var(--mc-warn-ink);
+  --sl-color-green-low: var(--mc-ok-bg);
+  --sl-color-green: var(--mc-ok-ink);
+  --sl-color-green-high: var(--mc-ok-ink);
 
   --sl-shadow-sm: 0 1px 0 rgb(0 0 0 / 20%);
   --sl-shadow-md: 0 4px 12px rgb(0 0 0 / 28%);
@@ -92,56 +92,56 @@
 }
 
 :root[data-theme='light'] {
-  --mv-ground: #f6f7f5;
-  --mv-surface: #ffffff;
-  --mv-ink: #1c2024;
-  --mv-muted: #5f6873;
-  --mv-accent: #0e6b73;
-  --mv-accent-ink: #0a5158;
-  --mv-token-bg: #e4eeee;
-  --mv-rule: #d3d8db;
-  --mv-rule-soft: #e6eaec;
-  --mv-code-bg: #eef1f0;
-  --mv-warn-bg: #f7eee3;
-  --mv-warn-ink: #7a4a12;
-  --mv-ok-bg: #e7f1ea;
-  --mv-ok-ink: #245a35;
-  --mv-tile-off: #dce2e4;
-  --mv-tile-on-ink: #ffffff;
-  --mv-shadow: 0 1px 0 rgb(28 32 36 / 6%);
+  --mc-ground: #f6f7f5;
+  --mc-surface: #ffffff;
+  --mc-ink: #1c2024;
+  --mc-muted: #5f6873;
+  --mc-accent: #0e6b73;
+  --mc-accent-ink: #0a5158;
+  --mc-token-bg: #e4eeee;
+  --mc-rule: #d3d8db;
+  --mc-rule-soft: #e6eaec;
+  --mc-code-bg: #eef1f0;
+  --mc-warn-bg: #f7eee3;
+  --mc-warn-ink: #7a4a12;
+  --mc-ok-bg: #e7f1ea;
+  --mc-ok-ink: #245a35;
+  --mc-tile-off: #dce2e4;
+  --mc-tile-on-ink: #ffffff;
+  --mc-shadow: 0 1px 0 rgb(28 32 36 / 6%);
 
-  --sl-color-white: var(--mv-ink);
+  --sl-color-white: var(--mc-ink);
   --sl-color-gray-1: #2a3137;
   --sl-color-gray-2: #3b444b;
-  --sl-color-gray-3: var(--mv-muted);
+  --sl-color-gray-3: var(--mc-muted);
   --sl-color-gray-4: #8c969e;
-  --sl-color-gray-5: var(--mv-rule);
-  --sl-color-gray-6: var(--mv-rule-soft);
-  --sl-color-gray-7: var(--mv-surface);
-  --sl-color-black: var(--mv-ground);
+  --sl-color-gray-5: var(--mc-rule);
+  --sl-color-gray-6: var(--mc-rule-soft);
+  --sl-color-gray-7: var(--mc-surface);
+  --sl-color-black: var(--mc-ground);
 
-  --sl-color-accent-low: var(--mv-token-bg);
-  --sl-color-accent: var(--mv-accent);
-  --sl-color-accent-high: var(--mv-accent-ink);
+  --sl-color-accent-low: var(--mc-token-bg);
+  --sl-color-accent: var(--mc-accent);
+  --sl-color-accent-high: var(--mc-accent-ink);
 
-  --sl-color-text: var(--mv-ink);
-  --sl-color-text-accent: var(--mv-accent-ink);
-  --sl-color-text-invert: var(--mv-tile-on-ink);
-  --sl-color-bg: var(--mv-ground);
-  --sl-color-bg-nav: var(--mv-ground);
-  --sl-color-bg-sidebar: var(--mv-ground);
-  --sl-color-bg-inline-code: var(--mv-token-bg);
-  --sl-color-bg-accent: var(--mv-accent);
-  --sl-color-hairline-light: var(--mv-rule);
-  --sl-color-hairline: var(--mv-rule-soft);
-  --sl-color-hairline-shade: var(--mv-rule-soft);
+  --sl-color-text: var(--mc-ink);
+  --sl-color-text-accent: var(--mc-accent-ink);
+  --sl-color-text-invert: var(--mc-tile-on-ink);
+  --sl-color-bg: var(--mc-ground);
+  --sl-color-bg-nav: var(--mc-ground);
+  --sl-color-bg-sidebar: var(--mc-ground);
+  --sl-color-bg-inline-code: var(--mc-token-bg);
+  --sl-color-bg-accent: var(--mc-accent);
+  --sl-color-hairline-light: var(--mc-rule);
+  --sl-color-hairline: var(--mc-rule-soft);
+  --sl-color-hairline-shade: var(--mc-rule-soft);
 
-  --sl-color-orange-low: var(--mv-warn-bg);
-  --sl-color-orange: var(--mv-warn-ink);
-  --sl-color-orange-high: var(--mv-warn-ink);
-  --sl-color-green-low: var(--mv-ok-bg);
-  --sl-color-green: var(--mv-ok-ink);
-  --sl-color-green-high: var(--mv-ok-ink);
+  --sl-color-orange-low: var(--mc-warn-bg);
+  --sl-color-orange: var(--mc-warn-ink);
+  --sl-color-orange-high: var(--mc-warn-ink);
+  --sl-color-green-low: var(--mc-ok-bg);
+  --sl-color-green: var(--mc-ok-ink);
+  --sl-color-green-high: var(--mc-ok-ink);
 
   --sl-shadow-sm: 0 1px 0 rgb(28 32 36 / 6%);
   --sl-shadow-md: 0 4px 12px rgb(28 32 36 / 8%);
@@ -154,7 +154,7 @@ body {
 
 /* ---- Small uppercase labels ---------------------------------------- */
 
-.mv-eyebrow,
+.mc-eyebrow,
 #starlight__on-this-page,
 .sidebar-content ul.top-level > li > details > summary .group-label > span {
   font-family: var(--__sl-font);
@@ -162,7 +162,7 @@ body {
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--mv-muted);
+  color: var(--mc-muted);
 }
 
 /* ---- Headings ------------------------------------------------------- */
@@ -170,7 +170,7 @@ body {
 h1#_top,
 .hero h1,
 .sl-markdown-content :is(h1, h2, h3, h4) {
-  font-family: var(--mv-font-display);
+  font-family: var(--mc-font-display);
   text-wrap: balance;
 }
 
@@ -203,7 +203,7 @@ h1#_top,
 .sl-markdown-content > h2 {
   margin-top: 3.25rem;
   padding-top: 1.375rem;
-  border-top: 1px solid var(--mv-rule);
+  border-top: 1px solid var(--mc-rule);
 }
 
 .sl-markdown-content > .sl-heading-wrapper.level-h2:first-child,
@@ -231,8 +231,8 @@ h1#_top,
 }
 
 .sl-markdown-content
-  > :is(p, ul, ol, dl, blockquote, .starlight-aside, .mv-query, .mv-steps) {
-  max-width: var(--mv-measure);
+  > :is(p, ul, ol, dl, blockquote, .starlight-aside, .mc-query, .mc-steps) {
+  max-width: var(--mc-measure);
 }
 
 .sl-markdown-content p {
@@ -244,42 +244,42 @@ h1#_top,
 }
 
 .sl-markdown-content li::marker {
-  color: var(--mv-muted);
+  color: var(--mc-muted);
 }
 
 .sl-markdown-content a {
-  color: var(--mv-accent-ink);
+  color: var(--mc-accent-ink);
   font-weight: 500;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.18em;
 }
 
 .sl-markdown-content a:hover {
-  color: var(--mv-accent-ink);
+  color: var(--mc-accent-ink);
   text-decoration-thickness: 2px;
 }
 
 .sl-markdown-content blockquote {
-  border-inline-start: 3px solid var(--mv-rule);
-  color: var(--mv-muted);
+  border-inline-start: 3px solid var(--mc-rule);
+  color: var(--mc-muted);
 }
 
 .sl-markdown-content hr {
-  border-bottom-color: var(--mv-rule);
+  border-bottom-color: var(--mc-rule);
 }
 
 /* ---- Tokens and code ------------------------------------------------ */
 
 .sl-markdown-content :not(pre, a) > code {
-  background: var(--mv-token-bg);
-  color: var(--mv-accent-ink);
+  background: var(--mc-token-bg);
+  color: var(--mc-accent-ink);
   padding: 0.0625rem 0.3125rem;
   border-radius: 3px;
   margin-block: 0;
 }
 
 .sl-markdown-content a > code {
-  background: var(--mv-token-bg);
+  background: var(--mc-token-bg);
   padding: 0.0625rem 0.3125rem;
   border-radius: 3px;
   margin-block: 0;
@@ -296,14 +296,14 @@ h1#_top,
    styleOverrides in astro.config.mjs, so they are set here instead. */
 :root[data-theme] .sl-markdown-content .expressive-code,
 .expressive-code {
-  --ec-frm-edBg: var(--mv-code-bg);
-  --ec-frm-trmBg: var(--mv-code-bg);
-  --ec-frm-edActTabBg: var(--mv-code-bg);
+  --ec-frm-edBg: var(--mc-code-bg);
+  --ec-frm-trmBg: var(--mc-code-bg);
+  --ec-frm-edActTabBg: var(--mc-code-bg);
 }
 
 .sl-markdown-content pre:not(.mermaid) {
-  background: var(--mv-code-bg);
-  border: 1px solid var(--mv-rule-soft);
+  background: var(--mc-code-bg);
+  border: 1px solid var(--mc-rule-soft);
   border-radius: 6px;
   padding: 0.875rem 1rem;
   line-height: 1.55;
@@ -312,18 +312,18 @@ h1#_top,
 
 /* ---- Tables --------------------------------------------------------- */
 
-/* Every Markdown table is wrapped in .mv-table by a rehype plugin (see
+/* Every Markdown table is wrapped in .mc-table by a rehype plugin (see
    src/lib/rehype-wrap-tables.mjs) so the border and the sideways scroll
    belong to the container, not the table. */
-.sl-markdown-content .mv-table {
+.sl-markdown-content .mc-table {
   overflow-x: auto;
-  border: 1px solid var(--mv-rule);
+  border: 1px solid var(--mc-rule);
   border-radius: 6px;
-  background: var(--mv-surface);
-  box-shadow: var(--mv-shadow);
+  background: var(--mc-surface);
+  box-shadow: var(--mc-shadow);
 }
 
-.sl-markdown-content .mv-table table {
+.sl-markdown-content .mc-table table {
   display: table;
   width: 100%;
   margin: 0;
@@ -332,49 +332,49 @@ h1#_top,
   font-variant-numeric: tabular-nums;
 }
 
-.sl-markdown-content .mv-table :is(th, td) {
+.sl-markdown-content .mc-table :is(th, td) {
   padding: 0.5625rem 0.75rem;
-  border-bottom: 1px solid var(--mv-rule-soft);
+  border-bottom: 1px solid var(--mc-rule-soft);
   vertical-align: top;
 }
 
-.sl-markdown-content .mv-table th {
+.sl-markdown-content .mc-table th {
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--mv-muted);
-  background: var(--mv-ground);
+  color: var(--mc-muted);
+  background: var(--mc-ground);
   white-space: nowrap;
 }
 
-.sl-markdown-content .mv-table tr:last-child td {
+.sl-markdown-content .mc-table tr:last-child td {
   border-bottom: 0;
 }
 
 /* ---- Asides --------------------------------------------------------- */
 
 .sl-markdown-content .starlight-aside {
-  background: var(--mv-surface);
+  background: var(--mc-surface);
   border-inline-start: 3px solid var(--sl-color-asides-border);
   border-radius: 0 6px 6px 0;
   padding: 0.75rem 1rem;
-  color: var(--mv-ink);
+  color: var(--mc-ink);
 }
 
 .starlight-aside--note {
-  --sl-color-asides-border: var(--mv-accent);
-  --sl-color-asides-text-accent: var(--mv-accent-ink);
+  --sl-color-asides-border: var(--mc-accent);
+  --sl-color-asides-text-accent: var(--mc-accent-ink);
 }
 
 .starlight-aside--tip {
-  --sl-color-asides-border: var(--mv-ok-ink);
-  --sl-color-asides-text-accent: var(--mv-ok-ink);
+  --sl-color-asides-border: var(--mc-ok-ink);
+  --sl-color-asides-text-accent: var(--mc-ok-ink);
 }
 
 .starlight-aside--caution {
-  --sl-color-asides-border: var(--mv-warn-ink);
-  --sl-color-asides-text-accent: var(--mv-warn-ink);
+  --sl-color-asides-border: var(--mc-warn-ink);
+  --sl-color-asides-text-accent: var(--mc-warn-ink);
 }
 
 .starlight-aside__title {
@@ -391,107 +391,107 @@ h1#_top,
 /* ---- Cards ---------------------------------------------------------- */
 
 .sl-markdown-content .card {
-  background: var(--mv-surface);
-  border: 1px solid var(--mv-rule-soft);
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-rule-soft);
   border-radius: 6px;
-  box-shadow: var(--mv-shadow);
+  box-shadow: var(--mc-shadow);
 }
 
 /* ---- Ordered steps as cards ----------------------------------------
    Use only where the order carries meaning:
-     <ol class="mv-steps"><li><b>Title</b> Body…</li></ol> */
+     <ol class="mc-steps"><li><b>Title</b> Body…</li></ol> */
 
-.sl-markdown-content .mv-steps {
+.sl-markdown-content .mc-steps {
   list-style: none;
   padding: 0;
   display: grid;
   gap: 0.625rem;
-  counter-reset: mv-step;
+  counter-reset: mc-step;
 }
 
-.sl-markdown-content .mv-steps > li {
-  counter-increment: mv-step;
+.sl-markdown-content .mc-steps > li {
+  counter-increment: mc-step;
   display: grid;
   grid-template-columns: 2.125rem 1fr;
   gap: 0.75rem;
   padding: 0.75rem 0.875rem;
   margin: 0;
-  background: var(--mv-surface);
-  border: 1px solid var(--mv-rule-soft);
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-rule-soft);
   border-radius: 6px;
 }
 
-.sl-markdown-content .mv-steps > li::before {
-  content: counter(mv-step);
-  font-family: var(--mv-font-display);
+.sl-markdown-content .mc-steps > li::before {
+  content: counter(mc-step);
+  font-family: var(--mc-font-display);
   font-weight: 700;
   font-size: 1.25rem;
   line-height: 1.2;
-  color: var(--mv-accent-ink);
+  color: var(--mc-accent-ink);
 }
 
-.sl-markdown-content .mv-steps > li > b:first-child {
+.sl-markdown-content .mc-steps > li > b:first-child {
   display: block;
   font-weight: 600;
   margin-bottom: 0.125rem;
 }
 
 /* ---- A typed query, shown as it would sit in the search box ---------
-   Rendered by src/components/TypedQuery.astro. Field names get .mv-k. */
+   Rendered by src/components/TypedQuery.astro. Field names get .mc-k. */
 
-.sl-markdown-content .mv-query {
+.sl-markdown-content .mc-query {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  background: var(--mv-surface);
-  border: 1px solid var(--mv-rule);
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-rule);
   border-radius: 6px;
   padding: 0.5625rem 0.75rem;
   font-family: var(--__sl-font-mono);
   font-size: 0.9375rem;
   line-height: 1.5;
-  box-shadow: var(--mv-shadow);
+  box-shadow: var(--mc-shadow);
   overflow-x: auto;
 }
 
-.sl-markdown-content .mv-query::before {
+.sl-markdown-content .mc-query::before {
   content: "";
   flex: none;
   width: 0.75rem;
   height: 0.75rem;
   box-sizing: border-box;
-  border: 2px solid var(--mv-muted);
+  border: 2px solid var(--mc-muted);
   border-radius: 50%;
 }
 
-.sl-markdown-content .mv-query__text {
+.sl-markdown-content .mc-query__text {
   white-space: pre;
-  color: var(--mv-ink);
+  color: var(--mc-ink);
 }
 
-.sl-markdown-content .mv-query .mv-k {
-  color: var(--mv-accent-ink);
+.sl-markdown-content .mc-query .mc-k {
+  color: var(--mc-accent-ink);
 }
 
-.sl-markdown-content .mv-query__note {
+.sl-markdown-content .mc-query__note {
   margin-inline-start: auto;
   padding-inline-start: 1rem;
   font-family: var(--__sl-font);
   font-size: 0.8125rem;
-  color: var(--mv-muted);
+  color: var(--mc-muted);
   white-space: nowrap;
 }
 
 /* ---- C V M tiles: which lists a search word applies to --------------
    Rendered by src/components/ListTiles.astro. A filled tile applies. */
 
-.mv-lists {
+.mc-lists {
   display: inline-flex;
   gap: 0.25rem;
   vertical-align: middle;
 }
 
-.mv-lists > span {
+.mc-lists > span {
   display: inline-grid;
   place-items: center;
   width: 1.375rem;
@@ -501,13 +501,13 @@ h1#_top,
   font-size: 0.75rem;
   font-weight: 500;
   line-height: 1;
-  background: var(--mv-tile-off);
-  color: var(--mv-muted);
+  background: var(--mc-tile-off);
+  color: var(--mc-muted);
 }
 
-.mv-lists > span.mv-on {
-  background: var(--mv-accent);
-  color: var(--mv-tile-on-ink);
+.mc-lists > span.mc-on {
+  background: var(--mc-accent);
+  color: var(--mc-tile-on-ink);
 }
 
 @media (prefers-reduced-motion: no-preference) {

@@ -1,7 +1,7 @@
 use super::*;
+use message_crate_core::{FormatConfig, MediaConfig, ObfuscateConfig, SourceConfig};
 use message_ir::IrAttachment;
 use message_ir_format::{read_conversation_csv, read_conversation_json};
-use message_crate_core::{FormatConfig, MediaConfig, ObfuscateConfig, SourceConfig};
 
 fn write_fixture(dir: &Path, format: OutputFormat) {
     fs::create_dir_all(dir).unwrap();

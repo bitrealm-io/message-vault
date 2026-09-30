@@ -18,7 +18,9 @@ import {
   type ImportStage,
   setImportStage,
 } from "../../lib/importSession";
+import { importSessionCreateBody } from "../../lib/importSource";
 import { mediaExtractFields, sbrExtractFields } from "../../lib/sbrExtractFields";
+import { completeImport, createImport } from "../../lib/serverApi";
 import { resolveImportStagingDir } from "../../lib/system-settings";
 import {
   type AttachmentForecast,
@@ -44,8 +46,6 @@ import {
 import { isTauri } from "../../lib/tauri-check";
 import type { AttachmentMediaMode, ImportIssueEvent, ImportProgressEvent } from "../../lib/types";
 import { useFetchAccountProfile } from "../../lib/useAccountProfile";
-import { completeImport, createImport } from "../../lib/vaultApi";
-import { importSessionCreateBody } from "../../lib/vaultSource";
 import { whatsappExtractFields } from "../../lib/whatsappExtractFields";
 import { isWhatsappMethod } from "../../lib/whatsappImport";
 import { formSnapshot, isStringArray } from "./formSnapshot";

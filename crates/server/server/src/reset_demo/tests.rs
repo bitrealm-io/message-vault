@@ -5,14 +5,14 @@ use sqlx::AnyConnection;
 fn url_config_for_refuse_tests() -> Config {
     Config {
         paths: PathsConfig {
-            db: PathBuf::from("data/vault.db"),
+            db: PathBuf::from("data/messagecrate.db"),
             data_dir: PathBuf::from("data"),
             assets_dir: "assets".into(),
             assets_converted_dir: "assets_converted".into(),
         },
         server: None,
         database: crate::config::DatabaseConfig {
-            url: Some("postgres://vault:vault@127.0.0.1:5432/vault".into()),
+            url: Some("postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate".into()),
         },
     }
 }
@@ -35,7 +35,7 @@ fn write_tiny_reset_bundle(root: &Path) {
     fs::create_dir_all(root.join("staging").join(WHATSAPP_SOURCE)).expect("whatsapp dir");
     fs::write(
         root.join("config/config.toml"),
-        "[paths]\ndb = \"data/vault.db\"\ndata_dir = \"data\"\n",
+        "[paths]\ndb = \"data/messagecrate.db\"\ndata_dir = \"data\"\n",
     )
     .expect("write bundle config");
     fs::write(
@@ -111,9 +111,7 @@ async fn reset_demo_db_url_creates_demo_account_on_postgres() {
         .await
         .expect("open postgres");
     let mut conn = pool.acquire().await.expect("acquire");
-    schema::ensure_vault_schema(&mut conn)
-        .await
-        .expect("schema");
+    schema::ensure_schema(&mut conn).await.expect("schema");
     conn.close().await.expect("close schema conn");
     pool.close().await;
 
@@ -175,7 +173,7 @@ async fn test_db(db: &Path) -> (sqlx::AnyPool, sqlx::pool::PoolConnection<sqlx::
         .await
         .expect("open test database");
     let mut conn = pool.acquire().await.expect("acquire test connection");
-    schema::ensure_vault_schema(&mut conn)
+    schema::ensure_schema(&mut conn)
         .await
         .expect("create vault schema");
     (pool, conn)
@@ -241,7 +239,7 @@ fn an_incomplete_bundle_without_a_seed_file_cannot_be_reset() {
 #[tokio::test]
 async fn the_demo_account_may_import_export_and_delete() {
     let temp = tempfile::tempdir().expect("create test directory");
-    let db = temp.path().join("vault.db");
+    let db = temp.path().join("messagecrate.db");
     let (pool, mut conn) = test_db(&db).await;
     let seed = DemoSeed {
         owner: DemoOwner {
@@ -276,7 +274,7 @@ async fn the_demo_account_may_import_export_and_delete() {
 #[tokio::test]
 async fn failed_reset_preserves_existing_demo_account() {
     let temp = tempfile::tempdir().expect("create test directory");
-    let db = temp.path().join("vault.db");
+    let db = temp.path().join("messagecrate.db");
     let data_dir = temp.path().join("data");
     let account_root = data_dir.join(DEMO_ACCOUNT_ID.to_string());
     fs::create_dir_all(&account_root).expect("create account data directory");
@@ -393,20 +391,20 @@ async fn failed_preparation_preserves_active_config() {
 #[tokio::test]
 async fn vault_db_without_accounts_table_does_not_block_reset_check() {
     let temp = tempfile::tempdir().expect("create test directory");
-    let active = temp.path().join("vault.db");
+    let active = temp.path().join("messagecrate.db");
     fs::write(&active, []).expect("create empty sqlite file");
     let prepared = temp.path().join("prepared.db");
     drop(test_db_conn(&prepared).await);
 
     verify_non_demo_state_preserved(&active, &prepared, DEMO_ACCOUNT_ID)
         .await
-        .expect("a vault.db with no accounts table must not block reset-demo");
+        .expect("a messagecrate.db with no accounts table must not block reset-demo");
 }
 
 /// Copy a seeded active database (demo account plus account 9, one message
 /// each) to a prepared one beside it, and return both paths.
 async fn active_and_prepared_reset_databases(root: &Path) -> (PathBuf, PathBuf) {
-    let active = root.join("vault.db");
+    let active = root.join("messagecrate.db");
     seed_reset_test_database(&active).await;
     let prepared = root.join("prepared.db");
     fs::copy(&active, &prepared).expect("copy prepared database");
@@ -468,7 +466,7 @@ async fn reset_check_refuses_a_prepared_database_with_more_non_demo_messages() {
 #[test]
 fn reset_refuses_while_server_holds_database_lock() {
     let temp = tempfile::tempdir().expect("create test directory");
-    let db = temp.path().join("vault.db");
+    let db = temp.path().join("messagecrate.db");
     let _serve_lock = crate::operation_lock::acquire_for_serve(&db).expect("acquire server lock");
 
     let error = crate::operation_lock::acquire_for_reset(&db)
@@ -486,11 +484,11 @@ async fn failures_after_database_and_account_install_restore_all_active_state() 
         ResetInstallFailure::AfterAccount,
     ] {
         let temp = tempfile::tempdir().expect("create test directory");
-        let active_db = temp.path().join("active/vault.db");
+        let active_db = temp.path().join("active/messagecrate.db");
         fs::create_dir_all(active_db.parent().expect("database parent"))
             .expect("create database parent");
         seed_reset_test_database(&active_db).await;
-        let prepared_db = temp.path().join("prepared/vault.db");
+        let prepared_db = temp.path().join("prepared/messagecrate.db");
         fs::create_dir_all(prepared_db.parent().expect("prepared database parent"))
             .expect("create prepared database parent");
         fs::copy(&active_db, &prepared_db).expect("copy prepared database");
@@ -552,11 +550,11 @@ async fn failures_after_database_and_account_install_restore_all_active_state() 
 #[tokio::test]
 async fn active_sidecars_are_cleaned_immediately_before_database_rename() {
     let temp = tempfile::tempdir().expect("create test directory");
-    let active_db = temp.path().join("active/vault.db");
+    let active_db = temp.path().join("active/messagecrate.db");
     fs::create_dir_all(active_db.parent().expect("database parent"))
         .expect("create database parent");
     seed_reset_test_database(&active_db).await;
-    let prepared_db = temp.path().join("prepared/vault.db");
+    let prepared_db = temp.path().join("prepared/messagecrate.db");
     fs::create_dir_all(prepared_db.parent().expect("prepared database parent"))
         .expect("create prepared database parent");
     fs::copy(&active_db, &prepared_db).expect("copy prepared database");
@@ -623,8 +621,8 @@ async fn active_sidecars_are_cleaned_immediately_before_database_rename() {
 #[test]
 fn reset_rollback_attempts_remaining_restorations_after_one_fails() {
     let temp = tempfile::tempdir().expect("create test directory");
-    let active_db = temp.path().join("active/vault.db");
-    let prepared_db = temp.path().join("prepared/vault.db");
+    let active_db = temp.path().join("active/messagecrate.db");
+    let prepared_db = temp.path().join("prepared/messagecrate.db");
     let active_account = temp.path().join("data/demo");
     let prepared_account = temp.path().join("prepared-data/demo");
     let active_config = temp.path().join("config/config.toml");
@@ -663,7 +661,7 @@ fn reset_rollback_attempts_remaining_restorations_after_one_fails() {
             if source.ends_with("previous-account") {
                 bail!("injected account restore failure");
             }
-            if source.ends_with("previous-vault.db") {
+            if source.ends_with("previous-messagecrate.db") {
                 database_restore_attempted = true;
             }
             fs::rename(source, destination).map_err(Into::into)
@@ -693,7 +691,7 @@ enum ResetInstallFailure {
 
 async fn seed_reset_test_database(path: &Path) {
     let (pool, mut conn) = test_db(path).await;
-    schema::ensure_vault_schema(&mut conn)
+    schema::ensure_schema(&mut conn)
         .await
         .expect("create reset test schema");
     seed_reset_test_account(&mut conn, DEMO_ACCOUNT_ID, "demo-existing").await;
@@ -825,10 +823,13 @@ async fn assert_reset_test_database(path: &Path) {
 #[test]
 fn parent_dir_or_cwd_returns_the_parent_or_the_current_directory() {
     assert_eq!(
-        parent_dir_or_cwd(Path::new("data/vault.db")),
+        parent_dir_or_cwd(Path::new("data/messagecrate.db")),
         Path::new("data")
     );
-    assert_eq!(parent_dir_or_cwd(Path::new("vault.db")), Path::new("."));
+    assert_eq!(
+        parent_dir_or_cwd(Path::new("messagecrate.db")),
+        Path::new(".")
+    );
     assert_eq!(parent_dir_or_cwd(Path::new("/")), Path::new("."));
 }
 
@@ -870,10 +871,10 @@ async fn sqlite_table_names(db: &Path) -> Vec<String> {
 #[tokio::test]
 async fn the_database_snapshot_carries_the_active_tables_and_rows() {
     let temp = tempfile::tempdir().expect("create test directory");
-    let active = temp.path().join("active/vault.db");
+    let active = temp.path().join("active/messagecrate.db");
     fs::create_dir_all(active.parent().expect("database parent")).expect("create database parent");
     seed_reset_test_database(&active).await;
-    let prepared = temp.path().join("prepared/vault.db");
+    let prepared = temp.path().join("prepared/messagecrate.db");
     fs::create_dir_all(prepared.parent().expect("prepared parent"))
         .expect("create prepared parent");
 
@@ -896,7 +897,7 @@ async fn the_database_snapshot_carries_the_active_tables_and_rows() {
 #[tokio::test]
 async fn the_snapshot_of_a_missing_database_is_an_empty_vault_with_the_schema() {
     let temp = tempfile::tempdir().expect("create test directory");
-    let active = temp.path().join("missing/vault.db");
+    let active = temp.path().join("missing/messagecrate.db");
     let prepared = temp.path().join("prepared.db");
 
     prepare_database_snapshot(&active, &prepared)
@@ -936,7 +937,7 @@ async fn a_successful_install_removes_the_work_directories() {
     let (db_work, data_work) = reset_work_dirs(temp.path());
     let db_work_path = db_work.path().to_path_buf();
     let data_work_path = data_work.path().to_path_buf();
-    let prepared_db = db_work.path().join("vault.db");
+    let prepared_db = db_work.path().join("messagecrate.db");
     seed_reset_test_database(&prepared_db).await;
     let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID.to_string());
     fs::create_dir_all(&prepared_account).expect("create prepared account");
@@ -945,7 +946,7 @@ async fn a_successful_install_removes_the_work_directories() {
     fs::create_dir_all(prepared_config.parent().expect("prepared config parent"))
         .expect("create prepared config parent");
     fs::write(&prepared_config, b"new config").expect("write prepared config");
-    let active_db = temp.path().join("active/vault.db");
+    let active_db = temp.path().join("active/messagecrate.db");
     fs::create_dir_all(active_db.parent().expect("active database parent"))
         .expect("create active database parent");
     let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
@@ -995,10 +996,10 @@ async fn a_failed_install_with_nothing_left_in_the_work_directories_removes_them
     let data_work_path = data_work.path().to_path_buf();
     // No prepared database, account or config: the install refuses before
     // any rename, so there is no rollback and nothing to keep.
-    let prepared_db = db_work.path().join("vault.db");
+    let prepared_db = db_work.path().join("messagecrate.db");
     let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID.to_string());
     let prepared_config = temp.path().join("prepared-config/config.toml");
-    let active_db = temp.path().join("active/vault.db");
+    let active_db = temp.path().join("active/messagecrate.db");
     let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
     let active_config = temp.path().join("config/config.toml");
 
@@ -1036,14 +1037,14 @@ async fn a_failed_install_that_left_previous_state_in_the_work_directories_keeps
     // A backup the rollback could not put back stands in the database work
     // directory, the way a rename that failed midway would leave it.
     fs::write(
-        db_work.path().join("previous-vault.db"),
+        db_work.path().join("previous-messagecrate.db"),
         b"previous database",
     )
     .expect("write leftover backup");
-    let prepared_db = db_work.path().join("vault.db");
+    let prepared_db = db_work.path().join("messagecrate.db");
     let prepared_account = data_work.path().join(DEMO_ACCOUNT_ID.to_string());
     let prepared_config = temp.path().join("prepared-config/config.toml");
-    let active_db = temp.path().join("active/vault.db");
+    let active_db = temp.path().join("active/messagecrate.db");
     let active_account = temp.path().join("data").join(DEMO_ACCOUNT_ID.to_string());
     let active_config = temp.path().join("config/config.toml");
 
@@ -1077,7 +1078,7 @@ async fn a_failed_install_that_left_previous_state_in_the_work_directories_keeps
         "{text}"
     );
     assert_eq!(
-        fs::read(db_work_path.join("previous-vault.db")).expect("read kept backup"),
+        fs::read(db_work_path.join("previous-messagecrate.db")).expect("read kept backup"),
         b"previous database"
     );
     assert!(
@@ -1138,7 +1139,7 @@ async fn count(conn: &mut AnyConnection, sql: &str) -> i64 {
 /// dropped, showed up first in the demo vault.
 ///
 /// Runs on SQLite by file path, and on Postgres by schema URL when
-/// `MV_TEST_POSTGRES_URL` is set, the two transports `reset-demo` takes.
+/// `MC_TEST_POSTGRES_URL` is set, the two transports `reset-demo` takes.
 #[tokio::test]
 async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
     let temp = tempfile::tempdir().expect("create test directory");
@@ -1152,7 +1153,7 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
         "{contents:?}"
     );
 
-    let db_path = temp.path().join("vault.db");
+    let db_path = temp.path().join("messagecrate.db");
     let pg_url = match crate::pg_test_url() {
         Some(url) => Some(crate::db::engine::pg_test_schema_url(&url).await),
         None => None,
@@ -1364,7 +1365,7 @@ async fn seed_previous_demo(db: &Path, data_dir: &Path) -> PathBuf {
 #[tokio::test]
 async fn the_wipe_removes_the_demo_rows_and_folder_and_leaves_other_accounts() {
     let temp = tempfile::tempdir().expect("create test directory");
-    let db = temp.path().join("vault.db");
+    let db = temp.path().join("messagecrate.db");
     let data_dir = temp.path().join("data");
     seed_reset_test_database(&db).await;
     let demo_folder = data_dir.join(DEMO_ACCOUNT_ID.to_string());
@@ -1431,7 +1432,7 @@ async fn the_wipe_removes_the_demo_rows_and_folder_and_leaves_other_accounts() {
 #[tokio::test]
 async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
     let temp = tempfile::tempdir().expect("create test directory");
-    let db = temp.path().join("active").join("vault.db");
+    let db = temp.path().join("active").join("messagecrate.db");
     fs::create_dir_all(db.parent().expect("database parent")).expect("create database parent");
     let data_dir = temp.path().join("data");
     let previous_file = seed_previous_demo(&db, &data_dir).await;
@@ -1460,7 +1461,7 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
     {
         let (pool, mut conn) = test_db(&db).await;
         assert!(
-            !account_profile::vault_is_claimed(&mut conn)
+            !account_profile::is_claimed(&mut conn)
                 .await
                 .expect("read claim state"),
             "the vault starts unclaimed, so the claim below is the reset's doing"
@@ -1491,7 +1492,7 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
 
     let (pool, mut conn) = test_db(&db).await;
     assert!(
-        account_profile::vault_is_claimed(&mut conn)
+        account_profile::is_claimed(&mut conn)
             .await
             .expect("read claim state"),
         "the reset claims the vault"

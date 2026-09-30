@@ -24,7 +24,7 @@ import {
   useSetNamedSetMembers,
   withName,
 } from "./nameCollection";
-import { keys } from "./vaultKeys";
+import { keys } from "./queryKeys";
 
 vi.mock("./auth", () => ({
   useAuth: () => ({ accountId: 7 }),

@@ -66,7 +66,7 @@ impl Modify for BearerAddon {
                 HttpBuilder::new()
                     .scheme(HttpAuthScheme::Bearer)
                     .description(Some(
-                        "A logged-in Session: the `mv-user-` token `POST /v1/session` returns. \
+                        "A logged-in Session: the `mc-user-` token `POST /v1/session` returns. \
                          A route naming a scope needs that permission on the account.",
                     ))
                     .build(),
@@ -78,7 +78,7 @@ impl Modify for BearerAddon {
                 HttpBuilder::new()
                     .scheme(HttpAuthScheme::Bearer)
                     .description(Some(
-                        "A named API token: the `mv-api-` secret \
+                        "A named API token: the `mc-api-` secret \
                          `POST /v1/accounts/{id}/api-tokens` returns once, carrying the import \
                          and export scopes it was created with; a token never carries delete. \
                          Only the routes listing it accept one; every other route answers 403.",
@@ -95,8 +95,8 @@ pub fn public_openapi() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(crate::accounts_api::create_account))
         .routes(routes!(crate::session_api::create_session))
-        .routes(routes!(crate::vault_api::get_vault))
-        .routes(routes!(crate::vault_api::claim_vault))
+        .routes(routes!(crate::server_api::get_server))
+        .routes(routes!(crate::server_api::claim_server))
 }
 
 /// Health, the logged-in Session, the accounts collection, and browse routes.
@@ -196,9 +196,9 @@ pub fn api_openapi() -> OpenApiRouter<AppState> {
         .routes(routes!(crate::assets_api::replace_asset_upload_part))
         .routes(routes!(crate::assets_api::complete_asset_upload))
         .routes(routes!(crate::assets_api::delete_asset_upload))
-        .routes(routes!(crate::vault_api::get_vault_settings))
-        .routes(routes!(crate::vault_api::update_vault_settings))
-        .routes(routes!(crate::vault_api::get_vault_storage))
+        .routes(routes!(crate::server_api::get_server_settings))
+        .routes(routes!(crate::server_api::update_server_settings))
+        .routes(routes!(crate::server_api::get_server_storage))
 }
 
 /// Finish the assembled document with the parts no handler writes: the

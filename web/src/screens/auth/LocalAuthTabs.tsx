@@ -1,6 +1,6 @@
 import { SelectionIndicator, Tab, TabList, TabPanel, Tabs } from "react-aria-components";
-import type { VaultState } from "../../lib/useVaultState";
-import ClaimVaultForm from "./ClaimVaultForm";
+import type { ServerState } from "../../lib/useServerState";
+import ClaimForm from "./ClaimForm";
 import CreateAccountForm from "./CreateAccountForm";
 import LoginForm from "./LoginForm";
 
@@ -28,26 +28,26 @@ function tabClassName({ isSelected }: { isSelected: boolean }) {
  */
 export default function LocalAuthTabs({
   serverUrl,
-  vaultState,
+  serverState,
   disabled = false,
 }: {
   serverUrl: string;
-  vaultState: VaultState;
+  serverState: ServerState;
   disabled?: boolean;
 }) {
   // One thing to do, so no tab strip to choose between things.
-  if (vaultState === "unclaimed") {
+  if (serverState === "unclaimed") {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <h2 className="mb-6 border-b border-border pb-2 text-center text-[0.875rem] font-medium text-text">
           Create Owner
         </h2>
-        <ClaimVaultForm serverUrl={serverUrl} disabled={disabled} />
+        <ClaimForm serverUrl={serverUrl} disabled={disabled} />
       </div>
     );
   }
 
-  if (vaultState === "closed") {
+  if (serverState === "closed") {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <h2 className="mb-6 border-b border-border pb-2 text-center text-[0.875rem] font-medium text-text">

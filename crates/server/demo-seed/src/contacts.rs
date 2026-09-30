@@ -74,7 +74,7 @@ pub fn write_config_toml(config_dir: &Path) -> Result<()> {
 # Demo account identity lives in crates/server/demo-seed/config/seed.toml.
 
 [paths]
-db = "data/vault.db"
+db = "data/messagecrate.db"
 data_dir = "data"
 assets_dir = "assets"
 assets_converted_dir = "assets_converted"

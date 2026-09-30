@@ -6,11 +6,11 @@ use crate::write_queue::{
 };
 use anyhow::Result;
 use media::{CompressOptions, MediaMode};
-use message_ir::{ConversationDocument, IrAttachment};
-use message_ir_format::{FormatSink, MergedArchive, write_documents_through_sink};
 use message_crate_core::{
     CancelFlag, ExportReport, ExportTransforms, LogSink, OutputFormat, ProgressSink,
 };
+use message_ir::{ConversationDocument, IrAttachment};
+use message_ir_format::{FormatSink, MergedArchive, write_documents_through_sink};
 use std::path::{Path, PathBuf};
 
 /// Owns the write tail of an exporter run: output preparation, the

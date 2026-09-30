@@ -152,7 +152,7 @@ copies it to `src-tauri/binaries/imessage-reader-<target triple>`, where
 `tauri-build` picks it up: beside the app binary for `cargo tauri dev`, and
 inside every installer for `cargo tauri build`. The app finds it beside its
 own executable at run time (`imessage_ir_exporter::helper::locate`), then in
-`MESSAGE_VAULT_IO_BIN`, then on `PATH`; `MESSAGE_VAULT_IMESSAGE_READER` names
+`MESSAGE_CRATE_BIN`, then on `PATH`; `MESSAGE_CRATE_IMESSAGE_READER` names
 one file outright. The Docker image is unaffected, because the server never
 links an exporter.
 

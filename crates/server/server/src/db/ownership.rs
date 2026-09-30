@@ -125,7 +125,7 @@ mod tests {
     async fn setup() -> (sqlx::AnyPool, tempfile::TempDir) {
         let (pool, dir) = crate::db::engine::test_pool().await;
         let mut conn = pool.acquire().await.unwrap();
-        schema::ensure_vault_schema(&mut conn).await.unwrap();
+        schema::ensure_schema(&mut conn).await.unwrap();
         for account in [ACCOUNT_A, ACCOUNT_B] {
             sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, $1)")
                 .bind(account)

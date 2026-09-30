@@ -2,11 +2,11 @@ import { type InfiniteData, type UseMutationResult, useMutation } from "@tanstac
 import { useCallback, useMemo } from "react";
 import {
   type OffsetPage,
-  useVaultCache,
-  useVaultQuery,
-  type VaultCacheEntries,
-  type VaultQueryKey,
-} from "./vaultQuery";
+  type RouteCacheEntries,
+  type RouteQueryKey,
+  useRouteCache,
+  useRouteQuery,
+} from "./routeQuery";
 
 /**
  * Contact Groups and Message Tags are the same feature over different nouns: a
@@ -42,7 +42,7 @@ export type SetMembersVars = { name: string; patch: MembersPatch };
  */
 export type ChipTarget = {
   /** Prefix of the entries to patch. */
-  key: VaultQueryKey;
+  key: RouteQueryKey;
   /** Field the names sit in on a row. */
   field: "groups" | "tags";
   /** `pages` for an offset-paged list entry, `row` for one row on its own. */
@@ -63,14 +63,14 @@ export type NameCollectionRoutes = {
 
 export type NameCollectionConfig = {
   routes: NameCollectionRoutes;
-  /** This collection's cache prefix, from `vaultKeys`. */
-  key: VaultQueryKey;
+  /** This collection's cache prefix, from `queryKeys`. */
+  key: RouteQueryKey;
   /**
    * Cache keys of the lists that show these names as chips, invalidated after
    * every write. Matched by prefix, so `keys.contacts.all` covers every page
    * and every search of the contact list.
    */
-  invalidates: readonly VaultQueryKey[];
+  invalidates: readonly RouteQueryKey[];
   /** Cached shapes to patch with this collection's names before the vault answers. */
   chips: readonly ChipTarget[];
   /** What one of these is called in an error, e.g. `group`. */
@@ -83,9 +83,9 @@ export type NameCollectionConfig = {
 
 export type NameCollection = {
   /** Cache key parts, before the account is put in front of them. */
-  key: VaultQueryKey;
+  key: RouteQueryKey;
   routes: NameCollectionRoutes;
-  invalidates: readonly VaultQueryKey[];
+  invalidates: readonly RouteQueryKey[];
   chips: readonly ChipTarget[];
   label: string;
   isReserved: (name: string) => boolean;
@@ -168,7 +168,7 @@ export function useNameCollection(collection: NameCollection): {
   names: string[];
   loading: boolean;
 } {
-  const { data, isPending } = useVaultQuery(collection.key, (signal) =>
+  const { data, isPending } = useRouteQuery(collection.key, (signal) =>
     fetchSets(collection, signal),
   );
   const names = useMemo(() => (data ?? []).map((set) => set.name), [data]);
@@ -181,7 +181,7 @@ export function useNameCollection(collection: NameCollection): {
  * to it before the invalidated list has come back.
  */
 function useIdOf(collection: NameCollection): (name: string) => Promise<number> {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   return useCallback(
     async (name: string) => {
       const wanted = name.trim().toLowerCase();
@@ -209,7 +209,7 @@ function checkedName(collection: NameCollection, name: string): string {
 
 /** This collection's list, plus every list that shows its names as chips. */
 function useMarkStale(collection: NameCollection): () => Promise<void> {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   return useCallback(async () => {
     await cache.invalidate(collection.key, ...collection.invalidates);
   }, [cache, collection]);
@@ -251,7 +251,7 @@ export function useDeleteNamedSet(
 }
 
 /** The rows as they were before an optimistic membership write touched them. */
-export type ChipSnapshot = { entries: VaultCacheEntries };
+export type ChipSnapshot = { entries: RouteCacheEntries };
 
 /**
  * Put rows in or out of one set, drawn before the vault answers.
@@ -267,7 +267,7 @@ export type ChipSnapshot = { entries: VaultCacheEntries };
 export function useSetNamedSetMembers(
   collection: NameCollection,
 ): UseMutationResult<MembersChanged, Error, SetMembersVars, ChipSnapshot> {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   const idOf = useIdOf(collection);
   const markStale = useMarkStale(collection);
   return useMutation<MembersChanged, Error, SetMembersVars, ChipSnapshot>({
@@ -315,7 +315,7 @@ export type NameCollectionActions = {
  * the invalidation all belong to the mutations above.
  */
 export function useNameCollectionActions(collection: NameCollection): NameCollectionActions {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   const createSet = useCreateNamedSet(collection);
   const renameSet = useRenameNamedSet(collection);
   const deleteSet = useDeleteNamedSet(collection);

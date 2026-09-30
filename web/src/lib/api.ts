@@ -68,7 +68,7 @@ const RAW_BODY_FALLBACK_LIMIT = 200;
  * reads — the problem's `detail`, or its `errors` joined for a validation
  * failure.
  */
-export class VaultApiError extends Error {
+export class ApiError extends Error {
   readonly status: number;
   /** The last segment of the problem's `type` URL; null when the body was not a problem. */
   readonly type: string | null;
@@ -79,7 +79,7 @@ export class VaultApiError extends Error {
 
   constructor(status: number, message: string, problem: Problem | null = null) {
     super(message);
-    this.name = "VaultApiError";
+    this.name = "ApiError";
     this.status = status;
     this.type = problem ? problemSlug(problem.type) : null;
     this.title = problem?.title ?? null;
@@ -124,9 +124,9 @@ function parseProblem(text: string): Problem | null {
  * to `RAW_BODY_FALLBACK_LIMIT` characters, since a reverse proxy or non-vault
  * host can answer with a whole HTML page — then to a generic sentence.
  */
-export function problemFromBody(status: number, text: string): VaultApiError {
+export function problemFromBody(status: number, text: string): ApiError {
   const trimmed = text.trim();
-  if (!trimmed) return new VaultApiError(status, `Request failed (${status})`);
+  if (!trimmed) return new ApiError(status, `Request failed (${status})`);
 
   const problem = parseProblem(trimmed);
   if (problem) {
@@ -134,12 +134,12 @@ export function problemFromBody(status: number, text: string): VaultApiError {
     const errors = (problem.errors ?? []).map((e) => e.trim()).filter(Boolean);
     const message =
       detail || errors.join("; ") || problem.title.trim() || `Request failed (${status})`;
-    return new VaultApiError(status, message, problem);
+    return new ApiError(status, message, problem);
   }
   if (trimmed.length > RAW_BODY_FALLBACK_LIMIT) {
-    return new VaultApiError(status, `${trimmed.slice(0, RAW_BODY_FALLBACK_LIMIT)}…`);
+    return new ApiError(status, `${trimmed.slice(0, RAW_BODY_FALLBACK_LIMIT)}…`);
   }
-  return new VaultApiError(status, trimmed);
+  return new ApiError(status, trimmed);
 }
 
 async function request<T>(

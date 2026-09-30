@@ -9,11 +9,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { getToken, setAccountId, setBaseUrl, setToken, VaultApiError } from "./api";
+import { ApiError, getToken, setAccountId, setBaseUrl, setToken } from "./api";
 import { parsePersistedAuth } from "./authGuards";
+import { getSession, logout as serverLogout } from "./serverApi";
 import { isTauri } from "./tauri-check";
 import { fetchAccountProfileFor } from "./useAccountProfile";
-import { getSession, logout as vaultLogout } from "./vaultApi";
 
 interface AuthState {
   serverUrl: string;
@@ -40,7 +40,7 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const STORAGE_KEY = "message-vault-auth";
+const STORAGE_KEY = "message-crate-auth";
 
 /** Max time to wait for the vault logout request before clearing local state. */
 const LOGOUT_TIMEOUT_MS = 2000;
@@ -99,10 +99,10 @@ function clearPersisted() {
 
 /** Holds login state for the app and restores a saved session on startup. */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Talking to the client directly rather than through `vaultQuery`, which
+  // Talking to the client directly rather than through `routeQuery`, which
   // imports `useAuth` from this module: importing it back would be a cycle.
   const queryClient = useQueryClient();
-  const resetVaultCache = useCallback(() => {
+  const resetRouteCache = useCallback(() => {
     queryClient.clear();
   }, [queryClient]);
   const [restored, setRestored] = useState(false);
@@ -171,7 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           authEpoch.current++;
           setToken(null);
           setAccountId(null);
-          if (err instanceof VaultApiError && err.status === 401) clearPersisted();
+          if (err instanceof ApiError && err.status === 401) clearPersisted();
           setState((s) => ({
             ...s,
             token: null,
@@ -211,7 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const epoch = ++authEpoch.current;
       // One call, and it cannot be incomplete: every cached vault entry is named
       // with the account that filled it, so this only releases memory.
-      resetVaultCache();
+      resetRouteCache();
       setBaseUrl(serverUrl);
       setToken(token);
       // The profile is the account's own row, addressed by this id, so the
@@ -238,7 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       // One call, and it cannot be incomplete: every cached vault entry is named
       // with the account that filled it, so this only releases memory.
-      resetVaultCache,
+      resetRouteCache,
       queryClient,
     ],
   );
@@ -259,14 +259,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Await so close-to-quit can finish (or time out) before the WebView dies.
     if (getToken()) {
       try {
-        await vaultLogout({ signal: logoutTimeoutSignal() });
+        await serverLogout({ signal: logoutTimeoutSignal() });
       } catch {
         // Vault unreachable, 401, or timeout — still clear the local session.
       }
     }
     setToken(null);
     setAccountId(null);
-    resetVaultCache();
+    resetRouteCache();
     clearPersisted();
     setState((s) => ({
       ...s,
@@ -274,7 +274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accountId: null,
       isAuthenticated: false,
     }));
-  }, [resetVaultCache]);
+  }, [resetRouteCache]);
 
   // Desktop only: on window close, revoke the session then quit.
   const closingRef = useRef(false);

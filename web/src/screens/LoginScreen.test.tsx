@@ -17,24 +17,24 @@ vi.mock("../lib/tauri-check", () => ({
   isTauri: () => false,
 }));
 
-import { VaultProviders } from "../test/vaultProviders";
+import { Providers } from "../test/providers";
 import LoginScreen from "./LoginScreen";
 
 /**
- * Answer `/health` as a healthy vault and `/v1/vault` with the state given.
+ * Answer `/health` as a healthy vault and `/v1/server` with the state given.
  *
  * The state decides which forms the card offers, so a test that says nothing
  * about it gets `open` — the two-tab card, which is what most of these tests
  * are about. Returns the underlying fetch mock.
  */
-function stubVault(state: "unclaimed" | "closed" | "open" = "open") {
+function stubServer(state: "unclaimed" | "closed" | "open" = "open") {
   // `/health` is read with `text()`; the API client reads `status` and
   // `json()`. Both shapes come back from the one stub so a test does not have
   // to know which of the two a given screen used.
   const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => ({
     ok: true,
     status: 200,
-    text: async () => (String(url).includes("/v1/vault") ? JSON.stringify({ state }) : ""),
+    text: async () => (String(url).includes("/v1/server") ? JSON.stringify({ state }) : ""),
     json: async () => ({ state }),
   }));
   vi.stubGlobal("fetch", fetchMock);
@@ -43,11 +43,11 @@ function stubVault(state: "unclaimed" | "closed" | "open" = "open") {
 
 function renderScreen() {
   render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter>
         <LoginScreen />
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 
@@ -71,7 +71,7 @@ describe("LoginScreen", () => {
   });
 
   it("logs in without a vault-selection step", async () => {
-    stubVault();
+    stubServer();
     renderScreen();
 
     expect(await screen.findByRole("tab", { name: "Login" })).toBeInTheDocument();
@@ -83,7 +83,7 @@ describe("LoginScreen", () => {
   });
 
   it("names the product and reports the connection as one word", async () => {
-    stubVault();
+    stubServer();
     renderScreen();
 
     expect(await screen.findByText("Connected")).toBeInTheDocument();
@@ -92,7 +92,7 @@ describe("LoginScreen", () => {
   });
 
   it("never shows the vault's host address", async () => {
-    stubVault();
+    stubServer();
     renderScreen();
 
     await screen.findByText("Connected");
@@ -101,7 +101,7 @@ describe("LoginScreen", () => {
   });
 
   it("probes /health rather than the auth mode endpoint", async () => {
-    const fetchMock = stubVault();
+    const fetchMock = stubServer();
     renderScreen();
 
     await screen.findByText("Connected");
@@ -112,7 +112,7 @@ describe("LoginScreen", () => {
   });
 
   it("keeps both tabs, Login first", async () => {
-    stubVault();
+    stubServer();
     renderScreen();
 
     await screen.findByRole("tab", { name: "Login" });
@@ -122,7 +122,7 @@ describe("LoginScreen", () => {
   });
 
   it("still asks for the password twice on Create Account", async () => {
-    stubVault();
+    stubServer();
     const user = setupUser();
     renderScreen();
 
@@ -135,7 +135,7 @@ describe("LoginScreen", () => {
   });
 
   it("drops the password-length claim the server does not enforce", async () => {
-    stubVault();
+    stubServer();
     const user = setupUser();
     renderScreen();
 
@@ -146,7 +146,7 @@ describe("LoginScreen", () => {
   });
 
   it("rejects a new account when the two passwords disagree", async () => {
-    stubVault();
+    stubServer();
     const user = setupUser();
     renderScreen();
 
@@ -224,7 +224,7 @@ describe("LoginScreen", () => {
   });
 
   it("disables Log in while the vault is unreachable", async () => {
-    stubVault();
+    stubServer();
     const user = setupUser();
     renderScreen();
 
@@ -243,7 +243,7 @@ describe("LoginScreen", () => {
   });
 
   it("offers Use this address only for an address that is a change", async () => {
-    stubVault();
+    stubServer();
     const user = setupUser();
     renderScreen();
 
@@ -284,7 +284,7 @@ describe("LoginScreen", () => {
   });
 
   it("opens Server Address from the link and comes back on Cancel", async () => {
-    stubVault();
+    stubServer();
     const user = setupUser();
     renderScreen();
 
@@ -302,7 +302,7 @@ describe("LoginScreen", () => {
   });
 
   it("reports what Test found for the typed address", async () => {
-    stubVault();
+    stubServer();
     const user = setupUser();
     renderScreen();
 
@@ -321,7 +321,7 @@ describe("LoginScreen", () => {
   });
 
   it("does not credit an edited address with the connection it never earned", async () => {
-    stubVault();
+    stubServer();
     const user = setupUser();
     renderScreen();
 
@@ -356,7 +356,7 @@ describe("LoginScreen", () => {
     await user.click(screen.getByRole("button", { name: "Change server address" }));
 
     // Only the address being typed answers healthy — the disconnected card's
-    // own background self-heal probe (`useVaultHealth`) keeps polling the
+    // own background self-heal probe (`useServerHealth`) keeps polling the
     // blank address it was last on, a different host from the one typed
     // below. Two hosts, two answers, so this test is about the one thing it
     // names: applying the address that was typed. Which probe wins when both
@@ -502,7 +502,7 @@ describe("LoginScreen", () => {
   });
 
   it("carries an abort signal on the health probe", async () => {
-    const fetchMock = stubVault();
+    const fetchMock = stubServer();
     renderScreen();
 
     await screen.findByRole("tab", { name: "Login" });
@@ -512,7 +512,7 @@ describe("LoginScreen", () => {
   });
 
   it("puts the credentials in a real form, so a password manager can fill it", async () => {
-    stubVault();
+    stubServer();
     renderScreen();
 
     const password = await screen.findByLabelText("Password");
@@ -526,7 +526,7 @@ describe("LoginScreen", () => {
   // jsdom does not perform that implicit submission, so this drives the form
   // element directly — that the key reaches it is the browser's part.
   it("runs the login from the form's own submit event", async () => {
-    stubVault();
+    stubServer();
     renderScreen();
 
     await screen.findByRole("tab", { name: "Login" });
@@ -541,7 +541,7 @@ describe("LoginScreen", () => {
   });
 
   it("calls the new-account action Continue, since profile setup finishes it", async () => {
-    stubVault();
+    stubServer();
     const user = setupUser();
     renderScreen();
 
@@ -553,7 +553,7 @@ describe("LoginScreen", () => {
   });
 
   it("keeps the action under the fields and the error down by the or-rule", async () => {
-    stubVault();
+    stubServer();
     const user = setupUser();
     renderScreen();
 

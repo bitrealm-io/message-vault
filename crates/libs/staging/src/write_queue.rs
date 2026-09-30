@@ -25,11 +25,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
 use anyhow::{Context, Result};
 use media::{CompressOptions, MediaMode};
-use message_ir::{ConversationDocument, IrAttachment, give_each_document_its_own_file};
 use message_crate_core::{
     AttachmentJob, CancelFlag, LogSink, MediaConfig, OutputFormat, ProgressEvent, ProgressSink,
     attachment_size_hint, emit_log, emit_progress, run_attachment_jobs,
 };
+use message_ir::{ConversationDocument, IrAttachment, give_each_document_its_own_file};
 
 use crate::transcode::{TranscodeOptions, transcode_staged};
 use message_ir_format::{is_complete_file, write_format};

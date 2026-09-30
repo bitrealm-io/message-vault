@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import Button from "../../components/Button";
 import { useContactGroupActions } from "../../lib/contactGroups";
-import { addressBookContentType, loadAddressBook } from "../../lib/vaultApi";
+import { addressBookContentType, loadAddressBook } from "../../lib/serverApi";
 import { sectionTitleClass } from "./profileStyles";
 
 /** Largest file the server accepts, mirrored here so the refusal is immediate. */

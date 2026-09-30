@@ -1,4 +1,4 @@
-//! Turn conversation documents into JSON Lines for the Message Vault import API.
+//! Turn conversation documents into JSON Lines for the Message Crate import API.
 //!
 //! JSON Lines means one JSON object per line. The first line is the conversation
 //! header. Each later line is one message.

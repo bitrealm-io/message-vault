@@ -73,7 +73,7 @@ pub(crate) async fn list_conversation_search_fields(
 mod tests {
     use axum::http::StatusCode;
 
-    use crate::test_support::{get_json, get_status, vault_with_account};
+    use crate::test_support::{fixture_with_account, get_json, get_status};
 
     /// The words a list's page names.
     fn words(body: &serde_json::Value) -> Vec<String> {
@@ -87,7 +87,7 @@ mod tests {
 
     #[tokio::test]
     async fn each_list_is_its_own_path_with_its_own_words() {
-        let (vault, account) = vault_with_account().await;
+        let (vault, account) = fixture_with_account().await;
         let contacts: serde_json::Value = get_json(
             &vault.state,
             "/v1/search-fields/contacts?limit=500",

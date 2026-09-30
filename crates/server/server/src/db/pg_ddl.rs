@@ -158,7 +158,7 @@ fn column_name(line: &str) -> String {
 }
 
 /// Render deferred foreign keys as idempotent `DO $$` blocks (a plain
-/// `ADD CONSTRAINT` would fail the second time `ensure_vault_schema` runs).
+/// `ADD CONSTRAINT` would fail the second time `ensure_schema` runs).
 fn render_deferred_fks(fks: &[DeferredFk]) -> String {
     let mut out = String::new();
     for fk in fks {

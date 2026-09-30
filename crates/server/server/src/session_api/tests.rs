@@ -3,9 +3,9 @@ use axum::http::StatusCode;
 use super::*;
 use crate::problem::ProblemType;
 use crate::test_support::{
-    RegisteredAccount, SeedConversation, SeedMessage, claim_vault_as_owner, delete_status,
-    expect_problem, get_json, get_raw, get_status, log_in, login_status, post_created_json,
-    post_raw, put_status, register_via_api, seed_conversation, test_vault, vault_with_account,
+    RegisteredAccount, SeedConversation, SeedMessage, claim_as_owner, delete_status,
+    expect_problem, fixture_with_account, get_json, get_raw, get_status, log_in, login_status,
+    post_created_json, post_raw, put_status, register_via_api, seed_conversation, test_fixture,
 };
 
 const TEST_ACCOUNT: i64 = 7;
@@ -15,7 +15,7 @@ const TEST_ACCOUNT: i64 = 7;
 /// `ok` flag, and `DELETE` ends it with `204 No Content`.
 #[tokio::test]
 async fn a_session_is_created_read_and_deleted_at_one_path() {
-    let (vault, _) = vault_with_account().await;
+    let (vault, _) = fixture_with_account().await;
     let state = vault.state.clone();
 
     let created = crate::test_support::log_in(&state, "alice", "hunter2hunter2").await;
@@ -48,7 +48,7 @@ async fn a_session_is_created_read_and_deleted_at_one_path() {
 /// had ended something it had not.
 #[tokio::test]
 async fn logging_out_with_an_api_token_is_refused_and_leaves_the_token_working() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let state = vault.state.clone();
     let mut conn = vault.conn().await;
     let token = crate::db::api_tokens::create_api_token(
@@ -80,11 +80,11 @@ async fn logging_out_with_an_api_token_is_refused_and_leaves_the_token_working()
 /// every other route.
 #[tokio::test]
 async fn logging_out_with_a_token_that_names_nothing_is_a_401() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let state = vault.state.clone();
 
     let (status, text) =
-        crate::test_support::delete_raw(&state, "/v1/session", "mv-user-not-a-session").await;
+        crate::test_support::delete_raw(&state, "/v1/session", "mc-user-not-a-session").await;
     crate::test_support::expect_problem(
         status,
         &text,
@@ -105,7 +105,7 @@ async fn logging_out_with_a_token_that_names_nothing_is_a_401() {
 /// every other route refuses it.
 #[tokio::test]
 async fn a_disabled_account_can_still_log_out() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let state = vault.state.clone();
     let mut conn = vault.conn().await;
     sqlx::query("UPDATE accounts SET disabled = 1 WHERE id = $1")
@@ -132,7 +132,7 @@ async fn a_disabled_account_can_still_log_out() {
 /// parameter the route does not take, never obeyed and never quietly dropped.
 #[tokio::test]
 async fn a_session_read_refuses_an_account_parameter() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let state = vault.state.clone();
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
@@ -182,7 +182,7 @@ async fn seed_source(state: &crate::server::AppState, account_id: i64, source: &
 /// other way round; another account's import never shows up.
 #[tokio::test]
 async fn a_session_lists_the_account_sources_oldest_first() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let state = vault.state.clone();
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
@@ -204,7 +204,7 @@ async fn a_session_lists_the_account_sources_oldest_first() {
 
 #[tokio::test]
 async fn logout_on_conn_leaves_registered_account() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let mut conn = vault.conn().await;
     account_profile::insert_account_at(&mut conn, TEST_ACCOUNT, "alice", None, None)
         .await
@@ -232,7 +232,7 @@ async fn logout_on_conn_leaves_registered_account() {
 
 #[tokio::test]
 async fn disabled_account_cannot_log_in() {
-    let (vault, created) = vault_with_account().await;
+    let (vault, created) = fixture_with_account().await;
     let state = vault.state.clone();
 
     let mut conn = state.db.acquire().await.unwrap();
@@ -265,7 +265,7 @@ async fn assert_refused(state: &crate::server::AppState, path: &str, token: &str
 /// past in the database rather than waited out.
 #[tokio::test]
 async fn an_expired_session_is_refused_on_a_browse_route() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let state = vault.state.clone();
     assert_eq!(
         get_status(&state, BROWSE, &alice.token).await,
@@ -291,7 +291,7 @@ async fn an_expired_session_is_refused_on_a_browse_route() {
 /// Logging out ends the session everywhere, not only at `/v1/session`.
 #[tokio::test]
 async fn a_logged_out_session_is_refused_on_a_browse_route() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let state = vault.state.clone();
     assert_eq!(
         get_status(&state, BROWSE, &alice.token).await,
@@ -326,7 +326,7 @@ async fn export_token(
 /// neither page the Export Run it started nor start another.
 #[tokio::test]
 async fn a_deleted_api_token_is_refused_on_the_export_routes() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let state = vault.state.clone();
     let (token_id, api_token) = export_token(&state, &alice).await;
 
@@ -375,7 +375,7 @@ async fn a_deleted_api_token_is_refused_on_the_export_routes() {
 /// one is.
 #[tokio::test]
 async fn an_expired_api_token_is_refused_on_an_export_route() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let state = vault.state.clone();
     let (token_id, api_token) = export_token(&state, &alice).await;
     assert_eq!(
@@ -400,7 +400,7 @@ async fn an_expired_api_token_is_refused_on_an_export_route() {
 /// is refused.
 #[tokio::test]
 async fn a_second_login_replaces_the_first_session() {
-    let (vault, first) = vault_with_account().await;
+    let (vault, first) = fixture_with_account().await;
     let state = vault.state.clone();
     let second = log_in(&state, "alice", "hunter2hunter2").await;
     let second = second["token"].as_str().unwrap();
@@ -425,9 +425,9 @@ async fn a_second_login_replaces_the_first_session() {
 /// more (`CONTEXT.md`, Owner Home): the account's session keeps browsing.
 #[tokio::test]
 async fn an_owner_password_reset_leaves_the_session_browsing() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let state = vault.state.clone();
-    let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
     let status = put_status(

@@ -1,8 +1,8 @@
 //! Parse OpenExtract conversation CSV (per-chat or all-conversations).
 
 use anyhow::{Context, Result, bail};
-use message_csv::{col, field};
 use message_crate_core::discover_files;
+use message_csv::{col, field};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

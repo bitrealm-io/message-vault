@@ -1,14 +1,14 @@
 import { type UseMutationResult, useMutation } from "@tanstack/react-query";
 import { apiErrorMessage } from "../../lib/apiErrorMessage";
+import { keys } from "../../lib/queryKeys";
+import { useRouteCache, useRouteQuery } from "../../lib/routeQuery";
 import {
   deleteAccountById,
   deleteAccountMessages,
   listAccounts,
   updateAccount,
-} from "../../lib/vaultApi";
-import type { components } from "../../lib/vaultApi.types";
-import { keys } from "../../lib/vaultKeys";
-import { useVaultCache, useVaultQuery } from "../../lib/vaultQuery";
+} from "../../lib/serverApi";
+import type { components } from "../../lib/serverApi.types";
 
 /** One account as the vault owner sees it: the same row the account itself reads. */
 export type ManagedAccount = components["schemas"]["Account"];
@@ -25,7 +25,7 @@ const fetchAccounts = (signal: AbortSignal) =>
 function useOwnerWrite<V>(
   write: (vars: V) => Promise<unknown>,
 ): UseMutationResult<unknown, Error, V> {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   return useMutation<unknown, Error, V>({
     mutationFn: write,
     onSettled: () => cache.invalidate(keys.ownerAccounts.all),
@@ -42,7 +42,7 @@ export function useUpdateAccount(): UseMutationResult<
   Error,
   { id: number; changes: ManagedAccountChanges }
 > {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   return useMutation<ManagedAccount, Error, { id: number; changes: ManagedAccountChanges }>({
     mutationFn: ({ id, changes }) => updateAccount(id, changes),
     onSuccess: (account) => {
@@ -70,7 +70,7 @@ export function useOwnerAccounts() {
     data,
     isPending: loading,
     error: loadError,
-  } = useVaultQuery(keys.ownerAccounts.all, fetchAccounts);
+  } = useRouteQuery(keys.ownerAccounts.all, fetchAccounts);
 
   return {
     accounts: data ?? [],

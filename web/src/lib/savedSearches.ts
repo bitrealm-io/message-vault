@@ -1,14 +1,14 @@
 import { type UseMutationResult, useMutation } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { keys } from "./queryKeys";
+import { useRouteCache, useRouteQuery } from "./routeQuery";
 import {
-  createSavedSearch as createVaultSavedSearch,
-  deleteSavedSearch as deleteVaultSavedSearch,
+  createSavedSearch,
+  deleteSavedSearch,
   listSavedSearches,
-  updateSavedSearch as updateVaultSavedSearch,
-} from "./vaultApi";
-import type { components } from "./vaultApi.types";
-import { keys } from "./vaultKeys";
-import { useVaultCache, useVaultQuery } from "./vaultQuery";
+  updateSavedSearch,
+} from "./serverApi";
+import type { components } from "./serverApi.types";
 
 type Schema = components["schemas"];
 
@@ -35,7 +35,7 @@ export function useSavedSearches(): {
   savedSearches: SavedSearch[];
   loading: boolean;
 } {
-  const { data, isPending } = useVaultQuery(
+  const { data, isPending } = useRouteQuery(
     keys.savedSearches.all,
     async (signal) => (await listSavedSearches({ signal })).items,
   );
@@ -44,7 +44,7 @@ export function useSavedSearches(): {
 
 /** Every write is followed by one fresh read of the list the sidebar shows. */
 function useSavedSearchWrite<T, V>(write: (vars: V) => Promise<T>): UseMutationResult<T, Error, V> {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   return useMutation<T, Error, V>({
     mutationFn: write,
     onSettled: () => cache.invalidate(keys.savedSearches.all),
@@ -56,7 +56,7 @@ export function useCreateSavedSearch(): UseMutationResult<
   Error,
   { name: string; query: string }
 > {
-  return useSavedSearchWrite((body) => createVaultSavedSearch(body));
+  return useSavedSearchWrite((body) => createSavedSearch(body));
 }
 
 export function useUpdateSavedSearch(): UseMutationResult<
@@ -64,11 +64,11 @@ export function useUpdateSavedSearch(): UseMutationResult<
   Error,
   { id: number; name: string; query: string }
 > {
-  return useSavedSearchWrite(({ id, name, query }) => updateVaultSavedSearch(id, { name, query }));
+  return useSavedSearchWrite(({ id, name, query }) => updateSavedSearch(id, { name, query }));
 }
 
 export function useDeleteSavedSearch(): UseMutationResult<void, Error, number> {
-  return useSavedSearchWrite((id) => deleteVaultSavedSearch(id));
+  return useSavedSearchWrite((id) => deleteSavedSearch(id));
 }
 
 export type SavedSearchActions = {

@@ -1,7 +1,7 @@
 //! Passwords, usernames, and the rate limiter on attempts to present them.
 //!
 //! Nothing here is a route. The Session routes (`session_api`), the accounts
-//! collection (`accounts_api`), claiming (`vault_api`) and the owner's shell
+//! collection (`accounts_api`), claiming (`server_api`) and the owner's shell
 //! commands (`owner_cli`) all hash, verify and validate through this module,
 //! so a password rule is written once.
 

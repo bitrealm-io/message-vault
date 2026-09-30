@@ -244,7 +244,7 @@ pub async fn update(
 
 /// Delete a saved search.
 ///
-/// This never touches `vault_imports`: an import-created saved search is a
+/// This never touches `imports`: an import-created saved search is a
 /// shortcut to a run's messages, and the run's own record is permanent.
 pub async fn delete(conn: &mut AnyConnection, account_id: i64, id: i64) -> Result<()> {
     let result = sqlx::query("DELETE FROM saved_searches WHERE account_id = $1 AND id = $2")
@@ -288,7 +288,7 @@ async fn unique_import_name(
 ///
 /// Called when a run finishes having inserted at least one message. A run
 /// that failed, was cancelled, or stored nothing gets no saved search — it is
-/// still recorded in `vault_imports` either way.
+/// still recorded in `imports` either way.
 pub async fn create_for_import(
     conn: &mut AnyConnection,
     account_id: i64,

@@ -1,4 +1,4 @@
-//! What one import run did to each contact: the `vault_import_contacts`
+//! What one import run did to each contact: the `import_contacts`
 //! table.
 //!
 //! An import creates contacts, names them, and adds handles to them, and
@@ -83,7 +83,7 @@ pub async fn record(
         return Ok(());
     };
     let existing: Option<String> = sqlx::query_scalar(
-        "SELECT reason FROM vault_import_contacts WHERE import_id = $1 AND contact_id = $2",
+        "SELECT reason FROM import_contacts WHERE import_id = $1 AND contact_id = $2",
     )
     .bind(import_id)
     .bind(contact_id)
@@ -93,7 +93,7 @@ pub async fn record(
         Some(kept) if kept <= reason => Ok(()),
         Some(_) => {
             sqlx::query(
-                "UPDATE vault_import_contacts SET reason = $3
+                "UPDATE import_contacts SET reason = $3
                  WHERE import_id = $1 AND contact_id = $2",
             )
             .bind(import_id)
@@ -105,7 +105,7 @@ pub async fn record(
         }
         None => {
             sqlx::query(
-                "INSERT INTO vault_import_contacts (import_id, contact_id, reason)
+                "INSERT INTO import_contacts (import_id, contact_id, reason)
                  VALUES ($1, $2, $3)
                  ON CONFLICT DO NOTHING",
             )
@@ -150,7 +150,7 @@ pub struct ContactCounts {
 /// Returns an error when the query fails.
 pub async fn counts(conn: &mut AnyConnection, import_id: i64) -> Result<ContactCounts> {
     let rows: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT reason, COUNT(*) FROM vault_import_contacts
+        "SELECT reason, COUNT(*) FROM import_contacts
          WHERE import_id = $1 GROUP BY reason",
     )
     .bind(import_id)
@@ -182,13 +182,13 @@ pub async fn page(
     offset: usize,
 ) -> Result<(Vec<ImportContact>, u64)> {
     let total: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM vault_import_contacts WHERE import_id = $1")
+        sqlx::query_scalar("SELECT COUNT(*) FROM import_contacts WHERE import_id = $1")
             .bind(import_id)
             .fetch_one(&mut *conn)
             .await?;
     let rows: Vec<(i64, String, String)> = sqlx::query_as(
         "SELECT c.id, c.preferred_name, ic.reason
-         FROM vault_import_contacts ic
+         FROM import_contacts ic
          JOIN contacts c ON c.id = ic.contact_id
          WHERE ic.import_id = $1
          ORDER BY CASE ic.reason
@@ -222,7 +222,7 @@ pub async fn page(
 /// Returns an error when the query fails.
 pub async fn contact_ids(conn: &mut AnyConnection, import_id: i64) -> Result<Vec<i64>> {
     let ids: Vec<i64> = sqlx::query_scalar(
-        "SELECT contact_id FROM vault_import_contacts WHERE import_id = $1 ORDER BY contact_id",
+        "SELECT contact_id FROM import_contacts WHERE import_id = $1 ORDER BY contact_id",
     )
     .bind(import_id)
     .fetch_all(&mut *conn)

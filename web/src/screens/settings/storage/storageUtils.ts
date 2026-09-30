@@ -1,6 +1,6 @@
 import type { ImportSummaryView } from "../../../components/import/ImportSummaryPanel";
 import { formatDateTime } from "../../../lib/formatDate";
-import type { components } from "../../../lib/vaultApi.types";
+import type { components } from "../../../lib/serverApi.types";
 
 export const ATTACHMENT_PAGE_SIZE = 20;
 

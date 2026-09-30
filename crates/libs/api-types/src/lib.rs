@@ -31,10 +31,10 @@ use serde::{Deserialize, Serialize};
 
 /// Request header naming the app a request comes from: `desktop` or
 /// `website`, the two values of [`AppKind`].
-pub const APP_HEADER: &str = "x-message-vault-app";
+pub const APP_HEADER: &str = "x-message-crate-app";
 
 /// Request header carrying that app's Build, such as `0.9.0+343fe0d8`.
-pub const APP_VERSION_HEADER: &str = "x-message-vault-version";
+pub const APP_VERSION_HEADER: &str = "x-message-crate-version";
 
 /// Which app a session's requests come from. The server records it beside the
 /// app's Build and shows both to the owner; it never refuses a request

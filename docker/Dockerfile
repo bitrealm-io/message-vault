@@ -20,7 +20,7 @@ COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
 ARG BUILD_METADATA=unknown
-ENV MESSAGE_VAULT_BUILD_METADATA=$BUILD_METADATA
+ENV MESSAGE_CRATE_BUILD_METADATA=$BUILD_METADATA
 RUN npm run build
 
 # -----------------------------------------------------------------------------
@@ -45,7 +45,7 @@ COPY schema ./schema
 COPY vendor ./vendor
 
 ARG BUILD_METADATA=unknown
-ENV MESSAGE_VAULT_BUILD_METADATA=$BUILD_METADATA
+ENV MESSAGE_CRATE_BUILD_METADATA=$BUILD_METADATA
 RUN cargo build --release -p message-crate-server
 # Conversation JSONL is not in git. Write it here so the runtime image can seed.
 # Needs crates/server/demo-seed/data/ (corpus + names). Do not ignore that path.
@@ -87,8 +87,8 @@ RUN chmod +x /usr/local/bin/docker-entrypoint-release.sh \
 USER node
 
 ENV HOSTNAME=0.0.0.0 \
-    VAULT_DB=/app/data/vault.db \
-    VAULT_DATA_DIR=/app/data
+    MC_DB=/app/data/messagecrate.db \
+    MC_DATA_DIR=/app/data
 
 EXPOSE 8080
 VOLUME ["/app/data"]

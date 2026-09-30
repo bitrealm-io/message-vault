@@ -26,15 +26,15 @@ import { formatDay } from "../lib/formatDate";
 import { highlightText } from "../lib/highlightText";
 import { PAGE_SIZE_CONTACTS_FIRST, PAGE_SIZE_FIRST } from "../lib/listPaging";
 import { checksFromMembers } from "../lib/membershipChecks";
+import { keys } from "../lib/queryKeys";
 import { applyCheckedRange } from "../lib/rangeCheck";
+import { type PagedFetchPage, useRoutePagedList } from "../lib/routeQuery";
 import { hasFieldToken, stripFieldTokens } from "../lib/searchFields";
+import { listContacts } from "../lib/serverApi";
+import type { components } from "../lib/serverApi.types";
 import { useTimeZone } from "../lib/timeZone";
 import { UNKNOWN_GROUP } from "../lib/unknownGroup";
 import { useContactGroups } from "../lib/useContactGroups";
-import { listContacts } from "../lib/vaultApi";
-import type { components } from "../lib/vaultApi.types";
-import { keys } from "../lib/vaultKeys";
-import { type PagedFetchPage, useVaultPagedList } from "../lib/vaultQuery";
 
 const FILTER_DEBOUNCE_MS = 300;
 /** Fixed row height keeps virtualization slots aligned with flex-centered content. */
@@ -168,7 +168,7 @@ export default function ContactList({
     error,
     hasMore,
     loadMore: requestMore,
-  } = useVaultPagedList(keys.contacts.list(serverQ), fetchPage, {
+  } = useRoutePagedList(keys.contacts.list(serverQ), fetchPage, {
     firstPageSize: serverQ.trim() ? PAGE_SIZE_FIRST : PAGE_SIZE_CONTACTS_FIRST,
   });
 

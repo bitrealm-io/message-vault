@@ -3,7 +3,7 @@ import { tdClass, tdMuted } from "../../settings/apiTokensUtils";
 import { formatBytes } from "../../settings/storage/storageUtils";
 import { rowStripe, thClass, thSeparator } from "../ownerTableStyles";
 import { DashboardSection } from "./DashboardSection";
-import type { VaultStorage } from "./types";
+import type { ServerStorage } from "./types";
 
 /** A figure lines up on the right, so sizes can be read down the column. */
 const numberCell = "whitespace-nowrap text-right";
@@ -18,7 +18,7 @@ const numberCell = "whitespace-nowrap text-right";
  * The estimate is the measured messages-on-disk figure split by each
  * account's share of text; the hint says so.
  */
-export function MessagesByAccountSection({ storage }: { storage: VaultStorage }) {
+export function MessagesByAccountSection({ storage }: { storage: ServerStorage }) {
   const totalText = storage.accounts.reduce((sum, account) => sum + account.text_bytes, 0);
   return (
     <DashboardSection

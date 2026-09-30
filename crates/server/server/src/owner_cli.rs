@@ -13,7 +13,7 @@
 use anyhow::{Result, bail};
 
 use crate::db::account_profile;
-use crate::open_vault::OpenVault;
+use crate::open_db::OpenDb;
 
 /// Create the vault owner, claiming an unclaimed vault.
 ///
@@ -21,7 +21,7 @@ use crate::open_vault::OpenVault;
 ///
 /// Fails when the vault already has an owner, when the username is malformed
 /// or taken, or when the password is empty.
-pub async fn create_owner(vault: &OpenVault, username: &str, password: &str) -> Result<String> {
+pub async fn create_owner(vault: &OpenDb, username: &str, password: &str) -> Result<String> {
     let mut conn = vault.conn().await?;
 
     let username = match crate::credentials::require_valid_username(username) {
@@ -33,7 +33,7 @@ pub async fn create_owner(vault: &OpenVault, username: &str, password: &str) -> 
         Err(e) => bail!("{e}"),
     };
 
-    if account_profile::vault_is_claimed(&mut conn).await? {
+    if account_profile::is_claimed(&mut conn).await? {
         bail!(
             "this Message Crate already has an owner; use `reset-owner-password` to set a new password for it"
         );
@@ -62,14 +62,14 @@ pub async fn create_owner(vault: &OpenVault, username: &str, password: &str) -> 
 /// # Errors
 ///
 /// Fails when the vault has no owner, or when the password is empty.
-pub async fn reset_owner_password(vault: &OpenVault, password: &str) -> Result<String> {
+pub async fn reset_owner_password(vault: &OpenDb, password: &str) -> Result<String> {
     let mut conn = vault.conn().await?;
 
     let hash = match crate::credentials::hash_owner_password(password) {
         Ok(hash) => hash,
         Err(e) => bail!("{e}"),
     };
-    if !account_profile::vault_is_claimed(&mut conn).await? {
+    if !account_profile::is_claimed(&mut conn).await? {
         bail!("this Message Crate has no owner yet; use `create-owner` to claim it");
     }
 
@@ -99,22 +99,22 @@ mod tests {
     use axum::http::StatusCode;
 
     use super::*;
-    use crate::test_support::{claim_vault_as_owner, get_status, login_status, test_vault};
+    use crate::test_support::{claim_as_owner, get_status, login_status, test_fixture};
 
     /// A session opened before the reset is refused after it, so whoever
     /// held the old password is signed out; the new password logs in and the
     /// old one does not.
     #[tokio::test]
     async fn resetting_the_owner_password_signs_out_the_sessions_it_opened() {
-        let vault = test_vault().await;
+        let vault = test_fixture().await;
         let state = vault.state.clone();
-        let owner = claim_vault_as_owner(&state, "keeper", "hunter2hunter2").await;
+        let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
         assert_eq!(
             get_status(&state, "/v1/session", &owner.token).await,
             StatusCode::OK
         );
 
-        let shell = OpenVault {
+        let shell = OpenDb {
             cfg: (*state.cfg).clone(),
             db: state.db.clone(),
         };

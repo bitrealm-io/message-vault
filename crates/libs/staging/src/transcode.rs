@@ -65,8 +65,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use media::{CompressOptions, MediaMode, TranscodeOutcome};
-use message_ir::{ConversationDocument, IrAttachment};
 use message_crate_core::{CancelFlag, check_cancel, mime_for_rel};
+use message_ir::{ConversationDocument, IrAttachment};
 
 use message_ir_format::read_conversation_jsonl;
 use message_ir_format::write_conversation_jsonl_to;

@@ -5,16 +5,16 @@
 //! [`message_crate_http::auth_check`]; the session type here is
 //! [`message_crate_http::HttpSession`].
 
+use message_crate_api_types::ImportMode;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::time::Duration;
-use message_crate_api_types::ImportMode;
 
 use anyhow::{Context, Result, anyhow};
+use message_crate_http::{HttpError, error_sentence, looks_like_html, ok_json, trim_base_url};
 use reqwest::Method;
 use serde::Deserialize;
-use message_crate_http::{VaultHttpError, error_sentence, looks_like_html, ok_json, trim_base_url};
 
 pub use message_crate_http::HttpSession;
 
@@ -146,15 +146,15 @@ impl Session {
         let status = response.status();
         match status.as_u16() {
             404 => return Ok(false),
-            401 => return Err(VaultHttpError::new(401, "invalid API key").into()),
+            401 => return Err(HttpError::new(401, "invalid API key").into()),
             403 => {
-                return Err(VaultHttpError::new(403, "username does not match API key").into());
+                return Err(HttpError::new(403, "username does not match API key").into());
             }
             _ => {}
         }
         if !status.is_success() {
             let text = response.text().unwrap_or_default();
-            return Err(VaultHttpError::new(
+            return Err(HttpError::new(
                 status.as_u16(),
                 format!(
                     "asset HEAD failed (HTTP {status}): {}",
@@ -199,7 +199,7 @@ impl Session {
         let status = response.status();
         let text = response.text().context("read asset response")?;
         if looks_like_payload_too_large(status, &text) {
-            return Err(VaultHttpError::new(
+            return Err(HttpError::new(
                 413,
                 payload_too_large_message("asset upload", Some(file_len as usize)),
             )
@@ -254,16 +254,14 @@ impl Session {
     ) -> Result<CreateImportBatchResponse> {
         let body_len = ndjson.len();
         if body_len > crate::run::MAX_PROXY_BODY_BYTES {
-            return Err(VaultHttpError::new(
-                413,
-                payload_too_large_message("import", Some(body_len)),
-            )
-            .into());
+            return Err(
+                HttpError::new(413, payload_too_large_message("import", Some(body_len))).into(),
+            );
         }
         let path = format!("/v1/imports/{import_id}/batches");
         let response = self
             .http
-            .vault_request(Method::POST, &self.url, &path, &self.key)
+            .server_request(Method::POST, &self.url, &path, &self.key)
             .timeout(Duration::from_secs(600))
             .header("Content-Type", "application/jsonl")
             .body(ndjson)
@@ -272,11 +270,9 @@ impl Session {
         let status = response.status();
         let text = response.text().context("read import response")?;
         if looks_like_payload_too_large(status, &text) {
-            return Err(VaultHttpError::new(
-                413,
-                payload_too_large_message("import", Some(body_len)),
-            )
-            .into());
+            return Err(
+                HttpError::new(413, payload_too_large_message("import", Some(body_len))).into(),
+            );
         }
         ok_json::<CreateImportBatchResponse>("import batch", status, &text)
     }
@@ -303,7 +299,7 @@ impl Session {
         }
         let response = self
             .http
-            .vault_request(Method::POST, &self.url, "/v1/imports", &self.key)
+            .server_request(Method::POST, &self.url, "/v1/imports", &self.key)
             .timeout(Duration::from_secs(60))
             .header("Content-Type", "application/json")
             .json(&body)
@@ -333,7 +329,7 @@ impl Session {
         });
         let response = self
             .http
-            .vault_request(
+            .server_request(
                 Method::POST,
                 &self.url,
                 &format!("/v1/imports/{import_id}/complete"),
@@ -391,11 +387,9 @@ impl<'a> MultipartUpload<'a> {
         let status = response.status();
         let text = response.text().context("read upload start response")?;
         if looks_like_payload_too_large(status, &text) {
-            return Err(VaultHttpError::new(
-                413,
-                payload_too_large_message("asset upload start", None),
-            )
-            .into());
+            return Err(
+                HttpError::new(413, payload_too_large_message("asset upload start", None)).into(),
+            );
         }
         let started: CreateAssetUploadResponse = ok_json("asset upload start", status, &text)?;
         if started.already_present {
@@ -445,14 +439,14 @@ impl<'a> MultipartUpload<'a> {
         let status = response.status();
         let text = response.text().unwrap_or_default();
         if looks_like_payload_too_large(status, &text) {
-            return Err(VaultHttpError::new(
+            return Err(HttpError::new(
                 413,
                 payload_too_large_message("asset upload part", Some(part_len)),
             )
             .into());
         }
         if !status.is_success() {
-            return Err(VaultHttpError::new(
+            return Err(HttpError::new(
                 status.as_u16(),
                 format!(
                     "asset part {part} failed (HTTP {status}): {}",

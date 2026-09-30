@@ -1,10 +1,10 @@
-//! `push` command — upload an extract folder to a Message Vault server.
+//! `push` command — upload an extract folder to a Message Crate server.
 
+use message_crate_push::ImportMode;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use message_crate_push::ImportMode;
 
-use message_crate_push::{ProgressEvent, VaultPushConfig, run as run_push};
+use message_crate_push::{ProgressEvent, PushConfig, run as run_push};
 
 use super::events;
 use super::events::ExtractProgressEvent;
@@ -124,8 +124,8 @@ pub fn push(
 /// The push settings the desktop app uses. They differ from the command-line
 /// defaults because desktop imports are many small files over a local
 /// network; each number says why.
-fn push_config(args: PushArgs) -> VaultPushConfig {
-    VaultPushConfig {
+fn push_config(args: PushArgs) -> PushConfig {
+    PushConfig {
         input: PathBuf::from(&args.input_dir),
         base_url: args.base_url,
         username: args.username,

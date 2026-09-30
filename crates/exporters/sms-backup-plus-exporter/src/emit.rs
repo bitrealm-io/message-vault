@@ -6,15 +6,15 @@ use crate::identity::{chat_id_for, cover_identity, name_only_key, timestamp_ms};
 use crate::parse_emit::{ParsedEmlKind, collect_eml_paths, parse_one_eml};
 use crate::types::ParsedMessage;
 use anyhow::{Result, bail};
+use message_crate_core::{
+    CancelFlag, ExportReport, ExportTransforms, LogSink, OutputFormat, emit_log, prepare_outputs,
+    project_conversation,
+};
 use message_ir::{
     ExportMeta, IrAttachment, IrService, IrSource, PendingAttachment, PendingConversation,
     PendingMessage, ProjectionHooks, parse_android_type,
 };
 use message_staging::{AttachmentSource, ExportWriter};
-use message_crate_core::{
-    CancelFlag, ExportReport, ExportTransforms, LogSink, OutputFormat, emit_log, prepare_outputs,
-    project_conversation,
-};
 use phone::OwnerHandleSet;
 use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap, HashSet};

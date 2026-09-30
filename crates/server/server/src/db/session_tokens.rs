@@ -1,22 +1,22 @@
-//! GUI session Bearer tokens (`mv-user-…`); one per account, rotates on login.
+//! GUI session Bearer tokens (`mc-user-…`); one per account, rotates on login.
 
 use anyhow::{Context, Result, bail};
+pub use message_crate_api_types::AppKind;
 use rand::TryRng;
 use sqlx::AnyConnection;
-pub use message_crate_api_types::AppKind;
 
 const TOKEN_ALPHANUM: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
 /// Default GUI session lifetime (30 days).
 pub const SESSION_TTL_SECS: u64 = 30 * 24 * 60 * 60;
 
-/// Generate a new GUI session token (`mv-user-` + 32 alphanumeric characters).
+/// Generate a new GUI session token (`mc-user-` + 32 alphanumeric characters).
 ///
 /// # Errors
 ///
 /// Returns an error when random bytes cannot be generated.
 pub fn generate_session_token() -> Result<String> {
-    generate_prefixed_token("mv-user-")
+    generate_prefixed_token("mc-user-")
 }
 
 /// A random 32-character token after `prefix`, from the OS random source.
@@ -311,16 +311,16 @@ mod tests {
     /// checked the length and determinism would pass after such a change —
     /// any 64-character hex hash is stable and 64 characters long. These
     /// digests are SHA-256 of the exact bytes shown, reproducible with
-    /// `printf 'mv-user-abc' | sha256sum`.
+    /// `printf 'mc-user-abc' | sha256sum`.
     #[test]
     fn hash_is_sha256_of_the_token_bytes() {
         for (token, expected) in [
             (
-                "mv-user-abc",
+                "mc-user-abc",
                 "0df4b3a1f371a0685d2ab53463e293d0a3cf12b3ffa63ccbbf4bdfa9792e5d1e",
             ),
             (
-                "mv-tok-abc123",
+                "mc-tok-abc123",
                 "949cf0bf8e4e42a454c6a16d67f6a6c414ac39ea6bee6003298da8cc90b10273",
             ),
             (
@@ -335,15 +335,15 @@ mod tests {
                  token in every existing vault is looked up by this digest"
             );
         }
-        assert_ne!(hash_api_token("mv-user-abc"), hash_api_token("mv-user-xyz"));
+        assert_ne!(hash_api_token("mc-user-abc"), hash_api_token("mc-user-xyz"));
     }
 
     #[test]
     fn generate_prefixed_token_uses_os_entropy() {
-        let a = generate_prefixed_token("mv-user-").unwrap();
-        let b = generate_prefixed_token("mv-user-").unwrap();
-        assert!(a.starts_with("mv-user-"));
-        assert_eq!(a.len(), "mv-user-".len() + 32);
+        let a = generate_prefixed_token("mc-user-").unwrap();
+        let b = generate_prefixed_token("mc-user-").unwrap();
+        assert!(a.starts_with("mc-user-"));
+        assert_eq!(a.len(), "mc-user-".len() + 32);
         assert_ne!(a, b);
     }
 
@@ -380,7 +380,7 @@ mod tests {
         let token = insert_account_session_token_with_ttl(&mut conn, 7, 120)
             .await
             .unwrap();
-        assert!(token.starts_with("mv-user-"));
+        assert!(token.starts_with("mc-user-"));
         let expires: String = sqlx::query_scalar(
             "SELECT expires_at FROM account_session_tokens WHERE account_id = 7",
         )

@@ -539,7 +539,7 @@ pub async fn load_contacts_if_needed(
     overwrite: bool,
     account_id: i64,
 ) -> Result<ContactLoadStats> {
-    crate::db::schema::ensure_vault_schema(conn).await?;
+    crate::db::schema::ensure_schema(conn).await?;
     crate::db::account_profile::ensure_account_row(conn, account_id).await?;
 
     let Some(path) = contacts_path else {

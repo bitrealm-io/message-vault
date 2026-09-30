@@ -1,9 +1,9 @@
 import { type UseMutationResult, useMutation } from "@tanstack/react-query";
 import type { AccountProfile } from "./account";
+import { keys } from "./queryKeys";
+import { useRouteCache, useRouteQuery } from "./routeQuery";
+import { getAccount, getAccountProfile, updateAccount } from "./serverApi";
 import { type AccountProfileChange, useUpdateAccountProfile } from "./useAccountProfile";
-import { getAccount, getAccountProfile, updateAccount } from "./vaultApi";
-import { keys } from "./vaultKeys";
-import { useVaultCache, useVaultQuery } from "./vaultQuery";
 
 /**
  * The account a Settings screen is about.
@@ -18,7 +18,7 @@ export function useSettingsAccount(managedAccountId?: number): {
   loading: boolean;
   error: string;
 } {
-  const { data, isPending, error } = useVaultQuery(
+  const { data, isPending, error } = useRouteQuery(
     managedAccountId === undefined
       ? keys.accountProfile.all
       : keys.ownerAccounts.member(managedAccountId),
@@ -41,7 +41,7 @@ export function useSettingsAccount(managedAccountId?: number): {
 export function useUpdateSettingsProfile(
   managedAccountId?: number,
 ): UseMutationResult<AccountProfile, Error, AccountProfileChange> {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   const own = useUpdateAccountProfile();
   const managed = useMutation<AccountProfile, Error, AccountProfileChange>({
     mutationFn: (body) => updateAccount(managedAccountId ?? 0, body),

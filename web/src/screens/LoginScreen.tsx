@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { setBaseUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { initialLoginServerUrl } from "../lib/authGuards";
+import { checkServerHealth, type ServerHealthStatus } from "../lib/serverHealth";
 import { isTauri } from "../lib/tauri-check";
 import { accentLink, authCard, authCardBody, authScreenTitle, pageCenter } from "../lib/uiStyles";
-import { useVaultHealth } from "../lib/useVaultHealth";
-import { useVaultState } from "../lib/useVaultState";
-import { checkVaultHealth, type VaultHealthStatus } from "../lib/vaultHealth";
+import { useServerHealth } from "../lib/useServerHealth";
+import { useServerState } from "../lib/useServerState";
 import LocalAuthTabs from "./auth/LocalAuthTabs";
-import VaultSettingsScreen from "./auth/VaultSettingsScreen";
-import VaultStatus, { type VaultConnection } from "./auth/VaultStatus";
+import ServerSettingsScreen from "./auth/ServerSettingsScreen";
+import ServerStatus, { type ServerConnection } from "./auth/ServerStatus";
 
 /** Placeholder shaped like the form, so the card does not flicker into shape. */
 function FormSkeleton() {
@@ -45,24 +45,24 @@ export default function LoginScreen() {
   const { setServer: setAuthServer, serverUrl: savedUrl, retrySavedLogin } = useAuth();
   const [address, setAddress] = useState(() => initialLoginServerUrl(savedUrl, isTauri()));
   const [draft, setDraft] = useState(address);
-  const [state, setState] = useState<VaultConnection>("connecting");
+  const [state, setState] = useState<ServerConnection>("connecting");
   // Sticky once true: once the login form has been shown, keep showing it
   // (dimmed while disconnected) instead of reverting to the skeleton.
   const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // What Test reported for the address currently typed, or null when it has
   // not been tested since the last edit.
-  const [tested, setTested] = useState<VaultConnection | null>(null);
+  const [tested, setTested] = useState<ServerConnection | null>(null);
 
   // A disconnected card keeps checking the address it already has, so it can
   // heal itself the moment the vault comes back. Nothing else probes: the
   // settings screen asks explicitly, with Test.
-  const health = useVaultHealth(state === "disconnected" ? address : null);
+  const health = useServerHealth(state === "disconnected" ? address : null);
 
   // Which forms this card offers is the vault's answer, not a guess made here.
   // Asked only once the address is reachable, so an unreachable vault reports
   // "disconnected" rather than a failed state query.
-  const { state: vaultState } = useVaultState(state === "connected" ? address : null);
+  const { state: serverState } = useServerState(state === "connected" ? address : null);
 
   // Two connects can be in flight at once — the background self-heal for the
   // address already saved, and the explicit reconnect for one just typed — so
@@ -86,7 +86,7 @@ export default function LoginScreen() {
       // GET /health answers plain text, not JSON, so this probes it directly
       // rather than through apiClient (which always parses the body as
       // JSON). The body is discarded either way — only reachability matters.
-      const reachable = await checkVaultHealth(trimmed, controller.signal);
+      const reachable = await checkServerHealth(trimmed, controller.signal);
       if (connectRun.current !== run) return;
       if (reachable) {
         setAddress(trimmed);
@@ -115,7 +115,7 @@ export default function LoginScreen() {
   // the transition into "ok" — not on every render while it stays "ok" — so a
   // `connect()` that fails and lands back in "disconnected" does not
   // immediately retry.
-  const previousHealth = useRef<VaultHealthStatus>(health);
+  const previousHealth = useRef<ServerHealthStatus>(health);
   useEffect(() => {
     const becameHealthy = previousHealth.current !== "ok" && health === "ok";
     previousHealth.current = health;
@@ -134,7 +134,7 @@ export default function LoginScreen() {
     const run = testRun.current + 1;
     testRun.current = run;
     setTested("connecting");
-    const reachable = await checkVaultHealth(draft.trim());
+    const reachable = await checkServerHealth(draft.trim());
     if (testRun.current !== run) return;
     setTested(reachable ? "connected" : "disconnected");
   }, [draft]);
@@ -150,7 +150,8 @@ export default function LoginScreen() {
    * is how a failed Test used to turn green again on the next keystroke.
    */
   const trimmedDraft = draft.trim();
-  const settingsStatus: VaultConnection = tested ?? (trimmedDraft === address ? state : "untested");
+  const settingsStatus: ServerConnection =
+    tested ?? (trimmedDraft === address ? state : "untested");
 
   // Change vault address applies an address. An empty field names no address,
   // and the one already connected is not a change: applying it would drop the
@@ -170,7 +171,7 @@ export default function LoginScreen() {
       <div className={authCard}>
         <div className={authCardBody}>
           {settingsOpen ? (
-            <VaultSettingsScreen
+            <ServerSettingsScreen
               draft={draft}
               status={settingsStatus}
               canSubmit={canApplyDraft}
@@ -192,16 +193,16 @@ export default function LoginScreen() {
           ) : (
             <>
               <h1 className={`${authScreenTitle} mb-2`}>Message Crate</h1>
-              <VaultStatus state={state} className="mb-5 text-center" />
+              <ServerStatus state={state} className="mb-5 text-center" />
 
               {/* The card waits for the vault's own answer as well as for the
                   connection: which forms belong here is the vault's to say, and
                   showing a login to an unclaimed vault would offer a door that
                   opens onto nothing. */}
-              {hasConnectedOnce && vaultState ? (
+              {hasConnectedOnce && serverState ? (
                 <LocalAuthTabs
                   serverUrl={address}
-                  vaultState={vaultState}
+                  serverState={serverState}
                   disabled={state !== "connected"}
                 />
               ) : state === "disconnected" ? (
@@ -210,7 +211,7 @@ export default function LoginScreen() {
                 // disabled: a placeholder here would read as "still loading"
                 // for as long as the vault stays down. The way on is Change
                 // vault settings, below.
-                <LocalAuthTabs serverUrl={address} vaultState="closed" disabled />
+                <LocalAuthTabs serverUrl={address} serverState="closed" disabled />
               ) : (
                 <FormSkeleton />
               )}

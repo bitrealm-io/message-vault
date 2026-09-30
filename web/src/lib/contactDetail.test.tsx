@@ -13,13 +13,13 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useContactDetail, useUpdateContact } from "./contactDetail";
-import { getContact, updateContact } from "./vaultApi";
-import { keys } from "./vaultKeys";
+import { keys } from "./queryKeys";
+import { getContact, updateContact } from "./serverApi";
 
 vi.mock("./auth", () => ({ useAuth: () => ({ accountId: 7 }) }));
 
-vi.mock("./vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./vaultApi")>()),
+vi.mock("./serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./serverApi")>()),
   getContact: vi.fn(),
   updateContact: vi.fn(),
 }));

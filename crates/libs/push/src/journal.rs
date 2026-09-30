@@ -1,7 +1,7 @@
 //! Local log of which conversations and files were already uploaded.
 //!
-//! The file is `.vault-import-state.jsonl`. JSON Lines means one JSON object per
-//! line. A later push can skip work that already succeeded. The Message Vault
+//! The file is `.import-state.jsonl`. JSON Lines means one JSON object per
+//! line. A later push can skip work that already succeeded. The Message Crate
 //! HTTP server still ignores true duplicates if a line is sent again.
 
 use std::collections::HashSet;
@@ -13,7 +13,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 /// Filename of the local upload log, written next to the conversation files.
-pub const JOURNAL_NAME: &str = ".vault-import-state.jsonl";
+pub const JOURNAL_NAME: &str = ".import-state.jsonl";
 /// Filename of the JSON summary written at the end of a push.
 pub const REPORT_NAME: &str = "message-crate-push-report.json";
 /// Filename of the human-readable push log.
@@ -26,7 +26,7 @@ pub struct JournalMessage {
     pub guid: String,
 }
 
-/// One row in `.vault-import-state.jsonl`.
+/// One row in `.import-state.jsonl`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum JournalEvent {
@@ -97,7 +97,7 @@ impl JournalState {
     }
 }
 
-/// Path of `.vault-import-state.jsonl` inside the export folder.
+/// Path of `.import-state.jsonl` inside the export folder.
 pub fn journal_path(input: &Path) -> PathBuf {
     input.join(JOURNAL_NAME)
 }

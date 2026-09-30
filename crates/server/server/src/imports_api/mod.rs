@@ -13,11 +13,11 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
+pub use message_crate_api_types::ImportMode;
 use serde::{Deserialize, Serialize};
 use sqlx::AnyConnection;
 use sqlx::Connection;
 use tempfile::TempDir;
-pub use message_crate_api_types::ImportMode;
 
 use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::{Request, State};
@@ -28,8 +28,8 @@ use crate::config::{PathsConfig, validate_source_id};
 use crate::db::contacts;
 use crate::db::dialect;
 use crate::db::engine;
+use crate::db::imports::{self, CompleteImportArgs};
 use crate::db::schema;
-use crate::db::vault_imports::{self, CompleteImportArgs};
 use media::MediaMode;
 
 pub mod contact_name;
@@ -229,7 +229,7 @@ pub async fn import_export(args: &ImportExportArgs<'_>) -> Result<ImportStats> {
 
     let pool = args.db.open().await?;
     let mut conn = pool.acquire().await?;
-    schema::ensure_vault_schema(&mut conn).await?;
+    schema::ensure_schema(&mut conn).await?;
     crate::db::account_profile::ensure_account_row(&mut conn, args.account_id).await?;
 
     let session = OwnedSession::start(
@@ -267,7 +267,7 @@ pub async fn import_export(args: &ImportExportArgs<'_>) -> Result<ImportStats> {
 /// shows a run stuck in progress.
 pub(crate) struct OwnedSession {
     account_id: i64,
-    /// The `vault_imports` row id; the import stamps it on every message.
+    /// The `imports` row id; the import stamps it on every message.
     pub id: i64,
 }
 
@@ -285,10 +285,10 @@ impl OwnedSession {
         source: &str,
         mode: ImportMode,
         tool: &str,
-    ) -> std::result::Result<Self, vault_imports::StartImportError> {
-        let id = vault_imports::start_import(
+    ) -> std::result::Result<Self, imports::StartImportError> {
+        let id = imports::start_import(
             conn,
-            &vault_imports::StartImportArgs::new(account_id, source, mode.as_str(), Some(tool)),
+            &imports::StartImportArgs::new(account_id, source, mode.as_str(), Some(tool)),
         )
         .await?;
         Ok(Self { account_id, id })
@@ -304,8 +304,7 @@ impl OwnedSession {
         };
         // The import itself is done either way; a failure to record that is
         // worth a log line, not an error the caller would have to unwind.
-        if let Err(error) =
-            vault_imports::complete_import(conn, self.account_id, self.id, &outcome).await
+        if let Err(error) = imports::complete_import(conn, self.account_id, self.id, &outcome).await
         {
             tracing::warn!(import_id = self.id, error = %error, "complete_import failed");
         }
@@ -377,7 +376,7 @@ pub async fn import_jsonl_files_on_conn(
             .with_context(|| format!("failed to create {}", opts.assets_dir.display()))?;
     }
     if schema_mode == ImportSchemaMode::Ensure {
-        schema::ensure_vault_schema(conn).await?;
+        schema::ensure_schema(conn).await?;
     }
     crate::db::account_profile::ensure_account_row(conn, opts.account_id).await?;
 
@@ -609,7 +608,7 @@ impl BatchContext {
     /// The context a running row gives a batch. A mode the row spells in a
     /// way the enum does not know is read as `append`, the mode that never
     /// removes anything.
-    pub(crate) fn from_row(row: &crate::db::vault_imports::VaultImportRow) -> Self {
+    pub(crate) fn from_row(row: &crate::db::imports::ImportRow) -> Self {
         let mode = match row.mode.as_str() {
             "replace" => ImportMode::Replace,
             _ => ImportMode::Append,
@@ -747,7 +746,7 @@ fn validate_import_status(status: &str) -> Result<(), ApiError> {
 
 /// Keys a stored form snapshot must never carry.
 ///
-/// The invariant: `vault_imports.form_json` is a durable record read back to
+/// The invariant: `imports.form_json` is a durable record read back to
 /// restore the Import screen, and a secret typed once for one run must not
 /// outlive it there. The desktop client already drops these before posting,
 /// but the client is the wrong place to enforce it -- an older build, a
@@ -853,14 +852,14 @@ pub(crate) struct ImportRun {
         ("sort" = Option<String>, Query, description = "`started_at` or `-started_at`. Default `-started_at`, newest first.")
     ),
     responses(
-        (status = 200, body = Page<crate::db::vault_imports::ImportSummary>),
+        (status = 200, body = Page<crate::db::imports::ImportSummary>),
     )
 )]
 pub(crate) async fn list_imports(
     State(state): State<AppState>,
     ImportAccess(auth): ImportAccess,
     Query(query): Query<ListImportsQuery>,
-) -> Result<Json<Page<crate::db::vault_imports::ImportSummary>>, ApiError> {
+) -> Result<Json<Page<crate::db::imports::ImportSummary>>, ApiError> {
     imports_page(&state, resolve_import_account(&auth), query).await
 }
 
@@ -871,7 +870,7 @@ pub(crate) async fn imports_page(
     state: &AppState,
     account: i64,
     query: ListImportsQuery,
-) -> Result<Json<Page<crate::db::vault_imports::ImportSummary>>, ApiError> {
+) -> Result<Json<Page<crate::db::imports::ImportSummary>>, ApiError> {
     let page = page_params(
         query.limit,
         query.offset,
@@ -880,8 +879,8 @@ pub(crate) async fn imports_page(
     )?;
     let order = parse_sort(
         query.sort.as_deref(),
-        &crate::db::vault_imports::IMPORT_SORT_KEYS,
-        &crate::db::vault_imports::DEFAULT_IMPORT_SORT,
+        &crate::db::imports::IMPORT_SORT_KEYS,
+        &crate::db::imports::DEFAULT_IMPORT_SORT,
     )?;
     let status = query
         .status
@@ -889,16 +888,16 @@ pub(crate) async fn imports_page(
         .map(str::trim)
         .filter(|s| !s.is_empty());
     if let Some(status) = status
-        && !crate::db::vault_imports::IMPORT_STATUSES.contains(&status)
+        && !crate::db::imports::IMPORT_STATUSES.contains(&status)
     {
         return Err(ApiError::validation(format!(
             "status: unknown value '{status}'; accepted values are {}",
-            crate::db::vault_imports::IMPORT_STATUSES.join(", ")
+            crate::db::imports::IMPORT_STATUSES.join(", ")
         )));
     }
 
     let mut conn = state.db.acquire().await?;
-    let (items, total) = crate::db::vault_imports::list_imports_page(
+    let (items, total) = crate::db::imports::list_imports_page(
         &mut conn,
         account,
         status,
@@ -941,7 +940,7 @@ pub(crate) async fn import_detail(
     import_id: i64,
 ) -> Result<Json<ImportRun>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let detail = crate::db::vault_imports::get_import_detail(&mut conn, account, import_id)
+    let detail = crate::db::imports::get_import_detail(&mut conn, account, import_id)
         .await
         .map_err(ApiError::from)?;
     let contacts = crate::db::import_contacts::counts(&mut conn, import_id)
@@ -980,8 +979,8 @@ pub(crate) async fn create_import(
     validate_source_id(&body.source).map_err(|e| ApiError::validation(e.to_string()))?;
     let account = resolve_import_account(&auth);
     let stage = match body.stage.as_deref() {
-        None => crate::db::vault_imports::ImportStage::Parse,
-        Some(raw) => crate::db::vault_imports::ImportStage::parse(raw).ok_or_else(|| {
+        None => crate::db::imports::ImportStage::Parse,
+        Some(raw) => crate::db::imports::ImportStage::parse(raw).ok_or_else(|| {
             ApiError::validation(format!(
                 "invalid import stage '{raw}'; expected one of parse, write, awaiting_gate_1, transcode, awaiting_gate_2, pushing"
             ))
@@ -997,7 +996,7 @@ pub(crate) async fn create_import(
 
     let mut conn = state.db.acquire().await?;
     crate::db::account_profile::ensure_account_row(&mut conn, account).await?;
-    let args = crate::db::vault_imports::StartImportArgs {
+    let args = crate::db::imports::StartImportArgs {
         account_id: account,
         source: &body.source,
         mode: body.mode.as_str(),
@@ -1010,7 +1009,7 @@ pub(crate) async fn create_import(
         source_fingerprint: fingerprint_json.as_deref(),
         source_identities: identities_json.as_deref(),
     };
-    let id = crate::db::vault_imports::start_import(&mut conn, &args).await?;
+    let id = crate::db::imports::start_import(&mut conn, &args).await?;
 
     Ok(Created {
         location: format!("/v1/imports/{id}"),
@@ -1047,7 +1046,7 @@ pub(crate) async fn complete_import(
             })?),
             None => None,
         };
-    let args = crate::db::vault_imports::CompleteImportArgs {
+    let args = crate::db::imports::CompleteImportArgs {
         status: body.status,
         message_count: body.message_count,
         attachment_count: body.attachment_count,
@@ -1061,7 +1060,7 @@ pub(crate) async fn complete_import(
         issues: body
             .issues
             .into_iter()
-            .map(|issue| crate::db::vault_imports::ImportIssueInput {
+            .map(|issue| crate::db::imports::ImportIssueInput {
                 kind: issue.kind,
                 step: issue.step,
                 item: issue.item,
@@ -1070,10 +1069,10 @@ pub(crate) async fn complete_import(
             .collect(),
     };
     let mut conn = state.db.acquire().await?;
-    let row = crate::db::vault_imports::complete_import(&mut conn, account, import_id, &args)
+    let row = crate::db::imports::complete_import(&mut conn, account, import_id, &args)
         .await
         .map_err(
-            |e| match e.downcast::<crate::db::vault_imports::ImportLookupError>() {
+            |e| match e.downcast::<crate::db::imports::ImportLookupError>() {
                 Ok(lookup) => ApiError::from(lookup),
                 Err(other) => ApiError::Internal(other),
             },
@@ -1099,11 +1098,11 @@ pub(crate) async fn complete_import(
 ///
 /// The shortcut is a convenience, not a record, so a failure here is logged and
 /// the import still reports success. The person may delete the saved search
-/// afterwards; the `vault_imports` row it points at is permanent.
+/// afterwards; the `imports` row it points at is permanent.
 async fn create_import_saved_search(
     conn: &mut sqlx::AnyConnection,
     account_id: i64,
-    row: &crate::db::vault_imports::VaultImportRow,
+    row: &crate::db::imports::ImportRow,
 ) {
     if row.message_count <= 0 {
         return;
@@ -1157,7 +1156,7 @@ pub(crate) async fn list_import_contacts(
 ) -> Result<Json<Page<crate::db::import_contacts::ImportContact>>, ApiError> {
     let params = page_params(query.limit, query.offset, DEFAULT_LIST_LIMIT, None)?;
     let mut conn = state.db.acquire().await?;
-    crate::db::vault_imports::get_import_detail(&mut conn, auth.account_id, import_id)
+    crate::db::imports::get_import_detail(&mut conn, auth.account_id, import_id)
         .await
         .map_err(ApiError::from)?;
     let (items, total) =
@@ -1175,7 +1174,7 @@ pub(crate) async fn list_import_contacts(
 /// Create the Contact Group naming the contacts an import run touched.
 ///
 /// The group is a shortcut pointing at the run: the person may delete it, and
-/// the `vault_imports` row it describes is permanent either way. Membership is
+/// the `imports` row it describes is permanent either way. Membership is
 /// a snapshot, because what a run brought in is a historical fact that should
 /// not silently rewrite itself as contacts change later.
 ///
@@ -1185,7 +1184,7 @@ pub(crate) async fn list_import_contacts(
 async fn create_import_contact_group(
     conn: &mut sqlx::AnyConnection,
     account_id: i64,
-    row: &crate::db::vault_imports::VaultImportRow,
+    row: &crate::db::imports::ImportRow,
 ) {
     let touched = match crate::db::import_contacts::contact_ids(conn, row.id).await {
         Ok(ids) if ids.is_empty() => return,
@@ -1229,14 +1228,14 @@ async fn create_import_contact_group(
 
 /// Name for an import run's Contact Group. The run id keeps it unique per
 /// account, which `contact_groups.name` requires.
-fn import_contact_group_name(row: &crate::db::vault_imports::VaultImportRow) -> String {
+fn import_contact_group_name(row: &crate::db::imports::ImportRow) -> String {
     format!("{} import {}", row.source, import_date_ymd(row))
 }
 
 /// Calendar date to name an import's saved search after: the day the run
 /// finished, falling back to the day it started, then to today. All three are
-/// UTC, because that is what `vault_imports` stores.
-fn import_date_ymd(row: &crate::db::vault_imports::VaultImportRow) -> String {
+/// UTC, because that is what `imports` stores.
+fn import_date_ymd(row: &crate::db::imports::ImportRow) -> String {
     row.finished_at
         .as_deref()
         .or(Some(row.started_at.as_str()))
@@ -1249,7 +1248,7 @@ fn import_date_ymd(row: &crate::db::vault_imports::VaultImportRow) -> String {
 }
 
 fn import_detail_response(
-    detail: crate::db::vault_imports::ImportDetail,
+    detail: crate::db::imports::ImportDetail,
     contacts: crate::db::import_contacts::ContactCounts,
 ) -> ImportRun {
     let row = detail.row;
@@ -1280,7 +1279,7 @@ fn import_detail_response(
         attachments_ms: row.attachments_ms,
         prepare_ms: row.prepare_ms,
         upload_ms: row.upload_ms,
-        summary: crate::db::vault_imports::json_column(row.summary_json),
+        summary: crate::db::imports::json_column(row.summary_json),
         issues,
         contacts_new: contacts.new_count,
         contacts_changed: contacts.changed_count,
@@ -1330,7 +1329,7 @@ pub(crate) async fn update_import(
     Json(body): Json<UpdateImportRequest>,
 ) -> Result<Json<ImportRun>, ApiError> {
     let account = resolve_import_account(&auth);
-    let stage = crate::db::vault_imports::ImportStage::parse(&body.stage).ok_or_else(|| {
+    let stage = crate::db::imports::ImportStage::parse(&body.stage).ok_or_else(|| {
         ApiError::validation(format!(
             "invalid import stage '{}'; expected one of parse, write, awaiting_gate_1, transcode, awaiting_gate_2, pushing",
             body.stage
@@ -1338,7 +1337,7 @@ pub(crate) async fn update_import(
     })?;
     let summary_json = optional_json_string(body.summary.as_ref(), "summary")?;
     let mut conn = state.db.acquire().await?;
-    crate::db::vault_imports::set_import_stage(
+    crate::db::imports::set_import_stage(
         &mut conn,
         account,
         import_id,
@@ -1346,7 +1345,7 @@ pub(crate) async fn update_import(
         summary_json.as_deref(),
     )
     .await?;
-    let detail = crate::db::vault_imports::get_import_detail(&mut conn, account, import_id)
+    let detail = crate::db::imports::get_import_detail(&mut conn, account, import_id)
         .await
         .map_err(ApiError::from)?;
     let contacts = crate::db::import_contacts::counts(&mut conn, import_id)
@@ -1381,7 +1380,7 @@ pub(crate) async fn discard_import(
 ) -> Result<Json<DiscardImportResponse>, ApiError> {
     let account = resolve_import_account(&auth);
     let mut conn = state.db.acquire().await?;
-    crate::db::vault_imports::discard_import(&mut conn, account, import_id).await?;
+    crate::db::imports::discard_import(&mut conn, account, import_id).await?;
     Ok(Json(DiscardImportResponse {
         id: import_id,
         status: "cancelled".into(),
@@ -1426,8 +1425,7 @@ pub(crate) async fn create_import_batch(
     // any of the body is read.
     let context = {
         let mut conn = state.db.acquire().await?;
-        let row =
-            crate::db::vault_imports::require_running_import(&mut conn, account, import_id).await?;
+        let row = crate::db::imports::require_running_import(&mut conn, account, import_id).await?;
         BatchContext::from_row(&row)
     };
 
@@ -1516,7 +1514,7 @@ async fn run_import_path(
     // A `replace` run wipes the source once, on its first batch; every batch
     // after that appends. The row's stamped messages say which this is.
     let mode = if run_mode == ImportMode::Replace
-        && !crate::db::vault_imports::has_messages(&mut conn, import_id).await?
+        && !crate::db::imports::has_messages(&mut conn, import_id).await?
     {
         ImportMode::Replace
     } else {

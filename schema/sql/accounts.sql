@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS account_handles (
     PRIMARY KEY (account_id, handle_id)
 );
 
--- GUI session Bearer (one per account; rotates on login). Prefix: mv-user-
+-- GUI session Bearer (one per account; rotates on login). Prefix: mc-user-
 CREATE TABLE IF NOT EXISTS account_session_tokens (
     -- Owning vault account (`accounts.id`); also the primary key (one session).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS account_session_tokens (
     PRIMARY KEY (account_id)
 );
 
--- Named CLI API tokens (many per account). Prefix: mv-api-
+-- Named CLI API tokens (many per account). Prefix: mc-api-
 CREATE TABLE IF NOT EXISTS account_api_tokens (
     -- Token id.
     id INTEGER PRIMARY KEY,
@@ -86,8 +86,8 @@ CREATE TABLE IF NOT EXISTS account_api_tokens (
     can_import INTEGER NOT NULL DEFAULT 1,
     -- 1 = this token may call the export endpoints.
     can_export INTEGER NOT NULL DEFAULT 1,
-    -- Masked form for Settings (e.g. mv-api-Sd..mE). Not enough to recover the secret.
-    token_hint TEXT NOT NULL DEFAULT 'mv-api-..',
+    -- Masked form for Settings (e.g. mc-api-Sd..mE). Not enough to recover the secret.
+    token_hint TEXT NOT NULL DEFAULT 'mc-api-..',
     -- Unix-seconds string for when this API token was created.
     created_at TEXT NOT NULL,
     -- Unix-seconds string; NULL until first successful Bearer use.
@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS account_prefs (
 
 -- Settings that belong to the whole vault rather than to one account. Exactly
 -- one row, so the vault owner reads and writes it without an id.
-CREATE TABLE IF NOT EXISTS vault_settings (
+CREATE TABLE IF NOT EXISTS server_settings (
     -- Always 1: the vault has one settings record.
     id INTEGER PRIMARY KEY CHECK (id = 1),
     -- 1 = anyone reaching the vault may create their own account; 0 = only
@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 );
 
 -- One row per import run into the vault.
-CREATE TABLE IF NOT EXISTS vault_imports (
+CREATE TABLE IF NOT EXISTS imports (
     -- Surrogate primary key for this import run.
     id INTEGER PRIMARY KEY,
     -- Owning vault account (`accounts.id`).
@@ -193,19 +193,19 @@ CREATE TABLE IF NOT EXISTS vault_imports (
     source_identities TEXT
 );
 
-CREATE INDEX IF NOT EXISTS ix_vault_imports_account_started
-    ON vault_imports(account_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS ix_imports_account_started
+    ON imports(account_id, started_at DESC);
 
 -- At most one live import session per account. A partial unique index
 -- rather than application logic, so it holds against a racing client.
-CREATE UNIQUE INDEX IF NOT EXISTS ux_vault_imports_active_account
-    ON vault_imports(account_id) WHERE status = 'running';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_imports_active_account
+    ON imports(account_id) WHERE status = 'running';
 
 -- One row per Export Run: what was asked for and how much matched, never
 -- message content. Recorded permanently whether the run completed, failed
 -- or was cancelled, so every read of message data by a program leaves a
 -- record.
-CREATE TABLE IF NOT EXISTS vault_exports (
+CREATE TABLE IF NOT EXISTS exports (
     -- Surrogate primary key for this export run.
     id INTEGER PRIMARY KEY,
     -- Owning vault account (`accounts.id`).
@@ -242,15 +242,15 @@ CREATE TABLE IF NOT EXISTS vault_exports (
     messages_delivered INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE INDEX IF NOT EXISTS ix_vault_exports_account_started
-    ON vault_exports(account_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS ix_exports_account_started
+    ON exports(account_id, started_at DESC);
 
 -- Per-item warning or error recorded during an import run.
-CREATE TABLE IF NOT EXISTS vault_import_issues (
+CREATE TABLE IF NOT EXISTS import_issues (
     -- Surrogate primary key for this issue row.
     id INTEGER PRIMARY KEY,
-    -- Parent import run (`vault_imports.id`).
-    import_id INTEGER NOT NULL REFERENCES vault_imports(id) ON DELETE CASCADE,
+    -- Parent import run (`imports.id`).
+    import_id INTEGER NOT NULL REFERENCES imports(id) ON DELETE CASCADE,
     -- Issue class (for example warning or error).
     kind TEXT NOT NULL,
     -- Pipeline step where the issue happened.
@@ -263,16 +263,16 @@ CREATE TABLE IF NOT EXISTS vault_import_issues (
     created_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS ix_vault_import_issues_import
-    ON vault_import_issues(import_id);
+CREATE INDEX IF NOT EXISTS ix_import_issues_import
+    ON import_issues(import_id);
 
 -- What one import run did to one contact. Written while the run stages, so
 -- the record says what the import decided rather than what timestamps
 -- suggest afterwards. The run's Contact Group and its new/changed counts
 -- read this table.
-CREATE TABLE IF NOT EXISTS vault_import_contacts (
-    -- Import run (`vault_imports.id`).
-    import_id INTEGER NOT NULL REFERENCES vault_imports(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS import_contacts (
+    -- Import run (`imports.id`).
+    import_id INTEGER NOT NULL REFERENCES imports(id) ON DELETE CASCADE,
     -- Contact the run touched (`contacts.id`); the row goes with the contact.
     contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
     -- One of replaced_trashed, created, named, handle_added. When a run does
@@ -282,5 +282,5 @@ CREATE TABLE IF NOT EXISTS vault_import_contacts (
     PRIMARY KEY (import_id, contact_id)
 );
 
-CREATE INDEX IF NOT EXISTS ix_vault_import_contacts_contact
-    ON vault_import_contacts(contact_id);
+CREATE INDEX IF NOT EXISTS ix_import_contacts_contact
+    ON import_contacts(contact_id);

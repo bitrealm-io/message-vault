@@ -299,9 +299,7 @@ pub(crate) async fn tag(
 pub(crate) async fn seeded() -> (sqlx::AnyPool, tempfile::TempDir, Fixture) {
     let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    crate::db::schema::ensure_vault_schema(&mut conn)
-        .await
-        .unwrap();
+    crate::db::schema::ensure_schema(&mut conn).await.unwrap();
     for (id, name) in [(ACCOUNT, "alice"), (OTHER_ACCOUNT, "bob")] {
         sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, $2)")
             .bind(id)
@@ -1531,9 +1529,7 @@ mod index_characters {
     async fn operator_characters_are_never_operators() {
         let (pool, _dir) = crate::db::engine::test_pool().await;
         let mut conn = pool.acquire().await.unwrap();
-        crate::db::schema::ensure_vault_schema(&mut conn)
-            .await
-            .unwrap();
+        crate::db::schema::ensure_schema(&mut conn).await.unwrap();
         sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
             .bind(ACCOUNT)
             .execute(&mut *conn)
@@ -1841,7 +1837,7 @@ mod people_words {
         let (pool, _dir, f) = seeded().await;
         let mut conn = pool.acquire().await.unwrap();
         let run_id: i64 = sqlx::query_scalar(
-            "INSERT INTO vault_imports (account_id, source, mode, status, started_at)
+            "INSERT INTO imports (account_id, source, mode, status, started_at)
              VALUES ($1, 'imessage', 'push', 'completed', '2024-01-01T00:00:00Z') RETURNING id",
         )
         .bind(ACCOUNT)

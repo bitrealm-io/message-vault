@@ -10,10 +10,10 @@
  * the browser or must ask the vault.
  */
 
-import { listSearchFields, type SearchFieldList } from "./vaultApi";
-import type { components } from "./vaultApi.types";
-import { keys } from "./vaultKeys";
-import { useVaultQuery } from "./vaultQuery";
+import { keys } from "./queryKeys";
+import { useRouteQuery } from "./routeQuery";
+import { listSearchFields, type SearchFieldList } from "./serverApi";
+import type { components } from "./serverApi.types";
 
 type Schema = components["schemas"];
 export type SearchField = Schema["FieldDoc"];
@@ -74,7 +74,7 @@ export function useSearchFields(list: SearchList | null): {
   fields: SearchField[];
   loading: boolean;
 } {
-  const { data, isPending } = useVaultQuery(
+  const { data, isPending } = useRouteQuery(
     keys.searchFields.list(list ?? "conversations"),
     async (signal) => (await listSearchFields(list ?? "conversations", { signal })).items,
     { staleTime: Number.POSITIVE_INFINITY, enabled: list !== null },

@@ -17,7 +17,7 @@ vi.mock("../lib/auth", () => ({
   }),
 }));
 
-vi.mock("../lib/vaultApi", () => ({
+vi.mock("../lib/serverApi", () => ({
   updateAccountProfile: (...args: unknown[]) => apiPost(...(args as [])),
 }));
 

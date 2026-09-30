@@ -1,4 +1,4 @@
-//! Upload a folder of conversation files into Message Vault.
+//! Upload a folder of conversation files into Message Crate.
 //!
 //! # What this module does
 //!
@@ -34,11 +34,11 @@
 //!   huge single uploads. Message batches are split, and large attachments use
 //!   multipart, so a big chat or video does not hit that wall.
 
+use message_crate_api_types::ImportMode;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
-use message_crate_api_types::ImportMode;
 
 use anyhow::{Context, Result, bail};
 use message_crate_core::{CancelFlag, check_cancel};
@@ -87,7 +87,7 @@ pub const DEFAULT_PREPARE_WORKERS: usize = 2;
 
 /// Settings for one full push run (paths, URL, flags, limits).
 #[derive(Debug, Clone)]
-pub struct VaultPushConfig {
+pub struct PushConfig {
     /// A folder of JSON Lines conversation files, or one such file.
     pub input: PathBuf,
     /// Vault base URL, e.g. `http://127.0.0.1:8080`.
@@ -178,7 +178,7 @@ impl RunPaths {
     /// # Errors
     ///
     /// Returns an error when the input folder does not exist.
-    fn resolve(cfg: &VaultPushConfig) -> Result<Self> {
+    fn resolve(cfg: &PushConfig) -> Result<Self> {
         let input = input_folder(&cfg.input)?;
         Ok(Self {
             report: cfg
@@ -215,7 +215,7 @@ impl RunPaths {
 /// Returns an error when setup fails, a worker disconnects, or the report cannot
 /// be written. Per-conversation failures are recorded in the report when
 /// `continue_on_error` is true.
-pub fn run(cfg: &VaultPushConfig, progress: Option<&mut ProgressFn<'_>>) -> Result<PushReport> {
+pub fn run(cfg: &PushConfig, progress: Option<&mut ProgressFn<'_>>) -> Result<PushReport> {
     let run_started = Instant::now();
     let started_at = now_stamp();
     let paths = RunPaths::resolve(cfg)?;
@@ -306,7 +306,7 @@ pub fn run(cfg: &VaultPushConfig, progress: Option<&mut ProgressFn<'_>>) -> Resu
 /// # Errors
 ///
 /// Returns an error when the HTTP client cannot be built or the key is rejected.
-fn login(cfg: &VaultPushConfig, out: &mut Reporter<'_, '_>) -> Result<Session> {
+fn login(cfg: &PushConfig, out: &mut Reporter<'_, '_>) -> Result<Session> {
     let url = cfg.base_url.trim_end_matches('/').to_string();
     let http = HttpSession::new()?;
     let auth = http.auth_check(&url, &cfg.key)?;
@@ -348,7 +348,7 @@ fn login(cfg: &VaultPushConfig, out: &mut Reporter<'_, '_>) -> Result<Session> {
 /// Returns the vault's refusal, which includes an account that already has a
 /// running Import Run.
 fn start_import_run(
-    cfg: &VaultPushConfig,
+    cfg: &PushConfig,
     session: &Session,
     input: &Path,
     out: &mut Reporter<'_, '_>,
@@ -538,7 +538,7 @@ fn absorb_prepared(prepared: &PreparedFile, assets: &mut AssetTotals, out: &mut 
 ///
 /// Returns an error when the journal cannot be updated or the import thread panicked.
 fn settle(
-    cfg: &VaultPushConfig,
+    cfg: &PushConfig,
     pipeline: &mut ImportPipeline<'_>,
     aborted: bool,
     out: &mut Reporter<'_, '_>,

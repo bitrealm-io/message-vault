@@ -7,6 +7,7 @@
 //! worker needs is read-only and lives in [`PrepareContext`]; the only shared
 //! mutable state is the journal behind a mutex.
 
+use message_crate_api_types::ImportMode;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -14,12 +15,11 @@ use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::Scope;
 use std::time::Instant;
-use message_crate_api_types::ImportMode;
 
 use anyhow::{Context, Result, bail};
+use message_crate_core::{check_cancel, parallel_for_each};
 use message_ir::{ConversationDocument, ConversationHeader, IrAttachment, IrMessage};
 use message_ir_format::read_conversation_jsonl;
-use message_crate_core::{check_cancel, parallel_for_each};
 
 use crate::folder::{attachment_label, resolve_attachment};
 use crate::http::{Asset, AssetUpload};
@@ -27,7 +27,7 @@ use crate::journal::{JournalMessage, RunJournal};
 use crate::progress::AttachmentSkip;
 use crate::project::{self, AttachmentProjection};
 use crate::report::{AssetTotals, UploadProfile, elapsed_ms};
-use crate::run::{MAX_IMPORT_BODY_BYTES, Session, VaultPushConfig};
+use crate::run::{MAX_IMPORT_BODY_BYTES, PushConfig, Session};
 
 /// Journal state shared by every prepare worker and the import pipeline.
 ///
@@ -80,7 +80,7 @@ type DigestCache = Mutex<HashMap<PathBuf, String>>;
 /// Read-only inputs every prepare worker shares for the whole run.
 pub(crate) struct PrepareContext<'a> {
     pub input: &'a Path,
-    pub cfg: &'a VaultPushConfig,
+    pub cfg: &'a PushConfig,
     pub session: &'a Session,
     pub journal: &'a Mutex<SharedJournal>,
     pub batch_size: usize,
@@ -96,7 +96,7 @@ impl<'a> PrepareContext<'a> {
     /// Bundle the run's shared inputs for the prepare workers.
     pub(crate) fn new(
         input: &'a Path,
-        cfg: &'a VaultPushConfig,
+        cfg: &'a PushConfig,
         session: &'a Session,
         journal: &'a Mutex<SharedJournal>,
         batch_size: usize,
@@ -748,8 +748,9 @@ fn preflight_existing_asset(ctx: &PrepareContext<'_>, source: &str, digest: &str
     }
     *done = true;
     let session = ctx.session;
-    let present =
-        message_crate_http::with_retries(ctx.cfg.max_retries, || session.head_asset(source, digest))?;
+    let present = message_crate_http::with_retries(ctx.cfg.max_retries, || {
+        session.head_asset(source, digest)
+    })?;
     if present {
         ctx.probe_existing.store(true, Ordering::Relaxed);
     }

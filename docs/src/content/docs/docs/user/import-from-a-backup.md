@@ -89,7 +89,7 @@ You do not have to sit and wait. A run keeps working while you read messages or 
 
 ## Resume and force reprocessing
 
-Import writes a journal file (`.vault-import-state.jsonl`) next to the work it does. On a later run with the same Message Crate and folder, the journal skips work that already finished.
+Import writes a journal file (`.import-state.jsonl`) next to the work it does. On a later run with the same Message Crate and folder, the journal skips work that already finished.
 
 Leave **force reprocessing** off when continuing an interrupted upload.
 

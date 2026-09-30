@@ -138,7 +138,7 @@ forward.
 
 **Two checks existed only on a developer's machine.**
 `scripts/check-generated-api-types.sh` regenerates
-`web/src/lib/vaultApi.types.ts` from `docs/src/assets/openapi.json` and diffs
+`web/src/lib/serverApi.types.ts` from `docs/src/assets/openapi.json` and diffs
 the result; it is the only thing tying the generated TypeScript to the
 specification, and no CI job ran it. `vite build` ran only in the tag-only
 `release` job, so a bundle that TypeScript accepted and Vite rejected surfaced
@@ -230,7 +230,7 @@ inherit it. A specific site that genuinely wants nine arguments carries a local
 
 The `test-postgres` job is gone. Its Postgres service moved onto the `test`
 job, which runs `cargo test --workspace` on SQLite and then
-`cargo test -p message-crate-server` with `MV_TEST_POSTGRES_URL` set. Only
+`cargo test -p message-crate-server` with `MC_TEST_POSTGRES_URL` set. Only
 the server reads that variable, so the second pass is the server alone.
 Both passes are needed: the tests whose subject is SQLite itself (the schema
 contract, FTS5 triggers, the rebuilds, the password-change rollback) return

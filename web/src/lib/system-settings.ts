@@ -4,16 +4,16 @@ import { invokeHomeDir } from "./tauri";
 import { isTauri } from "./tauri-check";
 
 /** localStorage key for the staging parent folder. */
-const STAGING_DIR_KEY = "mv-staging-dir";
-const REMEMBER_IMPORTER_PATHS_KEY = "mv-remember-importer-paths";
-const IMPORTER_PATHS_KEY = "mv-importer-paths";
-const IMPORTER_EXTRA_PATHS_KEY = "mv-importer-extra-paths";
+const STAGING_DIR_KEY = "mc-staging-dir";
+const REMEMBER_IMPORTER_PATHS_KEY = "mc-remember-importer-paths";
+const IMPORTER_PATHS_KEY = "mc-importer-paths";
+const IMPORTER_EXTRA_PATHS_KEY = "mc-importer-extra-paths";
 
 let cachedHomeDir: string | null = null;
 let homeDirPromise: Promise<string> | null = null;
 
 /** Default folder name under the user home directory for staging. */
-const STAGING_PARENT_NAME = "message-vault";
+const STAGING_PARENT_NAME = "message-crate";
 
 /**
  * Strip trailing `/` or `\\` without turning a Unix root into an empty string.
@@ -40,8 +40,8 @@ export function isUsableStagingParent(path: string): boolean {
 }
 
 /**
- * Default staging parent: `{home}/message-vault`.
- * When home is empty, returns the relative folder name `message-vault`.
+ * Default staging parent: `{home}/message-crate`.
+ * When home is empty, returns the relative folder name `message-crate`.
  */
 export function defaultStagingDir(homeDir: string): string {
   const home = stripTrailingPathSeparators(homeDir);
@@ -374,17 +374,17 @@ export function joinStagingPath(
 export async function resolveExportStagingDir(now: Date = new Date()): Promise<string> {
   const parent = await resolveStagingParent();
   if (!parent) {
-    throw new Error("Could not determine the user home directory. Staging needs ~/message-vault/.");
+    throw new Error("Could not determine the user home directory. Staging needs ~/message-crate/.");
   }
   return joinStagingPath(parent, EXPORT_STAGING_LABEL, now);
 }
 
 /**
  * Full path for a new import staging folder under the Settings parent
- * (default `{home}/message-vault`).
+ * (default `{home}/message-crate`).
  *
  * @throws If neither a saved staging parent nor the user home directory is
- * available. A relative `message-vault/…` path would otherwise be created next
+ * available. A relative `message-crate/…` path would otherwise be created next
  * to the process working directory (for example the AppImage mount).
  */
 export async function resolveImportStagingDir(
@@ -393,7 +393,7 @@ export async function resolveImportStagingDir(
 ): Promise<string> {
   const parent = await resolveStagingParent();
   if (!parent) {
-    throw new Error("Could not determine the user home directory. Staging needs ~/message-vault/.");
+    throw new Error("Could not determine the user home directory. Staging needs ~/message-crate/.");
   }
   return joinStagingPath(parent, sourceId);
 }

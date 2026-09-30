@@ -10,7 +10,7 @@ async fn seed(
     handle: &str,
     name_alias: Option<&str>,
 ) -> (i64, i64) {
-    schema::ensure_vault_schema(conn).await.unwrap();
+    schema::ensure_schema(conn).await.unwrap();
     crate::db::account_profile::ensure_account_row(conn, TEST_ACCOUNT)
         .await
         .unwrap();

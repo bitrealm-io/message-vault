@@ -2,7 +2,7 @@
 //!
 //! Keeps originals intact, writes content-addressed JPEG/MP4/MP3 blobs, and
 //! updates `attachments.derived_*`. The conversions are the `media` crate's,
-//! which finds ffmpeg and ffprobe beside the binary, in `MESSAGE_VAULT_IO_BIN`,
+//! which finds ffmpeg and ffprobe beside the binary, in `MESSAGE_CRATE_BIN`,
 //! or on `PATH`.
 
 use std::fs::{self, File};
@@ -15,7 +15,7 @@ use tempfile::TempDir;
 
 use crate::config::Config;
 use crate::db::schema;
-use crate::open_vault::OpenVault;
+use crate::open_db::OpenDb;
 use media::{CompressOptions, Kind, MediaMode, TranscodeOutcome};
 
 /// Browser previews use the `media` crate's compress recipe, the same one the
@@ -85,7 +85,7 @@ impl AssetRow {
 ///
 /// Returns an error when the vault has no accounts, a conversion tool fails,
 /// or a derived file cannot be written.
-pub async fn run(vault: &OpenVault, opts: &ProcessAssetsOptions) -> Result<ProcessAssetsStats> {
+pub async fn run(vault: &OpenDb, opts: &ProcessAssetsOptions) -> Result<ProcessAssetsStats> {
     let cfg = &vault.cfg;
     let mut conn = vault.conn().await?;
 

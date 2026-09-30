@@ -13,7 +13,7 @@ import { useAuth } from "../lib/auth";
 import { parseSelectKey } from "../lib/selectKey";
 import { OwnerAccountsPanel } from "./owner/OwnerAccountsPanel";
 import { OwnerDashboardPanel } from "./owner/OwnerDashboardPanel";
-import { VaultSettingsPanel } from "./owner/VaultSettingsPanel";
+import { ServerSettingsPanel } from "./owner/ServerSettingsPanel";
 import SettingsScreen from "./SettingsScreen";
 
 /** What the side panel lists, in its order. */
@@ -145,7 +145,7 @@ export default function OwnerHome() {
                 <h3 className="m-0 text-text">{SECTION_LABELS[section]}</h3>
               )}
               {section === "dashboard" && <OwnerDashboardPanel />}
-              {section === "settings" && <VaultSettingsPanel />}
+              {section === "settings" && <ServerSettingsPanel />}
               {section === "accounts" && <OwnerAccountsPanel filter={accountSearch} />}
             </div>
           )}

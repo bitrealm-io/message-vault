@@ -3,7 +3,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { VaultProviders } from "../../test/vaultProviders";
+import { Providers } from "../../test/providers";
 import LocalAuthTabs from "./LocalAuthTabs";
 
 vi.mock("../../lib/auth", () => ({
@@ -12,13 +12,13 @@ vi.mock("../../lib/auth", () => ({
 
 afterEach(cleanup);
 
-function renderTabs(vaultState: "unclaimed" | "closed" | "open") {
+function renderTabs(serverState: "unclaimed" | "closed" | "open") {
   render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter>
-        <LocalAuthTabs serverUrl="http://127.0.0.1:8080" vaultState={vaultState} />
+        <LocalAuthTabs serverUrl="http://127.0.0.1:8080" serverState={serverState} />
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 

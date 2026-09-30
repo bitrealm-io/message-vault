@@ -9,19 +9,19 @@
 
 use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::State;
+use message_crate_api_types::{ExportRun, ExportScope};
 use serde::Deserialize;
 use sqlx::{AnyConnection, Connection};
-use message_crate_api_types::{ExportRun, ExportScope};
 
 use crate::db::conversation_messages::{
     DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, selection_where,
 };
 use crate::db::dialect::{begin_immediate_sql, engine_of};
-use crate::db::ownership::{OwnedTable, missing_ids};
-use crate::db::vault_exports::{
+use crate::db::exports::{
     self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, EXPORT_STATUSES, ExportPageOpts, StartExportArgs,
     export_messages,
 };
+use crate::db::ownership::{OwnedTable, missing_ids};
 use crate::messages_api::message_filter;
 use crate::paging::{DEFAULT_LIST_LIMIT, MAX_LIST_OFFSET, Page, page_params, parse_sort};
 use crate::server::{ApiError, AppState, Created, ExportAccess};
@@ -51,7 +51,7 @@ pub async fn start_export_run(
     let mut tx = conn.begin_with(begin_immediate_sql(engine)).await?;
     let filter = scope_filter(&mut tx, account_id, scope, clock).await?;
     crate::db::account_profile::ensure_account_row(&mut tx, account_id).await?;
-    let export_id = vault_exports::start_export(
+    let export_id = exports::start_export(
         &mut tx,
         &StartExportArgs {
             account_id,
@@ -61,10 +61,10 @@ pub async fn start_export_run(
     )
     .await?;
 
-    vault_exports::list_run_messages(&mut tx, export_id, &filter).await?;
-    let counts = vault_exports::export_counts(&mut tx, export_id).await?;
-    vault_exports::record_counts(&mut tx, export_id, counts).await?;
-    let run = vault_exports::get_export(&mut tx, account_id, export_id)
+    exports::list_run_messages(&mut tx, export_id, &filter).await?;
+    let counts = exports::export_counts(&mut tx, export_id).await?;
+    exports::record_counts(&mut tx, export_id, counts).await?;
+    let run = exports::get_export(&mut tx, account_id, export_id)
         .await?
         .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("export run vanished before commit")))?;
     tx.commit().await?;
@@ -197,7 +197,7 @@ async fn owned_export(
     account_id: i64,
     export_id: i64,
 ) -> Result<ExportRun, ApiError> {
-    vault_exports::get_export(conn, account_id, export_id)
+    exports::get_export(conn, account_id, export_id)
         .await?
         .ok_or_else(|| ApiError::NotFound(format!("export {export_id} not found for this account")))
 }
@@ -228,7 +228,7 @@ async fn close_export(
 ) -> Result<Json<ExportRun>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let run = running_export(&mut conn, account_id, export_id).await?;
-    if !vault_exports::finish_export(&mut conn, account_id, export_id, status).await? {
+    if !exports::finish_export(&mut conn, account_id, export_id, status).await? {
         // Another closer won between the read above and this write.
         return Err(ApiError::StateConflict(format!(
             "export {export_id} is not running (status={})",
@@ -332,7 +332,7 @@ pub(crate) async fn exports_page(
     }
 
     let mut conn = state.db.acquire().await?;
-    let (items, total) = vault_exports::list_exports_page(
+    let (items, total) = exports::list_exports_page(
         &mut conn,
         account,
         status,
@@ -425,7 +425,7 @@ pub(crate) async fn list_export_messages(
     if (page.offset as u64) < total {
         let reached = (page.offset as u64 + page.limit as u64).min(total);
         let reached = i64::try_from(reached).unwrap_or(i64::MAX);
-        vault_exports::record_delivered(&mut conn, account, export_id, reached).await?;
+        exports::record_delivered(&mut conn, account, export_id, reached).await?;
     }
     Ok(Json(body))
 }

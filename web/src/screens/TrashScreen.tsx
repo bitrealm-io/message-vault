@@ -5,8 +5,11 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import ContactLabel from "../components/ContactLabel";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
 import { contactLabelText } from "../lib/contactLabel";
+import { keys } from "../lib/queryKeys";
+import { useRouteQuery } from "../lib/routeQuery";
 import { unsupportedFieldWords, useSearchFields } from "../lib/searchFields";
 import { trashed } from "../lib/searchQuery";
+import { getConversation, listContacts, listConversations } from "../lib/serverApi";
 import {
   useDeleteContact,
   useDeleteConversation,
@@ -15,9 +18,6 @@ import {
   useRestoreConversation,
 } from "../lib/trash";
 import { useAccountProfile } from "../lib/useAccountProfile";
-import { getConversation, listContacts, listConversations } from "../lib/vaultApi";
-import { keys } from "../lib/vaultKeys";
-import { useVaultQuery } from "../lib/vaultQuery";
 
 /**
  * Trash holds two kinds of thing, and this pane is where both come back — or
@@ -116,13 +116,13 @@ export default function TrashScreen() {
     data,
     isPending: loading,
     error,
-  } = useVaultQuery(keys.trash.count(query), fetchCount, { enabled: askConversations });
+  } = useRouteQuery(keys.trash.count(query), fetchCount, { enabled: askConversations });
 
   const {
     data: contactPage,
     isPending: contactsLoading,
     error: contactsError,
-  } = useVaultQuery(
+  } = useRouteQuery(
     keys.contacts.trashed(query),
     (signal) => listContacts({ q: query, limit: CONTACT_LIMIT, offset: 0 }, { signal }),
     { enabled: askContacts },
@@ -135,7 +135,7 @@ export default function TrashScreen() {
     data: selected,
     isPending: selectedLoading,
     error: selectedError,
-  } = useVaultQuery(
+  } = useRouteQuery(
     selectedId === null ? keys.trash.noSelection : keys.conversations.detail(selectedId),
     (signal) => getConversation(selectedId ?? 0, { signal }),
     { enabled: selectedId !== null },

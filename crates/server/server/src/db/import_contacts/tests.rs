@@ -1,13 +1,13 @@
 use super::*;
+use crate::db::imports::{StartImportArgs, start_import};
 use crate::db::schema;
-use crate::db::vault_imports::{StartImportArgs, start_import};
 
 const ACCOUNT: i64 = 7;
 
-async fn vault_with_a_run() -> (sqlx::AnyPool, tempfile::TempDir, i64) {
+async fn fixture_with_a_run() -> (sqlx::AnyPool, tempfile::TempDir, i64) {
     let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     crate::db::account_profile::ensure_account_row(&mut conn, ACCOUNT)
         .await
         .unwrap();
@@ -28,7 +28,7 @@ async fn contact(conn: &mut AnyConnection, name: &str) -> i64 {
 
 #[tokio::test]
 async fn a_run_keeps_the_most_consequential_reason_for_a_contact() {
-    let (pool, _dir, import_id) = vault_with_a_run().await;
+    let (pool, _dir, import_id) = fixture_with_a_run().await;
     let mut conn = pool.acquire().await.unwrap();
     let ada = contact(&mut conn, "Ada").await;
 
@@ -59,7 +59,7 @@ async fn a_run_keeps_the_most_consequential_reason_for_a_contact() {
 
 #[tokio::test]
 async fn the_tally_and_the_page_read_what_the_run_recorded() {
-    let (pool, _dir, import_id) = vault_with_a_run().await;
+    let (pool, _dir, import_id) = fixture_with_a_run().await;
     let mut conn = pool.acquire().await.unwrap();
     let ada = contact(&mut conn, "Ada").await;
     let grace = contact(&mut conn, "Grace").await;
@@ -126,7 +126,7 @@ async fn the_tally_and_the_page_read_what_the_run_recorded() {
 
 #[tokio::test]
 async fn nothing_is_recorded_without_a_run() {
-    let (pool, _dir, import_id) = vault_with_a_run().await;
+    let (pool, _dir, import_id) = fixture_with_a_run().await;
     let mut conn = pool.acquire().await.unwrap();
     let ada = contact(&mut conn, "Ada").await;
     record(&mut conn, None, ada, ContactReason::Created)

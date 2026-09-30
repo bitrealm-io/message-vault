@@ -33,7 +33,7 @@ use crate::db::account_profile::{self, OWNER_ACCOUNT_ID};
 use crate::db::api_tokens::create_api_token;
 use crate::db::permissions::Permissions;
 use crate::db::session_tokens::insert_account_session_token;
-use crate::test_support::{SeedConversation, SeedMessage, TestServer, TestVault};
+use crate::test_support::{SeedConversation, SeedMessage, TestFixture, TestServer};
 
 /// The one password every account in the fixture has.
 const PASSWORD: &str = "matrix-password";
@@ -275,14 +275,14 @@ pub(super) fn operations() -> Vec<Operation> {
 /// An account holds one Session at a time, so every call shares the owner's.
 /// The one call that ends it, the owner's `DELETE /v1/session`, runs last.
 pub(super) struct Shared {
-    vault: TestVault,
+    vault: TestFixture,
     server: TestServer,
     owner_session: String,
 }
 
 impl Shared {
     pub(super) async fn build() -> Self {
-        let vault = crate::test_support::test_vault().await;
+        let vault = crate::test_support::test_fixture().await;
         let mut conn = vault.conn().await;
         account_profile::insert_account_at(
             &mut conn,
@@ -651,8 +651,10 @@ pub(super) fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8
         ("post", "/v1/session") => {
             json(json!({ "username": format!("alice-{n}"), "password": PASSWORD }))
         }
-        ("post", "/v1/vault/claim") => json(json!({ "username": "usurper", "password": PASSWORD })),
-        ("patch", "/v1/vault/settings") => json(json!({ "public_registration": true })),
+        ("post", "/v1/server/claim") => {
+            json(json!({ "username": "usurper", "password": PASSWORD }))
+        }
+        ("patch", "/v1/server/settings") => json(json!({ "public_registration": true })),
         _ => None,
     }
 }
@@ -789,7 +791,7 @@ fn the_expected_outcome_follows_the_declared_security_and_the_owner_rule() {
     );
     assert_eq!(tokens.expected(Credential::Owner), Expected::Refused);
 
-    let public = op("get", "/v1/vault", Value::Null);
+    let public = op("get", "/v1/server", Value::Null);
     let outcomes: BTreeSet<String> = CREDENTIALS
         .iter()
         .map(|c| public.expected(*c).to_string())

@@ -1,5 +1,5 @@
+import { discardImport, listImports, setImportStage as setStage } from "./serverApi";
 import type { PathStat } from "./tauri";
-import { discardImport, listImports, setImportStage as setStage } from "./vaultApi";
 
 /** Where a live import session is. Mirrors the vault's `ImportStage`. */
 export const IMPORT_STAGES = [

@@ -5,7 +5,7 @@ export interface SessionResponse {
 }
 
 /** Desktop login default. IPv4 loopback, because `localhost` often resolves to IPv6 and Docker Compose publishes 8080 on IPv4 only. */
-export const DEFAULT_TAURI_VAULT_URL = "http://127.0.0.1:8080";
+export const DEFAULT_TAURI_SERVER_URL = "http://127.0.0.1:8080";
 
 /**
  * First value for the login server URL field.
@@ -15,11 +15,11 @@ export function initialLoginServerUrl(savedUrl: string | undefined, inTauri: boo
   if (typeof savedUrl === "string" && savedUrl.length > 0) {
     const normalized = savedUrl.trim().replace(/\/+$/, "");
     if (normalized === "http://localhost:8080") {
-      return DEFAULT_TAURI_VAULT_URL;
+      return DEFAULT_TAURI_SERVER_URL;
     }
     return savedUrl;
   }
-  return inTauri ? DEFAULT_TAURI_VAULT_URL : "";
+  return inTauri ? DEFAULT_TAURI_SERVER_URL : "";
 }
 
 export interface ParsedPersistedAuth {

@@ -8,15 +8,15 @@ use message_ir::HandleType;
 
 use crate::db::account_profile;
 use crate::test_support::{
-    RegisteredAccount, TestVault, post_json, post_status, register_via_api, test_vault,
-    vault_with_account,
+    RegisteredAccount, TestFixture, fixture_with_account, post_json, post_status, register_via_api,
+    test_fixture,
 };
 use axum::http::StatusCode;
 
 /// A vault, a logged-in account, and `handles` linked as contacts (one
 /// contact per phone, named `Contact 0`, `Contact 1`, ...).
-async fn contacts_fixture_with_handles(handles: &[&str]) -> (TestVault, RegisteredAccount) {
-    let (vault, account) = vault_with_account().await;
+async fn contacts_fixture_with_handles(handles: &[&str]) -> (TestFixture, RegisteredAccount) {
+    let (vault, account) = fixture_with_account().await;
     if !handles.is_empty() {
         let mut conn = vault.state.db.acquire().await.unwrap();
         for (i, handle) in handles.iter().enumerate() {
@@ -34,8 +34,8 @@ async fn contacts_fixture_with_handles(handles: &[&str]) -> (TestVault, Register
 
 /// A vault, a logged-in account, and one contact linked to `handle` that
 /// is then trashed.
-async fn contacts_fixture_with_trashed_handle(handle: &str) -> (TestVault, RegisteredAccount) {
-    let (vault, account) = vault_with_account().await;
+async fn contacts_fixture_with_trashed_handle(handle: &str) -> (TestFixture, RegisteredAccount) {
+    let (vault, account) = fixture_with_account().await;
     let mut conn = vault.state.db.acquire().await.unwrap();
     let contact_id =
         insert_contact_with_handle(&mut conn, account.account_id, "Trashed", handle).await;
@@ -51,7 +51,7 @@ async fn contacts_fixture_with_trashed_handle(handle: &str) -> (TestVault, Regis
 /// A second logged-in account in the same vault, with `handle` linked to
 /// one of its contacts. Used to prove `/v1/contacts/unmatched-identities` is scoped to
 /// the calling account rather than the whole vault database.
-async fn account_with_handle(vault: &TestVault, handle: &str) -> RegisteredAccount {
+async fn account_with_handle(vault: &TestFixture, handle: &str) -> RegisteredAccount {
     let account = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
     let mut conn = vault.state.db.acquire().await.unwrap();
     insert_contact_with_handle(&mut conn, account.account_id, "Other", handle).await;
@@ -232,7 +232,7 @@ async fn contact_match_rejects_an_oversized_batch() {
 
 #[tokio::test]
 async fn list_contacts_uses_preferred_name_and_handle_ids() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let contact_id: i64 = sqlx::query_scalar(
@@ -285,7 +285,7 @@ async fn list_contacts_uses_preferred_name_and_handle_ids() {
 
 #[tokio::test]
 async fn list_contacts_filters_and_paginates() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     for (name, phone) in [
@@ -378,7 +378,7 @@ async fn list_contacts_filters_and_paginates() {
 
 #[tokio::test]
 async fn get_contact_detail_counts_direct_group_and_messages() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let contact_id: i64 = sqlx::query_scalar(
@@ -547,7 +547,7 @@ async fn get_contact_detail_counts_direct_group_and_messages() {
 
 #[tokio::test]
 async fn get_contact_summaries_counts_two_contacts_in_one_query() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
 
@@ -818,7 +818,7 @@ async fn insert_held_message(
 /// every message held at it (ADR-0015).
 #[tokio::test]
 async fn a_contacts_identity_and_summary_count_the_messages_it_sent() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
 
@@ -991,7 +991,7 @@ async fn a_contacts_identity_and_summary_count_the_messages_it_sent() {
 
 #[tokio::test]
 async fn mutate_contact_add_update_remove_handle_and_rename() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let contact_id: i64 = sqlx::query_scalar(
@@ -1147,7 +1147,7 @@ async fn handle_type_and_service(
 /// username with no service stays Other rather than passing for a phone.
 #[tokio::test]
 async fn a_handle_takes_its_type_from_the_service_it_is_added_under() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let contact_id = insert_contact_with_handle(&mut conn, account, "Sam", "+15555550100").await;
@@ -1179,7 +1179,7 @@ async fn a_handle_takes_its_type_from_the_service_it_is_added_under() {
 /// second one.
 #[tokio::test]
 async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let contact_id = insert_contact_with_handle(&mut conn, account, "Sam", "+15555550100").await;
@@ -1219,7 +1219,7 @@ async fn naming_a_handle_again_under_another_transport_keeps_one_row() {
 
 #[tokio::test]
 async fn mutate_contact_rejects_trashed_contact() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let contact_id =
@@ -1282,7 +1282,7 @@ async fn set_contact_last_modified(
 
 #[tokio::test]
 async fn mutate_contact_bumps_last_modified_on_shape_changes() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let contact_id: i64 = sqlx::query_scalar(
@@ -1498,7 +1498,7 @@ async fn insert_direct_conversation(
 
 #[tokio::test]
 async fn list_contacts_filters_has_messages_and_never_messaged() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     insert_contact_with_handle(&mut conn, account, "Messaged", "+15555550100").await;
@@ -1581,7 +1581,7 @@ async fn insert_message_from(
 /// either direction.
 #[tokio::test]
 async fn list_contacts_sorts_by_last_heard_with_silent_contacts_last() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     insert_contact_with_handle(&mut conn, account, "Recent", "+15555550100").await;
@@ -1741,7 +1741,7 @@ async fn contacts_route_accepts_last_heard_and_refuses_other_keys() {
 
 #[tokio::test]
 async fn list_contacts_filters_no_handle() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     insert_contact_with_handle(&mut conn, account, "WithHandle", "+15555550100").await;
@@ -1770,7 +1770,7 @@ async fn list_contacts_filters_no_handle() {
 
 #[tokio::test]
 async fn list_contacts_filters_service_or() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     insert_contact_with_handle(&mut conn, account, "IMsg", "+15555550100").await;
@@ -1826,7 +1826,7 @@ async fn list_contacts_filters_service_or() {
 /// book that does parse is still loaded.
 #[tokio::test]
 async fn a_broken_address_book_is_a_422_and_a_good_one_loads() {
-    let (vault, account) = vault_with_account().await;
+    let (vault, account) = fixture_with_account().await;
     let (status, text) = crate::test_support::post_raw(
         &vault.state,
         "/v1/contacts",
@@ -1884,7 +1884,7 @@ fn address_book_of(len: usize) -> String {
 #[tokio::test]
 async fn an_address_book_at_the_size_cap_loads_and_one_byte_over_is_a_413() {
     use address_book::MAX_ADDRESS_BOOK_BYTES;
-    let (vault, account) = vault_with_account().await;
+    let (vault, account) = fixture_with_account().await;
 
     let (status, text) = crate::test_support::post_raw(
         &vault.state,
@@ -1939,7 +1939,7 @@ fn the_media_type_alone_decides_the_address_book_format() {
 
 #[tokio::test]
 async fn an_address_book_renames_a_contact_an_import_named() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let dir = vault.dir();
     let mut conn = vault.conn().await;
@@ -1995,7 +1995,7 @@ async fn an_address_book_renames_a_contact_an_import_named() {
 
 #[tokio::test]
 async fn a_nameless_card_does_not_blank_an_imported_name() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let dir = vault.dir();
     let mut conn = vault.conn().await;
@@ -2038,7 +2038,7 @@ async fn a_nameless_card_does_not_blank_an_imported_name() {
 
 #[tokio::test]
 async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let dir = vault.dir();
     let mut conn = vault.conn().await;
@@ -2149,7 +2149,7 @@ async fn an_address_book_does_not_rename_a_contact_the_person_typed() {
 
 #[tokio::test]
 async fn loading_an_address_book_replaces_only_its_own_rows() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let dir = vault.dir();
     let mut conn = vault.conn().await;
@@ -2231,7 +2231,7 @@ async fn loading_an_address_book_replaces_only_its_own_rows() {
 
 #[tokio::test]
 async fn reloading_an_address_book_keeps_a_contact_still_in_the_file() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let dir = vault.dir();
     let mut conn = vault.conn().await;
@@ -2282,7 +2282,7 @@ async fn reloading_an_address_book_keeps_a_contact_still_in_the_file() {
         .await
         .unwrap();
     let run_id: i64 = sqlx::query_scalar(
-        "INSERT INTO vault_imports (account_id, source, mode, status, started_at)
+        "INSERT INTO imports (account_id, source, mode, status, started_at)
          VALUES ($1, 'imessage', 'push', 'completed', '2024-01-01T00:00:00Z') RETURNING id",
     )
     .bind(account)
@@ -2362,7 +2362,7 @@ async fn reloading_an_address_book_keeps_a_contact_still_in_the_file() {
 
 #[tokio::test]
 async fn reloading_an_address_book_drops_a_number_the_card_no_longer_lists() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let dir = vault.dir();
     let mut conn = vault.conn().await;
@@ -2433,7 +2433,7 @@ async fn reloading_an_address_book_drops_a_number_the_card_no_longer_lists() {
 
 #[tokio::test]
 async fn a_card_whose_number_changed_is_a_new_contact() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let dir = vault.dir();
     let mut conn = vault.conn().await;
@@ -2503,7 +2503,7 @@ async fn a_card_whose_number_changed_is_a_new_contact() {
 
 #[tokio::test]
 async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
 
@@ -2566,7 +2566,7 @@ async fn unknown_group_collects_contacts_missing_a_name_or_an_identity() {
 
 #[tokio::test]
 async fn list_contacts_filters_by_group_and_no_group() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let family = insert_contact_with_handle(&mut conn, account, "Ada", "+15555550100").await;
@@ -2694,7 +2694,7 @@ fn a_refusal_is_the_persons_sentence_and_anything_else_is_internal() {
 
 #[tokio::test]
 async fn the_contact_list_is_a_page_and_summaries_are_items() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
 
     let page: serde_json::Value =
@@ -2733,7 +2733,7 @@ async fn trashed_contact_row_count(conn: &mut AnyConnection, account_id: i64, id
 /// A logged-in account with one named contact on `+15550100`, in one
 /// conversation (id 1) holding two messages, and already in the trash.
 /// Returns the account and the contact's id.
-async fn trashed_contact_fixture() -> (TestVault, RegisteredAccount, i64) {
+async fn trashed_contact_fixture() -> (TestFixture, RegisteredAccount, i64) {
     let (vault, account) = contacts_fixture_with_handles(&["+15550100"]).await;
     let mut conn = vault.conn().await;
     insert_direct_conversation(

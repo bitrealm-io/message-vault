@@ -1,6 +1,6 @@
 import { formatBytes } from "../../settings/storage/storageUtils";
 import { DashboardSection } from "./DashboardSection";
-import type { VaultStorage } from "./types";
+import type { ServerStorage } from "./types";
 
 /** One measured figure with its name under it. */
 function Figure({ label, bytes }: { label: string; bytes: number }) {
@@ -18,7 +18,7 @@ function Figure({ label, bytes }: { label: string; bytes: number }) {
  * on either engine. The search figure is for the whole vault, because the
  * index is one shared structure and cannot be split by account.
  */
-export function DatabaseSection({ storage }: { storage: VaultStorage }) {
+export function DatabaseSection({ storage }: { storage: ServerStorage }) {
   return (
     <DashboardSection
       title="Database"

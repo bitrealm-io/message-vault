@@ -26,7 +26,7 @@
 //! does ([`paths::resolve_openable_path`]/[`paths::resolve_staging_root`]),
 //! requires the target to be a direct child of the root (never the root
 //! itself, never a grandchild), and — for the two commands that write to or
-//! remove the folder — requires the `.message-vault-export` sentinel
+//! remove the folder — requires the `.message-crate-export` sentinel
 //! `ir-format` writes into every folder it exports into. The sentinel check
 //! is the decisive half: even a hostile or buggy `staging_root` value cannot
 //! make a folder this app never exported into look deletable.
@@ -68,7 +68,7 @@ pub struct StagingArgs {
 
 /// Resolve `staging_dir` and confirm it is safe to act on: a direct child of
 /// `staging_root` — never the root itself, never a grandchild — and, when
-/// `require_sentinel`, containing the `.message-vault-export` sentinel
+/// `require_sentinel`, containing the `.message-crate-export` sentinel
 /// `ir-format` writes into every folder it exports into.
 ///
 /// Both paths are resolved through [`resolve_openable_path`]/

@@ -17,7 +17,7 @@ use crate::db::engine::{self, DbTarget};
 use crate::db::schema;
 use crate::dedupe;
 use crate::imports_api::{self, ImportExportArgs, ImportMode};
-use crate::open_vault::OpenVault;
+use crate::open_db::OpenDb;
 use crate::process_assets::{self, ProcessAssetsOptions};
 
 /// Stable demo account id used when `reset-demo` runs without `--account`.
@@ -134,7 +134,7 @@ async fn dedupe_and_process_assets(
         DbTarget::Url(url) => (None, Some(url.to_string())),
         DbTarget::Path(path) => (Some(path.to_path_buf()), None),
     };
-    let vault = OpenVault::open(cfg.clone().with_db_overrides(db, db_url)).await?;
+    let vault = OpenDb::open(cfg.clone().with_db_overrides(db, db_url)).await?;
     let dedupe_stats = {
         let mut conn = vault.conn().await?;
         dedupe::dedupe_cross_source(&mut conn, account_id, None, 2).await?
@@ -331,7 +331,7 @@ async fn reset_prepared_bundle(
     // install can rename into data_dir/<account>. A work directory on
     // another mount (tmp, a nested bind, a named volume) fails with EXDEV.
     let data_work = reset_account_work_dir(&cfg.paths.data_dir)?;
-    let prepared_db = db_work.path().join("vault.db");
+    let prepared_db = db_work.path().join("messagecrate.db");
     checkpoint_and_clean_sidecars(&cfg.paths.db, "before creating the reset snapshot").await?;
     prepare_database_snapshot(&cfg.paths.db, &prepared_db).await?;
 
@@ -374,7 +374,7 @@ async fn install_reset_state_or_keep_work(
         return Ok(());
     };
     let config_backup = sqlite_sidecar(paths.prepared_config, ".previous-active");
-    let previous_state_still_in_work = db_work.path().join("previous-vault.db").exists()
+    let previous_state_still_in_work = db_work.path().join("previous-messagecrate.db").exists()
         || data_work.path().join("previous-account").exists()
         || config_backup.exists();
     if previous_state_still_in_work {
@@ -500,7 +500,7 @@ async fn prepare_database_snapshot(active: &Path, prepared: &Path) -> Result<()>
             .acquire()
             .await
             .with_context(|| format!("create prepared database {}", prepared.display()))?;
-        schema::ensure_vault_schema(&mut conn).await?;
+        schema::ensure_schema(&mut conn).await?;
         conn.close().await?;
         pool.close().await;
     }
@@ -775,7 +775,7 @@ impl<'a> ResetPaths<'a> {
             .prepared_db
             .parent()
             .context("prepared database has no parent")?
-            .join("previous-vault.db");
+            .join("previous-messagecrate.db");
         let account_backup = self
             .prepared_account
             .parent()
@@ -956,7 +956,7 @@ fn load_demo_seed(path: &Path) -> Result<DemoSeed> {
 async fn seed_demo_account(target: DbTarget<'_>, account_id: i64, seed: &DemoSeed) -> Result<()> {
     let pool = target.open().await?;
     let mut conn = pool.acquire().await?;
-    schema::ensure_vault_schema(&mut conn).await?;
+    schema::ensure_schema(&mut conn).await?;
     seed_demo_account_on_conn(&mut conn, account_id, seed).await?;
     seed_demo_owner_on_conn(&mut conn).await?;
     conn.close().await?;
@@ -1068,7 +1068,7 @@ async fn wipe_demo_account(cfg: &Config, account_id: i64, target: DbTarget<'_>) 
         .acquire()
         .await
         .with_context(|| format!("open {target} for demo account wipe"))?;
-    schema::ensure_vault_schema(&mut conn).await?;
+    schema::ensure_schema(&mut conn).await?;
     let deleted = sqlx::query("DELETE FROM accounts WHERE id = $1")
         .bind(account_id)
         .execute(&mut *conn)

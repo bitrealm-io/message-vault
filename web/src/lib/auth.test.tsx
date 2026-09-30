@@ -3,7 +3,7 @@
 import { act, render, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { VaultProviders } from "../test/vaultProviders";
+import { Providers } from "../test/providers";
 
 const post = vi.fn();
 const get = vi.fn();
@@ -20,7 +20,7 @@ let currentToken: string | null = null;
 let currentAccountId: number | null = null;
 
 vi.mock("./api", () => ({
-  VaultApiError: class VaultApiError extends Error {
+  ApiError: class ApiError extends Error {
     readonly status: number;
     constructor(status: number, message: string) {
       super(message);
@@ -39,10 +39,10 @@ vi.mock("./api", () => ({
   setBaseUrl: (...args: unknown[]) => setBaseUrl(...args),
 }));
 
-// The vault calls auth.tsx makes, faked by name. Everything else in vaultApi
+// The vault calls auth.tsx makes, faked by name. Everything else in serverApi
 // stays real, since other modules in this graph import from it.
-vi.mock("./vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./vaultApi")>()),
+vi.mock("./serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./serverApi")>()),
   logout: (...args: unknown[]) => post(...args),
   getSession: (...args: unknown[]) => get(...args),
   getAccountProfile: (...args: unknown[]) => getProfile(...args),
@@ -64,7 +64,7 @@ vi.mock("./messageTags", () => ({
   invalidateMessageTags: vi.fn(),
 }));
 
-const STORAGE_KEY = "message-vault-auth";
+const STORAGE_KEY = "message-crate-auth";
 
 function seedSession() {
   localStorage.setItem(
@@ -115,9 +115,9 @@ describe("AuthProvider logout", () => {
     const { AuthProvider, useAuth } = await import("./auth");
     const { result } = renderHook(() => useAuth(), {
       wrapper: ({ children }: { children: ReactNode }) => (
-        <VaultProviders>
+        <Providers>
           <AuthProvider>{children}</AuthProvider>
-        </VaultProviders>
+        </Providers>
       ),
     });
 
@@ -140,9 +140,9 @@ describe("AuthProvider logout", () => {
     const { AuthProvider, useAuth } = await import("./auth");
     const { result } = renderHook(() => useAuth(), {
       wrapper: ({ children }: { children: ReactNode }) => (
-        <VaultProviders>
+        <Providers>
           <AuthProvider>{children}</AuthProvider>
-        </VaultProviders>
+        </Providers>
       ),
     });
 
@@ -159,9 +159,9 @@ describe("AuthProvider logout", () => {
     const { AuthProvider, useAuth } = await import("./auth");
     const { result } = renderHook(() => useAuth(), {
       wrapper: ({ children }: { children: ReactNode }) => (
-        <VaultProviders>
+        <Providers>
           <AuthProvider>{children}</AuthProvider>
-        </VaultProviders>
+        </Providers>
       ),
     });
 
@@ -177,11 +177,11 @@ describe("AuthProvider logout", () => {
     isTauri.mockReturnValue(false);
     const { AuthProvider } = await import("./auth");
     render(
-      <VaultProviders>
+      <Providers>
         <AuthProvider>
           <div>ok</div>
         </AuthProvider>
-      </VaultProviders>,
+      </Providers>,
     );
 
     await waitFor(() => {
@@ -202,9 +202,9 @@ describe("AuthProvider logout", () => {
     const { AuthProvider, useAuth } = await import("./auth");
     const { result } = renderHook(() => useAuth(), {
       wrapper: ({ children }: { children: ReactNode }) => (
-        <VaultProviders>
+        <Providers>
           <AuthProvider>{children}</AuthProvider>
-        </VaultProviders>
+        </Providers>
       ),
     });
 
@@ -241,11 +241,11 @@ describe("AuthProvider logout", () => {
     seedSession();
     const { AuthProvider } = await import("./auth");
     render(
-      <VaultProviders>
+      <Providers>
         <AuthProvider>
           <div>ok</div>
         </AuthProvider>
-      </VaultProviders>,
+      </Providers>,
     );
 
     await waitFor(() => {
@@ -284,9 +284,9 @@ describe("AuthProvider restoring a saved login", () => {
     const { AuthProvider, useAuth } = await import("./auth");
     return renderHook(() => useAuth(), {
       wrapper: ({ children }: { children: ReactNode }) => (
-        <VaultProviders>
+        <Providers>
           <AuthProvider>{children}</AuthProvider>
-        </VaultProviders>
+        </Providers>
       ),
     });
   }
@@ -304,8 +304,8 @@ describe("AuthProvider restoring a saved login", () => {
 
   it("keeps the saved login when something other than the vault answers", async () => {
     seedSession();
-    const { VaultApiError } = await import("./api");
-    get.mockRejectedValue(new VaultApiError(502, "Bad Gateway"));
+    const { ApiError } = await import("./api");
+    get.mockRejectedValue(new ApiError(502, "Bad Gateway"));
 
     const { result } = await renderAuth();
 
@@ -315,8 +315,8 @@ describe("AuthProvider restoring a saved login", () => {
 
   it("deletes the saved login when the vault rejects it", async () => {
     seedSession();
-    const { VaultApiError } = await import("./api");
-    get.mockRejectedValue(new VaultApiError(401, "Unauthorized"));
+    const { ApiError } = await import("./api");
+    get.mockRejectedValue(new ApiError(401, "Unauthorized"));
 
     const { result } = await renderAuth();
 

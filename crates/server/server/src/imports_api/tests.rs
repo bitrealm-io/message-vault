@@ -1,8 +1,8 @@
 use super::*;
 use crate::assets_api;
 use crate::test_support::{
-    RegisteredAccount, TestVault, get_json, patch_json, post_created_json, post_json, test_vault,
-    vault_with_account,
+    RegisteredAccount, TestFixture, fixture_with_account, get_json, patch_json, post_created_json,
+    post_json, test_fixture,
 };
 use tempfile::TempDir;
 
@@ -17,8 +17,8 @@ fn write_jsonl(dir: &Path, name: &str, body: &str) -> PathBuf {
 /// A vault holding one live import session at `awaiting_gate_1` whose
 /// `summary_json` already carries `summary` — as if an earlier
 /// `PATCH /v1/imports/{id}` recorded a gate approval.
-async fn session_with_summary(summary: serde_json::Value) -> (TestVault, RegisteredAccount, i64) {
-    let (vault, account) = vault_with_account().await;
+async fn session_with_summary(summary: serde_json::Value) -> (TestFixture, RegisteredAccount, i64) {
+    let (vault, account) = fixture_with_account().await;
     let (_, created): (String, serde_json::Value) = post_created_json(
         &vault.state,
         "/v1/imports",
@@ -28,11 +28,11 @@ async fn session_with_summary(summary: serde_json::Value) -> (TestVault, Registe
     .await;
     let import_id = created["id"].as_i64().expect("created session has an id");
     let mut conn = vault.state.db.acquire().await.unwrap();
-    crate::db::vault_imports::set_import_stage(
+    crate::db::imports::set_import_stage(
         &mut conn,
         account.account_id,
         import_id,
-        crate::db::vault_imports::ImportStage::AwaitingGate1,
+        crate::db::imports::ImportStage::AwaitingGate1,
         Some(&summary.to_string()),
     )
     .await
@@ -42,14 +42,13 @@ async fn session_with_summary(summary: serde_json::Value) -> (TestVault, Registe
 
 /// The session's stored `summary_json`, decoded, or `None` when the
 /// column is null.
-async fn stored_summary(vault: &TestVault, import_id: i64) -> Option<serde_json::Value> {
+async fn stored_summary(vault: &TestFixture, import_id: i64) -> Option<serde_json::Value> {
     let mut conn = vault.state.db.acquire().await.unwrap();
-    let raw: Option<String> =
-        sqlx::query_scalar("SELECT summary_json FROM vault_imports WHERE id = $1")
-            .bind(import_id)
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
+    let raw: Option<String> = sqlx::query_scalar("SELECT summary_json FROM imports WHERE id = $1")
+        .bind(import_id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
     raw.map(|s| serde_json::from_str(&s).expect("stored summary_json is valid JSON"))
 }
 
@@ -58,7 +57,7 @@ async fn a_stage_change_with_a_summary_stores_it() {
     // The gate screen posts what the user approved so it survives a
     // reload — recomputing the summary from the folder is a different
     // question from what was actually approved.
-    let (vault, account) = vault_with_account().await;
+    let (vault, account) = fixture_with_account().await;
     let (location, created): (String, serde_json::Value) = post_created_json(
         &vault.state,
         "/v1/imports",
@@ -137,7 +136,7 @@ async fn open_verify(db: &Path) -> (sqlx::AnyPool, sqlx::pool::PoolConnection<sq
 #[tokio::test]
 async fn append_skips_existing_guids_and_keeps_id_map() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
 
     let first = write_jsonl(
@@ -277,7 +276,7 @@ fn chunk_boundary_jsonl() -> String {
 #[tokio::test]
 async fn staging_chunks_56_messages_and_keeps_children_on_right_rows() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     let path = write_jsonl(tmp.path(), "chunk-boundary.jsonl", &chunk_boundary_jsonl());
     let stats = import_jsonl_files(&db, &[path], &replace_opts(&assets, tmp.path(), "imessage"))
@@ -320,7 +319,7 @@ async fn staging_chunks_56_messages_and_keeps_children_on_right_rows() {
 #[tokio::test]
 async fn staging_skips_duplicate_guid_in_same_file_and_keeps_first_attachment() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null},{"handle":"+15555550999","display_name":null}],"stats":{"message_count":2,"attachment_count":2,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183463000}}}"#;
     let first = format!(
@@ -373,7 +372,7 @@ async fn staging_skips_duplicate_guid_in_same_file_and_keeps_first_attachment() 
 #[tokio::test]
 async fn staging_keeps_both_rows_when_guids_differ_only_by_whitespace() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null}],"stats":{"message_count":2,"attachment_count":2,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183463000}}}"#;
     let first = format!(
@@ -408,7 +407,7 @@ async fn staging_keeps_both_rows_when_guids_differ_only_by_whitespace() {
 #[tokio::test]
 async fn append_existing_guid_adds_missing_children() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     let header = r#"{"schema_version":4,"export":{"source":"imessage","tool":"test","tool_version":"0","owner_handle":null,"owner_display_name":null},"conversation":{"chat_identifier":"+15555550123","conversation_type":"individual","group_title":null,"participants":[{"handle":"+15555550123","display_name":null},{"handle":"+15555550999","display_name":null}],"stats":{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1426183462000,"last_timestamp_unix_ms":1426183462000}}}"#;
     let first = write_jsonl(
@@ -469,7 +468,7 @@ async fn append_existing_guid_adds_missing_children() {
 #[tokio::test]
 async fn append_with_a_found_file_fills_in_the_missing_attachment() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     let path = write_jsonl(
         tmp.path(),
@@ -536,7 +535,7 @@ async fn append_with_a_found_file_fills_in_the_missing_attachment() {
 #[tokio::test]
 async fn repeated_append_keeps_one_fts_posting_per_message() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     let path = write_jsonl(
         tmp.path(),
@@ -631,7 +630,7 @@ async fn repeated_append_keeps_one_fts_posting_per_message() {
 #[tokio::test]
 async fn deferred_fts_indexes_attachment_text_after_promote() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     fs::create_dir_all(&assets).unwrap();
     let att_dir = tmp.path().join("attachments");
@@ -679,7 +678,7 @@ async fn deferred_fts_indexes_attachment_text_after_promote() {
 #[tokio::test]
 async fn promote_stamps_messages_with_import_id() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     let path = write_jsonl(
         tmp.path(),
@@ -690,18 +689,13 @@ async fn promote_stamps_messages_with_import_id() {
     );
 
     let (_pool, mut conn) = open_verify(&db).await;
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
         .await
         .unwrap();
-    let import_id = crate::db::vault_imports::start_import(
+    let import_id = crate::db::imports::start_import(
         &mut conn,
-        &crate::db::vault_imports::StartImportArgs::new(
-            TEST_ACCOUNT,
-            "imessage",
-            "append",
-            Some("test"),
-        ),
+        &crate::db::imports::StartImportArgs::new(TEST_ACCOUNT, "imessage", "append", Some("test")),
     )
     .await
     .unwrap();
@@ -733,11 +727,11 @@ async fn promote_stamps_messages_with_import_id() {
         .unwrap();
     assert_eq!(stamped, 1);
 
-    let row = crate::db::vault_imports::complete_import(
+    let row = crate::db::imports::complete_import(
         &mut conn,
         TEST_ACCOUNT,
         import_id,
-        &crate::db::vault_imports::CompleteImportArgs {
+        &crate::db::imports::CompleteImportArgs {
             status: "completed".into(),
             message_count: Some(stats.messages as i64),
             attachment_count: Some(0),
@@ -750,11 +744,11 @@ async fn promote_stamps_messages_with_import_id() {
     assert_eq!(row.status, "completed");
     assert_eq!(row.message_count, 1);
 
-    let (listed, total) = crate::db::vault_imports::list_imports_page(
+    let (listed, total) = crate::db::imports::list_imports_page(
         &mut conn,
         TEST_ACCOUNT,
         None,
-        &crate::db::vault_imports::DEFAULT_IMPORT_SORT,
+        &crate::db::imports::DEFAULT_IMPORT_SORT,
         10,
         0,
     )
@@ -774,7 +768,7 @@ async fn promote_stamps_messages_with_import_id() {
         0
     );
     assert!(
-        crate::db::vault_imports::top_attachments_by_size(&mut conn, TEST_ACCOUNT, 5)
+        crate::db::imports::top_attachments_by_size(&mut conn, TEST_ACCOUNT, 5)
             .await
             .unwrap()
             .is_empty()
@@ -784,7 +778,7 @@ async fn promote_stamps_messages_with_import_id() {
 #[tokio::test]
 async fn trunk_zero_phone_imports_digits_with_review_note() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     let path = write_jsonl(
         tmp.path(),
@@ -795,7 +789,7 @@ async fn trunk_zero_phone_imports_digits_with_review_note() {
     );
 
     let (_pool, mut conn) = open_verify(&db).await;
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
         .await
         .unwrap();
@@ -843,7 +837,7 @@ async fn source_from_jsonl_stamps_export_source_and_assets() {
     use media::MediaMode;
 
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let data_dir = tmp.path().join("data");
     let paths = PathsConfig {
         db: db.clone(),
@@ -902,7 +896,7 @@ async fn media_none_skips_attachment_copy() {
     use media::MediaMode;
 
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let data_dir = tmp.path().join("data");
     let paths = PathsConfig {
         db: db.clone(),
@@ -951,7 +945,7 @@ async fn media_none_skips_attachment_copy() {
 async fn name_only_participant_becomes_a_contact_with_no_identity() {
     sqlx::any::install_default_drivers();
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     // A rescue export: the source names the other party and records no
     // address for them anywhere.
@@ -1021,7 +1015,7 @@ async fn name_only_participant_becomes_a_contact_with_no_identity() {
 async fn a_group_chat_identifier_never_becomes_a_contact() {
     sqlx::any::install_default_drivers();
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     let path = write_jsonl(
         tmp.path(),
@@ -1078,7 +1072,7 @@ async fn a_group_chat_identifier_never_becomes_a_contact() {
 async fn a_participant_with_no_address_and_no_name_is_never_created() {
     sqlx::any::install_default_drivers();
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     // Neither the roster entry nor the message's sender names this person
     // or records any address for them.
@@ -1121,7 +1115,7 @@ async fn a_participant_with_no_address_and_no_name_is_never_created() {
 #[tokio::test]
 async fn persists_missing_reason_with_null_sha256() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     fs::create_dir_all(&assets).unwrap();
 
@@ -1173,7 +1167,7 @@ async fn persists_missing_reason_with_null_sha256() {
 #[tokio::test]
 async fn claimed_import_rejects_corrupt_existing_asset() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     let sha = assets_api::sha256_hex(b"expected-asset");
     let corrupt = assets.join(assets_api::shard_rel_path(&sha, ""));
@@ -1222,7 +1216,7 @@ async fn claimed_import_rejects_corrupt_existing_asset() {
 #[tokio::test]
 async fn rejects_attachment_path_traversal() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     let export_dir = tmp.path().join("export");
     fs::create_dir_all(&assets).unwrap();
@@ -1262,7 +1256,7 @@ async fn rejects_attachment_path_traversal() {
 #[tokio::test]
 async fn failed_replace_keeps_existing_messages() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     let export_dir = tmp.path().join("export");
     fs::create_dir_all(&assets).unwrap();
@@ -1487,10 +1481,10 @@ async fn failed_promote_keeps_the_trashed_contact_and_adds_no_contacts() {
 /// to prove the opposite case.
 async fn importer() -> (
     crate::server::AppState,
-    crate::test_support::TestVault,
+    crate::test_support::TestFixture,
     String,
 ) {
-    let vault = crate::test_support::test_vault().await;
+    let vault = crate::test_support::test_fixture().await;
     let account =
         crate::test_support::register_via_api(&vault.state, "importer", "hunter2hunter2").await;
     let state = vault.state.clone();
@@ -1820,9 +1814,9 @@ async fn a_replace_run_deletes_only_its_own_sources_old_messages() {
 /// well formed, it is simply not something this route reads.
 #[tokio::test]
 async fn a_multipart_body_is_an_unsupported_media_type() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
 
-    let boundary = "MessageVaultTestBoundary";
+    let boundary = "MessageCrateTestBoundary";
     let body = format!(
         "--{boundary}\r\nContent-Disposition: form-data; name=\"jsonl\"\r\n\r\n{{}}\r\n--{boundary}--\r\n"
     );
@@ -1853,7 +1847,7 @@ async fn a_multipart_body_is_an_unsupported_media_type() {
 /// account, so an outsider cannot tell it exists.
 #[tokio::test]
 async fn a_batch_into_another_accounts_run_is_not_found() {
-    let (vault, alice) = crate::test_support::vault_with_account().await;
+    let (vault, alice) = crate::test_support::fixture_with_account().await;
     let bob = crate::test_support::register_via_api(&vault.state, "bob", "hunter2hunter2").await;
     let bobs_run = batches_path(&vault.state, &bob.token, "imessage").await;
 
@@ -1883,7 +1877,7 @@ async fn a_batch_into_another_accounts_run_is_not_found() {
 /// The account that owns Import Run `import_id`.
 async fn run_account(state: &crate::server::AppState, import_id: i64) -> i64 {
     let mut conn = state.db.acquire().await.unwrap();
-    sqlx::query_scalar("SELECT account_id FROM vault_imports WHERE id = $1")
+    sqlx::query_scalar("SELECT account_id FROM imports WHERE id = $1")
         .bind(import_id)
         .fetch_one(&mut *conn)
         .await
@@ -1901,12 +1895,11 @@ async fn complete_run(state: &crate::server::AppState, token: &str, import_id: i
     )
     .await;
     let mut conn = state.db.acquire().await.unwrap();
-    let finished_at: String =
-        sqlx::query_scalar("SELECT finished_at FROM vault_imports WHERE id = $1")
-            .bind(import_id)
-            .fetch_one(&mut *conn)
-            .await
-            .unwrap();
+    let finished_at: String = sqlx::query_scalar("SELECT finished_at FROM imports WHERE id = $1")
+        .bind(import_id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
     finished_at[..10].to_string()
 }
 
@@ -2081,7 +2074,7 @@ async fn participant_and_contact_counts(conn: &mut AnyConnection) -> (Vec<(i64, 
 /// same file twice must still leave one row per person in the conversation.
 #[tokio::test]
 async fn reimporting_a_file_with_a_name_only_participant_adds_no_participant() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let tmp = TempDir::new().unwrap();
     let path = write_jsonl(
         tmp.path(),
@@ -2113,7 +2106,7 @@ async fn reimporting_a_file_with_a_name_only_participant_adds_no_participant() {
 /// same handle beside it; the conversation lists the person once.
 #[tokio::test]
 async fn reimporting_after_trashing_a_contact_lists_the_person_once() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let tmp = TempDir::new().unwrap();
     let path = write_jsonl(
         tmp.path(),
@@ -2173,7 +2166,7 @@ async fn reimporting_after_trashing_a_contact_lists_the_person_once() {
 #[tokio::test]
 async fn a_message_is_held_at_its_own_owner_else_the_headers_and_the_owner_gets_no_contact() {
     let tmp = TempDir::new().unwrap();
-    let db = tmp.path().join("vault.db");
+    let db = tmp.path().join("messagecrate.db");
     let assets = tmp.path().join("assets");
     let file = write_jsonl(
         tmp.path(),

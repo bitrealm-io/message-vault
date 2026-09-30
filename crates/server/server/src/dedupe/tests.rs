@@ -132,7 +132,7 @@ fn content_key_distinguishes_group_senders() {
 const TEST_ACCOUNT_ID: i64 = 7;
 
 async fn setup_db(conn: &mut AnyConnection) {
-    schema::ensure_vault_schema(conn).await.unwrap();
+    schema::ensure_schema(conn).await.unwrap();
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'test')")
         .bind(TEST_ACCOUNT_ID)
         .execute(&mut *conn)
@@ -859,7 +859,7 @@ async fn message(conn: &mut AnyConnection, m: Msg<'_>) -> i64 {
 }
 
 async fn setup_account(conn: &mut AnyConnection) {
-    schema::ensure_vault_schema(conn).await.unwrap();
+    schema::ensure_schema(conn).await.unwrap();
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'test')")
         .bind(TEST_ACCOUNT_ID)
         .execute(&mut *conn)

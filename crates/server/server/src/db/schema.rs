@@ -2,14 +2,14 @@
 //!
 //! Serve and import open their database connections through
 //! [`crate::db::engine`] pools (shared pragmas for SQLite) and ensure the
-//! schema with `ensure_vault_schema` / `ensure_accounts_schema`. DDL lives in
+//! schema with `ensure_schema` / `ensure_accounts_schema`. DDL lives in
 //! the SQL files embedded at compile time; the functions here apply and
 //! evolve it. SQLite and Postgres each have their own DDL variants
 //! (`schema/sql/*.sql` and `schema/sql/pg_*.sql`).
 //!
 //! The embedded SQL is fingerprinted at compile time ([`SCHEMA_FINGERPRINT`])
 //! and the fingerprint is stamped into the database: `PRAGMA user_version`
-//! on SQLite, a `schema_meta` row (see [`VAULT_SCHEMA_META_KEY`]) on
+//! on SQLite, a `schema_meta` row (see [`SCHEMA_META_KEY`]) on
 //! Postgres. The rule is: any schema change requires a fresh reload of data,
 //! so a database stamped with a different fingerprint is rebuilt empty from
 //! the embedded DDL instead of being patched in place. Nothing is bumped by
@@ -44,8 +44,8 @@ const DROP_MESSAGES_FTS_TRIGGERS_PG_SQL: &str =
 /// Fingerprint of the embedded schema: a 31-bit FNV-1a hash over every
 /// `schema/sql/*.sql` file, computed at compile time. It is stamped into each
 /// SQLite database as `PRAGMA user_version` and into each Postgres database
-/// under [`VAULT_SCHEMA_META_KEY`]; a database carrying any other value is
-/// rebuilt empty (see [`migrate_vault_schema`]).
+/// under [`SCHEMA_META_KEY`]; a database carrying any other value is
+/// rebuilt empty (see [`migrate_schema`]).
 ///
 /// A hash rather than a hand-kept number so that a schema change is only a
 /// change to the SQL: nothing to bump, nothing to forget. 31 bits because
@@ -103,7 +103,7 @@ const fn fingerprint_of(files: &[&str]) -> i64 {
 ///
 /// The only kind of migration is a full rebuild: schema changes require a
 /// fresh reload of data, never in-place column patches.
-async fn migrate_vault_schema(conn: &mut AnyConnection) -> Result<()> {
+async fn migrate_schema(conn: &mut AnyConnection) -> Result<()> {
     let stamped = user_version(conn).await?;
     if stamped == SCHEMA_FINGERPRINT {
         return Ok(());
@@ -115,12 +115,12 @@ async fn migrate_vault_schema(conn: &mut AnyConnection) -> Result<()> {
             "database schema differs from this server's; rebuilding empty (re-import your data)"
         );
     }
-    rebuild_vault_schema(conn).await?;
+    rebuild_schema(conn).await?;
     stamp_user_version(conn, SCHEMA_FINGERPRINT).await?;
     Ok(())
 }
 
-/// The `user_version` pragma value stamped by [`migrate_vault_schema`].
+/// The `user_version` pragma value stamped by [`migrate_schema`].
 async fn user_version(conn: &mut AnyConnection) -> Result<i64> {
     Ok(sqlx::query_scalar("PRAGMA user_version")
         .fetch_one(&mut *conn)
@@ -155,7 +155,7 @@ async fn has_user_tables(conn: &mut AnyConnection) -> Result<bool> {
 /// reference already-dropped tables ("no such table: main.<dropped>"). The
 /// constraints themselves have `ON DELETE` actions, so the drops would
 /// cascade cleanly; this is a schema-parse limitation, not a data one.
-async fn rebuild_vault_schema(conn: &mut AnyConnection) -> Result<()> {
+async fn rebuild_schema(conn: &mut AnyConnection) -> Result<()> {
     sqlx::query("PRAGMA foreign_keys = OFF")
         .execute(&mut *conn)
         .await?;
@@ -174,13 +174,13 @@ async fn rebuild_vault_schema(conn: &mut AnyConnection) -> Result<()> {
     sqlx::query("PRAGMA foreign_keys = ON")
         .execute(&mut *conn)
         .await?;
-    apply_vault_ddl(conn).await?;
+    apply_ddl(conn).await?;
     Ok(())
 }
 
 /// Apply the current embedded DDL: accounts, contacts, messages, staging,
 /// then the FTS index and its sync triggers.
-async fn apply_vault_ddl(conn: &mut AnyConnection) -> Result<()> {
+async fn apply_ddl(conn: &mut AnyConnection) -> Result<()> {
     execute_batch(conn, ACCOUNTS_DDL).await?;
     // Contacts DDL defines `handles`, the FK target of conversations, participants,
     // messages, and tapbacks (messages.sql) plus account_handles (accounts.sql).
@@ -198,7 +198,7 @@ async fn apply_vault_ddl(conn: &mut AnyConnection) -> Result<()> {
 /// [`crate::db::pg_ddl`]). The installer, the rebuild's drop list, and the
 /// drift guard all read this one value, so a DDL file cannot reach one of
 /// them and miss the others.
-fn pg_vault_table_ddl() -> &'static crate::db::pg_ddl::PgDdl {
+fn pg_table_ddl() -> &'static crate::db::pg_ddl::PgDdl {
     static DDL: std::sync::OnceLock<crate::db::pg_ddl::PgDdl> = std::sync::OnceLock::new();
     DDL.get_or_init(|| {
         crate::db::pg_ddl::transpile(&[
@@ -219,12 +219,8 @@ fn pg_vault_table_ddl() -> &'static crate::db::pg_ddl::PgDdl {
 /// A SQLite database file belongs to the vault alone, but a Postgres schema
 /// may be shared with another application. The rebuild therefore names the
 /// vault's own tables instead of sweeping `current_schema()`.
-fn pg_vault_table_names() -> Vec<&'static str> {
-    pg_vault_table_ddl()
-        .tables
-        .iter()
-        .map(String::as_str)
-        .collect()
+fn pg_table_names() -> Vec<&'static str> {
+    pg_table_ddl().tables.iter().map(String::as_str).collect()
 }
 
 /// Quote `name` as a SQL identifier: wrapped in double quotes, with any
@@ -237,10 +233,10 @@ fn quote_ident(name: &str) -> String {
 }
 
 /// Drop the vault's own tables in the current schema. Postgres twin of
-/// [`rebuild_vault_schema`]: a vault stamped with an older marker is
+/// [`rebuild_schema`]: a vault stamped with an older marker is
 /// rebuilt empty rather than patched in place.
 ///
-/// Only the tables [`pg_vault_table_names`] lists are dropped, and each is
+/// Only the tables [`pg_table_names`] lists are dropped, and each is
 /// schema-qualified, so a vault sharing its schema with another application
 /// rebuilds its own data without touching the neighbour's.
 ///
@@ -252,7 +248,7 @@ async fn drop_pg_user_tables(conn: &mut AnyConnection) -> Result<()> {
         .fetch_one(&mut *conn)
         .await?;
     let schema = quote_ident(&schema);
-    for table in pg_vault_table_names() {
+    for table in pg_table_names() {
         sqlx::query(&format!(
             "DROP TABLE IF EXISTS {schema}.{} CASCADE",
             quote_ident(table)
@@ -265,10 +261,10 @@ async fn drop_pg_user_tables(conn: &mut AnyConnection) -> Result<()> {
 
 /// Apply the Postgres DDL variants. The DDL is idempotent (`IF NOT EXISTS`),
 /// so applying it again is a no-op.
-async fn apply_postgres_vault_ddl(conn: &mut AnyConnection) -> Result<()> {
+async fn apply_postgres_ddl(conn: &mut AnyConnection) -> Result<()> {
     // Installed vaults skip straight past this (one marker lookup per
     // request instead of re-running the DDL batch).
-    if pg_vault_schema_ready(&mut *conn).await? {
+    if pg_schema_ready(&mut *conn).await? {
         return Ok(());
     }
     // One-time install: the advisory lock serializes concurrent
@@ -276,14 +272,14 @@ async fn apply_postgres_vault_ddl(conn: &mut AnyConnection) -> Result<()> {
     // the re-check under the lock turns a waiter into a no-op.
     let mut tx = conn.begin().await?;
     sqlx::query("SELECT pg_advisory_xact_lock($1)")
-        .bind(VAULT_SCHEMA_LOCK_ID)
+        .bind(SCHEMA_LOCK_ID)
         .execute(&mut *tx)
         .await?;
-    if !pg_vault_schema_ready(&mut tx).await? {
+    if !pg_schema_ready(&mut tx).await? {
         // A vault stamped with another fingerprint (or none, with tables
         // present) is rebuilt empty — the same contract SQLite's
         // user_version gives. Re-importing is the migration.
-        if table_exists(&mut tx, "vault_imports").await? {
+        if table_exists(&mut tx, "imports").await? {
             tracing::warn!(
                 expected = %SCHEMA_FINGERPRINT,
                 "database schema differs from this server's; rebuilding empty (re-import your data)"
@@ -291,12 +287,12 @@ async fn apply_postgres_vault_ddl(conn: &mut AnyConnection) -> Result<()> {
             drop_pg_user_tables(&mut tx).await?;
         }
         // Same ordering as the SQLite variant: contacts before messages.
-        for ddl in &pg_vault_table_ddl().files {
+        for ddl in &pg_table_ddl().files {
             execute_batch(&mut tx, ddl).await?;
         }
         // Post-hoc FKs last: they reference tables created across the DDL
         // sequence (see `pg_ddl` rule 4).
-        execute_batch(&mut tx, &pg_vault_table_ddl().deferred_fks).await?;
+        execute_batch(&mut tx, &pg_table_ddl().deferred_fks).await?;
         // FTS last, same as the SQLite variant: the tsvector column, GIN
         // index, and sync triggers all target tables created above.
         ensure_messages_fts(&mut tx).await?;
@@ -304,7 +300,7 @@ async fn apply_postgres_vault_ddl(conn: &mut AnyConnection) -> Result<()> {
             "INSERT INTO schema_meta (key, value) VALUES ($1, $2)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         )
-        .bind(VAULT_SCHEMA_META_KEY)
+        .bind(SCHEMA_META_KEY)
         .bind(SCHEMA_FINGERPRINT.to_string())
         .execute(&mut *tx)
         .await?;
@@ -316,13 +312,13 @@ async fn apply_postgres_vault_ddl(conn: &mut AnyConnection) -> Result<()> {
 /// True when the Postgres install marker carries the current
 /// [`SCHEMA_FINGERPRINT`]. Also false when `schema_meta` itself does not
 /// exist yet (pre-install).
-async fn pg_vault_schema_ready(conn: &mut AnyConnection) -> Result<bool> {
+async fn pg_schema_ready(conn: &mut AnyConnection) -> Result<bool> {
     if !table_exists(&mut *conn, "schema_meta").await? {
         return Ok(false);
     }
     let stamped: Option<String> =
         sqlx::query_scalar("SELECT value FROM schema_meta WHERE key = $1")
-            .bind(VAULT_SCHEMA_META_KEY)
+            .bind(SCHEMA_META_KEY)
             .fetch_optional(&mut *conn)
             .await?;
     Ok(stamped == Some(SCHEMA_FINGERPRINT.to_string()))
@@ -332,17 +328,17 @@ async fn pg_vault_schema_ready(conn: &mut AnyConnection) -> Result<bool> {
 ///
 /// SQLite carries the fingerprint in `PRAGMA user_version` and is rebuilt
 /// when it does not match; Postgres carries it in a `schema_meta` row (see
-/// [`VAULT_SCHEMA_META_KEY`]) so repeated ensures cost one lookup instead of
+/// [`SCHEMA_META_KEY`]) so repeated ensures cost one lookup instead of
 /// re-running the DDL.
 ///
 /// # Errors
 ///
 /// Returns an error when a DDL statement fails.
-pub async fn ensure_vault_schema(conn: &mut AnyConnection) -> Result<()> {
+pub async fn ensure_schema(conn: &mut AnyConnection) -> Result<()> {
     if dialect::engine_of(conn) == DbEngine::Postgres {
-        return apply_postgres_vault_ddl(conn).await;
+        return apply_postgres_ddl(conn).await;
     }
-    migrate_vault_schema(conn).await
+    migrate_schema(conn).await
 }
 
 /// Marker that current full-text search (FTS) sync trigger definitions are installed.
@@ -352,12 +348,12 @@ pub const MESSAGES_FTS_TRIGGERS_META_KEY: &str = "messages_fts_triggers_v1";
 /// Postgres. A vault whose row holds another value, or an older
 /// `vault_schema_vN` marker and no such row, is rebuilt empty, matching
 /// SQLite's `user_version` behaviour.
-pub const VAULT_SCHEMA_META_KEY: &str = "vault_schema";
+pub const SCHEMA_META_KEY: &str = "vault_schema";
 
 /// Advisory lock id serializing the one-time Postgres DDL install so two
 /// concurrent first-touches cannot interleave the trigger drop/create pair
 /// (arbitrary but unique within this database).
-const VAULT_SCHEMA_LOCK_ID: i64 = 0x4D56_0001;
+const SCHEMA_LOCK_ID: i64 = 0x4D56_0001;
 
 /// Full-text search index over message body/subject plus attachment text:
 /// contentless FTS5 virtual table with sync triggers on SQLite, a `search_tsv`
@@ -684,17 +680,17 @@ pub async fn delete_messages_for_source(
 /// the one `user_version` stamp covers them on SQLite. A stamped database
 /// needs nothing; anything else gets the full vault schema (with the rebuild
 /// that implies). On Postgres the one-time DDL install is gated by the
-/// [`VAULT_SCHEMA_META_KEY`] marker.
+/// [`SCHEMA_META_KEY`] marker.
 ///
 /// # Errors
 ///
 /// Returns an error when a DDL statement fails.
 pub async fn ensure_accounts_schema(conn: &mut AnyConnection) -> Result<()> {
     if dialect::engine_of(conn) == DbEngine::Postgres {
-        return ensure_vault_schema(conn).await;
+        return ensure_schema(conn).await;
     }
     if user_version(conn).await? != SCHEMA_FINGERPRINT {
-        ensure_vault_schema(conn).await?;
+        ensure_schema(conn).await?;
     }
     Ok(())
 }

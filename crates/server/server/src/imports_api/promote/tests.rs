@@ -34,7 +34,7 @@ async fn pg_messages_analyze_stat(conn: &mut AnyConnection) -> (i64, Option<Stri
 }
 
 /// Postgres-gated: the promote path's disable→bulk-fill→enable FTS cycle
-/// on the real engine. Skips unless `MV_TEST_POSTGRES_URL` is set (CI
+/// on the real engine. Skips unless `MC_TEST_POSTGRES_URL` is set (CI
 /// service / `docker-compose.pg.yml`).
 #[tokio::test]
 async fn promote_fts_cycle_pg() {
@@ -43,7 +43,7 @@ async fn promote_fts_cycle_pg() {
     };
     let pool = crate::db::engine::pg_test_schema_pool(&url).await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
 
     // One account + handle + conversation, and a pre-existing message
     // below the promote watermark, indexed by the insert trigger.
@@ -331,7 +331,7 @@ async fn an_import_analyzes_import_tables_before_begin_pg() {
     // wrong rows (#394).
     let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    schema::ensure_vault_schema(&mut conn).await.unwrap();
+    schema::ensure_schema(&mut conn).await.unwrap();
     let (analyze_before, last_analyze_before) = pg_messages_analyze_stat(&mut conn).await;
     import_one_message(&mut conn, dir.path(), "analyze-pg-guid-1").await;
     // Since Postgres 15 the cumulative statistics live in shared memory and

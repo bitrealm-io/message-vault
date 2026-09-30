@@ -17,7 +17,7 @@ mod session;
 
 pub use auth_error::AuthError;
 pub use response::{error_sentence, ok_json};
-pub use retry::{RetryKind, VaultHttpError, classify_retry, with_retries};
+pub use retry::{HttpError, RetryKind, classify_retry, with_retries};
 pub use session::{HttpSession, auth_check, bearer_header, looks_like_html, trim_base_url};
 
 use anyhow::{Context, Result};
@@ -55,7 +55,9 @@ fn app_headers() -> reqwest::header::HeaderMap {
     if let Some(build) = build {
         headers.insert(
             message_crate_api_types::APP_HEADER,
-            reqwest::header::HeaderValue::from_static(message_crate_api_types::AppKind::Desktop.as_str()),
+            reqwest::header::HeaderValue::from_static(
+                message_crate_api_types::AppKind::Desktop.as_str(),
+            ),
         );
         headers.insert(message_crate_api_types::APP_VERSION_HEADER, build);
     }

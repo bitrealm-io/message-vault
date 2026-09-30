@@ -19,12 +19,12 @@ const CONVERSATION_JSONL: &str = r#"{"schema_version":4,"export":{"source":"imes
 /// one, with absolute paths so the test does not depend on the working
 /// directory. On a Postgres run the database is a schema of its own on that
 /// server, as every other test's is.
-async fn vault_config(dir: &Path) -> PathBuf {
+async fn server_config(dir: &Path) -> PathBuf {
     let config_dir = dir.join("config");
     fs::create_dir_all(&config_dir).unwrap();
     let mut text = format!(
         "[paths]\ndb = \"{}\"\ndata_dir = \"{}\"\n",
-        dir.join("vault.db").display(),
+        dir.join("messagecrate.db").display(),
         dir.join("data").display()
     );
     if let Some(url) = crate::pg_test_url() {
@@ -37,10 +37,8 @@ async fn vault_config(dir: &Path) -> PathBuf {
 }
 
 /// The vault the config names, opened the way the commands open it.
-async fn open(config: &Path) -> OpenVault {
-    OpenVault::open(Config::load(config).unwrap())
-        .await
-        .unwrap()
+async fn open(config: &Path) -> OpenDb {
+    OpenDb::open(Config::load(config).unwrap()).await.unwrap()
 }
 
 /// An ordinary account named alice, so `--account alice` resolves.
@@ -79,7 +77,7 @@ fn import_args(config: &Path, input: &Path) -> ImportArgs {
 #[tokio::test]
 async fn create_owner_claims_the_vault_once_and_reset_password_needs_the_claim() {
     let dir = tempfile::tempdir().unwrap();
-    let config = vault_config(dir.path()).await;
+    let config = server_config(dir.path()).await;
 
     let unclaimed = run(Cli {
         command: Commands::ResetOwnerPassword(ResetOwnerPasswordArgs {
@@ -133,7 +131,7 @@ async fn create_owner_claims_the_vault_once_and_reset_password_needs_the_claim()
 
     let vault = open(&config).await;
     let mut conn = vault.conn().await.unwrap();
-    assert!(account_profile::vault_is_claimed(&mut conn).await.unwrap());
+    assert!(account_profile::is_claimed(&mut conn).await.unwrap());
     assert_eq!(
         account_profile::username_for_account(&mut conn, account_profile::OWNER_ACCOUNT_ID)
             .await
@@ -145,7 +143,7 @@ async fn create_owner_claims_the_vault_once_and_reset_password_needs_the_claim()
 #[tokio::test]
 async fn import_records_the_conversation_then_dedupe_and_process_assets_run_on_it() {
     let dir = tempfile::tempdir().unwrap();
-    let config = vault_config(dir.path()).await;
+    let config = server_config(dir.path()).await;
     with_alice(&config).await;
     let input = dir.path().join("export");
     fs::create_dir_all(&input).unwrap();
@@ -161,10 +159,7 @@ async fn import_records_the_conversation_then_dedupe_and_process_assets_run_on_i
         count(&config, "SELECT COUNT(*) FROM conversations").await,
         1
     );
-    assert_eq!(
-        count(&config, "SELECT COUNT(*) FROM vault_imports").await,
-        1
-    );
+    assert_eq!(count(&config, "SELECT COUNT(*) FROM imports").await, 1);
 
     run(Cli {
         command: Commands::DedupeCrossSource(DedupeArgs {
@@ -210,7 +205,7 @@ fn imports_discard_args(config: &Path) -> Cli {
 #[tokio::test]
 async fn imports_discard_clears_a_stranded_session_so_the_next_import_runs() {
     let dir = tempfile::tempdir().unwrap();
-    let config = vault_config(dir.path()).await;
+    let config = server_config(dir.path()).await;
     with_alice(&config).await;
     let input = dir.path().join("export");
     fs::create_dir_all(&input).unwrap();
@@ -220,9 +215,9 @@ async fn imports_discard_clears_a_stranded_session_so_the_next_import_runs() {
     let stranded = {
         let vault = open(&config).await;
         let mut conn = vault.conn().await.unwrap();
-        crate::db::vault_imports::start_import(
+        crate::db::imports::start_import(
             &mut conn,
-            &crate::db::vault_imports::StartImportArgs::new(
+            &crate::db::imports::StartImportArgs::new(
                 ALICE,
                 "imessage",
                 "replace",
@@ -256,7 +251,7 @@ async fn imports_discard_clears_a_stranded_session_so_the_next_import_runs() {
     let status: String = {
         let vault = open(&config).await;
         let mut conn = vault.conn().await.unwrap();
-        sqlx::query_scalar("SELECT status FROM vault_imports WHERE id = $1")
+        sqlx::query_scalar("SELECT status FROM imports WHERE id = $1")
             .bind(stranded)
             .fetch_one(&mut *conn)
             .await
@@ -276,7 +271,7 @@ async fn imports_discard_clears_a_stranded_session_so_the_next_import_runs() {
     assert_eq!(
         count(
             &config,
-            "SELECT COUNT(*) FROM vault_imports WHERE status = 'running'"
+            "SELECT COUNT(*) FROM imports WHERE status = 'running'"
         )
         .await,
         0
@@ -286,20 +281,17 @@ async fn imports_discard_clears_a_stranded_session_so_the_next_import_runs() {
 #[tokio::test]
 async fn imports_discard_with_no_session_changes_nothing() {
     let dir = tempfile::tempdir().unwrap();
-    let config = vault_config(dir.path()).await;
+    let config = server_config(dir.path()).await;
     with_alice(&config).await;
 
     run(imports_discard_args(&config)).await.unwrap();
 
-    assert_eq!(
-        count(&config, "SELECT COUNT(*) FROM vault_imports").await,
-        0
-    );
+    assert_eq!(count(&config, "SELECT COUNT(*) FROM imports").await, 0);
 }
 
 #[test]
 fn imports_discard_prints_the_session_or_that_there_was_none() {
-    let row = crate::db::vault_imports::VaultImportRow {
+    let row = crate::db::imports::ImportRow {
         id: 12,
         account_id: ALICE,
         source: "imessage".into(),
@@ -338,7 +330,7 @@ fn imports_discard_prints_the_session_or_that_there_was_none() {
 #[tokio::test]
 async fn import_contacts_loads_the_address_book_for_the_account() {
     let dir = tempfile::tempdir().unwrap();
-    let config = vault_config(dir.path()).await;
+    let config = server_config(dir.path()).await;
     with_alice(&config).await;
     let vcf = dir.path().join("book.vcf");
     fs::write(
@@ -372,7 +364,7 @@ async fn import_contacts_loads_the_address_book_for_the_account() {
 #[tokio::test]
 async fn the_db_url_flag_moves_the_vault_to_another_file() {
     let dir = tempfile::tempdir().unwrap();
-    let config = vault_config(dir.path()).await;
+    let config = server_config(dir.path()).await;
     if crate::pg_test_url().is_some() {
         // Every vault on a Postgres run is a schema on that server; the
         // point here is the SQLite file the flag names.
@@ -393,13 +385,13 @@ async fn the_db_url_flag_moves_the_vault_to_another_file() {
     .unwrap();
 
     assert!(other.is_file(), "the owner went into {}", other.display());
-    assert!(!dir.path().join("vault.db").exists());
+    assert!(!dir.path().join("messagecrate.db").exists());
 }
 
 #[tokio::test]
 async fn import_refuses_a_negative_window_before_opening_anything() {
     let dir = tempfile::tempdir().unwrap();
-    let config = vault_config(dir.path()).await;
+    let config = server_config(dir.path()).await;
     let mut args = import_args(&config, dir.path());
     args.window_secs = -1;
 
@@ -410,13 +402,13 @@ async fn import_refuses_a_negative_window_before_opening_anything() {
     .unwrap_err();
 
     assert_eq!(err.to_string(), "--window-secs must be >= 0");
-    assert!(!dir.path().join("vault.db").exists());
+    assert!(!dir.path().join("messagecrate.db").exists());
 }
 
 #[tokio::test]
 async fn import_refuses_an_unknown_media_mode() {
     let dir = tempfile::tempdir().unwrap();
-    let config = vault_config(dir.path()).await;
+    let config = server_config(dir.path()).await;
     let mut args = import_args(&config, dir.path());
     args.media = "shrink".into();
 
@@ -435,7 +427,7 @@ async fn import_refuses_an_unknown_media_mode() {
 #[tokio::test]
 async fn import_refuses_an_unknown_account() {
     let dir = tempfile::tempdir().unwrap();
-    let config = vault_config(dir.path()).await;
+    let config = server_config(dir.path()).await;
     let input = dir.path().join("export");
     fs::create_dir_all(&input).unwrap();
     fs::write(input.join("chat.jsonl"), CONVERSATION_JSONL).unwrap();

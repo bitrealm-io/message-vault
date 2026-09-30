@@ -28,7 +28,7 @@ use crate::credentials::{
 use crate::db::dialect::{begin_immediate_sql, engine_of};
 use crate::db::handles::{self, Identity};
 use crate::db::storage::{self, Scope};
-use crate::db::{account_profile, session_tokens, vault_imports, vault_settings};
+use crate::db::{account_profile, imports, server_settings, session_tokens};
 use crate::extract::{Json, Path, Query};
 use crate::paging::{DEFAULT_LIST_LIMIT, Page, PageQuery, page_of, page_params};
 use crate::server::{ApiError, AppState, AuthIdentity, Created, LoggedIn, Owner};
@@ -118,7 +118,7 @@ async fn load_account(
         phones: profile.phones,
         emails: profile.emails,
         is_demo: account_profile::is_demo_account(account_id),
-        is_owner: account_profile::is_vault_owner(account_id),
+        is_owner: account_profile::is_server_owner(account_id),
         disabled: auth.disabled,
         must_set_up_profile: auth.must_set_up_profile,
         last_login_at,
@@ -334,7 +334,7 @@ pub async fn create_account(
     let phone = req.phone.as_deref().and_then(message_ir::nonempty);
 
     let mut conn = state.db.acquire().await?;
-    if !by_owner && !vault_settings::load(&mut conn).await?.public_registration {
+    if !by_owner && !server_settings::load(&mut conn).await?.public_registration {
         return Err(ApiError::RegistrationClosed(
             "this Message Crate does not accept new accounts; ask its owner for one".into(),
         ));
@@ -747,7 +747,7 @@ pub async fn delete_account(
 ) -> Result<StatusCode, ApiError> {
     let mut conn = state.db.acquire().await?;
     let reach = require_account_reach(&mut conn, &auth, target, Admits::Owner).await?;
-    if account_profile::is_vault_owner(target) {
+    if account_profile::is_server_owner(target) {
         return Err(ApiError::validation("the owner cannot be deleted"));
     }
     if reach.is_own() {
@@ -881,7 +881,7 @@ pub async fn replace_account_password(
     }
 
     // The owner must have a password; a user account may have none.
-    let new_hash = if account_profile::is_vault_owner(target) {
+    let new_hash = if account_profile::is_server_owner(target) {
         Some(hash_owner_password(&req.password)?)
     } else {
         hash_user_password(&req.password)?
@@ -1015,7 +1015,7 @@ pub(crate) struct AccountStorage {
     pub conversation_count: i64,
     /// Contacts, on the same terms as `conversation_count`.
     pub contact_count: i64,
-    pub top_attachments: Vec<vault_imports::TopAttachment>,
+    pub top_attachments: Vec<imports::TopAttachment>,
 }
 
 /// What an account holds: attachment bytes, the attachment, conversation and
@@ -1046,12 +1046,11 @@ pub(crate) async fn get_account_storage(
     let attachment_count = storage::attachment_count(&mut conn, scope).await?;
     let conversation_count = storage::conversation_count(&mut conn, scope).await?;
     let contact_count = storage::contact_count(&mut conn, scope).await?;
-    let mut top_attachments =
-        vault_imports::top_attachments_by_size(&mut conn, target, 100).await?;
+    let mut top_attachments = imports::top_attachments_by_size(&mut conn, target, 100).await?;
     if matches!(reach, Reach::Owner) {
         top_attachments = top_attachments
             .into_iter()
-            .map(vault_imports::TopAttachment::without_conversation)
+            .map(imports::TopAttachment::without_conversation)
             .collect();
     }
     Ok(Json(AccountStorage {
@@ -1124,7 +1123,7 @@ pub(crate) async fn list_account_identities(
         ("sort" = Option<String>, Query, description = "`started_at` or `-started_at`. Default `-started_at`, newest first.")
     ),
     responses(
-        (status = 200, body = Page<vault_imports::ImportSummary>),
+        (status = 200, body = Page<imports::ImportSummary>),
         crate::problem::openapi::NotTheOwner
     )
 )]
@@ -1133,7 +1132,7 @@ pub(crate) async fn list_account_imports(
     Path(target): Path<i64>,
     LoggedIn(auth): LoggedIn,
     Query(query): Query<crate::imports_api::ListImportsQuery>,
-) -> Result<Json<Page<vault_imports::ImportSummary>>, ApiError> {
+) -> Result<Json<Page<imports::ImportSummary>>, ApiError> {
     require_reach(&state, &auth, target).await?;
     crate::imports_api::imports_page(&state, target, query).await
 }

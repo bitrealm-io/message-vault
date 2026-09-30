@@ -4,12 +4,13 @@ use axum::http::StatusCode;
 
 use crate::db::trash::{Trashable, move_to_trash};
 use crate::test_support::{
-    RegisteredAccount, SeedConversation, SeedMessage, TestVault, attach_stored_file, delete_status,
-    fake_sha256, get_json, get_status, register_via_api, seed_conversation, vault_with_account,
+    RegisteredAccount, SeedConversation, SeedMessage, TestFixture, attach_stored_file,
+    delete_status, fake_sha256, fixture_with_account, get_json, get_status, register_via_api,
+    seed_conversation,
 };
 
 /// One `imessage` conversation with one message on `handle`, returning its id.
-async fn seed(vault: &TestVault, account: &RegisteredAccount, handle: &str) -> i64 {
+async fn seed(vault: &TestFixture, account: &RegisteredAccount, handle: &str) -> i64 {
     seed_conversation(
         &vault.state,
         &SeedConversation {
@@ -30,7 +31,7 @@ async fn seed(vault: &TestVault, account: &RegisteredAccount, handle: &str) -> i
 }
 
 /// A named contact of `account`, returning its id.
-async fn seed_named_contact(vault: &TestVault, account: &RegisteredAccount, name: &str) -> i64 {
+async fn seed_named_contact(vault: &TestFixture, account: &RegisteredAccount, name: &str) -> i64 {
     let mut conn = vault.conn().await;
     sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name, origin) VALUES ($1, $2, 'user') RETURNING id",
@@ -42,7 +43,7 @@ async fn seed_named_contact(vault: &TestVault, account: &RegisteredAccount, name
     .unwrap()
 }
 
-async fn trash(vault: &TestVault, account: &RegisteredAccount, target: Trashable) {
+async fn trash(vault: &TestFixture, account: &RegisteredAccount, target: Trashable) {
     let mut conn = vault.conn().await;
     assert!(
         move_to_trash(&mut conn, account.account_id, target)
@@ -53,7 +54,7 @@ async fn trash(vault: &TestVault, account: &RegisteredAccount, target: Trashable
 
 /// `total` of the conversation list for `q`, already percent-encoded where
 /// it needs to be (`#` would otherwise start a fragment).
-async fn conversation_total(vault: &TestVault, token: &str, q: &str) -> u64 {
+async fn conversation_total(vault: &TestFixture, token: &str, q: &str) -> u64 {
     let page: serde_json::Value =
         get_json(&vault.state, &format!("/v1/conversations?q={q}"), token).await;
     page["total"].as_u64().unwrap()
@@ -61,7 +62,7 @@ async fn conversation_total(vault: &TestVault, token: &str, q: &str) -> u64 {
 
 #[tokio::test]
 async fn empty_trash_deletes_trashed_conversations_and_forgets_trashed_contacts() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let shared = fake_sha256('a');
     let only_in_doomed = fake_sha256('b');
 
@@ -147,7 +148,7 @@ async fn empty_trash_deletes_trashed_conversations_and_forgets_trashed_contacts(
 
 #[tokio::test]
 async fn empty_trash_leaves_another_accounts_trash_alone() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
     let bobs = seed(&vault, &bob, "+15550001").await;
     trash(&vault, &bob, Trashable::Conversation(bobs)).await;
@@ -164,7 +165,7 @@ async fn empty_trash_leaves_another_accounts_trash_alone() {
 
 #[tokio::test]
 async fn empty_trash_needs_the_delete_permission() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let doomed = seed(&vault, &alice, "+15550001").await;
     trash(&vault, &alice, Trashable::Conversation(doomed)).await;
     vault.turn_off_delete(alice.account_id).await;

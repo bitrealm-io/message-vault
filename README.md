@@ -7,7 +7,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/messagecrate/message-crate">
-    <img src="docs/img/vault_icon.png" alt="Message Crate icon" width="250" height="250">
+    <img src="docs/img/icon.png" alt="Message Crate icon" width="250" height="250">
   </a>
 
 <h1 align="center">Message Crate</h1>

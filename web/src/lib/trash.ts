@@ -1,15 +1,15 @@
 import { type UseMutationResult, useMutation } from "@tanstack/react-query";
+import { keys } from "./queryKeys";
+import { useRouteCache } from "./routeQuery";
 import {
-  deleteContact as deleteVaultContact,
-  deleteConversation as deleteVaultConversation,
-  emptyTrash as emptyVaultTrash,
-  restoreContact as restoreVaultContact,
-  restoreConversation as restoreVaultConversation,
-  trashContact as trashVaultContact,
-  trashConversation as trashVaultConversation,
-} from "./vaultApi";
-import { keys } from "./vaultKeys";
-import { useVaultCache } from "./vaultQuery";
+  deleteContact,
+  deleteConversation,
+  emptyTrash,
+  restoreContact,
+  restoreConversation,
+  trashContact,
+  trashConversation,
+} from "./serverApi";
 
 /**
  * Trash is a soft marker on two different nouns — conversations and contacts
@@ -27,7 +27,7 @@ import { useVaultCache } from "./vaultQuery";
 function useConversationTrashWrite(
   write: (id: number) => Promise<void>,
 ): UseMutationResult<void, Error, number> {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   return useMutation<void, Error, number>({
     mutationFn: write,
     // - conversations.lists: the row leaves or rejoins the (non-)trashed list.
@@ -56,11 +56,11 @@ function useConversationTrashWrite(
 }
 
 export function useTrashConversation(): UseMutationResult<void, Error, number> {
-  return useConversationTrashWrite(trashVaultConversation);
+  return useConversationTrashWrite(trashConversation);
 }
 
 export function useRestoreConversation(): UseMutationResult<void, Error, number> {
-  return useConversationTrashWrite(restoreVaultConversation);
+  return useConversationTrashWrite(restoreConversation);
 }
 
 /**
@@ -74,9 +74,9 @@ export function useRestoreConversation(): UseMutationResult<void, Error, number>
  * Settings → Storage counts them.
  */
 export function useDeleteConversation(): UseMutationResult<void, Error, number> {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   return useMutation<void, Error, number>({
-    mutationFn: deleteVaultConversation,
+    mutationFn: deleteConversation,
     onSettled: () =>
       cache.invalidate(
         keys.conversations.all,
@@ -91,7 +91,7 @@ export function useDeleteConversation(): UseMutationResult<void, Error, number> 
 function useContactTrashWrite(
   write: (id: string | number) => Promise<void>,
 ): UseMutationResult<void, Error, string | number> {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   return useMutation<void, Error, string | number>({
     mutationFn: write,
     // - contacts.lists: the row leaves or rejoins the contacts list.
@@ -112,11 +112,11 @@ function useContactTrashWrite(
 }
 
 export function useTrashContact(): UseMutationResult<void, Error, string | number> {
-  return useContactTrashWrite(trashVaultContact);
+  return useContactTrashWrite(trashContact);
 }
 
 export function useRestoreContact(): UseMutationResult<void, Error, string | number> {
-  return useContactTrashWrite(restoreVaultContact);
+  return useContactTrashWrite(restoreContact);
 }
 
 /**
@@ -130,9 +130,9 @@ export function useRestoreContact(): UseMutationResult<void, Error, string | num
  * Groups.
  */
 export function useDeleteContact(): UseMutationResult<void, Error, string | number> {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   return useMutation<void, Error, string | number>({
-    mutationFn: deleteVaultContact,
+    mutationFn: deleteContact,
     onSettled: (_data, _error, id) =>
       cache.invalidate(
         keys.contacts.lists,
@@ -150,9 +150,9 @@ export function useDeleteContact(): UseMutationResult<void, Error, string | numb
  * marked, with the whole of `contacts` standing in for the per-id details.
  */
 export function useEmptyTrash(): UseMutationResult<void, Error, void> {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   return useMutation<void, Error, void>({
-    mutationFn: emptyVaultTrash,
+    mutationFn: emptyTrash,
     onSettled: () =>
       cache.invalidate(
         keys.conversations.all,

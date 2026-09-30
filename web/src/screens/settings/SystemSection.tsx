@@ -33,7 +33,7 @@ function stagingHelpExample(stagingDir: string, defaultDir: string): string {
   const trimmed = stagingDir.trim().replace(/[/\\]+$/, "");
   const defaultTrimmed = defaultDir.trim().replace(/[/\\]+$/, "");
   if (!trimmed || (defaultTrimmed && trimmed === defaultTrimmed)) {
-    return `~/message-vault/${EXAMPLE_STAGING}`;
+    return `~/message-crate/${EXAMPLE_STAGING}`;
   }
   return `${trimmed}/${EXAMPLE_STAGING}`;
 }
@@ -230,7 +230,7 @@ export function SystemSection() {
             value={stagingPath}
             onChange={onStagingPathChange}
             directory
-            placeholder={defaultStagingPath || "~/message-vault"}
+            placeholder={defaultStagingPath || "~/message-crate"}
           />
         </div>
         <p className={settingsHelp}>

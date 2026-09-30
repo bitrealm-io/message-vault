@@ -3,9 +3,9 @@
 use crate::util;
 use anyhow::{Context, Result, bail};
 use mail::{MailAttachment, MailMessage, MailPackage, Participant, write_mail_package};
+use message_crate_core::OutputFormat;
 use message_csv::{AttachmentCell, ParticipantCell, format_local_ts, json_cell};
 use message_ir::{ConversationDocument, ConversationHeader, IrImessage, IrMessage, IrMessageKind};
-use message_crate_core::OutputFormat;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 

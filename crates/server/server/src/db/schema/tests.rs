@@ -1,6 +1,6 @@
 use super::*;
 use crate::db::engine::test_pool;
-use crate::test_support::{SeedConversation, TestVault, seed_conversation, test_vault};
+use crate::test_support::{SeedConversation, TestFixture, seed_conversation, test_fixture};
 
 const A1: i64 = 7;
 const A2: i64 = 8;
@@ -59,8 +59,8 @@ async fn pg_fts_hits(conn: &mut AnyConnection, term: &str) -> i64 {
 /// A vault with schema applied, and two accounts (`A1`/alice, `A2`/bob)
 /// each holding one individual conversation on `+15555550100` from
 /// `t.json`, with no messages.
-async fn seeded_schema_vault() -> (sqlx::AnyPool, TestVault) {
-    let vault = test_vault().await;
+async fn seeded_schema_fixture() -> (sqlx::AnyPool, TestFixture) {
+    let vault = test_fixture().await;
     for (id, user) in [(A1, "alice"), (A2, "bob")] {
         vault.account_with_id(id, user).await;
         seed_conversation(
@@ -85,7 +85,7 @@ async fn promote_fts_indexing_covers_only_rows_inserted_by_this_promotion() {
     if crate::test_support::on_postgres() {
         return; // SQLite-only: asserts against the FTS5 table; the Postgres twin is promote_fts_cycle_pg
     }
-    let (pool, _vault) = seeded_schema_vault().await;
+    let (pool, _vault) = seeded_schema_fixture().await;
     let mut conn = pool.acquire().await.unwrap();
 
     // An earlier import already indexed this row through the insert trigger.
@@ -141,7 +141,7 @@ async fn fresh_vault_has_complete_current_schema() {
     }
     let (pool, _dir) = test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    ensure_vault_schema(&mut conn).await.unwrap();
+    ensure_schema(&mut conn).await.unwrap();
     assert_current_schema_contract(&mut conn).await;
     let version: i64 = sqlx::query_scalar("PRAGMA user_version")
         .fetch_one(&mut *conn)
@@ -152,7 +152,7 @@ async fn fresh_vault_has_complete_current_schema() {
         "a fresh vault is stamped at once"
     );
     // Ensuring again on a current vault is a no-op.
-    ensure_vault_schema(&mut conn).await.unwrap();
+    ensure_schema(&mut conn).await.unwrap();
     assert_current_schema_contract(&mut conn).await;
 }
 
@@ -293,7 +293,7 @@ async fn assert_current_schema_contract(conn: &mut AnyConnection) {
 
 #[tokio::test]
 async fn same_source_guid_allowed_across_accounts() {
-    let (pool, _vault) = seeded_schema_vault().await;
+    let (pool, _vault) = seeded_schema_fixture().await;
     let mut conn = pool.acquire().await.unwrap();
     for (conv, account) in [
         (conversation_id(&mut conn, A1).await, A1),
@@ -330,7 +330,7 @@ async fn old_vault_rebuilds_empty_at_current_version() {
     // tables, no user_version stamp.
     execute_batch(
         &mut conn,
-        include_str!("../../../../../../tests/fixtures/schema/v0-vault.sql"),
+        include_str!("../../../../../../tests/fixtures/schema/v0-schema.sql"),
     )
     .await
     .unwrap();
@@ -360,7 +360,7 @@ async fn old_vault_rebuilds_empty_at_current_version() {
         .await
         .unwrap();
 
-    ensure_vault_schema(&mut conn).await.unwrap();
+    ensure_schema(&mut conn).await.unwrap();
 
     let version: i64 = sqlx::query_scalar("PRAGMA user_version")
         .fetch_one(&mut *conn)
@@ -391,9 +391,9 @@ async fn old_vault_rebuilds_empty_at_current_version() {
 
 #[tokio::test]
 async fn current_version_vault_keeps_data_across_reensure() {
-    let (pool, _vault) = seeded_schema_vault().await;
+    let (pool, _vault) = seeded_schema_fixture().await;
     let mut conn = pool.acquire().await.unwrap();
-    ensure_vault_schema(&mut conn).await.unwrap();
+    ensure_schema(&mut conn).await.unwrap();
     let accounts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
         .fetch_one(&mut *conn)
         .await
@@ -411,12 +411,12 @@ async fn other_fingerprint_rebuilds_to_current() {
     if crate::test_support::on_postgres() {
         return; // SQLite-only: reads PRAGMA user_version; stale_postgres_marker_rebuilds_vault_schema_empty is the twin
     }
-    let (pool, _vault) = seeded_schema_vault().await;
+    let (pool, _vault) = seeded_schema_fixture().await;
     let mut conn = pool.acquire().await.unwrap();
     stamp_user_version(&mut conn, SCHEMA_FINGERPRINT ^ 1)
         .await
         .unwrap();
-    ensure_vault_schema(&mut conn).await.unwrap();
+    ensure_schema(&mut conn).await.unwrap();
     let version: i64 = sqlx::query_scalar("PRAGMA user_version")
         .fetch_one(&mut *conn)
         .await
@@ -436,14 +436,14 @@ async fn other_fingerprint_rebuilds_to_current() {
 async fn one_running_import_per_account() {
     let (pool, _dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
-    ensure_vault_schema(&mut conn).await.unwrap();
+    ensure_schema(&mut conn).await.unwrap();
     sqlx::query("INSERT INTO accounts (id, username) VALUES (7, 'alice')")
         .execute(&mut *conn)
         .await
         .unwrap();
 
     let insert = r"
-        INSERT INTO vault_imports (
+        INSERT INTO imports (
             account_id, source, mode, status, started_at,
             message_count, attachment_count, bytes_uploaded
         ) VALUES (7, 'imessage', 'append', $1, '2026-08-30T00:00:00Z', 0, 0, 0)
@@ -474,7 +474,7 @@ async fn messages_fts_stays_in_sync() {
     if crate::test_support::on_postgres() {
         return; // SQLite-only: queries the FTS5 table with MATCH; messages_fts_stays_in_sync_pg is the twin
     }
-    let (pool, _vault) = seeded_schema_vault().await;
+    let (pool, _vault) = seeded_schema_fixture().await;
     let mut conn = pool.acquire().await.unwrap();
     let conversation_id: i64 =
         sqlx::query_scalar("SELECT id FROM conversations WHERE account_id = $1")
@@ -530,7 +530,7 @@ async fn messages_fts_stays_in_sync() {
 
 /// The `messages_fts_stays_in_sync` twin for Postgres: the sync triggers
 /// keep `search_tsv` in step with message and attachment edits. Skips
-/// unless `MV_TEST_POSTGRES_URL` is set.
+/// unless `MC_TEST_POSTGRES_URL` is set.
 #[tokio::test]
 async fn messages_fts_stays_in_sync_pg() {
     let Some(url) = crate::pg_test_url() else {
@@ -538,7 +538,7 @@ async fn messages_fts_stays_in_sync_pg() {
     };
     let pool = crate::db::engine::pg_test_schema_pool(&url).await;
     let mut conn = pool.acquire().await.unwrap();
-    ensure_vault_schema(&mut conn).await.unwrap();
+    ensure_schema(&mut conn).await.unwrap();
 
     // One account + conversation, mirroring the SQLite test's setup.
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
@@ -616,10 +616,10 @@ async fn messages_fts_stays_in_sync_pg() {
 }
 
 /// The `other_fingerprint_rebuilds_to_current` twin for Postgres: a vault
-/// whose [`VAULT_SCHEMA_META_KEY`] row holds another fingerprint is rebuilt
+/// whose [`SCHEMA_META_KEY`] row holds another fingerprint is rebuilt
 /// empty by [`drop_pg_user_tables`] rather than patched in place, so new
 /// columns land on an already-installed vault too. Skips unless
-/// `MV_TEST_POSTGRES_URL` is set.
+/// `MC_TEST_POSTGRES_URL` is set.
 #[tokio::test]
 async fn stale_postgres_marker_rebuilds_vault_schema_empty() {
     let Some(url) = crate::pg_test_url() else {
@@ -627,7 +627,7 @@ async fn stale_postgres_marker_rebuilds_vault_schema_empty() {
     };
     let pool = crate::db::engine::pg_test_schema_pool(&url).await;
     let mut conn = pool.acquire().await.unwrap();
-    ensure_vault_schema(&mut conn).await.unwrap();
+    ensure_schema(&mut conn).await.unwrap();
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
         .bind(A1)
         .execute(&mut *conn)
@@ -638,12 +638,12 @@ async fn stale_postgres_marker_rebuilds_vault_schema_empty() {
     // left, simulating the upgrade scenario the rebuild path exists for.
     sqlx::query("UPDATE schema_meta SET value = $1 WHERE key = $2")
         .bind((SCHEMA_FINGERPRINT ^ 1).to_string())
-        .bind(VAULT_SCHEMA_META_KEY)
+        .bind(SCHEMA_META_KEY)
         .execute(&mut *conn)
         .await
         .unwrap();
 
-    ensure_vault_schema(&mut conn).await.unwrap();
+    ensure_schema(&mut conn).await.unwrap();
 
     let accounts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
         .fetch_one(&mut *conn)
@@ -652,7 +652,7 @@ async fn stale_postgres_marker_rebuilds_vault_schema_empty() {
     assert_eq!(accounts, 0, "another fingerprint rebuilds the vault empty");
 
     let stamped: String = sqlx::query_scalar("SELECT value FROM schema_meta WHERE key = $1")
-        .bind(VAULT_SCHEMA_META_KEY)
+        .bind(SCHEMA_META_KEY)
         .fetch_one(&mut *conn)
         .await
         .unwrap();
@@ -664,7 +664,7 @@ async fn stale_postgres_marker_rebuilds_vault_schema_empty() {
 
     sqlx::query(
         "SELECT stage, staging_dir, device_id, form_json, source_fingerprint
-         FROM vault_imports WHERE 1 = 0",
+         FROM imports WHERE 1 = 0",
     )
     .fetch_optional(&mut *conn)
     .await
@@ -673,7 +673,7 @@ async fn stale_postgres_marker_rebuilds_vault_schema_empty() {
 
 /// A vault sharing its Postgres schema with another application rebuilds
 /// its own tables and leaves the neighbour's alone. Skips unless
-/// `MV_TEST_POSTGRES_URL` is set.
+/// `MC_TEST_POSTGRES_URL` is set.
 #[tokio::test]
 async fn postgres_rebuild_spares_tables_the_vault_does_not_own() {
     let Some(url) = crate::pg_test_url() else {
@@ -681,21 +681,21 @@ async fn postgres_rebuild_spares_tables_the_vault_does_not_own() {
     };
     let pool = crate::db::engine::pg_test_schema_pool(&url).await;
     let mut conn = pool.acquire().await.unwrap();
-    ensure_vault_schema(&mut conn).await.unwrap();
+    ensure_schema(&mut conn).await.unwrap();
 
     // A co-tenant application's table, sitting in the same schema.
-    sqlx::query("CREATE TABLE mv_test_neighbour (id BIGINT PRIMARY KEY, note TEXT)")
+    sqlx::query("CREATE TABLE mc_test_neighbour (id BIGINT PRIMARY KEY, note TEXT)")
         .execute(&mut *conn)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO mv_test_neighbour (id, note) VALUES (1, 'keep me')")
+    sqlx::query("INSERT INTO mc_test_neighbour (id, note) VALUES (1, 'keep me')")
         .execute(&mut *conn)
         .await
         .unwrap();
 
     // Roll the marker back so the next ensure takes the rebuild path.
     sqlx::query("DELETE FROM schema_meta WHERE key = $1")
-        .bind(VAULT_SCHEMA_META_KEY)
+        .bind(SCHEMA_META_KEY)
         .execute(&mut *conn)
         .await
         .unwrap();
@@ -707,10 +707,10 @@ async fn postgres_rebuild_spares_tables_the_vault_does_not_own() {
     .await
     .unwrap();
 
-    ensure_vault_schema(&mut conn).await.unwrap();
+    ensure_schema(&mut conn).await.unwrap();
 
     let note: Option<String> =
-        sqlx::query_scalar("SELECT note FROM mv_test_neighbour WHERE id = 1")
+        sqlx::query_scalar("SELECT note FROM mc_test_neighbour WHERE id = 1")
             .fetch_optional(&mut *conn)
             .await
             .expect("a table the vault does not own survives the rebuild")
@@ -723,7 +723,7 @@ async fn postgres_rebuild_spares_tables_the_vault_does_not_own() {
 
     // The vault's own tables were still rebuilt.
     let ready: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM schema_meta WHERE key = $1")
-        .bind(VAULT_SCHEMA_META_KEY)
+        .bind(SCHEMA_META_KEY)
         .fetch_one(&mut *conn)
         .await
         .unwrap();
@@ -754,14 +754,14 @@ fn the_fingerprint_follows_the_schema_text() {
 /// The drop list is read out of the embedded DDL, so it covers every
 /// table the vault installs and nothing else.
 #[test]
-fn pg_vault_table_names_match_the_embedded_ddl() {
-    let names = pg_vault_table_names();
+fn pg_table_names_match_the_embedded_ddl() {
+    let names = pg_table_names();
     for expected in [
         "accounts",
         "account_api_tokens",
         "schema_meta",
-        "vault_imports",
-        "vault_import_issues",
+        "imports",
+        "import_issues",
         "contacts",
         "handles",
         "trashed_conversations",
@@ -776,7 +776,7 @@ fn pg_vault_table_names_match_the_embedded_ddl() {
             "{expected} missing from {names:?}"
         );
     }
-    let declared = pg_vault_table_ddl()
+    let declared = pg_table_ddl()
         .files
         .iter()
         .flat_map(|ddl| ddl.lines())
@@ -821,7 +821,7 @@ fn split_ddl_skips_comments_and_blanks() {
 
 #[test]
 fn split_ddl_keeps_do_blocks_intact() {
-    let fks = &pg_vault_table_ddl().deferred_fks;
+    let fks = &pg_table_ddl().deferred_fks;
     let stmts = split_ddl(fks);
     assert_eq!(
         stmts.len(),

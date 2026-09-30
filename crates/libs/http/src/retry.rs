@@ -24,12 +24,12 @@ pub enum RetryKind {
 /// call site wrote; the status travels typed for [`classify_retry`].
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
-pub struct VaultHttpError {
+pub struct HttpError {
     status: u16,
     message: String,
 }
 
-impl VaultHttpError {
+impl HttpError {
     /// Build a status-tagged error that displays `message` verbatim.
     pub fn new(status: u16, message: impl Into<String>) -> Self {
         Self {
@@ -41,16 +41,16 @@ impl VaultHttpError {
 
 /// Classify an error for [`with_retries`].
 ///
-/// Checks, in order: [`VaultHttpError`] (2xx and 4xx permanent), [`AuthError`]
+/// Checks, in order: [`HttpError`] (2xx and 4xx permanent), [`AuthError`]
 /// (auth and 4xx permanent, transport transient), `reqwest::Error` status (4xx
 /// permanent), `std::io::Error` kind (`NotFound` permanent). Anything
 /// unrecognized is transient, matching the historical default.
 ///
-/// A [`VaultHttpError`] with a 2xx status is an answer the client could not
+/// A [`HttpError`] with a 2xx status is an answer the client could not
 /// read. The vault has already done the work, so sending the request again
 /// would repeat a write it committed.
 pub fn classify_retry(error: &anyhow::Error) -> RetryKind {
-    if let Some(http) = error.downcast_ref::<VaultHttpError>() {
+    if let Some(http) = error.downcast_ref::<HttpError>() {
         return if (200..300).contains(&http.status) || (400..500).contains(&http.status) {
             RetryKind::Permanent
         } else {
@@ -136,17 +136,17 @@ mod tests {
 
     #[test]
     fn http_status_errors_are_permanent_for_4xx() {
-        let e = anyhow::Error::from(VaultHttpError::new(404, "asset HEAD failed (HTTP 404)"));
+        let e = anyhow::Error::from(HttpError::new(404, "asset HEAD failed (HTTP 404)"));
         assert!(classified(classify_retry(&e)));
-        let e = anyhow::Error::from(VaultHttpError::new(413, "import rejected: HTTP 413"));
+        let e = anyhow::Error::from(HttpError::new(413, "import rejected: HTTP 413"));
         assert!(classified(classify_retry(&e)));
-        let e = anyhow::Error::from(VaultHttpError::new(401, "invalid API key"));
+        let e = anyhow::Error::from(HttpError::new(401, "invalid API key"));
         assert!(classified(classify_retry(&e)));
     }
 
     #[test]
     fn an_unreadable_2xx_is_permanent_because_the_vault_did_the_work() {
-        let e = anyhow::Error::from(VaultHttpError::new(
+        let e = anyhow::Error::from(HttpError::new(
             200,
             "could not read the server's answer to import batch",
         ));
@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn http_status_errors_are_transient_for_5xx() {
-        let e = anyhow::Error::from(VaultHttpError::new(503, "asset part 1 failed (HTTP 503)"));
+        let e = anyhow::Error::from(HttpError::new(503, "asset part 1 failed (HTTP 503)"));
         assert!(!classified(classify_retry(&e)));
     }
 
@@ -235,7 +235,7 @@ mod tests {
         let mut calls = 0;
         let result = with_retries(3, || -> Result<u32> {
             calls += 1;
-            Err(anyhow::Error::from(VaultHttpError::new(404, "gone")))
+            Err(anyhow::Error::from(HttpError::new(404, "gone")))
         });
         assert!(result.is_err());
         assert_eq!(calls, 1);

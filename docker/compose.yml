@@ -5,7 +5,7 @@
 # Empty vault: DEMO_DATA=false docker compose up -d
 # JSONL drop: copy files into ./staging
 
-name: message-vault
+name: message-crate
 
 services:
   vault:
@@ -16,10 +16,10 @@ services:
     environment:
       DEMO_DATA: ${DEMO_DATA:-true}
     volumes:
-      - message-vault-data:/app/data
+      - message-crate-data:/app/data
       - ./staging:/app/staging
     restart: unless-stopped
 
 volumes:
-  message-vault-data:
-    name: message-vault-data
+  message-crate-data:
+    name: message-crate-data

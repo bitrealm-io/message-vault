@@ -22,7 +22,7 @@ use crate::progress::Reporter;
 use crate::report::{
     FileResult, MessageAccounting, UploadProfile, elapsed_ms, format_profile_line,
 };
-use crate::run::{MAX_IMPORT_BODY_BYTES, Session, VaultPushConfig};
+use crate::run::{MAX_IMPORT_BODY_BYTES, PushConfig, Session};
 
 /// If the pending message batch is at least this many messages, start its HTTP
 /// import now instead of waiting until the next chat is prepared.
@@ -166,7 +166,7 @@ struct ImportHttpOutcome {
 
 /// Owns the import-side state of one push run.
 pub(crate) struct ImportPipeline<'a> {
-    cfg: &'a VaultPushConfig,
+    cfg: &'a PushConfig,
     session: &'a Session,
     journal: &'a Mutex<SharedJournal>,
     /// The Import Run every batch is posted into. Whether the run replaces
@@ -188,7 +188,7 @@ pub(crate) struct ImportPipeline<'a> {
 impl<'a> ImportPipeline<'a> {
     /// An empty pipeline for `total` conversation files.
     pub(crate) fn new(
-        cfg: &'a VaultPushConfig,
+        cfg: &'a PushConfig,
         session: &'a Session,
         journal: &'a Mutex<SharedJournal>,
         import_id: i64,

@@ -4,10 +4,10 @@ use crate::db::participant_names::Participant;
 use message_ir::HandleType;
 use sqlx::AnyConnection;
 
-use crate::db::{account_profile, vault_imports};
+use crate::db::{account_profile, imports};
 use crate::test_support::{
-    RegisteredAccount, TestVault, register_via_api, seed_one_message, test_vault,
-    vault_with_account,
+    RegisteredAccount, TestFixture, fixture_with_account, register_via_api, seed_one_message,
+    test_fixture,
 };
 
 /// A newest-first page — the default ordering, which is what most of these
@@ -32,8 +32,8 @@ async fn list_conversations(
 }
 
 /// A vault, a logged-in account, and one conversation holding one message.
-async fn conversations_fixture() -> (TestVault, RegisteredAccount) {
-    let (vault, account) = vault_with_account().await;
+async fn conversations_fixture() -> (TestFixture, RegisteredAccount) {
+    let (vault, account) = fixture_with_account().await;
     seed_one_message(&vault.state, account.account_id).await;
     (vault, account)
 }
@@ -75,8 +75,8 @@ async fn conversation_list_takes_the_search_language() {
 /// `participants` row (`name_alias`) that query also reads has no
 /// counterpart in the seeder at all. So this stays as explicit SQL
 /// rather than using the shared seeder.
-async fn conversations_setup() -> (sqlx::AnyPool, TestVault, i64) {
-    let vault = test_vault().await;
+async fn conversations_setup() -> (sqlx::AnyPool, TestFixture, i64) {
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let mut conn = vault.conn().await;
     let peer =
@@ -799,7 +799,7 @@ async fn list_conversations_participants_eq_three_on_built_fixture() {
 #[tokio::test]
 async fn list_conversations_filters_by_import_id() {
     // Fresh db (conversations_setup() already owns conversation 1, which this test inserts itself).
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let pool = vault.state.db.clone();
     let account = 101_i64;
     let mut conn = pool.acquire().await.unwrap();
@@ -809,25 +809,25 @@ async fn list_conversations_filters_by_import_id() {
         .await
         .unwrap();
 
-    let import_a = vault_imports::start_import(
+    let import_a = imports::start_import(
         &mut conn,
-        &vault_imports::StartImportArgs::new(account, "imessage-ios", "append", Some("test")),
+        &imports::StartImportArgs::new(account, "imessage-ios", "append", Some("test")),
     )
     .await
     .unwrap();
     // Only one session may be `running` per account (the partial unique
     // index); finish `import_a` so `import_b` can start.
-    vault_imports::complete_import(
+    imports::complete_import(
         &mut conn,
         account,
         import_a,
-        &vault_imports::CompleteImportArgs::succeeded(1, 0),
+        &imports::CompleteImportArgs::succeeded(1, 0),
     )
     .await
     .unwrap();
-    let import_b = vault_imports::start_import(
+    let import_b = imports::start_import(
         &mut conn,
-        &vault_imports::StartImportArgs::new(account, "imessage-ios", "append", Some("test")),
+        &imports::StartImportArgs::new(account, "imessage-ios", "append", Some("test")),
     )
     .await
     .unwrap();
@@ -947,7 +947,7 @@ async fn list_conversations_filters_by_import_id() {
 /// never silently the default, and two keys compose.
 #[tokio::test]
 async fn sort_is_parsed_against_the_lists_keys() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     let (status, text) =
         crate::test_support::get_raw(&state, "/v1/conversations?sort=colour", &user.token).await;
@@ -977,7 +977,7 @@ async fn duplicate_only_threads_sort_last_in_either_date_direction() {
     // duplicate. Those threads are only listed under an `import:` filter,
     // which is the one path where NULL ordering is observable — and the two
     // engines disagree about it unless the query says where NULLs go.
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let pool = vault.state.db.clone();
     let account = 101_i64;
     let mut conn = pool.acquire().await.unwrap();
@@ -987,9 +987,9 @@ async fn duplicate_only_threads_sort_last_in_either_date_direction() {
         .await
         .unwrap();
 
-    let import_a = vault_imports::start_import(
+    let import_a = imports::start_import(
         &mut conn,
-        &vault_imports::StartImportArgs::new(account, "imessage-ios", "append", Some("test")),
+        &imports::StartImportArgs::new(account, "imessage-ios", "append", Some("test")),
     )
     .await
     .unwrap();
@@ -1087,7 +1087,7 @@ async fn duplicate_only_threads_sort_last_in_either_date_direction() {
 async fn list_conversations_import_id_includes_duplicate_only_thread() {
     // Fresh db: conversations_setup() would add a second non-duplicate conversation,
     // which breaks the "all" total assertion below.
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let pool = vault.state.db.clone();
     let account = 101_i64;
     let mut conn = pool.acquire().await.unwrap();
@@ -1097,9 +1097,9 @@ async fn list_conversations_import_id_includes_duplicate_only_thread() {
         .await
         .unwrap();
 
-    let import_a = vault_imports::start_import(
+    let import_a = imports::start_import(
         &mut conn,
-        &vault_imports::StartImportArgs::new(account, "imessage-ios", "append", Some("test")),
+        &imports::StartImportArgs::new(account, "imessage-ios", "append", Some("test")),
     )
     .await
     .unwrap();
@@ -1220,7 +1220,7 @@ async fn the_conversation_list_labels_each_thread_by_its_sources() {
     use crate::test_support::{SeedConversation, SeedMessage, get_json, seed_conversation};
     use std::collections::HashMap;
 
-    let (vault, user) = vault_with_account().await;
+    let (vault, user) = fixture_with_account().await;
     let message = |source| SeedMessage {
         source,
         timestamp: "2024-01-01T00:00:00Z",
@@ -1337,7 +1337,7 @@ async fn list_conversations_filters_by_tag_and_people() {
 
 #[tokio::test]
 async fn the_conversation_list_is_a_page_with_integer_ids() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
 
@@ -1356,7 +1356,7 @@ async fn the_conversation_list_is_a_page_with_integer_ids() {
 
 #[tokio::test]
 async fn conversation_detail_returns_the_owned_conversation() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
@@ -1379,7 +1379,7 @@ async fn conversation_detail_returns_the_owned_conversation() {
 
 #[tokio::test]
 async fn conversation_detail_404s_for_an_id_this_account_does_not_own() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
 
     let status =
@@ -1389,7 +1389,7 @@ async fn conversation_detail_404s_for_an_id_this_account_does_not_own() {
 
 #[tokio::test]
 async fn conversation_detail_404s_for_another_accounts_conversation() {
-    let (vault, alice) = crate::test_support::vault_with_account().await;
+    let (vault, alice) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     crate::test_support::seed_one_message(&state, alice.account_id).await;
     let alice_list: serde_json::Value =
@@ -1413,7 +1413,7 @@ async fn conversation_detail_404s_for_another_accounts_conversation() {
 
 #[tokio::test]
 async fn conversation_detail_reads_a_trashed_conversation() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
@@ -1458,7 +1458,7 @@ async fn trashed_conversation_row_count(conn: &mut AnyConnection, account_id: i6
 
 #[tokio::test]
 async fn conversation_trash_drops_it_from_the_list() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
@@ -1484,7 +1484,7 @@ async fn conversation_trash_drops_it_from_the_list() {
 
 #[tokio::test]
 async fn conversation_trash_twice_is_204_with_no_second_marker() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
@@ -1509,7 +1509,7 @@ async fn conversation_trash_twice_is_204_with_no_second_marker() {
 
 #[tokio::test]
 async fn conversation_restore_brings_it_back_to_the_list() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
@@ -1542,7 +1542,7 @@ async fn conversation_restore_brings_it_back_to_the_list() {
 
 #[tokio::test]
 async fn conversation_restore_twice_is_204_with_marker_gone() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     crate::test_support::seed_one_message(&state, user.account_id).await;
     let list: serde_json::Value =
@@ -1574,7 +1574,7 @@ async fn conversation_restore_twice_is_204_with_marker_gone() {
 
 #[tokio::test]
 async fn conversation_trash_404s_for_an_unknown_id() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
 
     let status = crate::test_support::post_status(
@@ -1589,7 +1589,7 @@ async fn conversation_trash_404s_for_an_unknown_id() {
 
 #[tokio::test]
 async fn conversation_restore_404s_for_an_unknown_id() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
 
     let status = crate::test_support::post_status(
@@ -1604,7 +1604,7 @@ async fn conversation_restore_404s_for_an_unknown_id() {
 
 #[tokio::test]
 async fn conversation_trash_404s_for_another_accounts_conversation() {
-    let (vault, alice) = crate::test_support::vault_with_account().await;
+    let (vault, alice) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     crate::test_support::seed_one_message(&state, alice.account_id).await;
     let alice_list: serde_json::Value =
@@ -1635,7 +1635,7 @@ async fn conversation_trash_404s_for_another_accounts_conversation() {
 
 #[tokio::test]
 async fn conversation_restore_404s_for_another_accounts_conversation() {
-    let (vault, alice) = crate::test_support::vault_with_account().await;
+    let (vault, alice) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     crate::test_support::seed_one_message(&state, alice.account_id).await;
     let alice_list: serde_json::Value =
@@ -1672,8 +1672,8 @@ async fn conversation_restore_404s_for_another_accounts_conversation() {
 
 /// A logged-in account with one conversation already in the trash,
 /// returning the account and the conversation's id.
-async fn trashed_conversation_fixture() -> (TestVault, RegisteredAccount, i64) {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+async fn trashed_conversation_fixture() -> (TestFixture, RegisteredAccount, i64) {
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     crate::test_support::seed_one_message(&vault.state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&vault.state, "/v1/conversations", &user.token).await;
@@ -1784,7 +1784,7 @@ async fn conversation_delete_removes_files_only_the_deleted_conversation_used() 
 
 #[tokio::test]
 async fn conversation_delete_refuses_a_conversation_that_is_not_in_the_trash() {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     crate::test_support::seed_one_message(&vault.state, user.account_id).await;
     let list: serde_json::Value =
         crate::test_support::get_json(&vault.state, "/v1/conversations", &user.token).await;
@@ -1852,8 +1852,8 @@ async fn conversation_delete_needs_the_delete_permission() {
 /// A logged-in account and one conversation with no messages yet, for
 /// tests that seed their own message rows with specific timestamps and
 /// `sort_order`.
-async fn conversation_messages_fixture() -> (TestVault, RegisteredAccount, i64) {
-    let (vault, user) = crate::test_support::vault_with_account().await;
+async fn conversation_messages_fixture() -> (TestFixture, RegisteredAccount, i64) {
+    let (vault, user) = crate::test_support::fixture_with_account().await;
     let state = vault.state.clone();
     let mut conn = state.db.acquire().await.unwrap();
     let handle_id: i64 = sqlx::query_scalar(
@@ -2201,9 +2201,9 @@ async fn conversation_messages_reads_a_trashed_conversations_messages() {
 
 /// Alice's conversation holding two iMessage messages and two SMS messages,
 /// one of the SMS messages a duplicate of an iMessage one.
-async fn sources_fixture() -> (TestVault, RegisteredAccount, i64) {
+async fn sources_fixture() -> (TestFixture, RegisteredAccount, i64) {
     use crate::test_support::{SeedConversation, SeedMessage, seed_conversation};
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let message = |source, timestamp, body| SeedMessage {
         source,
         timestamp,

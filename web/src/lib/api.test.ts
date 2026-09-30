@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiClient, getBaseUrl, problemFromBody, setBaseUrl, setToken, VaultApiError } from "./api";
+import { ApiError, apiClient, getBaseUrl, problemFromBody, setBaseUrl, setToken } from "./api";
 import { APP_BUILD } from "./build";
 
 afterEach(() => {
@@ -94,7 +94,7 @@ describe("problemFromBody", () => {
 });
 
 describe("apiClient errors", () => {
-  it("throws a VaultApiError carrying the status and the server's message", async () => {
+  it("throws a ApiError carrying the status and the server's message", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -111,7 +111,7 @@ describe("apiClient errors", () => {
     );
 
     await expect(apiClient.post("/v1/accounts", {})).rejects.toMatchObject({
-      name: "VaultApiError",
+      name: "ApiError",
       status: 409,
       message: "username already taken: matt",
     });
@@ -129,7 +129,7 @@ describe("apiClient errors", () => {
 
     const caught = await apiClient.get("/v1/whoami").catch((e: unknown) => e);
     expect(caught).toBeInstanceOf(Error);
-    expect(caught).toBeInstanceOf(VaultApiError);
+    expect(caught).toBeInstanceOf(ApiError);
   });
 });
 
@@ -158,14 +158,14 @@ describe("apiClient request shape", () => {
   it("names this app and its Build on every request, logged in or not", async () => {
     const fetchSpy = stubOkFetch();
 
-    await apiClient.get("/v1/vault");
+    await apiClient.get("/v1/server");
     await apiClient.postRaw("/v1/imports/1/conversations", "{}", "application/x-ndjson");
 
     for (const [, init] of fetchSpy.mock.calls as [string, RequestInit][]) {
       const headers = init.headers as Record<string, string>;
       // A browser here, not the desktop app: nothing has set up Tauri.
-      expect(headers["x-message-vault-app"]).toBe("website");
-      expect(headers["x-message-vault-version"]).toBe(APP_BUILD);
+      expect(headers["x-message-crate-app"]).toBe("website");
+      expect(headers["x-message-crate-version"]).toBe(APP_BUILD);
     }
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
@@ -196,12 +196,12 @@ describe("apiClient request shape", () => {
 
   it("carries the session token as a Bearer header once one is set", async () => {
     const fetchSpy = stubOkFetch();
-    setToken("mv-user-abc123");
+    setToken("mc-user-abc123");
 
     await apiClient.get("/v1/session");
 
     const headers = lastCall(fetchSpy)[1].headers as Record<string, string>;
-    expect(headers.Authorization).toBe("Bearer mv-user-abc123");
+    expect(headers.Authorization).toBe("Bearer mc-user-abc123");
   });
 
   it("sends no Authorization header while logged out", async () => {
@@ -274,7 +274,7 @@ describe("apiClient request shape", () => {
 
   it("posts a raw body under its own media type without re-encoding it", async () => {
     const fetchSpy = stubOkFetch();
-    setToken("mv-user-abc123");
+    setToken("mc-user-abc123");
     const jsonl = '{"schema_version":4}\n{"schema_version":4}\n';
 
     await apiClient.postRaw("/v1/imports", jsonl, "application/x-ndjson");
@@ -282,7 +282,7 @@ describe("apiClient request shape", () => {
     const [, init] = lastCall(fetchSpy);
     const headers = init.headers as Record<string, string>;
     expect(headers["Content-Type"]).toBe("application/x-ndjson");
-    expect(headers.Authorization).toBe("Bearer mv-user-abc123");
+    expect(headers.Authorization).toBe("Bearer mc-user-abc123");
     expect(init.body).toBe(jsonl);
   });
 });

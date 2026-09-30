@@ -1,4 +1,4 @@
-import type { components } from "./vaultApi.types";
+import type { components } from "./serverApi.types";
 
 type Schema = components["schemas"];
 

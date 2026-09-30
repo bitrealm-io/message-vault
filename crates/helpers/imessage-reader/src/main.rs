@@ -1,4 +1,4 @@
-//! `imessage-reader`: reads Apple Messages for the Message Vault desktop app.
+//! `imessage-reader`: reads Apple Messages for the Message Crate desktop app.
 //!
 //! This program exists for a licence reason, not a product one. It links
 //! `imessage-database` and `crabapple`, which are GPL-3.0-or-later, and the

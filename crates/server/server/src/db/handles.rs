@@ -253,7 +253,7 @@ mod tests {
     async fn upsert_handle_row_cached_reuses_id_without_second_row() {
         let (pool, _dir) = crate::db::engine::test_pool().await;
         let mut conn = pool.acquire().await.unwrap();
-        schema::ensure_vault_schema(&mut conn).await.unwrap();
+        schema::ensure_schema(&mut conn).await.unwrap();
         crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
             .await
             .unwrap();

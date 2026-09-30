@@ -2,7 +2,7 @@
 --
 -- A saved search collects nothing: it holds a query string, not members.
 -- The rows an `import` search points at outlive it — deleting a saved
--- search never touches `vault_imports`.
+-- search never touches `imports`.
 CREATE TABLE IF NOT EXISTS saved_searches (
     -- Surrogate primary key for this saved search.
     id INTEGER PRIMARY KEY,

@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { VaultApiError } from "../../lib/api";
+import { ApiError } from "../../lib/api";
+import { createAccount } from "../../lib/serverApi";
+import type { components } from "../../lib/serverApi.types";
 import { useAsyncAction } from "../../lib/useAsyncAction";
-import { createAccount } from "../../lib/vaultApi";
-import type { components } from "../../lib/vaultApi.types";
 
 /** What the vault answers when it creates an account. */
 export type CreatedAccount = components["schemas"]["CreateAccountResponse"];
@@ -55,7 +55,7 @@ export function useCreateAccountForm({
       } catch (e: unknown) {
         // A taken username is the vault's answer, worded for the log. The
         // form says the one thing the person can act on.
-        if (e instanceof VaultApiError && e.type === "username-taken") {
+        if (e instanceof ApiError && e.type === "username-taken") {
           throw new Error("Invalid username.");
         }
         throw e;

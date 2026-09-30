@@ -2,14 +2,14 @@ use axum::http::StatusCode;
 
 use crate::problem::ProblemType;
 use crate::test_support::{
-    RegisteredAccount, SeedConversation, SeedMessage, TestVault, expect_problem, get_json, get_raw,
-    get_status, register_via_api, seed_conversation, vault_with_account,
+    RegisteredAccount, SeedConversation, SeedMessage, TestFixture, expect_problem,
+    fixture_with_account, get_json, get_raw, get_status, register_via_api, seed_conversation,
 };
 
 /// Two conversations for alice (a direct thread and a group), and one for bob
 /// that must never appear in alice's results.
-async fn seeded() -> (TestVault, RegisteredAccount, i64, i64) {
-    let (vault, alice) = vault_with_account().await;
+async fn seeded() -> (TestFixture, RegisteredAccount, i64, i64) {
+    let (vault, alice) = fixture_with_account().await;
     let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
     let direct = seed_conversation(
         &vault.state,
@@ -170,7 +170,7 @@ async fn a_word_the_messages_list_does_not_have_is_a_422_with_a_sentence() {
 /// reports the sort, as the contact and conversation lists do.
 #[tokio::test]
 async fn a_bad_sort_is_reported_before_a_bad_query() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let (status, text) = get_raw(
         &vault.state,
         "/v1/messages?q=conversations%3A0&sort=colour",
@@ -218,7 +218,7 @@ fn ir_message(
 /// Import, through the whole pipeline, three messages into `account_id`: a
 /// reply carrying a sticker and a tapback array of two, an announcement
 /// carrying a single tapback object, and a plain message with none of these.
-async fn import_reactions_and_flags(vault: &TestVault, account_id: i64) {
+async fn import_reactions_and_flags(vault: &TestFixture, account_id: i64) {
     let header = serde_json::json!({
         "schema_version": 4,
         "export": {"source": "imessage", "tool": "test", "tool_version": "0",
@@ -310,7 +310,7 @@ async fn import_reactions_and_flags(vault: &TestVault, account_id: i64) {
 /// single tapback object is read the same as an array of one.
 #[tokio::test]
 async fn reactions_and_message_flags_are_read_back_as_imported() {
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     import_reactions_and_flags(&vault, alice.account_id).await;
 
     let page: serde_json::Value = get_json(&vault.state, "/v1/messages", &alice.token).await;
@@ -400,7 +400,7 @@ async fn one_message_is_read_by_id_and_only_by_the_account_that_owns_it() {
 async fn date_today_is_the_day_on_the_accounts_clock() {
     use chrono::TimeZone;
 
-    let (vault, alice) = vault_with_account().await;
+    let (vault, alice) = fixture_with_account().await;
     let zone = chrono_tz::Pacific::Kiritimati;
     let _: serde_json::Value = crate::test_support::patch_json(
         &vault.state,

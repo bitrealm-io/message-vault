@@ -99,8 +99,8 @@ CREATE TABLE IF NOT EXISTS messages (
     content_key TEXT,
     -- Points at the kept message when this row is a flagged duplicate.
     duplicate_of INTEGER REFERENCES messages(id) ON DELETE SET NULL,
-    -- Import run that inserted this row (`vault_imports.id`).
-    import_id INTEGER REFERENCES vault_imports(id) ON DELETE SET NULL
+    -- Import run that inserted this row (`imports.id`).
+    import_id INTEGER REFERENCES imports(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS ix_messages_conversation_timestamp
@@ -212,9 +212,9 @@ CREATE TABLE IF NOT EXISTS message_tag_members (
 -- pages read these rows rather than its scope, so an import, a trash, or a
 -- new day between pages cannot move what the run hands over. The rows are
 -- deleted when the run completes or is cancelled.
-CREATE TABLE IF NOT EXISTS vault_export_messages (
-    -- Export Run (`vault_exports.id`).
-    export_id INTEGER NOT NULL REFERENCES vault_exports(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS export_messages (
+    -- Export Run (`exports.id`).
+    export_id INTEGER NOT NULL REFERENCES exports(id) ON DELETE CASCADE,
     -- The message's place in the run, from 1: oldest first by timestamp,
     -- then sort_order, then id, as they stood at creation.
     row_order INTEGER NOT NULL,
@@ -224,5 +224,5 @@ CREATE TABLE IF NOT EXISTS vault_export_messages (
     PRIMARY KEY (export_id, row_order)
 );
 
-CREATE INDEX IF NOT EXISTS ix_vault_export_messages_message
-    ON vault_export_messages (message_id);
+CREATE INDEX IF NOT EXISTS ix_export_messages_message
+    ON export_messages (message_id);

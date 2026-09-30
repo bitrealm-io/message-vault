@@ -4,7 +4,7 @@ import Button from "../../components/Button";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import DeleteAccountDialog from "../../components/DeleteAccountDialog";
 import { useAuth } from "../../lib/auth";
-import { deleteAccount, deleteAllMessages as deleteAllVaultMessages } from "../../lib/vaultApi";
+import { deleteAccount, deleteAllMessages as deleteAllMessagesRoute } from "../../lib/serverApi";
 import { useDeleteAccount, useDeleteAccountMessages } from "../owner/useOwnerAccounts";
 import { dangerButtonClass } from "./profileStyles";
 
@@ -53,7 +53,7 @@ export function ProfileDangerZone({
     setDangerError("");
     try {
       if (managed) await removeManagedMessages.mutateAsync(managedAccountId);
-      else await deleteAllVaultMessages({ confirm: true });
+      else await deleteAllMessagesRoute({ confirm: true });
     } catch (e) {
       setDangerError(e instanceof Error ? e.message : String(e));
     } finally {

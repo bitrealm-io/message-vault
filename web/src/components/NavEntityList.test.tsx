@@ -12,7 +12,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mockedAuth, VaultProviders } from "../test/vaultProviders";
+import { mockedAuth, Providers } from "../test/providers";
 import GroupsNav from "./GroupsNav";
 import MessageTagsNav from "./MessageTagsNav";
 
@@ -27,7 +27,7 @@ const routes = vi.hoisted(() => ({
   deleteMessageTag: vi.fn(),
 }));
 
-vi.mock("../lib/vaultApi", () => ({
+vi.mock("../lib/serverApi", () => ({
   listContactGroups: routes.listContactGroups,
   createContactGroup: vi.fn(),
   updateContactGroup: routes.updateContactGroup,
@@ -57,12 +57,12 @@ function renderGroups(path: string, groups: string[]) {
     items: groups.map((name, i) => ({ id: i + 1, name })),
   });
   return render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter initialEntries={[path]}>
         <LocationDisplay />
         <GroupsNav groups={groups} />
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 
@@ -71,12 +71,12 @@ function renderTags(path: string, tags: string[]) {
     items: tags.map((name, i) => ({ id: i + 1, name })),
   });
   return render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter initialEntries={[path]}>
         <LocationDisplay />
         <MessageTagsNav tags={tags} />
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 

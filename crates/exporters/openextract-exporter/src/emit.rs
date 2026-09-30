@@ -4,14 +4,14 @@
 use crate::parse::{RawRow, SourceKind, discover_csv_files, parse_csv_file};
 use anyhow::Result;
 use chrono::DateTime;
+use message_crate_core::{
+    CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
+};
 use message_ir::{
     ExportMeta, HandleType, IrParticipant, IrService, IrSource, PendingConversation,
     PendingMessage, ProjectionHooks, ensure_conversation,
 };
 use message_staging::{AttachmentSource, ExportWriter};
-use message_crate_core::{
-    CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
-};
 use phone::sanitize_number;
 use serde_json::{Map, json};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -268,11 +268,7 @@ fn resolve_chat(peer: &str) -> (String, String, bool) {
         // Format as E.164 when unambiguous. Otherwise keep digits as-is. Never invent `+0…`.
         return (phone::normalize_lenient(peer), String::new(), false);
     }
-    (
-        message_crate_core::name_stem(peer),
-        peer.to_string(),
-        true,
-    )
+    (message_crate_core::name_stem(peer), peer.to_string(), true)
 }
 
 /// Whether the row is outgoing, from its direction column or its sender.

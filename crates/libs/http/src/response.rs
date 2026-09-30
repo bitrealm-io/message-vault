@@ -10,10 +10,10 @@
 //! one edit rather than a hunt.
 
 use anyhow::Result;
-use serde::de::DeserializeOwned;
 use message_crate_api_types::Problem;
+use serde::de::DeserializeOwned;
 
-use crate::retry::VaultHttpError;
+use crate::retry::HttpError;
 use crate::truncate;
 
 /// Longest failure body repeated back to the person. A vault sentence is far
@@ -40,7 +40,7 @@ pub fn error_sentence(body: &str) -> String {
 /// wrong.
 ///
 /// A 2xx status is a success and the body is `T`. Anything else is a
-/// [`VaultHttpError`] carrying the status, so the retry rules can classify it,
+/// [`HttpError`] carrying the status, so the retry rules can classify it,
 /// and a sentence naming `what` was being asked for — "import batch",
 /// "export messages" — because a status alone does not tell the person which
 /// part of a long run stopped.
@@ -57,14 +57,14 @@ pub fn ok_json<T: DeserializeOwned>(
 ) -> Result<T> {
     if status.is_success() {
         return serde_json::from_str::<T>(body).map_err(|e| {
-            VaultHttpError::new(
+            HttpError::new(
                 status.as_u16(),
                 format!("could not read the server's answer to {what} ({e}): {body}"),
             )
             .into()
         });
     }
-    Err(VaultHttpError::new(
+    Err(HttpError::new(
         status.as_u16(),
         format!("{what} failed (HTTP {status}): {}", error_sentence(body)),
     )

@@ -1,12 +1,12 @@
 use super::*;
-use crate::test_support::test_vault;
+use crate::test_support::test_fixture;
 
 const A1: i64 = 7;
 const A2: i64 = 8;
 
 #[tokio::test]
 async fn reset_for_account_leaves_other_accounts() {
-    let vault = test_vault().await;
+    let vault = test_fixture().await;
     let mut conn = vault.conn().await;
     for (account, user) in [(A1, "alice"), (A2, "bob")] {
         vault.account_with_id(account, user).await;

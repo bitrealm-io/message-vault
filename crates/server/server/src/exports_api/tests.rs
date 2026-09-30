@@ -1,13 +1,13 @@
 use super::*;
 use crate::db::conversation_messages::{MessageSort, messages_from_sql};
+use crate::db::exports::ExportCounts;
 use crate::db::sql::renumber_placeholders;
-use crate::db::vault_exports::ExportCounts;
 use crate::paging::SortKey;
 use crate::problem::ProblemType;
 use crate::test_support::{
-    RegisteredAccount, SeedConversation, SeedMessage, TestVault, delete_status, expect_problem,
-    get_json, get_raw, get_status, post_created_json, post_json, post_raw, post_status,
-    register_via_api, seed_conversation, test_vault, vault_with_account,
+    RegisteredAccount, SeedConversation, SeedMessage, TestFixture, delete_status, expect_problem,
+    fixture_with_account, get_json, get_raw, get_status, post_created_json, post_json, post_raw,
+    post_status, register_via_api, seed_conversation, test_fixture,
 };
 use axum::http::StatusCode;
 use serde_json::{Value, json};
@@ -99,8 +99,8 @@ async fn a_query_scope_takes_the_search_language() {
 /// The messages are seeded with an explicit SQL insert rather than through
 /// `seed_conversation`, because `SeedMessage` has no `service` field and a
 /// test below asserts `message.service == Some("sms")`.
-async fn seeded_export_vault() -> (TestVault, i64, i64) {
-    let vault = test_vault().await;
+async fn seeded_export_fixture() -> (TestFixture, i64, i64) {
+    let vault = test_fixture().await;
     let account = vault.account_with_id(101, "alice").await;
     let conv1 = seed_conversation(
         &vault.state,
@@ -162,7 +162,7 @@ async fn add_message(conn: &mut AnyConnection, id: i64, conversation: i64, day: 
 
 #[tokio::test]
 async fn a_selection_scope_matches_by_conversation_or_message_with_the_browse_defaults() {
-    let (vault, conv1, conv2) = seeded_export_vault().await;
+    let (vault, conv1, conv2) = seeded_export_fixture().await;
     let mut conn = vault.conn().await;
     add_message(&mut conn, 3, conv2, 3, "hello three").await;
 
@@ -213,7 +213,7 @@ async fn a_selection_scope_matches_by_conversation_or_message_with_the_browse_de
 
 #[tokio::test]
 async fn a_selection_refuses_ids_the_account_does_not_hold_naming_them() {
-    let (vault, conv1, _conv2) = seeded_export_vault().await;
+    let (vault, conv1, _conv2) = seeded_export_fixture().await;
     vault.account_with_id(102, "bob").await;
     let mut conn = vault.conn().await;
     let bob_handle: i64 = sqlx::query_scalar(
@@ -278,7 +278,7 @@ async fn a_selection_refuses_ids_the_account_does_not_hold_naming_them() {
 
 #[tokio::test]
 async fn export_counts_count_messages_conversations_and_distinct_attachments() {
-    let (vault, conv1, _conv2) = seeded_export_vault().await;
+    let (vault, conv1, _conv2) = seeded_export_fixture().await;
     let mut conn = vault.conn().await;
     add_message(&mut conn, 3, conv1, 3, "third").await;
     // The same file on two messages is one attachment, counted at its
@@ -318,7 +318,7 @@ async fn export_counts_count_messages_conversations_and_distinct_attachments() {
 
 #[tokio::test]
 async fn export_includes_attachment_missing_reason() {
-    let (vault, conv1, _conv2) = seeded_export_vault().await;
+    let (vault, conv1, _conv2) = seeded_export_fixture().await;
     let mut conn = vault.conn().await;
     sqlx::query(
         "INSERT INTO attachments (
@@ -345,7 +345,7 @@ async fn export_includes_attachment_missing_reason() {
 
 #[tokio::test]
 async fn export_boolean_queries_preserve_or_and_and_not() {
-    let (vault, conv1, _conv2) = seeded_export_vault().await;
+    let (vault, conv1, _conv2) = seeded_export_fixture().await;
     let mut conn = vault.conn().await;
     sqlx::query("UPDATE messages SET body = 'foo' WHERE id = 1")
         .execute(&mut *conn)
@@ -373,7 +373,7 @@ async fn export_boolean_queries_preserve_or_and_and_not() {
 /// conversations and no other.
 #[tokio::test]
 async fn a_comma_list_of_conversation_ids_exports_exactly_those_conversations() {
-    let (vault, conv1, conv2) = seeded_export_vault().await;
+    let (vault, conv1, conv2) = seeded_export_fixture().await;
     let conv3 = seed_conversation(
         &vault.state,
         &SeedConversation {
@@ -415,7 +415,7 @@ async fn a_comma_list_of_conversation_ids_exports_exactly_those_conversations() 
 
 #[tokio::test]
 async fn rejects_an_oversized_query() {
-    let (vault, _conv1, _conv2) = seeded_export_vault().await;
+    let (vault, _conv1, _conv2) = seeded_export_fixture().await;
     let mut conn = vault.conn().await;
     let huge = "x".repeat(crate::search::lex::MAX_QUERY_BYTES + 1);
     let err = page(&mut conn, 101, &query(&huge), 10, 0)
@@ -429,7 +429,7 @@ async fn rejects_an_oversized_query() {
 
 #[tokio::test]
 async fn export_pages_by_offset_and_reports_the_total() {
-    let (vault, conv1, _conv2) = seeded_export_vault().await;
+    let (vault, conv1, _conv2) = seeded_export_fixture().await;
     let mut conn = vault.conn().await;
     add_message(&mut conn, 3, conv1, 3, "third").await;
 
@@ -458,7 +458,7 @@ async fn export_pages_by_offset_and_reports_the_total() {
 /// selection's own `?` list renumbered after the query's.
 #[tokio::test]
 async fn export_sql_placeholders_match_params_order() {
-    let (vault, conv1, conv2) = seeded_export_vault().await;
+    let (vault, conv1, conv2) = seeded_export_fixture().await;
     let mut conn = vault.conn().await;
     let scope = ExportScope::Selection {
         conversation_ids: vec![conv1, conv2],
@@ -492,8 +492,8 @@ async fn export_sql_placeholders_match_params_order() {
 /// "pizza tonight" and "salad tomorrow", and `+15555550101` holding "the
 /// menu"; the menu message carries one 13-byte attachment. Returns the vault,
 /// the account, and the two conversation ids.
-async fn vault_with_two_conversations() -> (TestVault, RegisteredAccount, i64, i64) {
-    let (vault, alice) = vault_with_account().await;
+async fn fixture_with_two_conversations() -> (TestFixture, RegisteredAccount, i64, i64) {
+    let (vault, alice) = fixture_with_account().await;
     let dinner = seed_conversation(
         &vault.state,
         &SeedConversation {
@@ -550,7 +550,7 @@ async fn vault_with_two_conversations() -> (TestVault, RegisteredAccount, i64, i
 }
 
 /// The message ids of `conversation`, oldest first.
-async fn message_ids(vault: &TestVault, conversation: i64) -> Vec<i64> {
+async fn message_ids(vault: &TestFixture, conversation: i64) -> Vec<i64> {
     let mut conn = vault.conn().await;
     sqlx::query_scalar("SELECT id FROM messages WHERE conversation_id = $1 ORDER BY sort_order, id")
         .bind(conversation)
@@ -561,7 +561,7 @@ async fn message_ids(vault: &TestVault, conversation: i64) -> Vec<i64> {
 
 /// `POST /v1/exports` for `scope`, asserting `201 Created` and that the
 /// `Location` names the run the body carries.
-async fn create_run(vault: &TestVault, token: &str, scope: Value) -> Value {
+async fn create_run(vault: &TestFixture, token: &str, scope: Value) -> Value {
     let (location, run): (String, Value) = post_created_json(
         &vault.state,
         "/v1/exports",
@@ -574,7 +574,7 @@ async fn create_run(vault: &TestVault, token: &str, scope: Value) -> Value {
 }
 
 /// An API token for `user` with the export scope on or off.
-async fn api_token(vault: &TestVault, user: &RegisteredAccount, can_export: bool) -> String {
+async fn api_token(vault: &TestFixture, user: &RegisteredAccount, can_export: bool) -> String {
     let (_location, created): (String, Value) = post_created_json(
         &vault.state,
         &format!("/v1/accounts/{}/api-tokens", user.account_id),
@@ -587,7 +587,7 @@ async fn api_token(vault: &TestVault, user: &RegisteredAccount, can_export: bool
 
 #[tokio::test]
 async fn creating_a_run_records_the_scope_the_tool_and_the_counts() {
-    let (vault, alice, dinner, menu) = vault_with_two_conversations().await;
+    let (vault, alice, dinner, menu) = fixture_with_two_conversations().await;
     let menu_message = message_ids(&vault, menu).await[0];
 
     let everything = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
@@ -655,7 +655,7 @@ async fn creating_a_run_records_the_scope_the_tool_and_the_counts() {
 
 #[tokio::test]
 async fn a_scope_the_vault_cannot_honour_is_refused_and_no_run_is_recorded() {
-    let (vault, alice, _dinner, _menu) = vault_with_two_conversations().await;
+    let (vault, alice, _dinner, _menu) = fixture_with_two_conversations().await;
     let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
     crate::test_support::seed_one_message(&vault.state, bob.account_id).await;
     let mut conn = vault.conn().await;
@@ -735,7 +735,7 @@ async fn a_scope_the_vault_cannot_honour_is_refused_and_no_run_is_recorded() {
 
 #[tokio::test]
 async fn the_list_is_newest_first_filters_by_status_and_refuses_unknown_values() {
-    let (vault, alice, _dinner, _menu) = vault_with_two_conversations().await;
+    let (vault, alice, _dinner, _menu) = fixture_with_two_conversations().await;
     let first = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
     let second = create_run(
         &vault,
@@ -783,7 +783,7 @@ async fn the_list_is_newest_first_filters_by_status_and_refuses_unknown_values()
 
 #[tokio::test]
 async fn a_run_belongs_to_its_account() {
-    let (vault, alice, _dinner, _menu) = vault_with_two_conversations().await;
+    let (vault, alice, _dinner, _menu) = fixture_with_two_conversations().await;
     let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
     let run = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
     let id = run["id"].as_i64().unwrap();
@@ -815,10 +815,10 @@ async fn a_run_belongs_to_its_account() {
 
 #[tokio::test]
 async fn paging_a_run_raises_messages_delivered_to_the_rows_handed_over() {
-    let (vault, alice, _dinner, _menu) = vault_with_two_conversations().await;
+    let (vault, alice, _dinner, _menu) = fixture_with_two_conversations().await;
     let run = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
     let id = run["id"].as_i64().unwrap();
-    let delivered = |vault: &TestVault| {
+    let delivered = |vault: &TestFixture| {
         let token = alice.token.clone();
         let state = vault.state.clone();
         async move {
@@ -896,7 +896,7 @@ async fn paging_a_run_raises_messages_delivered_to_the_rows_handed_over() {
 
 #[tokio::test]
 async fn a_finished_run_refuses_pages_and_a_second_close() {
-    let (vault, alice, _dinner, _menu) = vault_with_two_conversations().await;
+    let (vault, alice, _dinner, _menu) = fixture_with_two_conversations().await;
     let run = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
     let id = run["id"].as_i64().unwrap();
 
@@ -959,7 +959,7 @@ async fn a_finished_run_refuses_pages_and_a_second_close() {
 
 #[tokio::test]
 async fn an_export_token_reads_messages_only_through_a_run() {
-    let (vault, alice, _dinner, _menu) = vault_with_two_conversations().await;
+    let (vault, alice, _dinner, _menu) = fixture_with_two_conversations().await;
     let token = api_token(&vault, &alice, true).await;
 
     let run = create_run(&vault, &token, json!({ "kind": "query", "q": "pizza" })).await;
@@ -1010,7 +1010,7 @@ async fn an_export_token_reads_messages_only_through_a_run() {
 /// Run when `import_id` is given, and return its id. Stands in for an import
 /// landing while a run is being read.
 async fn insert_message(
-    vault: &TestVault,
+    vault: &TestFixture,
     account: i64,
     conversation: i64,
     timestamp: &str,
@@ -1034,10 +1034,10 @@ async fn insert_message(
 }
 
 /// Record a completed Import Run for `account` and return its id.
-async fn insert_import(vault: &TestVault, account: i64) -> i64 {
+async fn insert_import(vault: &TestFixture, account: i64) -> i64 {
     let mut conn = vault.conn().await;
     sqlx::query_scalar(
-        "INSERT INTO vault_imports (account_id, source, mode, status, started_at)
+        "INSERT INTO imports (account_id, source, mode, status, started_at)
          VALUES ($1, 'imessage', 'append', 'completed', '2026-01-01T00:00:00Z')
          RETURNING id",
     )
@@ -1048,7 +1048,7 @@ async fn insert_import(vault: &TestVault, account: i64) -> i64 {
 }
 
 /// The ids on one page of run `id` and the page's `total`.
-async fn run_page_ids(vault: &TestVault, token: &str, id: i64, query: &str) -> (Vec<i64>, i64) {
+async fn run_page_ids(vault: &TestFixture, token: &str, id: i64, query: &str) -> (Vec<i64>, i64) {
     let page: Value = get_json(
         &vault.state,
         &format!("/v1/exports/{id}/messages?{query}"),
@@ -1065,9 +1065,9 @@ async fn run_page_ids(vault: &TestVault, token: &str, id: i64, query: &str) -> (
 }
 
 /// How many snapshot rows run `id` still holds.
-async fn snapshot_rows(vault: &TestVault, id: i64) -> i64 {
+async fn snapshot_rows(vault: &TestFixture, id: i64) -> i64 {
     let mut conn = vault.conn().await;
-    sqlx::query_scalar("SELECT COUNT(*) FROM vault_export_messages WHERE export_id = $1")
+    sqlx::query_scalar("SELECT COUNT(*) FROM export_messages WHERE export_id = $1")
         .bind(id)
         .fetch_one(&mut *conn)
         .await
@@ -1076,7 +1076,7 @@ async fn snapshot_rows(vault: &TestVault, id: i64) -> i64 {
 
 #[tokio::test]
 async fn a_run_hands_over_exactly_what_matched_when_it_started() {
-    let (vault, alice, dinner, menu) = vault_with_two_conversations().await;
+    let (vault, alice, dinner, menu) = fixture_with_two_conversations().await;
     let account = alice.account_id;
     for day in 4..=6 {
         insert_message(
@@ -1158,7 +1158,7 @@ async fn a_run_hands_over_exactly_what_matched_when_it_started() {
 
 #[tokio::test]
 async fn a_deleted_message_leaves_its_place_empty_and_closing_drops_the_list() {
-    let (vault, alice, dinner, menu) = vault_with_two_conversations().await;
+    let (vault, alice, dinner, menu) = fixture_with_two_conversations().await;
     let menu_message = message_ids(&vault, menu).await;
     let run = create_run(&vault, &alice.token, json!({ "kind": "everything" })).await;
     let id = run["id"].as_i64().unwrap();
@@ -1230,7 +1230,7 @@ async fn a_deleted_message_leaves_its_place_empty_and_closing_drops_the_list() {
 
 #[tokio::test]
 async fn import_last_keeps_meaning_the_import_that_was_last_at_creation() {
-    let (vault, alice, dinner, _menu) = vault_with_two_conversations().await;
+    let (vault, alice, dinner, _menu) = fixture_with_two_conversations().await;
     let account = alice.account_id;
     let first = insert_import(&vault, account).await;
     let from_first =

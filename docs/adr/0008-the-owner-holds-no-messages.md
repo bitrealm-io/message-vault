@@ -124,19 +124,19 @@ on that screen say who the account talks to, and the owner gets neither: an
 import's detail gives the owner how many contacts it created and changed and
 not who they are, and a large attachment comes to the owner as a name, a type
 and a size, without the conversation it is in. The installation-wide totals are
-`GET /v1/vault/storage`, the owner's alone, and Owner Home's Dashboard shows
+`GET /v1/server/storage`, the owner's alone, and Owner Home's Dashboard shows
 them. The per-account and installation-wide numbers come from the same queries
 (`crates/server/server/src/db/storage.rs`), with and without an account
 filter, so the Dashboard cannot disagree with the sum of the Storage tabs.
 
 ## The three states of a Message Crate
 
-`GET /v1/vault` is unauthenticated and reports one value: `unclaimed`,
+`GET /v1/server` is unauthenticated and reports one value: `unclaimed`,
 `closed`, or `open`. The logged-out screen follows from it — Create
 Owner, Login alone, or Login plus Create Account.
 
 The server reports the state rather than the two facts behind it (whether an
-owner exists, and whether `vault_settings.public_registration` is set) so that
+owner exists, and whether `server_settings.public_registration` is set) so that
 the rule joining them is stated once. A browser and a desktop app that each
 derived the screen from raw fields would be two copies of one rule, free to
 drift apart.
@@ -195,7 +195,7 @@ product needs.)
 ## Consequences
 
 - `POST /v1/auth/register` succeeds only while
-  `vault_settings.public_registration` is set. It defaults to off, so a
+  `server_settings.public_registration` is set. It defaults to off, so a
   fresh installation admits nobody the owner has not admitted.
 - Because registration is off by default, the owner creating accounts is not a
   convenience: without it a claimed Message Crate could never gain a user.

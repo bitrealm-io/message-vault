@@ -1,11 +1,10 @@
-//! `pull` command — download messages from a Message Vault server.
+//! `pull` command — download messages from a Message Crate server.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use message_crate_pull::{
-    DEFAULT_ASSET_DOWNLOAD_WORKERS, DEFAULT_PAGE_LIMIT, ProgressEvent, VaultPullConfig,
-    run as run_pull,
+    DEFAULT_ASSET_DOWNLOAD_WORKERS, DEFAULT_PAGE_LIMIT, ProgressEvent, PullConfig, run as run_pull,
 };
 
 use super::events;
@@ -51,7 +50,7 @@ pub fn pull(
 
     let app_handle = app.clone();
     spawn_job(app, move || {
-        let cfg = VaultPullConfig {
+        let cfg = PullConfig {
             out_dir: PathBuf::from(&args.out_dir),
             base_url: args.base_url,
             username: args.username,

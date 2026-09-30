@@ -14,6 +14,15 @@ import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  deleteContact as deleteContactRoute,
+  deleteConversation as deleteConversationRoute,
+  emptyTrash as emptyTrashRoute,
+  restoreContact as restoreContactRoute,
+  restoreConversation as restoreConversationRoute,
+  trashContact as trashContactRoute,
+  trashConversation as trashConversationRoute,
+} from "./serverApi";
+import {
   useDeleteContact,
   useDeleteConversation,
   useEmptyTrash,
@@ -22,20 +31,11 @@ import {
   useTrashContact,
   useTrashConversation,
 } from "./trash";
-import {
-  deleteContact as deleteVaultContact,
-  deleteConversation as deleteVaultConversation,
-  emptyTrash as emptyVaultTrash,
-  restoreContact as restoreVaultContact,
-  restoreConversation as restoreVaultConversation,
-  trashContact as trashVaultContact,
-  trashConversation as trashVaultConversation,
-} from "./vaultApi";
 
 vi.mock("./auth", () => ({ useAuth: () => ({ accountId: 7 }) }));
 
-vi.mock("./vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./vaultApi")>()),
+vi.mock("./serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./serverApi")>()),
   trashConversation: vi.fn(),
   restoreConversation: vi.fn(),
   deleteConversation: vi.fn(),
@@ -45,13 +45,13 @@ vi.mock("./vaultApi", async (importOriginal) => ({
   emptyTrash: vi.fn(),
 }));
 
-const trashConversation = vi.mocked(trashVaultConversation);
-const restoreConversation = vi.mocked(restoreVaultConversation);
-const deleteConversation = vi.mocked(deleteVaultConversation);
-const trashContact = vi.mocked(trashVaultContact);
-const restoreContact = vi.mocked(restoreVaultContact);
-const deleteContact = vi.mocked(deleteVaultContact);
-const emptyTrash = vi.mocked(emptyVaultTrash);
+const trashConversation = vi.mocked(trashConversationRoute);
+const restoreConversation = vi.mocked(restoreConversationRoute);
+const deleteConversation = vi.mocked(deleteConversationRoute);
+const trashContact = vi.mocked(trashContactRoute);
+const restoreContact = vi.mocked(restoreContactRoute);
+const deleteContact = vi.mocked(deleteContactRoute);
+const emptyTrash = vi.mocked(emptyTrashRoute);
 
 let client: QueryClient;
 

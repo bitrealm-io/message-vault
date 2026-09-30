@@ -18,6 +18,7 @@ import {
   shouldPrefillMacMessagesDb,
 } from "../lib/imessageImport";
 import { discardImportSession, getActiveImportSession } from "../lib/importSession";
+import { unmatchedIdentities } from "../lib/serverApi";
 import {
   getImporterPath,
   getRememberImporterPaths,
@@ -39,7 +40,6 @@ import {
   useFetchAccountProfile,
   useUpdateAccountProfile,
 } from "../lib/useAccountProfile";
-import { unmatchedIdentities } from "../lib/vaultApi";
 import {
   emptyWhatsappPathStats,
   isWhatsappMethod,

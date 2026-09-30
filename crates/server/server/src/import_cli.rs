@@ -11,7 +11,7 @@ use crate::dedupe::{self, DedupeStats};
 use crate::imports_api::{self, ImportMode, ImportOptions, ImportStats};
 use crate::jsonl;
 use crate::models::ExportRecord;
-use crate::open_vault::OpenVault;
+use crate::open_db::OpenDb;
 use media::MediaMode;
 
 /// Options for a CLI directory import.
@@ -101,7 +101,7 @@ impl SourcePlan {
 ///
 /// Returns an error when the input directory is missing, has no `.jsonl`
 /// files, or import / duplicate detection fails.
-pub async fn run(vault: &OpenVault, opts: &CliImportOptions) -> Result<CliImportStats> {
+pub async fn run(vault: &OpenDb, opts: &CliImportOptions) -> Result<CliImportStats> {
     let input = &opts.input_dir;
     if !input.is_dir() {
         bail!("input directory does not exist: {}", input.display());
@@ -139,7 +139,7 @@ pub async fn run(vault: &OpenVault, opts: &CliImportOptions) -> Result<CliImport
 
 /// Echo what the import is about to do so a wrong flag is visible before any
 /// row is written.
-fn print_plan(opts: &CliImportOptions, vault: &OpenVault, plan: &SourcePlan) {
+fn print_plan(opts: &CliImportOptions, vault: &OpenDb, plan: &SourcePlan) {
     println!("Import");
     println!("  account:      {}", opts.account_id);
     println!("  input:        {}", opts.input_dir.display());
@@ -267,7 +267,7 @@ pub fn discover_sources(paths: &[PathBuf]) -> Result<Vec<String>> {
 mod tests {
     use super::*;
     use crate::db::account_profile;
-    use crate::open_vault::fresh_config;
+    use crate::open_db::fresh_config;
     use tempfile::TempDir;
 
     const ALICE: i64 = 7;
@@ -287,8 +287,8 @@ mod tests {
 
     /// A vault with account alice, an export folder holding one conversation
     /// with `PHONE`, and a one-card address book naming that number.
-    async fn vault_with_export_and_book(dir: &Path) -> (OpenVault, CliImportOptions) {
-        let vault = OpenVault::open(fresh_config(dir).await).await.unwrap();
+    async fn fixture_with_export_and_book(dir: &Path) -> (OpenDb, CliImportOptions) {
+        let vault = OpenDb::open(fresh_config(dir).await).await.unwrap();
         let mut conn = vault.conn().await.unwrap();
         account_profile::insert_account_at(&mut conn, ALICE, "alice", None, None)
             .await
@@ -320,7 +320,7 @@ mod tests {
         (vault, opts)
     }
 
-    async fn count(vault: &OpenVault, sql: &str) -> i64 {
+    async fn count(vault: &OpenDb, sql: &str) -> i64 {
         let mut conn = vault.conn().await.unwrap();
         sqlx::query_scalar(sql)
             .bind(ALICE)
@@ -333,7 +333,7 @@ mod tests {
     async fn an_import_with_contacts_loads_the_book_and_links_its_phone_to_the_participant() {
         sqlx::any::install_default_drivers();
         let dir = TempDir::new().unwrap();
-        let (vault, opts) = vault_with_export_and_book(dir.path()).await;
+        let (vault, opts) = fixture_with_export_and_book(dir.path()).await;
 
         let stats = run(&vault, &opts).await.unwrap();
 
@@ -386,7 +386,7 @@ mod tests {
     async fn a_second_import_with_the_same_book_and_no_overwrite_skips_the_contacts() {
         sqlx::any::install_default_drivers();
         let dir = TempDir::new().unwrap();
-        let (vault, opts) = vault_with_export_and_book(dir.path()).await;
+        let (vault, opts) = fixture_with_export_and_book(dir.path()).await;
         run(&vault, &opts).await.unwrap();
 
         let stats = run(&vault, &opts).await.unwrap();
@@ -413,7 +413,7 @@ mod tests {
     async fn an_import_without_contacts_reports_the_load_as_skipped() {
         sqlx::any::install_default_drivers();
         let dir = TempDir::new().unwrap();
-        let (vault, mut opts) = vault_with_export_and_book(dir.path()).await;
+        let (vault, mut opts) = fixture_with_export_and_book(dir.path()).await;
         opts.contacts = None;
 
         let stats = run(&vault, &opts).await.unwrap();

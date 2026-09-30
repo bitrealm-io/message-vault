@@ -56,7 +56,7 @@ export default function PopupMenu({
       ref={rootRef}
       role="menu"
       aria-label={label}
-      data-mv-overlay=""
+      data-mc-overlay=""
       onKeyDown={onKeyDown}
       className={`min-w-[7.5rem] rounded-lg border border-border bg-popover py-1 ${popupShadow} ${className}`}
     >

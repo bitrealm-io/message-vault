@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ImportSummaryView } from "../../components/import/ImportSummaryPanel";
 import type { AttachmentForecast, StagingSummary } from "../../lib/tauri";
-import { VaultProviders } from "../../test/vaultProviders";
+import { Providers } from "../../test/providers";
 import ImportRunView from "./ImportRunView";
 import { type ImportStep, stepsFor } from "./importProgressState";
 import { attachmentsAsked, runHeading, sourceDisplayName } from "./importRunCopy";
@@ -25,8 +25,8 @@ vi.mock("../../lib/auth", () => ({
   useAuth: () => ({ accountId: 7, token: "test-token", isAuthenticated: true }),
 }));
 
-vi.mock("../../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/vaultApi")>()),
+vi.mock("../../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/serverApi")>()),
   getImport: (...args: unknown[]) => getImportMock(...args),
   getImportContacts: (...args: unknown[]) => getImportContactsMock(...args),
 }));
@@ -124,7 +124,7 @@ function stepsAt(
 
 function renderView(props: Partial<Parameters<typeof ImportRunView>[0]> = {}) {
   return render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter>
         <ImportRunView
           phase="running"
@@ -146,7 +146,7 @@ function renderView(props: Partial<Parameters<typeof ImportRunView>[0]> = {}) {
           {...props}
         />
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 
@@ -227,7 +227,7 @@ describe("ImportRunView", () => {
 
   it("puts the backup path under the heading and the staging directory in the Staging row", async () => {
     const user = userEvent.setup();
-    const staging = "/home/sam/message-vault/staging-iphone";
+    const staging = "/home/sam/message-crate/staging-iphone";
     renderView({ stagingDir: staging });
 
     expect(screen.getByRole("heading", { name: "Importing from iMessage · iPhone backup" }));
@@ -242,16 +242,20 @@ describe("ImportRunView", () => {
 
   it("offers no import log until Upload has started, then shows it in the Upload row", async () => {
     const user = userEvent.setup();
-    const staging = "/home/sam/message-vault/staging-iphone";
+    const staging = "/home/sam/message-crate/staging-iphone";
     const view = renderView({ stagingDir: staging });
-    expect(screen.queryByRole("button", { name: "message-crate-push.log" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "message-crate-push.log" }),
+    ).not.toBeInTheDocument();
 
     view.unmount();
     renderView({
       stagingDir: staging,
       steps: stepsAt("convert", { Staging: "done", Media: "done", Upload: "active" }),
     });
-    await user.click(within(stageRow("Upload")).getByRole("button", { name: "message-crate-push.log" }));
+    await user.click(
+      within(stageRow("Upload")).getByRole("button", { name: "message-crate-push.log" }),
+    );
     expect(openPathInExplorer).toHaveBeenCalledWith(`${staging}/message-crate-push.log`);
   });
 

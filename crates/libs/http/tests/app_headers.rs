@@ -5,8 +5,8 @@
 //! value for the whole process.
 
 use httpmock::prelude::*;
-use reqwest::Method;
 use message_crate_http::HttpSession;
+use reqwest::Method;
 
 #[test]
 fn every_request_names_the_desktop_app_and_its_build() {
@@ -16,14 +16,14 @@ fn every_request_names_the_desktop_app_and_its_build() {
     let named = server.mock(|when, then| {
         when.method(GET)
             .path("/v1/session")
-            .header("x-message-vault-app", "desktop")
-            .header("x-message-vault-version", "0.9.0+343fe0d8");
+            .header("x-message-crate-app", "desktop")
+            .header("x-message-crate-version", "0.9.0+343fe0d8");
         then.status(200);
     });
 
     let session = HttpSession::new().unwrap();
     session
-        .vault_request(Method::GET, &server.base_url(), "/v1/session", "mv-user-k")
+        .server_request(Method::GET, &server.base_url(), "/v1/session", "mc-user-k")
         .send()
         .unwrap();
 

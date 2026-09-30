@@ -1,5 +1,5 @@
 //! Every column in `schema/sql/*.sql` carries a `--` comment on the line
-//! above it. The developer reference at `docs/vault/developer/reference/database.md`
+//! above it. The developer reference at `docs/docs/developer/reference/database.md`
 //! is written from those comments, so a column without one is a column the
 //! documentation cannot describe.
 //!

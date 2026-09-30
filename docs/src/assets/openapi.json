@@ -8977,7 +8977,7 @@
     "/v1/vault": {
       "get": {
         "tags": [
-          "Vault"
+          "Server"
         ],
         "summary": "Report whether this Message Crate is unclaimed, closed, or open.",
         "operationId": "get_vault",
@@ -9011,7 +9011,7 @@
     "/v1/vault/claim": {
       "post": {
         "tags": [
-          "Vault"
+          "Server"
         ],
         "summary": "Claim an unclaimed Message Crate by creating its owner.",
         "description": "Unauthenticated, because a Message Crate with no owner has no credential\nthat could authorize this. Whoever reaches an unclaimed one first may\nclaim it: Message Crate is self-hosted, so its operator installs the\nsoftware, claims it, and publishes the port, in that order and at times\nof their choosing. An unclaimed one is also empty, so a lost race\ndestroys nothing and announces itself at once.",
@@ -9129,7 +9129,7 @@
     "/v1/vault/settings": {
       "get": {
         "tags": [
-          "Vault"
+          "Server"
         ],
         "summary": "Read the server settings.",
         "operationId": "get_vault_settings",
@@ -9196,7 +9196,7 @@
       },
       "patch": {
         "tags": [
-          "Vault"
+          "Server"
         ],
         "summary": "Change the server settings.",
         "operationId": "update_vault_settings",
@@ -9314,7 +9314,7 @@
     "/v1/vault/storage": {
       "get": {
         "tags": [
-          "Vault"
+          "Server"
         ],
         "summary": "Read what the database holds.",
         "description": "The counts and the attachment bytes are summed over every account. The database, messages and full-text search sizes are measured on disk. Each account's share of message storage is an estimate from its share of text. Counts and totals only, never a name or a line of text (`docs/adr/0008-the-owner-holds-no-messages.md`, \"What the owner may see\"). The owner's, because the owner administers this Message Crate and nobody else holds more than their own account.",
@@ -13727,7 +13727,7 @@
       "description": "The words the search language accepts"
     },
     {
-      "name": "Vault",
+      "name": "Server",
       "description": "The state of this Message Crate: claiming it, and what a logged-out visitor may do"
     }
   ]

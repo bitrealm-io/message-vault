@@ -14,7 +14,7 @@
 //! # Why it is built this way (upload performance)
 //!
 //! - **Attachments first, then messages.** Messages point at attachments by a
-//!   content fingerprint (sha256). The vault must already have that file, or
+//!   content fingerprint (sha256). The server must already have that file, or
 //!   the import would fail. Media is uploaded before message text is sent.
 //! - **Fingerprint = sha256.** Same bytes always produce the same hex string.
 //!   The vault stores one copy per fingerprint, so the same photo shared in

@@ -7,7 +7,7 @@
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AuthError {
     /// The vault URL could not be parsed as a valid HTTP URL.
-    #[error("invalid server URL {url}: {detail}")]
+    #[error("invalid server address {url}: {detail}")]
     InvalidUrl {
         /// The vault URL that failed to parse.
         url: String,
@@ -44,7 +44,7 @@ pub enum AuthError {
     },
     /// The endpoint returned HTML instead of the vault API.
     #[error(
-        "GET /v1/session returned HTML from {url} (HTTP {status}). The server URL must point at the Message Crate server (TLS site or port 8080), not the Next.js browse UI alone (port 3000)"
+        "GET /v1/session returned HTML from {url} (HTTP {status}). The server address must point at the Message Crate server (TLS site or port 8080), not the Next.js browse UI alone (port 3000)"
     )]
     WrongHostHtml {
         /// The endpoint that returned HTML.
@@ -54,7 +54,7 @@ pub enum AuthError {
     },
     /// Requested `http://…` but the vault redirected to `https://…` (auth header dropped).
     #[error(
-        "server URL {url} redirected from http to https; use https:// so the API key is sent (http redirects drop Authorization)"
+        "server address {url} redirected from http to https; use https:// so the API key is sent (http redirects drop Authorization)"
     )]
     HttpsRequired {
         /// The `http://` URL that the vault redirected to `https://`.
@@ -151,7 +151,7 @@ impl AuthError {
     pub fn user_message(&self) -> String {
         match self {
             Self::InvalidUrl { .. } => {
-                "This server URL is not valid. Enter the full URL, including `https://`.".into()
+                "This server address is not valid. Enter the full URL, including `https://`.".into()
             }
             Self::Timeout { .. } => {
                 "The server did not respond within 15 seconds. Check the URL and try again.".into()
@@ -167,7 +167,7 @@ impl AuthError {
                 "Connected to the server, but could not read its response. Try again.".into()
             }
             Self::WrongHostHtml { .. } => {
-                "This URL points to the Message Crate website, not the API. Use the server URL (the TLS host or port 8080, not port 3000).".into()
+                "This URL points to the Message Crate website, not the API. Use the server address (the TLS host or port 8080, not port 3000).".into()
             }
             Self::HttpsRequired { .. } => {
                 "This server requires https:// but http:// was specified.".into()
@@ -199,7 +199,7 @@ impl AuthError {
                 "Connected to the server, but its response was not recognized. Confirm that the server is compatible with this app.".into()
             }
             Self::Rejected { .. } => {
-                "The server rejected these credentials. Check the server URL and API key.".into()
+                "The server rejected these credentials. Check the server address and API key.".into()
             }
             Self::MissingAccountId => {
                 "The API key was accepted, but the server did not return an account. Contact the owner of this Message Crate.".into()

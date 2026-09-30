@@ -112,9 +112,9 @@ fn payload_too_large_message(kind: &str, bytes: Option<usize>) -> String {
 fn asset_url(base_url: &str, segments: &[&str], source: &str) -> Result<reqwest::Url> {
     let base = trim_base_url(base_url);
     let mut url =
-        reqwest::Url::parse(base).with_context(|| format!("invalid server URL {base}"))?;
+        reqwest::Url::parse(base).with_context(|| format!("invalid server address {base}"))?;
     url.path_segments_mut()
-        .map_err(|()| anyhow!("invalid server URL {base}"))?
+        .map_err(|()| anyhow!("invalid server address {base}"))?
         .pop_if_empty()
         .extend(["v1", "assets"].into_iter().chain(segments.iter().copied()));
     url.query_pairs_mut().append_pair("source", source);

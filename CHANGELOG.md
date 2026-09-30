@@ -69,8 +69,14 @@ released versions carry their date on the heading.
   <https://messagecrate.app/docs/>, the hosted product answers at
   <https://my.messagecrate.app>, and the Docker image is
   `bitrealm/message-crate`. Every error response's `type` URL now points at
-  the new documentation host. The product name in copy and the names inside
-  the code change in the next two pull requests.
+  the new documentation host.
+- 2026-09-30 **Message Vault is now Message Crate.** Every screen, every page
+  of the documentation, every error message and the HTTP API reference use
+  the new name, and the word "vault" is gone from all of them. One
+  installation is "a Message Crate", the account that runs it is the
+  "Owner", and the owner's installation-wide settings are "Server Settings".
+  The desktop app's window and installers carry the new name. Names inside
+  the code, routes, and files on disk change in the next pull request.
 
 - 2026-09-22 **An account identity means ownership.** The Profile tab now
   says what the identities are for: your phone numbers and emails, which

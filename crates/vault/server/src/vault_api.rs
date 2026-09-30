@@ -72,7 +72,7 @@ async fn state_on_conn(conn: &mut sqlx::AnyConnection) -> Result<VaultState, Api
 #[utoipa::path(
     get,
     path = "/v1/vault",
-    tag = "Vault",
+    tag = "Server",
     responses((status = 200, body = Vault))
 )]
 pub async fn get_vault(State(state): State<AppState>) -> Result<Json<Vault>, ApiError> {
@@ -95,7 +95,7 @@ pub async fn get_vault(State(state): State<AppState>) -> Result<Json<Vault>, Api
 #[utoipa::path(
     post,
     path = "/v1/vault/claim",
-    tag = "Vault",
+    tag = "Server",
     request_body = ClaimVaultRequest,
     responses(
         (
@@ -174,7 +174,7 @@ pub struct UpdateVaultSettingsRequest {
 #[utoipa::path(
     get,
     path = "/v1/vault/settings",
-    tag = "Vault",
+    tag = "Server",
     security(("session" = ["owner"])),
     responses(
         (status = 200, body = VaultSettings),
@@ -195,7 +195,7 @@ pub async fn get_vault_settings(
 #[utoipa::path(
     patch,
     path = "/v1/vault/settings",
-    tag = "Vault",
+    tag = "Server",
     security(("session" = ["owner"])),
     request_body = UpdateVaultSettingsRequest,
     responses(
@@ -268,7 +268,7 @@ pub struct AccountMessages {
 #[utoipa::path(
     get,
     path = "/v1/vault/storage",
-    tag = "Vault",
+    tag = "Server",
     security(("session" = ["owner"])),
     responses(
         (status = 200, body = VaultStorage),

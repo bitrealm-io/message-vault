@@ -89,7 +89,7 @@ Contributions are welcome. The [Contributing guide](https://messagecrate.app/doc
 Most documentation lives in the guidebook at [messagecrate.app](https://messagecrate.app):
 
 - [User Guide](https://messagecrate.app/docs/user/)
-- [Developer Guide](https://messagecrate.app/docs/developer/) — including [Architecture](https://messagecrate.app/docs/developer/design/) (Design, Message Transfer, Common message)
+- [Developer Guide](https://messagecrate.app/docs/developer/) — including [Architecture](https://messagecrate.app/docs/developer/design/) (System Design, Message Transfer, Common message)
 
 ## License
 

@@ -37,7 +37,7 @@ use crate::server::AppState;
         (name = "Message tags", description = "Tags on conversations"),
         (name = "Saved searches", description = "Queries in the search language, saved under a name"),
         (name = "Search", description = "The words the search language accepts"),
-        (name = "Vault", description = "The state of this Message Crate: claiming it, and what a logged-out visitor may do")
+        (name = "Server", description = "The state of this Message Crate: claiming it, and what a logged-out visitor may do")
     )
 )]
 /// OpenAPI document definition assembled from the utoipa-annotated handlers.

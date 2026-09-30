@@ -1,6 +1,6 @@
--- Vault login account (web UI + API owner).
+-- Login account (web UI + API owner).
 CREATE TABLE IF NOT EXISTS accounts (
-    -- Account id. Ids below 100 are reserved for accounts the vault makes
+    -- Account id. Ids below 100 are reserved for accounts the server makes
     -- itself: the owner is 1 and the demo account 2. Every other account takes
     -- the next id above both that range and the highest id present.
     id INTEGER PRIMARY KEY,
@@ -25,15 +25,15 @@ CREATE TABLE IF NOT EXISTS accounts (
     -- 1 = may destroy message data (trash, purge, delete-messages, attachments).
     can_delete INTEGER NOT NULL DEFAULT 1,
     -- RFC 3339 UTC instant of the last successful login (login, claiming
-    -- the vault, or registering); NULL until the account has logged in once.
+    -- Message Crate, or registering); NULL until the account has logged in once.
     last_login_at TEXT
 );
 
 -- Email addresses attached to an account (not used for login).
 CREATE TABLE IF NOT EXISTS account_emails (
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    -- Email address; unique case-insensitively across the vault.
+    -- Email address; unique case-insensitively across all accounts.
     email TEXT NOT NULL UNIQUE COLLATE NOCASE,
     -- 1 = primary email for this account; at most one per account via partial index.
     is_primary INTEGER NOT NULL DEFAULT 0,
@@ -46,7 +46,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_account_emails_one_primary
 
 -- Handles that mean “me” when matching message participants.
 CREATE TABLE IF NOT EXISTS account_handles (
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Self identity (`handles.id`).
     handle_id INTEGER NOT NULL REFERENCES handles(id) ON DELETE CASCADE,
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS account_handles (
 
 -- GUI session Bearer (one per account; rotates on login). Prefix: mc-user-
 CREATE TABLE IF NOT EXISTS account_session_tokens (
-    -- Owning vault account (`accounts.id`); also the primary key (one session).
+    -- Owning account (`accounts.id`); also the primary key (one session).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Hash of the session Bearer secret (never store the raw token).
     token_hash TEXT NOT NULL UNIQUE,
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS account_session_tokens (
 CREATE TABLE IF NOT EXISTS account_api_tokens (
     -- Token id.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- User-visible label in Settings.
     label TEXT NOT NULL,
@@ -103,7 +103,7 @@ CREATE INDEX IF NOT EXISTS ix_account_api_tokens_account
 
 -- Per-account key/value preferences for the UI and server.
 CREATE TABLE IF NOT EXISTS account_prefs (
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Preference name (for example theme or feature flags).
     key TEXT NOT NULL,
@@ -112,13 +112,13 @@ CREATE TABLE IF NOT EXISTS account_prefs (
     PRIMARY KEY (account_id, key)
 );
 
--- Settings that belong to the whole vault rather than to one account. Exactly
--- one row, so the vault owner reads and writes it without an id.
+-- Settings that belong to the whole Message Crate rather than to one account. Exactly
+-- one row, so the owner reads and writes it without an id.
 CREATE TABLE IF NOT EXISTS server_settings (
-    -- Always 1: the vault has one settings record.
+    -- Always 1: a Message Crate has one settings record.
     id INTEGER PRIMARY KEY CHECK (id = 1),
-    -- 1 = anyone reaching the vault may create their own account; 0 = only
-    -- the vault owner creates accounts. Off until the owner turns it on.
+    -- 1 = anyone reaching the server may create their own account; 0 = only
+    -- the owner creates accounts. Off until the owner turns it on.
     public_registration INTEGER NOT NULL DEFAULT 0
 );
 
@@ -130,11 +130,11 @@ CREATE TABLE IF NOT EXISTS schema_meta (
     value TEXT NOT NULL
 );
 
--- One row per import run into the vault.
+-- One row per import run into Message Crate.
 CREATE TABLE IF NOT EXISTS imports (
     -- Surrogate primary key for this import run.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Backup/source family (for example imessage, whatsapp, sms-backup-restore).
     source TEXT NOT NULL,
@@ -175,7 +175,7 @@ CREATE TABLE IF NOT EXISTS imports (
     -- `stage` says where it is.
     stage TEXT,
     -- Absolute path to this session's staging folder on the client. The
-    -- database holds the pointer so resuming means asking the vault where
+    -- database holds the pointer so resuming means asking the server where
     -- to go, rather than guessing from a directory listing.
     staging_dir TEXT,
     -- Which install created the session, so another machine can say where
@@ -208,7 +208,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_imports_active_account
 CREATE TABLE IF NOT EXISTS exports (
     -- Surrogate primary key for this export run.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Which of the three scope forms the run asked for: everything, query,
     -- or selection.

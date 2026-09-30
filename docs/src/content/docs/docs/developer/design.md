@@ -19,7 +19,7 @@ message-crate
 │   ├── exporters/          # parse iMessage, WhatsApp, SMS, and other backups into JSONL
 │   ├── libs/               # shared code the exporters and the server use (format, contacts,
 │   │                       #   media, message-crate-push, message-crate-pull)
-│   └── vault/              # message-crate-server (API + SQLite) and demo-seed (sample inbox)
+│   └── server/             # message-crate-server (API + SQLite) and demo-seed (sample inbox)
 ├── docker/                 # image and Compose file that look like a published install
 ├── docs/                   # messagecrate.app (User Guide, Developer docs, landing page)
 ├── schema/                 # SQLite CREATE TABLE files the server embeds

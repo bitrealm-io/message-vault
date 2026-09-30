@@ -155,13 +155,13 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: vault
-          POSTGRES_PASSWORD: vault
-          POSTGRES_DB: vault
+          POSTGRES_USER: messagecrate
+          POSTGRES_PASSWORD: messagecrate
+          POSTGRES_DB: messagecrate
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U vault"
+          --health-cmd "pg_isready -U messagecrate"
           --health-interval 2s
           --health-timeout 2s
           --health-retries 10
@@ -267,7 +267,7 @@ jobs:
       - name: Lint and format-check
         run: cd web && npx biome ci .
 
-      - name: Generated vault API types match the OpenAPI document
+      - name: Generated server API types match the OpenAPI document
         run: ./scripts/check-generated-api-types.sh
 
       - name: Type-check and build bundle

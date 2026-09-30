@@ -6,7 +6,7 @@
 CREATE TABLE IF NOT EXISTS saved_searches (
     -- Surrogate primary key for this saved search.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Display name, unique per account.
     name TEXT NOT NULL,

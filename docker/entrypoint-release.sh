@@ -28,7 +28,7 @@ seed_if_needed() {
     rm -f data/server.ready
   fi
   if [[ -f data/messagecrate.db ]]; then
-    echo "Vault DB present; skipping seed (DEMO_DATA=${DEMO_DATA})."
+    echo "Database present; skipping seed (DEMO_DATA=${DEMO_DATA})."
     ensure_docker_config
     return
   fi

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Host vault for day-to-day work from a git checkout.
+# Host server for day-to-day work from a git checkout.
 #
-#   ./scripts/run-dev.sh                 # keep existing data/; empty vault if none
+#   ./scripts/run-dev.sh                 # keep existing data/; empty Message Crate if none
 #   ./scripts/run-dev.sh --reset         # wipe data/, start empty
-#   ./scripts/run-dev.sh --reset --owner # wipe data/, claim the vault as admin/admin
+#   ./scripts/run-dev.sh --reset --owner # wipe data/, claim the Message Crate as admin/admin
 #   ./scripts/run-dev.sh --reset-demo    # wipe data/, seed sample inbox
 #   ./scripts/run-dev.sh --sqlweb        # SQLite browser on http://127.0.0.1:8081
 #   ./scripts/run-dev.sh --release       # optimized binary (combine with any flag above)
@@ -37,12 +37,12 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") [--reset | --reset-demo] [--owner] [--sqlweb] [--release]
 
-  --reset       Wipe data/ and start with an empty vault
+  --reset       Wipe data/ and start with an empty Message Crate
   --reset-demo  Wipe data/ and seed the sample inbox
-  --owner       Claim the vault as admin/admin. Combine with --reset for an
-                empty claimed vault; without it, --reset leaves the vault
-                unclaimed so the Create Vault Owner screen is reachable.
-                Rejected with --reset-demo, which claims the vault itself.
+  --owner       Claim the Message Crate as admin/admin. Combine with --reset
+                for an empty claimed Message Crate; without it, --reset
+                leaves it unclaimed so the Create Owner screen is reachable.
+                Rejected with --reset-demo, which claims it itself.
   --sqlweb      Start sqlite-web on http://127.0.0.1:8081 (needs sqlite_web on PATH)
   --release     Build and run the optimized binary (seed and serve)
   -h, --help
@@ -51,12 +51,12 @@ Examples:
   ./scripts/$(basename "$0")
       Keep data/ as it is and serve
   ./scripts/$(basename "$0") --reset
-      Empty, unclaimed vault: the web UI opens on Create Vault Owner
+      Empty, unclaimed Message Crate: the web UI opens on Create Owner
   ./scripts/$(basename "$0") --reset --owner
-      Empty vault, log in as admin / admin
+      Empty Message Crate, log in as admin / admin
   ./scripts/$(basename "$0") --owner
-      Claim the existing vault as admin / admin (warns and carries on if it
-      is already claimed)
+      Claim the existing Message Crate as admin / admin (warns and carries on
+      if it is already claimed)
   ./scripts/$(basename "$0") --reset-demo
       Sample inbox, log in as demo with an empty password
   ./scripts/$(basename "$0") --reset-demo --release --sqlweb
@@ -91,7 +91,7 @@ if [[ "${RESET}" -eq 1 && "${DEMO}" -eq 1 ]]; then
 fi
 
 if [[ "${OWNER}" -eq 1 && "${DEMO}" -eq 1 ]]; then
-  echo "error: --reset-demo claims the vault itself; drop --owner" >&2
+  echo "error: --reset-demo claims the Message Crate itself; drop --owner" >&2
   exit 1
 fi
 
@@ -139,14 +139,14 @@ start_sqlweb() {
 }
 
 # cargo run with the chosen profile; arguments after -- go to the server binary.
-vault() {
+server_cli() {
   cargo run "${CARGO_PROFILE[@]}" -p message-crate-server -- "$@"
 }
 
 run_server() {
   echo "Starting message-crate-server (${PROFILE_NAME}). Restart after server-crate edits."
   if [[ "${SQLWEB}" -eq 1 ]]; then
-    vault serve --config "${CONFIG}"
+    server_cli serve --config "${CONFIG}"
   else
     exec cargo run "${CARGO_PROFILE[@]}" -p message-crate-server -- serve --config "${CONFIG}"
   fi
@@ -182,29 +182,29 @@ if [[ "${DEMO}" -eq 1 ]]; then
   require_cmd ffmpeg
   require_cmd ffprobe
   echo "Seeding demo data…"
-  vault reset-demo --config "${CONFIG}"
+  server_cli reset-demo --config "${CONFIG}"
   write_host_dev_config
   echo "Converting demo media…"
-  vault process-assets --config "${CONFIG}" \
+  server_cli process-assets --config "${CONFIG}" \
     || echo "warning: process-assets failed; UI still works"
 elif [[ "${RESET}" -eq 1 ]]; then
-  echo "Empty data/ (claim the vault in the web UI, or pass --owner)."
+  echo "Empty data/ (claim the Message Crate in the web UI, or pass --owner)."
 elif [[ ! -f data/messagecrate.db ]]; then
-  echo "Empty data/ (pass --reset-demo to seed a sample inbox, or --owner to claim the vault)."
+  echo "Empty data/ (pass --reset-demo to seed a sample inbox, or --owner to claim the Message Crate)."
 else
-  echo "Vault DB present; leaving it in place."
+  echo "Database present; leaving it in place."
 fi
 
-# Claiming is separate from seeding: --reset alone leaves the vault unclaimed,
-# which is the only way to reach the Create Vault Owner screen in dev.
+# Claiming is separate from seeding: --reset alone leaves the Message Crate
+# unclaimed, which is the only way to reach the Create Owner screen in dev.
 if [[ "${OWNER}" -eq 1 ]]; then
-  echo "Claiming the vault as admin/admin…"
-  vault create-owner --config "${CONFIG}" --username admin --password admin \
-    || echo "warning: create-owner failed (already claimed?); leaving the vault as it is"
+  echo "Claiming the Message Crate as admin/admin…"
+  server_cli create-owner --config "${CONFIG}" --username admin --password admin \
+    || echo "warning: create-owner failed (already claimed?); leaving it as it is"
 fi
 
 echo
-echo "Vault API:  http://127.0.0.1:8080"
+echo "Server API: http://127.0.0.1:8080"
 echo "Website:    cd web && npm run dev     → http://localhost:5173"
 echo "Desktop:    cargo tauri dev"
 if [[ "${SQLWEB}" -eq 1 ]]; then

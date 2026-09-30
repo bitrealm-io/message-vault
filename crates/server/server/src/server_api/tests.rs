@@ -6,7 +6,7 @@ use crate::test_support::{
     post_status_logged_out, register_via_api, seed_conversation, test_fixture,
 };
 
-/// Turn public registration off, the way a real vault ships.
+/// Turn public registration off, the way a real server ships.
 async fn close_registration(state: &AppState) {
     let mut conn = state.db.acquire().await.unwrap();
     server_settings::set_public_registration(&mut conn, false)
@@ -15,56 +15,56 @@ async fn close_registration(state: &AppState) {
 }
 
 #[tokio::test]
-async fn an_unowned_vault_reports_unclaimed() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn an_unowned_server_reports_unclaimed() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
 
-    let body: Vault = get_json(&state, "/v1/server", "").await;
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
     assert_eq!(body.state, ServerState::Unclaimed);
 }
 
-/// Unclaimed wins over the registration setting: a vault with no owner has
+/// Unclaimed wins over the registration setting: a Message Crate with no owner has
 /// one thing to offer, and joining it is not that thing.
 #[tokio::test]
-async fn public_registration_does_not_make_an_unowned_vault_open() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn public_registration_does_not_make_an_unowned_server_open() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
 
-    let body: Vault = get_json(&state, "/v1/server", "").await;
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
     assert_eq!(
         body.state,
         ServerState::Unclaimed,
-        "test vaults open registration; being unclaimed still comes first"
+        "test fixtures open registration; being unclaimed still comes first"
     );
 }
 
 #[tokio::test]
-async fn a_claimed_vault_is_closed_until_registration_is_opened() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn a_claimed_server_is_closed_until_registration_is_opened() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     close_registration(&state).await;
     let _owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let body: Vault = get_json(&state, "/v1/server", "").await;
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
     assert_eq!(body.state, ServerState::Closed);
 }
 
 #[tokio::test]
-async fn a_claimed_vault_with_registration_on_is_open() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn a_claimed_server_with_registration_on_is_open() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let _owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
-    let body: Vault = get_json(&state, "/v1/server", "").await;
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
     assert_eq!(body.state, ServerState::Open);
 }
 
-/// The route reports the vault's state to anyone, logged in or not. The
-/// Create Vault Owner screen has no credential to present.
+/// The route reports this Message Crate's state to anyone, logged in or not. The
+/// Create Owner screen has no credential to present.
 #[tokio::test]
 async fn the_state_route_needs_no_credential() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
 
     assert_eq!(get_status(&state, "/v1/server", "").await, StatusCode::OK);
     assert_eq!(
@@ -74,14 +74,14 @@ async fn the_state_route_needs_no_credential() {
     );
 }
 
-/// The vault says which code it runs and which schema it carries to anyone:
+/// The server says which code it runs and which schema it carries to anyone:
 /// an app has to read both before anybody is logged in, and neither is secret.
 #[tokio::test]
 async fn the_state_route_carries_the_build_and_the_schema_fingerprint() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
 
-    let body: Vault = get_json(&state, "/v1/server", "").await;
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
 
     assert_eq!(body.version, crate::BUILD);
     assert!(
@@ -96,9 +96,9 @@ async fn the_state_route_carries_the_build_and_the_schema_fingerprint() {
 }
 
 #[tokio::test]
-async fn claiming_an_unowned_vault_creates_the_owner_and_signs_them_in() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn claiming_an_unowned_server_creates_the_owner_and_signs_them_in() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
 
     let server = crate::test_support::serve(&state).await;
     let response = reqwest::Client::new()
@@ -130,18 +130,18 @@ async fn claiming_an_unowned_vault_creates_the_owner_and_signs_them_in() {
     assert!(auth.is_owner());
     drop(conn);
 
-    let after: Vault = get_json(&state, "/v1/server", "").await;
+    let after: ServerInfo = get_json(&state, "/v1/server", "").await;
     assert_eq!(
         after.state,
         ServerState::Open,
-        "test vaults open registration"
+        "test fixtures open registration"
     );
 }
 
 #[tokio::test]
-async fn a_vault_can_only_be_claimed_once() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn a_server_can_only_be_claimed_once() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let _owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let status = post_status(
@@ -164,8 +164,8 @@ async fn a_vault_can_only_be_claimed_once() {
 
 #[tokio::test]
 async fn claiming_needs_a_password_of_one_character_or_more() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
 
     let status = post_status(
         &state,
@@ -177,9 +177,9 @@ async fn claiming_needs_a_password_of_one_character_or_more() {
     assert_eq!(
         status,
         StatusCode::UNPROCESSABLE_ENTITY,
-        "the vault owner must have a password"
+        "the owner must have a password"
     );
-    let after: Vault = get_json(&state, "/v1/server", "").await;
+    let after: ServerInfo = get_json(&state, "/v1/server", "").await;
     assert_eq!(after.state, ServerState::Unclaimed);
 
     let status = post_status(
@@ -192,15 +192,15 @@ async fn claiming_needs_a_password_of_one_character_or_more() {
     assert_eq!(status, StatusCode::CREATED, "one character is enough");
 }
 
-/// Claiming takes no credential and makes the most powerful one the vault
-/// has, so it is rate limited, and once for the whole vault: a count per
+/// Claiming takes no credential and makes the most powerful one the server
+/// has, so it is rate limited, and once for the whole server: a count per
 /// username would let a script trying a new name each time straight through.
 #[tokio::test]
-async fn claiming_is_rate_limited_across_the_vault() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn claiming_is_rate_limited_across_the_server() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     // An empty password is refused after the limiter has counted the
-    // attempt, so every try counts and none claims the vault.
+    // attempt, so every try counts and none claims this Message Crate.
     for attempt in 0..crate::credentials::AUTH_RATE_MAX {
         let status = post_status_logged_out(
             &state,
@@ -226,14 +226,14 @@ async fn claiming_is_rate_limited_across_the_vault() {
         crate::problem::ProblemType::RateLimited,
     );
     assert!(problem.retry_after.is_some(), "{text}");
-    let after: Vault = get_json(&state, "/v1/server", "").await;
+    let after: ServerInfo = get_json(&state, "/v1/server", "").await;
     assert_eq!(after.state, ServerState::Unclaimed);
 }
 
 #[tokio::test]
-async fn registration_is_refused_while_the_vault_is_closed() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn registration_is_refused_while_the_server_is_closed() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     close_registration(&state).await;
 
     let status = post_status_logged_out(
@@ -248,8 +248,8 @@ async fn registration_is_refused_while_the_vault_is_closed() {
 /// The owner opens the door, and the same request that was refused succeeds.
 #[tokio::test]
 async fn the_owner_can_open_and_close_registration() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     close_registration(&state).await;
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
@@ -278,14 +278,14 @@ async fn the_owner_can_open_and_close_registration() {
     let joined = register_via_api(&state, "stranger", "hunter2hunter2").await;
     assert_eq!(joined.username, "stranger");
 
-    let body: Vault = get_json(&state, "/v1/server", "").await;
+    let body: ServerInfo = get_json(&state, "/v1/server", "").await;
     assert_eq!(body.state, ServerState::Open);
 }
 
 #[tokio::test]
 async fn only_the_owner_reaches_the_server_settings() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let _owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let ordinary = register_via_api(&state, "bob", "hunter2hunter2").await;
 
@@ -305,11 +305,11 @@ async fn only_the_owner_reaches_the_server_settings() {
     );
 }
 
-/// Claiming the vault puts a row at the owner id and nowhere else.
+/// Claiming this Message Crate puts a row at the owner id and nowhere else.
 #[tokio::test]
-async fn claiming_the_vault_creates_exactly_one_owner() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn claiming_the_server_creates_exactly_one_owner() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
 
     let mut conn = state.db.acquire().await.unwrap();
     assert!(!account_profile::is_claimed(&mut conn).await.unwrap());
@@ -328,13 +328,13 @@ async fn claiming_the_vault_creates_exactly_one_owner() {
     assert_eq!(owners, 1);
 }
 
-/// The vault owner holds no messages, so profile setup would ask for a name
+/// The owner holds no messages, so profile setup would ask for a name
 /// shown against messages, a zone to read them in, and handles that mark one
 /// as theirs: three questions with no answer. The owner is never sent there.
 #[tokio::test]
-async fn the_vault_owner_owes_no_profile_setup() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn the_owner_owes_no_profile_setup() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let mut conn = state.db.acquire().await.unwrap();
@@ -346,18 +346,18 @@ async fn the_vault_owner_owes_no_profile_setup() {
 }
 
 // ---------------------------------------------------------------------------
-// What the vault holds
+// What the database holds
 // ---------------------------------------------------------------------------
 
-/// The vault's totals sum every account, and the answer is counts and byte
+/// The server's totals sum every account, and the answer is counts and byte
 /// totals and nothing that names a person or a conversation. The database
 /// figures are measured, so they are only checked for sign; the split of
 /// message storage across accounts is checked exactly, because it is arithmetic
 /// over the measured total.
 #[tokio::test]
-async fn the_owner_reads_the_vault_totals_summed_over_every_account() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn the_owner_reads_the_server_totals_summed_over_every_account() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
@@ -427,7 +427,7 @@ async fn the_owner_reads_the_vault_totals_summed_over_every_account() {
         )
         .await;
     }
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     for (account_id, size) in [(alice.account_id, 3000_i64), (bob.account_id, 1000)] {
         let message_id: i64 =
             sqlx::query_scalar("SELECT MIN(id) FROM messages WHERE account_id = $1")
@@ -526,13 +526,13 @@ async fn the_owner_reads_the_vault_totals_summed_over_every_account() {
     assert_eq!(estimates.iter().sum::<i64>(), totals.messages_bytes);
 }
 
-/// An account holds only its own data, so the vault's totals are the owner's
+/// An account holds only its own data, so the server's totals are the owner's
 /// alone; a session that is not the owner's is refused, and no session is
 /// unauthorized.
 #[tokio::test]
-async fn only_the_owner_reaches_the_vault_totals() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn only_the_owner_reaches_the_server_totals() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let _owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let ordinary = register_via_api(&state, "bob", "hunter2hunter2").await;
 

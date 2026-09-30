@@ -14,20 +14,20 @@ fn write_jsonl(dir: &Path, name: &str, body: &str) -> PathBuf {
     path
 }
 
-/// A vault holding one live import session at `awaiting_gate_1` whose
+/// A fixture holding one live import session at `awaiting_gate_1` whose
 /// `summary_json` already carries `summary` — as if an earlier
 /// `PATCH /v1/imports/{id}` recorded a gate approval.
 async fn session_with_summary(summary: serde_json::Value) -> (TestFixture, RegisteredAccount, i64) {
-    let (vault, account) = fixture_with_account().await;
+    let (fixture, account) = fixture_with_account().await;
     let (_, created): (String, serde_json::Value) = post_created_json(
-        &vault.state,
+        &fixture.state,
         "/v1/imports",
         &account.token,
         serde_json::json!({ "source": "imessage" }),
     )
     .await;
     let import_id = created["id"].as_i64().expect("created session has an id");
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     crate::db::imports::set_import_stage(
         &mut conn,
         account.account_id,
@@ -37,13 +37,13 @@ async fn session_with_summary(summary: serde_json::Value) -> (TestFixture, Regis
     )
     .await
     .unwrap();
-    (vault, account, import_id)
+    (fixture, account, import_id)
 }
 
 /// The session's stored `summary_json`, decoded, or `None` when the
 /// column is null.
-async fn stored_summary(vault: &TestFixture, import_id: i64) -> Option<serde_json::Value> {
-    let mut conn = vault.state.db.acquire().await.unwrap();
+async fn stored_summary(fixture: &TestFixture, import_id: i64) -> Option<serde_json::Value> {
+    let mut conn = fixture.state.db.acquire().await.unwrap();
     let raw: Option<String> = sqlx::query_scalar("SELECT summary_json FROM imports WHERE id = $1")
         .bind(import_id)
         .fetch_one(&mut *conn)
@@ -57,9 +57,9 @@ async fn a_stage_change_with_a_summary_stores_it() {
     // The gate screen posts what the user approved so it survives a
     // reload — recomputing the summary from the folder is a different
     // question from what was actually approved.
-    let (vault, account) = fixture_with_account().await;
+    let (fixture, account) = fixture_with_account().await;
     let (location, created): (String, serde_json::Value) = post_created_json(
-        &vault.state,
+        &fixture.state,
         "/v1/imports",
         &account.token,
         serde_json::json!({ "source": "imessage" }),
@@ -69,7 +69,7 @@ async fn a_stage_change_with_a_summary_stores_it() {
     assert_eq!(location, format!("/v1/imports/{import_id}"));
 
     patch_json::<serde_json::Value>(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/imports/{import_id}"),
         &account.token,
         serde_json::json!({"stage": "awaiting_gate_1", "summary": {"approved": true}}),
@@ -77,7 +77,7 @@ async fn a_stage_change_with_a_summary_stores_it() {
     .await;
 
     assert_eq!(
-        stored_summary(&vault, import_id).await,
+        stored_summary(&fixture, import_id).await,
         Some(serde_json::json!({"approved": true}))
     );
 }
@@ -89,11 +89,11 @@ async fn active_session_reports_the_summary_a_stage_change_stored() {
     // record. But mid-session, between an approval and completion, a
     // reload has nowhere else to read the approved plan back from:
     // the running run on GET /v1/imports?status=running must expose it too.
-    let (vault, account, import_id) =
+    let (fixture, account, import_id) =
         session_with_summary(serde_json::json!({"approved": true})).await;
 
     let page: serde_json::Value =
-        get_json(&vault.state, "/v1/imports?status=running", &account.token).await;
+        get_json(&fixture.state, "/v1/imports?status=running", &account.token).await;
     let active = &page["items"][0];
 
     assert_eq!(active["id"], serde_json::json!(import_id));
@@ -104,11 +104,11 @@ async fn active_session_reports_the_summary_a_stage_change_stored() {
 async fn a_stage_change_without_a_summary_does_not_erase_the_stored_one() {
     // Most stage changes carry nothing. Treating absent as null would
     // throw away the plan the outcome is judged against.
-    let (vault, account, import_id) =
+    let (fixture, account, import_id) =
         session_with_summary(serde_json::json!({"approved": true})).await;
 
     let run: serde_json::Value = patch_json(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/imports/{import_id}"),
         &account.token,
         serde_json::json!({"stage": "pushing"}),
@@ -121,7 +121,7 @@ async fn a_stage_change_without_a_summary_does_not_erase_the_stored_one() {
     );
 
     assert_eq!(
-        stored_summary(&vault, import_id).await,
+        stored_summary(&fixture, import_id).await,
         Some(serde_json::json!({"approved": true}))
     );
 }
@@ -1357,9 +1357,9 @@ async fn fail_every_message_insert(conn: &mut AnyConnection) {
 /// An import that fails in promote imports nothing, and that includes its
 /// contacts. Staging meets every handle first and, by ADR-0013, discards a
 /// trashed contact whose handle the backup holds, and makes contacts for
-/// people new to the vault. Those writes must not outlive a promote that
+/// people new to the database. Those writes must not outlive a promote that
 /// rolled back: the person keeps the trashed contact's name and groups, and
-/// the vault gains no contacts with no messages.
+/// the database gains no contacts with no messages.
 #[tokio::test]
 async fn failed_promote_keeps_the_trashed_contact_and_adds_no_contacts() {
     let (pool, dir) = crate::db::engine::test_pool().await;
@@ -1484,11 +1484,11 @@ async fn importer() -> (
     crate::test_support::TestFixture,
     String,
 ) {
-    let vault = crate::test_support::test_fixture().await;
+    let fixture = crate::test_support::test_fixture().await;
     let account =
-        crate::test_support::register_via_api(&vault.state, "importer", "hunter2hunter2").await;
-    let state = vault.state.clone();
-    (state, vault, account.token)
+        crate::test_support::register_via_api(&fixture.state, "importer", "hunter2hunter2").await;
+    let state = fixture.state.clone();
+    (state, fixture, account.token)
 }
 
 /// Create an Import Run for `source` and hand back the path its batches
@@ -1506,7 +1506,7 @@ async fn batches_path(state: &crate::server::AppState, token: &str, source: &str
 
 #[tokio::test]
 async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
-    let (state, _vault, token) = importer().await;
+    let (state, _fixture, token) = importer().await;
     let path = batches_path(&state, &token, "whatsapp").await;
     let body = concat!(
         r#"{"schema_version":3,"export":{"source":"whatsapp","tool":"t","owner_handle":"+15550000001","owner_display_name":"Me"},"#,
@@ -1525,7 +1525,7 @@ async fn http_import_of_a_schema_3_file_is_a_400_naming_both_versions() {
 
 #[tokio::test]
 async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line() {
-    let (state, _vault, token) = importer().await;
+    let (state, _fixture, token) = importer().await;
     let path = batches_path(&state, &token, "whatsapp").await;
     let (status, text) = crate::test_support::post_raw(
         &state,
@@ -1549,7 +1549,7 @@ async fn http_import_of_a_line_that_is_not_json_is_a_400_naming_the_line() {
 /// run has nothing to import under.
 #[tokio::test]
 async fn a_batch_into_a_run_that_is_not_running_is_a_state_conflict() {
-    let (state, _vault, token) = importer().await;
+    let (state, _fixture, token) = importer().await;
     let path = batches_path(&state, &token, "whatsapp").await;
     let id = path
         .trim_start_matches("/v1/imports/")
@@ -1608,7 +1608,7 @@ fn replace_run_batch(chat: &str, guids: &[&str]) -> String {
 /// run or an append run alike, because append skips by guid only.
 #[tokio::test]
 async fn a_retried_batch_in_a_replace_run_keeps_every_message_once() {
-    let (state, _vault, token) = importer().await;
+    let (state, _fixture, token) = importer().await;
     let (_, created): (String, serde_json::Value) = post_created_json(
         &state,
         "/v1/imports",
@@ -1701,13 +1701,13 @@ async fn import_one_batch(
 
 /// A replace run deletes the account's existing messages for its source
 /// before it promotes the new ones, so a message dropped from the new
-/// export leaves the vault, with its attachments and tapbacks. Nothing
+/// export leaves the server, with its attachments and tapbacks. Nothing
 /// else moves: another source's messages, another account's messages for
 /// the same source, and a message that pointed at a deleted one as its
 /// duplicate (which now points nowhere).
 #[tokio::test]
 async fn a_replace_run_deletes_only_its_own_sources_old_messages() {
-    let (state, _vault, token) = importer().await;
+    let (state, _fixture, token) = importer().await;
     let other = crate::test_support::register_via_api(&state, "other", "hunter2hunter2").await;
 
     import_one_batch(
@@ -1814,15 +1814,15 @@ async fn a_replace_run_deletes_only_its_own_sources_old_messages() {
 /// well formed, it is simply not something this route reads.
 #[tokio::test]
 async fn a_multipart_body_is_an_unsupported_media_type() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
 
     let boundary = "MessageCrateTestBoundary";
     let body = format!(
         "--{boundary}\r\nContent-Disposition: form-data; name=\"jsonl\"\r\n\r\n{{}}\r\n--{boundary}--\r\n"
     );
-    let path = batches_path(&vault.state, &user.token, "imessage").await;
+    let path = batches_path(&fixture.state, &user.token, "imessage").await;
     let (status, text) = crate::test_support::post_raw(
-        &vault.state,
+        &fixture.state,
         &path,
         &user.token,
         &format!("multipart/form-data; boundary={boundary}"),
@@ -1847,12 +1847,12 @@ async fn a_multipart_body_is_an_unsupported_media_type() {
 /// account, so an outsider cannot tell it exists.
 #[tokio::test]
 async fn a_batch_into_another_accounts_run_is_not_found() {
-    let (vault, alice) = crate::test_support::fixture_with_account().await;
-    let bob = crate::test_support::register_via_api(&vault.state, "bob", "hunter2hunter2").await;
-    let bobs_run = batches_path(&vault.state, &bob.token, "imessage").await;
+    let (fixture, alice) = crate::test_support::fixture_with_account().await;
+    let bob = crate::test_support::register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
+    let bobs_run = batches_path(&fixture.state, &bob.token, "imessage").await;
 
     let (status, text) = crate::test_support::post_raw(
-        &vault.state,
+        &fixture.state,
         &bobs_run,
         &alice.token,
         "application/jsonl",
@@ -1862,9 +1862,9 @@ async fn a_batch_into_another_accounts_run_is_not_found() {
     crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
 
     // Positive control: her own run takes the batch as far as reading it.
-    let own = batches_path(&vault.state, &alice.token, "imessage").await;
+    let own = batches_path(&fixture.state, &alice.token, "imessage").await;
     let (status, _) = crate::test_support::post_raw(
-        &vault.state,
+        &fixture.state,
         &own,
         &alice.token,
         "application/jsonl",
@@ -1948,7 +1948,7 @@ async fn shortcuts(
 /// `import` so the sidebar can tell them from what a person made.
 #[tokio::test]
 async fn completing_an_import_with_messages_creates_its_saved_search_and_contact_group() {
-    let (state, _vault, token) = importer().await;
+    let (state, _fixture, token) = importer().await;
     let path = batches_path(&state, &token, "whatsapp").await;
     let import_id: i64 = path
         .trim_start_matches("/v1/imports/")
@@ -1998,7 +1998,7 @@ async fn completing_an_import_with_messages_creates_its_saved_search_and_contact
 /// Group either.
 #[tokio::test]
 async fn completing_an_import_with_no_messages_creates_no_saved_search() {
-    let (state, _vault, token) = importer().await;
+    let (state, _fixture, token) = importer().await;
     let (_, created): (String, serde_json::Value) = post_created_json(
         &state,
         "/v1/imports",
@@ -2074,7 +2074,7 @@ async fn participant_and_contact_counts(conn: &mut AnyConnection) -> (Vec<(i64, 
 /// same file twice must still leave one row per person in the conversation.
 #[tokio::test]
 async fn reimporting_a_file_with_a_name_only_participant_adds_no_participant() {
-    let vault = test_fixture().await;
+    let fixture = test_fixture().await;
     let tmp = TempDir::new().unwrap();
     let path = write_jsonl(
         tmp.path(),
@@ -2083,7 +2083,7 @@ async fn reimporting_a_file_with_a_name_only_participant_adds_no_participant() {
 {"guid":"g-name-only-twice","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"sms","message_kind":"sms","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}
 "#,
     );
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let mut conn = fixture.state.db.acquire().await.unwrap();
 
     append_on_conn(&mut conn, &path, tmp.path(), "openextract").await;
     let (first_rows, first_contacts) = participant_and_contact_counts(&mut conn).await;
@@ -2106,7 +2106,7 @@ async fn reimporting_a_file_with_a_name_only_participant_adds_no_participant() {
 /// same handle beside it; the conversation lists the person once.
 #[tokio::test]
 async fn reimporting_after_trashing_a_contact_lists_the_person_once() {
-    let vault = test_fixture().await;
+    let fixture = test_fixture().await;
     let tmp = TempDir::new().unwrap();
     let path = write_jsonl(
         tmp.path(),
@@ -2115,7 +2115,7 @@ async fn reimporting_after_trashing_a_contact_lists_the_person_once() {
 {"guid":"g-trashed-twice","timestamp_unix_ms":1426183462000,"direction":"incoming","service":"imessage","message_kind":"imessage","sender_handle":"+15555550123","sender_display_name":null,"subject":null,"text":"hi","attachments":[],"imessage":null,"source":null}
 "#,
     );
-    let mut conn = vault.state.db.acquire().await.unwrap();
+    let mut conn = fixture.state.db.acquire().await.unwrap();
 
     append_on_conn(&mut conn, &path, tmp.path(), "imessage").await;
     let ada: i64 = sqlx::query_scalar(

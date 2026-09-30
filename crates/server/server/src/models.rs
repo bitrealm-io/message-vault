@@ -10,7 +10,7 @@ use phone::sanitize_number;
 use serde::Deserialize;
 use serde_json::Value;
 
-/// One JSONL conversation after IR → vault-row mapping.
+/// One JSONL conversation after IR → database-row mapping.
 #[derive(Debug, Clone)]
 pub enum ExportRecord {
     /// A conversation header record.
@@ -415,7 +415,7 @@ struct WireTapback {
 }
 
 /// The UTC RFC 3339 string (`Z` suffix) for a Unix timestamp, or `None` when
-/// it cannot be represented. The vault stores the instant and nothing about
+/// it cannot be represented. The server stores the instant and nothing about
 /// where the phone was; the account's time zone turns it into a clock reading.
 fn format_utc_timestamp(secs: i64) -> Option<String> {
     Some(

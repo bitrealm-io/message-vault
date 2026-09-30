@@ -27,7 +27,7 @@ use crate::server::{ApiError, AppState, FullDeleteAccess};
 ///
 /// `Internal` when a file exists and cannot be removed, or when a stored path
 /// would escape the directory it belongs under. Either is a defect in the
-/// vault's own data, not something the caller did, so the rows stay deleted
+/// server's own data, not something the caller did, so the rows stay deleted
 /// and the message is logged rather than shown.
 pub(crate) async fn remove_orphaned_files(
     cfg: Arc<Config>,
@@ -79,7 +79,7 @@ fn paths_to_remove(
 }
 
 /// `dir/relative`, refusing a stored path that is absolute or climbs out of
-/// `dir`. The vault wrote every `assets_path` itself, so this never fires on
+/// `dir`. The server wrote every `assets_path` itself, so this never fires on
 /// its own data; it is the guard that keeps a corrupted row from naming a
 /// file elsewhere on the machine.
 fn join_under(dir: &Path, relative: &str) -> Result<PathBuf, ApiError> {

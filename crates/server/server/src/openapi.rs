@@ -49,12 +49,12 @@ impl Modify for BearerAddon {
     /// Register the two credentials a route may name, `session` and
     /// `api-token`, and say which is which.
     ///
-    /// Both are `Authorization: Bearer`, and the vault tells them apart by
+    /// Both are `Authorization: Bearer`, and the server tells them apart by
     /// the token's own prefix, so one scheme could have described the header.
     /// Two describe the interface: most routes take a logged-in session and
     /// refuse a token outright, and the ones that take a token say which
     /// scope it needs. The scope names on a requirement are the role names
-    /// OpenAPI allows on a non-OAuth scheme: `owner` for the vault owner's
+    /// OpenAPI allows on a non-OAuth scheme: `owner` for the owner's
     /// session, and `import`, `export` and `delete` for the three
     /// permissions a session carries. A token carries `import` and `export`
     /// only, so no route offers a token the `delete` scope.
@@ -90,7 +90,7 @@ impl Modify for BearerAddon {
 }
 
 /// The routes a stranger may call: creating an account, logging in, and
-/// reading or claiming the vault. Served behind a small body limit.
+/// reading or claiming the server. Served behind a small body limit.
 pub fn public_openapi() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(crate::accounts_api::create_account))

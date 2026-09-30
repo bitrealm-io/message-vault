@@ -1,13 +1,13 @@
 //! The accounts collection: `/v1/accounts` and everything under a member
 //! except API tokens, which `api_tokens_api` serves.
 //!
-//! One collection serves the vault owner and every account. Who may call a
+//! One collection serves the owner and every account. Who may call a
 //! route is decided here, per handler, never by the path: the owner reaches
 //! every row, an account reaches its own, and a stranger may create one while
-//! the vault is open. `docs/architecture/http-api.md` records the rule and the
+//! the server is open. `docs/architecture/http-api.md` records the rule and the
 //! role prefix it replaced.
 //!
-//! The owner manages accounts, not the contents of other people's vaults, so
+//! The owner manages accounts, not the contents of other people's accounts, so
 //! nothing here reads `messages.body`, `attachments.transcription`, or any
 //! other content column: a row carries who an account is, what it may do and
 //! how much it holds, never what it says.
@@ -146,9 +146,9 @@ async fn require_account(conn: &mut AnyConnection, account_id: i64) -> Result<Ac
 /// What the caller is to the account a member route addresses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Reach {
-    /// The vault owner, acting on an account that is not its own.
+    /// The owner, acting on an account that is not its own.
     Owner,
-    /// The vault owner, on its own row.
+    /// The owner, on its own row.
     OwnersOwn,
     /// An ordinary account, on its own row.
     Own,
@@ -164,18 +164,18 @@ impl Reach {
 /// Who a member route admits besides the account itself.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Admits {
-    /// The vault owner too, on any account.
+    /// The owner too, on any account.
     Owner,
     /// Nobody else. The sentence is the refusal everyone else gets.
     NobodyElse(&'static str),
 }
 
 /// The one answer to "is this row the caller's?" for the routes under
-/// `/v1/accounts/{id}`: admit the account itself, and the vault owner when
+/// `/v1/accounts/{id}`: admit the account itself, and the owner when
 /// `admits` says so, and say which.
 ///
 /// A caller addressing a row it may not reach answers `403`, whether or not
-/// the row exists, so the refusal says nothing about the vault's accounts.
+/// the row exists, so the refusal says nothing about the server's accounts.
 /// The owner alone learns that an id is absent.
 pub(crate) async fn require_account_reach(
     conn: &mut AnyConnection,
@@ -322,7 +322,7 @@ pub async fn create_account(
             ));
         }
         None => {
-            // One count for the whole vault, like `claim`: a count per
+            // One count for the whole server, like `claim`: a count per
             // username lets a script that tries a new name each time through.
             check_auth_rate_limit(&state.auth_rate_limits, "register")?;
             false
@@ -467,7 +467,7 @@ impl UpdateAccountRequest {
             || !self.remove_identities.is_empty()
     }
 
-    /// True when the body names a field only the vault owner may set.
+    /// True when the body names a field only the owner may set.
     fn touches_flags(&self) -> bool {
         self.disabled.is_some()
             || self.can_import.is_some()
@@ -622,7 +622,7 @@ async fn update_profile_on_conn(
     .await?;
     // An account saving its own profile is what profile setup is, so it no
     // longer owes one. Cleared in the same transaction as the change it
-    // describes, so the flag cannot outlive the fact it stands for. The vault
+    // describes, so the flag cannot outlive the fact it stands for. The
     // owner filling a profile in ahead of time is not the holder's setup.
     if completes_setup {
         account_profile::set_must_set_up_profile(&mut tx, account_id, false).await?;

@@ -27,9 +27,9 @@ static DUMMY_PASSWORD_HASH: OnceLock<String> = OnceLock::new();
 /// Sliding-window hit counts for the unauthenticated credential routes, keyed
 /// by bucket (`register:<username>`, `session:<username>`, `claim`).
 ///
-/// This lives on `AppState` rather than in a process-global static: a served
-/// vault builds exactly one state, so the limiter still spans the whole server,
-/// while each test vault gets its own counts and cannot rate-limit an unrelated
+/// This lives on `AppState` rather than in a process-global static: a running
+/// server builds exactly one state, so the limiter still spans the whole server,
+/// while each test fixture gets its own counts and cannot rate-limit an unrelated
 /// test running beside it in the same binary.
 pub(crate) type AuthRateLimits = Arc<Mutex<HashMap<String, VecDeque<Instant>>>>;
 
@@ -135,7 +135,7 @@ pub(crate) fn verify_login_password(password_hash: Option<&str>, password: &str)
     }
 }
 
-/// Hash the vault owner's password. The owner must have one, so an empty
+/// Hash the owner's password. The owner must have one, so an empty
 /// password is refused; one character is enough.
 pub(crate) fn hash_owner_password(password: &str) -> Result<String, ApiError> {
     if password.is_empty() {

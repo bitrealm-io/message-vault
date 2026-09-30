@@ -39,7 +39,7 @@ pub async fn reset_for_account(conn: &mut AnyConnection, account_id: i64) -> Res
 
 /// One conversation header as the import stages it.
 pub struct StagingConversation<'a> {
-    /// Owning vault account.
+    /// Owning account.
     pub account_id: i64,
     /// The thread's identity handle, already written to `handles`.
     pub chat_handle_id: i64,
@@ -115,7 +115,7 @@ pub async fn insert_participant(
 pub struct StagingMessage<'a> {
     /// Parent staging conversation.
     pub conversation_id: i64,
-    /// Owning vault account.
+    /// Owning account.
     pub account_id: i64,
     /// Backup family that produced the row.
     pub source: &'a str,

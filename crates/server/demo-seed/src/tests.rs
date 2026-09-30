@@ -238,7 +238,7 @@ fn every_conversation_file_is_a_current_schema_document_and_the_counts_match_the
     // Replies and tapbacks are placed on a stride, so how many there are
     // says nothing a pinned number could check. What has to hold is that
     // every reply names a message written earlier in the same conversation:
-    // a reply whose target is missing is a thread the vault cannot show.
+    // a reply whose target is missing is a thread the server cannot show.
     let mut replies = 0;
     let mut tapbacks = 0;
     for (source, doc) in &documents {
@@ -529,7 +529,7 @@ fn assert_bundle_paths(root: &Path, marker: &[u8]) {
     assert_eq!(fs::read(root.join("README.md")).expect("README"), marker);
 }
 
-/// The validator is what stops a broken bundle reaching a demo vault, and
+/// The validator is what stops a broken bundle reaching a demo Message Crate, and
 /// mutation testing found it could be replaced with `Ok(())` in its entirety —
 /// both `validate_generated_bundle` and the `validate_tree_files` walk beneath
 /// it — with every test still green. Nothing here fed it a bundle that ought
@@ -587,7 +587,7 @@ fn the_validator_refuses_a_bundle_with_a_config_file_missing() {
 
 /// A JSON Lines file that is not JSON is the failure that matters most: the
 /// bundle looks complete, every folder and file is where it should be, and the
-/// vault fails on import instead. `validate_tree_files` is the walk that
+/// server fails on import instead. `validate_tree_files` is the walk that
 /// catches it, and it could be replaced with `Ok(())`.
 #[test]
 fn the_validator_refuses_a_conversation_file_that_is_not_json() {
@@ -652,8 +652,8 @@ fn the_validator_reads_only_json_lines_files() {
 #[test]
 fn the_output_parent_is_the_folder_the_bundle_lands_beside() {
     assert_eq!(
-        output_parent_dir(Path::new("/srv/vault/demo")),
-        Path::new("/srv/vault")
+        output_parent_dir(Path::new("/srv/data/demo")),
+        Path::new("/srv/data")
     );
     assert_eq!(
         output_parent_dir(Path::new("relative/demo")),

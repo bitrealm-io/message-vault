@@ -112,7 +112,7 @@ async fn load_participant_rows(
 /// Same rule, one clause shorter: with no participants row there is no
 /// per-conversation backup name, so it is the Contact's name, else the handle.
 /// The Contact is reached through `contact_handles` exactly as above, so a
-/// person the vault has a name for is named here too and their row opens the
+/// person the database has a name for is named here too and their row opens the
 /// contact drawer instead of showing a bare phone number.
 ///
 /// A conversation with no chat handle row is simply absent from the result.

@@ -8,7 +8,7 @@ const OTHER_ACCOUNT: i64 = 8;
 
 /// Passwords hashed before the argon2 0.6 upgrade must still let people in.
 ///
-/// These three strings were produced by argon2 0.5.3, the version the vault
+/// These three strings were produced by argon2 0.5.3, the version the server
 /// shipped with, using the salt scheme it used then: sixteen bytes from the
 /// system RNG, base64-encoded, passed to `Argon2::default()`. If a future
 /// upgrade stops them verifying, every account created before that upgrade
@@ -42,7 +42,7 @@ fn hashes_written_by_argon2_0_5_still_verify() {
     }
 }
 
-/// The parameters the vault writes must not drift silently. A weaker
+/// The parameters the server writes must not drift silently. A weaker
 /// memory or time cost would be a security regression that still passes
 /// every round-trip test, because hashing and verifying would agree.
 #[test]
@@ -113,7 +113,7 @@ fn auth_rate_limit_trips_after_max() {
 }
 
 #[test]
-fn auth_rate_limits_do_not_cross_vaults() {
+fn auth_rate_limits_do_not_cross_servers() {
     let one: AuthRateLimits = Arc::new(Mutex::new(HashMap::new()));
     let two: AuthRateLimits = Arc::new(Mutex::new(HashMap::new()));
     let bucket = "register:someone";
@@ -122,7 +122,7 @@ fn auth_rate_limits_do_not_cross_vaults() {
     }
     check_auth_rate_limit(&one, bucket).unwrap_err();
     check_auth_rate_limit(&two, bucket)
-        .expect("a second vault's limiter must not see the first vault's hits");
+        .expect("a second server's limiter must not see the first server's hits");
 }
 
 async fn password_change_setup() -> (
@@ -375,7 +375,7 @@ fn a_username_is_one_to_128_characters_of_a_known_set() {
 /// does not have, so the twin injects one with a `CHECK (false) NOT VALID`
 /// constraint instead: `NOT VALID` leaves the rows the setup already wrote
 /// alone and rejects the rotation's upsert. Without this twin nothing proves
-/// the transaction rolls back on the engine the vault runs on when it is not
+/// the transaction rolls back on the engine the server runs on when it is not
 /// running on SQLite, and the two engines treat a failed statement inside a
 /// transaction differently — which is the thing at issue.
 #[tokio::test]

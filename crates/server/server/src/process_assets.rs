@@ -79,15 +79,15 @@ impl AssetRow {
     }
 }
 
-/// Run derived-media conversion for every account/source in the vault.
+/// Run derived-media conversion for every account/source in the database.
 ///
 /// # Errors
 ///
-/// Returns an error when the vault has no accounts, a conversion tool fails,
+/// Returns an error when the database has no accounts, a conversion tool fails,
 /// or a derived file cannot be written.
-pub async fn run(vault: &OpenDb, opts: &ProcessAssetsOptions) -> Result<ProcessAssetsStats> {
-    let cfg = &vault.cfg;
-    let mut conn = vault.conn().await?;
+pub async fn run(opened: &OpenDb, opts: &ProcessAssetsOptions) -> Result<ProcessAssetsStats> {
+    let cfg = &opened.cfg;
+    let mut conn = opened.conn().await?;
 
     let account_ids = list_account_ids(&mut conn, &cfg.paths.data_dir).await?;
     if account_ids.is_empty() {
@@ -489,7 +489,7 @@ async fn update_derived(
     Ok(())
 }
 
-/// Incomplete iMessage/SMS transfers and aborted vault uploads use a `.part` suffix.
+/// Incomplete iMessage/SMS transfers and aborted uploads use a `.part` suffix.
 fn is_part_path(path: &str) -> bool {
     has_part_extension(Path::new(path))
 }

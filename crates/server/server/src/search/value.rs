@@ -58,7 +58,7 @@ pub(crate) enum Value {
     Size(Cmp<i64>),
 }
 
-/// The instant `day` begins in `zone`, as the RFC 3339 UTC text the vault
+/// The instant `day` begins in `zone`, as the RFC 3339 UTC text the server
 /// stores (`2024-01-01T05:00:00Z`), so a day or a year in the account's time
 /// zone compares against `messages.timestamp` as text on either engine. A
 /// day whose midnight falls in a daylight-saving gap starts at the first

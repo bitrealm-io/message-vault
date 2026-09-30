@@ -10,7 +10,7 @@ use crate::db::engine::DbEngine;
 /// `column` contains a `LIKE` pattern, case-insensitively: both sides go
 /// through `lower()`, so a non-ASCII capital folds the same way an ASCII
 /// one does, on both engines. Postgres's `lower()` folds Unicode on its
-/// own; SQLite's folds only ASCII, so the vault registers a Unicode one on
+/// own; SQLite's folds only ASCII, so the server registers a Unicode one on
 /// every connection ([`crate::db::sqlite_functions`]). `ILIKE` and
 /// `COLLATE NOCASE` are not used: `ILIKE` is Postgres-only, `NOCASE` folds
 /// only ASCII, and one shape for both engines is one thing to read.

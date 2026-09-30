@@ -411,14 +411,14 @@ fn gc_stale_incoming_removes_old_sessions() {
 
 #[tokio::test]
 async fn an_asset_put_then_get_returns_the_same_bytes() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
 
     // Arbitrary non-UTF-8 bytes, to prove the round trip preserves the
     // raw content rather than only text that happens to decode.
     let bytes: Vec<u8> = vec![0xff, 0x00, 0xde, 0xad, 0xbe, 0xef, b'\n', b'x'];
     let sha = sha256_hex(&bytes);
     let path = format!("/v1/assets/{sha}?source=sms-backup-restore");
-    let server = crate::test_support::serve(&vault.state).await;
+    let server = crate::test_support::serve(&fixture.state).await;
     let put = |content_type: Option<&str>| {
         let mut request = reqwest::Client::new()
             .put(format!("{}{path}", server.base()))
@@ -469,11 +469,11 @@ async fn an_asset_put_then_get_returns_the_same_bytes() {
 
 #[tokio::test]
 async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
 
     let unknown = "0".repeat(64);
     let (status, text) = crate::test_support::get_raw(
-        &vault.state,
+        &fixture.state,
         &format!("/v1/assets/{unknown}?source=sms-backup-restore"),
         &user.token,
     )
@@ -487,8 +487,8 @@ async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
 /// own check is what answers. `docs/architecture/http-api.md`: the status carries the meaning.
 #[tokio::test]
 async fn an_upload_part_over_the_part_size_is_a_json_413() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let mut state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let mut state = fixture.state.clone();
     // `UploadLimits` is `Copy` and `part_size` is public, so a test can lower
     // it without rebuilding the config.
     state.upload_limits.part_size = 16;
@@ -517,12 +517,12 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
 /// The multipart upload over HTTP, the way `message-crate-push` sends a large file:
 /// open the upload, send each part, complete it, and read the asset back.
 /// Each step is tested alone in `asset_uploads`; this proves the routes join
-/// up, that the part size the vault hands out is the one it holds a part to,
-/// and that `complete` installs bytes the vault then serves.
+/// up, that the part size the server hands out is the one it holds a part to,
+/// and that `complete` installs bytes the server then serves.
 #[tokio::test]
 async fn a_multipart_upload_completes_end_to_end_over_http() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let mut state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let mut state = fixture.state.clone();
     state.upload_limits.part_size = 16;
     let bytes: Vec<u8> = (0u8..40).collect();
     let sha = sha256_hex(&bytes);
@@ -646,13 +646,13 @@ fn lookup_ignores_a_file_named_with_an_extension() {
     assert!(root.join(shard_rel_path(&sha, "")).is_file());
 }
 
-/// The Content-Type on a PUT is the asset's own media type, so the vault
+/// The Content-Type on a PUT is the asset's own media type, so the server
 /// records it and serves it back. `application/octet-stream` only says the
 /// body is bytes, so nothing is recorded and the download falls back to it.
 #[tokio::test]
 async fn an_asset_put_keeps_its_media_type_but_not_octet_stream() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let server = crate::test_support::serve(&vault.state).await;
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let server = crate::test_support::serve(&fixture.state).await;
     let client = reqwest::Client::new();
     let url = |sha: &str| format!("{}/v1/assets/{sha}?source=imessage", server.base());
 
@@ -694,7 +694,7 @@ async fn an_asset_put_keeps_its_media_type_but_not_octet_stream() {
     );
 
     // Stored files have no extension, so the served type is the sidecar's.
-    let assets_dir = vault
+    let assets_dir = fixture
         .state
         .cfg
         .paths
@@ -709,12 +709,12 @@ async fn an_asset_put_keeps_its_media_type_but_not_octet_stream() {
     );
 }
 
-/// Starting a chunked upload for a blob the vault already holds creates
+/// Starting a chunked upload for a blob the server already holds creates
 /// nothing: the answer is 200 with where the bytes are, and no session.
 #[tokio::test]
 async fn starting_an_upload_for_a_stored_blob_answers_200_already_present() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let server = crate::test_support::serve(&vault.state).await;
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let server = crate::test_support::serve(&fixture.state).await;
     let client = reqwest::Client::new();
     let bytes = b"already-stored".to_vec();
     let sha = sha256_hex(&bytes);
@@ -747,7 +747,7 @@ async fn starting_an_upload_for_a_stored_blob_answers_200_already_present() {
     assert_eq!(started["sha256"], sha.as_str());
     assert_eq!(started["assets_path"], created["assets_path"]);
 
-    let incoming = vault
+    let incoming = fixture
         .state
         .cfg
         .paths
@@ -761,8 +761,8 @@ async fn starting_an_upload_for_a_stored_blob_answers_200_already_present() {
 /// manifest and parts included, so an abandoned upload holds no disk.
 #[tokio::test]
 async fn deleting_an_upload_answers_204_and_removes_its_files() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let mut state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let mut state = fixture.state.clone();
     state.upload_limits.part_size = 16;
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
@@ -825,8 +825,8 @@ async fn deleting_an_upload_answers_204_and_removes_its_files() {
 /// does not, and stores nothing.
 #[tokio::test]
 async fn an_asset_put_with_an_empty_body_answers_422() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let server = crate::test_support::serve(&vault.state).await;
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let server = crate::test_support::serve(&fixture.state).await;
     let sha = sha256_hex(b"never-sent");
     let response = reqwest::Client::new()
         .put(format!("{}/v1/assets/{sha}?source=imessage", server.base()))
@@ -844,7 +844,7 @@ async fn an_asset_put_with_an_empty_body_answers_422() {
         crate::problem::ProblemType::AssetUploadInvalid,
     );
 
-    let assets_dir = vault
+    let assets_dir = fixture
         .state
         .cfg
         .paths
@@ -857,8 +857,8 @@ async fn an_asset_put_with_an_empty_body_answers_422() {
 /// 200 with no `Location`, like the PUT does, and drops the session.
 #[tokio::test]
 async fn completing_an_upload_for_a_blob_a_put_stored_first_answers_200() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let mut state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let mut state = fixture.state.clone();
     state.upload_limits.part_size = 16;
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();

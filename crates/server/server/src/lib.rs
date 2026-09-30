@@ -1,6 +1,6 @@
 //! HTTP API and SQLite storage for browsing imported messages.
 
-/// This vault's Build: the Product Version plus the commit it was built from,
+/// This server's Build: the Product Version plus the commit it was built from,
 /// such as `0.9.0+343fe0d8`. `build.rs` works it out.
 pub const BUILD: &str = env!("MESSAGE_CRATE_BUILD");
 

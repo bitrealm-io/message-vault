@@ -25,8 +25,8 @@ fn member(id: i64) -> String {
 /// other row exists or not; only the owner learns that an id is absent.
 #[tokio::test]
 async fn the_owner_reaches_every_row_and_an_account_reaches_its_own() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
@@ -49,11 +49,11 @@ async fn the_owner_reaches_every_row_and_an_account_reaches_its_own() {
 
 /// No API token resolves to the owner, whichever account issued it. This is
 /// what bounds a leaked token: the worst it does is reach message data inside
-/// one account's permissions, never the vault's account list.
+/// one account's permissions, never the server's account list.
 #[tokio::test]
 async fn api_tokens_never_resolve_to_the_owner() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let mut conn = state.db.acquire().await.unwrap();
@@ -79,8 +79,8 @@ async fn api_tokens_never_resolve_to_the_owner() {
 /// the message-data routes is reachable with the owner's session.
 #[tokio::test]
 async fn the_owner_holds_no_message_permissions() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let mut conn = state.db.acquire().await.unwrap();
@@ -105,8 +105,8 @@ async fn the_owner_holds_no_message_permissions() {
 
 #[tokio::test]
 async fn the_owner_sees_every_account_but_no_messages() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let _alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let _bob = register_via_api(&state, "bob", "hunter2hunter2").await;
@@ -119,12 +119,12 @@ async fn the_owner_sees_every_account_but_no_messages() {
     assert!(!bob.disabled);
 }
 
-/// The owner is an account of this vault too: the list opens with it, ahead
+/// The owner is an account of this server too: the list opens with it, ahead
 /// of a username that would sort before its own.
 #[tokio::test]
 async fn the_owner_leads_the_account_list() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let _alice = register_via_api(&state, "alice", "hunter2hunter2").await;
 
@@ -179,8 +179,8 @@ async fn account_rows_carry_no_message_content_fields() {
     // unknown fields on decode, so asserting on a re-serialized typed value
     // would only prove the struct's own shape, not what the server put on
     // the wire.
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     seed_one_message(&state, alice.account_id).await;
@@ -205,8 +205,8 @@ async fn account_rows_carry_no_message_content_fields() {
 /// creation opens no session.
 #[tokio::test]
 async fn a_created_account_must_replace_the_password_the_owner_chose() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let (location, created): (String, serde_json::Value) = post_created_json(
@@ -239,8 +239,8 @@ async fn a_created_account_must_replace_the_password_the_owner_chose() {
 /// with a single character or with none, and both log in.
 #[tokio::test]
 async fn the_owner_creates_accounts_with_a_short_password_or_none() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     for body in [
@@ -255,14 +255,14 @@ async fn the_owner_creates_accounts_with_a_short_password_or_none() {
     assert_eq!(login_status(&state, "dave", "a").await, StatusCode::CREATED);
 }
 
-/// A stranger's registration answers the new row and the Session the vault
+/// A stranger's registration answers the new row and the Session the server
 /// opened on it, so the person is logged in on creation. It never grants
 /// anything beyond an ordinary account: the owner is claimed at a fixed id,
 /// never promoted from whoever arrived first.
 #[tokio::test]
 async fn a_stranger_is_logged_in_on_creation_and_never_becomes_the_owner() {
-    let (vault, first) = fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, first) = fixture_with_account().await;
+    let state = fixture.state.clone();
 
     let second = register_via_api(&state, "bob", "hunter2hunter2").await;
     assert_ne!(first.account_id, account_profile::OWNER_ACCOUNT_ID);
@@ -281,15 +281,15 @@ async fn a_stranger_is_logged_in_on_creation_and_never_becomes_the_owner() {
     let mut conn = state.db.acquire().await.unwrap();
     assert!(
         !account_profile::is_claimed(&mut conn).await.unwrap(),
-        "registering accounts does not claim the vault"
+        "registering accounts does not claim the server"
     );
 }
 
 /// A registration that named the account leaves nothing to set up.
 #[tokio::test]
 async fn a_registration_that_names_the_account_owes_no_profile_setup() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
 
     let status = post_status_logged_out(
         &state,
@@ -319,8 +319,8 @@ async fn a_registration_that_names_the_account_owes_no_profile_setup() {
 /// A stranger may register without a password.
 #[tokio::test]
 async fn a_stranger_may_register_without_a_password() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
 
     let status = post_status_logged_out(
         &state,
@@ -335,12 +335,12 @@ async fn a_stranger_may_register_without_a_password() {
     );
 }
 
-/// A closed vault admits nobody the owner has not admitted, and a logged-in
+/// A closed server admits nobody the owner has not admitted, and a logged-in
 /// account is not the owner: creating accounts for others is the owner's.
 #[tokio::test]
-async fn a_closed_vault_and_an_ordinary_session_are_both_refused() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn a_closed_server_and_an_ordinary_session_are_both_refused() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let _owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     {
@@ -369,8 +369,8 @@ async fn a_closed_vault_and_an_ordinary_session_are_both_refused() {
 /// The username is the collection's key, taken once.
 #[tokio::test]
 async fn a_taken_username_is_a_conflict() {
-    let (vault, _alice) = fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, _alice) = fixture_with_account().await;
+    let state = fixture.state.clone();
 
     // Usernames are compared ignoring case, which the problem page says out
     // loud. A comparison that stopped ignoring it would let "ALICE" register
@@ -401,17 +401,17 @@ async fn a_taken_username_is_a_conflict() {
     );
 }
 
-/// Creating an account is the vault's one unauthenticated write, so without a
+/// Creating an account is the server's one unauthenticated write, so without a
 /// limit it is an offer to fill the disk. The limiter itself is unit-tested in
 /// `credentials/tests.rs` and the status mapping in `server/tests.rs`, but
 /// nothing put the two together: a route that stopped consulting the limiter
-/// passed both. The count is one for the whole vault, like `claim`: a count
+/// passed both. The count is one for the whole server, like `claim`: a count
 /// per username lets a script that tries a new name each time straight
 /// through, which is the flood the limit exists to stop.
 #[tokio::test]
-async fn registrations_under_many_names_are_rate_limited_across_the_vault() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+async fn registrations_under_many_names_are_rate_limited_across_the_server() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let body =
         |username: &str| serde_json::json!({ "username": username, "password": "hunter2hunter2" });
 
@@ -439,11 +439,11 @@ async fn registrations_under_many_names_are_rate_limited_across_the_vault() {
 /// the GET route then agrees with.
 #[tokio::test]
 async fn an_account_patches_its_own_profile_and_reads_it_back() {
-    let (vault, account) = fixture_with_account().await;
+    let (fixture, account) = fixture_with_account().await;
     let path = member(account.account_id);
 
     let patched: serde_json::Value = patch_json(
-        &vault.state,
+        &fixture.state,
         &path,
         &account.token,
         serde_json::json!({
@@ -464,16 +464,16 @@ async fn an_account_patches_its_own_profile_and_reads_it_back() {
     assert_eq!(patched["phones"], serde_json::json!(["+15555550100"]));
     assert_eq!(patched["emails"], serde_json::json!(["alex@example.com"]));
     assert_eq!(patched["must_set_up_profile"], false);
-    let read_back: serde_json::Value = get_json(&vault.state, &path, &account.token).await;
+    let read_back: serde_json::Value = get_json(&fixture.state, &path, &account.token).await;
     assert_eq!(read_back, patched);
 }
 
 #[tokio::test]
 async fn patching_with_an_unknown_time_zone_is_a_validation_failure() {
-    let (vault, account) = fixture_with_account().await;
+    let (fixture, account) = fixture_with_account().await;
 
     let (status, sentence) = patch_failure(
-        &vault.state,
+        &fixture.state,
         &member(account.account_id),
         &account.token,
         serde_json::json!({ "time_zone": "Mars/Olympus_Mons" }),
@@ -491,8 +491,8 @@ async fn patching_with_an_unknown_time_zone_is_a_validation_failure() {
 /// the account sends it: nothing in it is applied.
 #[tokio::test]
 async fn an_account_does_not_set_its_own_flags() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
     let path = member(bob.account_id);
@@ -521,8 +521,8 @@ async fn an_account_does_not_set_its_own_flags() {
 /// account still owes at its first login.
 #[tokio::test]
 async fn the_owner_sets_a_managed_accounts_profile() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let (_, created): (String, serde_json::Value) = post_created_json(
         &state,
@@ -571,8 +571,8 @@ async fn the_owner_sets_a_managed_accounts_profile() {
 /// route answers 200 either way, so only a read-back shows the save.
 #[tokio::test]
 async fn the_owner_sets_each_profile_field_on_its_own() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let (_, created): (String, serde_json::Value) = post_created_json(
         &state,
@@ -617,8 +617,8 @@ async fn the_owner_sets_each_profile_field_on_its_own() {
 /// A phone given when the owner creates an account is linked to it.
 #[tokio::test]
 async fn a_phone_given_at_creation_is_linked_to_the_account() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let (_, created): (String, serde_json::Value) = post_created_json(
         &state,
@@ -641,8 +641,8 @@ async fn a_phone_given_at_creation_is_linked_to_the_account() {
 /// issued narrows with it, because the two are intersected on each request.
 #[tokio::test]
 async fn the_owner_clears_a_permission_and_it_takes_effect() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
@@ -670,8 +670,8 @@ async fn the_owner_clears_a_permission_and_it_takes_effect() {
 /// Nor can anyone delete it.
 #[tokio::test]
 async fn the_owners_own_row_cannot_be_disabled_or_deleted() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let own = member(account_profile::OWNER_ACCOUNT_ID);
 
@@ -710,8 +710,8 @@ async fn the_owners_own_row_cannot_be_disabled_or_deleted() {
 
 #[tokio::test]
 async fn owner_routes_on_a_missing_account_are_404() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let missing = member(424_242);
 
@@ -758,8 +758,8 @@ async fn owner_routes_on_a_missing_account_are_404() {
 /// password does not count as that account logging in.
 #[tokio::test]
 async fn last_login_follows_sessions_being_opened() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
@@ -813,8 +813,8 @@ async fn last_login_follows_sessions_being_opened() {
 /// is simply the account's password from then on.
 #[tokio::test]
 async fn the_owner_sets_a_password_and_nothing_else_changes() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
     let path = member(bob.account_id);
@@ -854,8 +854,8 @@ async fn the_owner_sets_a_password_and_nothing_else_changes() {
 /// session token back.
 #[tokio::test]
 async fn an_account_changes_its_own_password() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
 
     let (_, created): (String, serde_json::Value) = post_created_json(
@@ -893,8 +893,8 @@ async fn an_account_changes_its_own_password() {
 /// it replaces: without it, or with the wrong one, nothing changes.
 #[tokio::test]
 async fn the_owner_changes_their_own_password_with_the_current_one() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let path = format!("{}/password", member(owner.account_id));
 
@@ -947,8 +947,8 @@ async fn the_owner_changes_their_own_password_with_the_current_one() {
 /// as it is.
 #[tokio::test]
 async fn a_password_change_is_checked_in_a_fixed_order() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let path = format!("{}/password", member(owner.account_id));
 
@@ -1041,8 +1041,8 @@ async fn a_password_change_is_checked_in_a_fixed_order() {
 /// and the refusal leaves the old password in place.
 #[tokio::test]
 async fn the_owner_cannot_clear_their_own_password() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let path = format!("{}/password", member(owner.account_id));
 
@@ -1082,8 +1082,8 @@ async fn the_owner_cannot_clear_their_own_password() {
 /// user's the same way it sets one.
 #[tokio::test]
 async fn a_user_password_can_be_cleared_by_the_account_or_the_owner() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
     let path = format!("{}/password", member(bob.account_id));
@@ -1134,8 +1134,8 @@ async fn a_user_password_can_be_cleared_by_the_account_or_the_owner() {
 
 #[tokio::test]
 async fn deleting_one_accounts_messages_leaves_the_others_alone() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
@@ -1158,7 +1158,7 @@ async fn deleting_one_accounts_messages_leaves_the_others_alone() {
     let alice_row = body.items.iter().find(|a| a.username == "alice").unwrap();
     let bob_row = body.items.iter().find(|a| a.username == "bob").unwrap();
     assert_eq!(alice_row.message_count, 0);
-    assert_eq!(bob_row.message_count, 1, "bob's vault is untouched");
+    assert_eq!(bob_row.message_count, 1, "bob's account is untouched");
 }
 
 /// Deleting an account's messages removes the attachment files of every
@@ -1167,8 +1167,8 @@ async fn deleting_one_accounts_messages_leaves_the_others_alone() {
 /// files all stay. Without this the rows go and every photo stays on disk.
 #[tokio::test]
 async fn deleting_messages_removes_the_accounts_attachment_files_and_only_those() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
@@ -1232,8 +1232,8 @@ async fn deleting_messages_removes_the_accounts_attachment_files_and_only_those(
 /// confirmation; without the scope it is refused.
 #[tokio::test]
 async fn deleting_own_messages_needs_the_delete_permission_and_a_confirmation() {
-    let (vault, alice) = fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, alice) = fixture_with_account().await;
+    let state = fixture.state.clone();
     let path = format!("{}/messages", member(alice.account_id));
     seed_one_message(&state, alice.account_id).await;
 
@@ -1251,7 +1251,7 @@ async fn deleting_own_messages_needs_the_delete_permission_and_a_confirmation() 
     .await;
     assert_eq!(body.conversations, 1);
 
-    vault.turn_off_delete(alice.account_id).await;
+    fixture.turn_off_delete(alice.account_id).await;
     assert_eq!(
         delete_status_with_body(
             &state,
@@ -1269,8 +1269,8 @@ async fn deleting_own_messages_needs_the_delete_permission_and_a_confirmation() 
 /// asked to carry.
 #[tokio::test]
 async fn a_token_may_not_delete_messages_or_close_the_account() {
-    let (vault, created) = fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, created) = fixture_with_account().await;
+    let state = fixture.state.clone();
     seed_one_message(&state, created.account_id).await;
     let mut conn = state.db.acquire().await.unwrap();
     let token = api_tokens::create_api_token(
@@ -1313,16 +1313,16 @@ async fn a_token_may_not_delete_messages_or_close_the_account() {
 }
 
 /// The owner deletes an account outright, with no body; the demo account is
-/// deleted like any other, which is how a demo vault is cleared into a real
+/// deleted like any other, which is how a demo Message Crate is cleared into a real
 /// one.
 #[tokio::test]
 async fn the_owner_deletes_any_account_outright() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let victim = register_via_api(&state, "bob", "hunter2hunter2").await;
     seed_one_message(&state, victim.account_id).await;
-    let demo = vault
+    let demo = fixture
         .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
         .await;
 
@@ -1353,8 +1353,8 @@ async fn the_owner_deletes_any_account_outright() {
 /// the one that refuses its own.
 #[tokio::test]
 async fn an_account_deletes_itself_with_its_password_and_the_demo_account_refuses() {
-    let (vault, alice) = fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, alice) = fixture_with_account().await;
+    let state = fixture.state.clone();
     let _bob = register_via_api(&state, "bob", "hunter2hunter2").await;
     let path = member(alice.account_id);
 
@@ -1393,7 +1393,7 @@ async fn an_account_deletes_itself_with_its_password_and_the_demo_account_refuse
         "the other account is untouched"
     );
 
-    let demo = vault
+    let demo = fixture
         .account_with_id(account_profile::DEMO_ACCOUNT_ID, "demo")
         .await;
     let demo_token = log_in(&state, "demo", "").await["token"]
@@ -1424,18 +1424,18 @@ async fn an_account_deletes_itself_with_its_password_and_the_demo_account_refuse
 /// conversations and duplicates excluded. The owner reads the same.
 #[tokio::test]
 async fn the_identities_route_counts_the_direct_and_group_messages_held_at_each_identity() {
-    let vault = test_fixture().await;
-    let owner = claim_as_owner(&vault.state, "keeper", "hunter2hunter2").await;
-    let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let fixture = test_fixture().await;
+    let owner = claim_as_owner(&fixture.state, "keeper", "hunter2hunter2").await;
+    let account = register_via_api(&fixture.state, "alice", "hunter2hunter2").await;
     let path = format!("{}/identities", member(account.account_id));
-    let empty: serde_json::Value = get_json(&vault.state, &path, &account.token).await;
+    let empty: serde_json::Value = get_json(&fixture.state, &path, &account.token).await;
     assert_eq!(
         empty,
         serde_json::json!({ "items": [], "total": 0, "limit": 40, "offset": 0 })
     );
 
     let _: serde_json::Value = patch_json(
-        &vault.state,
+        &fixture.state,
         &member(account.account_id),
         &account.token,
         serde_json::json!({
@@ -1462,7 +1462,7 @@ async fn the_identities_route_counts_the_direct_and_group_messages_held_at_each_
         },
     ];
     let direct = seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: account.account_id,
             handle: "+15555550200",
@@ -1494,7 +1494,7 @@ async fn the_identities_route_counts_the_direct_and_group_messages_held_at_each_
         },
     ];
     let group = seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: account.account_id,
             handle: "chat100",
@@ -1507,7 +1507,7 @@ async fn the_identities_route_counts_the_direct_and_group_messages_held_at_each_
     .await;
     // A third conversation the identity is in, but trashed, so it counts for nothing.
     let trashed = seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: account.account_id,
             handle: "chat200",
@@ -1518,7 +1518,7 @@ async fn the_identities_route_counts_the_direct_and_group_messages_held_at_each_
         },
     )
     .await;
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     let identity_id = |handle_type: &'static str| {
         sqlx::query_scalar::<_, i64>(
             "SELECT h.id FROM handles h JOIN account_handles ah ON ah.handle_id = h.id
@@ -1563,7 +1563,7 @@ async fn the_identities_route_counts_the_direct_and_group_messages_held_at_each_
     .unwrap();
     drop(conn);
 
-    let page: serde_json::Value = get_json(&vault.state, &path, &account.token).await;
+    let page: serde_json::Value = get_json(&fixture.state, &path, &account.token).await;
     assert_eq!(page["total"], 2);
     assert_eq!(
         page["items"],
@@ -1588,7 +1588,7 @@ async fn the_identities_route_counts_the_direct_and_group_messages_held_at_each_
             }
         ])
     );
-    let by_owner: serde_json::Value = get_json(&vault.state, &path, &owner.token).await;
+    let by_owner: serde_json::Value = get_json(&fixture.state, &path, &owner.token).await;
     assert_eq!(by_owner["items"], page["items"]);
 }
 
@@ -1597,11 +1597,11 @@ async fn the_identities_route_counts_the_direct_and_group_messages_held_at_each_
 /// the largest. The owner reads the same numbers.
 #[tokio::test]
 async fn the_storage_route_sums_attachment_bytes_and_lists_the_largest_first() {
-    let vault = test_fixture().await;
-    let owner = claim_as_owner(&vault.state, "keeper", "hunter2hunter2").await;
-    let account = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let fixture = test_fixture().await;
+    let owner = claim_as_owner(&fixture.state, "keeper", "hunter2hunter2").await;
+    let account = register_via_api(&fixture.state, "alice", "hunter2hunter2").await;
     let path = format!("{}/storage", member(account.account_id));
-    let empty: serde_json::Value = get_json(&vault.state, &path, &account.token).await;
+    let empty: serde_json::Value = get_json(&fixture.state, &path, &account.token).await;
     assert_eq!(
         empty,
         serde_json::json!({
@@ -1613,7 +1613,7 @@ async fn the_storage_route_sums_attachment_bytes_and_lists_the_largest_first() {
         })
     );
     let conversation_id = seed_conversation(
-        &vault.state,
+        &fixture.state,
         &SeedConversation {
             account_id: account.account_id,
             handle: "+15555550100",
@@ -1629,7 +1629,7 @@ async fn the_storage_route_sums_attachment_bytes_and_lists_the_largest_first() {
         },
     )
     .await;
-    let mut conn = vault.conn().await;
+    let mut conn = fixture.conn().await;
     let message_id: i64 = sqlx::query_scalar("SELECT id FROM messages WHERE conversation_id = $1")
         .bind(conversation_id)
         .fetch_one(&mut *conn)
@@ -1662,7 +1662,7 @@ async fn the_storage_route_sums_attachment_bytes_and_lists_the_largest_first() {
     }
     drop(conn);
 
-    let storage: serde_json::Value = get_json(&vault.state, &path, &account.token).await;
+    let storage: serde_json::Value = get_json(&fixture.state, &path, &account.token).await;
     assert_eq!(storage["total_bytes"], 4000);
     assert_eq!(storage["attachment_count"], 3);
     assert_eq!(storage["conversation_count"], 1);
@@ -1680,7 +1680,7 @@ async fn the_storage_route_sums_attachment_bytes_and_lists_the_largest_first() {
     // The owner reads the same totals and the same files by name, type and
     // size, and not which conversation a file is in: that says who the
     // account talks to.
-    let by_owner: serde_json::Value = get_json(&vault.state, &path, &owner.token).await;
+    let by_owner: serde_json::Value = get_json(&fixture.state, &path, &owner.token).await;
     assert_eq!(by_owner["total_bytes"], storage["total_bytes"]);
     assert_eq!(by_owner["attachment_count"], storage["attachment_count"]);
     assert_eq!(by_owner["conversation_count"], 1);
@@ -1722,9 +1722,9 @@ async fn the_storage_route_sums_attachment_bytes_and_lists_the_largest_first() {
 
 #[tokio::test]
 async fn apply_profile_update_sets_name_and_handles() {
-    let vault = test_fixture().await;
-    let account_id = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account_id = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     apply_profile_update(
         &mut conn,
         account_id,
@@ -1765,15 +1765,15 @@ async fn apply_profile_update_sets_name_and_handles() {
     assert_eq!(wa_service, "whatsapp");
 }
 
-/// Saving a profile is what profile setup is, so the vault stops asking
+/// Saving a profile is what profile setup is, so the server stops asking
 /// for one. The flag is the answer every client reads, so it has to move
 /// when the fact behind it does. An empty-looking profile is not by itself
 /// setup owed: the flag says what is owed.
 #[tokio::test]
 async fn saving_a_profile_clears_the_setup_owed_flag() {
-    let vault = test_fixture().await;
-    let account_id = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account_id = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let bare = require_account(&mut conn, account_id).await.unwrap();
     assert_eq!(bare.preferred_name, None);
     assert!(bare.phones.is_empty());
@@ -1816,9 +1816,9 @@ async fn saving_a_profile_clears_the_setup_owed_flag() {
 
 #[tokio::test]
 async fn apply_profile_update_removes_handles() {
-    let vault = test_fixture().await;
-    let account_id = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account_id = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let both = [
         AccountIdentityRequest {
             address: "+15555550100".into(),
@@ -1843,9 +1843,9 @@ async fn apply_profile_update_removes_handles() {
 
 #[tokio::test]
 async fn profile_update_rolls_back_when_a_handle_service_is_unsupported() {
-    let vault = test_fixture().await;
-    let account_id = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = test_fixture().await;
+    let account_id = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
 
     let result = update_profile_on_conn(
         &mut conn,
@@ -1875,8 +1875,8 @@ async fn profile_update_rolls_back_when_a_handle_service_is_unsupported() {
 /// unknown name is refused before anything is written.
 #[tokio::test]
 async fn the_account_carries_a_time_zone_and_refuses_an_unknown_one() {
-    let (vault, account) = fixture_with_account().await;
-    let mut conn = vault.conn().await;
+    let (fixture, account) = fixture_with_account().await;
+    let mut conn = fixture.conn().await;
     let before = require_account(&mut conn, account.account_id)
         .await
         .unwrap();
@@ -1924,8 +1924,8 @@ async fn the_account_carries_a_time_zone_and_refuses_an_unknown_one() {
 /// owner reads which app each account connects with, and its Build.
 #[tokio::test]
 async fn the_account_list_shows_the_app_each_account_connects_with() {
-    let vault = test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
     let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
     let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
 
@@ -1967,20 +1967,20 @@ async fn the_account_list_shows_the_app_each_account_connects_with() {
 /// refuse the owner, who holds no import or export permission.
 #[tokio::test]
 async fn the_owner_and_the_account_read_the_same_import_and_export_history() {
-    let vault = test_fixture().await;
-    let owner = claim_as_owner(&vault.state, "keeper", "hunter2hunter2").await;
-    let alice = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
+    let fixture = test_fixture().await;
+    let owner = claim_as_owner(&fixture.state, "keeper", "hunter2hunter2").await;
+    let alice = register_via_api(&fixture.state, "alice", "hunter2hunter2").await;
     let base = member(alice.account_id);
 
     let (_, import): (String, serde_json::Value) = post_created_json(
-        &vault.state,
+        &fixture.state,
         "/v1/imports",
         &alice.token,
         serde_json::json!({ "source": "imessage" }),
     )
     .await;
     let (_, export): (String, serde_json::Value) = post_created_json(
-        &vault.state,
+        &fixture.state,
         "/v1/exports",
         &alice.token,
         serde_json::json!({ "scope": { "kind": "everything" }, "tool": "tests" }),
@@ -1992,21 +1992,21 @@ async fn the_owner_and_the_account_read_the_same_import_and_export_history() {
         format!("{base}/imports/{}", import["id"]),
         format!("{base}/exports"),
     ] {
-        let by_account: serde_json::Value = get_json(&vault.state, &path, &alice.token).await;
-        let by_owner: serde_json::Value = get_json(&vault.state, &path, &owner.token).await;
+        let by_account: serde_json::Value = get_json(&fixture.state, &path, &alice.token).await;
+        let by_owner: serde_json::Value = get_json(&fixture.state, &path, &owner.token).await;
         assert_eq!(by_owner, by_account, "{path}");
     }
 
     let imports: serde_json::Value =
-        get_json(&vault.state, &format!("{base}/imports"), &owner.token).await;
+        get_json(&fixture.state, &format!("{base}/imports"), &owner.token).await;
     assert_eq!(imports["total"], 1);
     assert_eq!(imports["items"][0]["id"], import["id"]);
     let exports: serde_json::Value =
-        get_json(&vault.state, &format!("{base}/exports"), &owner.token).await;
+        get_json(&fixture.state, &format!("{base}/exports"), &owner.token).await;
     assert_eq!(exports["total"], 1);
     assert_eq!(exports["items"][0]["id"], export["id"]);
     let detail: serde_json::Value = get_json(
-        &vault.state,
+        &fixture.state,
         &format!("{base}/imports/{}", import["id"]),
         &owner.token,
     )
@@ -2016,7 +2016,7 @@ async fn the_owner_and_the_account_read_the_same_import_and_export_history() {
 
     // The list takes the same `status` filter, and refuses the same unknown value.
     let running: serde_json::Value = get_json(
-        &vault.state,
+        &fixture.state,
         &format!("{base}/imports?status=completed"),
         &owner.token,
     )
@@ -2024,7 +2024,7 @@ async fn the_owner_and_the_account_read_the_same_import_and_export_history() {
     assert_eq!(running["total"], 0);
     assert_eq!(
         get_status(
-            &vault.state,
+            &fixture.state,
             &format!("{base}/exports?status=backup"),
             &owner.token
         )
@@ -2034,7 +2034,7 @@ async fn the_owner_and_the_account_read_the_same_import_and_export_history() {
 
     for pipeline in ["/v1/imports", "/v1/exports"] {
         assert_eq!(
-            get_status(&vault.state, pipeline, &owner.token).await,
+            get_status(&fixture.state, pipeline, &owner.token).await,
             StatusCode::FORBIDDEN,
             "{pipeline} is the pipeline's route and stays closed to the owner"
         );
@@ -2044,12 +2044,12 @@ async fn the_owner_and_the_account_read_the_same_import_and_export_history() {
 /// An Import Run is read under the account that ran it and nowhere else.
 #[tokio::test]
 async fn an_import_run_is_a_404_under_another_account() {
-    let vault = test_fixture().await;
-    let owner = claim_as_owner(&vault.state, "keeper", "hunter2hunter2").await;
-    let alice = register_via_api(&vault.state, "alice", "hunter2hunter2").await;
-    let bob = register_via_api(&vault.state, "bob", "hunter2hunter2").await;
+    let fixture = test_fixture().await;
+    let owner = claim_as_owner(&fixture.state, "keeper", "hunter2hunter2").await;
+    let alice = register_via_api(&fixture.state, "alice", "hunter2hunter2").await;
+    let bob = register_via_api(&fixture.state, "bob", "hunter2hunter2").await;
     let (_, import): (String, serde_json::Value) = post_created_json(
-        &vault.state,
+        &fixture.state,
         "/v1/imports",
         &alice.token,
         serde_json::json!({ "source": "imessage" }),
@@ -2058,7 +2058,7 @@ async fn an_import_run_is_a_404_under_another_account() {
 
     assert_eq!(
         get_status(
-            &vault.state,
+            &fixture.state,
             &format!("{}/imports/{}", member(bob.account_id), import["id"]),
             &owner.token
         )
@@ -2067,7 +2067,7 @@ async fn an_import_run_is_a_404_under_another_account() {
     );
     assert_eq!(
         get_status(
-            &vault.state,
+            &fixture.state,
             &format!("{}/imports", member(9_999)),
             &owner.token
         )

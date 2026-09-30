@@ -1,9 +1,9 @@
-//! The two shell commands that reach the vault owner's credentials.
+//! The two shell commands that reach the owner's credentials.
 //!
-//! Claiming a vault and getting back into one are different jobs, so they are
-//! different commands: `create-owner` refuses a vault that already has an
+//! Claiming a Message Crate and getting back into one are different jobs, so they are
+//! different commands: `create-owner` refuses a Message Crate that already has an
 //! owner, `reset-owner-password` refuses one that does not. Neither can be
-//! mistaken for the other, so setting up a vault cannot silently overwrite a
+//! mistaken for the other, so setting up a Message Crate cannot silently overwrite a
 //! live owner's password.
 //!
 //! A shell on the server is the right credential for both. Nothing inside the
@@ -15,14 +15,14 @@ use anyhow::{Result, bail};
 use crate::db::account_profile;
 use crate::open_db::OpenDb;
 
-/// Create the vault owner, claiming an unclaimed vault.
+/// Create the owner, claiming an unclaimed Message Crate.
 ///
 /// # Errors
 ///
-/// Fails when the vault already has an owner, when the username is malformed
+/// Fails when this Message Crate already has an owner, when the username is malformed
 /// or taken, or when the password is empty.
-pub async fn create_owner(vault: &OpenDb, username: &str, password: &str) -> Result<String> {
-    let mut conn = vault.conn().await?;
+pub async fn create_owner(opened: &OpenDb, username: &str, password: &str) -> Result<String> {
+    let mut conn = opened.conn().await?;
 
     let username = match crate::credentials::require_valid_username(username) {
         Ok(username) => username,
@@ -54,16 +54,16 @@ pub async fn create_owner(vault: &OpenDb, username: &str, password: &str) -> Res
     Ok(username)
 }
 
-/// Set a new password for an existing vault owner and end their sessions.
+/// Set a new password for an existing owner and end their sessions.
 ///
 /// Returns the owner's username, which is as easy to forget as the password
 /// and just as unreachable from inside the product.
 ///
 /// # Errors
 ///
-/// Fails when the vault has no owner, or when the password is empty.
-pub async fn reset_owner_password(vault: &OpenDb, password: &str) -> Result<String> {
-    let mut conn = vault.conn().await?;
+/// Fails when this Message Crate has no owner, or when the password is empty.
+pub async fn reset_owner_password(opened: &OpenDb, password: &str) -> Result<String> {
+    let mut conn = opened.conn().await?;
 
     let hash = match crate::credentials::hash_owner_password(password) {
         Ok(hash) => hash,
@@ -106,8 +106,8 @@ mod tests {
     /// old one does not.
     #[tokio::test]
     async fn resetting_the_owner_password_signs_out_the_sessions_it_opened() {
-        let vault = test_fixture().await;
-        let state = vault.state.clone();
+        let fixture = test_fixture().await;
+        let state = fixture.state.clone();
         let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
         assert_eq!(
             get_status(&state, "/v1/session", &owner.token).await,

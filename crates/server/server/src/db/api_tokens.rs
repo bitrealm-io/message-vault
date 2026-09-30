@@ -366,9 +366,9 @@ mod tests {
     use super::*;
     #[tokio::test]
     async fn create_list_lookup_delete() {
-        let vault = crate::test_support::test_fixture().await;
-        let account_id = vault.account_with_id(101, "alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
         let created = create_api_token(
             &mut conn,
             account_id,
@@ -458,9 +458,9 @@ mod tests {
 
     #[tokio::test]
     async fn empty_label_rejected() {
-        let vault = crate::test_support::test_fixture().await;
-        let account_id = vault.account_with_id(101, "alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
         assert!(
             create_api_token(&mut conn, account_id, "  ", Permissions::all(), None)
                 .await
@@ -470,9 +470,9 @@ mod tests {
 
     #[tokio::test]
     async fn rename_label() {
-        let vault = crate::test_support::test_fixture().await;
-        let account_id = vault.account_with_id(101, "alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
         let id = create_api_token(&mut conn, account_id, "old name", Permissions::all(), None)
             .await
             .unwrap()
@@ -502,9 +502,9 @@ mod tests {
 
     #[tokio::test]
     async fn label_validation_errors_are_typed() {
-        let vault = crate::test_support::test_fixture().await;
-        let account_id = vault.account_with_id(101, "alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
 
         let err = create_api_token(&mut conn, account_id, "  ", Permissions::all(), None)
             .await
@@ -546,9 +546,9 @@ mod tests {
     /// how someone revokes one without deleting the record of it.
     #[tokio::test]
     async fn an_expired_token_is_refused_and_a_live_one_is_not() {
-        let vault = crate::test_support::test_fixture().await;
-        let account_id = vault.account_with_id(101, "alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
 
         let live = create_api_token(&mut conn, account_id, "live", Permissions::all(), None)
             .await
@@ -597,9 +597,9 @@ mod tests {
     /// turns an unreadable expiry into a credential that never dies.
     #[tokio::test]
     async fn a_token_with_an_unreadable_expiry_is_refused() {
-        let vault = crate::test_support::test_fixture().await;
-        let account_id = vault.account_with_id(101, "alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
 
         let created = create_api_token(&mut conn, account_id, "odd", Permissions::all(), None)
             .await
@@ -623,9 +623,9 @@ mod tests {
 
     #[tokio::test]
     async fn a_disabled_token_is_refused_while_its_row_remains() {
-        let vault = crate::test_support::test_fixture().await;
-        let account_id = vault.account_with_id(101, "alice").await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
 
         let created = create_api_token(&mut conn, account_id, "revoked", Permissions::all(), None)
             .await

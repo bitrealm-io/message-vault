@@ -12,7 +12,7 @@ use media::{CompressOptions, Kind, MediaMode, TranscodeOutcome};
 /// The file to store for one attachment, after the mode's transformation.
 #[derive(Debug)]
 pub struct ResolvedMedia {
-    /// Path of the file to store in the vault.
+    /// Path of the file to store in the database.
     pub path: PathBuf,
     /// MIME type of the attachment, when known.
     pub mime_type: Option<String>,

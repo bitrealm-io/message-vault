@@ -18,7 +18,7 @@
 //! whether or not the row exists.
 //!
 //! Every call gets accounts, rows and sessions of its own inside one shared
-//! vault, so a delete, a password change or a logout cannot change what the
+//! server, so a delete, a password change or a logout cannot change what the
 //! next call sees.
 
 use std::collections::BTreeSet;
@@ -39,7 +39,7 @@ use crate::test_support::{SeedConversation, SeedMessage, TestFixture, TestServer
 const PASSWORD: &str = "matrix-password";
 
 /// The bytes of the stored asset, and of the upload that is under way.
-const ASSET_BYTES: &[u8] = b"an attachment already in the vault";
+const ASSET_BYTES: &[u8] = b"an attachment already in the database";
 const UPLOAD_BYTES: &[u8] = b"an attachment being uploaded in parts";
 
 /// The credentials every operation is called with.
@@ -53,7 +53,7 @@ pub(super) enum Credential {
     TokenImportOnly,
     /// Alice's API token with the export scope only.
     TokenExportOnly,
-    /// The vault owner's session.
+    /// The owner's session.
     Owner,
     /// Alice's session, every permission on.
     Session,
@@ -268,22 +268,22 @@ pub(super) fn operations() -> Vec<Operation> {
     operations
 }
 
-/// One vault and one running server for the whole matrix, with its owner.
-/// Creating a vault is the slow part, on Postgres above all, so every call
-/// gets fresh accounts inside this one instead of a vault of its own.
+/// One fixture and one running server for the whole matrix, with its owner.
+/// Creating a fixture is the slow part, on Postgres above all, so every call
+/// gets fresh accounts inside this one instead of a fixture of its own.
 ///
 /// An account holds one Session at a time, so every call shares the owner's.
 /// The one call that ends it, the owner's `DELETE /v1/session`, runs last.
 pub(super) struct Shared {
-    vault: TestFixture,
+    fixture: TestFixture,
     server: TestServer,
     owner_session: String,
 }
 
 impl Shared {
     pub(super) async fn build() -> Self {
-        let vault = crate::test_support::test_fixture().await;
-        let mut conn = vault.conn().await;
+        let fixture = crate::test_support::test_fixture().await;
+        let mut conn = fixture.conn().await;
         account_profile::insert_account_at(
             &mut conn,
             OWNER_ACCOUNT_ID,
@@ -297,9 +297,9 @@ impl Shared {
             .await
             .unwrap();
         drop(conn);
-        let server = crate::test_support::serve(&vault.state).await;
+        let server = crate::test_support::serve(&fixture.state).await;
         Self {
-            vault,
+            fixture,
             server,
             owner_session,
         }
@@ -361,8 +361,8 @@ fn password_hash() -> &'static str {
 
 impl<'a> World<'a> {
     pub(super) async fn build(shared: &'a Shared, n: usize) -> Self {
-        let state = &shared.vault.state;
-        let mut conn = shared.vault.conn().await;
+        let state = &shared.fixture.state;
+        let mut conn = shared.fixture.conn().await;
         let hash = Some(password_hash());
         // Ids of the call's own, because calls run side by side and the next
         // free id is read and then written. They count down from the top, so
@@ -419,7 +419,7 @@ impl<'a> World<'a> {
             },
         )
         .await;
-        let mut conn = shared.vault.conn().await;
+        let mut conn = shared.fixture.conn().await;
         let message_id: i64 =
             sqlx::query_scalar("SELECT id FROM messages WHERE conversation_id = $1")
                 .bind(conversation_id)
@@ -663,7 +663,7 @@ pub(super) fn body_for(op: &Operation, n: usize) -> Option<(&'static str, Vec<u8
 async fn run(shared: &Shared, n: usize, op: Operation, credential: Credential) -> Option<String> {
     let world = World::build(shared, n).await;
     if credential == Credential::SessionWithoutDelete {
-        shared.vault.turn_off_delete(world.alice).await;
+        shared.fixture.turn_off_delete(world.alice).await;
     }
     let expected = op.expected(credential);
     let status = world.call(&op, credential).await;

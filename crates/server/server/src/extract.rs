@@ -130,27 +130,27 @@ mod tests {
 
     #[tokio::test]
     async fn a_query_parameter_of_the_wrong_type_is_a_validation_422() {
-        let (vault, user) = fixture_with_account().await;
+        let (fixture, user) = fixture_with_account().await;
         let (status, text) =
-            get_raw(&vault.state, "/v1/conversations?limit=ten", &user.token).await;
+            get_raw(&fixture.state, "/v1/conversations?limit=ten", &user.token).await;
         let problem = expect_problem(status, &text, ProblemType::ValidationFailed);
         assert!(problem.errors.unwrap()[0].contains("limit"), "{text}");
     }
 
     #[tokio::test]
     async fn a_path_id_that_is_not_a_number_is_a_validation_422() {
-        let (vault, user) = fixture_with_account().await;
+        let (fixture, user) = fixture_with_account().await;
         let (status, text) =
-            get_raw(&vault.state, "/v1/conversations/abc/sources", &user.token).await;
+            get_raw(&fixture.state, "/v1/conversations/abc/sources", &user.token).await;
         let problem = expect_problem(status, &text, ProblemType::ValidationFailed);
         assert!(!problem.errors.unwrap().is_empty(), "{text}");
     }
 
     #[tokio::test]
     async fn a_json_body_missing_a_field_is_a_json_422() {
-        let (vault, user) = fixture_with_account().await;
+        let (fixture, user) = fixture_with_account().await;
         let (status, text) = post_raw(
-            &vault.state,
+            &fixture.state,
             "/v1/saved-searches",
             &user.token,
             "application/json",
@@ -166,9 +166,9 @@ mod tests {
 
     #[tokio::test]
     async fn a_json_body_with_the_wrong_content_type_is_a_json_415() {
-        let (vault, user) = fixture_with_account().await;
+        let (fixture, user) = fixture_with_account().await;
         let (status, text) = post_raw(
-            &vault.state,
+            &fixture.state,
             "/v1/saved-searches",
             &user.token,
             "text/plain",
@@ -187,8 +187,8 @@ mod tests {
     /// text; the extractor's own arm is tested below without HTTP.
     #[tokio::test]
     async fn a_json_body_over_the_body_cap_is_a_json_413_and_a_syntax_error_a_400() {
-        let (vault, user) = fixture_with_account().await;
-        let mut state = vault.state.clone();
+        let (fixture, user) = fixture_with_account().await;
+        let mut state = fixture.state.clone();
         state.max_body_bytes = 1024;
 
         let padding = "a".repeat(4096);
@@ -275,13 +275,13 @@ mod tests {
 
     #[tokio::test]
     async fn a_json_body_over_the_auth_router_body_limit_is_a_json_413() {
-        let vault = test_fixture().await;
+        let fixture = test_fixture().await;
         // The auth router caps request bodies at 32 KiB (server.rs,
         // `limited_auth_router`); pad well past it with a valid JSON string.
         let padding = "a".repeat(64 * 1024);
         let body = serde_json::json!({ "username": padding, "password": PASSWORD }).to_string();
         let (status, text) = post_raw(
-            &vault.state,
+            &fixture.state,
             "/v1/session",
             "unused-token",
             "application/json",
@@ -293,15 +293,15 @@ mod tests {
 
     #[tokio::test]
     async fn an_unknown_api_path_is_a_json_404_and_a_wrong_method_a_json_405() {
-        let (vault, user) = fixture_with_account().await;
-        let (status, text) = get_raw(&vault.state, "/v1/no-such-thing", &user.token).await;
+        let (fixture, user) = fixture_with_account().await;
+        let (status, text) = get_raw(&fixture.state, "/v1/no-such-thing", &user.token).await;
         let problem = expect_problem(status, &text, ProblemType::NotFound);
         assert_eq!(
             problem.detail.as_deref(),
             Some("no route at /v1/no-such-thing")
         );
 
-        let (status, text) = delete_raw(&vault.state, "/v1/conversations", &user.token).await;
+        let (status, text) = delete_raw(&fixture.state, "/v1/conversations", &user.token).await;
         let problem = expect_problem(status, &text, ProblemType::MethodNotAllowed);
         assert_eq!(
             problem.detail.as_deref(),
@@ -311,9 +311,9 @@ mod tests {
 
     #[tokio::test]
     async fn bare_v1_and_v1_slash_are_a_json_404() {
-        let vault = test_fixture().await;
+        let fixture = test_fixture().await;
         for path in ["/v1", "/v1/"] {
-            let (status, text) = get_raw(&vault.state, path, "unused-token").await;
+            let (status, text) = get_raw(&fixture.state, path, "unused-token").await;
             expect_problem(status, &text, ProblemType::NotFound);
         }
     }

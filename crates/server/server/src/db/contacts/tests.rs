@@ -196,7 +196,7 @@ async fn trunk_zero_phone_is_flagged_with_note() {
 }
 
 #[test]
-fn accepts_vcard_csv_and_vcf_but_rejects_vault_csv() {
+fn accepts_vcard_csv_and_vcf_but_rejects_the_contacts_export_csv() {
     let dir = std::env::temp_dir().join(format!(
         "mc-contacts-fmt-{}",
         std::time::SystemTime::now()
@@ -216,14 +216,14 @@ fn accepts_vcard_csv_and_vcf_but_rejects_vault_csv() {
         ContactsFormat::VcardCsv
     );
 
-    // Vault's own export CSV (phones/first_name/last_name) is not an address book.
-    let vault_export = dir.join("vault-export.csv");
+    // The server's own contacts export CSV (phones/first_name/last_name) is not an address book.
+    let contacts_export = dir.join("contacts-export.csv");
     std::fs::write(
-        &vault_export,
+        &contacts_export,
         "phones,first_name,last_name,label_1\n+15551234567,Ada,Lovelace,Family\n",
     )
     .unwrap();
-    assert!(contacts_file_format(&vault_export).is_err());
+    assert!(contacts_file_format(&contacts_export).is_err());
 
     let vcf = dir.join("book.vcf");
     std::fs::write(

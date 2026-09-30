@@ -43,7 +43,7 @@ fn internal_error_keeps_the_chain_and_answers_500() {
 
 const TEST_ACCOUNT: i64 = 7;
 
-/// Test database with the vault schema applied. The temp dir is returned
+/// Test database with the schema applied. The temp dir is returned
 /// too: dropping it deletes the database file out from under the checked-out
 /// connection, after which SQLite rejects writes with SQLITE_READONLY.
 async fn test_conn() -> (TempDir, sqlx::pool::PoolConnection<sqlx::Any>) {
@@ -271,7 +271,7 @@ async fn cors_preflight_allows_packaged_desktop_and_vite_origins() {
     }
 }
 
-/// A vault built from source starts with `cors_origins` commented out. The
+/// A server built from source starts with `cors_origins` commented out. The
 /// desktop app still has to reach it, so the packaged origins do not wait
 /// to be configured.
 #[tokio::test]
@@ -769,8 +769,8 @@ async fn discard_frees_the_slot() {
 /// "matched my route and rejected my body" from "matched the wrong route".
 #[tokio::test]
 async fn literal_contact_routes_are_not_captured_by_the_id_route() {
-    let vault = crate::test_support::test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = crate::test_support::test_fixture().await;
+    let state = fixture.state.clone();
     let user =
         crate::test_support::register_via_api(&state, "contact-routes", "hunter2hunter2").await;
 
@@ -808,8 +808,8 @@ async fn literal_contact_routes_are_not_captured_by_the_id_route() {
 /// green without this test.
 #[tokio::test]
 async fn import_endpoint_honors_can_import_flag() {
-    let vault = crate::test_support::test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = crate::test_support::test_fixture().await;
+    let state = fixture.state.clone();
     let owner =
         crate::test_support::claim_as_owner(&state, "import-guard-keeper", "hunter2hunter2").await;
     let user =
@@ -852,8 +852,8 @@ async fn import_endpoint_honors_can_import_flag() {
 /// off, the endpoint refuses; turned back on, it succeeds.
 #[tokio::test]
 async fn export_endpoint_honors_can_export_flag() {
-    let vault = crate::test_support::test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = crate::test_support::test_fixture().await;
+    let state = fixture.state.clone();
     let owner =
         crate::test_support::claim_as_owner(&state, "export-guard-keeper", "hunter2hunter2").await;
     let user =
@@ -895,15 +895,15 @@ async fn export_endpoint_honors_can_export_flag() {
 /// `RequestBodyLimitLayer` answers its own 413 the moment a `Content-Length`
 /// announces an oversize body, without running any handler. That response
 /// must still pass through the CORS layer, or a browser reports a CORS
-/// failure instead of showing the 413 the vault sent.
+/// failure instead of showing the 413 the server sent.
 #[tokio::test]
 async fn the_fast_413_carries_cors_headers() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
     // The default test config's `cors_origins` is empty, which only
     // allows the packaged desktop origins (`build_cors_layer`) — not the
     // browser origin this test sends. Configure it explicitly so the
     // assertion below tests CORS header propagation, not the allow list.
-    let mut state = with_cors(vault.state.clone(), &["https://app.example"]);
+    let mut state = with_cors(fixture.state.clone(), &["https://app.example"]);
     state.max_body_bytes = 1024;
 
     let (_, created): (String, serde_json::Value) = crate::test_support::post_created_json(
@@ -950,8 +950,8 @@ async fn the_fast_413_carries_cors_headers() {
 /// body, and an id the client sends is dropped rather than kept.
 #[tokio::test]
 async fn every_response_carries_a_server_made_request_id_and_a_problem_repeats_it() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
 
@@ -999,8 +999,8 @@ async fn every_response_carries_a_server_made_request_id_and_a_problem_repeats_i
 /// the limit is `rate-limited` with a `Retry-After` the body repeats.
 #[tokio::test]
 async fn a_wrong_password_is_401_and_the_limit_answers_429_with_retry_after() {
-    let (vault, _) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, _) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
     let login = || {
@@ -1049,8 +1049,8 @@ async fn a_wrong_password_is_401_and_the_limit_answers_429_with_retry_after() {
 /// follows, so a new route is covered without anyone remembering it.
 #[tokio::test]
 async fn every_operation_refuses_a_query_parameter_it_does_not_declare() {
-    let vault = crate::test_support::test_fixture().await;
-    let state = vault.state.clone();
+    let fixture = crate::test_support::test_fixture().await;
+    let state = fixture.state.clone();
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
     let spec: serde_json::Value =
@@ -1113,8 +1113,8 @@ async fn every_operation_refuses_a_query_parameter_it_does_not_declare() {
 /// else: not on the static app, and not on the asset download.
 #[tokio::test]
 async fn accept_is_checked_on_v1_json_routes_only() {
-    let (vault, user) = crate::test_support::fixture_with_account().await;
-    let state = vault.state.clone();
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let state = fixture.state.clone();
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
 

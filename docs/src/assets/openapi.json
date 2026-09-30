@@ -8669,7 +8669,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Vault"
+                  "$ref": "#/components/schemas/ServerInfo"
                 }
               }
             }
@@ -13166,6 +13166,30 @@
           }
         }
       },
+      "ServerInfo": {
+        "type": "object",
+        "description": "The state of this Message Crate, for the screen a logged-out person sees.",
+        "required": [
+          "state",
+          "version",
+          "schema_fingerprint"
+        ],
+        "properties": {
+          "schema_fingerprint": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The Schema Fingerprint, the number this server stamps into its database."
+          },
+          "state": {
+            "$ref": "#/components/schemas/ServerState",
+            "description": "`unclaimed` shows Create Owner alone; `closed` shows Login alone;\n`open` shows Login and Create Account."
+          },
+          "version": {
+            "type": "string",
+            "description": "The server's Build: its Product Version, plus the commit it was built\nfrom unless it is a release. An app compares the Product Version with\nits own and says so when they differ; the server serves it either way."
+          }
+        }
+      },
       "ServerSettings": {
         "type": "object",
         "description": "The server settings the owner controls.",
@@ -13634,30 +13658,6 @@
           "size",
           "flag"
         ]
-      },
-      "Vault": {
-        "type": "object",
-        "description": "The state of this Message Crate, for the screen a logged-out person sees.",
-        "required": [
-          "state",
-          "version",
-          "schema_fingerprint"
-        ],
-        "properties": {
-          "schema_fingerprint": {
-            "type": "integer",
-            "format": "int64",
-            "description": "The Schema Fingerprint, the number this server stamps into its database."
-          },
-          "state": {
-            "$ref": "#/components/schemas/ServerState",
-            "description": "`unclaimed` shows Create Owner alone; `closed` shows Login alone;\n`open` shows Login and Create Account."
-          },
-          "version": {
-            "type": "string",
-            "description": "The server's Build: its Product Version, plus the commit it was built\nfrom unless it is a release. An app compares the Product Version with\nits own and says so when they differ; the server serves it either way."
-          }
-        }
       }
     },
     "securitySchemes": {

@@ -13,9 +13,9 @@ async fn insert_contact(conn: &mut AnyConnection, account: i64, name: &str) -> i
 
 #[tokio::test]
 async fn reserved_names_rejected_with_exact_messages() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let err = create_set(tag_spec(), &mut conn, account, "Trash")
         .await
         .unwrap_err();
@@ -43,9 +43,9 @@ async fn reserved_names_rejected_with_exact_messages() {
 
 #[tokio::test]
 async fn names_over_max_len_rejected() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let long = "x".repeat(MAX_NAME_LEN + 1);
     let err = create_set(tag_spec(), &mut conn, account, &long)
         .await
@@ -63,9 +63,9 @@ async fn names_over_max_len_rejected() {
 
 #[tokio::test]
 async fn create_set_refuses_an_empty_name() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let err = create_set(group_spec(), &mut conn, account, "   ")
         .await
         .unwrap_err();
@@ -74,9 +74,9 @@ async fn create_set_refuses_an_empty_name() {
 
 #[tokio::test]
 async fn rename_set_refuses_an_empty_or_over_long_name() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let (id, _) = create_set(group_spec(), &mut conn, account, "Family")
         .await
         .unwrap();
@@ -95,9 +95,9 @@ async fn rename_set_refuses_an_empty_or_over_long_name() {
 
 #[tokio::test]
 async fn on_change_hook_runs_on_membership_change() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     sqlx::query("INSERT INTO contacts (account_id, preferred_name) VALUES ($1, 'Ada')")
         .bind(account)
         .execute(&mut *conn)
@@ -142,9 +142,9 @@ async fn on_change_hook_runs_on_membership_change() {
 
 #[tokio::test]
 async fn create_and_list_sets_answer_ids_and_names_a_to_z() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let (work_id, work) = create_set(group_spec(), &mut conn, account, " Work ")
         .await
         .unwrap();
@@ -170,9 +170,9 @@ async fn create_and_list_sets_answer_ids_and_names_a_to_z() {
 
 #[tokio::test]
 async fn create_set_refuses_duplicates_and_reserved_names() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     create_set(group_spec(), &mut conn, account, "Family")
         .await
         .unwrap();
@@ -188,9 +188,9 @@ async fn create_set_refuses_duplicates_and_reserved_names() {
 
 #[tokio::test]
 async fn rename_set_allows_a_case_change_and_refuses_another_sets_name() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let (family_id, _) = create_set(group_spec(), &mut conn, account, "Family")
         .await
         .unwrap();
@@ -215,9 +215,9 @@ async fn rename_set_allows_a_case_change_and_refuses_another_sets_name() {
 
 #[tokio::test]
 async fn delete_set_drops_its_memberships_and_refuses_an_unknown_id() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let a = insert_contact(&mut conn, account, "Ada").await;
     let (id, _) = create_set(group_spec(), &mut conn, account, "Family")
         .await
@@ -248,9 +248,9 @@ async fn delete_set_drops_its_memberships_and_refuses_an_unknown_id() {
 
 #[tokio::test]
 async fn patch_members_adds_and_removes_in_one_call() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let a = insert_contact(&mut conn, account, "Ada").await;
     let b = insert_contact(&mut conn, account, "Ben").await;
     let (id, _) = create_set(group_spec(), &mut conn, account, "Family")
@@ -288,9 +288,9 @@ async fn patch_members_adds_and_removes_in_one_call() {
 
 #[tokio::test]
 async fn patch_members_with_a_foreign_member_writes_nothing() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let a = insert_contact(&mut conn, account, "Ada").await;
     let (id, _) = create_set(group_spec(), &mut conn, account, "Family")
         .await
@@ -311,9 +311,9 @@ async fn patch_members_with_a_foreign_member_writes_nothing() {
 /// the state the caller asked for, and `removed` counts only deleted rows.
 #[tokio::test]
 async fn patch_members_ignores_an_unknown_id_in_remove() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let a = insert_contact(&mut conn, account, "Ada").await;
     let b = insert_contact(&mut conn, account, "Ben").await;
     let (id, _) = create_set(group_spec(), &mut conn, account, "Family")
@@ -353,9 +353,9 @@ async fn patch_members_ignores_an_unknown_id_in_remove() {
 
 #[tokio::test]
 async fn another_accounts_set_is_not_found() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let other = 102_i64;
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'bob')")
         .bind(other)
@@ -379,9 +379,9 @@ async fn another_accounts_set_is_not_found() {
 
 #[tokio::test]
 async fn get_set_does_not_find_a_reserved_name_leftover() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     // create_set and rename_set both refuse reserved names, so the only
     // way a reserved-name row exists is a leftover from before that
     // check existed (or a direct insert, as here).
@@ -400,9 +400,9 @@ async fn get_set_does_not_find_a_reserved_name_leftover() {
 
 #[tokio::test]
 async fn patch_members_an_id_in_both_add_and_remove_nets_to_removed() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let a = insert_contact(&mut conn, account, "Ada").await;
     let (id, _) = create_set(group_spec(), &mut conn, account, "Family")
         .await
@@ -445,9 +445,9 @@ async fn patch_members_an_id_in_both_add_and_remove_nets_to_removed() {
 /// The import path still fills groups by name through `set_membership`.
 #[tokio::test]
 async fn set_membership_by_name_still_creates_and_fills_a_group() {
-    let vault = crate::test_support::test_fixture().await;
-    let account = vault.account_with_id(101, "alice").await;
-    let mut conn = vault.conn().await;
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
     let a = insert_contact(&mut conn, account, "Ada").await;
     assert_eq!(
         set_membership(group_spec(), &mut conn, account, &[a], "Family", true)

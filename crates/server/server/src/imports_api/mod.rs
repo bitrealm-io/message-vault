@@ -1,8 +1,8 @@
-//! Import message-ir JSONL into the vault.
+//! Import message-ir JSONL into the database.
 //!
 //! The pipeline runs in three stages: `staging` parses JSONL files and writes
 //! staging rows, `promote` copies staging rows into the production tables, and
-//! `contact_name` links handles to vault contacts and merges display names.
+//! `contact_name` links handles to contacts and merges display names.
 //! The HTTP handlers for the `/v1/imports` routes, an Import Run and the
 //! batches posted into it, live at the end of this module.
 
@@ -66,7 +66,7 @@ pub struct ImportOptions<'a> {
     pub mode: ImportMode,
     /// Fixed source id (HTTP / `--source` override). Ignored when `source_from_jsonl`.
     pub source: &'a str,
-    /// Vault account the import writes into.
+    /// Account the import writes into.
     pub account_id: i64,
     /// Fill missing `content_key` values during promote (needed before cross-source dedupe).
     pub fill_content_keys: bool,
@@ -97,7 +97,7 @@ pub struct FixedImportArgs<'a> {
     pub mode: ImportMode,
     /// Fixed source id applied to every conversation.
     pub source: &'a str,
-    /// Vault account the import writes into.
+    /// Account the import writes into.
     pub account_id: i64,
     /// Fill missing `content_key` values during promote.
     pub fill_content_keys: bool,
@@ -206,7 +206,7 @@ pub struct ImportExportArgs<'a> {
     pub mode: ImportMode,
     /// Fixed source id applied to every conversation.
     pub source: &'a str,
-    /// Vault account the import writes into.
+    /// Account the import writes into.
     pub account_id: i64,
 }
 
@@ -314,7 +314,7 @@ impl OwnedSession {
 /// Whether import should run DDL/schema ensure on the connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportSchemaMode {
-    /// CLI / one-shot: ensure vault + messages schema.
+    /// CLI / one-shot: ensure the schema.
     Ensure,
     /// HTTP serve hot path: schema already ensured on the warm connection.
     AssumeReady,
@@ -1179,7 +1179,7 @@ pub(crate) async fn list_import_contacts(
 /// not silently rewrite itself as contacts change later.
 ///
 /// A failure here is reported and swallowed, the same as the saved search: the
-/// messages are already in the vault, and losing a shortcut is not a reason to
+/// messages are already in the database, and losing a shortcut is not a reason to
 /// call the import failed.
 async fn create_import_contact_group(
     conn: &mut sqlx::AnyConnection,

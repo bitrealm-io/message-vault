@@ -52,7 +52,7 @@ pub struct GenStats {
     /// Group conversations written.
     pub groups: usize,
     /// Messages written to both the iMessage and the Android backup, one copy
-    /// each. Every one is counted twice in `messages`, and a vault that
+    /// each. Every one is counted twice in `messages`, and a database that
     /// imports the bundle hides exactly this many as duplicates.
     pub shared_messages: usize,
 }

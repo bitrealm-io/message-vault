@@ -3,7 +3,7 @@
 //! Each subcommand is a `clap` argument struct plus one `run_*` function. The
 //! functions here only parse, validate, and print; the work lives in the
 //! module each one calls (`import_cli`, `dedupe`, `reset_demo`, and so on).
-//! Every command that reads the vault opens it the same way: the config with
+//! Every command that reads the database opens it the same way: the config with
 //! `--db` and `--db-url` applied, through [`OpenDb`].
 
 use std::fmt::Write as _;
@@ -354,22 +354,22 @@ pub async fn run(cli: Cli) -> Result<()> {
     }
 }
 
-/// Claim the vault and report the owner's username.
+/// Claim this Message Crate and report the owner's username.
 async fn run_create_owner(args: CreateOwnerArgs) -> Result<()> {
     let cfg = Config::load(&args.config)?.with_db_overrides(None, args.db_url);
-    let vault = OpenDb::open(cfg).await?;
-    let username = crate::owner_cli::create_owner(&vault, &args.username, &args.password).await?;
-    vault.close().await;
+    let opened = OpenDb::open(cfg).await?;
+    let username = crate::owner_cli::create_owner(&opened, &args.username, &args.password).await?;
+    opened.close().await;
     println!("Message Crate claimed. Log in as {username}.");
     Ok(())
 }
 
-/// Set the vault owner's password and report the username to log in with.
+/// Set the owner's password and report the username to log in with.
 async fn run_reset_owner_password(args: ResetOwnerPasswordArgs) -> Result<()> {
     let cfg = Config::load(&args.config)?.with_db_overrides(None, args.db_url);
-    let vault = OpenDb::open(cfg).await?;
-    let username = crate::owner_cli::reset_owner_password(&vault, &args.password).await?;
-    vault.close().await;
+    let opened = OpenDb::open(cfg).await?;
+    let username = crate::owner_cli::reset_owner_password(&opened, &args.password).await?;
+    opened.close().await;
     println!("Owner password set. Log in as {username}.");
     Ok(())
 }
@@ -395,11 +395,11 @@ async fn run_import(args: ImportArgs) -> Result<()> {
             args.media
         )
     })?;
-    let vault = OpenDb::open(cfg).await?;
-    let account = vault.account_id(&args.account).await?;
+    let opened = OpenDb::open(cfg).await?;
+    let account = opened.account_id(&args.account).await?;
 
     let stats = crate::import_cli::run(
-        &vault,
+        &opened,
         &crate::import_cli::CliImportOptions {
             account_id: account,
             input_dir: args.input,
@@ -416,7 +416,7 @@ async fn run_import(args: ImportArgs) -> Result<()> {
     .await?;
 
     println!();
-    println!("Import into {}", vault.location());
+    println!("Import into {}", opened.location());
     println!("  input:         {}", stats.input_dir.display());
     println!("  sources:       {}", stats.sources.join(", "));
     print!("{}", format_import_stats(&stats.import));
@@ -427,7 +427,7 @@ async fn run_import(args: ImportArgs) -> Result<()> {
         }
         None => println!("Cross-source soft-dedupe skipped (--skip-dedupe)"),
     }
-    vault.close().await;
+    opened.close().await;
     Ok(())
 }
 
@@ -435,12 +435,12 @@ async fn run_import(args: ImportArgs) -> Result<()> {
 /// or that there was none.
 async fn run_imports_discard(args: ImportsDiscardArgs) -> Result<()> {
     let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
-    let vault = OpenDb::open(cfg).await?;
-    let account = vault.account_id(&args.account).await?;
-    let mut conn = vault.conn().await?;
+    let opened = OpenDb::open(cfg).await?;
+    let account = opened.account_id(&args.account).await?;
+    let mut conn = opened.conn().await?;
     let discarded = crate::db::imports::discard_running_import(&mut conn, account).await?;
     drop(conn);
-    vault.close().await;
+    opened.close().await;
     print!(
         "{}",
         format_discarded_import(&args.account, discarded.as_ref())
@@ -535,12 +535,12 @@ fn format_dedupe_stats(stats: &DedupeStats) -> String {
 async fn run_dedupe(args: DedupeArgs) -> Result<()> {
     let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
     validate_window_secs(args.window_secs)?;
-    let vault = OpenDb::open(cfg).await?;
-    let account = vault.account_id(&args.account).await?;
-    let mut conn = vault.conn().await?;
+    let opened = OpenDb::open(cfg).await?;
+    let account = opened.account_id(&args.account).await?;
+    let mut conn = opened.conn().await?;
     let priority = crate::dedupe::source_priority_from_db(&mut conn, account).await?;
 
-    println!("Cross-source dedupe on {}", vault.location());
+    println!("Cross-source dedupe on {}", opened.location());
     println!("  config:       {}", args.config.display());
     println!("  account:      {account}");
     println!("  window_secs:  {}", args.window_secs);
@@ -557,28 +557,28 @@ async fn run_dedupe(args: DedupeArgs) -> Result<()> {
         crate::dedupe::dedupe_cross_source(&mut conn, account, None, args.window_secs).await?;
     print!("{}", format_dedupe_stats(&stats));
     drop(conn);
-    vault.close().await;
+    opened.close().await;
     Ok(())
 }
 
-/// Load an address book into an existing vault and print the counts.
+/// Load an address book into an existing database and print the counts.
 async fn run_import_contacts(args: ImportContactsArgs) -> Result<()> {
     let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
-    let vault = OpenDb::open(cfg).await?;
-    let account = vault.account_id(&args.account).await?;
-    let mut conn = vault.conn().await?;
+    let opened = OpenDb::open(cfg).await?;
+    let account = opened.account_id(&args.account).await?;
+    let mut conn = opened.conn().await?;
     let stats =
         contacts_db::load_contacts_if_needed(&mut conn, Some(&args.contacts), true, account)
             .await?;
 
-    println!("Imported contacts into {}", vault.location());
+    println!("Imported contacts into {}", opened.location());
     println!("  config:       {}", args.config.display());
     println!("  account:      {account}");
     println!("  contacts:     {}", args.contacts.display());
     println!("  rows:         {}", stats.contacts);
     println!("  phones:       {}", stats.phones);
     drop(conn);
-    vault.close().await;
+    opened.close().await;
     Ok(())
 }
 
@@ -645,9 +645,9 @@ async fn run_process_assets(args: ProcessAssetsArgs) -> Result<()> {
     if let Some(ref source) = args.source {
         validate_source_id(source)?;
     }
-    let vault = OpenDb::open(cfg).await?;
+    let opened = OpenDb::open(cfg).await?;
     crate::process_assets::run(
-        &vault,
+        &opened,
         &crate::process_assets::ProcessAssetsOptions {
             force: args.force,
             dry_run: args.dry_run,
@@ -658,7 +658,7 @@ async fn run_process_assets(args: ProcessAssetsArgs) -> Result<()> {
         },
     )
     .await?;
-    vault.close().await;
+    opened.close().await;
     Ok(())
 }
 

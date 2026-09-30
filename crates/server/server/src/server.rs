@@ -47,7 +47,7 @@ pub enum AuthCapability {
         /// What the account may do.
         permissions: Permissions,
     },
-    /// Logged-in vault owner. Carries no permissions at all, so every guard
+    /// Logged-in owner. Carries no permissions at all, so every guard
     /// that asks for one refuses it and the owner cannot reach message data.
     /// See `docs/adr/0008-the-owner-holds-no-messages.md`.
     Owner,
@@ -55,10 +55,10 @@ pub enum AuthCapability {
     ApiToken(Permissions),
 }
 
-/// Authenticated vault account from a session token or named API token.
+/// Authenticated account from a session token or named API token.
 #[derive(Debug, Clone)]
 pub struct AuthIdentity {
-    /// The authenticated vault account.
+    /// The authenticated account.
     pub account_id: i64,
     /// What this credential is allowed to do.
     pub capability: AuthCapability,
@@ -66,7 +66,7 @@ pub struct AuthIdentity {
 
 impl AuthIdentity {
     /// What this credential may do, account and token already intersected.
-    /// The vault owner has nothing: holding no messages is what the owner is.
+    /// The owner has nothing: holding no messages is what the owner is.
     pub fn permissions(&self) -> Permissions {
         match self.capability {
             AuthCapability::Session { permissions } | AuthCapability::ApiToken(permissions) => {
@@ -76,19 +76,19 @@ impl AuthIdentity {
         }
     }
 
-    /// True only for the logged-in vault owner. An API token can never be the
+    /// True only for the logged-in owner. An API token can never be the
     /// owner, because no token resolves to [`AuthCapability::Owner`].
     pub fn is_owner(&self) -> bool {
         matches!(self.capability, AuthCapability::Owner)
     }
 
     /// True when the credential is a logged-in session on an ordinary account:
-    /// not a token, and not the vault owner.
+    /// not a token, and not the owner.
     pub fn is_session(&self) -> bool {
         matches!(self.capability, AuthCapability::Session { .. })
     }
 
-    /// True when a person logged in, whether as the vault owner or on an
+    /// True when a person logged in, whether as the owner or on an
     /// ordinary account. False for every API token.
     pub fn is_logged_in(&self) -> bool {
         self.is_session() || self.is_owner()
@@ -110,7 +110,7 @@ pub fn require_full_access(auth: &AuthIdentity) -> Result<(), ApiError> {
     ))
 }
 
-/// Reject anything that is not the logged-in vault owner.
+/// Reject anything that is not the logged-in owner.
 ///
 /// # Errors
 ///
@@ -124,7 +124,7 @@ pub fn require_owner(auth: &AuthIdentity) -> Result<(), ApiError> {
     ))
 }
 
-/// Allow any logged-in person, vault owner or ordinary account, and reject
+/// Allow any logged-in person, owner or ordinary account, and reject
 /// API tokens. The guard for the routes under `/v1/accounts/{id}`, where a
 /// handler then decides whether the caller is the owner or the account
 /// itself; the owner needs them for its own row as much as anyone.
@@ -276,7 +276,7 @@ auth_guard!(
     require_full_access
 );
 auth_guard!(
-    /// Logged-in vault owner; wraps [`require_owner`].
+    /// Logged-in owner; wraps [`require_owner`].
     Owner,
     require_owner
 );
@@ -327,7 +327,7 @@ pub struct AppState {
     pub(crate) asset_complete_locks: KeyedLocks,
     /// Sliding-window hit counts for the unauthenticated auth endpoints. Held
     /// here, not in a static, so tests in one binary cannot rate-limit each
-    /// other; a served vault has a single state, so the limit still spans it.
+    /// other; a running server has a single state, so the limit still spans it.
     pub(crate) auth_rate_limits: crate::credentials::AuthRateLimits,
     /// Multipart / asset size limits from `[server]` (env may override part size).
     pub(crate) upload_limits: asset_uploads::UploadLimits,
@@ -336,13 +336,13 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// The state every handler shares, over an opened vault. `serve` and the
+    /// The state every handler shares, over an opened database. `serve` and the
     /// test harness both come through here, so the locks, the rate limits
     /// and the body cap are assembled in one place.
-    pub fn new(vault: OpenDb, upload_limits: asset_uploads::UploadLimits) -> Self {
+    pub fn new(opened: OpenDb, upload_limits: asset_uploads::UploadLimits) -> Self {
         Self {
-            cfg: Arc::new(vault.cfg),
-            db: vault.db,
+            cfg: Arc::new(opened.cfg),
+            db: opened.db,
             account_import_locks: KeyedLocks::default(),
             asset_complete_locks: KeyedLocks::default(),
             auth_rate_limits: Arc::new(std::sync::Mutex::new(HashMap::new())),
@@ -408,9 +408,9 @@ pub enum ApiError {
     NameTaken(String),
     /// `403` — the demo account refuses a destructive operation.
     DemoAccountProtected(String),
-    /// `403` — the route belongs to the vault owner.
+    /// `403` — the route belongs to the owner.
     NotTheOwner(String),
-    /// `403` — the vault does not let strangers create their own account.
+    /// `403` — the server does not let strangers create their own account.
     RegistrationClosed(String),
     /// `403` — the credential is valid but lacks the scope the route needs.
     InsufficientScope(String),
@@ -660,7 +660,7 @@ impl From<anyhow::Error> for ApiError {
 /// anyone: `tauri://localhost` on Linux and macOS, and `http(s)://tauri.localhost`
 /// on Windows.
 ///
-/// These are allowed whatever the config says. A vault built from source starts
+/// These are allowed whatever the config says. A server built from source starts
 /// with `cors_origins` commented out, and the desktop app pointed at it then
 /// fails in a way that reads as a network problem — the browser refuses the
 /// response before any code can see it, so the app reports the server as
@@ -685,7 +685,7 @@ pub(crate) const PACKAGED_DESKTOP_ORIGINS: &[&str] = &[
 ///   [`PACKAGED_DESKTOP_ORIGINS`]
 ///
 /// An empty list is therefore not "no CORS" but "the desktop app and nothing
-/// else", which is what an unconfigured vault wants: the browser UI it serves
+/// else", which is what an unconfigured server wants: the browser UI it serves
 /// itself is same-origin and needs no header at all.
 fn build_cors_layer(origins: &[String]) -> CorsLayer {
     if origins.iter().any(|o| o.trim() == "*") {
@@ -763,7 +763,7 @@ async fn json_body_limit_response(response: Response) -> Response {
 /// (`docs/architecture/http-api.md`). Narrow on purpose: only when the header is present and none of
 /// its members is `application/json`, `application/problem+json`,
 /// `application/*` or `*/*`. A missing `Accept` is a request for JSON, which
-/// is what every one of the vault's own clients sends.
+/// is what every one of the server's own clients sends.
 ///
 /// Applied to the `/v1` routes only, through `route_layer`, so the static app,
 /// `/health` and the OpenAPI UI keep producing what they produce. The asset
@@ -908,16 +908,16 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
     let upload_limits =
         asset_uploads::UploadLimits::new(server.asset_part_size, server.asset_max_bytes);
 
-    let vault = OpenDb::open(cfg).await?;
+    let opened = OpenDb::open(cfg).await?;
     if engine == DbEngine::Sqlite {
-        crate::operation_lock::mark_ready(&vault.cfg.paths.db)?;
+        crate::operation_lock::mark_ready(&opened.cfg.paths.db)?;
         let mode: String = sqlx::query_scalar("PRAGMA journal_mode")
-            .fetch_one(&vault.db)
+            .fetch_one(&opened.db)
             .await
             .unwrap_or_else(|_| "unknown".into());
         eprintln!(
             "  db:   {} (journal_mode={mode})",
-            vault.cfg.paths.db.display()
+            opened.cfg.paths.db.display()
         );
     }
     eprintln!(
@@ -926,7 +926,7 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         upload_limits.part_size as u64 / message_ir::MIB
     );
 
-    let app = http_app(AppState::new(vault, upload_limits));
+    let app = http_app(AppState::new(opened, upload_limits));
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     eprintln!("message-crate-server serve listening on http://{bind}");
     eprintln!(
@@ -996,7 +996,7 @@ pub async fn resolve_auth(headers: &HeaderMap, state: &AppState) -> Result<AuthI
 
 pub use message_crate_api_types::{APP_HEADER, APP_VERSION_HEADER};
 
-/// Longest Build the vault records. A real one is under thirty characters.
+/// Longest Build the server records. A real one is under thirty characters.
 const MAX_APP_BUILD_LEN: usize = 64;
 
 /// The app a request says it comes from. `None` unless both headers are

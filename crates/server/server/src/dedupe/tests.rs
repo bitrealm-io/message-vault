@@ -24,7 +24,7 @@ fn group_chat_identity_is_sorted_handles() {
 
 #[test]
 fn content_key_stable_across_whitespace_and_offset_forms() {
-    // The vault stores the instant in UTC with a Z; the key hashes the epoch
+    // The server stores the instant in UTC with a Z; the key hashes the epoch
     // it names, so an offset spelling of the same instant hashes the same.
     let a = compute_content_key(
         "+14075551212",
@@ -104,7 +104,7 @@ fn parallel_content_keys_match_serial() {
                 "8e9ab8eb840faf0f50a805e3a68c430ab4234ff3b8b87792fdcd70f7078cae03".to_string()
             ),
         ],
-        "the content key decides which messages are duplicates; changing it          re-partitions every vault, so it is pinned deliberately"
+        "the content key decides which messages are duplicates; changing it          re-partitions every database, so it is pinned deliberately"
     );
 }
 
@@ -173,7 +173,7 @@ async fn setup_db(conn: &mut AnyConnection) {
 struct InsertMsgArgs<'a> {
     source: &'a str,
     guid: &'a str,
-    /// The UTC instant, as the vault stores it.
+    /// The UTC instant, as the server stores it.
     timestamp: &'a str,
     from_me: i64,
     body: &'a str,
@@ -753,7 +753,7 @@ async fn the_same_words_from_two_group_members_are_never_near_duplicates() {
 // Several conversations, handles, senders and attachments.
 //
 // The tests above use one 1:1 conversation and two messages. The ones below
-// build what a real vault holds: 1:1 and group conversations, the same group
+// build what a real database holds: 1:1 and group conversations, the same group
 // under two chat identifiers (two exporters naming one group differently),
 // incoming group messages with a sender, and attachments.
 // ---------------------------------------------------------------------------
@@ -875,7 +875,7 @@ async fn duplicate_of(conn: &mut AnyConnection, id: i64) -> Option<i64> {
         .unwrap()
 }
 
-/// A message imported before its attachment reached the vault still pairs
+/// A message imported before its attachment reached the server still pairs
 /// with its twin once the attachment arrives.
 ///
 /// An append import of the same source maps a message it already holds onto
@@ -1079,10 +1079,10 @@ async fn a_failed_dedupe_keeps_the_previous_duplicates_hidden() {
 }
 
 // ---------------------------------------------------------------------------
-// Invariants over generated vaults.
+// Invariants over generated databases.
 // ---------------------------------------------------------------------------
 
-/// A linear congruential generator: the same seed builds the same vault on
+/// A linear congruential generator: the same seed builds the same database on
 /// every machine, with no dependency.
 struct Lcg(u64);
 
@@ -1123,13 +1123,13 @@ struct GenChat {
     senders: Vec<i64>,
 }
 
-/// Build a vault from `seed`: two 1:1 chats, one group under two chat
+/// Build a database from `seed`: two 1:1 chats, one group under two chat
 /// identifiers, one smaller group. Each logical message is written by one
 /// to three sources (a source may write it twice), and each copy is an exact
 /// twin, a near-time twin (inside the window or one second past it), or a
 /// near-miss (the body or one attachment differs). Messages are a few seconds
 /// apart and share a small vocabulary, so unrelated messages collide too.
-async fn generate_vault(conn: &mut AnyConnection, seed: u64) -> Vec<i64> {
+async fn generate_database(conn: &mut AnyConnection, seed: u64) -> Vec<i64> {
     let mut rng = Lcg(seed);
     setup_account(conn).await;
     let mut people = Vec::new();
@@ -1346,7 +1346,7 @@ async fn assert_dedupe_invariants(conn: &mut AnyConnection, ctx: &str) {
     let expected: HashMap<i64, String> = ContentKeyInputs::load(conn, TEST_ACCOUNT_ID, false)
         .await
         .unwrap()
-        .expect("the vault has messages")
+        .expect("the database has messages")
         .hash()
         .into_iter()
         .collect();
@@ -1446,17 +1446,17 @@ async fn dedupe_and_check(conn: &mut AnyConnection, ctx: &str) -> DedupeStats {
     stats
 }
 
-/// Dedupe over generated vaults, before and after a later import adds
-/// attachments to messages already in the vault and a participant to one
+/// Dedupe over generated databases, before and after a later import adds
+/// attachments to messages already in the database and a participant to one
 /// name of the shared group. The seed is in every failure message; add it
 /// to the list to keep a case that once failed.
 #[tokio::test]
-async fn dedupe_invariants_hold_over_generated_vaults() {
+async fn dedupe_invariants_hold_over_generated_databases() {
     let (mut exact, mut near, mut rewritten) = (0, 0, 0);
     for seed in [1_u64, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610] {
         let (pool, _dir) = engine::test_pool().await;
         let mut conn = pool.acquire().await.unwrap();
-        let ids = generate_vault(&mut conn, seed).await;
+        let ids = generate_database(&mut conn, seed).await;
         let stats = dedupe_and_check(&mut conn, &format!("seed {seed}, first import")).await;
         exact += stats.exact_flagged;
         near += stats.near_flagged;

@@ -1,5 +1,5 @@
 //! A seed small enough to generate in a test, for this crate's own tests and
-//! for the vault server's import test (`testutil` feature).
+//! for the server's import test (`testutil` feature).
 //!
 //! One copy, used from both places: a second copy of the seed in the server
 //! would drift from this one the first time a section is added here.

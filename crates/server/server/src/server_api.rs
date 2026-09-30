@@ -1,13 +1,13 @@
-//! What a logged-out browser is allowed to know about this vault, and the one
-//! act it is allowed to perform: claiming an unclaimed vault.
+//! What a logged-out browser is allowed to know about this Message Crate, and the one
+//! act it is allowed to perform: claiming an unclaimed Message Crate.
 //!
-//! `GET /v1/server` reports the vault's state as a single value rather than the
+//! `GET /v1/server` reports this Message Crate's state as a single value rather than the
 //! two facts behind it — whether an owner exists, and whether public
 //! registration is on — so that the rule joining them is stated once, on the
 //! server. A browser and a desktop app that each derived the entry screen from
 //! raw fields would be two copies of one rule, free to drift apart.
 //!
-//! These are the vault's only unauthenticated routes besides logging in and
+//! These are the server's only unauthenticated routes besides logging in and
 //! a stranger's `POST /v1/accounts`, and the first read routes that do not
 //! require a session: the entry screen cannot have one yet, which is the
 //! whole of the exception. See
@@ -34,7 +34,7 @@ pub enum ServerState {
 
 /// The state of this Message Crate, for the screen a logged-out person sees.
 #[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
-pub struct Vault {
+pub struct ServerInfo {
     /// `unclaimed` shows Create Owner alone; `closed` shows Login alone;
     /// `open` shows Login and Create Account.
     pub state: ServerState,
@@ -55,7 +55,7 @@ pub struct ClaimRequest {
     pub password: String,
 }
 
-/// Read the vault's state on an existing connection.
+/// Read this Message Crate's state on an existing connection.
 async fn state_on_conn(conn: &mut sqlx::AnyConnection) -> Result<ServerState, ApiError> {
     if !account_profile::is_claimed(conn).await? {
         return Ok(ServerState::Unclaimed);
@@ -73,11 +73,11 @@ async fn state_on_conn(conn: &mut sqlx::AnyConnection) -> Result<ServerState, Ap
     get,
     path = "/v1/server",
     tag = "Server",
-    responses((status = 200, body = Vault))
+    responses((status = 200, body = ServerInfo))
 )]
-pub async fn get_server(State(state): State<AppState>) -> Result<Json<Vault>, ApiError> {
+pub async fn get_server(State(state): State<AppState>) -> Result<Json<ServerInfo>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    Ok(Json(Vault {
+    Ok(Json(ServerInfo {
         state: state_on_conn(&mut conn).await?,
         version: crate::BUILD.to_string(),
         schema_fingerprint: crate::db::schema::SCHEMA_FINGERPRINT,
@@ -118,7 +118,7 @@ pub async fn claim_server(
 
     let mut conn = state.db.acquire().await?;
     // The claim check and the insert share a transaction: two requests racing
-    // for an unclaimed vault must not both believe they won it.
+    // for an unclaimed Message Crate must not both believe they won it.
     let mut tx = sqlx::Connection::begin(&mut *conn).await?;
     if account_profile::is_claimed(&mut tx).await? {
         return Err(ApiError::StateConflict(
@@ -279,7 +279,7 @@ pub async fn get_server_storage(
     Owner(_auth): Owner,
 ) -> Result<Json<ServerStorage>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let scope = storage::Scope::Vault;
+    let scope = storage::Scope::AllAccounts;
     let fts_bytes = storage::fts_bytes(&mut conn).await?;
     let messages_bytes = storage::messages_bytes(&mut conn, fts_bytes).await?;
     let by_account = storage::text_by_account(&mut conn).await?;

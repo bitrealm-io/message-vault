@@ -1,6 +1,6 @@
 //! An account's named API tokens: `/v1/accounts/{id}/api-tokens`.
 //!
-//! The account itself, and nobody else. The vault owner has no tokens and
+//! The account itself, and nobody else. The owner has no tokens and
 //! does not manage other people's: a token is a program's credential into
 //! one account's messages, and the owner never reaches those. A logged-in
 //! session is required; a token cannot mint, rename or revoke tokens.
@@ -321,8 +321,8 @@ mod tests {
     /// delete token would otherwise find out only when a delete fails.
     #[tokio::test]
     async fn create_token_asking_for_delete_is_refused() {
-        let vault = crate::test_support::test_fixture().await;
-        let state = vault.state.clone();
+        let fixture = crate::test_support::test_fixture().await;
+        let state = fixture.state.clone();
         let account =
             crate::test_support::register_via_api(&state, "token-owner", "hunter2hunter2").await;
 
@@ -361,8 +361,8 @@ mod tests {
         };
         use axum::http::StatusCode;
 
-        let vault = test_fixture().await;
-        let state = vault.state.clone();
+        let fixture = test_fixture().await;
+        let state = fixture.state.clone();
         let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
         let alice = register_via_api(&state, "alice", "hunter2hunter2").await;
         let bob = register_via_api(&state, "bob", "hunter2hunter2").await;
@@ -422,8 +422,8 @@ mod tests {
         };
         use axum::http::StatusCode;
 
-        let (vault, alice) = fixture_with_account().await;
-        let state = vault.state.clone();
+        let (fixture, alice) = fixture_with_account().await;
+        let state = fixture.state.clone();
         let collection = format!("/v1/accounts/{}/api-tokens", alice.account_id);
         let (_, created): (String, serde_json::Value) = post_created_json(
             &state,
@@ -467,8 +467,8 @@ mod tests {
         use crate::test_support::{fixture_with_account, get_status, post_created_json};
         use axum::http::StatusCode;
 
-        let (vault, alice) = fixture_with_account().await;
-        let state = vault.state.clone();
+        let (fixture, alice) = fixture_with_account().await;
+        let state = fixture.state.clone();
         let (_, created): (String, serde_json::Value) = post_created_json(
             &state,
             &format!("/v1/accounts/{}/api-tokens", alice.account_id),

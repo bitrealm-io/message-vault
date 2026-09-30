@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# The web app's vault types are generated from docs/src/assets/openapi.json.
+# The web app's server API types are generated from docs/src/assets/openapi.json.
 # That JSON is already pinned to the running server by a Rust test
 # (crates/server/server/src/openapi.rs). This is the other half: it fails when
 # the checked-in TypeScript no longer matches the JSON, so a route or field
-# renamed on the vault cannot reach the web app as a silent runtime error.
+# renamed on the server cannot reach the web app as a silent runtime error.
 #
 #   ./scripts/check-generated-api-types.sh
 #

@@ -1,11 +1,11 @@
--- Old vault schema snapshot: the full `schema/sql/` set at commit
+-- Old schema snapshot: the full `schema/sql/` set at commit
 -- c15872be^ (parent of "feat(contacts): add groups in the GUI and API"),
 -- concatenated in the order the ensure flow of that era applied it.
--- A vault of this era had no `PRAGMA user_version` stamp (version 0).
--- Used by the schema migration tests to upgrade an old vault in place.
+-- A database of this era had no `PRAGMA user_version` stamp (version 0).
+-- Used by the schema migration tests to upgrade an old database in place.
 -- Do not edit; rebuild from git history if it ever needs to change.
 
--- Vault login account (web UI + API owner).
+-- Login account (web UI + API owner).
 CREATE TABLE IF NOT EXISTS accounts (
     -- Stable account id (opaque string primary key).
     id TEXT PRIMARY KEY,
@@ -25,9 +25,9 @@ CREATE TABLE IF NOT EXISTS accounts (
 
 -- Email addresses attached to an account (not used for login).
 CREATE TABLE IF NOT EXISTS account_emails (
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    -- Email address; unique case-insensitively across the vault.
+    -- Email address; unique case-insensitively across all accounts.
     email TEXT NOT NULL UNIQUE COLLATE NOCASE,
     -- 1 = primary email for this account; at most one per account via partial index.
     is_primary INTEGER NOT NULL DEFAULT 0,
@@ -40,7 +40,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_account_emails_one_primary
 
 -- Handles that mean “me” when matching message participants.
 CREATE TABLE IF NOT EXISTS account_handles (
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Self identity (`handles.id`).
     handle_id INTEGER NOT NULL REFERENCES handles(id) ON DELETE CASCADE,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS account_handles (
 
 -- GUI session Bearer (one per account; rotates on login). Prefix: mc-user-
 CREATE TABLE IF NOT EXISTS account_session_tokens (
-    -- Owning vault account (`accounts.id`); also the primary key (one session).
+    -- Owning account (`accounts.id`); also the primary key (one session).
     account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
     -- Hash of the session Bearer secret (never store the raw token).
     token_hash TEXT NOT NULL UNIQUE,
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS account_session_tokens (
 CREATE TABLE IF NOT EXISTS account_api_tokens (
     -- Opaque token id (primary key).
     id TEXT PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- User-visible label in Settings.
     label TEXT NOT NULL,
@@ -89,7 +89,7 @@ CREATE INDEX IF NOT EXISTS ix_account_api_tokens_account
 
 -- Per-account key/value preferences for the UI and server.
 CREATE TABLE IF NOT EXISTS account_prefs (
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Preference name (for example theme or feature flags).
     key TEXT NOT NULL,
@@ -106,11 +106,11 @@ CREATE TABLE IF NOT EXISTS schema_meta (
     value TEXT NOT NULL
 );
 
--- One row per import run into the vault.
+-- One row per import run into Message Crate.
 CREATE TABLE IF NOT EXISTS imports (
     -- Surrogate primary key for this import run.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Backup/source family (for example imessage, whatsapp, sms-backup-restore).
     source TEXT NOT NULL,
@@ -171,11 +171,11 @@ CREATE INDEX IF NOT EXISTS ix_import_issues_import
 CREATE UNIQUE INDEX IF NOT EXISTS ix_accounts_hanko_user_id
     ON accounts(hanko_user_id)
     WHERE hanko_user_id IS NOT NULL AND hanko_user_id != '';
--- Address-book person for one vault account.
+-- Address-book person for one account.
 CREATE TABLE IF NOT EXISTS contacts (
     -- Surrogate primary key for this contact row.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Display name shown in the UI (address-book preferred name only).
     preferred_name TEXT NOT NULL,
@@ -189,7 +189,7 @@ CREATE INDEX IF NOT EXISTS ix_contacts_account_id ON contacts (account_id);
 CREATE TABLE IF NOT EXISTS handles (
     -- Surrogate primary key for this handle row.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Identity string exactly as the backup/source wrote it.
     raw TEXT NOT NULL,
@@ -209,7 +209,7 @@ CREATE INDEX IF NOT EXISTS ix_handles_normalized ON handles (account_id, normali
 
 -- Links one handle to at most one contact within an account.
 CREATE TABLE IF NOT EXISTS contact_handles (
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Linked identity (`handles.id`).
     handle_id INTEGER NOT NULL REFERENCES handles(id) ON DELETE CASCADE,
@@ -227,7 +227,7 @@ CREATE INDEX IF NOT EXISTS ix_contact_handles_contact_id
 CREATE TABLE IF NOT EXISTS contact_labels (
     -- Surrogate primary key for this label.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Label text unique per account.
     name TEXT NOT NULL,
@@ -245,7 +245,7 @@ CREATE TABLE IF NOT EXISTS contact_label_members (
 
 -- Soft-delete marker for a handle; underlying handle row stays.
 CREATE TABLE IF NOT EXISTS trashed_handles (
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Handle marked trash (`handles.id`).
     handle_id INTEGER NOT NULL REFERENCES handles(id) ON DELETE CASCADE,
@@ -256,7 +256,7 @@ CREATE TABLE IF NOT EXISTS trashed_handles (
 
 -- Soft-delete marker for a conversation; chat rows stay until purge.
 CREATE TABLE IF NOT EXISTS trashed_conversations (
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Conversation marked trash (`conversations.id`, no FK so chat can remain).
     conversation_id INTEGER NOT NULL,
@@ -267,7 +267,7 @@ CREATE TABLE IF NOT EXISTS trashed_conversations (
 
 -- Soft-delete marker for a contact; contact row stays until purge.
 CREATE TABLE IF NOT EXISTS trashed_contacts (
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Contact marked trash (`contacts.id`, no FK so contact can remain).
     contact_id INTEGER NOT NULL,
@@ -279,7 +279,7 @@ CREATE TABLE IF NOT EXISTS trashed_contacts (
 CREATE TABLE IF NOT EXISTS conversations (
     -- Surrogate primary key for this conversation.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Thread identity handle (`handles.id`); peer for 1:1, group chat id for groups.
     chat_handle_id INTEGER NOT NULL REFERENCES handles(id) ON DELETE CASCADE,
@@ -320,7 +320,7 @@ CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY,
     -- Parent conversation (`conversations.id`).
     conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    -- Owning vault account (`accounts.id`) denormalized for account-scoped queries.
+    -- Owning account (`accounts.id`) denormalized for account-scoped queries.
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Backup/source family that produced this row (for example imessage, whatsapp).
     source TEXT NOT NULL,
@@ -330,7 +330,7 @@ CREATE TABLE IF NOT EXISTS messages (
     timestamp TEXT NOT NULL,
     -- Message time normalized to UTC when available.
     timestamp_utc TEXT,
-    -- 1 = sent by the vault owner; 0 = received from someone else.
+    -- 1 = sent by the account holder; 0 = received from someone else.
     is_from_me INTEGER NOT NULL,
     -- Sender identity (`handles.id`); NULL when unknown.
     sender_handle_id INTEGER REFERENCES handles(id) ON DELETE SET NULL,
@@ -397,7 +397,7 @@ CREATE TABLE IF NOT EXISTS attachments (
     transcription TEXT,
     -- SHA-256 hex of the stored original bytes when present.
     sha256 TEXT,
-    -- Path under the vault assets store for the original file.
+    -- Path under the assets store for the original file.
     assets_path TEXT,
     -- Original file size in bytes when known.
     size_bytes INTEGER,
@@ -405,7 +405,7 @@ CREATE TABLE IF NOT EXISTS attachments (
     missing_reason TEXT,
     -- SHA-256 hex of a converted/compressed derivative used by the browser.
     derived_sha256 TEXT,
-    -- Path under the vault assets store for the derivative file.
+    -- Path under the assets store for the derivative file.
     derived_assets_path TEXT,
     -- MIME type of the derivative file.
     derived_mime_type TEXT
@@ -426,7 +426,7 @@ CREATE TABLE IF NOT EXISTS tapbacks (
     kind TEXT NOT NULL,
     -- Emoji glyph when the reaction is custom/emoji-based.
     emoji TEXT,
-    -- 1 = reaction from the vault owner; 0 = from someone else.
+    -- 1 = reaction from the account holder; 0 = from someone else.
     is_from_me INTEGER NOT NULL,
     -- Reactor identity (`handles.id`); NULL when unknown.
     sender_handle_id INTEGER REFERENCES handles(id) ON DELETE SET NULL
@@ -437,7 +437,7 @@ CREATE INDEX IF NOT EXISTS ix_tapbacks_message_id ON tapbacks (message_id);
 CREATE TABLE IF NOT EXISTS staging_conversations (
     -- Surrogate primary key for this staging conversation.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Thread identity handle id (resolved into handles during staging).
     chat_handle_id INTEGER NOT NULL,
@@ -473,7 +473,7 @@ CREATE TABLE IF NOT EXISTS staging_messages (
     id INTEGER PRIMARY KEY,
     -- Parent staging conversation (`staging_conversations.id`).
     conversation_id INTEGER NOT NULL REFERENCES staging_conversations(id) ON DELETE CASCADE,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Backup/source family that produced this row.
     source TEXT NOT NULL,
@@ -483,7 +483,7 @@ CREATE TABLE IF NOT EXISTS staging_messages (
     timestamp TEXT NOT NULL,
     -- Message time normalized to UTC when available.
     timestamp_utc TEXT,
-    -- 1 = sent by the vault owner; 0 = received from someone else.
+    -- 1 = sent by the account holder; 0 = received from someone else.
     is_from_me INTEGER NOT NULL,
     -- Sender identity handle id; NULL when unknown.
     sender_handle_id INTEGER,
@@ -534,7 +534,7 @@ CREATE TABLE IF NOT EXISTS staging_attachments (
     transcription TEXT,
     -- SHA-256 hex of the stored original bytes when present.
     sha256 TEXT,
-    -- Path under the vault assets store for the original file.
+    -- Path under the assets store for the original file.
     assets_path TEXT,
     -- Original file size in bytes when known.
     size_bytes INTEGER,
@@ -542,7 +542,7 @@ CREATE TABLE IF NOT EXISTS staging_attachments (
     missing_reason TEXT,
     -- SHA-256 hex of a converted/compressed derivative.
     derived_sha256 TEXT,
-    -- Path under the vault assets store for the derivative file.
+    -- Path under the assets store for the derivative file.
     derived_assets_path TEXT,
     -- MIME type of the derivative file.
     derived_mime_type TEXT
@@ -563,7 +563,7 @@ CREATE TABLE IF NOT EXISTS staging_tapbacks (
     kind TEXT NOT NULL,
     -- Emoji glyph when the reaction is custom/emoji-based.
     emoji TEXT,
-    -- 1 = reaction from the vault owner; 0 = from someone else.
+    -- 1 = reaction from the account holder; 0 = from someone else.
     is_from_me INTEGER NOT NULL,
     -- Reactor identity handle id; NULL when unknown.
     sender_handle_id INTEGER

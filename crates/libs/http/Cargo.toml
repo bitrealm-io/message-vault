@@ -2,7 +2,7 @@
 name = "message-crate-http"
 version = "0.1.0"
 edition = "2024"
-description = "Blocking HTTP client helpers and typed retry classification for the vault CLI crates"
+description = "Blocking HTTP client helpers and typed retry classification for the push and pull crates"
 license = "LicenseRef-FCL-1.0-ALv2"
 
 [dependencies]

@@ -7,7 +7,7 @@
 # BUILD_METADATA is the part of the Build after the "+", normally the commit:
 #   docker build --build-arg BUILD_METADATA="$(git rev-parse --short=8 HEAD)" ...
 # .git is not in the build context, so neither stage can ask git for it. Left
-# out, the vault and the website report 0.9.0+unknown. Passed empty, as the
+# out, the server and the website report 0.9.0+unknown. Passed empty, as the
 # release job does, they report the Product Version alone.
 
 # -----------------------------------------------------------------------------
@@ -28,7 +28,7 @@ RUN npm run build
 # -----------------------------------------------------------------------------
 # rust-toolchain.toml is the one place the compiler version is chosen. The
 # image copies it and lets rustup install that exact toolchain before the
-# build, so the published vault compiles on the Rust that CI tested (#427).
+# build, so the published server compiles on the Rust that CI tested (#427).
 # The base tag only picks the Debian release and pre-installs the same
 # minor: once Docker Hub carries the patch release the install is a no-op,
 # and scripts/check-docker-context.sh fails when the two minors disagree.

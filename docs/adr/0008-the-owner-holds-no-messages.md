@@ -150,7 +150,7 @@ configuration the operator chose. An unclaimed Message Crate is also empty, so a
 race destroys nothing and announces itself immediately — the operator finds
 they cannot claim their own installation.
 
-## Considered and rejected: a separate `vault_owner` table
+## Considered and rejected: a separate `owner` table
 
 Keeping the owner outside `accounts` entirely would make it impossible for the
 twelve account-scoped data tables to reference the owner at all, rather than
@@ -240,9 +240,9 @@ product needs.)
   not be enough to take it over. A user account changes its own on its
   session alone.
 - A forgotten owner password cannot be reset from inside the product, because
-  no account stands above the owner. `vault reset-owner-password` resets it
+  no account stands above the owner. `message-crate-server reset-owner-password` resets it
   from a shell on the server, which is the credential the owner already holds
-  as the operator. `vault create-owner` claims an unclaimed Message Crate from the same
+  as the operator. `message-crate-server create-owner` claims an unclaimed Message Crate from the same
   shell; each command refuses the state it is not for, so setting one up
   cannot silently overwrite a live owner's password.
 - The administrator surface is renamed throughout: `/v1/owner/accounts`, the

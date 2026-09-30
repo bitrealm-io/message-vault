@@ -21,7 +21,7 @@ Container_Ext(data, "Raw Message Data", "device backup, .json, .xml, .csv", "Ext
 ' Container_Ext($alias, $label, $techn="", $descr="", $sprite="", $tags="", $link="", $baseShape="rectangle")
 
 ' !unquoted procedure Container_Boundary($alias, $label, $tags="", $link="", $descr = "")
-Container_Boundary(vault_system, "Message Crate System") {
+Container_Boundary(message_crate_system, "Message Crate System") {
     Container(web, "Static Web Content", "html, css, javscript")
     
     Container_Boundary(ui, "User Interface") {

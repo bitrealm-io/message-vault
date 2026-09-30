@@ -21,7 +21,7 @@ docs/dist/
 docs/public/docs/developer/rustdoc/
 /static/
 
-# Local vault data and generated demo copies
+# Local server data and generated demo copies
 /data/
 crates/server/demo-seed/staging/
 

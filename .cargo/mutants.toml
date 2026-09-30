@@ -12,7 +12,7 @@
 # workspace member, so it is never mutated.
 
 exclude_globs = [
-    # Generates the demo vault's sample data; its output is checked by the
+    # Generates the demo account's sample data; its output is checked by the
     # demo import test, not line by line.
     "crates/server/demo-seed/**",
     # Builds the chat.db fixture other tests read.

@@ -52,7 +52,7 @@ fi
 echo "==> cargo test src-tauri"
 cargo test --manifest-path src-tauri/Cargo.toml
 
-echo "==> generated vault API types match the OpenAPI document"
+echo "==> generated server API types match the OpenAPI document"
 "${SCRIPT_DIR}/check-generated-api-types.sh"
 
 echo "==> web test"

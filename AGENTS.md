@@ -42,7 +42,7 @@ instead of dropping them.
 
 ## Message Crate Repository
 
-This repository is **messagecrate/message-crate**. Cargo package names still say `message-crate` (`message-crate-server`, `message-crate-core`): the packages keep the old name until the identifier rename lands. Public docs live at messagecrate.app.
+This repository is **messagecrate/message-crate**. The Cargo packages carry the same name (`message-crate-server`, `message-crate-core`). Public docs live at messagecrate.app.
 
 The product has two pieces:
 
@@ -75,7 +75,7 @@ message-crate
 │   ├── helpers/            # imessage-reader (GPL helper process the app spawns) and its protocol
 │   ├── libs/               # shared libraries (ir, ir-format, reexport, contacts, media,
 │   │                       #   message-crate-push, message-crate-pull, …)
-│   └── vault/              # message-crate-server (HTTP API + SQLite) and demo-seed
+│   └── server/             # message-crate-server (HTTP API + SQLite) and demo-seed
 ├── docker/                 # Dockerfile and Compose for a release-shaped server image
 ├── docs/                   # Astro Starlight site (messagecrate.app)
 │   ├── img/                # images used in README / docs

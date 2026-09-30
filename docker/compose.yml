@@ -1,14 +1,14 @@
-# Published vault image. Save this file and run: docker compose up -d
+# Published Message Crate image. Save this file and run: docker compose up -d
 # Docs: https://messagecrate.app/docs/user/get-started/try-message-crate/
 #
 # Pin a release: change :latest to :0.8.3 (no "v").
-# Empty vault: DEMO_DATA=false docker compose up -d
+# Empty Message Crate: DEMO_DATA=false docker compose up -d
 # JSONL drop: copy files into ./staging
 
 name: message-crate
 
 services:
-  vault:
+  server:
     image: bitrealm/message-crate:latest
     user: "${UID}:${GID}"
     ports:

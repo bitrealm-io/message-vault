@@ -403,7 +403,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: bitrealm/message-vault
+          images: bitrealm/message-crate
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -585,8 +585,8 @@ jobs:
 
           - Tauri v2 desktop app with all exporters included
           - Vault push/pull, format conversion, contacts preview
-          - Vault server Docker image: \`bitrealm/message-vault:${TAG}\`
-          - User Guide and developer docs: https://bitrealm.io/vault/user/ and https://bitrealm.io/vault/developer/
+          - Vault server Docker image: \`bitrealm/message-crate:${TAG}\`
+          - User Guide and developer docs: https://messagecrate.app/docs/user/ and https://messagecrate.app/docs/developer/
 
           ## Installers
 
@@ -598,5 +598,5 @@ jobs:
           ## Docker
 
           \`\`\`bash
-          docker pull bitrealm/message-vault:${TAG}
+          docker pull bitrealm/message-crate:${TAG}
           \`\`\`"

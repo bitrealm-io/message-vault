@@ -823,7 +823,7 @@ describe("OwnerHome", () => {
     const user = userEvent.setup({ delay: null });
     createAccount.mockRejectedValue(
       new VaultApiError(409, "username already taken: bob", {
-        type: "https://bitrealm.io/vault/errors/username-taken",
+        type: "https://messagecrate.app/docs/developer/reference/errors/username-taken",
         title: "Username taken",
         status: 409,
         detail: "username already taken: bob",

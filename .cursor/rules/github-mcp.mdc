@@ -1,5 +1,5 @@
 ---
-description: Use GitHub MCP for issues, PRs, search, and reviews on bitrealm-io/message-vault
+description: Use GitHub MCP for issues, PRs, search, and reviews on messagecrate/message-crate
 alwaysApply: true
 ---
 
@@ -7,7 +7,7 @@ alwaysApply: true
 
 Namespace: `plugin-github-github`. Discover schemas with `GetDynamicTools`, then call with `CallDynamicTool`.
 
-Default repo: **`bitrealm-io/message-vault`** (owner `bitrealm-io`, repo `message-vault`).
+Default repo: **`messagecrate/message-crate`** (owner `messagecrate`, repo `message-crate`).
 
 ## Auth and discovery
 

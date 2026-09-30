@@ -616,7 +616,7 @@ fn an_asset_the_vault_does_not_have_fails_the_run_and_cancels_it_in_the_vault() 
     let menu = server.mock(|when, then| {
         when.method(GET).path(format!("/v1/assets/{MENU_SHA}"));
         then.status(404).json_body(json!({
-            "type": "https://bitrealm.io/vault/developer/reference/errors/not-found",
+            "type": "https://messagecrate.app/docs/developer/reference/errors/not-found",
             "title": "Not found",
             "status": 404,
             "detail": "asset not found"
@@ -651,7 +651,7 @@ fn a_scope_the_vault_refuses_fails_the_run_with_the_vaults_sentence() {
         then.status(400)
             .header("content-type", "application/problem+json")
             .json_body(json!({
-                "type": "https://bitrealm.io/vault/developer/reference/errors/search-query-invalid",
+                "type": "https://messagecrate.app/docs/developer/reference/errors/search-query-invalid",
                 "title": "Search query invalid",
                 "status": 400,
                 "detail": "wibble: is not a word the Messages list has"

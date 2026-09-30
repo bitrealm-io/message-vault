@@ -1,6 +1,6 @@
 //! Per-conversation `.eml` / `.mbox` archive writer.
 //!
-//! Layout and headers follow the [mail archive format](https://bitrealm.io/vault/developer/formats/mail-archive/).
+//! Layout and headers follow the [mail archive format](https://messagecrate.app/docs/developer/formats/mail-archive/).
 //! The usual layout is one folder of `.eml` files per conversation.
 //! [`write_mail_package`] writes **mboxrd** mailboxes for clients that prefer
 //! a single file. SMS/MMS fill the core fields. iMessage also sets reply,

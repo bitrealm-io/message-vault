@@ -42,7 +42,7 @@ instead of dropping them.
 
 ## Message Vault Repository
 
-This repository is **message-vault**. Cargo package names may still say `message-vault-io`; that is a package namespace, not the repo name. Public docs and GitHub live under `bitrealm-io`.
+This repository is **messagecrate/message-crate**. Cargo package names still say `message-vault`; that is a package namespace, not the repo name. Public docs live at messagecrate.app.
 
 The product has two pieces:
 
@@ -59,7 +59,7 @@ The product has two pieces:
 | Desktop app            | Tauri 2 native window. Vite 8 + React 19 + TypeScript SPA in `web/`. React Router 7, React Aria, Tailwind CSS 4. Vitest + Biome.  |
 | Website                | Same `web/` SPA. Dev server on port 5173. Production copy in `static/`, served by the vault on port 8080.                         |
 | Node                   | Node.js 22+ for `web/`, `docs/`, and Docker frontend builds.                                                                      |
-| Docs site              | Astro 7 + Starlight, published to GitHub Pages at bitrealm.io on each `v*` release tag.                                            |
+| Docs site              | Astro 7 + Starlight, published to GitHub Pages at messagecrate.app on each `v*` release tag.                                            |
 | Packaging              | Docker (Node 22 + Rust image). GitHub Actions on `v*` tags builds the image and Tauri installers.                                 |
 | Helpers on PATH        | `ffmpeg` / `ffprobe` for media. `wtsexporter` (Python) for WhatsApp. `gh` for GitHub. `imessage-reader` is bundled beside the app, not on PATH (`src-tauri/build.rs` builds it). |
 | Not the product path   | Restored Next.js 16 browse app (`web-next/`), an HTTP client of the vault `/v1` API for evaluating its screens. Kept on purpose; see CLAUDE.md before proposing its removal. |
@@ -77,7 +77,7 @@ message-vault
 │   │                       #   vault-push, vault-pull, …)
 │   └── vault/              # message-vault-server (HTTP API + SQLite) and demo-seed
 ├── docker/                 # Dockerfile and Compose for a release-shaped vault image
-├── docs/                   # Astro Starlight site (bitrealm.io)
+├── docs/                   # Astro Starlight site (messagecrate.app)
 │   ├── img/                # images used in README / docs
 │   ├── public/             # CNAME and other files copied as-is
 │   └── src/                # landing page + User Guide + Developer guidebook
@@ -160,7 +160,7 @@ cargo install cargo-mutants cargo-nextest --locked                # ./scripts/mu
 **5. Clone and install the frontend**
 
 ```bash
-git clone https://github.com/bitrealm-io/message-vault.git
+git clone https://github.com/messagecrate/message-crate.git
 cd message-vault
 cd web && npm ci && cd ..
 ```
@@ -313,7 +313,7 @@ Three version numbers are easy to mix up:
 | What            | Example             | Meaning                                                                                |
 |-----------------|---------------------|----------------------------------------------------------------------------------------|
 | Product version | `0.9.0`             | Desktop app + vault image. Git tag is `v0.9.0`.                                        |
-| Docker Hub tag  | `0.9.0` (no `v`)    | `bitrealm/message-vault:0.9.0`. Also `0.9`, `latest`, and `sha-…`.                     |
+| Docker Hub tag  | `0.9.0` (no `v`)    | `bitrealm/message-crate:0.9.0`. Also `0.9`, `latest`, and `sha-…`.                     |
 | JSONL schema    | `schema_version: 4` | Shared chat file format. Independent of the product version. Version 3 is refused, never upgraded. |
 | Build           | `0.9.0+343fe0d8`    | The product version plus the commit, which is what a screen shows as "Version". `.dirty` follows the commit when tracked files held uncommitted changes; a build from a `v*` tag is `0.9.0` alone; `0.9.0+unknown` when nothing is known. Nobody writes it: `crates/libs/build-version` works it out for the vault and the desktop app, and `web/vite.config.ts` for the SPA, under the same rules. |
 | Schema fingerprint | `345080516`      | Derived from `schema/sql/*.sql` and stamped into the vault database. Shown in Owner Home → Vault Settings. Never bumped by hand. |
@@ -336,13 +336,13 @@ Leave most other `Cargo.toml` files at `0.1.0`. Do not bump `web-next/` (`0.3.0`
 3. Set the four product version files to the new number (for example `0.8.0`).
 4. Push a git tag `v0.8.0` on that commit. Pushing the tag is what ships. Push/PR to `main` does not. The `version` job fails the tag run if the four files, their lockfiles, or the changelog heading disagree with the tag, and nothing is built or published.
 
-`.github/workflows/ci.yml` then: runs fmt/test, pushes `bitrealm/message-vault`, builds Tauri installers (Linux `.deb` + AppImage, Windows `.msi`, macOS `.dmg`), and creates a GitHub Release named `Message Vault v0.8.0`. `.github/workflows/docs.yml` publishes the documentation site to bitrealm.io on the same tag; a merge to `main` does not publish it.
+`.github/workflows/ci.yml` then: runs fmt/test, pushes `bitrealm/message-crate`, builds Tauri installers (Linux `.deb` + AppImage, Windows `.msi`, macOS `.dmg`), and creates a GitHub Release named `Message Vault v0.8.0`. `.github/workflows/docs.yml` publishes the documentation site to messagecrate.app on the same tag; a merge to `main` does not publish it.
 
 The docs deploy runs in the `github-pages` environment, whose deployment branch policy in the repository settings must allow the `v*` tag rule as well as `main` (for `workflow_dispatch`). The workflow trigger and that policy have to agree: a tag push against an environment that only allows `main` builds the site and then refuses the deploy, which is what happened to `v0.9.0` (#654). Check and set it with:
 
 ```bash
-gh api repos/bitrealm-io/message-vault/environments/github-pages/deployment-branch-policies -q '.branch_policies[] | "\(.type) \(.name)"'
-gh api --method POST repos/bitrealm-io/message-vault/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag
+gh api repos/messagecrate/message-crate/environments/github-pages/deployment-branch-policies -q '.branch_policies[] | "\(.type) \(.name)"'
+gh api --method POST repos/messagecrate/message-crate/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag
 ```
 
 **Build a release-shaped binary locally (does not publish)**

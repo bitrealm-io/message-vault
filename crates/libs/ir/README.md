@@ -14,7 +14,7 @@ Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ## Docs
 
-This crate is a library. Schema notes for contributors: [Common message](https://bitrealm.io/vault/developer/architecture/common-message/). JSON Lines layout for imports: https://bitrealm.io/vault/developer/reference/export-structure/
+This crate is a library. Schema notes for contributors: [Common message](https://messagecrate.app/docs/developer/architecture/common-message/). JSON Lines layout for imports: https://messagecrate.app/docs/developer/reference/export-structure/
 
 ## License
 

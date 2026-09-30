@@ -3342,7 +3342,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_Account"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3352,11 +3352,11 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -3366,7 +3366,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3400,7 +3400,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateAccountResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3409,7 +3409,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3419,13 +3419,13 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`registration-closed`](https://bitrealm.io/vault/developer/reference/errors/registration-closed): This vault does not let visitors create their own account: its owner has not opened registration, or nobody has claimed the vault yet.
+             *     [`registration-closed`](https://messagecrate.app/docs/developer/reference/errors/registration-closed): This vault does not let visitors create their own account: its owner has not opened registration, or nobody has claimed the vault yet.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -3435,7 +3435,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`username-taken`](https://bitrealm.io/vault/developer/reference/errors/username-taken): The username already belongs to an account on this vault. */
+            /** @description [`username-taken`](https://messagecrate.app/docs/developer/reference/errors/username-taken): The username already belongs to an account on this vault. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3444,7 +3444,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3453,7 +3453,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -3462,7 +3462,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3471,7 +3471,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`rate-limited`](https://bitrealm.io/vault/developer/reference/errors/rate-limited): The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault. */
+            /** @description [`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault. */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -3502,7 +3502,7 @@ export interface operations {
                     "application/json": components["schemas"]["Account"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3512,11 +3512,11 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -3526,7 +3526,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3535,7 +3535,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3570,7 +3570,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3580,9 +3580,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`invalid-credentials`](https://bitrealm.io/vault/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong.
+             * @description [`invalid-credentials`](https://messagecrate.app/docs/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong.
              *
-             *     [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.
+             *     [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.
              */
             401: {
                 headers: {
@@ -3593,13 +3593,13 @@ export interface operations {
                 };
             };
             /**
-             * @description [`demo-account-protected`](https://bitrealm.io/vault/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
+             * @description [`demo-account-protected`](https://messagecrate.app/docs/developer/reference/errors/demo-account-protected): The demo account refuses this operation, because it exists to be looked at and reset rather than changed.
              *
-             *     [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             *     [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -3609,7 +3609,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3618,7 +3618,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3627,7 +3627,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -3636,7 +3636,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3671,7 +3671,7 @@ export interface operations {
                     "application/json": components["schemas"]["Account"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3680,7 +3680,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3690,11 +3690,11 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -3704,7 +3704,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3713,7 +3713,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3722,7 +3722,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -3731,7 +3731,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3767,7 +3767,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ApiToken"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3777,9 +3777,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -3789,7 +3789,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3798,7 +3798,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3835,7 +3835,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateApiTokenResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3844,7 +3844,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3854,9 +3854,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -3866,7 +3866,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3875,7 +3875,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -3884,7 +3884,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -3893,7 +3893,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3925,7 +3925,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -3935,9 +3935,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -3947,7 +3947,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3956,7 +3956,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3993,7 +3993,7 @@ export interface operations {
                     "application/json": components["schemas"]["UpdateApiTokenResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4002,7 +4002,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4012,9 +4012,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -4024,7 +4024,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4033,7 +4033,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4042,7 +4042,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4051,7 +4051,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4091,7 +4091,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ExportRun"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4101,11 +4101,11 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -4115,7 +4115,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4124,7 +4124,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4160,7 +4160,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_Identity"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4170,11 +4170,11 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -4184,7 +4184,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4193,7 +4193,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4233,7 +4233,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ImportSummary"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4243,11 +4243,11 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -4257,7 +4257,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4266,7 +4266,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4299,7 +4299,7 @@ export interface operations {
                     "application/json": components["schemas"]["ImportRun"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4309,11 +4309,11 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -4323,7 +4323,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4332,7 +4332,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4368,7 +4368,7 @@ export interface operations {
                     "application/json": components["schemas"]["DeleteMessagesResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4377,7 +4377,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4387,11 +4387,11 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -4401,7 +4401,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4410,7 +4410,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4419,7 +4419,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4428,7 +4428,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4471,7 +4471,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4481,9 +4481,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`invalid-credentials`](https://bitrealm.io/vault/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong.
+             * @description [`invalid-credentials`](https://messagecrate.app/docs/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong.
              *
-             *     [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.
+             *     [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.
              */
             401: {
                 headers: {
@@ -4494,11 +4494,11 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -4508,7 +4508,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4517,7 +4517,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4526,7 +4526,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4535,7 +4535,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4566,7 +4566,7 @@ export interface operations {
                     "application/json": components["schemas"]["AccountStorage"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4576,11 +4576,11 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -4590,7 +4590,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4599,7 +4599,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4633,7 +4633,7 @@ export interface operations {
                     "application/octet-stream": unknown;
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4643,9 +4643,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -4655,7 +4655,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4664,7 +4664,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4714,7 +4714,7 @@ export interface operations {
                     "application/json": components["schemas"]["Asset"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4723,7 +4723,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4733,9 +4733,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -4745,7 +4745,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4754,7 +4754,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4763,7 +4763,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4773,9 +4773,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`asset-upload-invalid`](https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
              */
             422: {
                 headers: {
@@ -4809,7 +4809,7 @@ export interface operations {
                     "application/json": components["schemas"]["Asset"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4819,9 +4819,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -4831,7 +4831,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4840,7 +4840,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4889,7 +4889,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateAssetUploadResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4898,7 +4898,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4908,9 +4908,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -4920,7 +4920,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4929,7 +4929,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -4938,7 +4938,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -4948,9 +4948,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`asset-upload-invalid`](https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
              */
             422: {
                 headers: {
@@ -4984,7 +4984,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4994,9 +4994,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -5006,7 +5006,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5016,9 +5016,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`asset-upload-invalid`](https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
              */
             422: {
                 headers: {
@@ -5065,7 +5065,7 @@ export interface operations {
                     "application/json": components["schemas"]["Asset"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5075,9 +5075,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -5087,7 +5087,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5097,9 +5097,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`asset-upload-invalid`](https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
              */
             422: {
                 headers: {
@@ -5140,7 +5140,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReplaceAssetUploadPartResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5149,7 +5149,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5159,9 +5159,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -5171,7 +5171,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5180,7 +5180,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5189,7 +5189,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5199,9 +5199,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`asset-upload-invalid`](https://bitrealm.io/vault/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
+             *     [`asset-upload-invalid`](https://messagecrate.app/docs/developer/reference/errors/asset-upload-invalid): Something about the upload does not match what the vault expected: the bytes do not hash to the claimed SHA-256, a part number or upload id is unknown, or a completion names parts that never arrived.
              */
             422: {
                 headers: {
@@ -5235,7 +5235,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_NamedSet"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5245,9 +5245,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -5257,7 +5257,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5291,7 +5291,7 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5300,7 +5300,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5310,9 +5310,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -5322,7 +5322,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`name-taken`](https://bitrealm.io/vault/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
+            /** @description [`name-taken`](https://messagecrate.app/docs/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5331,7 +5331,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5340,7 +5340,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5349,7 +5349,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5378,7 +5378,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5388,9 +5388,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -5400,7 +5400,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5409,7 +5409,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5444,7 +5444,7 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5453,7 +5453,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5463,9 +5463,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -5475,7 +5475,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5484,7 +5484,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`name-taken`](https://bitrealm.io/vault/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
+            /** @description [`name-taken`](https://messagecrate.app/docs/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5493,7 +5493,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5502,7 +5502,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5511,7 +5511,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5547,7 +5547,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_i64"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5557,9 +5557,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -5569,7 +5569,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5578,7 +5578,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5613,7 +5613,7 @@ export interface operations {
                     "application/json": components["schemas"]["UpdateMembersResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5622,7 +5622,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5632,9 +5632,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -5644,7 +5644,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5653,7 +5653,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5662,7 +5662,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5671,7 +5671,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5708,7 +5708,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ContactSummary"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5718,9 +5718,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -5731,9 +5731,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`search-query-invalid`](https://bitrealm.io/vault/developer/reference/errors/search-query-invalid): The search language refused the query.
+             *     [`search-query-invalid`](https://messagecrate.app/docs/developer/reference/errors/search-query-invalid): The search language refused the query.
              */
             422: {
                 headers: {
@@ -5768,7 +5768,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateContactsResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5777,7 +5777,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5787,9 +5787,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -5799,7 +5799,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5808,7 +5808,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5817,7 +5817,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5849,7 +5849,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ContactSelectionSummary"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5858,7 +5858,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5868,9 +5868,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -5880,7 +5880,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5889,7 +5889,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5898,7 +5898,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5930,7 +5930,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_String"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5939,7 +5939,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5949,9 +5949,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -5961,7 +5961,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -5970,7 +5970,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -5979,7 +5979,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6010,7 +6010,7 @@ export interface operations {
                     "application/json": components["schemas"]["Contact"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6020,9 +6020,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6032,7 +6032,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6041,7 +6041,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6071,7 +6071,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6081,9 +6081,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6093,7 +6093,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6102,7 +6102,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6111,7 +6111,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6146,7 +6146,7 @@ export interface operations {
                     "application/json": components["schemas"]["Contact"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6155,7 +6155,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6165,9 +6165,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6177,7 +6177,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6186,7 +6186,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -6195,7 +6195,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -6204,7 +6204,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6234,7 +6234,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6244,9 +6244,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6256,7 +6256,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6265,7 +6265,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6295,7 +6295,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6305,9 +6305,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6317,7 +6317,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6326,7 +6326,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6363,7 +6363,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ConversationSummary"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6373,9 +6373,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6386,9 +6386,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`search-query-invalid`](https://bitrealm.io/vault/developer/reference/errors/search-query-invalid): The search language refused the query.
+             *     [`search-query-invalid`](https://messagecrate.app/docs/developer/reference/errors/search-query-invalid): The search language refused the query.
              */
             422: {
                 headers: {
@@ -6420,7 +6420,7 @@ export interface operations {
                     "application/json": components["schemas"]["ConversationSummary"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6430,9 +6430,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6442,7 +6442,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6451,7 +6451,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6481,7 +6481,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6491,9 +6491,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6503,7 +6503,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6512,7 +6512,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6521,7 +6521,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6559,7 +6559,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_Message"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6569,9 +6569,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6581,7 +6581,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6590,7 +6590,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6620,7 +6620,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6630,9 +6630,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6642,7 +6642,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6651,7 +6651,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6687,7 +6687,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ConversationSource"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6697,9 +6697,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6709,7 +6709,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6718,7 +6718,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6748,7 +6748,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6758,9 +6758,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6770,7 +6770,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6779,7 +6779,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6816,7 +6816,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ExportRun"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6826,9 +6826,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6838,7 +6838,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6872,7 +6872,7 @@ export interface operations {
                     "application/json": components["schemas"]["ExportRun"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6881,7 +6881,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6891,9 +6891,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6903,7 +6903,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -6912,7 +6912,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -6922,9 +6922,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`search-query-invalid`](https://bitrealm.io/vault/developer/reference/errors/search-query-invalid): The search language refused the query.
+             *     [`search-query-invalid`](https://messagecrate.app/docs/developer/reference/errors/search-query-invalid): The search language refused the query.
              */
             422: {
                 headers: {
@@ -6956,7 +6956,7 @@ export interface operations {
                     "application/json": components["schemas"]["ExportRun"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -6966,9 +6966,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -6978,7 +6978,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6987,7 +6987,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7018,7 +7018,7 @@ export interface operations {
                     "application/json": components["schemas"]["ExportRun"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7028,9 +7028,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -7040,7 +7040,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7049,7 +7049,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7058,7 +7058,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7089,7 +7089,7 @@ export interface operations {
                     "application/json": components["schemas"]["ExportRun"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7099,9 +7099,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -7111,7 +7111,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7120,7 +7120,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7129,7 +7129,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7167,7 +7167,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_Message"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7177,9 +7177,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -7189,7 +7189,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7198,7 +7198,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7207,7 +7207,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7244,7 +7244,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ImportSummary"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7254,9 +7254,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -7266,7 +7266,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7300,7 +7300,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateImportResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7309,7 +7309,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7319,9 +7319,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -7331,7 +7331,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7340,7 +7340,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -7349,7 +7349,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -7358,7 +7358,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7389,7 +7389,7 @@ export interface operations {
                     "application/json": components["schemas"]["ImportRun"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7399,9 +7399,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -7411,7 +7411,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7420,7 +7420,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7455,7 +7455,7 @@ export interface operations {
                     "application/json": components["schemas"]["ImportRun"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7464,7 +7464,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7474,9 +7474,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -7486,7 +7486,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7495,7 +7495,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7504,7 +7504,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -7513,7 +7513,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -7522,7 +7522,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7559,7 +7559,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateImportBatchResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7568,7 +7568,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7578,9 +7578,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -7590,7 +7590,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7599,7 +7599,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7608,7 +7608,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -7617,7 +7617,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -7626,7 +7626,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7661,7 +7661,7 @@ export interface operations {
                     "application/json": components["schemas"]["CompleteImportResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7670,7 +7670,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7680,9 +7680,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -7692,7 +7692,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7701,7 +7701,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7710,7 +7710,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -7719,7 +7719,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -7728,7 +7728,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7764,7 +7764,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_ImportContact"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7774,9 +7774,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -7786,7 +7786,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7795,7 +7795,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7826,7 +7826,7 @@ export interface operations {
                     "application/json": components["schemas"]["DiscardImportResponse"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7836,9 +7836,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -7848,7 +7848,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7857,7 +7857,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7866,7 +7866,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7899,7 +7899,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_NamedSet"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7909,9 +7909,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -7921,7 +7921,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7955,7 +7955,7 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7964,7 +7964,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7974,9 +7974,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -7986,7 +7986,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`name-taken`](https://bitrealm.io/vault/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
+            /** @description [`name-taken`](https://messagecrate.app/docs/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7995,7 +7995,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8004,7 +8004,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -8013,7 +8013,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8042,7 +8042,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8052,9 +8052,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -8064,7 +8064,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8073,7 +8073,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8108,7 +8108,7 @@ export interface operations {
                     "application/json": components["schemas"]["NamedSet"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8117,7 +8117,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8127,9 +8127,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -8139,7 +8139,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8148,7 +8148,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`name-taken`](https://bitrealm.io/vault/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
+            /** @description [`name-taken`](https://messagecrate.app/docs/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8157,7 +8157,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8166,7 +8166,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -8175,7 +8175,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8211,7 +8211,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_i64"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8221,9 +8221,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -8233,7 +8233,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8242,7 +8242,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8277,7 +8277,7 @@ export interface operations {
                     "application/json": components["schemas"]["UpdateMembersResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8286,7 +8286,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8296,9 +8296,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -8308,7 +8308,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8317,7 +8317,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8326,7 +8326,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -8335,7 +8335,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8372,7 +8372,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_Message"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8382,9 +8382,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -8395,9 +8395,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
              *
-             *     [`search-query-invalid`](https://bitrealm.io/vault/developer/reference/errors/search-query-invalid): The search language refused the query.
+             *     [`search-query-invalid`](https://messagecrate.app/docs/developer/reference/errors/search-query-invalid): The search language refused the query.
              */
             422: {
                 headers: {
@@ -8429,7 +8429,7 @@ export interface operations {
                     "application/json": components["schemas"]["Message"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8439,9 +8439,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -8451,7 +8451,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8460,7 +8460,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8493,7 +8493,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_SavedSearch"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8503,9 +8503,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -8515,7 +8515,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8549,7 +8549,7 @@ export interface operations {
                     "application/json": components["schemas"]["SavedSearch"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8558,7 +8558,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8568,9 +8568,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -8580,7 +8580,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`name-taken`](https://bitrealm.io/vault/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
+            /** @description [`name-taken`](https://messagecrate.app/docs/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8589,7 +8589,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8598,7 +8598,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -8607,7 +8607,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8637,7 +8637,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8647,9 +8647,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -8659,7 +8659,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8668,7 +8668,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8703,7 +8703,7 @@ export interface operations {
                     "application/json": components["schemas"]["SavedSearch"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8712,7 +8712,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8722,9 +8722,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -8734,7 +8734,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`not-found`](https://bitrealm.io/vault/developer/reference/errors/not-found): No resource at that address exists for this account. */
+            /** @description [`not-found`](https://messagecrate.app/docs/developer/reference/errors/not-found): No resource at that address exists for this account. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8743,7 +8743,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`name-taken`](https://bitrealm.io/vault/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
+            /** @description [`name-taken`](https://messagecrate.app/docs/developer/reference/errors/name-taken): A Contact Group, Message Tag or Saved Search with this name already exists for the account. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8752,7 +8752,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -8761,7 +8761,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -8770,7 +8770,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8803,7 +8803,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_FieldDoc"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8813,9 +8813,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -8825,7 +8825,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8858,7 +8858,7 @@ export interface operations {
                     "application/json": components["schemas"]["Page_FieldDoc"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8868,9 +8868,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -8880,7 +8880,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8908,7 +8908,7 @@ export interface operations {
                     "application/json": components["schemas"]["Session"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8918,9 +8918,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -8930,7 +8930,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8965,7 +8965,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateSessionResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8974,7 +8974,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`invalid-credentials`](https://bitrealm.io/vault/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong. */
+            /** @description [`invalid-credentials`](https://messagecrate.app/docs/developer/reference/errors/invalid-credentials): The username or password did not match an account, or the current password given to confirm deleting an account or changing the vault owner's password was wrong. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -8983,7 +8983,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act. */
+            /** @description [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -8992,7 +8992,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -9001,7 +9001,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -9010,7 +9010,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9019,7 +9019,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`rate-limited`](https://bitrealm.io/vault/developer/reference/errors/rate-limited): The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault. */
+            /** @description [`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault. */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -9046,7 +9046,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9056,9 +9056,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -9068,7 +9068,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9095,7 +9095,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9105,9 +9105,9 @@ export interface operations {
                 };
             };
             /**
-             * @description [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -9117,7 +9117,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9145,7 +9145,7 @@ export interface operations {
                     "application/json": components["schemas"]["Vault"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9180,7 +9180,7 @@ export interface operations {
                     "application/json": components["schemas"]["CreateSessionResponse"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9189,7 +9189,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`state-conflict`](https://bitrealm.io/vault/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
+            /** @description [`state-conflict`](https://messagecrate.app/docs/developer/reference/errors/state-conflict): The resource is not in a state that allows the operation: an import that is no longer running or already has a live run, a vault that already has an owner, or a delete on something not yet trashed. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9198,7 +9198,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -9207,7 +9207,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -9216,7 +9216,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9225,7 +9225,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`rate-limited`](https://bitrealm.io/vault/developer/reference/errors/rate-limited): The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault. */
+            /** @description [`rate-limited`](https://messagecrate.app/docs/developer/reference/errors/rate-limited): The vault refused an authentication attempt because too many came too fast: more than 20 attempts inside 60 seconds to log in as one username, or to register an account or claim the vault, which count once for the whole vault. */
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -9253,7 +9253,7 @@ export interface operations {
                     "application/json": components["schemas"]["VaultSettings"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9263,11 +9263,11 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -9277,7 +9277,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9309,7 +9309,7 @@ export interface operations {
                     "application/json": components["schemas"]["VaultSettings"];
                 };
             };
-            /** @description [`malformed-body`](https://bitrealm.io/vault/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the vault reads, or the body failed to arrive. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9318,7 +9318,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9328,11 +9328,11 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -9342,7 +9342,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`payload-too-large`](https://bitrealm.io/vault/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the vault's configured cap, whether announced by `Content-Length` or discovered while reading. */
             413: {
                 headers: {
                     [name: string]: unknown;
@@ -9351,7 +9351,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`unsupported-media-type`](https://bitrealm.io/vault/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
             415: {
                 headers: {
                     [name: string]: unknown;
@@ -9360,7 +9360,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -9388,7 +9388,7 @@ export interface operations {
                     "application/json": components["schemas"]["VaultStorage"];
                 };
             };
-            /** @description [`authentication-required`](https://bitrealm.io/vault/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -9398,11 +9398,11 @@ export interface operations {
                 };
             };
             /**
-             * @description [`not-the-owner`](https://bitrealm.io/vault/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
+             * @description [`not-the-owner`](https://messagecrate.app/docs/developer/reference/errors/not-the-owner): This route belongs to the vault owner: creating accounts, changing vault settings, or anything the owner gates.
              *
-             *     [`insufficient-scope`](https://bitrealm.io/vault/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *     [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
              *
-             *     [`account-disabled`](https://bitrealm.io/vault/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the vault owner has disabled it, so it may not log in or act.
              */
             403: {
                 headers: {
@@ -9412,7 +9412,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description [`validation-failed`](https://bitrealm.io/vault/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
             422: {
                 headers: {
                     [name: string]: unknown;

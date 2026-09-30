@@ -37,7 +37,7 @@ Source
 This copy was built from Message Vault {version}. Its complete corresponding
 source is the folder crates/helpers/imessage-reader at that release:
 
-  https://github.com/bitrealm-io/message-vault/tree/v{version}/crates/helpers/imessage-reader
+  https://github.com/messagecrate/message-crate/tree/v{version}/crates/helpers/imessage-reader
 
 Questions: vault@bitrealm.io
 

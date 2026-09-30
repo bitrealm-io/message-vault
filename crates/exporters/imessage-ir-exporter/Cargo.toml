@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license = "LicenseRef-FCL-1.0-ALv2"
 description = "Export Apple Messages to per-conversation JSON Lines / JSON / CSV / EML / MBOX via message-ir, reading the database through the imessage-reader helper process"
-repository = "https://github.com/bitrealm-io/message-vault"
+repository = "https://github.com/messagecrate/message-crate"
 
 [lib]
 name = "imessage_ir_exporter"

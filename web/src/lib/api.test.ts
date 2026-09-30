@@ -28,7 +28,7 @@ function lastCall(fetchSpy: ReturnType<typeof vi.fn>): [string, RequestInit] {
 }
 
 const PROBLEM = {
-  type: "https://bitrealm.io/vault/developer/reference/errors/invalid-credentials",
+  type: "https://messagecrate.app/docs/developer/reference/errors/invalid-credentials",
   title: "Invalid credentials",
   status: 401,
   detail: "invalid username or password",
@@ -49,7 +49,7 @@ describe("problemFromBody", () => {
     const err = problemFromBody(
       422,
       JSON.stringify({
-        type: "https://bitrealm.io/vault/developer/reference/errors/validation-failed",
+        type: "https://messagecrate.app/docs/developer/reference/errors/validation-failed",
         title: "Validation failed",
         status: 422,
         errors: ["limit must be at least 1", "offset exceeds maximum of 50000"],
@@ -102,7 +102,7 @@ describe("apiClient errors", () => {
         status: 409,
         text: async () =>
           JSON.stringify({
-            type: "https://bitrealm.io/vault/developer/reference/errors/username-taken",
+            type: "https://messagecrate.app/docs/developer/reference/errors/username-taken",
             title: "Username taken",
             status: 409,
             detail: "username already taken: matt",

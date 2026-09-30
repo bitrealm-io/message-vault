@@ -11,7 +11,7 @@ use axum::http::StatusCode;
 pub use vault_api_types::Problem;
 
 /// Where the type pages are published; each `type` URL is this plus the slug.
-pub const ERRORS_URL: &str = "https://bitrealm.io/vault/developer/reference/errors/";
+pub const ERRORS_URL: &str = "https://messagecrate.app/docs/developer/reference/errors/";
 
 /// The `type` of a `500 Internal Server Error`: no page could say anything a
 /// reader could act on.

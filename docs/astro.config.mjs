@@ -22,109 +22,109 @@ const limitedBadge = {
 };
 
 const userGuideItems = [
-  { label: 'Home', slug: 'vault/user' },
+  { label: 'Home', slug: 'docs/user' },
   {
     label: 'Get started',
     items: [
-      'vault/user/get-started/what-is-message-vault',
-      'vault/user/get-started/why-you-provide-backups',
-      'vault/user/get-started/try-the-vault',
-      'vault/user/get-started/your-own-messages',
-      'vault/user/get-started/install-the-desktop-app',
+      'docs/user/get-started/what-is-message-vault',
+      'docs/user/get-started/why-you-provide-backups',
+      'docs/user/get-started/try-the-vault',
+      'docs/user/get-started/your-own-messages',
+      'docs/user/get-started/install-the-desktop-app',
     ],
   },
   {
     label: 'Prepare a backup',
     items: [
-      'vault/user/prepare-a-backup',
-      'vault/user/prepare-a-backup/iphone-ipad',
-      'vault/user/prepare-a-backup/iphone-whatsapp',
-      'vault/user/prepare-a-backup/android-sms',
-      'vault/user/prepare-a-backup/android-whatsapp',
+      'docs/user/prepare-a-backup',
+      'docs/user/prepare-a-backup/iphone-ipad',
+      'docs/user/prepare-a-backup/iphone-whatsapp',
+      'docs/user/prepare-a-backup/android-sms',
+      'docs/user/prepare-a-backup/android-whatsapp',
     ],
   },
-  'vault/user/import-from-a-backup',
-  'vault/user/browse-your-messages',
+  'docs/user/import-from-a-backup',
+  'docs/user/browse-your-messages',
   {
     label: 'How do I…',
     items: [
-      'vault/user/how-to/search',
-      'vault/user/how-to/contacts-and-labels',
-      'vault/user/how-to/saved-searches',
-      'vault/user/how-to/trash',
-      'vault/user/how-to/settings',
-      'vault/user/how-to/owner-home',
-      'vault/user/how-to/export-from-the-vault',
-      'vault/user/how-to/convert-formats',
-      'vault/user/how-to/media-and-privacy',
-      { slug: 'vault/user/how-to/rescue-imports', badge: limitedBadge },
-      'vault/user/how-to/update',
-      'vault/user/how-to/troubleshooting',
+      'docs/user/how-to/search',
+      'docs/user/how-to/contacts-and-labels',
+      'docs/user/how-to/saved-searches',
+      'docs/user/how-to/trash',
+      'docs/user/how-to/settings',
+      'docs/user/how-to/owner-home',
+      'docs/user/how-to/export-from-the-vault',
+      'docs/user/how-to/convert-formats',
+      'docs/user/how-to/media-and-privacy',
+      { slug: 'docs/user/how-to/rescue-imports', badge: limitedBadge },
+      'docs/user/how-to/update',
+      'docs/user/how-to/troubleshooting',
     ],
   },
-  'vault/user/glossary',
+  'docs/user/glossary',
 ];
 
 const developerItems = [
-  'vault/developer',
-  'vault/developer/contributing',
-  'vault/developer/release',
-  'vault/developer/rustdoc-style',
+  'docs/developer',
+  'docs/developer/contributing',
+  'docs/developer/release',
+  'docs/developer/rustdoc-style',
   {
     label: 'Architecture',
     items: [
-      'vault/developer/vault-design',
-      'vault/developer/message-transfer',
-      'vault/developer/architecture/common-message',
+      'docs/developer/vault-design',
+      'docs/developer/message-transfer',
+      'docs/developer/architecture/common-message',
     ],
   },
-  'vault/developer/docker',
-  'vault/developer/reference/api',
+  'docs/developer/docker',
+  'docs/developer/reference/api',
   {
     label: 'HTTP problem types',
     collapsed: true,
-    items: [{ autogenerate: { directory: 'vault/developer/reference/errors' } }],
+    items: [{ autogenerate: { directory: 'docs/developer/reference/errors' } }],
   },
   {
     label: 'HTTP API reference',
-    link: '/vault/developer/rustdoc/http/',
+    link: '/docs/developer/rustdoc/http/',
     attrs: { target: '_self' },
   },
   {
     label: 'Rust crate docs',
-    link: '/vault/developer/rustdoc/',
+    link: '/docs/developer/rustdoc/',
     attrs: { target: '_self' },
   },
   {
     label: 'Formats',
     items: [
-      'vault/developer/formats',
-      'vault/developer/formats/mail-archive',
-      'vault/developer/formats/sms-backup-restore-xml',
-      'vault/developer/formats/convert',
+      'docs/developer/formats',
+      'docs/developer/formats/mail-archive',
+      'docs/developer/formats/sms-backup-restore-xml',
+      'docs/developer/formats/convert',
       {
         label: 'SMS Backup & Restore',
         items: [
-          'vault/developer/formats/sms-backup-restore/input',
-          'vault/developer/formats/sms-backup-restore/mapping',
+          'docs/developer/formats/sms-backup-restore/input',
+          'docs/developer/formats/sms-backup-restore/mapping',
         ],
       },
       {
         label: 'SMS Backup+',
         items: [
-          'vault/developer/formats/sms-backup-plus/format',
-          'vault/developer/formats/sms-backup-plus/mapping',
+          'docs/developer/formats/sms-backup-plus/format',
+          'docs/developer/formats/sms-backup-plus/mapping',
         ],
       },
       {
         label: 'GO SMS Pro',
-        items: ['vault/developer/formats/go-sms-pro/mapping'],
+        items: ['docs/developer/formats/go-sms-pro/mapping'],
       },
       {
         label: 'iMazing',
         items: [
-          'vault/developer/formats/imazing/input',
-          'vault/developer/formats/imazing/design',
+          'docs/developer/formats/imazing/input',
+          'docs/developer/formats/imazing/design',
         ],
       },
     ],
@@ -133,20 +133,20 @@ const developerItems = [
     label: 'Instance internals',
     collapsed: true,
     items: [
-      'vault/developer/reference/config-and-accounts',
-      'vault/developer/reference/database',
-      'vault/developer/reference/export-structure',
-      'vault/developer/reference/export-formats',
-      'vault/developer/reference/csv-columns',
-      'vault/developer/reference/server-cli',
+      'docs/developer/reference/config-and-accounts',
+      'docs/developer/reference/database',
+      'docs/developer/reference/export-structure',
+      'docs/developer/reference/export-formats',
+      'docs/developer/reference/csv-columns',
+      'docs/developer/reference/server-cli',
     ],
   },
 ];
 
 export default defineConfig({
-  site: 'https://bitrealm.io',
+  site: 'https://messagecrate.app',
   redirects: {
-    '/vault/developer/docker-compose/': '/vault/developer/docker/',
+    '/docs/developer/docker-compose/': '/docs/developer/docker/',
   },
   markdown: {
     processor: satteri({ hastPlugins: [wrapTables] }),
@@ -162,13 +162,13 @@ export default defineConfig({
         'Extract messages from phone backups, import them into a local vault, and browse them in a website you control.',
       editLink: {
         baseUrl:
-          'https://github.com/bitrealm-io/message-vault/edit/main/docs/',
+          'https://github.com/messagecrate/message-crate/edit/main/docs/',
       },
       social: [
         {
           icon: 'github',
           label: 'GitHub',
-          href: 'https://github.com/bitrealm-io/message-vault',
+          href: 'https://github.com/messagecrate/message-crate',
         },
       ],
       head: [
@@ -221,14 +221,14 @@ export default defineConfig({
           [
             {
               label: 'User Guide',
-              link: '/vault/user/',
+              link: '/docs/user/',
               icon: 'open-book',
               items: userGuideItems,
             },
             {
               label: 'Developer',
               id: 'developer',
-              link: '/vault/developer/',
+              link: '/docs/developer/',
               icon: 'laptop',
               items: developerItems,
             },
@@ -236,8 +236,8 @@ export default defineConfig({
           {
             topics: {
               developer: [
-                '/vault/developer/rustdoc',
-                '/vault/developer/rustdoc/**',
+                '/docs/developer/rustdoc',
+                '/docs/developer/rustdoc/**',
               ],
             },
           },

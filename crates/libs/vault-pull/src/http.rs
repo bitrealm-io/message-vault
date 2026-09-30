@@ -213,7 +213,7 @@ mod tests {
         assert_eq!((page.items.len(), page.total), (0, 7));
         assert_eq!(
             error_sentence(
-                r#"{"type":"https://bitrealm.io/vault/developer/reference/errors/validation-failed","title":"Validation failed","status":422,"errors":["limit exceeds maximum of 500"]}"#
+                r#"{"type":"https://messagecrate.app/docs/developer/reference/errors/validation-failed","title":"Validation failed","status":422,"errors":["limit exceeds maximum of 500"]}"#
             ),
             "limit exceeds maximum of 500"
         );

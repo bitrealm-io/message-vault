@@ -65,7 +65,7 @@ deadlocks every pull request that misses the filter, exactly like
 `paths-ignore`. `docs.yml` keeps the full build with rustdoc and the Pages
 deploy, and runs on the `v*` tag that ships a release, or by hand.
 
-The site publishes on a release, not on a merge. bitrealm.io describes the
+The site publishes on a release, not on a merge. messagecrate.app describes the
 product people can install, and between releases that is the tagged version,
 not the tip of `main`; a page that documents a screen nobody can download yet
 is wrong for every reader who arrives from the download link. Publishing on

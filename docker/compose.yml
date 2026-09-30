@@ -1,5 +1,5 @@
 # Published vault image. Save this file and run: docker compose up -d
-# Docs: https://bitrealm.io/vault/user/get-started/try-the-vault/
+# Docs: https://messagecrate.app/docs/user/get-started/try-the-vault/
 #
 # Pin a release: change :latest to :0.8.3 (no "v").
 # Empty vault: DEMO_DATA=false docker compose up -d
@@ -9,7 +9,7 @@ name: message-vault
 
 services:
   vault:
-    image: bitrealm/message-vault:latest
+    image: bitrealm/message-crate:latest
     user: "${UID}:${GID}"
     ports:
       - "8080:8080"

@@ -5,7 +5,7 @@ docs_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 src_js="${docs_root}/node_modules/@scalar/api-reference/dist/browser/standalone.js"
 src_json="${docs_root}/src/assets/openapi.json"
 src_html="${docs_root}/src/assets/http-api-reference.html"
-dest="${docs_root}/public/vault/developer/rustdoc/http"
+dest="${docs_root}/public/docs/developer/rustdoc/http"
 
 if [[ ! -f "${src_js}" ]]; then
   printf '%s\n' "missing ${src_js}; run npm ci in docs/" >&2

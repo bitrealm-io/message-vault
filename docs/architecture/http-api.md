@@ -252,7 +252,7 @@ Every failure answers an RFC 7807 problem document as
 every rule that broke rather than the first.
 
 `type` is the URL of a page under
-`bitrealm.io/vault/developer/reference/errors/`, one page per problem type.
+`messagecrate.app/docs/developer/reference/errors/`, one page per problem type.
 The code is the registry: each type is declared once in
 `crates/vault/server/src/problem.rs`, the pages are generated from it, and a
 test fails when the checked-in pages drift. Only `500 Internal Server Error`

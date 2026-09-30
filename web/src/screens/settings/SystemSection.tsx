@@ -273,7 +273,7 @@ export function SystemSection() {
           <p className={settingsHelp}>
             Folder must contain both ffmpeg and ffprobe. Leave blank to use system PATH.{" "}
             <a
-              href="https://bitrealm.io/vault/user/how-to/media-and-privacy/"
+              href="https://messagecrate.app/docs/user/how-to/media-and-privacy/"
               target="_blank"
               rel="noopener"
               className="text-accent"

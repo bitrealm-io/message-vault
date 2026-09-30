@@ -18,7 +18,7 @@ web-next/.next/
 web-next/out/
 docs/.astro/
 docs/dist/
-docs/public/vault/developer/rustdoc/
+docs/public/docs/developer/rustdoc/
 /static/
 
 # Local vault data and generated demo copies

@@ -45,7 +45,7 @@ config/contacts.vcf
 /docs/.astro/
 /docs/dist/
 /docs/node_modules
-/docs/public/vault/developer/rustdoc/
+/docs/public/docs/developer/rustdoc/
 
 # PlantUML extension default dump (workspace export goes to docs/maintainers/architecture/puml/img)
 /out/

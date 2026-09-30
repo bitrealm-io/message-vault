@@ -235,7 +235,7 @@ Phone backups do not go into the vault as raw files. A converter reads the backu
 
 ### Preview the guidebook
 
-Guidebook pages live under `docs/src/content/docs/vault/` and show up at paths like `/docs/user/` and `/docs/developer/`. The home page at `/` comes from `docs/src/pages/index.astro`. The published site is **https://messagecrate.app/**.
+Guidebook pages live under `docs/src/content/docs/docs/` and show up at paths like `/docs/user/` and `/docs/developer/`. The home page at `/` comes from `docs/src/pages/index.astro`. The published site is **https://messagecrate.app/**.
 
 To preview locally:
 

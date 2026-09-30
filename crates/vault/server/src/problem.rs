@@ -4,7 +4,7 @@
 //! This is the one place a type is declared. [`crate::server::ApiError`] names
 //! one per variant, the OpenAPI document describes the body through
 //! [`Problem`], and `dump-error-docs` ([`crate::error_docs`]) writes one page
-//! per type under `docs/src/content/docs/vault/developer/reference/errors/`
+//! per type under `docs/src/content/docs/docs/developer/reference/errors/`
 //! from the same declarations, so nothing has to be kept in step by hand.
 
 use axum::http::StatusCode;

@@ -6,7 +6,7 @@ the rules between them. It is written for anyone adding, changing, or
 reviewing a search word, precisely enough to write a word's SQL from.
 
 Someone who only wants to search should read the user guide,
-[Search](../src/content/docs/vault/user/how-to/search.mdx), instead. Why the
+[Search](../src/content/docs/docs/user/how-to/search.mdx), instead. Why the
 language is one module with one registry is
 [ADR 0004](../adr/0004-one-search-language-compiled-in-one-module.md).
 

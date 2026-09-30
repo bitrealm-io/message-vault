@@ -1,7 +1,7 @@
 //! Shared phone-number parsing for message converters.
 //!
 //! [`normalize_typed_handle`] is the one key a handle is stored and matched
-//! under: by the vault, by the contacts book, and by [`OwnerHandleSet`].
+//! under: by the server, by the contacts book, and by [`OwnerHandleSet`].
 
 use std::collections::HashSet;
 use std::fmt;
@@ -173,7 +173,7 @@ pub struct GuardedNormalize {
 /// Rewrite to E.164 only when the parse is certain. Otherwise store the
 /// digits without adding a `+` prefix (a trunk-zero national number like
 /// `020 7946 0000` would otherwise become the invalid `+02079460000`) and
-/// attach a human-readable reason so the vault can show it for review.
+/// attach a human-readable reason so the server can show it for review.
 pub fn normalize_guarded(raw: &str, region: PhoneRegion) -> GuardedNormalize {
     match normalize_checked(raw, region) {
         Ok(e164) => GuardedNormalize {
@@ -213,7 +213,7 @@ pub fn normalize_digits_us(raw: &str) -> Option<String> {
     Some(normalize_guarded(&digits, PhoneRegion::Usa).normalized)
 }
 
-/// One normalization policy for a typed handle, shared by the vault, the
+/// One normalization policy for a typed handle, shared by the server, the
 /// contacts book, and the exporters.
 ///
 /// Phone: guarded E.164 via [`normalize_guarded`] with [`PhoneRegion::for_raw`]
@@ -237,9 +237,9 @@ pub fn normalize_typed_handle(raw: &str, handle_type: HandleType) -> (String, Op
     }
 }
 
-/// All configured owner handles, each stored under its vault handle key.
+/// All configured owner handles, each stored under its handle key.
 ///
-/// The key is [`normalize_typed_handle`], the same function the vault uses
+/// The key is [`normalize_typed_handle`], the same function the server uses
 /// for its `handles` rows and the contacts book uses for its entries, so an
 /// owner phone written `+44 7700 900123` is `+447700900123` here too.
 #[derive(Debug, Clone)]
@@ -271,7 +271,7 @@ impl OwnerHandleSet {
     }
 
     /// Whether a raw handle value plus type is one of the owner's, compared
-    /// by vault handle key.
+    /// by handle key.
     ///
     /// A value whose `+` has already been stripped is a different key: use
     /// [`OwnerHandleSet::is_owner_digits`] for those.
@@ -397,8 +397,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn typed_handle_policy_matches_the_vault_for_international_numbers() {
-        // The contacts book and the vault must key this identically:
+    fn typed_handle_policy_matches_the_server_for_international_numbers() {
+        // The contacts book and the server must key this identically:
         // for_raw keeps the + signal, so the E.164 form survives.
         let (uk, note) = normalize_typed_handle("+44 20 7946 0000", HandleType::Phone);
         assert_eq!(uk, "+442079460000");
@@ -699,7 +699,7 @@ mod tests {
             Some("+447700900123")
         );
         assert!(owners.is_owner("+447700900123", HandleType::Phone));
-        // Without the `+` the vault keys it as different digits.
+        // Without the `+` the server keys it as different digits.
         assert!(!owners.is_owner("447700900123", HandleType::Phone));
         // A source that has already dropped the `+` compares digits instead.
         assert!(owners.is_owner_digits("447700900123"));

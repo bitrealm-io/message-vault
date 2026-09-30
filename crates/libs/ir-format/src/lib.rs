@@ -1,5 +1,5 @@
 //! Write and read [`message_ir::ConversationDocument`] in each format Message
-//! Vault emits itself: JSON, JSON Lines (one JSON object per line), CSV, EML
+//! Crate emits itself: JSON, JSON Lines (one JSON object per line), CSV, EML
 //! and MBOX. [`FormatSink`] buffers documents, applies obfuscation and the
 //! media mode, and writes them; a merged archive owned by another crate
 //! plugs in through [`MergedArchive`].

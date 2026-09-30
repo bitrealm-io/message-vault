@@ -6,10 +6,10 @@
 /// Failure from `GET /v1/session`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AuthError {
-    /// The vault URL could not be parsed as a valid HTTP URL.
+    /// The server URL could not be parsed as a valid HTTP URL.
     #[error("invalid server address {url}: {detail}")]
     InvalidUrl {
-        /// The vault URL that failed to parse.
+        /// The server URL that failed to parse.
         url: String,
         /// Why the URL was rejected.
         detail: String,
@@ -20,7 +20,7 @@ pub enum AuthError {
         /// The underlying client-build error.
         detail: String,
     },
-    /// The vault could not be reached over the network.
+    /// The server could not be reached over the network.
     #[error("GET {url}: {detail}")]
     Network {
         /// The endpoint that could not be reached.
@@ -28,7 +28,7 @@ pub enum AuthError {
         /// The underlying network error.
         detail: String,
     },
-    /// The vault did not respond within the request timeout.
+    /// The server did not respond within the request timeout.
     #[error("GET {url}: {detail}")]
     Timeout {
         /// The endpoint that timed out.
@@ -42,7 +42,7 @@ pub enum AuthError {
         /// The underlying read error.
         detail: String,
     },
-    /// The endpoint returned HTML instead of the vault API.
+    /// The endpoint returned HTML instead of the Message Crate API.
     #[error(
         "GET /v1/session returned HTML from {url} (HTTP {status}). The server address must point at the Message Crate server (TLS site or port 8080), not the Next.js browse UI alone (port 3000)"
     )]
@@ -52,55 +52,55 @@ pub enum AuthError {
         /// The HTTP status code returned.
         status: u16,
     },
-    /// Requested `http://…` but the vault redirected to `https://…` (auth header dropped).
+    /// Requested `http://…` but the server redirected to `https://…` (auth header dropped).
     #[error(
         "server address {url} redirected from http to https; use https:// so the API key is sent (http redirects drop Authorization)"
     )]
     HttpsRequired {
-        /// The `http://` URL that the vault redirected to `https://`.
+        /// The `http://` URL that the server redirected to `https://`.
         url: String,
     },
     /// The API key was rejected as invalid.
     #[error("invalid API key")]
     InvalidKey,
-    /// The API key does not have permission for this vault.
+    /// The API key does not have permission for this Message Crate.
     #[error("session check failed (HTTP {status}): {body}")]
     Forbidden {
         /// The HTTP status code returned.
         status: u16,
-        /// The response body from the vault.
+        /// The response body from the server.
         body: String,
     },
-    /// The vault API was not found at this URL.
+    /// The Message Crate API was not found at this URL.
     #[error("session check failed (HTTP {status}): {body}")]
     ApiNotFound {
         /// The HTTP status code returned.
         status: u16,
-        /// The response body from the vault.
+        /// The response body from the server.
         body: String,
     },
-    /// The vault rejected the request because it was rate limited.
+    /// The server rejected the request because it was rate limited.
     #[error("session check failed (HTTP {status}): {body}")]
     RateLimited {
         /// The HTTP status code returned.
         status: u16,
-        /// The response body from the vault.
+        /// The response body from the server.
         body: String,
     },
-    /// The vault failed while verifying the credentials.
+    /// The server failed while verifying the credentials.
     #[error("session check failed (HTTP {status}): {body}")]
     ServerError {
         /// The HTTP status code returned.
         status: u16,
-        /// The response body from the vault.
+        /// The response body from the server.
         body: String,
     },
-    /// The vault returned an unexpected HTTP status.
+    /// The server returned an unexpected HTTP status.
     #[error("session check failed (HTTP {status}): {body}")]
     HttpStatus {
         /// The HTTP status code returned.
         status: u16,
-        /// The response body from the vault.
+        /// The response body from the server.
         body: String,
     },
     /// The response body was not recognizable JSON.
@@ -113,13 +113,13 @@ pub enum AuthError {
         /// A short excerpt of the unparseable response body.
         snippet: String,
     },
-    /// The vault rejected the supplied credentials.
+    /// The server rejected the supplied credentials.
     #[error("session check rejected: {message}")]
     Rejected {
-        /// The rejection message from the vault.
+        /// The rejection message from the server.
         message: String,
     },
-    /// The vault did not return an account id.
+    /// The server did not return an account id.
     #[error("session check did not return account_id")]
     MissingAccountId,
 }

@@ -6,7 +6,7 @@
 //! binary. The app starts this one, writes a request on its stdin, and reads
 //! events off its stdout; the protocol is `imessage-reader-protocol`. Nothing
 //! here is meant to be typed at a shell, and ADR 0001's rule (no command line
-//! except the vault server) still stands: an internal helper the app spawns
+//! except the server) still stands: an internal helper the app spawns
 //! is not a command line for people.
 //!
 //! Parts of `backup.rs` and `error.rs` are adapted from `imessage-exporter`

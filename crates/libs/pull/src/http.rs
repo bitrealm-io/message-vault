@@ -4,9 +4,9 @@
 //! Calls are blocking so they can run on worker threads without an async
 //! runtime. The session type is [`message_crate_http::HttpSession`].
 //!
-//! The shapes are `message-crate-api-types`, the same definitions the vault
+//! The shapes are `message-crate-api-types`, the same definitions the server
 //! serializes from. This file used to mirror them by hand, and three defects
-//! shipped because the mirror and the vault drifted apart with nothing to
+//! shipped because the mirror and the server drifted apart with nothing to
 //! notice.
 
 use std::fs::File;
@@ -30,11 +30,11 @@ struct CreateExportBody<'a> {
 }
 
 /// `POST /v1/exports`: record a run for `scope` and return it with the
-/// counts the vault computed.
+/// counts the server computed.
 ///
 /// # Errors
 ///
-/// Returns an error when the request fails, the vault refuses the scope, or
+/// Returns an error when the request fails, the server refuses the scope, or
 /// the body is not a run.
 pub fn create_export(
     http: &HttpSession,
@@ -124,7 +124,7 @@ pub fn close_export(
 ///
 /// # Errors
 ///
-/// Returns an error when the fingerprint is not 64 hex characters, the vault
+/// Returns an error when the fingerprint is not 64 hex characters, the server
 /// returns 404 or another failure, or the file cannot be written.
 pub fn download_asset(
     http: &HttpSession,

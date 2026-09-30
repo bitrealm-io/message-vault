@@ -1,4 +1,4 @@
-//! Typed retry classification for the vault HTTP paths.
+//! Typed retry classification for the server HTTP paths.
 
 use std::io;
 use std::thread;
@@ -47,7 +47,7 @@ impl HttpError {
 /// unrecognized is transient, matching the historical default.
 ///
 /// A [`HttpError`] with a 2xx status is an answer the client could not
-/// read. The vault has already done the work, so sending the request again
+/// read. The server has already done the work, so sending the request again
 /// would repeat a write it committed.
 pub fn classify_retry(error: &anyhow::Error) -> RetryKind {
     if let Some(http) = error.downcast_ref::<HttpError>() {
@@ -145,7 +145,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unreadable_2xx_is_permanent_because_the_vault_did_the_work() {
+    fn an_unreadable_2xx_is_permanent_because_the_server_did_the_work() {
         let e = anyhow::Error::from(HttpError::new(
             200,
             "could not read the server's answer to import batch",

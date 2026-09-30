@@ -1,4 +1,4 @@
-//! The response shapes the vault's HTTP API sends, defined once for the
+//! The response shapes the server's HTTP API sends, defined once for the
 //! server that writes them and the client crates that read them.
 //!
 //! Two crates sit on either side of these shapes: `message-crate-server`
@@ -50,7 +50,7 @@ pub enum AppKind {
 }
 
 impl AppKind {
-    /// The value sent in [`APP_HEADER`] and stored by the vault.
+    /// The value sent in [`APP_HEADER`] and stored by the server.
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Desktop => "desktop",

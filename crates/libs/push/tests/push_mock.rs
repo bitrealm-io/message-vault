@@ -54,7 +54,7 @@ fn sample_doc() -> ConversationDocument {
             sender_display_name: Some("Sam".into()),
             owner_handle: None,
             subject: None,
-            text: "hello vault".into(),
+            text: "hello there".into(),
             attachments: vec![],
             imessage: None,
             source: None,
@@ -89,7 +89,7 @@ fn write_jsonl(dir: &Path, doc: &ConversationDocument) {
     }
 }
 
-/// The vault's answer to `POST /v1/imports`: an Import Run with `id`. Every
+/// The server's answer to `POST /v1/imports`: an Import Run with `id`. Every
 /// push starts one, so every test mocks it; the batches then go to
 /// `/v1/imports/{id}/batches`.
 fn mock_import_run(server: &MockServer, id: i64) -> httpmock::Mock<'_> {
@@ -101,7 +101,7 @@ fn mock_import_run(server: &MockServer, id: i64) -> httpmock::Mock<'_> {
     })
 }
 
-/// Push config that skips attachments, pointed at a mock vault URL.
+/// Push config that skips attachments, pointed at a mock server URL.
 fn text_only_config(dir: &Path, base_url: String) -> PushConfig {
     PushConfig {
         input: dir.to_path_buf(),
@@ -312,7 +312,7 @@ fn a_push_completes_its_import_run_with_the_counts_it_sent() {
 }
 
 /// A push that stops at a failed batch still completes its Import Run, as
-/// failed, so the vault does not show it as running.
+/// failed, so the server does not show it as running.
 #[test]
 fn an_aborted_push_completes_its_import_run_as_failed() {
     let server = MockServer::start();
@@ -525,7 +525,7 @@ fn folder_with_a_bad_middle_file(dir: &Path) {
 
 /// Without `continue_on_error`, a push stops at the first file that fails to
 /// prepare. The batch already packed still lands, so the journal matches the
-/// vault, and nothing after the failure is sent.
+/// server, and nothing after the failure is sent.
 #[test]
 fn a_push_without_continue_on_error_stops_at_the_first_bad_file() {
     let server = MockServer::start();
@@ -646,7 +646,7 @@ fn resumes_message_batches_from_compacted_journal() {
     assert_eq!(import.calls(), 1);
 }
 
-/// A replace push wipes the source on the vault, so it ignores the journal
+/// A replace push wipes the source on the server, so it ignores the journal
 /// even without `force`: every message already sent goes out again.
 /// Otherwise the journaled messages would be skipped and the wipe would
 /// leave them missing.
@@ -923,8 +923,8 @@ fn puts_two_new_assets_without_head() {
 
 #[test]
 fn heads_later_assets_after_put_reports_already_present() {
-    const FIRST: &[u8] = b"already-on-vault-first";
-    const SECOND: &[u8] = b"already-on-vault-second";
+    const FIRST: &[u8] = b"already-on-server-first";
+    const SECOND: &[u8] = b"already-on-server-second";
 
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
@@ -994,8 +994,8 @@ fn heads_later_assets_after_put_reports_already_present() {
 
 #[test]
 fn preflight_head_skips_puts_when_first_asset_already_present() {
-    const A: &[u8] = b"vault-already-has-alpha";
-    const B: &[u8] = b"vault-already-has-bravo";
+    const A: &[u8] = b"server-already-has-alpha";
+    const B: &[u8] = b"server-already-has-bravo";
 
     let server = MockServer::start();
     let _auth = server.mock(|when, then| {
@@ -1053,7 +1053,7 @@ fn preflight_head_skips_puts_when_first_asset_already_present() {
 
 #[test]
 fn multipart_upload_when_over_proxy_threshold() {
-    // File larger than the test threshold; mock vault returns a tiny part_size.
+    // File larger than the test threshold; mock server returns a tiny part_size.
     const ASSET_BYTES: &[u8] = b"0123456789abcdef0123456789abcdef01234567"; // 40 bytes
 
     let server = MockServer::start();
@@ -1427,7 +1427,7 @@ fn shared_attachment_uploaded_once_across_conversations() {
 /// push rather than skipping it as already in flight.
 ///
 /// The two conversations come from different backup sources, so the mock
-/// vault can refuse the first upload and accept the second by the `source`
+/// server can refuse the first upload and accept the second by the `source`
 /// each PUT carries.
 #[test]
 fn a_failed_upload_frees_a_shared_file_for_the_next_conversation() {
@@ -1449,7 +1449,7 @@ fn a_failed_upload_frees_a_shared_file_for_the_next_conversation() {
             "type": "about:blank",
             "title": "Service unavailable",
             "status": 503,
-            "detail": "the vault is busy"
+            "detail": "the server is busy"
         }));
     });
     let accepted = server.mock(|when, then| {
@@ -1871,7 +1871,7 @@ fn a_push_that_skips_attachments_sends_text_and_uploads_nothing() {
         when.method(POST)
             .path("/v1/imports/7/batches")
             .body_includes("\"guid\":\"guid-1\"")
-            .body_includes("hello vault")
+            .body_includes("hello there")
             .body_excludes("photo.txt");
         then.status(200).json_body(json!({
             "messages": 1,
@@ -1965,7 +1965,7 @@ fn journaled_guids(dir: &Path) -> Vec<String> {
         .collect()
 }
 
-/// A mock vault session that accepts the key.
+/// A mock server session that accepts the key.
 fn mock_session(server: &MockServer) -> httpmock::Mock<'_> {
     server.mock(|when, then| {
         when.method(GET).path("/v1/session");
@@ -1976,7 +1976,7 @@ fn mock_session(server: &MockServer) -> httpmock::Mock<'_> {
     })
 }
 
-/// A batch the vault answers 503 once and 200 on the retry is counted once:
+/// A batch the server answers 503 once and 200 on the retry is counted once:
 /// one journal entry for its file and message, and `attempted` equal to the
 /// messages the run sent, not the requests it made.
 ///
@@ -1994,7 +1994,7 @@ fn a_batch_retried_after_a_503_is_counted_and_journaled_once() {
             "type": "about:blank",
             "title": "Service unavailable",
             "status": 503,
-            "detail": "the vault is busy"
+            "detail": "the server is busy"
         }));
     });
 
@@ -2030,7 +2030,7 @@ fn a_batch_retried_after_a_503_is_counted_and_journaled_once() {
         (report, accepted.calls())
     });
 
-    assert_eq!(accepted_calls, 1, "the retry must reach the vault once");
+    assert_eq!(accepted_calls, 1, "the retry must reach the server once");
     assert!(report.ok, "{:?}", report.results);
     assert_eq!(report.conversations_ok, 1);
     assert_eq!(report.messages_attempted, 1);
@@ -2077,7 +2077,7 @@ fn a_cancelled_push_sends_no_further_batch_and_resumes_later() {
         ..text_only_config(dir.path(), server.base_url())
     };
 
-    // Cancel as soon as the first conversation is in the vault.
+    // Cancel as soon as the first conversation is on the server.
     let flag = cancel.clone();
     let mut on_progress = move |event: ProgressEvent| {
         if let ProgressEvent::FileDone { status, .. } = event
@@ -2204,10 +2204,10 @@ fn a_second_push_sends_only_the_conversation_whose_batch_failed() {
     assert_eq!(guids, vec!["guid-1", "guid-2", "guid-3"]);
 }
 
-/// A 2xx means the vault did the work. When its body cannot be read, the
+/// A 2xx means the server did the work. When its body cannot be read, the
 /// batch is not posted again as if the request had failed in transit: the
 /// conversation fails once with a sentence saying the answer was unreadable,
-/// and the next push sends it again for the vault to dedupe.
+/// and the next push sends it again for the server to dedupe.
 #[test]
 fn an_unreadable_2xx_answer_is_not_retried() {
     let server = MockServer::start();
@@ -2215,7 +2215,7 @@ fn an_unreadable_2xx_answer_is_not_retried() {
     let _run = mock_import_run(&server, 7);
     let import = server.mock(|when, then| {
         when.method(POST).path("/v1/imports/7/batches");
-        then.status(200).body("<html>not the vault</html>");
+        then.status(200).body("<html>not the server</html>");
     });
 
     let dir = tempdir().unwrap();
@@ -2240,10 +2240,10 @@ fn an_unreadable_2xx_answer_is_not_retried() {
 
 /// When a conversation's chunk would overflow the pending batch, the batch
 /// goes first and the chunk starts the next one: every message still reaches
-/// the vault, and no request carries more than `batch_size` messages.
+/// the server, and no request carries more than `batch_size` messages.
 ///
 /// Guards the flush-then-add step in `queue_chunk`. A chunk dropped after
-/// the forced flush never reaches the vault, yet its conversation would be
+/// the forced flush never reaches the server, yet its conversation would be
 /// journaled as done, so a later push would never send it.
 #[test]
 fn a_chunk_that_overflows_the_pending_batch_is_sent_in_the_next_one() {

@@ -6,7 +6,7 @@
 //! exporter deferred (see `extract::exporter_media_mode`), and
 //! `delete_staging` removes the staging folder — when a review is closed
 //! without approving, when a resumable run is discarded, and when an import
-//! finishes successfully, since the vault then holds everything the folder
+//! finishes successfully, since the server then holds everything the folder
 //! held.
 //!
 //! `summarize_staging` and `transcode_staging` both build a
@@ -336,7 +336,7 @@ pub struct DeleteStagingArgs {
 
 /// Delete a staging folder: the decline path's terminal action (Decision
 /// 16), and the last step of a successful import, whose staged copy of the
-/// messages, push log, journal and report the vault has no further use for.
+/// messages, push log, journal and report the server has no further use for.
 ///
 /// Runs on the async task pool (`#[tauri::command(async)]`) rather than the
 /// main thread: `remove_dir_all` over a large staging folder would otherwise

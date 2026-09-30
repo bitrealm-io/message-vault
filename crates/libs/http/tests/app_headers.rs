@@ -1,4 +1,4 @@
-//! Once the desktop app has said which Build it is, every vault request
+//! Once the desktop app has said which Build it is, every request to the server
 //! carries that Build and names the desktop app.
 //!
 //! This sits in a test binary of its own because `identify_desktop_app` sets a

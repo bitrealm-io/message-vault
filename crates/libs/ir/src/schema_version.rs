@@ -1,7 +1,7 @@
 //! The one check that refuses a file from another schema version.
 //!
 //! Every reader of a [`ConversationDocument`](crate::ConversationDocument) or
-//! its JSON Lines header — the format reader, the push client, the vault's
+//! its JSON Lines header — the format reader, the push client, the server's
 //! import — refuses a version other than [`SCHEMA_VERSION`] with the same
 //! words, and refuses it before parsing the rest of the file: a version-3
 //! file is not expected to match the version-4 field shapes, and the person

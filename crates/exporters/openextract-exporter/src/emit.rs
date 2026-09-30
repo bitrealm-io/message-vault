@@ -257,7 +257,7 @@ fn infer_peer_label(rows: &[RawRow]) -> String {
 ///
 /// OpenExtract CSVs identify the other party by phone number or by name. When
 /// it is a name, the chat is keyed by a stem of that name and `name_only` is
-/// set: the exporter records the name and no address, and the vault resolves
+/// set: the exporter records the name and no address, and the server resolves
 /// it against contacts on import. No address is invented here.
 fn resolve_chat(peer: &str) -> (String, String, bool) {
     let peer = peer.trim();
@@ -299,7 +299,7 @@ fn resolve_sender(
     let handle = if chat_id.starts_with('+') || sanitize_number(chat_id).is_some() {
         if chat_id.starts_with('+') {
             // Only unambiguous +-prefixed values pass through. A fabricated
-            // `+0…` stays digits-as-is so the vault can flag it.
+            // `+0…` stays digits-as-is so the server can flag it.
             phone::normalize_lenient(chat_id)
         } else {
             phone::normalize_digits_us(chat_id).unwrap_or_default()

@@ -1,6 +1,6 @@
 //! `auth_check` is the desktop app's login, and every branch in it produces a
 //! different message for the person typing the URL: "that is the wrong host",
-//! "that key is not valid", "the vault is rate limiting you". Nothing exercised
+//! "that key is not valid", "the server is rate limiting you". Nothing exercised
 //! the function itself before — the unit tests reach the classifiers directly,
 //! so the wiring between the response and the classifier was untested, and a
 //! change that answered `invalid_key` to every failure would have passed them
@@ -22,7 +22,7 @@ fn check_against(
     auth_check(&server.base_url(), "mc-user-testkey")
 }
 
-/// The vault answers, and the fields the clients read come back.
+/// The server answers, and the fields the clients read come back.
 #[test]
 fn a_session_body_becomes_the_account_it_names() {
     let info = check_against(200, r#"{"account_id": 42, "username": "alice"}"#)
@@ -46,7 +46,7 @@ fn a_session_without_an_account_id_is_refused() {
 }
 
 /// The wrong-host case, which is the most common mistake made at this screen:
-/// the URL points at a web server or a proxy rather than at a vault, and the
+/// the URL points at a web server or a proxy rather than at a Message Crate, and the
 /// answer is an HTML page. Reporting that as bad JSON tells the reader nothing.
 ///
 /// The lowercase `<!doctype html>` is deliberate: it is what the HTML5
@@ -70,7 +70,7 @@ fn an_html_page_means_the_url_points_at_the_wrong_host() {
     assert_eq!(err.kind(), "wrong_host");
 }
 
-/// Each status the vault can answer maps to its own error, because each one
+/// Each status the server can answer maps to its own error, because each one
 /// asks the reader to do something different. Deleting any arm of that mapping
 /// used to change nothing that any test could see.
 #[test]
@@ -106,9 +106,9 @@ fn an_unparsable_url_is_refused_before_the_request() {
 }
 
 /// Nothing is listening, so the failure is a network failure and not a
-/// rejection by a vault. Port 1 refuses connections.
+/// rejection by a server. Port 1 refuses connections.
 #[test]
-fn an_unreachable_vault_is_a_network_failure() {
+fn an_unreachable_server_is_a_network_failure() {
     let err = auth_check("http://127.0.0.1:1", "mc-user-testkey")
         .expect_err("nothing is listening on port 1");
     assert_eq!(err.kind(), "network");

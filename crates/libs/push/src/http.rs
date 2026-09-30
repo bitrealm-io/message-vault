@@ -20,7 +20,7 @@ pub use message_crate_http::HttpSession;
 
 use crate::run::Session;
 
-/// The vault's `Asset`: the answer to `HEAD` or `PUT /v1/assets/{sha256}`
+/// The server's `Asset`: the answer to `HEAD` or `PUT /v1/assets/{sha256}`
 /// and to completing a multipart upload. Only `already_present` is read.
 #[derive(Debug, Deserialize)]
 pub struct Asset {
@@ -67,7 +67,7 @@ struct CreateImportResponse {
 }
 
 /// The answer to `POST /v1/imports/{id}/complete`. Only `id` is read: it
-/// names the run the vault closed.
+/// names the run the server closed.
 #[derive(Debug, Deserialize)]
 struct CompleteImportResponse {
     id: i64,
@@ -127,7 +127,7 @@ impl Session {
         asset_url(&self.url, segments, source)
     }
 
-    /// Whether the vault already holds the attachment with this digest:
+    /// Whether the server already holds the attachment with this digest:
     /// `true` for a 2xx, `false` for a 404. A HEAD reply carries no body, so
     /// the status is the whole answer.
     ///
@@ -171,8 +171,8 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Returns an error when the file cannot be read or the vault rejects it;
-    /// a 413 says how large a body the vault accepts.
+    /// Returns an error when the file cannot be read or the server rejects it;
+    /// a 413 says how large a body the server accepts.
     pub(crate) fn put_asset(&self, asset: &AssetUpload<'_>) -> Result<Asset> {
         let file_len = std::fs::metadata(asset.file)
             .with_context(|| format!("stat {}", asset.file.display()))?
@@ -209,7 +209,7 @@ impl Session {
     }
 
     /// Upload in parts: open a multipart upload, send each part, complete
-    /// it. A part or completion that fails aborts the upload on the vault.
+    /// it. A part or completion that fails aborts the upload on the server.
     fn put_asset_multipart(&self, asset: &AssetUpload<'_>, file_len: u64) -> Result<Asset> {
         let Some(upload) = MultipartUpload::start(self, asset, file_len)? else {
             return Ok(Asset {
@@ -246,7 +246,7 @@ impl Session {
     /// # Errors
     ///
     /// Returns a 413 before sending when the body is over the proxy limit,
-    /// and the vault's error otherwise.
+    /// and the server's error otherwise.
     pub(crate) fn post_import(
         &self,
         import_id: i64,
@@ -277,12 +277,12 @@ impl Session {
         ok_json::<CreateImportBatchResponse>("import batch", status, &text)
     }
 
-    /// Create an Import Run on the vault and return its id. Every batch is
+    /// Create an Import Run on the server and return its id. Every batch is
     /// posted into it; the bearer token names the account.
     ///
     /// # Errors
     ///
-    /// Returns an error when the vault refuses, which includes an account
+    /// Returns an error when the server refuses, which includes an account
     /// that already has a running Import Run.
     pub(crate) fn start_import(
         &self,
@@ -315,7 +315,7 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// Returns an error when the vault refuses.
+    /// Returns an error when the server refuses.
     pub(crate) fn complete_import(
         &self,
         import_id: i64,
@@ -353,22 +353,22 @@ impl Session {
     }
 }
 
-/// A multipart upload the vault has opened for one attachment.
+/// A multipart upload the server has opened for one attachment.
 struct MultipartUpload<'a> {
     session: &'a Session,
     source: &'a str,
     sha256: &'a str,
     upload_id: String,
-    /// Bytes per part, as the vault asked.
+    /// Bytes per part, as the server asked.
     part_size: usize,
 }
 
 impl<'a> MultipartUpload<'a> {
-    /// Open the upload. `None` when the vault says it already has the file.
+    /// Open the upload. `None` when the server says it already has the file.
     ///
     /// # Errors
     ///
-    /// Returns an error when the vault refuses or its reply lacks an upload
+    /// Returns an error when the server refuses or its reply lacks an upload
     /// id or part size.
     fn start(session: &'a Session, asset: &AssetUpload<'a>, file_len: u64) -> Result<Option<Self>> {
         let start_url = session.asset_url(asset.source, &[asset.sha256, "uploads"])?;
@@ -458,7 +458,7 @@ impl<'a> MultipartUpload<'a> {
         Ok(())
     }
 
-    /// Tell the vault every part is in and read its reply.
+    /// Tell the server every part is in and read its reply.
     fn complete(&self) -> Result<Asset> {
         let complete_url = self.url(&["complete"])?;
         let response = self
@@ -473,8 +473,8 @@ impl<'a> MultipartUpload<'a> {
         ok_json::<Asset>("asset upload complete", status, &text)
     }
 
-    /// Drop the upload on the vault. Best effort: a failed abort only leaves
-    /// a stale upload for the vault to expire.
+    /// Drop the upload on the server. Best effort: a failed abort only leaves
+    /// a stale upload for the server to expire.
     fn abort(&self) {
         let Ok(url) = self.url(&[]) else {
             return;

@@ -1,13 +1,13 @@
-//! Blocking HTTP client helpers and retry classification for the vault CLI
+//! Blocking HTTP client helpers and retry classification for the push and pull
 //! crates.
 //!
-//! `message-crate-push` and `message-crate-pull` both talk to the vault through one
+//! `message-crate-push` and `message-crate-pull` both talk to the server through one
 //! [`HttpSession`] (built on [`build_client`]), log in through
 //! [`auth_check`], share [`truncate`] for error snippets, and classify
 //! retryable failures through `classify_retry` / `with_retries`.
 //! [`AuthError`] and [`AuthInfo`] live here so both crates — and the desktop
 //! app through their re-exports — share one auth surface, and [`ok_json`]
-//! reads every vault answer, so the vault's `{error}` failure body is
+//! reads every server answer, so the server's `{error}` failure body is
 //! understood in one place rather than in each client.
 
 mod auth_error;
@@ -25,7 +25,7 @@ use anyhow::{Context, Result};
 /// Account id and username returned by a successful `GET /v1/session`.
 #[derive(Debug, Clone)]
 pub struct AuthInfo {
-    /// The vault account id.
+    /// The account id.
     pub account_id: i64,
     /// The display username for the account, if one is set.
     pub username: Option<String>,
@@ -34,9 +34,9 @@ pub struct AuthInfo {
 /// The desktop app's Build, set once at startup by [`identify_desktop_app`].
 static DESKTOP_BUILD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
-/// Say which Build of the desktop app this process is, so every vault request
-/// made through [`build_client`] carries it. The vault records it on the
-/// account's session and shows it to the vault owner.
+/// Say which Build of the desktop app this process is, so every request to the server
+/// made through [`build_client`] carries it. The server records it on the
+/// account's session and shows it to the owner.
 ///
 /// This crate cannot work the Build out itself: it is a library at `0.1.0`,
 /// and the Product Version belongs to the app that links it. Called once, from
@@ -45,7 +45,7 @@ pub fn identify_desktop_app(build: &str) {
     let _ = DESKTOP_BUILD.set(build.to_string());
 }
 
-/// The headers that name this app to the vault, empty until
+/// The headers that name this app to the server, empty until
 /// [`identify_desktop_app`] has run.
 fn app_headers() -> reqwest::header::HeaderMap {
     let mut headers = reqwest::header::HeaderMap::new();
@@ -64,7 +64,7 @@ fn app_headers() -> reqwest::header::HeaderMap {
     headers
 }
 
-/// Idle connections kept per vault host for worker threads.
+/// Idle connections kept per server host for worker threads.
 const POOL_MAX_IDLE_PER_HOST: usize = 64;
 
 /// Build the shared blocking reqwest client.

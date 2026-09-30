@@ -496,7 +496,7 @@ fn run_media_post_pass(
     let transcode_options = TranscodeOptions {
         mode: options.media,
         compress: options.compress.clone(),
-        // No vault limit applies to a local export, so nothing here is
+        // No server limit applies to a local export, so nothing here is
         // written off as too large. The desktop's own media pass, which does
         // enforce the real limit, never reaches this code: it stages with
         // Clone and converts on its own.

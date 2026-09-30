@@ -20,7 +20,7 @@ pub struct FileResult {
     /// The failure, when `status` is `failed`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    /// Messages sent to the vault from this file.
+    /// Messages sent to the server from this file.
     pub messages: u64,
     /// Attachments uploaded for this file.
     pub attachments: u64,
@@ -84,7 +84,7 @@ pub struct PushReport {
     pub ok: bool,
     /// Account id the key resolved to.
     pub account: i64,
-    /// Username the vault reports for that account, else the account id.
+    /// Username the server reports for that account, else the account id.
     pub username: String,
     /// `append` or `replace`.
     pub mode: ImportMode,
@@ -118,7 +118,7 @@ pub struct PushReport {
     pub messages: u64,
     /// Attachments whose bytes went up this run.
     pub assets_uploaded: u64,
-    /// Attachments the vault already had, by fingerprint.
+    /// Attachments the server already had, by fingerprint.
     pub assets_skipped: u64,
     /// Bytes uploaded.
     pub assets_bytes: u64,

@@ -170,7 +170,7 @@ pub(crate) struct ImportPipeline<'a> {
     session: &'a Session,
     journal: &'a Mutex<SharedJournal>,
     /// The Import Run every batch is posted into. Whether the run replaces
-    /// or appends is the run's, decided when it was created: the vault wipes
+    /// or appends is the run's, decided when it was created: the server wipes
     /// the source on a replace run's first batch and appends after that.
     import_id: i64,
     batch_size: usize,

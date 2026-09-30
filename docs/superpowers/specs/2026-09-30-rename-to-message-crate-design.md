@@ -268,6 +268,35 @@ bundle identifier changed.
   an owner, imports a fixture, and logs in from the desktop app against
   `my.messagecrate.app`.
 
+## What was built differently
+
+Names chosen while building PR (c), where the name above collided with
+something that already exists or a better fit turned up. These are the
+names in the tree.
+
+| This document says | The tree has | Why |
+|---|---|---|
+| `routes.ts`, `routes`, `routes.types.ts` | `serverApi.ts`, `serverApi`, `serverApi.types.ts` | `routes` is already used about a hundred times in `web/src` |
+| `query.ts`, `queryKey.ts`, `keys.ts` | `routeQuery.ts`, `routeQueryKey.ts`, `queryKeys.ts` | the hooks in them are `useRouteQuery` and `RouteQueryKey`; `keys` stays the exported object |
+| `useCache`, `Cache`, `resetCache` | `useRouteCache`, `RouteCache`, `resetRouteCache` | matches `useRouteQuery` |
+| `login`, `logout`, `claim` (web) | `serverLogin`, `serverLogout`, `claimServer` | the bare names already exist in `web/src` |
+| `source.ts`, `sourceForMethod` file | `importSource.ts`; the function is `sourceForMethod` | `source` alone says nothing |
+| `TestServer`, `test_server`, `server_with_*` | `TestFixture`, `test_fixture`, `fixture_with_*` | a `TestServer` test type already exists |
+| table `settings` | `server_settings` | a bare `settings` table reads as an account's settings |
+| `is_owner`, `claim` (Rust) | `is_server_owner`, `claim_server` | `is_owner` and a `claim` function already exist |
+| `request`, `config` (Rust) | `server_request`, `server_config` | too generic to be found again |
+| `Vault` response type, not listed | `ServerInfo` | the `GET /v1/server` response |
+| not listed | `storage::Scope::AllAccounts`, schema marker key `schema_fingerprint` | were `Scope::Vault` and `vault_schema` |
+| not listed | `~/message-crate` staging default, `.import-state.jsonl`, `server.ready`, `x-message-crate-app` and `x-message-crate-version` headers, `message-crate-auth` storage key, `MESSAGE_CRATE_*` build env vars | every on-disk and on-the-wire name that carried the old product name |
+| not listed | pulled documents carry `server:{id}`, `server_message_id`, `server_source` | were `vault:{id}`, `vault_message_id`, `vault_source` |
+| not listed | compose service `server`, volume `message-crate-data`, Postgres user and database `messagecrate` | |
+| diagram files `vault_N_*_diagram` | `system_diagram`, `container_diagram`, `deployment_diagram` | |
+
+The word survives in four places on purpose: the two "avoid" lines in
+`CONTEXT.md`, the vocabulary row in `docs/agents/writing-style.md`, paths
+into `web-next/`, and the address `vault@bitrealm.io`, which has no
+replacement yet.
+
 ## Out of scope
 
 - The landing page at `messagecrate.app/` (its own brainstorm).

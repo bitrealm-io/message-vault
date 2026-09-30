@@ -75,8 +75,16 @@ released versions carry their date on the heading.
   the new name, and the word "vault" is gone from all of them. One
   installation is "a Message Crate", the account that runs it is the
   "Owner", and the owner's installation-wide settings are "Server Settings".
-  The desktop app's window and installers carry the new name. Names inside
-  the code, routes, and files on disk change in the next pull request.
+  The desktop app's window and installers carry the new name.
+- 2026-09-30 **Everything that was named after the old product has a new
+  name, and nothing old still works.** The owner's routes are under
+  `/v1/server`. Session and API tokens start `mc-user-` and `mc-api-`, so
+  every existing token stops working and everyone logs in again. The
+  database file is `data/messagecrate.db` and several tables are renamed, so
+  an existing database is rebuilt empty and needs a fresh import. The
+  staging folder defaults to `~/message-crate`. The Docker environment
+  variables are `MC_DB` and `MC_DATA_DIR`, the compose service is `server`,
+  and the desktop app installs as a new application beside any older copy.
 
 - 2026-09-22 **An account identity means ownership.** The Profile tab now
   says what the identities are for: your phone numbers and emails, which

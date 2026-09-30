@@ -45,7 +45,7 @@ struct FixtureAttachment {
 /// Committed queries and expected id sets (message keys from the fixture).
 /// Format: (query string, expected keys). These are the parity contract.
 const CASES: &[(&str, &[i64])] = &[
-    ("vault", &[1]),
+    ("archive", &[1]),
     ("hello", &[1, 2]),         // case-insensitive on both engines
     ("report*", &[3]),          // prefix
     ("\"two words\"", &[4, 5]), // phrase (exact adjacency; k=5 "two words apart" matches too)

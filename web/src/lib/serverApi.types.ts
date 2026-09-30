@@ -3060,6 +3060,25 @@ export interface components {
             name: string;
             query: string;
         };
+        /** @description The state of this Message Crate, for the screen a logged-out person sees. */
+        ServerInfo: {
+            /**
+             * Format: int64
+             * @description The Schema Fingerprint, the number this server stamps into its database.
+             */
+            schema_fingerprint: number;
+            /**
+             * @description `unclaimed` shows Create Owner alone; `closed` shows Login alone;
+             *     `open` shows Login and Create Account.
+             */
+            state: components["schemas"]["ServerState"];
+            /**
+             * @description The server's Build: its Product Version, plus the commit it was built
+             *     from unless it is a release. An app compares the Product Version with
+             *     its own and says so when they differ; the server serves it either way.
+             */
+            version: string;
+        };
         /** @description The server settings the owner controls. */
         ServerSettings: {
             /** @description Anyone reaching the server may create their own account. */
@@ -3272,25 +3291,6 @@ export interface components {
          * @enum {string}
          */
         ValueType: "text" | "name" | "person" | "choice" | "date" | "count" | "size" | "flag";
-        /** @description The state of this Message Crate, for the screen a logged-out person sees. */
-        Vault: {
-            /**
-             * Format: int64
-             * @description The Schema Fingerprint, the number this server stamps into its database.
-             */
-            schema_fingerprint: number;
-            /**
-             * @description `unclaimed` shows Create Owner alone; `closed` shows Login alone;
-             *     `open` shows Login and Create Account.
-             */
-            state: components["schemas"]["ServerState"];
-            /**
-             * @description The server's Build: its Product Version, plus the commit it was built
-             *     from unless it is a release. An app compares the Product Version with
-             *     its own and says so when they differ; the server serves it either way.
-             */
-            version: string;
-        };
     };
     responses: never;
     parameters: never;
@@ -8905,7 +8905,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Vault"];
+                    "application/json": components["schemas"]["ServerInfo"];
                 };
             };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */

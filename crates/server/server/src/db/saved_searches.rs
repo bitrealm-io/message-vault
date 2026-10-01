@@ -258,37 +258,18 @@ pub async fn delete(conn: &mut SqliteConnection, account_id: i64, id: i64) -> Re
     Ok(())
 }
 
-/// Name for an import's saved search, adding " 2", " 3", … when the account
-/// already used the plain name on the same day.
-async fn unique_import_name(
-    conn: &mut SqliteConnection,
-    account_id: i64,
-    source: &str,
-    date_ymd: &str,
-) -> Result<String> {
-    let base = format!("Import {source} {date_ymd}");
-    if find_id_by_name(conn, account_id, &base).await?.is_none() {
-        return Ok(base);
-    }
-    for n in 2..1000 {
-        let candidate = format!("{base} {n}");
-        if find_id_by_name(conn, account_id, &candidate)
-            .await?
-            .is_none()
-        {
-            return Ok(candidate);
-        }
-    }
-    Err(SavedSearchError::Conflict(
-        "too many imports named alike on one day".into(),
-    ))
-}
-
 /// Create the saved search that points at one import run's messages.
 ///
 /// Called when a run finishes having inserted at least one message. A run
 /// that failed, was cancelled, or stored nothing gets no saved search — it is
 /// still recorded in `imports` either way.
+///
+/// The name is `Import <source> <date>`, or that with " 2", " 3", … when the
+/// account already has a saved search under the name in any letter case. The
+/// insert itself claims the name, through
+/// [`crate::db::dialect::insert_under_free_name`], which the run's Contact
+/// Group goes through too. A saved search a person made under that name is
+/// left alone.
 pub async fn create_for_import(
     conn: &mut SqliteConnection,
     account_id: i64,
@@ -296,15 +277,28 @@ pub async fn create_for_import(
     source: &str,
     date_ymd: &str,
 ) -> Result<SavedSearch> {
-    let name = unique_import_name(conn, account_id, source, date_ymd).await?;
-    create(
+    let base = normalize_name(&format!("Import {source} {date_ymd}"))?;
+    let query = format!("import:#{import_id}");
+    let kind = SavedSearchKind::Import.as_str();
+    let claimed = crate::db::dialect::insert_under_free_name(
         conn,
+        "saved_searches",
         account_id,
-        &name,
-        &format!("import:#{import_id}"),
-        SavedSearchKind::Import,
+        &base,
+        &[("query", &query), ("kind", kind)],
     )
-    .await
+    .await?;
+    let Some((id, name)) = claimed else {
+        return Err(SavedSearchError::Conflict(
+            "too many imports named alike on one day".into(),
+        ));
+    };
+    Ok(SavedSearch {
+        id,
+        name,
+        query,
+        kind: kind.to_string(),
+    })
 }
 
 #[cfg(test)]

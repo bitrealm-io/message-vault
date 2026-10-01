@@ -294,45 +294,30 @@ pub async fn contact_id_by_preferred_name(
 /// Saved Search follows. The group is always a new row: an import never adds
 /// to, or re-marks, a group an earlier run or a person made.
 ///
-/// Each candidate is claimed by the insert itself, not by a lookup before
-/// it. When two runs finish at the same moment, `UNIQUE(account_id, name)`
-/// lets one insert through, and the other inserts nothing and tries the
-/// next name.
+/// The insert itself claims the name, through
+/// [`crate::db::dialect::insert_under_free_name`], which the run's Saved
+/// Search goes through too.
 ///
 /// # Errors
 ///
-/// Returns an error when an insert fails, or when 998 names are all taken.
+/// Returns an error when an insert fails, or when all 999 names are taken.
 pub async fn create_import_group(
     conn: &mut SqliteConnection,
     account_id: i64,
     base: &str,
 ) -> Result<(i64, String)> {
-    let sql = format!(
-        "INSERT INTO contact_groups (account_id, name, kind)
-         SELECT $1, $2, 'import'
-         WHERE NOT EXISTS (
-             SELECT 1 FROM contact_groups WHERE account_id = $1 AND {name_taken}
-         )
-         ON CONFLICT DO NOTHING
-         RETURNING id",
-        name_taken = crate::db::dialect::name_eq_ci("name", "$2"),
-    );
-    for n in 1..1000 {
-        let name = if n == 1 {
-            base.to_string()
-        } else {
-            format!("{base} {n}")
-        };
-        let id: Option<i64> = sqlx::query_scalar(&sql)
-            .bind(account_id)
-            .bind(&name)
-            .fetch_optional(&mut *conn)
-            .await?;
-        if let Some(id) = id {
-            return Ok((id, name));
-        }
+    let claimed = crate::db::dialect::insert_under_free_name(
+        conn,
+        "contact_groups",
+        account_id,
+        base,
+        &[("kind", "import")],
+    )
+    .await?;
+    match claimed {
+        Some(claimed) => Ok(claimed),
+        None => anyhow::bail!("too many Contact Groups named like {base:?}"),
     }
-    anyhow::bail!("too many Contact Groups named like {base:?}")
 }
 
 /// SQL predicate selecting the Unknown contacts of alias `ct`.

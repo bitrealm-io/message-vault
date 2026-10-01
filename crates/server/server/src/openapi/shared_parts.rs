@@ -38,6 +38,7 @@ pub(crate) fn apply(spec: &mut OpenApi) {
     for (path, item) in &mut spec.paths.paths {
         for op in operations_mut(item) {
             one_sentence_summary(op);
+            describe_successes(op);
             failures(path, op);
         }
     }
@@ -73,6 +74,27 @@ fn one_sentence_summary(op: &mut Operation) {
         (false, None) => Some(rest.to_string()),
         (false, Some(description)) => Some(format!("{rest}\n\n{description}")),
     };
+}
+
+/// Give a response the handler left undescribed its status's reason phrase
+/// ("OK", "Created", "No Content"). OpenAPI 3.1 requires a description on
+/// every response, and an empty one is left out of the document.
+fn describe_successes(op: &mut Operation) {
+    for (status, response) in &mut op.responses.responses {
+        let RefOr::T(response) = response else {
+            continue;
+        };
+        if !response.description.is_empty() {
+            continue;
+        }
+        if let Some(reason) = status
+            .parse::<axum::http::StatusCode>()
+            .ok()
+            .and_then(|status| status.canonical_reason())
+        {
+            response.description = reason.to_string();
+        }
+    }
 }
 
 /// The first sentence of `text` and what follows it. A sentence ends at a
@@ -157,7 +179,7 @@ fn failures(path: &str, op: &mut Operation) {
         .parameters
         .iter()
         .flatten()
-        .any(|p| matches!(p.parameter_in, ParameterIn::Path))
+        .any(|p| matches!(p, RefOr::T(p) if matches!(p.parameter_in, ParameterIn::Path)))
     {
         kinds.extend([ProblemType::NotFound, ProblemType::ValidationFailed]);
     }

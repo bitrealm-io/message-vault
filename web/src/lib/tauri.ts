@@ -176,7 +176,6 @@ export interface PushConfig {
   input_dir: string;
   mode: string;
   force: boolean;
-  continue_on_error: boolean;
   skip_attachments: boolean;
   trust_export: boolean;
   import_id?: number;
@@ -243,7 +242,6 @@ export async function invokePush(config: PushConfig): Promise<void> {
       inputDir: config.input_dir,
       mode: config.mode,
       force: config.force,
-      continueOnError: config.continue_on_error,
       skipAttachments: config.skip_attachments,
       trustExport: config.trust_export,
       importId: config.import_id ?? null,

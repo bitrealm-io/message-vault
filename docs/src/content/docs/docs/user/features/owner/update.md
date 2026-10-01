@@ -1,49 +1,93 @@
 ---
 title: Update Message Crate
-description: Upgrade the published Docker image and the desktop app without losing the database volume.
+description: Replace the server with a newer release while keeping the data volume, update the desktop app, and what happens when a release changes the database layout.
 ---
 
-## Updating the server (published image)
+A Message Crate has two parts to update: the server, which runs in Docker, and the desktop app.
+Both carry the same version number, and both should be updated to the same release.
 
-Stop the container, pull the new image, and start it again on the **same** named volume:
+## Before updating
 
-```bash title="Upgrade with docker run"
+Two checks come first, because an update can empty the database.
+
+1. The [changelog](https://github.com/messagecrate/message-crate/blob/main/CHANGELOG.md) has an **Upgrading** heading under a release when that release needs something done. A release that changes the database layout rebuilds the database empty, as described [below](#when-the-database-layout-changes).
+2. The phone backups the messages were imported from must still be at hand, because they are what a rebuilt Message Crate is filled from again.
+
+A copy of the `message-crate-data` volume, made as in [Run on another machine](/docs/user/features/owner/run-on-another-machine/#save-the-volume-to-a-file), allows going back to the release that was running before.
+
+## Update the server
+
+:::caution[Not tested]
+These steps follow Docker's documentation. Nobody on the project has run them. A wrong step is worth [an issue](https://github.com/messagecrate/message-crate/issues).
+:::
+
+The steps match the server started in [Start your own Message Crate](/docs/user/get-started/start-your-own-message-crate/): a container named `message-crate` on the volume `message-crate-data`.
+
+`docker stop` and `docker rm` remove the running server.
+They leave the volume alone, so the messages stay.
+
+```bash title="Remove the old server"
 docker stop message-crate
 docker rm message-crate
+```
+
+`docker pull` downloads the newest release.
+
+```bash title="Download the new release"
 docker pull bitrealm/message-crate:latest
+```
+
+The same command as the first time starts the new server on the same volume.
+
+```bash title="Start the new server"
 docker run -d --name message-crate \
-  -p 8080:8080 \
+  --restart unless-stopped \
+  -p 127.0.0.1:8080:8080 \
+  -e DEMO_DATA=false \
   -v message-crate-data:/app/data \
   bitrealm/message-crate:latest
 ```
 
-The named volume keeps the database and assets. `DEMO_DATA` only controls seeding when the volume is empty, so it does not need to be set during an upgrade. Schema upgrades apply when the server starts.
+A server that was started with a different `-p` value, as in [Run on another machine](/docs/user/features/owner/run-on-another-machine/), is started again with that value.
 
-Copy the database and `data/` directory somewhere safe before you upgrade.
+`-e DEMO_DATA=false` changes nothing on a volume that already holds a database.
+The server only reads it when the volume is empty.
 
-If you started from [docker/compose.yml](https://github.com/messagecrate/message-crate/blob/main/docker/compose.yml), upgrade in that same folder:
+### Check that it worked
 
-```bash title="Upgrade with Compose"
-docker compose pull
-docker compose up -d
-```
+1. Log in as the Owner at [http://localhost:8080](http://localhost:8080).
+2. Open **Server Settings**. **Version** shows the new release.
 
-A release-shaped image from a git checkout: [Docker](/docs/developer/docker/).
+### A fixed release in place of the newest
 
-## Updating the desktop app
+`latest` is the newest release.
+A tag with a version number, such as `bitrealm/message-crate:0.9.0`, stays on that release.
+The tag has no `v` in front.
 
-Download the new installer from [GitHub Releases](https://github.com/messagecrate/message-crate/releases) and install it over the current app (`.deb` / AppImage, `.msi`, or `.dmg`).
+## Update the desktop app
 
-If Import is in use, the `.import-state.jsonl` journal in the work directory is forward-compatible.
+The installers are on the [latest release on GitHub](https://github.com/messagecrate/message-crate/releases/latest), under **Assets**.
+[Install the desktop app](/docs/user/get-started/install-the-desktop-app/) lists which file belongs to which computer.
 
-## When the database schema changes
+A desktop app from a different release than the server still connects, and the server serves it.
+The Owner sees the difference on the account's **Profile** tab in [Owner Home](/docs/user/features/owner/owner-home/#profile), under **App**.
 
-Some releases change the shape of the server's own database rather than the JSONL it imports. When that happens, the server rebuilds its tables empty the first time it starts on the new version, on SQLite and Postgres alike, and the release notes say so. Message Crate comes back the way it looked the first time you ran it. You create your account again, then import your conversations again from the backups they came from. Anything that lived only in the database starts fresh too: the contacts you renamed, your tags, whatever you had moved to the trash, and any API tokens you had issued.
+## When the database layout changes
 
-Keep the backups you imported from where you can get to them: a `chat.db`, an XML export, whatever the source was.
+Message Crate doesn't convert an old database to a new layout.
+A server whose database layout differs from the one in the volume rebuilds the database empty when it starts.
 
-## Compatibility
+How is a rebuild recognised?
 
-The server reads one JSONL schema version at a time, currently version 4. If you import a file written by an older desktop app, the server refuses it and tells you which version it expected — re-export from the current desktop app and import again.
+- The browser shows **Create Owner**, as it did the first time.
+- **Schema fingerprint** under **Server Settings** shows a different number than before the update. The number is the same for every server with the same database layout.
+- `docker logs message-crate` shows the line `database schema differs from this server's; rebuilding empty (re-import your data)`.
 
-The Docker tag `latest` points at the most recent release. For a specific version, use `bitrealm/message-crate:0.9.0` (no `v` prefix) or a tag from [Releases](https://github.com/messagecrate/message-crate/releases).
+Everything the database held is gone after a rebuild:
+
+- the Owner and every account,
+- every message, conversation, and contact,
+- contact names that were typed in, Contact Groups, Message Tags, Saved Searches, and the Trash,
+- every API Token.
+
+The way back is the first-time path again: [create the Owner and an account](/docs/user/get-started/start-your-own-message-crate/#create-the-owner), then [import the backups](/docs/user/get-started/import-your-backup/).

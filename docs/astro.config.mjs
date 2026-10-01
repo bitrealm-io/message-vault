@@ -58,6 +58,7 @@ const userGuideItems = [
           'docs/user/features/messages/browse',
           'docs/user/features/messages/search',
           'docs/user/features/messages/saved-searches',
+          'docs/user/features/messages/message-tags',
           'docs/user/features/messages/trash',
           'docs/user/features/messages/import',
           'docs/user/features/messages/export',
@@ -66,13 +67,20 @@ const userGuideItems = [
       },
       {
         label: 'Contacts',
-        items: ['docs/user/features/contacts/contacts'],
+        items: [
+          'docs/user/features/contacts/contacts',
+          'docs/user/features/contacts/contact-groups',
+          'docs/user/features/contacts/unknown',
+        ],
       },
       {
         label: 'Settings',
         items: [
-          'docs/user/features/settings/settings',
+          'docs/user/features/settings/account-and-profile',
+          'docs/user/features/settings/storage',
+          'docs/user/features/settings/system',
           'docs/user/features/settings/convert',
+          'docs/user/features/settings/appearance',
         ],
       },
       {
@@ -80,6 +88,7 @@ const userGuideItems = [
         items: [
           'docs/user/features/owner/owner-home',
           'docs/user/features/owner/update',
+          'docs/user/features/owner/run-on-another-machine',
           'docs/user/features/owner/troubleshooting',
         ],
       },

@@ -1,52 +1,91 @@
 ---
 title: Trash
-description: Move a conversation or a contact to Trash, take it back out again, or delete it for good.
+description: What moving a conversation or a contact to Trash does, what restoring does, and what deleting from Trash removes.
 ---
 
-**Trash** in the sidebar holds conversations and contacts you have set aside. Nothing in it is deleted: a trashed item keeps all of its messages, handles and group membership, and it comes back exactly as it was. Trash is also the only door to deleting something for good — an item has to be in Trash before **Delete** or **Empty Trash** can remove it.
+**Trash** in the sidebar holds the conversations and contacts an account has set aside.
+Nothing in Trash is deleted.
+A trashed conversation keeps its messages and can still be opened and read.
 
-## Move something to Trash
+Trash is also the only way to delete one conversation or one contact permanently.
+The item must be in Trash before **Delete** or **Empty Trash** can remove it.
 
-Open a conversation and click **Move to trash** in its header. The conversation leaves the inbox, along with its messages, and no longer counts towards the message and conversation totals shown for the people in it.
+## What moving to Trash does
 
-For a contact, open the contact and click **Move to trash** in the drawer. The contact leaves the Contacts list. Their conversations stay where they are — trashing a person is not the same as trashing what you talked about.
+**Move to trash** is in the header of an open conversation and in the drawer of an open contact.
 
-A trashed contact stays set aside until an import meets one of their handles. A backup that still holds the person means you still talk to them, so the import discards the trashed contact — the name, the Contact Group memberships and every handle it had — and makes a new contact from the backup, the way a first import would. The new contact carries only the handles the backup mentions (the same number on another service counts as mentioned); a handle the trashed contact had that the backup does not mention belongs to nobody afterwards, and its conversations show under Unknown until you add it to a contact. To keep a person out of Contacts for good, delete them from Trash instead.
+A trashed conversation leaves the conversation list, and a search no longer looks at it or at its messages.
+It is no longer counted among the conversations of the contacts in it.
 
-## Take it back
+A trashed contact leaves the Contacts list.
+The contact's conversations stay where they are, because trashing a person is separate from trashing what was said.
 
-Click **Trash** in the sidebar. Trashed conversations are listed in the left column; click one and the pane shows it with a **Restore** button, next to a link to read the conversation before you decide. Trashed contacts are listed under **Contacts** in the pane itself, each row with its own **Restore**.
+## A trashed contact and a later import
 
-Restoring puts the item back where it came from. The row leaves Trash as soon as it does.
+A trashed contact stays in Trash until an import meets one of the contact's identities.
+A backup that still holds the person means the person is still in use, so the import discards the trashed contact and makes a new contact from the backup, as a first import would.
+The discarded contact's name, its Contact Group memberships, and every identity it had go with it.
 
-The search box narrows both lists at once while you are in Trash, so `ada` finds the trashed conversations and contacts that match it.
+The new contact carries only the identities the backup mentions.
+The same phone number on another service counts as mentioned.
+An identity the trashed contact had that the backup does not mention belongs to no contact afterwards, and its conversations show under Unknown until the identity is added to a contact.
 
-## Delete for good
+A contact that should stay out of Contacts for good must be deleted from Trash, because a trashed contact is replaced by the next import that meets it.
 
-Every trashed item also has a **Delete** button, and the pane has **Empty Trash** at the top. Each asks you to confirm first, and the dialog says what will happen, because Delete means two different things for the two kinds of item.
+## The Trash screen
 
-Deleting a conversation removes it and its messages from the database. An attachment is stored once however many messages share it, so a photo that also appears in another conversation stays; a file only the deleted messages used goes with them.
+The Trash screen has two sections, **Conversations** and **Contacts**.
 
-Deleting a contact works the way Delete Contact works on a phone. The name and details you gave the person go, along with their Contact Group memberships, and the contact becomes Unknown again. The messages stay. Their conversations are untouched and now show the phone number or address instead of the name. A conversation is never deleted with a contact — to remove one, trash and delete it as a conversation.
+Trashed conversations are listed in the left column.
+Selecting one shows its name and message count in the pane, with **Restore**, **Delete**, and **View conversation**, which opens the conversation for reading.
 
-**Empty Trash** does both at once: every conversation in Trash is deleted, and every contact in Trash becomes Unknown. It acts on all of Trash, not only on what a search is showing.
+Trashed contacts are listed in the pane itself, because a trashed contact cannot be opened.
+Each row has its own **Restore** and **Delete**.
+The pane lists up to 100 trashed contacts.
 
-An Import Run's record under **Settings → Storage** does not change when things it brought in are later deleted. It describes the run as it happened.
+**Restore** takes the item out of Trash, and its row leaves the screen.
 
-The demo account can trash and restore but cannot delete, so its Delete and Empty Trash buttons stay disabled.
+The search box narrows both sections at once.
+A search word that only one section understands is not applied to the other section, and that section says so, for example `participants: applies to conversations only`.
 
-## Find trashed items from anywhere
+## Deleting
 
-Trash is a marker on the item, not a place its data was moved to, so search can ask about it directly. The `trashed:` operator works on Contacts, Conversations and Messages:
+**Delete** and **Empty Trash** each ask for confirmation first.
+The confirmation says what will be removed, because Delete means different things for a conversation and for a contact.
 
-- `trashed:yes` — only trashed items
-- `trashed:no` — only items that are not trashed, which is what every search does by default
-- `trashed:any` — both
+Deleting a conversation removes it and its messages from the Message Crate.
+An attachment that only the deleted messages use goes with them.
+An attachment that another message also uses stays, because an attachment is stored once however many messages share it.
 
-Searching `trashed:yes` on Contacts shows trashed contacts in the Contacts list, but they cannot be opened from there — restore or delete them from the Trash view.
+Deleting a contact removes the name and details, along with the contact's Contact Group memberships.
+The contact becomes Unknown.
+The messages stay, and the conversations show the phone number or address in place of the name.
+Deleting a contact never deletes a conversation.
 
-See [Search](/docs/user/features/messages/search/) for the rest of the operators.
+**Empty Trash** does both at once.
+Every conversation in Trash is deleted with its messages, and every contact in Trash becomes Unknown.
+It acts on all of Trash, not only on what a search is showing.
 
-## Remove everything at once
+Deleting needs the account's delete permission, which the Owner sets.
+Without it, **Delete** and **Empty Trash** are disabled and show `Deleting is not permitted for this account`.
+Moving to Trash and restoring stay available.
 
-To remove all message content for an account without trashing each conversation first, use the danger-zone actions under **Settings → Account**. See [Settings](/docs/user/features/settings/settings/).
+The record of an Import Run under **Settings → Storage → Import history** does not change when conversations the run brought in are later deleted.
+It describes the run as it happened.
+
+## Searching for trashed items
+
+Trash is a mark on the item, not a place its data was moved to, so a search can ask about it.
+The `trashed:` operator works on contacts, conversations, and messages:
+
+- `trashed:yes` finds only trashed items.
+- `trashed:no` finds only items that are not trashed. Every search does this by default.
+- `trashed:any` finds both.
+
+[Search](/docs/user/features/messages/search/) covers the other operators.
+
+## Deleting everything at once
+
+**Settings → Account** has a **Danger zone** with **Delete all messages**.
+It deletes every message and attachment the account holds without trashing each conversation first, and leaves the contacts and settings in place.
+The button is disabled on the `demo` account.

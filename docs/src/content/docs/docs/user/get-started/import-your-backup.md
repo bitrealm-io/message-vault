@@ -34,7 +34,7 @@ The Owner's login doesn't show **Import**, because the Owner holds no messages.
 **Attachments** stays on **Copy**, which uploads every photo, video, and file as it is.
 
 **Convert** and **Compress & Convert** need the separate program ffmpeg, so they are left for a later import.
-With **Copy**, a browser shows the formats it can show. Some iPhone photos and videos are in formats that not every browser displays, and those don't show until they are converted.
+With **Copy**, a browser shows the formats it can show. Some iPhone photos and videos are in formats that not every browser displays, and those stay that way. [Attachments and media](/docs/user/features/messages/attachments-and-media/) describes what each choice does.
 [Attachments and media](/docs/user/features/messages/attachments-and-media/) covers the other choices.
 
 ## Start the import
@@ -42,8 +42,9 @@ With **Copy**, a browser shows the formats it can show. Some iPhone photos and v
 Select **Import**.
 
 For an iPhone backup, the app first compares the addresses the phone sent from with the ones on the account's profile.
-When none match, it stops and says so, because it would otherwise mark the person's own messages as received.
-**Add to profile** adds the phone's addresses and carries on.
+When none match, it stops and lists the phone's addresses.
+**Add to profile** beside an address adds that one address to the profile.
+**Continue import** starts the run, whether or not an address was added.
 
 ## Follow the run
 
@@ -51,7 +52,7 @@ The screen changes to a list of stages, in order.
 The run works through them from the top.
 
 1. **Staging** reads the backup and copies the messages and attachments into a working folder on this computer. Nothing has reached the Message Crate yet. A large backup takes a while here.
-2. **Staging Review** stops the run and reads **Awaiting approval**. It shows what was found: the count of conversations and messages, the attachments and their total size, and the contacts, split into **Existing** and **New**.
+2. **Staging Review** stops the run and reads **Awaiting approval**. It shows what was found: the contacts, split into **Existing** and **New**, any attachment too large to upload, and the addresses the phone sent from. The counts of conversations, messages and attachments are in the **Staging** row above it.
 3. **Upload** writes everything into the Message Crate.
 
 Nothing is stored until the review is approved.

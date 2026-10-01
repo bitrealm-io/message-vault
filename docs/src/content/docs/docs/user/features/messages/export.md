@@ -1,54 +1,82 @@
 ---
-title: Export your messages
-description: Save your messages to a folder on your computer, in the format you choose.
+title: Export
+description: What the desktop app's Export screen writes, what an export covers, and the formats it offers.
 ---
 
-**Export** writes your messages, and their attachments, to a folder on your computer. It runs in the desktop app: Export appears in the sidebar once you log in.
+**Export** writes an account's messages and their attachments to a folder on the computer.
+It reads the Message Crate, never a phone backup.
 
-An export covers every conversation, or only the conversations a search finds. The scope is the first choice on the screen.
+Export is in the desktop app's sidebar, under **Messages**.
+The browser doesn't show it, because writing a folder of files needs the desktop app.
 
-Every export is recorded as an Export Run: when it started, what it asked for, how many messages and attachments matched, and how it ended. [Settings → Storage](/docs/user/features/settings/settings/) lists them under Export history.
+Every export is recorded as an Export Run.
+[**Settings → Storage**](/docs/user/features/settings/storage/) lists them under **Export history**.
+Each row has the date, the scope, the status, the count of messages that matched, the count delivered, the count of attachments, and their size.
+The record holds what was asked for, never what the messages said.
 
-## Before you start
+## The form
 
-- A running Message Crate server, and an account with messages already imported
-- The desktop app, logged in
-- An empty folder on disk to write into
+The Export screen has four fields.
 
-## Export from the desktop app
+| Field | What it sets |
+|---|---|
+| **Scope** | **Everything** or **Search**. |
+| **Search** | The search an export is limited to. Shown only when **Scope** is **Search**. |
+| **Save to** | The folder the export is written into. |
+| **Format** | One of six formats. **JSON Lines (.jsonl)** is the default. |
 
-1. Log in to Message Crate in the desktop app
-2. Open **Export** in the sidebar
-3. Choose the scope: **Everything** or **Search**
-4. Choose the folder to save into
-5. Choose a format
-6. Select **Export** and wait for the log to finish
+**Export** starts the run and **Cancel** stops it.
+The **Export** button stays disabled until **Save to** holds a folder, and under **Search** until the search box holds a search.
+A log under the buttons shows what the run is doing.
+A finished run reads `Export complete.` followed by the format and the folder.
 
 ## Scope
 
-**Everything** writes every conversation.
+**Everything** writes every conversation the account holds.
 
-**Search** writes only the conversations a search finds, and shows a box for the search. It takes the same [search language](/docs/user/features/messages/search/) as the search bar, so `from:me last year` exports what that search would show. To export particular conversations, name them with `in:`, which takes a title, a handle, or an id: `in:#19,#22` exports those two conversations and nothing else, and `in:"Book Club"` exports the one with that title.
+**Search** writes only the conversations a search finds.
+The box takes the same [search language](/docs/user/features/messages/search/) as the search bar, so `from:me last year` exports what that search shows.
+`in:` names particular conversations by title, by identity, or by id: `in:#19,#22` exports those two conversations and nothing else.
 
-When you open Export while looking at a list of conversations, the screen starts in **Search** with that list's search already in the box, tag included, so exporting what you are looking at is one more click. Opened from Contacts or Trash, or from the sidebar with no search running, it starts in **Everything**.
+Export opened from the conversation list starts in **Search**, with the search that list is showing already in the box.
+Opened from any other screen, or with no search running, it starts in **Everything**.
+
+An Export Run hands over the messages that matched when it started.
+A message imported or trashed while the run is being read does not change what the run writes.
 
 ## Formats
 
-| Format | What you get |
+| Format | What is written |
 |---|---|
-| **JSON Lines** | One `.jsonl` file per conversation, attachments in an `attachments/` folder |
-| **JSON** | One indented `.json` file per conversation, attachments in an `attachments/` folder |
-| **CSV** | One `.csv` file per conversation, attachments in an `attachments/` folder. Columns: [CSV columns](/docs/developer/reference/csv-columns/) |
-| **EML** | One folder per conversation, one `.eml` file per message, attachments embedded |
-| **MBOX** | One `.mbox` file per conversation, attachments embedded |
-| **Android XML** | A single `smses.xml`, attachments embedded. Apple-only fields are dropped |
+| **JSON Lines (.jsonl)** | One `.jsonl` file per conversation, attachments in an `attachments/` folder |
+| **JSON (.json)** | One indented `.json` file per conversation, attachments in an `attachments/` folder |
+| **CSV (.csv)** | One `.csv` file per conversation, attachments in an `attachments/` folder. Columns: [CSV columns](/docs/developer/reference/csv-columns/) |
+| **EML (one file per message)** | One folder per conversation, one `.eml` file per message, attachments embedded |
+| **MBOX (.mbox)** | One `.mbox` file per conversation, attachments embedded |
+| **Android XML (smses.xml)** | A single `smses.xml`, attachments embedded |
 
-JSON Lines is what Message Crate stores, so it is the fastest and the only format that loses nothing. Every other format is written by converting a JSON Lines export, which happens as part of the same run.
+Export always fetches the messages as JSON Lines first.
+Any other format is written by converting that JSON Lines copy, as part of the same run.
 
-Folder layout: [Export structure](/docs/developer/reference/export-structure/).
+The JSON Lines layout is described in [Export structure](/docs/developer/reference/export-structure/).
 
-## Where the temporary files go
+## The folder an export writes into
 
-Choosing any format other than JSON Lines takes two steps: the messages are written as JSON Lines first, then converted into the format you asked for. The intermediate copy goes in your staging directory — the same folder Import uses, `~/message-crate` by default, changeable in [Settings → System](/docs/user/features/settings/settings/). It is deleted when the export finishes, including when the conversion fails.
+A JSON Lines export writes straight into the **Save to** folder.
+It also keeps a file named `.message-crate-pull-state.jsonl` there, which records the attachments already downloaded.
+A later JSON Lines export into the same folder skips those attachments.
 
-Make sure that folder has room for a second copy of your messages while an export runs.
+An export in any other format first deletes the files of an earlier export from the **Save to** folder.
+It refuses a folder that holds other files and no export, so that nothing unrelated is deleted.
+An empty folder, or one a previous export wrote, is accepted.
+
+## The Staging Directory
+
+An export in any format other than JSON Lines needs two folders, because the conversion reads one folder and writes another.
+The JSON Lines copy goes into the Staging Directory, and the converted files go into the **Save to** folder.
+
+The Staging Directory is `~/message-crate` by default, the same folder Import uses.
+[**Settings → System**](/docs/user/features/settings/system/) changes it under **Staging directory**.
+The export's folder inside it is deleted when the export finishes, including when the conversion fails.
+
+The disk that holds the Staging Directory needs room for a second copy of the exported messages and attachments while such an export runs.

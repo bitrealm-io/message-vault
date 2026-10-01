@@ -42,7 +42,7 @@ pub(crate) struct WtsexporterArgs {
 
 /// Locate `wtsexporter` (the Python WhatsApp export tool this crate shells out to):
 /// `WTSEXPORTER` → sibling of this exe → `cli/` next to the GUI →
-/// legacy parent dir → `MESSAGE_VAULT_IO_BIN` → `PATH`.
+/// legacy parent dir → `MESSAGE_CRATE_BIN` → `PATH`.
 ///
 /// # Errors
 ///
@@ -87,7 +87,7 @@ pub(crate) fn resolve_wtsexporter() -> Result<PathBuf> {
         }
     }
 
-    if let Some(extra) = env::var_os("MESSAGE_VAULT_IO_BIN") {
+    if let Some(extra) = env::var_os("MESSAGE_CRATE_BIN") {
         let candidate = PathBuf::from(extra).join(executable);
         tried.push(candidate.clone());
         if candidate.is_file() {
@@ -107,7 +107,7 @@ pub(crate) fn resolve_wtsexporter() -> Result<PathBuf> {
     bail!(
         "Could not find {executable}. Install with: pip install '{PINNED_HINT}' \
          (or pip install 'whatsapp-chat-exporter[android_backup,crypt15]'), \
-         put the KnugiHK release binary in cli/ next to this tool / in MESSAGE_VAULT_IO_BIN, \
+         put the KnugiHK release binary in cli/ next to this tool / in MESSAGE_CRATE_BIN, \
          or set WTSEXPORTER. Tried: {}",
         tried
             .iter()

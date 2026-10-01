@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiClient, getBaseUrl, problemFromBody, setBaseUrl, setToken, VaultApiError } from "./api";
+import { ApiError, apiClient, getBaseUrl, problemFromBody, setBaseUrl, setToken } from "./api";
 import { APP_BUILD } from "./build";
 
 afterEach(() => {
@@ -28,7 +28,7 @@ function lastCall(fetchSpy: ReturnType<typeof vi.fn>): [string, RequestInit] {
 }
 
 const PROBLEM = {
-  type: "https://bitrealm.io/vault/developer/reference/errors/invalid-credentials",
+  type: "https://messagecrate.app/docs/developer/reference/errors/invalid-credentials",
   title: "Invalid credentials",
   status: 401,
   detail: "invalid username or password",
@@ -49,7 +49,7 @@ describe("problemFromBody", () => {
     const err = problemFromBody(
       422,
       JSON.stringify({
-        type: "https://bitrealm.io/vault/developer/reference/errors/validation-failed",
+        type: "https://messagecrate.app/docs/developer/reference/errors/validation-failed",
         title: "Validation failed",
         status: 422,
         errors: ["limit must be at least 1", "offset exceeds maximum of 50000"],
@@ -94,7 +94,7 @@ describe("problemFromBody", () => {
 });
 
 describe("apiClient errors", () => {
-  it("throws a VaultApiError carrying the status and the server's message", async () => {
+  it("throws a ApiError carrying the status and the server's message", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -102,7 +102,7 @@ describe("apiClient errors", () => {
         status: 409,
         text: async () =>
           JSON.stringify({
-            type: "https://bitrealm.io/vault/developer/reference/errors/username-taken",
+            type: "https://messagecrate.app/docs/developer/reference/errors/username-taken",
             title: "Username taken",
             status: 409,
             detail: "username already taken: matt",
@@ -111,7 +111,7 @@ describe("apiClient errors", () => {
     );
 
     await expect(apiClient.post("/v1/accounts", {})).rejects.toMatchObject({
-      name: "VaultApiError",
+      name: "ApiError",
       status: 409,
       message: "username already taken: matt",
     });
@@ -129,7 +129,7 @@ describe("apiClient errors", () => {
 
     const caught = await apiClient.get("/v1/whoami").catch((e: unknown) => e);
     expect(caught).toBeInstanceOf(Error);
-    expect(caught).toBeInstanceOf(VaultApiError);
+    expect(caught).toBeInstanceOf(ApiError);
   });
 });
 
@@ -152,37 +152,37 @@ describe("apiClient no-content", () => {
  * response, so the URL, the Authorization header, the media type and the body
  * were never looked at. A client that dropped the Bearer token, sent the body
  * as `[object Object]`, or built the URL without the base would have passed
- * every one of them, and every screen would have failed against a real vault.
+ * every one of them, and every screen would have failed against a real server.
  */
 describe("apiClient request shape", () => {
   it("names this app and its Build on every request, logged in or not", async () => {
     const fetchSpy = stubOkFetch();
 
-    await apiClient.get("/v1/vault");
+    await apiClient.get("/v1/server");
     await apiClient.postRaw("/v1/imports/1/conversations", "{}", "application/x-ndjson");
 
     for (const [, init] of fetchSpy.mock.calls as [string, RequestInit][]) {
       const headers = init.headers as Record<string, string>;
       // A browser here, not the desktop app: nothing has set up Tauri.
-      expect(headers["x-message-vault-app"]).toBe("website");
-      expect(headers["x-message-vault-version"]).toBe(APP_BUILD);
+      expect(headers["x-message-crate-app"]).toBe("website");
+      expect(headers["x-message-crate-version"]).toBe(APP_BUILD);
     }
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
   it("puts the path after the base URL", async () => {
     const fetchSpy = stubOkFetch();
-    setBaseUrl("https://vault.example.test");
+    setBaseUrl("https://server.example.test");
 
     await apiClient.get("/v1/conversations");
 
     const [url] = lastCall(fetchSpy);
-    expect(url).toBe("https://vault.example.test/v1/conversations");
+    expect(url).toBe("https://server.example.test/v1/conversations");
   });
 
   it("strips trailing slashes off the base URL so the path is not doubled", () => {
-    setBaseUrl("https://vault.example.test///");
-    expect(getBaseUrl()).toBe("https://vault.example.test");
+    setBaseUrl("https://server.example.test///");
+    expect(getBaseUrl()).toBe("https://server.example.test");
   });
 
   it("sends no host of its own when the base URL is empty, so the page's host serves the API", async () => {
@@ -196,12 +196,12 @@ describe("apiClient request shape", () => {
 
   it("carries the session token as a Bearer header once one is set", async () => {
     const fetchSpy = stubOkFetch();
-    setToken("mv-user-abc123");
+    setToken("mc-user-abc123");
 
     await apiClient.get("/v1/session");
 
     const headers = lastCall(fetchSpy)[1].headers as Record<string, string>;
-    expect(headers.Authorization).toBe("Bearer mv-user-abc123");
+    expect(headers.Authorization).toBe("Bearer mc-user-abc123");
   });
 
   it("sends no Authorization header while logged out", async () => {
@@ -240,7 +240,7 @@ describe("apiClient request shape", () => {
   it("does not claim a JSON body on a request that carries none", async () => {
     const fetchSpy = stubOkFetch();
 
-    // The vault reads a body wherever the media type promises one, and refuses
+    // The server reads a body wherever the media type promises one, and refuses
     // an empty one as unparseable: a DELETE marked as JSON answered 400.
     await apiClient.delete("/v1/accounts/101");
 
@@ -274,7 +274,7 @@ describe("apiClient request shape", () => {
 
   it("posts a raw body under its own media type without re-encoding it", async () => {
     const fetchSpy = stubOkFetch();
-    setToken("mv-user-abc123");
+    setToken("mc-user-abc123");
     const jsonl = '{"schema_version":4}\n{"schema_version":4}\n';
 
     await apiClient.postRaw("/v1/imports", jsonl, "application/x-ndjson");
@@ -282,7 +282,7 @@ describe("apiClient request shape", () => {
     const [, init] = lastCall(fetchSpy);
     const headers = init.headers as Record<string, string>;
     expect(headers["Content-Type"]).toBe("application/x-ndjson");
-    expect(headers.Authorization).toBe("Bearer mv-user-abc123");
+    expect(headers.Authorization).toBe("Bearer mc-user-abc123");
     expect(init.body).toBe(jsonl);
   });
 });

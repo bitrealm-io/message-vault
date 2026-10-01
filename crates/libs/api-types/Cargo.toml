@@ -1,0 +1,22 @@
+[package]
+name = "message-crate-api-types"
+version = "0.1.0"
+edition = "2024"
+description = "The response shapes the Message Crate HTTP API sends and its client crates read"
+license = "LicenseRef-FCL-1.0-ALv2"
+
+[dependencies]
+serde = { workspace = true }
+utoipa = { version = "5", optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[features]
+# The server turns this on so the same structs describe themselves in the
+# OpenAPI document. Client crates leave it off and never build utoipa.
+default = []
+schema = ["dep:utoipa"]
+
+[lints]
+workspace = true

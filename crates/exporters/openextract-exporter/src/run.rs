@@ -2,7 +2,7 @@
 
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::{Result, bail};
-use message_vault_io_core::{ExporterConfig, RunResult, SourceConfig};
+use message_crate_core::{ExporterConfig, RunResult, SourceConfig};
 
 /// Resolve contacts, convert, then apply media transforms and obfuscation.
 ///
@@ -14,9 +14,9 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     let SourceConfig::OpenExtract(_) = &config.source else {
         bail!("openextract-exporter requires SourceConfig::OpenExtract");
     };
-    message_vault_io_core::check_cancel(config.cancel.as_ref())?;
+    message_crate_core::check_cancel(config.cancel.as_ref())?;
     let input = config.require_input().map_err(anyhow::Error::msg)?;
-    message_vault_io_core::run_pipeline(config, |transforms| {
+    message_crate_core::run_pipeline(config, |transforms| {
         convert_export(ConvertExportArgs {
             input,
             output: &config.output,

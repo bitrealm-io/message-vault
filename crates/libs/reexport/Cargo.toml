@@ -2,13 +2,13 @@
 name = "message-reexport"
 version = "0.1.0"
 edition = "2024"
-description = "Convert a Message Vault output directory to another format"
+description = "Convert a Message Crate output directory to another format"
 license = "LicenseRef-FCL-1.0-ALv2"
 
 [dependencies]
 anyhow = { workspace = true }
 csv = { workspace = true }
-message-vault-io-core = { path = "../../core/message-vault-io-core" }
+message-crate-core = { path = "../../core/message-crate-core" }
 message-ir = { path = "../ir" }
 message-ir-format = { path = "../ir-format" }
 media = { path = "../media" }

@@ -4,6 +4,7 @@ import {
   useNameCollectionActions,
   useSetNamedSetMembers,
 } from "./nameCollection";
+import { keys } from "./queryKeys";
 import { forTag } from "./searchQuery";
 import {
   createMessageTag,
@@ -11,8 +12,7 @@ import {
   listMessageTags,
   updateMessageTag,
   updateMessageTagMembers,
-} from "./vaultApi";
-import { keys } from "./vaultKeys";
+} from "./serverApi";
 
 /** Names that must not be created as message tags. */
 export const RESERVED_TAG_NAMES = new Set(
@@ -74,7 +74,7 @@ export function useMessageTagActions() {
   return useNameCollectionActions(messageTags);
 }
 
-/** Put conversations in or out of one Message Tag, drawn before the vault answers. */
+/** Put conversations in or out of one Message Tag, drawn before the server answers. */
 export function useSetMessageTagMembers() {
   return useSetNamedSetMembers(messageTags);
 }

@@ -9,7 +9,7 @@
 
 import { productVersionOf } from "./buildFormat";
 
-const REPO = "https://github.com/bitrealm-io/message-vault";
+const REPO = "https://github.com/messagecrate/message-crate";
 const READER_PATH = "crates/helpers/imessage-reader";
 
 /** The reader's folder at the release tag for this Build. */

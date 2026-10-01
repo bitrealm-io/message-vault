@@ -7,7 +7,7 @@
 //! - **Compress** — re-encode to shrink files, with optional video settings
 //!
 //! Convert and compress need `ffmpeg` / `ffprobe` beside the running binary,
-//! in `MESSAGE_VAULT_IO_BIN`, or on `PATH`.
+//! in `MESSAGE_CRATE_BIN`, or on `PATH`.
 
 mod estimate;
 mod mime;

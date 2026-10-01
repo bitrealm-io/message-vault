@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { VaultApiError } from "../../lib/api";
+import { ApiError } from "../../lib/api";
+import { createAccount } from "../../lib/serverApi";
+import type { components } from "../../lib/serverApi.types";
 import { useAsyncAction } from "../../lib/useAsyncAction";
-import { createAccount } from "../../lib/vaultApi";
-import type { components } from "../../lib/vaultApi.types";
 
-/** What the vault answers when it creates an account. */
+/** What the server answers when it creates an account. */
 export type CreatedAccount = components["schemas"]["CreateAccountResponse"];
 
 /**
@@ -12,8 +12,8 @@ export type CreatedAccount = components["schemas"]["CreateAccountResponse"];
  * request.
  *
  * Two screens create accounts, and they look nothing alike: Create Account on
- * the Login screen of an open vault, and the Account section of a new
- * account's Settings, which the vault owner opens from User Accounts. Both are
+ * the Login screen of an open Message Crate, and the Account section of a new
+ * account's Settings, which the owner opens from User Accounts. Both are
  * this, so the checks and the request are written once. What differs is what
  * follows, which `onCreated` holds: a stranger is logged in to the account,
  * and the owner is taken to its Settings.
@@ -22,9 +22,9 @@ export function useCreateAccountForm({
   onBeforeCreate,
   onCreated,
 }: {
-  /** Runs once the fields pass, before the request: the Login screen points the app at the vault here. */
+  /** Runs once the fields pass, before the request: the Login screen points the app at the server here. */
   onBeforeCreate?: () => void;
-  /** Runs with the vault's answer. The form stays busy until it settles, and shows what it throws. */
+  /** Runs with the server's answer. The form stays busy until it settles, and shows what it throws. */
   onCreated: (created: CreatedAccount) => Promise<void> | void;
 }) {
   const [username, setUsername] = useState("");
@@ -53,9 +53,9 @@ export function useCreateAccountForm({
           phone: null,
         });
       } catch (e: unknown) {
-        // A taken username is the vault's answer, worded for the log. The
+        // A taken username is the server's answer, worded for the log. The
         // form says the one thing the person can act on.
-        if (e instanceof VaultApiError && e.type === "username-taken") {
+        if (e instanceof ApiError && e.type === "username-taken") {
           throw new Error("Invalid username.");
         }
         throw e;

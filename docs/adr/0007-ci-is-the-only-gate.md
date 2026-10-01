@@ -65,7 +65,7 @@ deadlocks every pull request that misses the filter, exactly like
 `paths-ignore`. `docs.yml` keeps the full build with rustdoc and the Pages
 deploy, and runs on the `v*` tag that ships a release, or by hand.
 
-The site publishes on a release, not on a merge. bitrealm.io describes the
+The site publishes on a release, not on a merge. messagecrate.app describes the
 product people can install, and between releases that is the tagged version,
 not the tip of `main`; a page that documents a screen nobody can download yet
 is wrong for every reader who arrives from the download link. Publishing on
@@ -125,7 +125,7 @@ two needless `mut`, two needless borrows in
 `crates/exporters/imessage-ir-exporter/src/attachments.rs`, an empty line after
 a doc comment, items declared after a test module, an `if let` that is
 `.unwrap_or_default()`, three `too_many_arguments` — including a nine-argument
-function at `crates/libs/vault-push/src/run.rs:2055` — three `type_complexity`,
+function at `crates/libs/push/src/run.rs:2055` — three `type_complexity`,
 and a `contains` method at
 `crates/exporters/imessage-ir-exporter/src/contacts.rs:71` that nothing calls.
 
@@ -138,7 +138,7 @@ forward.
 
 **Two checks existed only on a developer's machine.**
 `scripts/check-generated-api-types.sh` regenerates
-`web/src/lib/vaultApi.types.ts` from `docs/src/assets/openapi.json` and diffs
+`web/src/lib/serverApi.types.ts` from `docs/src/assets/openapi.json` and diffs
 the result; it is the only thing tying the generated TypeScript to the
 specification, and no CI job ran it. `vite build` ran only in the tag-only
 `release` job, so a bundle that TypeScript accepted and Vite rejected surfaced
@@ -230,14 +230,14 @@ inherit it. A specific site that genuinely wants nine arguments carries a local
 
 The `test-postgres` job is gone. Its Postgres service moved onto the `test`
 job, which runs `cargo test --workspace` on SQLite and then
-`cargo test -p message-vault-server` with `MV_TEST_POSTGRES_URL` set. Only
+`cargo test -p message-crate-server` with `MC_TEST_POSTGRES_URL` set. Only
 the server reads that variable, so the second pass is the server alone.
 Both passes are needed: the tests whose subject is SQLite itself (the schema
 contract, FTS5 triggers, the rebuilds, the password-change rollback) return
 early when the variable is set, and for a while the job set it for its only
 test step, so those tests reported a pass on every pull request without
 asserting anything. Every Postgres-gated test runs in a schema of its own on
-that server (`pg_test_schema_url` in `crates/vault/server/src/db/engine.rs`,
+that server (`pg_test_schema_url` in `crates/server/server/src/db/engine.rs`,
 #435), so running them inside the suite introduces no race, and two checkouts
 can run against one server at the same time. The server crate compiles once
 per pull request; the second pass reuses the build.
@@ -283,7 +283,7 @@ builds, and `cargo doc` failures are compile failures that the `test` job
 already catches. It skips the HTTP API catalog copy for the same reason:
 `docs/scripts/copy-http-api-reference.sh` writes into `public/`, which
 `astro check` never reads, and `astro.config.mjs` excludes
-`/vault/developer/rustdoc/**` from link checking, so the step changed nothing
+`/docs/developer/rustdoc/**` from link checking, so the step changed nothing
 the job verified. `docs.yml` still runs both before the build it deploys.
 
 Every sentence in `AGENTS.md` and `CLAUDE.md` describing the old arrangement is

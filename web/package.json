@@ -1,5 +1,5 @@
 {
-  "name": "message-vault-io-web",
+  "name": "message-crate-web",
   "private": true,
   "version": "0.9.0",
   "license": "SEE LICENSE IN ../LICENSE.md",
@@ -14,11 +14,11 @@
     "format:check": "biome check --linter-enabled=false .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "gen:api": "npx --yes openapi-typescript@7.13.0 ../docs/src/assets/openapi.json -o src/lib/vaultApi.types.ts"
+    "gen:api": "npx --yes openapi-typescript@7.13.0 ../docs/src/assets/openapi.json -o src/lib/serverApi.types.ts"
   },
   "dependencies": {
     "@internationalized/date": "^3.12.4",
-    "@tanstack/react-query": "^5.103.1",
+    "@tanstack/react-query": "^5.103.2",
     "@tanstack/react-virtual": "^3.14.13",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
@@ -39,7 +39,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.1.1",
-    "jsdom": "^30.1.0",
+    "jsdom": "^30.1.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7",
     "vite": "^8",

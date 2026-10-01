@@ -10,7 +10,7 @@
 export const PAGE_SIZE_FIRST = 40;
 /** Rows in each page loaded as the person scrolls. */
 export const PAGE_SIZE_FILL = 100;
-/** Contacts catalog first page — large enough for typical vaults in one request. */
+/** Contacts catalog first page — large enough for typical accounts in one request. */
 export const PAGE_SIZE_CONTACTS_FIRST = 500;
 
 /**

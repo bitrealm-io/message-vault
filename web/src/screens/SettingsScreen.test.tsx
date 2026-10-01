@@ -3,11 +3,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mockedAuth, VaultProviders } from "../test/vaultProviders";
+import { mockedAuth, Providers } from "../test/providers";
 import SettingsScreen from "./SettingsScreen";
 
 /**
- * Settings holds no account management. The vault owner manages accounts from
+ * Settings holds no account management. The owner manages accounts from
  * a console of their own, and an ordinary account never could. `?tab=users`
  * must therefore fall back to Account rather than render anything.
  */
@@ -57,11 +57,11 @@ function baseProfile() {
 
 function renderSettings(initialEntries: string[]) {
   return render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter initialEntries={initialEntries}>
         <SettingsScreen />
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 

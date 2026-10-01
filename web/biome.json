@@ -7,7 +7,7 @@
     "root": ".."
   },
   "files": {
-    "includes": ["**", "!!**/dist", "!package-lock.json", "!src/lib/vaultApi.types.ts"]
+    "includes": ["**", "!!**/dist", "!package-lock.json", "!src/lib/serverApi.types.ts"]
   },
   "formatter": {
     "enabled": true,
@@ -58,7 +58,7 @@
               "hintStyle",
               "isGroupConversation",
               "mockedAuth",
-              "renderWithVault",
+              "renderWithProviders",
               "sectionGap",
               "selectItemClassName",
               "senderName",

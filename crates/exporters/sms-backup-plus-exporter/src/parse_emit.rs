@@ -5,7 +5,7 @@ use crate::emit::is_eml_file;
 use crate::flat_eml::{MailHeaders, is_flat_sms_eml, parse_flat_eml_mail};
 use crate::types::ParsedMessage;
 use anyhow::{Result, bail};
-use message_vault_io_core::CancelFlag;
+use message_crate_core::CancelFlag;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -26,7 +26,7 @@ pub(super) fn collect_eml_paths<P: AsRef<Path>>(
 
     let mut paths = Vec::new();
     for input in inputs {
-        message_vault_io_core::check_cancel(cancel)?;
+        message_crate_core::check_cancel(cancel)?;
         let input = input.as_ref();
         if input.is_file() {
             if is_eml_file(input) {
@@ -39,7 +39,7 @@ pub(super) fn collect_eml_paths<P: AsRef<Path>>(
         if !input.is_dir() {
             bail!("input is not a file or directory: {}", input.display());
         }
-        let mut found = message_vault_io_core::discover_files(input, &is_eml_file)?;
+        let mut found = message_crate_core::discover_files(input, &is_eml_file)?;
         found.retain(|p| !in_skipped_dir(p));
         paths.extend(found);
     }

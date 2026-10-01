@@ -1,9 +1,9 @@
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
 import { asMessagesLocationState } from "../lib/messagesLocationState";
-import { getConversation } from "../lib/vaultApi";
-import { keys } from "../lib/vaultKeys";
-import { useVaultQuery } from "../lib/vaultQuery";
+import { keys } from "../lib/queryKeys";
+import { useRouteQuery } from "../lib/routeQuery";
+import { getConversation } from "../lib/serverApi";
 import ConversationList from "../screens/ConversationList";
 import MessageView from "../screens/MessageView";
 import ListColumn from "./ListColumn";
@@ -47,7 +47,7 @@ export default function MessageRoute() {
     data: conversation,
     isLoading,
     error,
-  } = useVaultQuery(
+  } = useRouteQuery(
     keys.conversations.detail(detailId),
     (signal) => getConversation(detailId, { signal }),
     {

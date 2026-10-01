@@ -4,7 +4,6 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Conversation } from "../lib/types";
 import {
   deleteContact,
   deleteConversation,
@@ -16,14 +15,15 @@ import {
   listSearchFields,
   restoreContact,
   restoreConversation,
-} from "../lib/vaultApi";
-import { mockedAuth, VaultProviders } from "../test/vaultProviders";
+} from "../lib/serverApi";
+import type { Conversation } from "../lib/types";
+import { mockedAuth, Providers } from "../test/providers";
 import TrashScreen from "./TrashScreen";
 
 vi.mock("../lib/auth", () => ({ useAuth: () => mockedAuth }));
 
-vi.mock("../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/vaultApi")>()),
+vi.mock("../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/serverApi")>()),
   listConversations: vi.fn(),
   listContacts: vi.fn(),
   listSearchFields: vi.fn(),
@@ -98,11 +98,11 @@ function contactPage(items: ReturnType<typeof contact>[]) {
 
 function renderAt(path: string) {
   return render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter initialEntries={[path]}>
         <TrashScreen />
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 
@@ -145,7 +145,7 @@ describe("TrashScreen", () => {
 
   it("explains a word one list refuses instead of asking that list", async () => {
     // `participants:` is a conversations word. The contacts pane must not
-    // send it (the vault would answer 422) and must say who the word is for;
+    // send it (the server would answer 422) and must say who the word is for;
     // the conversations pane still answers normally (#331).
     renderAt("/trash?tq=participants%3A%3E3");
 
@@ -216,7 +216,7 @@ describe("TrashScreen", () => {
   });
 
   describe("trashed contacts", () => {
-    it("lists trashed contacts, asking the vault for them with trashed:yes", async () => {
+    it("lists trashed contacts, asking the server for them with trashed:yes", async () => {
       listContactsMock.mockResolvedValue(contactPage([contact(7, "Grace Hopper")]));
       renderAt("/trash");
 
@@ -229,7 +229,7 @@ describe("TrashScreen", () => {
 
     it("restores a contact from its row and drops it from the list", async () => {
       const user = userEvent.setup();
-      // The vault, modelled: restoring takes the contact out of the trash, so
+      // The server, modelled: restoring takes the contact out of the trash, so
       // the refetch the mutation triggers answers with an empty page.
       let trashed = [contact(7, "Grace Hopper")];
       listContactsMock.mockImplementation(async () => contactPage(trashed));
@@ -309,7 +309,7 @@ describe("TrashScreen", () => {
 
       const dialog = await screen.findByRole("dialog", { name: "Delete this conversation?" });
       expect(
-        within(dialog).getByText(/Deletes Ada Lovelace and its 5 messages from your vault/),
+        within(dialog).getByText(/Deletes Ada Lovelace and its 5 messages from your Message Crate/),
       ).toBeTruthy();
       // Nothing is sent until the dialog is confirmed.
       expect(deleteConversationMock).not.toHaveBeenCalled();

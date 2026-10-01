@@ -38,7 +38,7 @@ describe("ImportSummaryPanel", () => {
     expect(screen.getByText("Parse backup")).toBeInTheDocument();
     expect(screen.getByText("Attachments")).toBeInTheDocument();
     expect(screen.getByText("Preparing messages")).toBeInTheDocument();
-    expect(screen.getByText("Upload to vault")).toBeInTheDocument();
+    expect(screen.getByText("Upload to Message Crate")).toBeInTheDocument();
     expect(screen.queryByText("Convert attachments")).not.toBeInTheDocument();
   });
 
@@ -58,7 +58,7 @@ describe("ImportSummaryPanel", () => {
               kind: "error",
               step: "upload",
               item: "thread.jsonl",
-              reason: "HTTP 500 from vault",
+              reason: "HTTP 500 from server",
             },
           ],
         }}

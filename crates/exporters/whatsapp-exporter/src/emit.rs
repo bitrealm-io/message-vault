@@ -6,15 +6,15 @@ use crate::parse::{
     ChatJson, MessageJson, load_chat_store, media_path, message_text, timestamp_ms, timestamp_secs,
 };
 use anyhow::{Context, Result};
+use message_crate_core::{
+    CancelFlag, ExportReport, ExportTransforms, OutputFormat, project_conversation,
+};
 use message_csv::{format_local_ts, json_cell};
 use message_ir::{
     ExportMeta, HandleType, IrAttachment, IrParticipant, IrService, IrSource, PendingAttachment,
     PendingConversation, PendingMessage, ProjectionHooks, SortKeyUnit,
 };
 use message_staging::{AttachmentSource, ExportWriter};
-use message_vault_io_core::{
-    CancelFlag, ExportReport, ExportTransforms, OutputFormat, project_conversation,
-};
 use serde_json::Map;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -82,7 +82,7 @@ pub(crate) fn convert_json(request: ConvertRequest<'_>) -> Result<ExportReport> 
     let mut conversations: BTreeMap<String, PendingConversation> = BTreeMap::new();
 
     for (jid, chat) in store {
-        message_vault_io_core::check_cancel(cancel)?;
+        message_crate_core::check_cancel(cancel)?;
         if jid.starts_with('_') {
             // Reserved / system keys if any.
             continue;
@@ -99,7 +99,7 @@ pub(crate) fn convert_json(request: ConvertRequest<'_>) -> Result<ExportReport> 
     }
 
     let hooks = WhatsappProjection {
-        export: message_vault_io_core::export_meta(
+        export: message_crate_core::export_meta(
             EXPORT_SOURCE,
             EXPORT_TOOL,
             EXPORT_TOOL_VERSION,
@@ -110,7 +110,7 @@ pub(crate) fn convert_json(request: ConvertRequest<'_>) -> Result<ExportReport> 
     let mut documents = Vec::new();
     let mut media_sources: Vec<Option<PathBuf>> = Vec::new();
     for (chat_id, mut convo) in conversations {
-        message_vault_io_core::check_cancel(cancel)?;
+        message_crate_core::check_cancel(cancel)?;
         let Some(doc) = project_conversation(&chat_id, &mut convo, &hooks, &mut report) else {
             continue;
         };

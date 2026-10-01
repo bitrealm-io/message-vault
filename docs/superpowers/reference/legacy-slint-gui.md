@@ -11,7 +11,7 @@ if a render ever needs regenerating. Two liberties taken so every field is
 visible: collapsible Advanced sections are drawn expanded (they default
 closed), and combos show their default values.
 
-The window had six reachable screens. Home fans out to the guided vault flow
+The window had six reachable screens. Home fans out to the guided server flow
 (Credentials → Import or Export), Backup Account, and the advanced Extract
 Messages form, whose fields reshape around the Backup type dropdown — one
 capture per exporter below. Four more page files (`contacts`, `format`,
@@ -28,7 +28,7 @@ preset pickers.
 
 ## Vault Credentials
 
-`ui/pages/credentials.slint` — first step of the guided vault flow: URL, API
+`ui/pages/credentials.slint` — first step of the guided server flow: URL, API
 token, and whether to continue into Import or Export.
 
 ![Vault Credentials](legacy-slint-gui/vault-credentials.png)
@@ -43,7 +43,7 @@ filtering, and processing options.
 
 ## Vault Export (guided)
 
-`ui/pages/vault-export.slint` — pulls messages back out of a vault with
+`ui/pages/vault-export.slint` — pulls messages back out of a server with
 Fastmail-style search operators and a query-before-export count.
 
 ![Vault Export](legacy-slint-gui/vault-export.png)

@@ -1,4 +1,4 @@
-//! Desktop process that hosts the Message Vault window.
+//! Desktop process that hosts the Message Crate window.
 //!
 //! The Vite UI in `web/` runs inside a WebView (a browser-like window). A web
 //! page cannot read local phone backups, run the Rust exporters, open native
@@ -18,9 +18,9 @@ use std::sync::{Arc, Mutex};
 
 /// Start the desktop window and wait until the user quits.
 fn main() {
-    // Import and export name this Build to the vault on every request; the SPA
+    // Import and export name this Build to the server on every request; the SPA
     // does the same for its own requests (`web/src/lib/api.ts`).
-    vault_http::identify_desktop_app(env!("MESSAGE_VAULT_BUILD"));
+    message_crate_http::identify_desktop_app(env!("MESSAGE_CRATE_BUILD"));
 
     let app_state = Arc::new(Mutex::new(AppState::new()));
 

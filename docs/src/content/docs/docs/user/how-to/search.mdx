@@ -1,0 +1,102 @@
+---
+title: Search
+description: Find conversations or contacts, then open matches in the thread view.
+---
+
+import TypedQuery from '../../../../../components/TypedQuery.astro';
+import ListTiles from '../../../../../components/ListTiles.astro';
+
+Use the search box in the app header. Open the advanced search form (chevron next to the box) when you want structured fields instead of typing operators by hand.
+
+Advanced search has two modes:
+
+- **Messages** — *what was said?* Searches message text; the words below narrow it. Results are usually one row per conversation (match count + snippet).
+- **Contacts** — *who do I know?* Filters the contact list by name, phone, and related fields. It does not search message text.
+
+Typing plain words in the search box runs a **Messages** search.
+
+## Opening a message result
+
+Clicking a message result opens the conversation so you can read the matching thread. Use in-conversation find when you need to step through highlights inside a long chat.
+
+Save a query under **Saved searches** in the sidebar — [Saved searches](/docs/user/how-to/saved-searches/).
+
+## The search language
+
+One language works on all three lists: **Contacts**, **Conversations**, and **Messages**. Plain words search the row's own text: a contact's name and handles, a conversation's title and who is in it, a message's body, subject, and attachment names. Everything else is a word, a colon, and a value.
+
+### How values work
+
+- Put quotes around a value with a space, a colon, or a parenthesis: `group:"Book Club"`, `group:"Family (close)"`. Parentheses group clauses, so an unquoted `group:Family (close)` asks a different question. Two quotes in a row are one quote.
+- Case never matters.
+- `#12` means the thing with that id: `group:#7`, `with:#42`, `in:#19`. An id that names nothing matches nothing, so a Saved Search that names a deleted Contact Group still runs.
+- `none` means empty and `any` means not empty, on the words whose row below lists them: `name:none`, `tag:none`, `attachment:any`.
+- Dates name a span: `2024` is the year, `2024-05` the month, `2024-05-01` the day, `7d` or `2w` or `3m` or `1y` the last that long, plus `today` and `yesterday`. Add `>=` for from its start, `<` for before its start, `>` for after its end, `<=` for up to its end, or `a..b` for a range: `date:2019`, `date:>=2019`, `date:<1m`, `date:2019..2021`. Days start and end in the account's time zone (Settings → Profile), so a text sent at 11:59 pm on New Year's Eve belongs to the old year wherever the server runs.
+- Sizes are `500k`, `1M`, `2G`, or plain bytes. Counts are plain numbers. Both take the same `>`, `>=`, `<`, `<=`, and `a..b`.
+- A comma inside a value means either: `service:imessage,sms`. Repeating a word means both: `tag:Work tag:Urgent`.
+- `-` in front of anything means not: `-tag:Work`, `-avocado`, `-(toast or guacamole)`. It includes the rows that have no value for the word, so `-last-message:2019` on Contacts includes contacts who never sent a message. `not` does the same as a word of its own: `not tag:Work`.
+- A space between two terms means both, and so does `and`. `or` means either, and binds looser than both: `a b or c` is `(a b) or c`. Parentheses group: `(toast or guacamole) avocado`.
+- `avoc*` matches words starting with avoc, and `tag:Hol*` a Message Tag whose name starts with Hol; `"exact phrase"` matches the phrase.
+- In message text, punctuation inside a word splits it into words that must come next to each other in that order: `o'brien` finds "O'Brien" and "o brien", and `a&b` finds "a & b" but not "b and a". A word that is only punctuation or emoji finds no message text.
+- On a server that runs on SQLite, `cafe` also finds "café" in message text. On Postgres, accents count.
+- A trailing `*` is the only wildcard. `%`, `_`, and `\` are ordinary characters, so `filename:IMG_0001` finds IMG_0001.jpg and not IMGX0001.jpg.
+
+A word the list does not have is refused with a message that says so, and offers the nearest word when there is one.
+
+A search is at most 2,048 bytes, 32 plain words, and 32 levels of parentheses. A very long search with many parts is refused with a message that says so.
+
+Each list leaves some rows out until a search asks for them. Everything in the Trash is left out until the search uses `trashed:`, and that holds everywhere the search looks: a conversation in the Trash does not count for a contact's `kind:`, `tag:`, `date:`, `messages:` or `conversations:`, and a contact in the Trash does not count for a conversation's `group:` or `name:`. Once the search uses `trashed:`, the Trash counts on both sides. On Messages, a copy of a message a later import already had is left out until the search uses `source:` or `import:`. On Conversations, a conversation holding only such copies is left out until the search uses `import:`.
+
+On Contacts, a word that counts or dates messages counts only the messages the contact sent you, in a direct or a group conversation. Your own messages and other people's messages in a shared group chat do not count, so `messages:0` is everyone who never messaged you, and `date:2019` is everyone who wrote to you in 2019. To find the people who were in a conversation active in 2019, whoever wrote, search Conversations: `with:jane date:2019`.
+
+### The words
+
+The tiles mark which lists accept the word: <ListTiles on="C" /> Contacts, <ListTiles on="V" /> Conversations, <ListTiles on="M" /> Messages.
+
+| Word | Means | Values | Lists |
+|---|---|---|---|
+| `body:` | message body only | text, `none`, `any` | <ListTiles on="V M" /> |
+| `subject:` | subject line only | text, `none`, `any` | <ListTiles on="V M" /> |
+| `name:` | on Contacts, the contact's own name; elsewhere, the name of someone in the conversation | text, `none`, `any` | <ListTiles on="C V M" /> |
+| `title:` | the conversation's title | text, `none`, `any` | <ListTiles on="V M" /> |
+| `handle:` | a phone number, email, or username: on Contacts, the contact's own; elsewhere, one in the conversation | text, `none`, `any` | <ListTiles on="C V M" /> |
+| `with:` | this person is in the conversation | name, handle, `pre*`, `#id` | <ListTiles on="V M" /> |
+| `from:` | this person sent it | `me`, name, handle, `pre*`, `#id` | <ListTiles on="M" /> |
+| `to:` | it was sent to this person | `me`, name, handle, `pre*`, `#id` | <ListTiles on="M" /> |
+| `in:` | this one conversation | title, handle, `pre*`, `#id` | <ListTiles on="M" /> |
+| `group:` | in this Contact Group: on Contacts, the contact; elsewhere, someone in the conversation | name, `pre*`, `#id`, `none`, `unknown` | <ListTiles on="C V M" /> |
+| `tag:` | the conversation carries this Message Tag; on Contacts, one of the contact's conversations does | name, `pre*`, `#id`, `none` | <ListTiles on="C V M" /> |
+| `kind:` | direct or group conversation | `direct`, `group` | <ListTiles on="C V M" /> |
+| `service:` | how the message travelled | `imessage`, `sms`, `mms`, `rcs`, `whatsapp` | <ListTiles on="C V M" /> |
+| `source:` | which backup it was imported from | `imessage`, `whatsapp`, `sms` | <ListTiles on="V M" /> |
+| `import:` | brought in by this Import Run | `#id`, `last` | <ListTiles on="V M" /> |
+| `date:` | when a message was sent; on Contacts, the contact sent a message then; on Conversations, the conversation has a message from then | date | <ListTiles on="C V M" /> |
+| `first-message:` | the date of the first message: on Contacts, the first the contact sent; elsewhere, the conversation's first | date | <ListTiles on="C V M" /> |
+| `last-message:` | the date of the last message: on Contacts, the last the contact sent; elsewhere, the conversation's last | date | <ListTiles on="C V M" /> |
+| `attachment:` | what is attached | `image`, `video`, `audio`, `document`, `pdf`, `contact`, `other`, `any`, `none` | <ListTiles on="V M" /> |
+| `filename:` | an attachment's file name | text, `pre*` | <ListTiles on="V M" /> |
+| `size:` | an attachment's size | `>1M`, `<500k`, `100k..2M` | <ListTiles on="V M" /> |
+| `messages:` | how many messages; on Contacts, how many the contact sent | `>100`, `0`, `1..10` | <ListTiles on="C V" /> |
+| `conversations:` | how many conversations | count | <ListTiles on="C" /> |
+| `groups:` | how many Contact Groups | count | <ListTiles on="C" /> |
+| `participants:` | how many people in the conversation | count | <ListTiles on="V M" /> |
+| `attachments:` | how many attachments on the message | count | <ListTiles on="M" /> |
+| `trashed:` | in the trash | `yes`, `no`, `any` | <ListTiles on="C V M" /> |
+
+### Examples
+
+<TypedQuery query='from:me to:"Jane Doe" (avocado or "guacamole night")' note="on Messages" />
+
+<TypedQuery query="-last-message:>=2022" note="on Contacts" />
+
+Everyone you have not heard from since 2022, including people who never messaged you.
+
+<TypedQuery query="group:Family date:2019..2021 attachment:image size:>1M" note="on Messages" />
+
+<TypedQuery query="participants:>2 -tag:Archive" note="on Conversations" />
+
+<TypedQuery query="group:none messages:>0" note="on Contacts" />
+
+People with messages who are in no Contact Group.
+
+Sorting, the Contacts switch, and how results are grouped are controls on the screen, not words in the search, so a Saved Search means what you want and never how the screen looked.

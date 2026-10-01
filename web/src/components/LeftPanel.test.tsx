@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mockedAuth, VaultProviders } from "../test/vaultProviders";
+import { mockedAuth, Providers } from "../test/providers";
 import LeftPanel from "./LeftPanel";
 
 const profileState = vi.hoisted(() => ({
@@ -71,12 +71,12 @@ function LocationProbe() {
 
 function renderPanel(initialEntries?: string[], browseQuery = "") {
   return render(
-    <VaultProviders>
+    <Providers>
       <MemoryRouter initialEntries={initialEntries}>
         <LeftPanel onSearchChange={() => {}} browseQuery={browseQuery} />
         <LocationProbe />
       </MemoryRouter>
-    </VaultProviders>,
+    </Providers>,
   );
 }
 

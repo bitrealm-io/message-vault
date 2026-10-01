@@ -4,7 +4,7 @@
 //! Tauri because it is not serializable. These structs match the TypeScript
 //! types in `web/src/lib/types.ts`.
 
-use message_vault_io_core::ProgressEvent;
+use message_crate_core::ProgressEvent;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 

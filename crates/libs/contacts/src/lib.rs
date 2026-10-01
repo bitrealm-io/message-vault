@@ -3,7 +3,7 @@
 //! A VCF file is a vCard address book. A vCard CSV is the same data exported
 //! as a spreadsheet (First Name, Last Name, phone columns).
 //!
-//! - [`parse_vcf`] / [`read_vcard_csv_rows`] — parse APIs used by vault ingest
+//! - [`parse_vcf`] / [`read_vcard_csv_rows`] — parse APIs used by the server's import
 //!   and by backup converters
 //! - [`ContactsBook`] — name and phone indexes used when a converter looks up
 //!   display names

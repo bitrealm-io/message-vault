@@ -17,7 +17,7 @@ const features = [
   },
   {
     title: "Local and private",
-    body: "Your archive lives in a vault you run—on your machine or a server you control. Not a stranger’s cloud account.",
+    body: "Your archive lives where you run it—on your machine or a server you control. Not a stranger’s cloud account.",
   },
   {
     title: "Export anytime",
@@ -32,13 +32,13 @@ const features = [
 const steps = [
   {
     num: "01",
-    title: "Run your vault",
+    title: "Run Message Crate",
     body: "Install the desktop app, run from source, or start the published Docker image—no cloud account required.",
   },
   {
     num: "02",
     title: "Import your history",
-    body: "Point Message Vault at phone backups you already have and bring conversations into one local library.",
+    body: "Point Message Crate at phone backups you already have and bring conversations into one local library.",
   },
   {
     num: "03",
@@ -49,31 +49,31 @@ const steps = [
 ---
 
 <LandingLayout
-  title="Message Vault"
-  description="Extract messages from phone backups into a local vault you control. Browse, search, and export on your terms."
+  title="Message Crate"
+  description="Extract messages from phone backups onto a server you control. Browse, search, and export on your terms."
   canonicalPath="/"
 >
   <main>
-    <section class="mv-hero">
-      <div class="mv-hero-inner">
+    <section class="mc-hero">
+      <div class="mc-hero-inner">
         <div>
-          <span class="mv-eyebrow">Self-hosted and private</span>
+          <span class="mc-eyebrow">Self-hosted and private</span>
           <h1>Every message you’ve ever sent, preserved forever.</h1>
-          <p class="mv-lede">
-            Message Vault turns phone-backup chat history into one searchable
+          <p class="mc-lede">
+            Message Crate turns phone-backup chat history into one searchable
             library you run yourself—SMS, iMessage, WhatsApp, and more.
           </p>
-          <div class="mv-hero-actions">
+          <div class="mc-hero-actions">
             <a
-              class="mv-btn mv-btn-primary mv-btn-lg"
+              class="mc-btn mc-btn-primary mc-btn-lg"
               href={landingLinks.download}>Download</a
             >
-            <a class="mv-btn mv-btn-ghost mv-btn-lg" href={landingLinks.features}
+            <a class="mc-btn mc-btn-ghost mc-btn-lg" href={landingLinks.features}
               >See features</a
             >
           </div>
         </div>
-        <figure class="mv-hero-visual">
+        <figure class="mc-hero-visual">
           <img
             src="/landing/hero-messages.avif"
             alt="Message conversation preview"
@@ -85,20 +85,20 @@ const steps = [
       </div>
     </section>
 
-    <section class="mv-section mv-section-alt" id="features">
-      <div class="mv-section-inner">
-        <div class="mv-section-head">
-          <span class="mv-kicker">Why Message Vault</span>
+    <section class="mc-section mc-section-alt" id="features">
+      <div class="mc-section-inner">
+        <div class="mc-section-head">
+          <span class="mc-kicker">Why Message Crate</span>
           <h2>The archive you’ll actually want to keep</h2>
           <p>
             Stop losing years of conversations. Turn scattered chat history into
             one searchable, private library.
           </p>
         </div>
-        <div class="mv-feature-grid">
+        <div class="mc-feature-grid">
           {
             features.map((feature) => (
-              <article class="mv-feature">
+              <article class="mc-feature">
                 <h3>{feature.title}</h3>
                 <p>{feature.body}</p>
               </article>
@@ -108,17 +108,17 @@ const steps = [
       </div>
     </section>
 
-    <section class="mv-section">
-      <div class="mv-section-inner">
-        <div class="mv-section-head">
-          <span class="mv-kicker">How it works</span>
+    <section class="mc-section">
+      <div class="mc-section-inner">
+        <div class="mc-section-head">
+          <span class="mc-kicker">How it works</span>
           <h2>Up and running in three steps</h2>
         </div>
-        <div class="mv-steps">
+        <div class="mc-steps">
           {
             steps.map((step) => (
-              <article class="mv-step">
-                <span class="mv-step-num">{step.num}</span>
+              <article class="mc-step">
+                <span class="mc-step-num">{step.num}</span>
                 <h3>{step.title}</h3>
                 <p>{step.body}</p>
               </article>

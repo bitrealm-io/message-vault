@@ -4,9 +4,9 @@
 #   ./scripts/build-app.sh [cargo tauri build arguments]
 #
 # Tauri names each installer after productName, so a plain build writes
-# "Message Vault_0.9.0_amd64.AppImage". productName is also the name the app
+# "Message Crate_0.9.0_amd64.AppImage". productName is also the name the app
 # shows in menus, so it stays as it is and the files are renamed afterwards:
-# message_vault_0.9.0_amd64.AppImage. The release job in ci.yml runs this
+# message_crate_0.9.0_amd64.AppImage. The release job in ci.yml runs this
 # script too, so a local build and a release carry the same names.
 set -euo pipefail
 
@@ -28,7 +28,7 @@ for file in src-tauri/target/*/bundle/*/"${PRODUCT_NAME}"* \
   src-tauri/target/*/*/bundle/*/"${PRODUCT_NAME}"*; do
   [[ -f "${file}" ]] || continue
   name="$(basename "${file}")"
-  target="$(dirname "${file}")/message_vault${name#"${PRODUCT_NAME}"}"
+  target="$(dirname "${file}")/message_crate${name#"${PRODUCT_NAME}"}"
   mv -f "${file}" "${target}"
   echo "==> ${target}"
   renamed=$((renamed + 1))

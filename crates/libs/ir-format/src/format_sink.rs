@@ -6,8 +6,8 @@ use crate::clean::clean_previous_ir_output;
 use crate::export_transforms::apply_transforms;
 use crate::write::write_format;
 use anyhow::{Context, Result};
+use message_crate_core::{ExportReport, ExportTransforms, OutputFormat};
 use message_ir::ConversationDocument;
-use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -207,19 +207,19 @@ fn remove_staged_attachments(output_dir: &Path) -> Result<()> {
 pub fn write_documents_through_sink(
     documents: Vec<message_ir::ConversationDocument>,
     mut sink: FormatSink,
-    log: Option<&message_vault_io_core::LogSink>,
-    progress: Option<&message_vault_io_core::ProgressSink>,
-    cancel: Option<&message_vault_io_core::CancelFlag>,
+    log: Option<&message_crate_core::LogSink>,
+    progress: Option<&message_crate_core::ProgressSink>,
+    cancel: Option<&message_crate_core::CancelFlag>,
     report: &mut ExportReport,
 ) -> anyhow::Result<()> {
-    use message_vault_io_core::{ProgressEvent, emit_log, emit_progress};
+    use message_crate_core::{ProgressEvent, emit_log, emit_progress};
     let total = documents.len();
     emit_log(log, "");
     emit_log(log, format!("Preparing {total} conversation file(s)..."));
     emit_progress(progress, ProgressEvent::Prepare { done: 0, total });
     let mut written = 0usize;
     for doc in documents {
-        message_vault_io_core::check_cancel(cancel)?;
+        message_crate_core::check_cancel(cancel)?;
         written += 1;
         sink.write_document(doc)?;
         report.conversations += 1;
@@ -246,7 +246,7 @@ mod tests {
 
     #[test]
     fn write_documents_through_sink_reports_prepare_progress() {
-        use message_vault_io_core::{ProgressEvent, ProgressSink};
+        use message_crate_core::{ProgressEvent, ProgressSink};
         use std::sync::{Arc, Mutex};
 
         let tmp = tempfile::tempdir().unwrap();

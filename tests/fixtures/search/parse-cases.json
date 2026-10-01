@@ -557,13 +557,13 @@
   },
   {
     "name": "or-and-parens-prefix",
-    "input": "hello OR (world AND vault*)",
+    "input": "hello OR (world AND archive*)",
     "expected": {
       "mode": "messages",
       "terms": [
         "hello",
         "world",
-        "vault"
+        "archive"
       ],
       "phrases": [],
       "exclude": [],
@@ -583,7 +583,7 @@
               },
               {
                 "type": "term",
-                "value": "vault",
+                "value": "archive",
                 "prefix": true
               }
             ]

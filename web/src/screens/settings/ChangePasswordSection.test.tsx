@@ -12,15 +12,15 @@ vi.mock("../../lib/auth", () => ({
   useAuth: () => ({ updateToken }),
 }));
 
-vi.mock("../../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/vaultApi")>()),
+vi.mock("../../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/serverApi")>()),
   changePassword: (...a: unknown[]) => changePassword(...a),
 }));
 
 beforeEach(() => {
   changePassword.mockReset();
   updateToken.mockReset();
-  changePassword.mockResolvedValue({ token: "mv-user-rotated" });
+  changePassword.mockResolvedValue({ token: "mc-user-rotated" });
 });
 
 afterEach(cleanup);
@@ -45,12 +45,12 @@ describe("ChangePasswordSection", () => {
     await waitFor(() =>
       expect(changePassword).toHaveBeenCalledWith({ password: "a", password_confirmation: "a" }),
     );
-    expect(updateToken).toHaveBeenCalledWith("mv-user-rotated");
+    expect(updateToken).toHaveBeenCalledWith("mc-user-rotated");
   });
 
-  it("sends a differing confirmation to the vault and shows its sentence", async () => {
-    // The vault checks the pair after the current password, so the screen
-    // never judges it: the order of what a user hears is the vault's.
+  it("sends a differing confirmation to the server and shows its sentence", async () => {
+    // The server checks the pair after the current password, so the screen
+    // never judges it: the order of what a user hears is the server's.
     changePassword.mockRejectedValue(new Error("New passwords do not match."));
     const user = userEvent.setup();
     render(<ChangePasswordSection />);
@@ -87,7 +87,7 @@ describe("ChangePasswordSection", () => {
     expect(screen.queryByRole("button", { name: "Reset password" })).not.toBeInTheDocument();
   });
 
-  it("asks the vault owner for the current password and sends it", async () => {
+  it("asks the owner for the current password and sends it", async () => {
     const user = userEvent.setup();
     render(<ChangePasswordSection canReset={false} requireCurrent />);
 

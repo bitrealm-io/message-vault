@@ -5,7 +5,7 @@
  * lists also use listbox roles; treating those as overlays stopped outside
  * clicks from closing the search panel.
  */
-const PORTALED_OVERLAY_SELECTOR = ["[data-mv-overlay]", "[data-testid='underlay']"].join(", ");
+const PORTALED_OVERLAY_SELECTOR = ["[data-mc-overlay]", "[data-testid='underlay']"].join(", ");
 
 /**
  * True when an outside click should leave the parent panel open.

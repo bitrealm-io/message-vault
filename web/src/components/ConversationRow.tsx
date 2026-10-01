@@ -9,7 +9,7 @@ import { useColumnResizing } from "./columnResizeState";
 /**
  * Short service label for a row.
  *
- * iMessage and SMS/MMS are the same thing to someone reading their vault — a
+ * iMessage and SMS/MMS are the same thing to someone reading their messages — a
  * text message — and which transport carried it is not what the row is for.
  * Anything else (WhatsApp, say) keeps its own name.
  */

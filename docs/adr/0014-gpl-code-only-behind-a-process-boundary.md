@@ -1,6 +1,6 @@
 # GPL code only behind a process boundary
 
-Message Vault is under the Fair Core License (`LICENSE.md`, `FCL-1.0-ALv2`),
+Message Crate is under the Fair Core License (`LICENSE.md`, `FCL-1.0-ALv2`),
 and the best parser for Apple Messages, `imessage-database`, is
 GPL-3.0-or-later. FCL is source-available with a non-compete restriction; the
 GPL requires the whole conveyed work to be under GPL terms with no added
@@ -37,7 +37,7 @@ fallback, below.
 ## Why the boundary holds, and where it is thin
 
 The GPL reaches the whole of "the same program", so the question is whether
-the reader is part of Message Vault or a separate program Message Vault runs.
+the reader is part of Message Crate or a separate program Message Crate runs.
 The FSF's GPL FAQ says two programs that run as separate processes and exchange
 data over pipes are separate works. GPL section 5 says that placing separate
 works on one distribution medium is "mere aggregation" and does not extend
@@ -152,7 +152,7 @@ copies it to `src-tauri/binaries/imessage-reader-<target triple>`, where
 `tauri-build` picks it up: beside the app binary for `cargo tauri dev`, and
 inside every installer for `cargo tauri build`. The app finds it beside its
 own executable at run time (`imessage_ir_exporter::helper::locate`), then in
-`MESSAGE_VAULT_IO_BIN`, then on `PATH`; `MESSAGE_VAULT_IMESSAGE_READER` names
+`MESSAGE_CRATE_BIN`, then on `PATH`; `MESSAGE_CRATE_IMESSAGE_READER` names
 one file outright. The Docker image is unaffected, because the server never
 links an exporter.
 

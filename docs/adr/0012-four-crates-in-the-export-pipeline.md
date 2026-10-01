@@ -3,10 +3,10 @@
 The code that turns a phone backup into files on disk is four crates, and each
 one holds a single job.
 
-- **`message-vault-io-core`** is the run model: the configuration a run is given,
+- **`message-crate-core`** is the run model: the configuration a run is given,
   the report it produces, the shared run skeleton, and the one function that
   stages a conversation's attachments.
-- **`message-ir-format`** reads and writes the formats Message Vault itself
+- **`message-ir-format`** reads and writes the formats Message Crate itself
   emits — JSON, JSON Lines, CSV, EML, MBOX — and nothing else.
 - **`message-staging`** is the resumable write path: the bounded write queue, the
   transcode pass, the staging summary, and the `ExportWriter` that drives them.
@@ -31,7 +31,7 @@ across 21 files, and only about half of them read or wrote a format:
 
 The consumers were already disjoint, which is the clearest sign the crate held
 more than one thing. `src-tauri` imported the staging engine and one unrelated
-constant. `vault-push`, `vault-pull`, `message-reexport` and the vault server
+constant. `message-crate-push`, `message-crate-pull`, `message-reexport` and the server
 imported no staging item at all. Nothing but the six vendor exporters needed
 both halves, and they reached the staging half only through `ExportWriter`.
 
@@ -45,16 +45,16 @@ crate, so the only dependencies exclusive to staging were `fs2` and `serde`.
 
 Two things forced more than a set of file moves.
 
-**The vault server linked a format crate for one string.** Its only import from
+**The server linked a format crate for one string.** Its only import from
 `message-ir-format` was the constant `UNSAFE_ATTACHMENT_PATH_PREFIX`. That
 constant existed because the path-escape check was written twice — once in
 `ir-format`'s `safe_attachment_path`, once in the server's `safe_rel_path` at
-`crates/vault/server/src/config.rs:144` — with a doc comment instructing the
+`crates/server/server/src/config.rs:144` — with a doc comment instructing the
 next reader to keep the two error strings identical. A defence against directory
 traversal held in step by a shared string is a defence waiting to diverge, so
 the check itself moves into `message-ir`, both call sites use it, and the server
 drops `message-ir-format` from its manifest entirely. A third copy turned up
-while doing it — `vault-push`'s `safe_rel`, which accepted an absolute path in
+while doing it — `message-crate-push`'s `safe_rel`, which accepted an absolute path in
 one function and refused it in the one called just before — and it went the
 same way.
 
@@ -109,7 +109,7 @@ producer means one caller could own the special case.
 
 It was rejected because the single producer is a fact about what has been built,
 not about what the product is for. SMS Backup & Restore will gain an import
-screen, and when it does, a person exports their vault as `smses.xml` and loads
+screen, and when it does, a person exports their messages as `smses.xml` and loads
 it back onto the phone — which means an export path, not only Convert, has to be
 able to ask for XML. A trait seam in `ir-format`, implemented by the SBR crate
 and supplied by whichever caller wants XML, keeps that reachable. Lifting the

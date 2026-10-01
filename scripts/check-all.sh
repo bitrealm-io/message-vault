@@ -8,7 +8,7 @@
 # license, Docker-context, version-lockstep and generated-API-type checks, cargo-deny
 # (advisories, licences and bans on the workspace, licences and bans on src-tauri), and
 # the web and docs test/build/audit steps. The workspace always tests on
-# SQLite; export MV_TEST_POSTGRES_URL and the server crate runs a second
+# SQLite; export MC_TEST_POSTGRES_URL and the server crate runs a second
 # time on Postgres, the way CI does. CI runs the same set in
 # parallel; this exists so nobody types nine commands by hand. Why the
 # split from check-pr.sh: docs/adr/0007-ci-is-the-only-gate.md.
@@ -42,17 +42,17 @@ echo "==> cargo build --workspace"
 cargo build --workspace
 
 echo "==> cargo test --workspace (SQLite)"
-env -u MV_TEST_POSTGRES_URL cargo test --workspace
+env -u MC_TEST_POSTGRES_URL cargo test --workspace
 
-if [[ -n "${MV_TEST_POSTGRES_URL:-}" ]]; then
-  echo "==> cargo test -p message-vault-server (Postgres)"
-  cargo test -p message-vault-server
+if [[ -n "${MC_TEST_POSTGRES_URL:-}" ]]; then
+  echo "==> cargo test -p message-crate-server (Postgres)"
+  cargo test -p message-crate-server
 fi
 
 echo "==> cargo test src-tauri"
 cargo test --manifest-path src-tauri/Cargo.toml
 
-echo "==> generated vault API types match the OpenAPI document"
+echo "==> generated server API types match the OpenAPI document"
 "${SCRIPT_DIR}/check-generated-api-types.sh"
 
 echo "==> web test"

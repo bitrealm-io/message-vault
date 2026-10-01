@@ -8,15 +8,15 @@ use crate::parse_emit::{
     PeerInfo, collect_peer_info, is_notification, is_outgoing, parse_message_date, resolve_sender,
 };
 use anyhow::Result;
+use message_crate_core::{
+    CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
+};
 use message_csv::Zone;
 use message_ir::{
     ExportMeta, HandleType, IrAttachment, IrParticipant, IrService, IrSource, PendingAttachment,
     PendingConversation, PendingMessage, ProjectedRole, ProjectionHooks,
 };
 use message_staging::{AttachmentSource, ExportWriter};
-use message_vault_io_core::{
-    CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
-};
 use serde_json::Map;
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
@@ -91,7 +91,7 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
         report: ExportReport::default(),
     };
     for discovered in discover_csv_files(input)? {
-        message_vault_io_core::check_cancel(cancel)?;
+        message_crate_core::check_cancel(cancel)?;
         ingest.ingest_file(&discovered);
     }
     let Ingest {
@@ -101,7 +101,7 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
     } = ingest;
 
     let hooks = ImazingProjection {
-        export: message_vault_io_core::export_meta(
+        export: message_crate_core::export_meta(
             EXPORT_SOURCE,
             EXPORT_TOOL,
             EXPORT_TOOL_VERSION,

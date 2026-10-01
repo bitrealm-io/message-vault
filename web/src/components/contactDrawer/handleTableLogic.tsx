@@ -7,7 +7,7 @@ export function handleDateCell(iso: string | null | undefined): string {
 
 export type RemoveIdentityTarget = {
   address: string;
-  /** The service the vault recorded, or null when it recorded none. */
+  /** The service the server recorded, or null when it recorded none. */
   service: string | null;
   serviceLabel: string;
   conversationCount: number;

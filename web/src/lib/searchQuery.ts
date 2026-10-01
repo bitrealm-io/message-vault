@@ -1,16 +1,16 @@
 /**
- * Every place in the app that composes a vault search string, in one leaf
+ * Every place in the app that composes a server search string, in one leaf
  * module.
  *
- * The vault's search language (`crates/vault/server/src/search/`) reads a
+ * The server's search language (`crates/server/server/src/search/`) reads a
  * quoted value by scanning to the next unescaped `"`, and a doubled `""`
  * inside a quoted value is one literal quote
- * (`crates/vault/server/src/search/lex.rs`, `read_quoted`). There is no
+ * (`crates/server/server/src/search/lex.rs`, `read_quoted`). There is no
  * backslash escape — `\"` would come through as two literal characters, a
  * backslash and a quote. A value must be quoted whenever it holds
  * whitespace, `(`, or `)`, because the lexer treats an unquoted `(`/`)` as
  * the language's own grouping syntax rather than as text
- * (`crates/vault/server/src/search/lex.rs`, `is_bare_end`); a Contact Group
+ * (`crates/server/server/src/search/lex.rs`, `is_bare_end`); a Contact Group
  * named `Family (close)` sent as `group:Family (close)` therefore means
  * something different from what the person picked.
  *

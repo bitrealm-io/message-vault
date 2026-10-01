@@ -109,7 +109,7 @@ impl ContactsBook {
 
     /// Add one name with its phones, merging into an existing entry with the same normalized name.
     ///
-    /// Each phone is filed under [`phone_key`], the key the vault gives the
+    /// Each phone is filed under [`phone_key`], the key the server gives the
     /// same number as a handle.
     fn insert_entry(&mut self, display: &str, phones: &[String]) {
         let display = collapse_inner_whitespace(display);
@@ -182,7 +182,7 @@ fn normalize_handle(raw: &str, handle_type: HandleType) -> String {
     phone::normalize_typed_handle(raw, handle_type).0
 }
 
-/// The vault's handle key for a written phone number, or `None` when it has
+/// The server's handle key for a written phone number, or `None` when it has
 /// too few digits to be one.
 ///
 /// The `+` is what says a number is international, so the key is taken from
@@ -341,14 +341,14 @@ TEL;TYPE=CELL:+1-555-555-0100\nEND:VCARD\n",
         );
     }
 
-    /// One number, written any common way, has one key: the key the vault
+    /// One number, written any common way, has one key: the key the server
     /// gives the handle, the key the book files the card under, and the key
     /// an owner phone is matched on must be the same string. The book once
     /// dropped the `+` and applied US rules, so `+65 9123 4567` was filed as
     /// the US number `+16591234567`, and an owner `+44 7700 900123` became
     /// `447700900123`.
     #[test]
-    fn one_number_has_one_key_in_the_book_the_owner_set_and_the_vault() {
+    fn one_number_has_one_key_in_the_book_the_owner_set_and_the_server() {
         let rows: [(&str, &str); 11] = [
             ("+44 20 7946 0000", "+442079460000"),
             ("+442079460000", "+442079460000"),
@@ -536,7 +536,7 @@ NoPhone,,Person,,,,\n",
         push_phones_from_field("+15551234567; +15557654321, +15550000000", &mut out);
         assert_eq!(
             out,
-            // Each is stored under the vault's handle key, `+` included.
+            // Each is stored under the server's handle key, `+` included.
             ["+15551234567", "+15557654321", "+15550000000"],
             "each separator splits a field"
         );

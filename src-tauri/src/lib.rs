@@ -1,4 +1,4 @@
-//! Native desktop host for the Message Vault UI.
+//! Native desktop host for the Message Crate UI.
 //!
 //! The screens in `web/` are a Vite app. In the desktop build they run inside
 //! a WebView, which is a browser-like window. A web page cannot read local

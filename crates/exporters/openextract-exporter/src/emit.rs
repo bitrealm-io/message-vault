@@ -4,14 +4,14 @@
 use crate::parse::{RawRow, SourceKind, discover_csv_files, parse_csv_file};
 use anyhow::Result;
 use chrono::DateTime;
+use message_crate_core::{
+    CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
+};
 use message_ir::{
     ExportMeta, HandleType, IrParticipant, IrService, IrSource, PendingConversation,
     PendingMessage, ProjectionHooks, ensure_conversation,
 };
 use message_staging::{AttachmentSource, ExportWriter};
-use message_vault_io_core::{
-    CancelFlag, ExportReport, ExportTransforms, OutputFormat, prepare_outputs, project_conversation,
-};
 use phone::sanitize_number;
 use serde_json::{Map, json};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -57,10 +57,10 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
 
     let mut ingest = Ingest::default();
     for path in discover_csv_files(input)? {
-        message_vault_io_core::check_cancel(cancel)?;
+        message_crate_core::check_cancel(cancel)?;
         ingest.ingest_file(&path);
     }
-    message_vault_io_core::check_cancel(cancel)?;
+    message_crate_core::check_cancel(cancel)?;
     let Ingest {
         conversations,
         mut report,
@@ -68,7 +68,7 @@ pub(crate) fn convert_export(args: ConvertExportArgs<'_>) -> Result<ExportReport
     } = ingest;
 
     let hooks = OpenExtractProjection {
-        export: message_vault_io_core::export_meta(
+        export: message_crate_core::export_meta(
             EXPORT_SOURCE,
             EXPORT_TOOL,
             EXPORT_TOOL_VERSION,
@@ -257,7 +257,7 @@ fn infer_peer_label(rows: &[RawRow]) -> String {
 ///
 /// OpenExtract CSVs identify the other party by phone number or by name. When
 /// it is a name, the chat is keyed by a stem of that name and `name_only` is
-/// set: the exporter records the name and no address, and the vault resolves
+/// set: the exporter records the name and no address, and the server resolves
 /// it against contacts on import. No address is invented here.
 fn resolve_chat(peer: &str) -> (String, String, bool) {
     let peer = peer.trim();
@@ -268,11 +268,7 @@ fn resolve_chat(peer: &str) -> (String, String, bool) {
         // Format as E.164 when unambiguous. Otherwise keep digits as-is. Never invent `+0…`.
         return (phone::normalize_lenient(peer), String::new(), false);
     }
-    (
-        message_vault_io_core::name_stem(peer),
-        peer.to_string(),
-        true,
-    )
+    (message_crate_core::name_stem(peer), peer.to_string(), true)
 }
 
 /// Whether the row is outgoing, from its direction column or its sender.
@@ -303,7 +299,7 @@ fn resolve_sender(
     let handle = if chat_id.starts_with('+') || sanitize_number(chat_id).is_some() {
         if chat_id.starts_with('+') {
             // Only unambiguous +-prefixed values pass through. A fabricated
-            // `+0…` stays digits-as-is so the vault can flag it.
+            // `+0…` stays digits-as-is so the server can flag it.
             phone::normalize_lenient(chat_id)
         } else {
             phone::normalize_digits_us(chat_id).unwrap_or_default()

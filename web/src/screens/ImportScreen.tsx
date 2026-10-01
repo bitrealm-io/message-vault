@@ -18,6 +18,7 @@ import {
   shouldPrefillMacMessagesDb,
 } from "../lib/imessageImport";
 import { discardImportSession, getActiveImportSession } from "../lib/importSession";
+import { unmatchedIdentities } from "../lib/serverApi";
 import {
   getImporterPath,
   getRememberImporterPaths,
@@ -39,7 +40,6 @@ import {
   useFetchAccountProfile,
   useUpdateAccountProfile,
 } from "../lib/useAccountProfile";
-import { unmatchedIdentities } from "../lib/vaultApi";
 import {
   emptyWhatsappPathStats,
   isWhatsappMethod,
@@ -66,7 +66,7 @@ import { parseStoredStagingSummary, useImportJob } from "./import/useImportJob";
 const DEFAULT_SOURCE = IMESSAGE_DEFAULT_METHOD;
 const PATH_PROBE_DEBOUNCE_MS = 200;
 /** The server's own cap on one `/v1/contacts/unmatched-identities` request (`MAX_MATCH_IDENTIFIERS`,
- * `crates/vault/server/src/contacts_api.rs`) — the client batches to it rather than
+ * `crates/server/server/src/contacts_api.rs`) — the client batches to it rather than
  * discovering the limit from a 422. */
 const MAX_MATCH_IDENTIFIERS = 500;
 
@@ -166,7 +166,7 @@ export default function ImportScreen() {
         throw new Error("no-op add");
       }
     } catch {
-      setIdentityAddError("The vault didn't add that address.");
+      setIdentityAddError("The server didn't add that address.");
     }
   };
 
@@ -221,10 +221,10 @@ export default function ImportScreen() {
   const resumingRef = useRef(false);
 
   /**
-   * Ask the vault what session is open, on mount and on every return to the
+   * Ask the server what session is open, on mount and on every return to the
    * form.
    *
-   * Re-checking matters because the vault can hold a session the screen has
+   * Re-checking matters because the server can hold a session the screen has
    * already forgotten: a swallowed final /complete, or a restart whose
    * discard failed before the create 409'd. Without it, Back lands on a
    * blank form whose Import button 409s until the route is remounted.
@@ -262,7 +262,7 @@ export default function ImportScreen() {
           );
         }
       } catch {
-        // A vault that cannot answer is not a reason to block the form.
+        // A server that cannot answer is not a reason to block the form.
         if (!cancelled && !resumingRef.current && !discardingRef.current) setResume(NO_RESUME);
       } finally {
         // Only the first check gates what renders; a later one must not
@@ -276,11 +276,11 @@ export default function ImportScreen() {
   }, [phase]);
 
   /**
-   * Ask the vault which of the staged contact identifiers this account
+   * Ask the server which of the staged contact identifiers this account
    * already has, once per summary shown at a review, batched at the
    * server's own cap so a large import doesn't send an oversized request. A
    * failed batch leaves the count unknown rather than blocking the review:
-   * the "new to your vault" clause is a nicety, not a requirement.
+   * the count of contacts new to the account is a nicety, not a requirement.
    */
   useEffect(() => {
     if (!isReviewPhase(phase) || !stagingSummary) return;
@@ -423,7 +423,7 @@ export default function ImportScreen() {
       }
 
       // Restart: a fresh extract writes into a new staging folder, and the
-      // vault allows only one live session per account, so give up the old
+      // server allows only one live session per account, so give up the old
       // one before starting the new run. setResume stays put until right
       // before startImport, so the panel (not a blank form) covers the
       // discard round trip. The old folder goes with the session: nothing
@@ -437,7 +437,7 @@ export default function ImportScreen() {
             : Promise.resolve(),
         ]);
       } catch {
-        // Best effort -- if the vault is unreachable the create call below
+        // Best effort -- if the server is unreachable the create call below
         // surfaces its own error the same as any other failed import start.
       }
       setResume(NO_RESUME);

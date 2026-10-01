@@ -1,5 +1,5 @@
 {
-  "name": "message-vault-docs",
+  "name": "message-crate-docs",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "@astrojs/markdown-satteri": "0.4.1",
+    "@astrojs/markdown-satteri": "0.4.2",
     "@astrojs/starlight": "^0.42.2",
     "@scalar/api-reference": "^1.68.0",
     "astro": "^7.3.5",

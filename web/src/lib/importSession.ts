@@ -1,7 +1,7 @@
+import { discardImport, listImports, setImportStage as setStage } from "./serverApi";
 import type { PathStat } from "./tauri";
-import { discardImport, listImports, setImportStage as setStage } from "./vaultApi";
 
-/** Where a live import session is. Mirrors the vault's `ImportStage`. */
+/** Where a live import session is. Mirrors the server's `ImportStage`. */
 export const IMPORT_STAGES = [
   "parse",
   "write",
@@ -13,7 +13,7 @@ export const IMPORT_STAGES = [
 
 export type ImportStage = (typeof IMPORT_STAGES)[number];
 
-/** The vault sends `stage` as a plain string; anything unknown reads as null. */
+/** The server sends `stage` as a plain string; anything unknown reads as null. */
 function asImportStage(value: string | null | undefined): ImportStage | null {
   return IMPORT_STAGES.includes(value as ImportStage) ? (value as ImportStage) : null;
 }
@@ -27,7 +27,7 @@ export type SourceFingerprint = {
   message_count: number | null;
 };
 
-/** The account's live import session, as the vault reports it. */
+/** The account's live import session, as the server reports it. */
 export type ActiveImportSession = {
   id: number;
   source: string;

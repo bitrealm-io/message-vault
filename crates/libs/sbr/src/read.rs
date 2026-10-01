@@ -1025,6 +1025,17 @@ mod tests {
         assert!(record.attachments.is_empty());
     }
 
+    /// SMS Backup & Restore writes `null` for a part with no name. Two such
+    /// parts are two files, not one file named "null".
+    #[test]
+    fn media_parts_named_null_or_nothing_are_each_an_attachment() {
+        let record = mms_with_parts(
+            r#"<part ct="image/jpeg" name="null" cl="NULL" fn="" data="aGVsbG8="/><part ct="image/png" name="null" cl="NULL" fn="" data="d29ybGQ="/>"#,
+        );
+        let data: Vec<&[u8]> = record.attachments.iter().map(|a| a.data.as_ref()).collect();
+        assert_eq!(data, vec![b"hello".as_slice(), b"world".as_slice()]);
+    }
+
     #[test]
     fn parses_attachment_and_preserves_fields() {
         let xml = br#"<smses><mms date="1400773400000" msg_box="1" address="+15555550101" extra="x"><parts><part seq="0" ct="image/jpeg" name="pic.jpg" data="aGVsbG8="/></parts><addrs><addr address="+15555550101" type="137" charset="106"/></addrs></mms></smses>"#;

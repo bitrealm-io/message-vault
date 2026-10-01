@@ -86,6 +86,27 @@ fn obfuscate_replaces_the_owner_address_on_each_message() {
     );
 }
 
+/// "Me" is the label exports give the owner's own messages and names nobody,
+/// so it stays. A real name on a sent message is the owner's and must go.
+#[test]
+fn obfuscate_keeps_me_on_a_sent_message_and_replaces_a_real_name() {
+    let mut doc = doc_with_image_attachment();
+    let mut labelled = doc.messages[0].clone();
+    labelled.direction = IrDirection::Outgoing;
+    labelled.sender_display_name = Some("Me".into());
+    let mut named = labelled.clone();
+    named.sender_display_name = Some("Alex Rivera".into());
+    doc.messages = vec![labelled, named];
+
+    let mut anon = Obfuscator::new([7u8; 32]);
+    obfuscate_document(&mut doc, &mut anon);
+
+    assert_eq!(doc.messages[0].sender_display_name.as_deref(), Some("Me"));
+    let replaced = doc.messages[1].sender_display_name.as_deref().unwrap();
+    assert_ne!(replaced, "Alex Rivera");
+    assert_ne!(replaced, "Me");
+}
+
 #[test]
 fn obfuscate_skips_staged_media_and_writes_placeholders() {
     let tmp = tempfile::tempdir().unwrap();

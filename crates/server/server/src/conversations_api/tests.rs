@@ -1958,6 +1958,54 @@ async fn conversation_messages_are_ascending_by_timestamp_then_sort_order() {
     assert_eq!(texts, vec!["first", "second", "third"]);
 }
 
+/// A sent message reads back as sent and a received one as received: the
+/// thread view puts each on its own side by this field.
+#[tokio::test]
+async fn conversation_messages_say_which_were_sent_and_which_received() {
+    let (fixture, user, conversation_id) = conversation_messages_fixture().await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    // `insert_message` writes a sent message.
+    insert_message(
+        &mut conn,
+        conversation_id,
+        user.account_id,
+        "2024-01-01T00:00:00Z",
+        0,
+        "sent",
+    )
+    .await;
+    sqlx::query(
+        "INSERT INTO messages (
+            conversation_id, account_id, source, timestamp, is_from_me, sort_order, body
+         ) VALUES ($1, $2, 'imessage', '2024-01-02T00:00:00Z', 0, 0, 'received')",
+    )
+    .bind(conversation_id)
+    .bind(user.account_id)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    drop(conn);
+
+    let page: serde_json::Value = crate::test_support::get_json(
+        &fixture.state,
+        &format!("/v1/conversations/{conversation_id}/messages"),
+        &user.token,
+    )
+    .await;
+    let directions: Vec<(&str, bool)> = page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| {
+            (
+                m["text"].as_str().unwrap(),
+                m["is_from_me"].as_bool().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(directions, vec![("sent", true), ("received", false)]);
+}
+
 /// `sort=-date` turns both message lists newest first, ties broken by
 /// `sort_order` the same way round.
 #[tokio::test]

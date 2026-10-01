@@ -651,13 +651,13 @@ describe("OwnerHome", () => {
   it("states both versions under the header when the server is another release", async () => {
     getServerState.mockResolvedValue({
       state: "closed",
-      version: "0.10.0",
+      version: "99.0.0",
       schema_fingerprint: 1234567890,
     });
     renderHome();
 
     expect(await screen.findByRole("status")).toHaveTextContent(
-      `The server is 0.10.0. This app is ${productVersionOf(APP_BUILD)}.`,
+      `The server is 99.0.0. This app is ${productVersionOf(APP_BUILD)}.`,
     );
     // It blocks nothing: the screen under it still loads and works.
     expect(await screen.findByText("bob")).toBeInTheDocument();

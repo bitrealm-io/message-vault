@@ -323,8 +323,6 @@ async fn import_reactions_and_flags(fixture: &TestFixture, account_id: i64) {
         &crate::imports_api::ImportOptions::fixed(crate::imports_api::FixedImportArgs {
             assets_dir: &assets,
             asset_root: &dir,
-            contacts: None,
-            overwrite_contacts: false,
             mode: crate::imports_api::ImportMode::Append,
             source: "imessage",
             account_id,

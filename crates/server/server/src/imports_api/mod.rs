@@ -25,7 +25,6 @@ use axum::http::HeaderMap;
 
 use crate::assets_api::AssetStats;
 use crate::config::{PathsConfig, validate_source_id};
-use crate::db::contacts;
 use crate::db::dialect;
 use crate::db::engine;
 use crate::db::imports::{self, CompleteImportArgs};
@@ -51,17 +50,13 @@ use crate::server::{
     resolve_import_account, stream_body_to_file,
 };
 
-/// Full import settings: paths, mode, media handling, and contact naming.
+/// Full import settings: paths, mode, and media handling.
 #[derive(Debug, Clone)]
 pub struct ImportOptions<'a> {
     /// Content-addressed asset store when [`Self::source_from_jsonl`] is false.
     pub assets_dir: &'a Path,
     /// Root for resolving relative attachment paths in JSONL.
     pub asset_root: &'a Path,
-    /// Optional address book to load: VCF or vCard CSV export.
-    pub contacts: Option<&'a Path>,
-    /// Reload the address book even when contacts already exist.
-    pub overwrite_contacts: bool,
     /// Import mode: replace or append.
     pub mode: ImportMode,
     /// Fixed source id (HTTP / `--source` override). Ignored when `source_from_jsonl`.
@@ -89,10 +84,6 @@ pub struct FixedImportArgs<'a> {
     pub assets_dir: &'a Path,
     /// Root for resolving relative attachment paths in JSONL.
     pub asset_root: &'a Path,
-    /// Optional address book to load: VCF or vCard CSV export.
-    pub contacts: Option<&'a Path>,
-    /// Reload the address book even when contacts already exist.
-    pub overwrite_contacts: bool,
     /// Import mode: replace or append.
     pub mode: ImportMode,
     /// Fixed source id applied to every conversation.
@@ -111,8 +102,6 @@ impl<'a> ImportOptions<'a> {
         Self {
             assets_dir: args.assets_dir,
             asset_root: args.asset_root,
-            contacts: args.contacts,
-            overwrite_contacts: args.overwrite_contacts,
             mode: args.mode,
             source: args.source,
             account_id: args.account_id,
@@ -147,14 +136,8 @@ pub struct ImportStats {
     pub assets_deduped: u64,
     /// Attachment files referenced but not found on disk.
     pub assets_missing: u64,
-    /// Contacts loaded from the address book.
-    pub contacts: u64,
-    /// Contact–handle links created.
-    pub contact_handles: u64,
     /// Contacts the import created for participants nothing else owned.
     pub contacts_created: u64,
-    /// True when the address book was not loaded (already present or no file).
-    pub contacts_skipped: bool,
     /// Messages hidden as duplicates within this import.
     pub messages_deduped: u64,
     /// Messages added by an append-mode import.
@@ -198,10 +181,6 @@ pub struct ImportExportArgs<'a> {
     pub db: &'a Path,
     /// Content-addressed asset store directory.
     pub assets_dir: &'a Path,
-    /// Optional address book to load: VCF or vCard CSV export.
-    pub contacts: Option<&'a Path>,
-    /// Reload the address book even when contacts already exist.
-    pub overwrite_contacts: bool,
     /// Import mode: replace or append.
     pub mode: ImportMode,
     /// Fixed source id applied to every conversation.
@@ -246,8 +225,6 @@ pub async fn import_export(args: &ImportExportArgs<'_>) -> Result<ImportStats> {
         &ImportOptions::fixed(FixedImportArgs {
             assets_dir: args.assets_dir,
             asset_root: args.export_dir,
-            contacts: args.contacts,
-            overwrite_contacts: args.overwrite_contacts,
             mode: args.mode,
             source: args.source,
             account_id: args.account_id,
@@ -378,7 +355,6 @@ pub async fn import_jsonl_files_on_conn(
     }
     crate::db::account_profile::ensure_account_row(conn, opts.account_id).await?;
 
-    let contact_stats = load_contacts_step(conn, opts).await?;
     if schema_mode == ImportSchemaMode::Ensure {
         say("  sql:      ensuring schema + resetting staging for account…");
     } else {
@@ -399,10 +375,6 @@ pub async fn import_jsonl_files_on_conn(
     }
 
     let mut stats = ImportStats {
-        contacts: contact_stats.contacts,
-        contact_handles: contact_stats.phones,
-        contacts_skipped: contact_stats.skipped,
-        phones_needing_review: contact_stats.phones_needing_review,
         mode: opts.mode,
         ..Default::default()
     };
@@ -447,40 +419,6 @@ pub async fn import_jsonl_files_on_conn(
 fn say(line: &str) {
     println!("{line}");
     let _ = io::stdout().flush();
-}
-
-/// Load the address book named by `--contacts`, if any, and report what happened.
-///
-/// # Errors
-///
-/// Returns an error when the address book cannot be read or written.
-async fn load_contacts_step(
-    conn: &mut SqliteConnection,
-    opts: &ImportOptions<'_>,
-) -> Result<contacts::ContactLoadStats> {
-    match opts.contacts {
-        Some(path) => say(&format!(
-            "  sql:      loading contacts from {}…",
-            path.display()
-        )),
-        None => say("  sql:      contacts load skipped (no --contacts address book)"),
-    }
-    let contact_stats = contacts::load_contacts_if_needed(
-        conn,
-        opts.contacts,
-        opts.overwrite_contacts,
-        opts.account_id,
-    )
-    .await?;
-    if contact_stats.skipped {
-        say("  sql:      contacts skipped (already loaded or no address book)");
-    } else {
-        say(&format!(
-            "  sql:      contacts={} phones={}",
-            contact_stats.contacts, contact_stats.phones
-        ));
-    }
-    Ok(contact_stats)
 }
 
 /// The source ids a replace-mode import wipes once staging succeeds: the
@@ -1537,8 +1475,6 @@ async fn run_import_path(
     let opts = ImportOptions::fixed(FixedImportArgs {
         assets_dir: &assets_dir,
         asset_root: &assets_dir,
-        contacts: None,
-        overwrite_contacts: false,
         mode,
         source: &source_id,
         account_id: account,

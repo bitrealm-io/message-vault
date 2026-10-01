@@ -1,4 +1,4 @@
-//! VCF 3.0 parser (names, phones, email, categories) for contact books and the server's import.
+//! VCF 3.0 parser: names, phones, email and categories.
 
 use anyhow::{Context, Result};
 use std::fs;
@@ -166,37 +166,6 @@ fn split_categories(raw: &str) -> Vec<String> {
     out
 }
 
-/// Extract `[Tag]` values from a string and return (`stripped_text`, tags).
-pub fn extract_tags(raw: &str) -> (String, Vec<String>) {
-    let mut tags = Vec::new();
-    let mut out = String::new();
-    let mut chars = raw.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '[' {
-            let mut tag = String::new();
-            for c in chars.by_ref() {
-                if c == ']' {
-                    break;
-                }
-                tag.push(c);
-            }
-            let tag = tag.trim();
-            if !tag.is_empty() {
-                tags.push(tag.to_string());
-            }
-        } else {
-            out.push(ch);
-        }
-    }
-    let stripped = out.split_whitespace().collect::<Vec<_>>().join(" ");
-    (stripped, tags)
-}
-
-/// Strip `[Tag]` markers from a VCF name field.
-pub fn strip_tags(raw: &str) -> String {
-    extract_tags(raw).0
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,14 +190,6 @@ mod tests {
         assert_eq!(cards[0].n_middle, "Augusta");
         assert_eq!(cards[0].email.as_deref(), Some("ada@example.com"));
         assert_eq!(cards[0].categories, vec!["Family", "Friends", "Work"]);
-    }
-
-    #[test]
-    fn extract_tags_strips_brackets() {
-        let (stripped, tags) = extract_tags("Ada [Family] Lovelace [Work]");
-        assert_eq!(stripped, "Ada Lovelace");
-        assert_eq!(tags, vec!["Family", "Work"]);
-        assert_eq!(strip_tags("Ada [Family]"), "Ada");
     }
 
     #[test]

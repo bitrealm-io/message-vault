@@ -1,4 +1,4 @@
-//! Convert OpenExtract conversation CSV (plus VCF) into the shared conversation
+//! Convert OpenExtract conversation CSV into the shared conversation
 //! structure ([`message_ir::ConversationDocument`]) every exporter writes.
 //!
 //! Library entry: [`run`] for the full pipeline.

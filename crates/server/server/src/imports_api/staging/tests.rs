@@ -39,8 +39,6 @@ async fn import_one(
     let opts = ImportOptions::fixed(FixedImportArgs {
         assets_dir: &assets,
         asset_root: tmp.path(),
-        contacts: None,
-        overwrite_contacts: false,
         mode: ImportMode::Append,
         source: "sms-backup-restore",
         account_id: TEST_ACCOUNT,
@@ -134,8 +132,6 @@ async fn a_file_that_does_not_match_its_claimed_sha256_fails_the_import_and_is_n
     let opts = ImportOptions::fixed(FixedImportArgs {
         assets_dir: &assets,
         asset_root: tmp.path(),
-        contacts: None,
-        overwrite_contacts: false,
         mode: ImportMode::Append,
         source: "imessage",
         account_id: TEST_ACCOUNT,

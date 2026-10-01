@@ -153,8 +153,6 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
         &ImportOptions::fixed(FixedImportArgs {
             assets_dir: &assets,
             asset_root: tmp.path(),
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Replace,
             source: "sms-backup-restore",
             account_id: TEST_ACCOUNT,
@@ -181,8 +179,6 @@ async fn append_skips_existing_guids_and_keeps_id_map() {
         &ImportOptions::fixed(FixedImportArgs {
             assets_dir: &assets,
             asset_root: tmp.path(),
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Append,
             source: "sms-backup-restore",
             account_id: TEST_ACCOUNT,
@@ -238,8 +234,6 @@ fn replace_opts<'a>(assets: &'a Path, root: &'a Path, source: &'a str) -> Import
     ImportOptions::fixed(FixedImportArgs {
         assets_dir: assets,
         asset_root: root,
-        contacts: None,
-        overwrite_contacts: false,
         mode: ImportMode::Replace,
         source,
         account_id: TEST_ACCOUNT,
@@ -425,8 +419,6 @@ async fn append_existing_guid_adds_missing_children() {
     let options = ImportOptions::fixed(FixedImportArgs {
         assets_dir: &assets,
         asset_root: tmp.path(),
-        contacts: None,
-        overwrite_contacts: false,
         mode: ImportMode::Append,
         source: "imessage",
         account_id: TEST_ACCOUNT,
@@ -489,8 +481,6 @@ async fn append_with_a_found_file_fills_in_the_missing_attachment() {
     let options = ImportOptions::fixed(FixedImportArgs {
         assets_dir: &assets,
         asset_root: tmp.path(),
-        contacts: None,
-        overwrite_contacts: false,
         mode: ImportMode::Append,
         source: "imessage",
         account_id: TEST_ACCOUNT,
@@ -551,8 +541,6 @@ async fn repeated_append_keeps_one_fts_posting_per_message() {
     let options = ImportOptions::fixed(FixedImportArgs {
         assets_dir: &assets,
         asset_root: tmp.path(),
-        contacts: None,
-        overwrite_contacts: false,
         mode: ImportMode::Append,
         source: "imessage",
         account_id: TEST_ACCOUNT,
@@ -654,8 +642,6 @@ async fn deferred_fts_indexes_attachment_text_after_promote() {
         &ImportOptions::fixed(FixedImportArgs {
             assets_dir: &assets,
             asset_root: tmp.path(),
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Append,
             source: "imessage",
             account_id: TEST_ACCOUNT,
@@ -710,8 +696,6 @@ async fn promote_stamps_messages_with_import_id() {
         &ImportOptions::fixed(FixedImportArgs {
             assets_dir: &assets,
             asset_root: tmp.path(),
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Append,
             source: "imessage",
             account_id: TEST_ACCOUNT,
@@ -804,8 +788,6 @@ async fn trunk_zero_phone_imports_digits_with_review_note() {
         &ImportOptions::fixed(FixedImportArgs {
             assets_dir: &assets,
             asset_root: tmp.path(),
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Append,
             source: "imessage",
             account_id: TEST_ACCOUNT,
@@ -866,8 +848,6 @@ async fn source_from_jsonl_stamps_export_source_and_assets() {
         &ImportOptions {
             assets_dir: &placeholder,
             asset_root: tmp.path(),
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Replace,
             source: "",
             account_id: TEST_ACCOUNT,
@@ -925,8 +905,6 @@ async fn media_none_skips_attachment_copy() {
         &ImportOptions {
             assets_dir: &placeholder,
             asset_root: tmp.path(),
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Replace,
             source: "",
             account_id: TEST_ACCOUNT,
@@ -992,8 +970,6 @@ fn media_convert_stores_the_converted_file_not_the_original() {
             &ImportOptions {
                 assets_dir: &placeholder,
                 asset_root: tmp.path(),
-                contacts: None,
-                overwrite_contacts: false,
                 mode: ImportMode::Replace,
                 source: "",
                 account_id: TEST_ACCOUNT,
@@ -1045,8 +1021,6 @@ async fn name_only_participant_becomes_a_contact_with_no_identity() {
     let opts = ImportOptions::fixed(FixedImportArgs {
         assets_dir: &assets,
         asset_root: tmp.path(),
-        contacts: None,
-        overwrite_contacts: false,
         mode: ImportMode::Append,
         source: "openextract",
         account_id: TEST_ACCOUNT,
@@ -1170,8 +1144,6 @@ async fn a_participant_with_no_address_and_no_name_is_never_created() {
     let opts = ImportOptions::fixed(FixedImportArgs {
         assets_dir: &assets,
         asset_root: tmp.path(),
-        contacts: None,
-        overwrite_contacts: false,
         mode: ImportMode::Append,
         source: "openextract",
         account_id: TEST_ACCOUNT,
@@ -1216,8 +1188,6 @@ async fn persists_missing_reason_with_null_sha256() {
         &ImportOptions::fixed(FixedImportArgs {
             assets_dir: &assets,
             asset_root: tmp.path(),
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Append,
             source: "sms-backup-restore",
             account_id: TEST_ACCOUNT,
@@ -1355,8 +1325,6 @@ async fn claimed_import_rejects_corrupt_existing_asset() {
         &ImportOptions::fixed(FixedImportArgs {
             assets_dir: &assets,
             asset_root: tmp.path(),
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Append,
             source: "imessage",
             account_id: TEST_ACCOUNT,
@@ -1401,8 +1369,6 @@ async fn rejects_attachment_path_traversal() {
         &ImportOptions::fixed(FixedImportArgs {
             assets_dir: &assets,
             asset_root: &export_dir,
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Append,
             source: "sms-backup-restore",
             account_id: TEST_ACCOUNT,
@@ -1440,8 +1406,6 @@ async fn failed_replace_keeps_existing_messages() {
         &ImportOptions::fixed(FixedImportArgs {
             assets_dir: &assets,
             asset_root: &export_dir,
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Replace,
             source: "sms-backup-restore",
             account_id: TEST_ACCOUNT,
@@ -1465,8 +1429,6 @@ async fn failed_replace_keeps_existing_messages() {
         &ImportOptions::fixed(FixedImportArgs {
             assets_dir: &assets,
             asset_root: &export_dir,
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Replace,
             source: "sms-backup-restore",
             account_id: TEST_ACCOUNT,
@@ -1529,8 +1491,6 @@ async fn failed_promote_keeps_the_trashed_contact_and_adds_no_contacts() {
     let opts = ImportOptions::fixed(FixedImportArgs {
         assets_dir: &assets,
         asset_root: &export_dir,
-        contacts: None,
-        overwrite_contacts: false,
         mode: ImportMode::Append,
         source: "sms-backup-restore",
         account_id: TEST_ACCOUNT,
@@ -2388,8 +2348,6 @@ async fn append_on_conn(conn: &mut SqliteConnection, path: &Path, root: &Path, s
         &ImportOptions::fixed(FixedImportArgs {
             assets_dir: &assets,
             asset_root: root,
-            contacts: None,
-            overwrite_contacts: false,
             mode: ImportMode::Append,
             source,
             account_id: TEST_ACCOUNT,

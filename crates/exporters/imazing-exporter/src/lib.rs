@@ -1,4 +1,4 @@
-//! Convert iMazing Messages / WhatsApp CSV (plus vCard CSV / VCF contacts)
+//! Convert iMazing Messages / WhatsApp CSV
 //! into the shared conversation structure ([`message_ir::ConversationDocument`])
 //! every exporter writes.
 //!

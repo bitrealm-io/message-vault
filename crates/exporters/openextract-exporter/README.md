@@ -1,6 +1,6 @@
 # openextract-exporter
 
-Rescue messages from an OpenExtract conversation CSV (and optional VCF) into JSON Lines, JSON, CSV, EML, MBOX, or XML. This is a limited rescue import.
+Rescue messages from an OpenExtract conversation CSV into JSON Lines, JSON, CSV, EML, MBOX, or XML. This is a limited rescue import.
 
 The desktop app Import screen uses this crate as a library.
 

@@ -3,17 +3,10 @@ name = "contacts"
 version = "0.1.0"
 edition = "2024"
 license = "LicenseRef-FCL-1.0-ALv2"
-description = "VCF / contacts CSV name↔phone resolution for message-crate"
+description = "vCard (VCF) parser for message-crate"
 
 [dependencies]
 anyhow = { workspace = true }
-csv = { workspace = true }
-message-ir = { path = "../ir" }
-phone = { path = "../phone" }
-thiserror = { workspace = true }
-
-[dev-dependencies]
-tempfile = { workspace = true }
 
 [lints]
 workspace = true

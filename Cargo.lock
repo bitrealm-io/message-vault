@@ -507,11 +507,6 @@ name = "contacts"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "csv",
- "message-ir",
- "phone",
- "tempfile",
- "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -1056,7 +1051,6 @@ name = "go-sms-pro-exporter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "contacts",
  "csv",
  "go-sms-mms",
  "hex",
@@ -1516,7 +1510,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "contacts",
  "csv",
  "media",
  "message-crate-core",
@@ -1907,7 +1900,7 @@ dependencies = [
  "chrono-tz",
  "clap",
  "clap-markdown",
- "contacts",
+ "csv",
  "demo-seed",
  "fs2",
  "futures-util",
@@ -2148,7 +2141,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "contacts",
  "csv",
  "media",
  "message-crate-core",
@@ -3020,7 +3012,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "contacts",
  "csv",
  "hex",
  "mailparse",

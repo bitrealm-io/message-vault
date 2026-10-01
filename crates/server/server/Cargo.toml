@@ -16,7 +16,7 @@ chrono = { workspace = true }
 chrono-tz = { workspace = true }
 clap = { workspace = true }
 clap-markdown = "0.1.5"
-contacts = { workspace = true }
+csv = { workspace = true }
 demo-seed = { path = "../demo-seed" }
 fs2 = "0.4.3"
 futures-util = { version = "0.3.31", default-features = false }

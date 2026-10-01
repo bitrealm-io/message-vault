@@ -16,7 +16,7 @@ use std::path::Path;
 /// Starlight frontmatter title for the generated page.
 const TITLE: &str = "Server CLI";
 /// Starlight frontmatter description for the generated page.
-const DESCRIPTION: &str = "Cargo subcommands for import, dedupe, contacts, demo reset, and serve.";
+const DESCRIPTION: &str = "Cargo subcommands for import, dedupe, demo reset, and serve.";
 
 /// Render the page: Starlight frontmatter plus the clap-generated body.
 ///

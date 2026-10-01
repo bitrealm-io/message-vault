@@ -1,6 +1,6 @@
 ---
 title: Server CLI
-description: Cargo subcommands for import, dedupe, contacts, demo reset, and serve.
+description: Cargo subcommands for import, dedupe, demo reset, and serve.
 editUrl: false
 ---
 
@@ -17,7 +17,6 @@ This document contains the help content for the `message-crate-server` command-l
 * [`message-crate-server imports`↴](#message-crate-server-imports)
 * [`message-crate-server imports discard`↴](#message-crate-server-imports-discard)
 * [`message-crate-server dedupe-cross-source`↴](#message-crate-server-dedupe-cross-source)
-* [`message-crate-server import-contacts`↴](#message-crate-server-import-contacts)
 * [`message-crate-server reset-demo`↴](#message-crate-server-reset-demo)
 * [`message-crate-server create-database`↴](#message-crate-server-create-database)
 * [`message-crate-server serve`↴](#message-crate-server-serve)
@@ -39,7 +38,6 @@ Import and view messages in SQLite
 * `import` — Import a message-ir JSONL folder (source from export.source unless --source)
 * `imports` — Work on an account's import sessions (`discard` clears a stranded one)
 * `dedupe-cross-source` — Soft-hide the same SMS when it appears under more than one import source
-* `import-contacts` — Import an address book (VCF or vCard CSV) into an existing database
 * `reset-demo` — Rebuild the Demo Account: generate Demo Data, clear the account, import, and process assets. Adds the account when it is not there
 * `create-database` — Create an empty database, with no Demo Account. `serve` adds the Demo Account only to a database that does not exist yet, so this is how a Message Crate starts empty
 * `serve` — Run the HTTP API. A database that does not exist yet is created with the Demo Account before the server listens
@@ -67,8 +65,6 @@ Import a message-ir JSONL folder (source from export.source unless --source)
 * `--input <INPUT>` [aliases: `dir`, `staging-dir`, `export-dir`] — Folder of `*.jsonl` conversation files (+ attachments)
 * `--db <DB>` — Output SQLite database path (overrides config)
 * `--assets-dir <ASSETS_DIR>` — Originals asset store directory (overrides account/source default; fixed-source only)
-* `--contacts <CONTACTS>` — Address book to load: VCF or vCard CSV export
-* `--overwrite-contacts` — Reload contacts from --contacts even if the table is non-empty
 * `--media <MEDIA>` — Attachment handling: copy (default), none, convert, compress
 
   Default value: `copy`
@@ -127,23 +123,6 @@ Soft-hide the same SMS when it appears under more than one import source
 
   Default value: `2`
 * `--account <ACCOUNT>` — Account username or id (scopes dedupe to this account)
-
-
-
-## `message-crate-server import-contacts`
-
-Import an address book (VCF or vCard CSV) into an existing database
-
-**Usage:** `message-crate-server import-contacts [OPTIONS] --contacts <CONTACTS> --account <ACCOUNT>`
-
-###### **Options:**
-
-* `--config <CONFIG>` — Path to config.toml
-
-  Default value: `config/config.toml`
-* `--contacts <CONTACTS>` — Address book: VCF, or vCard CSV (First Name, Last Name, Phone columns)
-* `--db <DB>` — Output SQLite database path (overrides config)
-* `--account <ACCOUNT>` — Account username or id (scopes contacts to this account)
 
 
 

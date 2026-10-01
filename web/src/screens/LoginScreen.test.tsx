@@ -9,12 +9,26 @@ const login = vi.fn();
 const setServer = vi.fn();
 const retrySavedLogin = vi.fn();
 
+const authState = vi.hoisted(() => ({ serverUrl: "" }));
+
 vi.mock("../lib/auth", () => ({
-  useAuth: () => ({ login, setServer, retrySavedLogin, serverUrl: "" }),
+  useAuth: () => ({ login, setServer, retrySavedLogin, serverUrl: authState.serverUrl }),
 }));
 
+const tauriState = vi.hoisted(() => ({ isTauri: false }));
+const startLocalServer = vi.hoisted(() => vi.fn());
+const localServerStatus = vi.hoisted(() => vi.fn());
+const openDataFolder = vi.hoisted(() => vi.fn());
+
 vi.mock("../lib/tauri-check", () => ({
-  isTauri: () => false,
+  isTauri: () => tauriState.isTauri,
+}));
+
+vi.mock("../lib/localServer", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/localServer")>()),
+  startLocalServer: () => startLocalServer(),
+  localServerStatus: () => localServerStatus(),
+  openDataFolder: () => openDataFolder(),
 }));
 
 import { Providers } from "../test/providers";
@@ -70,6 +84,14 @@ describe("LoginScreen", () => {
   beforeEach(() => {
     login.mockReset();
     setServer.mockReset();
+    tauriState.isTauri = false;
+    authState.serverUrl = "";
+    startLocalServer.mockReset();
+    startLocalServer.mockResolvedValue({ status: "ready", started_by_app: true });
+    localServerStatus.mockReset();
+    localServerStatus.mockResolvedValue({ status: "ready", started_by_app: true });
+    openDataFolder.mockReset();
+    openDataFolder.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -613,5 +635,171 @@ describe("LoginScreen", () => {
     expect(precedes(confirmField, action)).toBe(true);
     expect(precedes(action, message)).toBe(true);
     expect(precedes(message, orRule)).toBe(true);
+  });
+
+  it("starts the desktop app's own Message Crate at the app's own address", async () => {
+    tauriState.isTauri = true;
+    stubServer();
+    renderScreen();
+
+    await screen.findByRole("tab", { name: "Login" });
+    expect(startLocalServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts nothing for an address the person entered", async () => {
+    tauriState.isTauri = true;
+    stubServer();
+    const user = setupUser();
+    renderScreen();
+    await screen.findByRole("tab", { name: "Login" });
+    startLocalServer.mockClear();
+
+    await user.click(screen.getByRole("button", { name: "Change server address" }));
+    const field = screen.getByRole("textbox");
+    await user.clear(field);
+    await user.type(field, "http://crate.example:8080");
+    await user.click(screen.getByRole("button", { name: "Use this address" }));
+
+    await waitFor(() => expect(setServer).toHaveBeenCalledWith("http://crate.example:8080"));
+    expect(startLocalServer).not.toHaveBeenCalled();
+  });
+
+  it("starts nothing in the browser", async () => {
+    stubServer();
+    renderScreen();
+
+    await screen.findByRole("tab", { name: "Login" });
+    expect(startLocalServer).not.toHaveBeenCalled();
+  });
+
+  /** A server nothing answers at, as the app's own is while it starts. */
+  function stubNoServer() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+  }
+
+  it("says the app's own Message Crate is starting, in place of Connected", async () => {
+    tauriState.isTauri = true;
+    startLocalServer.mockResolvedValue({ status: "starting", first_time: false });
+    localServerStatus.mockResolvedValue({ status: "starting", first_time: false });
+    stubNoServer();
+    renderScreen();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Starting Message Crate…");
+    expect(screen.queryByRole("tab", { name: "Login" })).toBeNull();
+  });
+
+  it("says a first start is setting Message Crate up", async () => {
+    tauriState.isTauri = true;
+    startLocalServer.mockResolvedValue({ status: "starting", first_time: true });
+    localServerStatus.mockResolvedValue({ status: "starting", first_time: true });
+    stubNoServer();
+    renderScreen();
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Setting up Message Crate for the first time…",
+    );
+  });
+
+  it("connects as soon as the app's own Message Crate answers", async () => {
+    tauriState.isTauri = true;
+    startLocalServer.mockResolvedValue({ status: "starting", first_time: true });
+    localServerStatus.mockResolvedValue({ status: "starting", first_time: true });
+    stubNoServer();
+    renderScreen();
+    await screen.findByText("Setting up Message Crate for the first time…");
+
+    stubServer("unclaimed", true);
+    localServerStatus.mockResolvedValue({ status: "ready", started_by_app: true });
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Connected"), {
+      timeout: 3000,
+    });
+    expect(await screen.findByRole("button", { name: "Explore Demo Account" })).toBeEnabled();
+  });
+
+  it("says why its own Message Crate did not start, and tries again when asked", async () => {
+    tauriState.isTauri = true;
+    startLocalServer.mockResolvedValue({
+      status: "failed",
+      reason: "port_taken",
+      message: "Another program is using port 8080. Close it, or enter another server address.",
+      details: "",
+    });
+    stubNoServer();
+    const user = setupUser();
+    renderScreen();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Another program is using port 8080.",
+    );
+    expect(screen.getByRole("button", { name: "Change server address" })).toBeEnabled();
+    // Nothing the server wrote, so nothing to disclose.
+    expect(screen.queryByText("Details")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Open data folder" }));
+    expect(openDataFolder).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(startLocalServer).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the server's own words under Details", async () => {
+    tauriState.isTauri = true;
+    startLocalServer.mockResolvedValue({
+      status: "failed",
+      reason: "start_failed",
+      message: "Message Crate stopped while starting.",
+      details: "Error: database is locked",
+    });
+    stubNoServer();
+    renderScreen();
+
+    expect(await screen.findByText("Details")).toBeInTheDocument();
+    expect(screen.getByText("Error: database is locked")).toBeInTheDocument();
+  });
+
+  it("opens the desktop app on the connection screen for an address the person entered", async () => {
+    tauriState.isTauri = true;
+    authState.serverUrl = "http://crate.example:8080";
+    stubServer();
+    const user = setupUser();
+    renderScreen();
+
+    expect(await screen.findByRole("heading", { name: "Server Address" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveValue("http://crate.example:8080");
+    expect(startLocalServer).not.toHaveBeenCalled();
+
+    // The saved address is the one on offer, so it can be used as it stands.
+    await user.click(screen.getByRole("button", { name: "Use this address" }));
+    expect(await screen.findByRole("tab", { name: "Login" })).toBeInTheDocument();
+  });
+
+  it("goes back to the app's own Message Crate from the connection screen", async () => {
+    tauriState.isTauri = true;
+    authState.serverUrl = "http://crate.example:8080";
+    stubServer();
+    const user = setupUser();
+    renderScreen();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Use the Message Crate on this computer" }),
+    );
+
+    await waitFor(() => expect(setServer).toHaveBeenCalledWith("http://127.0.0.1:8080"));
+    expect(startLocalServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the browser on the login card whatever the address", async () => {
+    authState.serverUrl = "http://crate.example:8080";
+    stubServer();
+    renderScreen();
+
+    expect(await screen.findByRole("tab", { name: "Login" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Server Address" })).toBeNull();
   });
 });

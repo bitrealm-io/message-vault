@@ -177,7 +177,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The build script also builds the server the app ships, so a run with
+    # no cache compiles the server as well as the app.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 

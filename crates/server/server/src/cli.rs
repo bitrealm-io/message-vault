@@ -274,6 +274,12 @@ pub struct ServeArgs {
     /// default `static`)
     #[arg(long)]
     pub static_dir: Option<PathBuf>,
+
+    /// Another website allowed to call this API, added to `[server]
+    /// cors_origins`; repeat for more than one. The packaged desktop app's
+    /// own origins are always allowed
+    #[arg(long = "cors-origin", value_name = "ORIGIN")]
+    pub cors_origins: Vec<String>,
 }
 
 /// Options shared by `dump-openapi`, `dump-cli-docs` and `dump-error-docs`.
@@ -668,7 +674,7 @@ fn serve_config(args: ServeArgs) -> Result<Config> {
         }
         None => Config::load(&args.config)?,
     };
-    Ok(cfg.with_serve_overrides(args.bind, args.static_dir))
+    Ok(cfg.with_serve_overrides(args.bind, args.static_dir, args.cors_origins))
 }
 
 /// Convert stored media into browser previews.

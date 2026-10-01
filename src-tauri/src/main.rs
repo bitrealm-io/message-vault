@@ -11,10 +11,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod local_server;
 mod state;
 
+use local_server::LocalServer;
 use state::AppState;
 use std::sync::{Arc, Mutex};
+use tauri::Manager;
 
 /// Start the desktop window and wait until the user quits.
 fn main() {
@@ -33,6 +36,8 @@ fn main() {
         .plugin(dialog_plugin)
         .plugin(shell_plugin)
         .manage(app_state)
+        // The Message Crate this app starts for itself, when asked to.
+        .manage(LocalServer::default())
         .invoke_handler(tauri::generate_handler![
             commands::extract::extract,
             commands::extract::cancel,
@@ -44,6 +49,9 @@ fn main() {
             commands::paths::ios_backup_encrypted,
             commands::paths::imessage_backup_identities,
             commands::paths::open_path,
+            commands::local_server::start_local_server,
+            commands::local_server::local_server_status,
+            commands::local_server::open_data_folder,
             commands::push::push,
             commands::pull::pull,
             commands::staging::summarize_staging,
@@ -52,6 +60,13 @@ fn main() {
         ]);
 
     builder
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app, event| {
+            // The server the app started stops with the app. One it only
+            // found (Docker on this computer) is not the app's to stop.
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<LocalServer>().stop();
+            }
+        });
 }

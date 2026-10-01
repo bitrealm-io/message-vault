@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { APP_BUILD } from "../../lib/build";
+import { getOpenToNetwork } from "../../lib/localServer";
 import { readerLicenseUrl, readerSourceUrl } from "../../lib/thirdPartySoftware";
 import { SystemSection } from "./SystemSection";
 
@@ -11,6 +12,15 @@ const tauriState = vi.hoisted(() => ({ isTauri: true }));
 const probeFfmpegTools = vi.hoisted(() => vi.fn());
 const setFfmpegToolsDir = vi.hoisted(() => vi.fn());
 const getHomeDir = vi.hoisted(() => vi.fn());
+const openDataFolder = vi.hoisted(() => vi.fn());
+
+const startLocalServer = vi.hoisted(() => vi.fn());
+
+vi.mock("../../lib/localServer", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/localServer")>()),
+  openDataFolder: () => openDataFolder(),
+  startLocalServer: () => startLocalServer(),
+}));
 
 vi.mock("../../lib/tauri-check", () => ({
   isTauri: () => tauriState.isTauri,
@@ -82,6 +92,57 @@ describe("SystemSection", () => {
     tauriState.isTauri = false;
     render(<SystemSection />);
     expect(screen.queryByText("Third-party software")).toBeNull();
+  });
+
+  it("opens the data folder of the app's own Message Crate", async () => {
+    openDataFolder.mockResolvedValue(undefined);
+    render(<SystemSection />);
+    await userEvent.click(await screen.findByRole("button", { name: "Open data folder" }));
+    expect(openDataFolder).toHaveBeenCalledTimes(1);
+  });
+
+  it("says why the data folder could not be opened", async () => {
+    openDataFolder.mockRejectedValue(new Error("Could not open /data"));
+    render(<SystemSection />);
+    await userEvent.click(await screen.findByRole("button", { name: "Open data folder" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not open /data");
+  });
+
+  it("keeps the app's own Message Crate closed to the network until asked", async () => {
+    startLocalServer.mockReset();
+    startLocalServer.mockResolvedValue({ status: "starting", first_time: false });
+    render(<SystemSection />);
+    const box = await screen.findByRole("checkbox", {
+      name: /Let other devices on this network connect/,
+    });
+    expect(box).not.toBeChecked();
+    // The warning is there before the choice, not after it.
+    expect(screen.getByText(/plain HTTP/)).toBeInTheDocument();
+
+    await userEvent.click(box);
+
+    expect(getOpenToNetwork()).toBe(true);
+    expect(startLocalServer).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(box);
+    expect(getOpenToNetwork()).toBe(false);
+    expect(startLocalServer).toHaveBeenCalledTimes(2);
+  });
+
+  it("says the setting does not change a Message Crate the app did not start", async () => {
+    startLocalServer.mockReset();
+    startLocalServer.mockResolvedValue({ status: "ready", started_by_app: false });
+    render(<SystemSection />);
+    await userEvent.click(
+      await screen.findByRole("checkbox", { name: /Let other devices on this network connect/ }),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent("This app did not start");
+  });
+
+  it("offers no data folder in the browser", () => {
+    tauriState.isTauri = false;
+    render(<SystemSection />);
+    expect(screen.queryByRole("button", { name: "Open data folder" })).toBeNull();
   });
 
   it("shows the desktop-only stub when not in Tauri", () => {

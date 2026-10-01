@@ -47,7 +47,7 @@ This repository is **messagecrate/message-crate**. The Cargo packages carry the 
 The product has two pieces:
 
 - **The server** — `message-crate-server`. Stores messages in SQLite (`data/messagecrate.db`), serves `/v1/*`, and can host the website from `static/`. Run it with `./scripts/run-dev.sh` (http://127.0.0.1:8080) or Docker. Login is a local account, not a cloud account.
-- **The desktop app** — Tauri v2 around the Vite SPA in `web/`. Reads phone backups, writes JSONL, and imports into a running server. Browse and search also work in the browser against the server; importing a backup needs the desktop app.
+- **The desktop app** — Tauri v2 around the Vite SPA in `web/`. Reads phone backups, writes JSONL, and imports into a running server. Browse and search also work in the browser against the server; importing a backup needs the desktop app. The installer carries `message-crate-server` and the built website, and the app starts that server at `127.0.0.1:8080` when nothing answers there, with its data in the operating system's app-data folder; it stops it on close. A Message Crate already answering at that address (Docker, `./scripts/run-dev.sh`) is used as it is. Rules: `src-tauri/src/local_server.rs`; why: `docs/adr/0018-the-desktop-app-starts-the-server-it-ships.md`.
 
 ### Technology stack
 
@@ -61,7 +61,7 @@ The product has two pieces:
 | Node                   | Node.js 22+ for `web/`, `docs/`, and Docker frontend builds.                                                                      |
 | Docs site              | Astro 7 + Starlight, published to GitHub Pages at messagecrate.app on each `v*` release tag.                                            |
 | Packaging              | Docker (Node 22 + Rust image). GitHub Actions on `v*` tags builds the image and Tauri installers.                                 |
-| Helpers on PATH        | `ffmpeg` / `ffprobe` for media. `wtsexporter` (Python) for WhatsApp. `gh` for GitHub. `imessage-reader` is bundled beside the app, not on PATH (`src-tauri/build.rs` builds it). |
+| Helpers on PATH        | `ffmpeg` / `ffprobe` for media. `wtsexporter` (Python) for WhatsApp. `gh` for GitHub. `imessage-reader` and `message-crate-server` are bundled beside the app, not on PATH (`src-tauri/build.rs` builds both). |
 | Not the product path   | Restored Next.js 16 browse app (`web-next/`), an HTTP client of the server's `/v1` API for evaluating its screens. Kept on purpose; see CLAUDE.md before proposing its removal. |
 
 ### Directory map (`tree -L 2 message-crate`)
@@ -201,6 +201,8 @@ Or, browser only (no Tauri):
 ```bash
 cd web && npm run dev        # http://localhost:5173, proxies /v1 to :8080
 ```
+
+`cargo tauri dev` uses the server on **127.0.0.1:8080** when one is running, so start `./scripts/run-dev.sh` first to work against the repository's `data/`. With nothing on that port the app starts its own server, built by `src-tauri/build.rs`, with its data in the app-data folder (`~/.local/share/app.messagecrate.desktop/data` on Linux), and stops it when the window closes.
 
 Do not run `npm run dev` and `cargo tauri dev` at the same time. Point the app at **http://127.0.0.1:8080** (not `localhost` — that can resolve to IPv6, which the server does not listen on). `web/` and `src-tauri/` usually reload; restart `cargo tauri dev` if they do not.
 

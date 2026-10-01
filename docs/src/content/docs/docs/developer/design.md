@@ -41,6 +41,12 @@ Apple Messages for the desktop app as a separate process, because the library
 that parses `chat.db` is GPL and the app is under the Fair Core License; the
 app starts it and speaks JSON lines to it over pipes. Everything else is a
 library the desktop app links directly — the exporters have no command line.
+
+The desktop installer carries two of these beside the app: `imessage-reader`
+and `message-crate-server`, with the built website. The app starts the server
+at `127.0.0.1:8080` when nothing answers there and stops it on close, so one
+install is a working Message Crate. It is the same server program the Docker
+image runs, given its data folder and address on the command line.
 Why: [ADR 0001](https://github.com/messagecrate/message-crate/blob/main/docs/adr/0001-no-command-line-except-the-server.md)
 and its amendment.
 

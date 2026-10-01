@@ -5,6 +5,13 @@ import PathPicker from "../../components/PathPicker";
 import { APP_BUILD } from "../../lib/build";
 import { FFMPEG_TOOLS_STORAGE_KEY } from "../../lib/ffmpeg-tools";
 import {
+  getOpenToNetwork,
+  type LocalServerStatus,
+  openDataFolder,
+  setOpenToNetwork,
+  startLocalServer,
+} from "../../lib/localServer";
+import {
   defaultStagingDir,
   getHomeDir,
   getRememberImporterPaths,
@@ -111,6 +118,84 @@ function ThirdPartySoftware() {
           License
         </a>
       </p>
+    </div>
+  );
+}
+
+/**
+ * Where the Message Crate this app starts keeps everything. The folder is the
+ * whole Message Crate, so it is what a person copies to back it up; the app
+ * opens it rather than naming a path to find.
+ */
+function DataFolder() {
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(getOpenToNetwork);
+  const [server, setServer] = useState<LocalServerStatus | null>(null);
+  const [networkError, setNetworkError] = useState<string | null>(null);
+
+  const onOpenChange = (on: boolean) => {
+    setOpen(on);
+    setOpenToNetwork(on);
+    setNetworkError(null);
+    // Starting again with the new setting restarts the app's own server.
+    startLocalServer().then(setServer, (caught: unknown) => {
+      setNetworkError(caught instanceof Error ? caught.message : String(caught));
+    });
+  };
+  // A Message Crate the app only found (Docker on this computer) listens
+  // where it was told to, not where this setting says.
+  const notOurs = server?.status === "ready" && !server.started_by_app;
+  return (
+    <div className="mt-8">
+      <h3 className={sectionHeading}>Message Crate on this computer</h3>
+      <p className="m-0 max-w-prose text-[0.875rem] text-text">
+        The Message Crate this app starts keeps its database and attachments in one folder. A copy
+        of that folder is a backup.
+      </p>
+      <button
+        type="button"
+        className="mt-2 rounded border border-border px-3 py-1.5 text-[0.875rem] text-text hover:bg-elevated"
+        onClick={() => {
+          setError(null);
+          openDataFolder().catch((caught: unknown) => {
+            setError(caught instanceof Error ? caught.message : String(caught));
+          });
+        }}
+      >
+        Open data folder
+      </button>
+      {error ? (
+        <p className="m-0 mt-1 text-[0.75rem] text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <Checkbox
+        labelClassName="mt-5 flex items-start text-[0.875rem]"
+        className="mt-[0.15rem]"
+        checked={open}
+        onChange={onOpenChange}
+      >
+        <span>
+          Let other devices on this network connect
+          <span className="mt-1 block max-w-prose text-[0.75rem] text-muted">
+            A phone or another computer can then open this computer's address on port 8080, for as
+            long as this app is open. The connection is plain HTTP, so anyone on the network can
+            read what is sent, passwords included. Changing this restarts Message Crate.
+          </span>
+        </span>
+      </Checkbox>
+      {notOurs ? (
+        <p className="m-0 mt-1 max-w-prose text-[0.75rem] text-muted" role="status">
+          This app did not start the Message Crate that is running on this computer, so the setting
+          does not change it.
+        </p>
+      ) : null}
+      {networkError ? (
+        <p className="m-0 mt-1 text-[0.75rem] text-danger" role="alert">
+          {networkError}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -289,6 +374,8 @@ export function SystemSection() {
           ) : null}
         </div>
       </div>
+
+      <DataFolder />
 
       <div className="mt-8">
         <AppVersion />

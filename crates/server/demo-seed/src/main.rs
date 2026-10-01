@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use clap::Parser;
-use demo_seed::SeedConfig;
+use demo_seed::{DemoSize, SeedConfig};
 
 #[derive(Parser)]
 #[command(name = "demo-seed")]
@@ -12,9 +12,13 @@ use demo_seed::SeedConfig;
     about = "Generate the demo message dataset (iMessage, SMS Backup & Restore, WhatsApp) for Message Crate"
 )]
 struct Cli {
-    /// Path to the `demo_seed.toml` settings file
-    #[arg(long, default_value_t = SeedConfig::default_path().display().to_string())]
-    config: String,
+    /// Which built-in data set to write
+    #[arg(long, value_enum, default_value_t = DemoSize::Medium)]
+    size: DemoSize,
+
+    /// Path to a settings file to use in place of a built-in size
+    #[arg(long, conflicts_with = "size")]
+    config: Option<String>,
 
     /// Output directory for the generated files. Overrides the path in the settings file.
     #[arg(long)]
@@ -29,7 +33,10 @@ struct Cli {
 /// output path and seed from the settings file.
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let mut cfg = SeedConfig::load(Path::new(&cli.config))?;
+    let mut cfg = match &cli.config {
+        Some(path) => SeedConfig::load(Path::new(path))?,
+        None => SeedConfig::for_size(cli.size)?,
+    };
     if let Some(out) = cli.out {
         cfg.out = out;
     }

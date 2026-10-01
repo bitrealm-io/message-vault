@@ -188,54 +188,6 @@ async fn close_test_db(pool: sqlx::AnyPool, conn: sqlx::pool::PoolConnection<sql
     pool.close().await;
 }
 
-/// The committed demo bundle ships a `seed.toml`; it must parse with the
-/// current `DemoOwner` (handle_specs) format or `reset-demo` fails on
-/// release images that skip bundle regeneration.
-#[test]
-fn committed_demo_seed_toml_parses() {
-    let text = include_str!("../../../demo-seed/config/seed.toml");
-    let seed: DemoSeed = toml::from_str(text).expect("committed demo seed.toml must parse");
-    assert_eq!(seed.owner.display_name, "Demo User");
-    assert_eq!(seed.owner.handle_specs.len(), 1);
-    let (raw, handle_type) = &seed.owner.handle_specs[0];
-    assert_eq!(raw, "+14155559000");
-    assert_eq!(*handle_type, HandleType::Phone);
-    assert_eq!(seed.owner.emails, vec!["demo.ingest@example.com"]);
-    assert_eq!(seed.account.username, "demo");
-}
-
-#[test]
-fn a_complete_bundle_is_used_as_it_is_when_there_is_no_seed_file() {
-    let temp = tempfile::tempdir().expect("create test directory");
-    let bundle = temp.path().join("bundle");
-    write_tiny_reset_bundle(&bundle);
-    let seed_toml = temp.path().join("demo_seed.toml");
-
-    let stats = maybe_regenerate_bundle(&bundle, &seed_toml).expect("the image bundle is complete");
-
-    assert_eq!(stats, demo_seed::GenStats::default());
-    assert!(
-        bundle.join("staging/imessage/a.jsonl").is_file(),
-        "the bundle's own conversations stay in place"
-    );
-}
-
-#[test]
-fn an_incomplete_bundle_without_a_seed_file_cannot_be_reset() {
-    let temp = tempfile::tempdir().expect("create test directory");
-    let bundle = temp.path().join("bundle");
-    fs::create_dir_all(bundle.join("staging").join(IMESSAGE_SOURCE)).expect("imessage dir");
-    let seed_toml = temp.path().join("demo_seed.toml");
-
-    let error = maybe_regenerate_bundle(&bundle, &seed_toml)
-        .expect_err("no seed file and no complete bundle");
-
-    assert!(
-        error.to_string().contains("is not a complete demo bundle"),
-        "{error:#}"
-    );
-}
-
 #[tokio::test]
 async fn the_demo_account_may_export_and_not_import_or_delete() {
     let temp = tempfile::tempdir().expect("create test directory");
@@ -1594,5 +1546,120 @@ fn the_conversion_warning_names_the_failed_attachments_and_is_silent_at_zero() {
         Some(
             "2 demo attachment(s) failed conversion; originals stay in place and reset-demo continues"
         )
+    );
+}
+
+/// The number of accounts and of the demo account's conversations in the
+/// database `cfg` names.
+async fn accounts_and_demo_conversations(cfg: &Config) -> (i64, i64) {
+    let pool = cfg.db_target().open().await.expect("open the database");
+    let mut conn = pool.acquire().await.expect("acquire");
+    let accounts = count(&mut conn, "SELECT COUNT(*) FROM accounts").await;
+    let conversations: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM conversations WHERE account_id = $1")
+            .bind(DEMO_ACCOUNT_ID)
+            .fetch_one(&mut *conn)
+            .await
+            .expect("count demo conversations");
+    conn.close().await.expect("close");
+    pool.close().await;
+    (accounts, conversations)
+}
+
+/// What `serve` does on a first start: a database that does not exist is
+/// new, seeding it leaves the Demo Account alone in an unclaimed Message
+/// Crate, and the database is then no longer new, so no later start seeds
+/// it again (#971).
+#[tokio::test]
+async fn a_new_database_is_seeded_once_with_the_demo_account_and_no_owner() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let mut cfg = crate::open_db::fresh_config(temp.path()).await;
+    cfg.paths.db = temp.path().join("new/folder/messagecrate.db");
+    assert!(
+        database_is_new(&cfg)
+            .await
+            .expect("read a missing database")
+    );
+
+    let messages = seed_new_database_with(&cfg, |bundle| {
+        write_tiny_reset_bundle(bundle);
+        Ok(())
+    })
+    .await
+    .expect("seeding from a complete bundle succeeds");
+
+    assert!(messages >= 1, "the bundle's messages were imported");
+    assert!(
+        !database_is_new(&cfg)
+            .await
+            .expect("read the seeded database")
+    );
+    let (accounts, conversations) = accounts_and_demo_conversations(&cfg).await;
+    assert_eq!(accounts, 1, "the Demo Account and no owner");
+    assert!(conversations >= 1);
+    let pool = cfg.db_target().open().await.expect("open the database");
+    let mut conn = pool.acquire().await.expect("acquire");
+    assert!(
+        !account_profile::is_claimed(&mut conn)
+            .await
+            .expect("read claim state"),
+        "a first start leaves the Message Crate unclaimed"
+    );
+    assert_eq!(
+        account_profile::username_for_account(&mut conn, DEMO_ACCOUNT_ID)
+            .await
+            .expect("read the demo username")
+            .as_deref(),
+        Some("demo")
+    );
+    conn.close().await.expect("close");
+    pool.close().await;
+}
+
+/// A database made empty on purpose (`create-database`, or any earlier
+/// start) has its schema, so it is not new and `serve` adds nothing to it.
+#[tokio::test]
+async fn a_database_created_empty_is_not_new() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let cfg = crate::open_db::fresh_config(temp.path()).await;
+    assert!(database_is_new(&cfg).await.expect("read before creating"));
+
+    OpenDb::open(cfg.clone())
+        .await
+        .expect("create the empty database")
+        .close()
+        .await;
+
+    assert!(!database_is_new(&cfg).await.expect("read after creating"));
+}
+
+/// Seeding that fails partway leaves no half-built Demo Account: the first
+/// source is imported, the second cannot be read, and the Message Crate
+/// starts empty and unclaimed.
+#[tokio::test]
+async fn a_first_start_seed_that_fails_partway_leaves_no_demo_account() {
+    let temp = tempfile::tempdir().expect("create test directory");
+    let cfg = crate::open_db::fresh_config(temp.path()).await;
+
+    let seeded = seed_new_database_with(&cfg, |bundle| {
+        write_tiny_reset_bundle(bundle);
+        fs::write(
+            bundle.join("staging").join(SBR_SOURCE).join("broken.jsonl"),
+            "this is not a conversation\n",
+        )
+        .expect("write a file the import cannot read");
+        Ok(())
+    })
+    .await;
+
+    assert_eq!(seeded, None);
+    let (accounts, conversations) = accounts_and_demo_conversations(&cfg).await;
+    assert_eq!((accounts, conversations), (0, 0));
+    assert!(
+        !cfg.paths
+            .data_dir
+            .join(DEMO_ACCOUNT_ID.to_string())
+            .exists(),
+        "the demo account's files are removed with it"
     );
 }

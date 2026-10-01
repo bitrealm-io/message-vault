@@ -1,9 +1,6 @@
-//! Loads public-domain sentences used as message bodies.
+//! Holds public-domain sentences used as message bodies.
 
-use std::fs;
-use std::path::Path;
-
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use rand::Rng;
 use rand::RngExt;
 use rand::seq::IndexedRandom;
@@ -14,30 +11,26 @@ pub struct Corpus {
 }
 
 impl Corpus {
-    /// Load Pride and Prejudice from `data/corpus/` in this crate.
+    /// Pride and Prejudice from `data/corpus/` in this crate, compiled into
+    /// the program so generating needs no files beside it.
     ///
     /// # Errors
     ///
-    /// Returns an error if the file cannot be read or it yields fewer than 100 sentences.
+    /// Returns an error if the text yields fewer than 100 sentences.
     pub fn load_pride_and_prejudice() -> Result<Self> {
-        let path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("data/corpus/pride-and-prejudice.txt");
-        Self::load(&path)
+        Self::from_text(
+            "pride-and-prejudice.txt",
+            include_str!("../data/corpus/pride-and-prejudice.txt"),
+        )
     }
 
-    /// Split a book text into sentences long enough to use as message bodies.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be read or it yields fewer than 100 sentences.
-    pub fn load(path: &Path) -> Result<Self> {
-        let text =
-            fs::read_to_string(path).with_context(|| format!("read corpus {}", path.display()))?;
-        let sentences = extract_sentences(&text);
+    /// Split a book text into sentences long enough to use as message
+    /// bodies; `name` says where the text came from, for the error.
+    fn from_text(name: &str, text: &str) -> Result<Self> {
+        let sentences = extract_sentences(text);
         if sentences.len() < 100 {
             bail!(
-                "corpus {} yielded only {} sentences (need ≥100)",
-                path.display(),
+                "corpus {name} yielded only {} sentences (need ≥100)",
                 sentences.len()
             );
         }

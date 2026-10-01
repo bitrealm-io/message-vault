@@ -46,10 +46,9 @@ COPY vendor ./vendor
 
 ARG BUILD_METADATA=unknown
 ENV MESSAGE_CRATE_BUILD_METADATA=$BUILD_METADATA
+# The server compiles in crates/server/demo-seed/data/ (corpus + names) and
+# generates Demo Data from it on a first start. Do not ignore that path.
 RUN cargo build --release -p message-crate-server
-# Conversation JSONL is not in git. Write it here so the runtime image can seed.
-# Needs crates/server/demo-seed/data/ (corpus + names). Do not ignore that path.
-RUN cargo run --release -p demo-seed
 
 # -----------------------------------------------------------------------------
 # Stage 3: slim runtime
@@ -67,11 +66,6 @@ WORKDIR /app
 
 # Rust CLI / serve binary
 COPY --from=rust-builder /src/target/release/message-crate-server /usr/local/bin/message-crate-server
-
-# Demo bundle (seeded on first start when DEMO_DATA is truthy)
-COPY --from=rust-builder /src/crates/server/demo-seed/staging ./crates/server/demo-seed/staging
-COPY --from=rust-builder /src/crates/server/demo-seed/config ./crates/server/demo-seed/config
-COPY --from=rust-builder /src/crates/server/demo-seed/README.md ./crates/server/demo-seed/README.md
 
 # Container config template
 COPY config/config.docker.toml ./config/config.docker.toml

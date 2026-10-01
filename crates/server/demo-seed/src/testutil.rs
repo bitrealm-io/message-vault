@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use crate::SeedConfig;
 
-/// `demo_seed.toml` shrunk to a dozen contacts. Every section keeps the shape
+/// `demo_seed_large.toml` shrunk to a dozen contacts. Every section keeps the shape
 /// of the checked-in file, so every writer still runs: iMessage-only,
 /// Android-only, overlap, WhatsApp, groups, unassigned handles, orphans, and
 /// both empty threads. Conversations stay long enough (about a hundred

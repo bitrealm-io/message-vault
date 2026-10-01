@@ -23,7 +23,7 @@ use anyhow::{Context, Result};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
-pub use config::SeedConfig;
+pub use config::{DemoSize, SeedConfig};
 pub use conversations::GenStats;
 
 const IMESSAGE_SOURCE: &str = "imessage";
@@ -502,17 +502,29 @@ fn remove_path_if_exists(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Generate the built-in data set of `size` into `out`.
+///
+/// # Errors
+///
+/// Returns an error if `out` is not valid UTF-8 or generation fails.
+pub fn generate_size_to(size: DemoSize, out: &Path) -> Result<GenStats> {
+    generate_with_out(SeedConfig::for_size(size)?, out)
+}
+
 /// Load the settings at `seed_file`, then generate into `out`.
 ///
-/// The seed and every other setting come from the file. `reset-demo` calls
-/// this with the checked-in `demo_seed.toml`.
+/// The seed and every other setting come from the file.
 ///
 /// # Errors
 ///
 /// Returns an error if the settings file cannot be read, `out` is not valid
 /// UTF-8, or generation fails.
 pub fn generate_to(seed_file: &Path, out: &Path) -> Result<GenStats> {
-    let mut cfg = SeedConfig::load(seed_file)?;
+    generate_with_out(SeedConfig::load(seed_file)?, out)
+}
+
+/// Point `cfg` at `out` and generate.
+fn generate_with_out(mut cfg: SeedConfig, out: &Path) -> Result<GenStats> {
     cfg.out = out
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("demo out path is not UTF-8: {}", out.display()))?
@@ -578,7 +590,7 @@ Or regenerate the bundle only:
 cargo run -p demo-seed
 ```
 
-Config knobs live in `crates/server/demo-seed/demo_seed.toml` (seed, contact count, rate/span
+Config knobs live in `crates/server/demo-seed/demo_seed_medium.toml` and `demo_seed_large.toml` (seed, contact count, rate/span
 distributions, group membership, dual-source split, `whatsapp_contact_fraction`,
 `apple_fallback_transport_fraction`). Message bodies are sampled from Pride and
 Prejudice ({corpus_sentences} sentences) under `crates/server/demo-seed/data/corpus/`. Names come from

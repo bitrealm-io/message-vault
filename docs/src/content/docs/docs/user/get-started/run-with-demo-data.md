@@ -24,7 +24,6 @@ The server is published as a Docker image and in no other form, so Docker is req
 ```bash title="Start a Message Crate with demo data"
 docker run -d --name message-crate-demo \
   -p 127.0.0.1:8080:8080 \
-  -e DEMO_DATA=true \
   -v message-crate-demo-data:/app/data \
   bitrealm/message-crate:latest
 ```
@@ -37,19 +36,19 @@ What each part does:
 |---|---|
 | `--name message-crate-demo` | Names the container, so step 3 can delete it by name. |
 | `-p 127.0.0.1:8080:8080` | Makes the server reachable at port 8080 from this computer only. |
-| `-e DEMO_DATA=true` | Fills a new Message Crate with demo data on its first start. |
 | `-v message-crate-demo-data:/app/data` | Keeps the database in a Docker volume named `message-crate-demo-data`. |
 
 ## Wait for the demo data
 
-The first start writes the demo data before the server answers, which takes about a minute.
+Every new Message Crate starts with demo data.
+The first start writes it before the server answers, which takes a few seconds.
 `docker logs -f message-crate-demo` shows the progress.
-The server is ready when the log prints `Starting message-crate-server`.
+The server is ready when the log prints `listening on`.
 `Ctrl+C` stops following the log and leaves the server running.
 
 ## Check that it worked
 
-[http://localhost:8080](http://localhost:8080) in a browser shows a card titled **Message Crate**, with the word **Connected**, a **Username** field, a **Password** field, and a **Log in** button.
+[http://localhost:8080](http://localhost:8080) in a browser shows a card titled **Message Crate**, with the word **Connected**, a **Create Owner** form, and an **Explore Demo Account** button.
 
 ![The Message Crate login card](../../../../../assets/user-guide/login.png)
 

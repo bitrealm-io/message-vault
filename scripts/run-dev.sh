@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Host server for day-to-day work from a git checkout.
 #
-#   ./scripts/run-dev.sh                 # keep existing data/; empty Message Crate if none
+#   ./scripts/run-dev.sh                 # keep existing data/; Demo Account if none
 #   ./scripts/run-dev.sh --reset         # wipe data/, start empty
 #   ./scripts/run-dev.sh --reset --owner # wipe data/, claim the Message Crate as admin/admin
 #   ./scripts/run-dev.sh --reset-demo    # wipe data/, seed sample inbox
+#   ./scripts/run-dev.sh --reset-demo --large  # the large sample inbox (about 613,000 messages)
 #   ./scripts/run-dev.sh --sqlweb        # SQLite browser on http://127.0.0.1:8081
 #   ./scripts/run-dev.sh --release       # optimized binary (combine with any flag above)
 #
@@ -27,6 +28,7 @@ cd "${REPO_ROOT}"
 CONFIG="config/config.toml"
 CONFIG_EXAMPLE="config/config.toml.example"
 DEMO=0
+SIZE=medium
 RESET=0
 SQLWEB=0
 SQLWEB_PID=""
@@ -35,10 +37,11 @@ OWNER=0
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [--reset | --reset-demo] [--owner] [--sqlweb] [--release]
+Usage: $(basename "$0") [--reset | --reset-demo [--large]] [--owner] [--sqlweb] [--release]
 
   --reset       Wipe data/ and start with an empty Message Crate
-  --reset-demo  Wipe data/ and seed the sample inbox
+  --reset-demo  Wipe data/ and seed the sample inbox (about 54,000 messages)
+  --large       With --reset-demo, seed about 613,000 messages instead
   --owner       Claim the Message Crate as admin/admin. Combine with --reset
                 for an empty claimed Message Crate; without it, --reset
                 or --reset-demo leaves it unclaimed so the Create Owner
@@ -49,7 +52,8 @@ Usage: $(basename "$0") [--reset | --reset-demo] [--owner] [--sqlweb] [--release
 
 Examples:
   ./scripts/$(basename "$0")
-      Keep data/ as it is and serve
+      Keep data/ as it is and serve. With no database yet, the server
+      adds the Demo Account as any new Message Crate does.
   ./scripts/$(basename "$0") --reset
       Empty, unclaimed Message Crate: the web UI opens on Create Owner
   ./scripts/$(basename "$0") --reset --owner
@@ -69,6 +73,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --reset) RESET=1 ;;
     --reset-demo) DEMO=1 ;;
+    --large) SIZE=large ;;
     --owner) OWNER=1 ;;
     --release) RELEASE=1 ;;
     --sqlweb) SQLWEB=1 ;;
@@ -87,6 +92,11 @@ done
 
 if [[ "${RESET}" -eq 1 && "${DEMO}" -eq 1 ]]; then
   echo "error: use either --reset or --reset-demo, not both" >&2
+  exit 1
+fi
+
+if [[ "${SIZE}" == "large" && "${DEMO}" -eq 0 ]]; then
+  echo "error: --large goes with --reset-demo" >&2
   exit 1
 fi
 
@@ -176,16 +186,19 @@ fi
 if [[ "${DEMO}" -eq 1 ]]; then
   require_cmd ffmpeg
   require_cmd ffprobe
-  echo "Seeding demo data…"
-  server_cli reset-demo --config "${CONFIG}"
+  echo "Seeding demo data (${SIZE})…"
+  server_cli reset-demo --size "${SIZE}" --config "${CONFIG}"
   write_host_dev_config
   echo "Converting demo media…"
   server_cli process-assets --config "${CONFIG}" \
     || echo "warning: process-assets failed; UI still works"
 elif [[ "${RESET}" -eq 1 ]]; then
+  # The server adds the Demo Account to a database that does not exist yet,
+  # so an empty start means creating the database first.
+  server_cli create-database --config "${CONFIG}"
   echo "Empty data/ (claim the Message Crate in the web UI, or pass --owner)."
 elif [[ ! -f data/messagecrate.db ]]; then
-  echo "Empty data/ (pass --reset-demo to seed a sample inbox, or --owner to claim the Message Crate)."
+  echo "No database yet: the server adds the Demo Account on start (pass --reset for an empty Message Crate)."
 else
   echo "Database present; leaving it in place."
 fi

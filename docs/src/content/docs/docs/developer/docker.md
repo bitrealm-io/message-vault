@@ -25,7 +25,7 @@ Docker Compose reads a YAML file and starts a container from it. This repository
 
 `docker/compose.yml` names an image that already exists: `bitrealm/message-crate:latest`. Compose downloads that image from Docker Hub. It does not compile this local checkout. That file is the sample for [Run a Message Crate with demo data](/docs/user/get-started/run-with-demo-data/#start-the-server). Do not use that file from a local checkout if the goal is to test local code.
 
-`docker/compose.release.yml` builds `docker/Dockerfile` from the files in this local checkout. The result is the same kind of image CI uploads to Docker Hub: a compiled server binary, the website copied into `static/`, ffmpeg, and the sample-inbox files `demo-seed` writes during the build. After a code change, rebuild. The running container does not pick up edits on the local machine on its own.
+`docker/compose.release.yml` builds `docker/Dockerfile` from the files in this local checkout. The result is the same kind of image CI uploads to Docker Hub: a compiled server binary, the website copied into `static/`, and ffmpeg. After a code change, rebuild. The running container does not pick up edits on the local machine on its own.
 
 A local checkout’s `.env.example` sets `COMPOSE_FILE=docker/compose.release.yml`. After copying that file to `.env`, `docker compose up --build` from the repository root uses the build-from-checkout file. Pass `-f` to override.
 
@@ -40,7 +40,6 @@ The container is the server process only. The desktop app stays on the local mac
 | `message-crate-server` | HTTP API under `/v1/*` and the website on port **8080** |
 | SQLite | Database and attachments under `/app/data` |
 | ffmpeg | Converts media so the browser can play it |
-| Sample inbox files | Used on first start when `DEMO_DATA` is true and the data volume is empty |
 
 The website in the image is the production Vite build from `web/`. There is no Vite dev server inside the container.
 
@@ -49,12 +48,10 @@ The website in the image is the production Vite build from `web/`. There is no V
 The file has three stages. Each stage is a temporary image. Only the last stage is what you run.
 
 1. **Website.** Node 22 installs `web/` dependencies and runs `npm run build`. The output is `web/dist`.
-2. **Server binary.** Rust 1.95 compiles `message-crate-server` in release mode. Then it runs `demo-seed`. That program writes conversation JSONL and config under `crates/server/demo-seed/`. Those files are not in git. The image must create them so a new volume can load the sample inbox.
-3. **Runtime.** A slim Node 20 image gets ffmpeg, the server binary, the `demo-seed` output, `config/config.docker.toml`, and the website files copied to `static/`.
+2. **Server binary.** Rust 1.95 compiles `message-crate-server` in release mode. The binary carries what it needs to generate Demo Data: the `demo-seed` crate, its two size settings, the Pride and Prejudice text, and the name lists.
+3. **Runtime.** A slim Node 20 image gets ffmpeg, the server binary, `config/config.docker.toml`, and the website files copied to `static/`.
 
-The build context is the **repository root**. `.dockerignore` decides what Docker sends into that context. It must ignore the live data folder at the repo root (`/data`) so a personal database is not copied into the image. It must not ignore `crates/server/demo-seed/data/`. That folder holds the Pride and Prejudice text and the name lists `demo-seed` reads.
-
-`demo-seed` first writes into a temporary directory, then moves `staging/`, `config/`, and `README.md` into place. Docker overlay layers can put those paths on different mounts. A plain `rename` then fails with `Invalid cross-device link`. The crate copies the files and deletes the source when that happens.
+The build context is the **repository root**. `.dockerignore` decides what Docker sends into that context. It must ignore the live data folder at the repo root (`/data`) so a personal database is not copied into the image. It must not ignore `crates/server/demo-seed/data/`. That folder holds the Pride and Prejudice text and the name lists the server compiles in.
 
 ## Build from this local checkout
 
@@ -74,9 +71,9 @@ This is the usual local path. Compose compiles `docker/Dockerfile` and starts th
 docker compose -f docker/compose.release.yml up --build
 ```
 
-The server is at **http://127.0.0.1:8080**. On an empty data volume, `DEMO_DATA=true` (the default) loads the sample inbox into the Demo Account and leaves Message Crate unclaimed. The first screen offers **Create Owner** and **Explore Demo Account**; the Demo Account has no password.
+The server is at **http://127.0.0.1:8080**. On a data volume with no database, the server adds the Demo Account with the medium data set (about 54,000 messages) before it listens, and leaves Message Crate unclaimed. The first screen offers **Create Owner** and **Explore Demo Account**; the Demo Account has no password. There is no switch for this: a Message Crate started by Docker begins the same as any other.
 
-With `DEMO_DATA=false` nothing is seeded, so the first screen is **Create Owner** alone.
+The container's entrypoint only writes the config and runs `serve`. Arguments after the image name run another server command in its place, with the stack stopped.
 
 ### Build without starting
 
@@ -108,11 +105,22 @@ docker buildx build \
 
 `--load` stores the image on this machine. CI uses push instead.
 
-### Start with no sample inbox
+### Load the large data set
 
-```bash title="Build and start with no sample inbox"
-DEMO_DATA=false docker compose -f docker/compose.release.yml up --build
+```bash title="Rebuild the Demo Account with about 613,000 messages"
+docker compose -f docker/compose.release.yml down
+docker compose -f docker/compose.release.yml run --rm server reset-demo --size large
+docker compose -f docker/compose.release.yml up
 ```
+
+### Start with no Demo Account
+
+```bash title="Create the database empty, then start"
+docker compose -f docker/compose.release.yml run --rm server create-database
+docker compose -f docker/compose.release.yml up
+```
+
+This works on a new volume only. `create-database` leaves an existing database as it is.
 
 ### Rebuild without cache
 

@@ -174,15 +174,16 @@ Work from the repository root. The server process must be running before the web
 **Terminal 1 — server API** (leave this running)
 
 ```bash
-./scripts/run-dev.sh                 # keep data/ if present; empty database if none
-./scripts/run-dev.sh --reset-demo    # wipe data/, seed the sample inbox (needs ffmpeg)
+./scripts/run-dev.sh                 # keep data/ if present; the server adds the Demo Account if none
+./scripts/run-dev.sh --reset-demo    # wipe data/, seed the sample inbox, about 54,000 messages (needs ffmpeg)
+./scripts/run-dev.sh --reset-demo --large  # the same with about 613,000 messages
 ./scripts/run-dev.sh --reset         # wipe data/, start empty and unclaimed (UI opens on Create Owner)
 ./scripts/run-dev.sh --reset --owner # wipe data/, claim it as admin / admin
 ./scripts/run-dev.sh --sqlweb        # also SQLite browser at http://127.0.0.1:8081
 ./scripts/run-dev.sh --release       # optimized build; combines with any flag above
 ```
 
-`--reset` and `--reset-demo` cannot be combined. Neither claims the Message Crate; add `--owner` to either for that. `--help` on either dev script lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
+`serve` adds the Demo Account to a database that does not exist yet, so a plain first start has it too; `--reset` creates the database empty first (`create-database`). `--reset` and `--reset-demo` cannot be combined. Neither claims the Message Crate; add `--owner` to either for that. `--help` on either dev script lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
 
 API: **http://127.0.0.1:8080**. After `--reset-demo`, press **Explore Demo Account** on the login card; the Demo Account has no password. After `--owner`, log in as `admin` / `admin`. Otherwise create the owner in the UI.
 
@@ -192,8 +193,8 @@ Restart terminal 1 after edits under `crates/server/server/` (debug `cargo run`;
 compose Postgres, runs this checkout's server with `--db-url
 postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate`, and stops the container
 on exit. `--reset` / `--reset-demo` wipe the `messagecrate_pg_data` volume and
-host `data/`. After `--reset-demo`, log in as `demo` with an empty
-password. Pass `--release` to seed and serve with the optimized binary
+host `data/`. After `--reset-demo`, press **Explore Demo Account** on the login
+card. Pass `--release` to seed and serve with the optimized binary
 (first compile can take several minutes). Do not run this and
 `./scripts/run-dev.sh` at once (both serve on 127.0.0.1:8080).
 

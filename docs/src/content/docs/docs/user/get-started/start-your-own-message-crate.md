@@ -1,9 +1,9 @@
 ---
 title: Start your own Message Crate
-description: Start an empty Message Crate, create its Owner, add an account to hold the messages, and log in as that account.
+description: Start a new Message Crate, create its Owner, add an account to hold the messages, and log in as that account.
 ---
 
-This step starts an empty Message Crate and ends logged in as the account that will hold the messages.
+This step starts a new Message Crate and ends logged in as the account that will hold the messages.
 
 It creates two logins, and both are needed:
 
@@ -13,26 +13,24 @@ It creates two logins, and both are needed:
 The split means the person who runs the server can't read another person's messages through it.
 The person who runs a Message Crate for themselves still needs both.
 
-## Start the server without demo data
+## Start the server
 
 The demo Message Crate from step 3 must be deleted first, because it holds port 8080.
 
-```bash title="Start an empty Message Crate"
+```bash title="Start a new Message Crate"
 docker run -d --name message-crate \
   --restart unless-stopped \
   -p 127.0.0.1:8080:8080 \
-  -e DEMO_DATA=false \
   -v message-crate-data:/app/data \
   bitrealm/message-crate:latest
 ```
 
-Three parts differ from the demo command:
+Two parts differ from the demo command:
 
 | Part | Meaning |
 |---|---|
 | `--name message-crate` and `message-crate-data` | New names, so nothing from the demo is reused. |
 | `--restart unless-stopped` | Starts the server again after the computer restarts. |
-| `-e DEMO_DATA=false` | Leaves the Message Crate empty. |
 
 Every message this Message Crate holds lives in the `message-crate-data` volume.
 `docker rm message-crate` removes only the server and keeps the messages.
@@ -40,7 +38,7 @@ Every message this Message Crate holds lives in the `message-crate-data` volume.
 
 ## Create the Owner
 
-1. Open [http://localhost:8080](http://localhost:8080). An empty Message Crate shows **Create Owner** and nothing else.
+1. Open [http://localhost:8080](http://localhost:8080). A new Message Crate shows **Create Owner** and, below it, **Explore Demo Account**: this Message Crate also starts with demo data, in an account of its own that the Owner can delete.
 2. Enter a **Username** and a **Password**, and repeat the password in **Confirm Password**.
 3. Select **Create Owner**.
 

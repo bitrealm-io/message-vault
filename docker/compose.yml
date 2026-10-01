@@ -2,7 +2,6 @@
 # Docs: https://messagecrate.app/docs/user/get-started/run-with-demo-data/
 #
 # Pin a release: change :latest to a release number such as :0.10.0 (no "v").
-# Empty Message Crate: DEMO_DATA=false docker compose up -d
 # JSONL drop: copy files into ./staging
 
 name: message-crate
@@ -13,8 +12,6 @@ services:
     user: "${UID}:${GID}"
     ports:
       - "8080:8080"
-    environment:
-      DEMO_DATA: ${DEMO_DATA:-true}
     volumes:
       - message-crate-data:/app/data
       - ./staging:/app/staging

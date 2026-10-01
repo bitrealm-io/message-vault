@@ -1,14 +1,49 @@
-//! Loads generator settings from `demo_seed.toml`.
+//! Loads generator settings: the two built-in sizes, or a settings file.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, de};
 
-/// Settings loaded from `demo_seed.toml`: how many contacts, how conversations
-/// are split across backups, and how often messages get photos or replies.
+/// How much Demo Data to generate. The settings for each size are compiled
+/// into the program, so the server can seed with no files beside it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, clap::ValueEnum)]
+pub enum DemoSize {
+    /// About 54,000 messages. A new Message Crate starts with this.
+    #[default]
+    Medium,
+    /// About 613,000 messages.
+    Large,
+}
+
+impl DemoSize {
+    /// The size's name as typed on a command line: `medium` or `large`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Medium => "medium",
+            Self::Large => "large",
+        }
+    }
+
+    /// The settings file for this size, as compiled in.
+    fn settings(self) -> &'static str {
+        match self {
+            Self::Medium => include_str!("../demo_seed_medium.toml"),
+            Self::Large => include_str!("../demo_seed_large.toml"),
+        }
+    }
+}
+
+impl std::fmt::Display for DemoSize {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Generator settings: how many contacts, how conversations are split across
+/// backups, and how often messages get photos or replies.
 #[derive(Debug, Clone, Deserialize)]
 pub struct SeedConfig {
     /// Random seed. The same seed and settings produce the same backups.
@@ -160,6 +195,20 @@ impl SeedConfig {
         Ok(cfg)
     }
 
+    /// The built-in settings for `size`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the compiled-in settings do not parse or fail
+    /// [`Self::validate`]; a test loads both sizes, so neither happens in a
+    /// released program.
+    pub fn for_size(size: DemoSize) -> Result<Self> {
+        let cfg: Self = toml::from_str(size.settings())
+            .with_context(|| format!("parse the built-in {size} demo settings"))?;
+        cfg.validate()?;
+        Ok(cfg)
+    }
+
     /// Check that the large-group size range sits inside the overall group size range.
     ///
     /// # Errors
@@ -213,11 +262,6 @@ impl SeedConfig {
         }
         Ok(())
     }
-
-    /// Path to `demo_seed.toml` next to this crate's `Cargo.toml`.
-    pub fn default_path() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("demo_seed.toml")
-    }
 }
 
 #[cfg(test)]
@@ -225,15 +269,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn both_built_in_sizes_load_and_medium_is_the_smaller() {
+        let medium = SeedConfig::for_size(DemoSize::Medium).expect("medium settings");
+        let large = SeedConfig::for_size(DemoSize::Large).expect("large settings");
+        assert!(medium.contacts.count < large.contacts.count);
+        assert_eq!(DemoSize::default(), DemoSize::Medium);
+    }
+
+    #[test]
     fn rejects_large_band_outside_participants_max() {
-        let mut cfg = SeedConfig::load(&SeedConfig::default_path()).expect("load");
+        let mut cfg = SeedConfig::for_size(DemoSize::Large).expect("load");
         cfg.groups.large_participants_max = cfg.groups.participants_max + 1;
         assert!(cfg.validate().is_err());
     }
 
     #[test]
     fn rejects_inverted_large_band() {
-        let mut cfg = SeedConfig::load(&SeedConfig::default_path()).expect("load");
+        let mut cfg = SeedConfig::for_size(DemoSize::Large).expect("load");
         cfg.groups.large_participants_min = 15;
         cfg.groups.large_participants_max = 10;
         assert!(cfg.validate().is_err());
@@ -241,14 +293,14 @@ mod tests {
 
     #[test]
     fn rejects_labels_names_without_four_entries() {
-        let mut cfg = SeedConfig::load(&SeedConfig::default_path()).expect("load");
+        let mut cfg = SeedConfig::for_size(DemoSize::Large).expect("load");
         cfg.labels.names = vec!["Family".into(), "Work".into()];
         assert!(cfg.validate().is_err());
     }
 
     #[test]
     fn rejects_name_shape_shares_above_one() {
-        let mut cfg = SeedConfig::load(&SeedConfig::default_path()).expect("load");
+        let mut cfg = SeedConfig::for_size(DemoSize::Large).expect("load");
         cfg.contacts.first_last = 1.0;
         assert!(cfg.validate().is_err());
     }

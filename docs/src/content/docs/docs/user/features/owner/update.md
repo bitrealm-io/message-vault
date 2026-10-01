@@ -43,15 +43,13 @@ The same command as the first time starts the new server on the same volume.
 docker run -d --name message-crate \
   --restart unless-stopped \
   -p 127.0.0.1:8080:8080 \
-  -e DEMO_DATA=false \
   -v message-crate-data:/app/data \
   bitrealm/message-crate:latest
 ```
 
 A server that was started with a different `-p` value, as in [Run on another machine](/docs/user/features/owner/run-on-another-machine/), is started again with that value.
 
-`-e DEMO_DATA=false` changes nothing on a volume that already holds a database.
-The server only reads it when the volume is empty.
+The server adds demo data only to a volume with no database, so starting on this volume changes nothing it holds.
 
 ### Check that it worked
 

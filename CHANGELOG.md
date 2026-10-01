@@ -17,11 +17,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 Bullets under the version still in development carry the date they landed;
 released versions carry their date on the heading.
 
-## [0.10.0] — in development
+## [0.10.0] - 2026-10-01
 
 ### Features
 
-- 2026-09-24 **A WhatsApp import knows which number is yours.** Every
+- **A WhatsApp import knows which number is yours.** Every
   imported WhatsApp message now records the phone number your WhatsApp
   account is registered to, so its conversations count toward that identity
   in Settings. An iPhone backup carries the number, and Import reads it from
@@ -30,7 +30,7 @@ released versions carry their date on the heading.
   iPhone the same field sits under Processing Options as a fallback for a
   backup without the number. The number is recorded on the messages and is
   not added to your profile.
-- 2026-09-24 **Search contacts by what they sent you.** On Contacts, every
+- **Search contacts by what they sent you.** On Contacts, every
   word that counts or dates messages now counts only the messages the
   contact sent you, in a direct or a group conversation. `messages:0` is
   everyone who never messaged you, which is what the Advanced Search form's
@@ -43,7 +43,7 @@ released versions carry their date on the heading.
   still mean the conversation's messages. The contact drawer's message
   count follows the same rule. The Advanced Search contacts form's date
   fields are First message and Last message, and Trash's form has them too.
-- 2026-09-22 **One identity table, on the contact drawer and on an account's
+- **One identity table, on the contact drawer and on an account's
   Profile.** An account's identities now show what a contact's do: the
   service, the address, when it was first and last seen, and how many
   conversations, direct messages and group messages it takes part in. The
@@ -52,7 +52,7 @@ released versions carry their date on the heading.
   a small dialog instead of a permanent row under the table, and the dialog
   offers Email everywhere, so a contact can be given an email address by
   hand.
-- 2026-09-22 **The Dashboard shows where the vault's disk space goes.**
+- **The Dashboard shows where the vault's disk space goes.**
   Owner Home's Dashboard is now three sections. Vault contents is the card it
   had. Database shows the size of the database on disk, how much of it the
   messages take and how much the full-text search index adds, all measured
@@ -64,19 +64,19 @@ released versions carry their date on the heading.
 
 ### Design
 
-- 2026-09-30 **The project moved.** The repository is now
+- **The project moved.** The repository is now
   `messagecrate/message-crate`, the documentation is at
   <https://messagecrate.app/docs/>, the hosted product answers at
   <https://my.messagecrate.app>, and the Docker image is
   `bitrealm/message-crate`. Every error response's `type` URL now points at
   the new documentation host.
-- 2026-09-30 **Message Vault is now Message Crate.** Every screen, every page
+- **Message Vault is now Message Crate.** Every screen, every page
   of the documentation, every error message and the HTTP API reference use
   the new name, and the word "vault" is gone from all of them. One
   installation is "a Message Crate", the account that runs it is the
   "Owner", and the owner's installation-wide settings are "Server Settings".
   The desktop app's window and installers carry the new name.
-- 2026-09-30 **Everything that was named after the old product has a new
+- **Everything that was named after the old product has a new
   name, and nothing old still works.** The owner's routes are under
   `/v1/server`. Session and API tokens start `mc-user-` and `mc-api-`, so
   every existing token stops working and everyone logs in again. The
@@ -86,19 +86,19 @@ released versions carry their date on the heading.
   variables are `MC_DB` and `MC_DATA_DIR`, the compose service is `server`,
   and the desktop app installs as a new application beside any older copy.
 
-- 2026-09-22 **An account identity means ownership.** The Profile tab now
+- **An account identity means ownership.** The Profile tab now
   says what the identities are for: your phone numbers and emails, which
   Import uses to determine which messages belong to you. The glossary and
   the architecture notes record the same distinction: a contact's identity
   means the person took part, an account's means the messages are theirs.
-- 2026-09-22 **Profile Setup shows the identities already on your account
+- **Profile Setup shows the identities already on your account
   in their own fields.** Phone numbers and emails the vault owner added
   now fill the rows, where you can change or remove them before going on,
   instead of sitting in a line of text above them.
-- 2026-09-22 **Shorter wording on two screens.** Create Vault Owner now
+- **Shorter wording on two screens.** Create Vault Owner now
   opens with "A vault owner is required to create and manage users.", and
   the Display Name button in Settings reads Save without changing to Saved.
-- 2026-09-23 **A contact's identities read the same as an account's.** The
+- **A contact's identities read the same as an account's.** The
   contact drawer now shows each identity in the form the vault stores it,
   a phone number in international form, and names an email address as
   Email, just as the Profile tab does. The vault counts both tables the
@@ -107,7 +107,7 @@ released versions carry their date on the heading.
 
 ### Fixes
 
-- 2026-09-24 **A contact's identities and selected contacts count what the
+- **A contact's identities and selected contacts count what the
   contact sent.** The identity table on the contact drawer, and the summary
   shown when you select contacts, counted every message in the contact's
   conversations, your own replies and everyone else in a group chat
@@ -118,7 +118,7 @@ released versions carry their date on the heading.
   conversation in the Trash is left out. The conversation count still counts
   every conversation the contact is in. Your own identities on Profile still
   count every message sent from or received at them.
-- 2026-09-24 **GO SMS Pro picture messages import whole, and the ones you
+- **GO SMS Pro picture messages import whole, and the ones you
   sent import at all.** An import read only the picture messages you received
   and, for most of them, mistook bytes inside the picture for phone numbers,
   so a photo from one friend could land in a group chat with hundreds of made-up
@@ -126,20 +126,20 @@ released versions carry their date on the heading.
   on it, the ones you sent are included, and a voicemail notice from Google
   Voice stays in the Google Voice conversation instead of being moved under
   the caller.
-- 2026-09-24 **iMazing message times are read in your account's time zone.**
+- **iMazing message times are read in your account's time zone.**
   An iMazing export writes each message time without a zone, and the desktop
   app used to read them in whatever zone the computer running the import was
   set to, so the same folder gave different times on different machines. The
   import now reads them in the time zone on your profile. If the phone lived
   in another zone at the time, Processing Options on the Import screen has a
   Time zone of the messages picker for the iMazing source.
-- 2026-09-24 **An iMessage you sent is always yours, however the phone
+- **An iMessage you sent is always yours, however the phone
   recorded your number.** Some iPhone databases store the sending number on
   an outgoing message as `tel:+1…`, and the import kept that prefix, so those
   messages carried a sender that did not match the number on your profile.
   The prefix is now removed the same way for every message and for the list
   of addresses the backup sent from.
-- 2026-09-24 **The Trash stays out of a search everywhere the search looks.**
+- **The Trash stays out of a search everywhere the search looks.**
   A contact whose only group chat was in the Trash still matched `kind:group`,
   a conversation whose only Family member was in the Trash still matched
   `group:Family`, and `conversations:` counted trashed conversations. A
@@ -148,21 +148,21 @@ released versions carry their date on the heading.
   screen already did. The contact list's Last heard from date and its
   ordering leave trashed conversations out too, so they agree with
   `last-message:`.
-- 2026-09-23 **Excluding something from a search no longer hides the rows
+- **Excluding something from a search no longer hides the rows
   that have nothing to compare.** A search with `-` in front of a word left
   out every row with no value for that word, so those rows appeared under
   neither the word nor its negation. `-import:last` found no messages at all
   before the first import, and a negated date word on Contacts left out
   every contact with no messages. A search and its negation now always
   divide the list between them.
-- 2026-09-23 **A group text from an SMS Backup & Restore backup is no longer
+- **A group text from an SMS Backup & Restore backup is no longer
   credited to the wrong person when the backup names no sender.** A group
   MMS without a sender address was shown as sent by whichever member the
   backup happened to list first. Such a message now shows no sender, as a
   message with no recorded sender does from any other source. A message that
   does name its sender was already credited correctly, whichever position the
   sender holds in the group.
-- 2026-09-23 **An iMazing message sent in the hour the clocks spring forward
+- **An iMazing message sent in the hour the clocks spring forward
   is kept.** iMazing writes each message's date as a wall-clock time with no
   zone. A time that never showed on the clock, such as 02:30 on the March
   morning when 02:00 became 03:00, was dropped as an invalid date; it is
@@ -172,13 +172,13 @@ released versions carry their date on the heading.
   zone an iMazing export is read in can now be given by name, such as
   `America/New_York`, as well as by offset.
 
-- 2026-09-23 **Searching for a word with punctuation in it works on every
+- **Searching for a word with punctuation in it works on every
   vault.** A search such as `a&b`, `o'bri*`, or text pasted with a hidden
   NUL character failed with an error, or on a Postgres vault found messages
   that had the words in any order. Punctuation inside a word now always means
   the words next to each other in that order, and a NUL is read as a space.
 
-- 2026-09-22 **Changing a password checks things in a sensible order and
+- **Changing a password checks things in a sensible order and
   says so in full sentences.** The vault now checks the current password
   first, then that the new password was typed the same way twice, then that
   it differs from the current one, and tells you only the first thing that
@@ -186,7 +186,7 @@ released versions carry their date on the heading.
   incorrect.") and the Change password button no longer sits tight against
   the last field.
 
-- 2026-09-22 **International phone numbers keep their country.** A number
+- **International phone numbers keep their country.** A number
   written with a country code, such as `+65 9123 4567` in an address book or
   `+44 7700 900123` as your own number, is now matched as that number. Before,
   some were read as a US number with the same digits and named the wrong

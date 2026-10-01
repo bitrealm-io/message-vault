@@ -199,7 +199,7 @@ one exists and it is whoever claimed the Message Crate.
 **Owner Home**:
 The screen the owner lands on at login and works from, the way any
 other account lands in Messages. It has the frame every account sees: the
-product name, a search bar and the account button across the top, over a
+product name, a search bar, the username and the account button across the top, over a
 side panel and a content pane. The side panel lists Dashboard, Server Settings,
 User Accounts, Activity and Logs; Dashboard shows what the whole Message Crate
 holds, and Activity and Logs are named and hold nothing yet. The search bar narrows User Accounts by username or

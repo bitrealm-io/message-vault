@@ -1,15 +1,13 @@
-import { lazy, type ReactNode, Suspense } from "react";
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
 import { AuthGuard } from "./components/AuthGuard";
+import ImportExportRoute from "./components/ImportExportRoute";
 import MessageRoute from "./components/MessageRoute";
 import { useMouseHistoryNavigation } from "./hooks/useMouseHistoryNavigation";
 import { AuthProvider, useAuth } from "./lib/auth";
-import { canUseImportExportWithProfile } from "./lib/desktopFeatures";
 import { ThemeProvider } from "./lib/ThemeProvider";
 import { TimeZoneProvider } from "./lib/TimeZoneProvider";
-import { isTauri } from "./lib/tauri-check";
-import { useAccountProfile } from "./lib/useAccountProfile";
 import { useIsOwner } from "./lib/useIsOwner";
 import { useNeedsProfileSetup } from "./lib/useNeedsProfileSetup";
 import LoginScreen from "./screens/LoginScreen";
@@ -27,23 +25,6 @@ const ExportScreen = lazy(() => import("./screens/ExportScreen"));
 /** Settings and trash are their own routes and are not on the first paint path. */
 const SettingsScreen = lazy(() => import("./screens/SettingsScreen"));
 const TrashScreen = lazy(() => import("./screens/TrashScreen"));
-
-/** Import and export stay on the desktop app. */
-function ImportExportRoute({ children }: { children: ReactNode }) {
-  const { profile, loading } = useAccountProfile();
-  if (!isTauri()) {
-    return <Navigate to="/" replace />;
-  }
-  if (loading) {
-    return null;
-  }
-  if (profile == null || !canUseImportExportWithProfile(true, profile)) {
-    return <Navigate to="/" replace />;
-  }
-  // The chunk only starts loading once the route is allowed, so the redirect
-  // paths above never pay for it.
-  return <Suspense fallback={null}>{children}</Suspense>;
-}
 
 function AppRoutes() {
   const { isAuthenticated } = useAuth();
@@ -103,7 +84,7 @@ function AppRoutes() {
           <Route
             path="import"
             element={
-              <ImportExportRoute>
+              <ImportExportRoute feature="import">
                 <ImportScreen />
               </ImportExportRoute>
             }
@@ -111,7 +92,7 @@ function AppRoutes() {
           <Route
             path="export"
             element={
-              <ImportExportRoute>
+              <ImportExportRoute feature="export">
                 <ExportScreen />
               </ImportExportRoute>
             }

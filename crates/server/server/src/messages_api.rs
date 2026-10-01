@@ -13,8 +13,6 @@ use axum::extract::State;
 use crate::db::conversation_messages::{
     DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, count_matching_messages, load_messages,
 };
-use crate::db::dialect::engine_of;
-use crate::db::engine::DbEngine;
 use crate::db::sql::SqlParam;
 use crate::paging::{ListRequest, Page, PageQuery};
 use crate::server::{ApiError, AppState, FullAccess};
@@ -26,7 +24,6 @@ use crate::server::{ApiError, AppState, FullAccess};
 /// Returns a bad-request error when the query does not parse or uses a word
 /// the Messages list does not have.
 pub(crate) fn message_filter(
-    engine: DbEngine,
     account_id: i64,
     query: &str,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
@@ -36,7 +33,6 @@ pub(crate) fn message_filter(
         list: crate::search::ListKind::Messages,
         query,
         account_id,
-        engine,
         today,
         zone,
     })?)
@@ -75,7 +71,7 @@ pub(crate) async fn list_messages(
         &DEFAULT_MESSAGE_SORT,
     )
     .await?;
-    let filter = message_filter(engine_of(&conn), auth.account_id, &list.q, list.clock)?;
+    let filter = message_filter(auth.account_id, &list.q, list.clock)?;
     let total = count_matching_messages(&mut conn, &filter).await?;
     let items = load_messages(
         &mut conn,
@@ -120,7 +116,7 @@ pub(crate) async fn get_message(
 ) -> Result<Json<Message>, ApiError> {
     let mut conn = state.db.acquire().await?;
     let clock = crate::db::account_profile::account_clock(&mut conn, auth.account_id).await?;
-    let filter = message_filter(engine_of(&conn), auth.account_id, "", clock)?
+    let filter = message_filter(auth.account_id, "", clock)?
         .and_where("m.id = ?", [SqlParam::Int(message_id)]);
     let mut items = load_messages(
         &mut conn,

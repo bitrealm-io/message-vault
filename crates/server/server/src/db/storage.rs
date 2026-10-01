@@ -7,7 +7,7 @@
 //! queries with and without an account filter, so the total on Owner Home
 //! cannot drift from the numbers on an account's Storage tab.
 //!
-//! The database sizes are measured, on both engines, never estimated. The
+//! The database sizes are measured, never estimated. The
 //! one estimate is each account's share of message storage, which is the
 //! measured messages figure split by the account's share of text.
 
@@ -15,8 +15,6 @@ use anyhow::Result;
 use sqlx::AnyConnection;
 
 use super::account_profile::OWNER_ACCOUNT_ID;
-use super::dialect::engine_of;
-use super::engine::DbEngine;
 
 /// Which rows a count covers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,77 +99,53 @@ pub struct AccountText {
     pub text_bytes: i64,
 }
 
-/// Bytes the database takes, without attachment files on disk. SQLite: the
-/// file's pages; Postgres: the whole database.
+/// Bytes the database takes, without attachment files on disk: the file's
+/// pages.
 pub async fn database_bytes(conn: &mut AnyConnection) -> Result<i64> {
-    let sql = match engine_of(conn) {
-        DbEngine::Sqlite => {
-            "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()"
-        }
-        DbEngine::Postgres => "SELECT pg_database_size(current_database())",
-    };
-    let n: i64 = sqlx::query_scalar(sql).fetch_one(&mut *conn).await?;
+    let n: i64 = sqlx::query_scalar(
+        "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
+    )
+    .fetch_one(&mut *conn)
+    .await?;
     Ok(n)
 }
 
-/// Bytes the full-text search index takes. On SQLite it is the four shadow
-/// tables behind `messages_fts`, measured through `dbstat`, which the bundled
-/// library is compiled with (`SQLITE_ENABLE_DBSTAT_VTAB`). On Postgres it is
-/// the `search_tsv` column on `messages` plus its GIN index.
+/// Bytes the full-text search index takes: the four shadow tables behind
+/// `messages_fts`, measured through `dbstat`, which the bundled library is
+/// compiled with (`SQLITE_ENABLE_DBSTAT_VTAB`).
 pub async fn fts_bytes(conn: &mut AnyConnection) -> Result<i64> {
-    let sql = match engine_of(conn) {
-        DbEngine::Sqlite => {
-            "SELECT COALESCE(SUM(pgsize), 0) FROM dbstat \
-             WHERE name IN ('messages_fts_data', 'messages_fts_idx', \
-                            'messages_fts_docsize', 'messages_fts_config')"
-        }
-        DbEngine::Postgres => {
-            "SELECT COALESCE(SUM(pg_column_size(search_tsv)), 0)::bigint \
-             + pg_relation_size('ix_messages_search_tsv') FROM messages"
-        }
-    };
-    let n: i64 = sqlx::query_scalar(sql).fetch_one(&mut *conn).await?;
+    let n: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(pgsize), 0) FROM dbstat \
+         WHERE name IN ('messages_fts_data', 'messages_fts_idx', \
+                        'messages_fts_docsize', 'messages_fts_config')",
+    )
+    .fetch_one(&mut *conn)
+    .await?;
     Ok(n)
 }
 
 /// Bytes the `messages` table and its indexes take, without the full-text
-/// search index, so the figure means the same thing on both engines. On
-/// SQLite the FTS index is separate tables, so the table's `dbstat` pages are
-/// the answer. On Postgres the FTS vector is a column on the table, so
-/// `fts_bytes`, which the caller has already measured, is subtracted; the
-/// measurement scans every message, so it is not repeated here.
-pub async fn messages_bytes(conn: &mut AnyConnection, fts_bytes: i64) -> Result<i64> {
-    match engine_of(conn) {
-        DbEngine::Sqlite => {
-            let n: i64 = sqlx::query_scalar(
-                "SELECT COALESCE(SUM(pgsize), 0) FROM dbstat \
-                 WHERE name = 'messages' \
-                    OR name IN (SELECT name FROM sqlite_master \
-                                WHERE type = 'index' AND tbl_name = 'messages')",
-            )
-            .fetch_one(&mut *conn)
-            .await?;
-            Ok(n)
-        }
-        DbEngine::Postgres => {
-            let total: i64 = sqlx::query_scalar("SELECT pg_total_relation_size('messages')")
-                .fetch_one(&mut *conn)
-                .await?;
-            Ok((total - fts_bytes).max(0))
-        }
-    }
+/// search index. The FTS index is separate tables, so the table's `dbstat`
+/// pages are the answer.
+pub async fn messages_bytes(conn: &mut AnyConnection) -> Result<i64> {
+    let n: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(pgsize), 0) FROM dbstat \
+         WHERE name = 'messages' \
+            OR name IN (SELECT name FROM sqlite_master \
+                        WHERE type = 'index' AND tbl_name = 'messages')",
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    Ok(n)
 }
 
 /// Every account with its message count and text bytes, the owner first and
 /// then by username: the order the User Accounts table uses. An account with
 /// no messages is listed with zeros. Text is counted in bytes, not
-/// characters: `LENGTH` on either engine counts characters, so SQLite reads
-/// the text as a blob and Postgres uses `octet_length`.
+/// characters: `LENGTH` of text counts characters, so the text is read as a
+/// blob.
 pub async fn text_by_account(conn: &mut AnyConnection) -> Result<Vec<AccountText>> {
-    let bytes_of = match engine_of(conn) {
-        DbEngine::Sqlite => |column: &str| format!("COALESCE(LENGTH(CAST({column} AS BLOB)), 0)"),
-        DbEngine::Postgres => |column: &str| format!("COALESCE(octet_length({column}), 0)"),
-    };
+    let bytes_of = |column: &str| format!("COALESCE(LENGTH(CAST({column} AS BLOB)), 0)");
     let rows: Vec<(i64, String, i64, i64)> = sqlx::query_as(&format!(
         "SELECT a.id, a.username, COUNT(m.id), COALESCE(SUM({} + {}), 0) \
          FROM accounts a LEFT JOIN messages m ON m.account_id = a.id \

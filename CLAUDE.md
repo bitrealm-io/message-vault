@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Message Crate pulls conversations out of chat apps (iMessage, WhatsApp, SMS backups) and makes them searchable on a self-hosted server. Three pieces:
 
-- **Server** (`crates/server/server/`) — Axum HTTP API (`/v1/*`) over SQLite at `data/messagecrate.db` by default; set the `[database] url` config (or `serve --db-url`) to run on Postgres instead. Login is a local account: an Argon2 password hash, and an opaque `mc-user-` session token stored hashed with an expiry (not a JWT); named API tokens with import/export scopes also exist.
+- **Server** (`crates/server/server/`) — Axum HTTP API (`/v1/*`) over SQLite at `data/messagecrate.db` by default (`[paths] db`, or `--db`). Login is a local account: an Argon2 password hash, and an opaque `mc-user-` session token stored hashed with an expiry (not a JWT); named API tokens with import/export scopes also exist.
 - **Desktop app** (`src-tauri/` + `web/`) — Tauri v2 shell around a Vite + React 19 + TypeScript SPA. It reads phone backups, writes JSONL, and imports into a running server. Browse/search work in the browser too; importing needs the desktop app.
 - **Website** — the same `web/` SPA served from the server's `static/`.
 
@@ -37,8 +37,8 @@ vendor backup (chat.db, SMS XML, WhatsApp crypt15, …)
 
 Every command is in AGENTS.md, and nothing is repeated here. Claude Code does not load AGENTS.md on its own, so read the section first:
 
-- **Starting the server, the browser UI, or the desktop app** — "Run the server (development)": dev script flags, the demo login, the Postgres variant, and what must not run at the same time.
-- **Checking work before a push** — "Build, format, and test". `./scripts/check-pr.sh` is the fast pre-flight and `./scripts/check-all.sh` is everything CI runs; the section has the single-crate, Postgres, coverage, `web/` and `docs/` commands.
+- **Starting the server, the browser UI, or the desktop app** — "Run the server (development)": dev script flags, the demo login, and what must not run at the same time.
+- **Checking work before a push** — "Build, format, and test". `./scripts/check-pr.sh` is the fast pre-flight and `./scripts/check-all.sh` is everything CI runs; the section has the single-crate, coverage, `web/` and `docs/` commands.
 - **After a `web/` UI change** — "Tools": verify in the browser with the Playwright MCP.
 - **A new machine** — "First time setup". **A version bump, changelog entry, or release** — "Releases and versions".
 
@@ -52,9 +52,15 @@ Every command is in AGENTS.md, and nothing is repeated here. Claude Code does no
   old client, and never argue against a change on the grounds that something
   already calls it. `docs/architecture/http-api.md` says this for the HTTP interface; it holds for every
   interface. Do not raise this as an open question.
+- **SQLite is the only database engine.** Write SQL for SQLite. Never make a
+  query more awkward to keep it portable, and never add an engine abstraction
+  or a dialect layer. Use a SQLite-only feature when the work at hand needs
+  it; do not rewrite a working query only to use one. Postgres was removed,
+  not forgotten: `docs/adr/0017-sqlite-is-the-only-database-engine.md` has
+  the reason and the reference commit.
 - **Version lockstep** (current `0.10.0`): `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `web/package.json`, `crates/server/server/Cargo.toml` all carry the product version. Leave other crates at `0.1.0`; never bump `web-next` (`0.3.0`).
 - **Pushing a `v*` tag ships a release** — CI builds the Docker image and desktop installers, creates a GitHub Release, and publishes the docs site to messagecrate.app. A merge to `main` publishes nothing. Never create or push tags unless asked.
-- **CI gates** (all in `ci.yml`, all required by the ruleset on `main`): rustfmt, Clippy at `-D warnings` (workspace and `src-tauri`), workspace build + test on SQLite (with ffmpeg installed, so the media tests run rather than skip; the server suite's second pass on Postgres is switched off for now, commented out in the `test` job), `src-tauri` check/clippy/test, web Biome `ci` + generated-types check + build + Vitest, docs `astro check` + build, license, Docker context, a build of the release Dockerfile when it or a Cargo manifest changes, product version lockstep (and on a `v*` tag, that the tag matches). A `changes` job skips what a PR doesn't touch. Dependency audits run in `audit.yml` on lockfile changes and weekly, not on every PR. Test coverage (`./scripts/coverage.sh`, cargo-llvm-cov) is a report, not a gate: it points at functions no test calls, and `coverage.yml` runs it on each push to `main`. Mutation testing (`./scripts/mutants.sh`, cargo-mutants over the workspace less what `.cargo/mutants.toml` leaves out) is the measure of whether tests would catch a change: `mutants.yml` runs it only when started by hand, never on a schedule or per pull request. Never write a test only to raise coverage; a test earns its place by failing for a bug that matters. Why: `docs/adr/0007-ci-is-the-only-gate.md`.
+- **CI gates** (all in `ci.yml`, all required by the ruleset on `main`): rustfmt, Clippy at `-D warnings` (workspace and `src-tauri`), workspace build + test (with ffmpeg installed, so the media tests run rather than skip), `src-tauri` check/clippy/test, web Biome `ci` + generated-types check + build + Vitest, docs `astro check` + build, license, Docker context, a build of the release Dockerfile when it or a Cargo manifest changes, product version lockstep (and on a `v*` tag, that the tag matches). A `changes` job skips what a PR doesn't touch. Dependency audits run in `audit.yml` on lockfile changes and weekly, not on every PR. Test coverage (`./scripts/coverage.sh`, cargo-llvm-cov) is a report, not a gate: it points at functions no test calls, and `coverage.yml` runs it on each push to `main`. Mutation testing (`./scripts/mutants.sh`, cargo-mutants over the workspace less what `.cargo/mutants.toml` leaves out) is the measure of whether tests would catch a change: `mutants.yml` runs it only when started by hand, never on a schedule or per pull request. Never write a test only to raise coverage; a test earns its place by failing for a bug that matters. Why: `docs/adr/0007-ci-is-the-only-gate.md`.
 - **Git workflow**: never commit to `main`; use a branch or worktree. Verify PR state with `gh pr view` / `gh pr list` / `gh pr checks` before pushing — don't assume. Don't merge PRs unless explicitly asked. Write the PR description to the matching template in `.github/PULL_REQUEST_TEMPLATE/` (`feature.md` or `bugfix.md`) — those are for the author to fill in, not options offered to a reviewer. See AGENTS.md, "Submitting Work".
 - **Biome**: prefer a real fix over `biome-ignore`; prefix unused bindings with `_`.
 - **Tests** use committed fixtures in `tests/fixtures/`; never commit personal backups or real message data.

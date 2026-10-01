@@ -52,7 +52,7 @@ impl Permissions {
         }
     }
 
-    /// Read from three integer columns as stored by both engines.
+    /// Read from three integer columns as stored.
     pub fn from_ints(import: i64, export: i64, delete: i64) -> Self {
         Self {
             import: import != 0,

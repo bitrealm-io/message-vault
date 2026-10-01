@@ -26,8 +26,7 @@ fn incoming(guid: &str, sender: &str) -> String {
 }
 
 /// Import one file named `name` with `body` under the fixed source
-/// `sms-backup-restore`, through the real entry point on the shared test
-/// pool so it runs on Postgres too.
+/// `sms-backup-restore`, through the real entry point.
 async fn import_one(
     conn: &mut AnyConnection,
     name: &str,

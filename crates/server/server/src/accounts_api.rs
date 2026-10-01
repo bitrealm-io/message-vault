@@ -25,7 +25,7 @@ use crate::credentials::{
     change_password_on_conn, check_auth_rate_limit, hash_owner_password, hash_user_password,
     passwords_match, require_username_free, require_valid_username,
 };
-use crate::db::dialect::{begin_immediate_sql, engine_of};
+use crate::db::dialect::BEGIN_IMMEDIATE_SQL;
 use crate::db::handles::{self, Identity};
 use crate::db::storage::{self, Scope};
 use crate::db::{account_profile, imports, server_settings, session_tokens};
@@ -353,13 +353,12 @@ pub async fn create_account(
 
     // The insert and the marks on the row land together: a failure between
     // them would leave an account whose holder keeps the password the owner
-    // chose, which is the one thing the forced change exists to prevent. On
-    // SQLite the transaction takes the write lock before the username check
-    // (`begin_immediate_sql`, as imports and exports begin), so two
+    // chose, which is the one thing the forced change exists to prevent. The
+    // transaction takes the write lock before the username check
+    // (`BEGIN_IMMEDIATE_SQL`, as imports and exports begin), so two
     // registrations of one name cannot both pass the check and then race to
     // the insert.
-    let engine = engine_of(&conn);
-    let mut tx = conn.begin_with(begin_immediate_sql(engine)).await?;
+    let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
     require_username_free(&mut tx, &username).await?;
     let account_id = account_profile::insert_account(
         &mut tx,

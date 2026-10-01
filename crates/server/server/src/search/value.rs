@@ -60,7 +60,7 @@ pub(crate) enum Value {
 
 /// The instant `day` begins in `zone`, as the RFC 3339 UTC text the server
 /// stores (`2024-01-01T05:00:00Z`), so a day or a year in the account's time
-/// zone compares against `messages.timestamp` as text on either engine. A
+/// zone compares against `messages.timestamp` as text. A
 /// day whose midnight falls in a daylight-saving gap starts at the first
 /// instant after the gap.
 pub(crate) fn utc_instant(zone: chrono_tz::Tz, day: NaiveDate) -> String {

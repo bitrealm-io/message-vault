@@ -284,8 +284,7 @@ fn orphaned(message: &str) -> String {
     header("orphaned", "individual", "") + "\n" + message + "\n"
 }
 
-/// Run one import of `files` (name, body) through the real entry point, on
-/// the shared test pool so it runs on Postgres too.
+/// Run one import of `files` (name, body) through the real entry point.
 async fn import_files(conn: &mut sqlx::AnyConnection, files: &[(&str, String)]) {
     let tmp = tempfile::TempDir::new().unwrap();
     let paths: Vec<std::path::PathBuf> = files

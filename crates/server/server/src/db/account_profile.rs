@@ -4,8 +4,6 @@ use anyhow::{Context, Result, bail};
 use message_ir::HandleType;
 use sqlx::AnyConnection;
 
-use crate::db::dialect;
-use crate::db::engine::DbEngine;
 use crate::db::handles::{normalize_handle, upsert_handle_row};
 use crate::db::schema;
 
@@ -117,19 +115,11 @@ pub async fn lookup_account_by_username(
         return Ok(None);
     }
     schema::ensure_accounts_schema(conn).await?;
-    // `COLLATE NOCASE` is SQLite-only; Postgres lowercases both sides (the
-    // CI index from the schema is on `lower(username)`).
-    let by_user: Option<i64> = if dialect::engine_of(conn) == DbEngine::Postgres {
-        sqlx::query_scalar("SELECT id FROM accounts WHERE lower(username) = lower($1)")
-            .bind(username)
-            .fetch_optional(&mut *conn)
-            .await?
-    } else {
+    let by_user: Option<i64> =
         sqlx::query_scalar("SELECT id FROM accounts WHERE username = $1 COLLATE NOCASE")
             .bind(username)
             .fetch_optional(&mut *conn)
-            .await?
-    };
+            .await?;
     Ok(by_user)
 }
 

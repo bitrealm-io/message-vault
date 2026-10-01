@@ -10,8 +10,6 @@ use std::time::Instant;
 use anyhow::{Result, bail};
 use sqlx::AnyConnection;
 
-use crate::db::dialect;
-use crate::db::engine::DbEngine;
 use crate::db::schema;
 use crate::db::staging;
 
@@ -41,12 +39,10 @@ pub(super) async fn promote_append(
     fill_content_keys: bool,
     wipe_sources: &[String],
 ) -> Result<PromoteStats> {
-    let engine = dialect::engine_of(tx);
     let mut promote = Promote {
         tx,
         account_id,
         mode,
-        engine,
         stats: PromoteStats::default(),
         started: Instant::now(),
     };
@@ -73,7 +69,6 @@ struct Promote<'a> {
     tx: &'a mut AnyConnection,
     account_id: i64,
     mode: ImportMode,
-    engine: DbEngine,
     stats: PromoteStats,
     /// When the promotion began, for the total in every phase's log line.
     started: Instant,
@@ -202,16 +197,11 @@ impl Promote<'_> {
     }
 
     /// Skip per-row full-text search trigger work during the bulk inserts;
-    /// [`Self::index_fts`] indexes once after. SQLite drops the sync triggers;
-    /// Postgres disables every trigger on the message tables (same effect,
-    /// and the triggers are simply re-enabled instead of reinstalled).
+    /// [`Self::index_fts`] indexes once after and reinstalls the sync
+    /// triggers dropped here.
     async fn pause_fts_triggers(&mut self) -> Result<()> {
         let phase = Self::begin("pausing FTS triggers…");
-        if self.engine == DbEngine::Postgres {
-            schema::disable_fts_triggers_pg(self.tx).await?;
-        } else {
-            schema::drop_messages_fts_triggers(self.tx).await?;
-        }
+        schema::drop_messages_fts_triggers(self.tx).await?;
         self.done(phase, "FTS triggers paused");
         Ok(())
     }
@@ -374,11 +364,7 @@ impl Promote<'_> {
     async fn index_fts(&mut self, messages_before: i64) -> Result<()> {
         let phase = Self::begin("bulk-indexing FTS for new messages…");
         let indexed = schema::index_messages_fts_from_promote_map(self.tx, messages_before).await?;
-        if self.engine == DbEngine::Postgres {
-            schema::enable_fts_triggers_pg(self.tx).await?;
-        } else {
-            schema::install_messages_fts_triggers(self.tx).await?;
-        }
+        schema::install_messages_fts_triggers(self.tx).await?;
         self.done(phase, format!("FTS indexed={indexed} (triggers restored)"));
         Ok(())
     }

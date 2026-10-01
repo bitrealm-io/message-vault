@@ -1507,19 +1507,13 @@ fn one_message_conversation(guid: &str, handle: &str) -> String {
 /// Make every later INSERT INTO messages fail, so an import gets through
 /// staging and fails inside promote.
 async fn fail_every_message_insert(conn: &mut AnyConnection) {
-    let statements: &[&str] = match dialect::engine_of(conn) {
-        engine::DbEngine::Sqlite => &["CREATE TRIGGER fail_promote BEFORE INSERT ON messages
-             BEGIN SELECT RAISE(ABORT, 'promote fails on purpose'); END"],
-        engine::DbEngine::Postgres => &[
-            "CREATE FUNCTION fail_promote() RETURNS trigger LANGUAGE plpgsql AS
-             $$ BEGIN RAISE EXCEPTION 'promote fails on purpose'; END $$",
-            "CREATE TRIGGER fail_promote BEFORE INSERT ON messages
-             FOR EACH ROW EXECUTE FUNCTION fail_promote()",
-        ],
-    };
-    for sql in statements {
-        sqlx::raw_sql(sql).execute(&mut *conn).await.unwrap();
-    }
+    sqlx::raw_sql(
+        "CREATE TRIGGER fail_promote BEFORE INSERT ON messages
+         BEGIN SELECT RAISE(ABORT, 'promote fails on purpose'); END",
+    )
+    .execute(&mut *conn)
+    .await
+    .unwrap();
 }
 
 /// An import that fails in promote imports nothing, and that includes its

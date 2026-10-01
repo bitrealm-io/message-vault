@@ -52,28 +52,9 @@ pub(crate) mod trash_api;
 pub use db::conversation_messages::{DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, MessageSort};
 pub use server::{ApiError, AppState, AuthCapability, AuthIdentity, resolve_auth, run};
 
-// Integration tests (crates/server/server/tests) cannot see `pub(crate)`
-// modules, so the search-parity suite reaches the test pools and the schema
-// and export entry points through these re-exports. Test-support surface,
-// not product API.
-#[doc(hidden)]
-pub use db::engine::{pg_test_schema_pool, sqlite_test_pool};
-#[doc(hidden)]
-pub use db::exports::{ExportPageOpts, export_messages};
-#[doc(hidden)]
-pub use db::schema::ensure_schema;
-#[doc(hidden)]
-pub use exports_api::start_export_run;
 pub use message_crate_api_types::{ExportQueryList, ExportScope};
 
 use clap::Command;
-
-/// Postgres test URL when the gated suite should run (CI sets this).
-pub fn pg_test_url() -> Option<String> {
-    std::env::var("MC_TEST_POSTGRES_URL")
-        .ok()
-        .filter(|u| !u.is_empty())
-}
 
 /// Clap command definition for the `message-crate-server` CLI; delegates to
 /// [`cli::clap_command`].

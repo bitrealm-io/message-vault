@@ -30,7 +30,6 @@ use crate::asset_uploads;
 use crate::config::Config;
 use crate::db::account_profile;
 use crate::db::api_tokens;
-use crate::db::engine::DbEngine;
 use crate::db::permissions::Permissions;
 use crate::db::schema;
 use crate::db::session_tokens;
@@ -338,7 +337,7 @@ auth_guard!(
 pub struct AppState {
     /// Loaded configuration.
     pub cfg: Arc<Config>,
-    /// Connection pool (SQLite file or `[database] url`). Handlers acquire
+    /// Connection pool for the database file. Handlers acquire
     /// short-lived connections from here.
     pub db: sqlx::AnyPool,
     /// Per-account import mutex: same-account imports stay serialized so staging
@@ -1002,34 +1001,24 @@ pub(crate) fn http_app(state: AppState) -> Router {
 pub async fn run(cfg: Config) -> anyhow::Result<()> {
     let server = cfg.require_server()?.clone();
     let bind = server.bind.clone();
-    let engine = cfg.db_engine()?;
-    let lock_path = if engine == DbEngine::Sqlite {
-        cfg.paths.db.clone()
-    } else {
-        cfg.paths.data_dir.join(".operation.lock")
-    };
-    let _operation_lock = crate::operation_lock::acquire_for_serve(&lock_path)?;
+    let _operation_lock = crate::operation_lock::acquire_for_serve(&cfg.paths.db)?;
 
     // Every new Message Crate starts with the Demo Account: seed first, then
     // listen, so the first page a person loads already offers it (#971).
     if crate::reset_demo::database_is_new(&cfg).await? {
-        if engine == DbEngine::Sqlite {
-            crate::operation_lock::clear_ready(&cfg.paths.db)?;
-        }
+        crate::operation_lock::clear_ready(&cfg.paths.db)?;
         crate::reset_demo::seed_new_database(&cfg).await;
     }
     let opened = OpenDb::open(cfg).await?;
-    if engine == DbEngine::Sqlite {
-        crate::operation_lock::mark_ready(&opened.cfg.paths.db)?;
-        let mode: String = sqlx::query_scalar("PRAGMA journal_mode")
-            .fetch_one(&opened.db)
-            .await
-            .unwrap_or_else(|_| "unknown".into());
-        eprintln!(
-            "  db:   {} (journal_mode={mode})",
-            opened.cfg.paths.db.display()
-        );
-    }
+    crate::operation_lock::mark_ready(&opened.cfg.paths.db)?;
+    let mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+        .fetch_one(&opened.db)
+        .await
+        .unwrap_or_else(|_| "unknown".into());
+    eprintln!(
+        "  db:   {} (journal_mode={mode})",
+        opened.cfg.paths.db.display()
+    );
     let state = AppState::new(opened, server.asset_part_size);
     // Reported as they stand now; each upload reads them again. Any stored
     // limit starts the server: a part is never larger than the limit.
@@ -1327,7 +1316,6 @@ pub(crate) fn test_app_state(pool: sqlx::AnyPool, data_dir: &Path) -> AppState {
             openapi_ui: false,
             static_dir: "static".into(),
         }),
-        database: crate::config::DatabaseConfig::default(),
     };
     AppState::new(OpenDb { cfg, db: pool }, asset_uploads::DEFAULT_PART_SIZE)
 }

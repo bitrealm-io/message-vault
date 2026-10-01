@@ -5,8 +5,6 @@ use chrono::NaiveDate;
 use sqlx::AnyConnection;
 
 use super::{CompileRequest, ListKind, QueryError, compile};
-use crate::db::dialect::engine_of;
-use crate::db::engine::DbEngine;
 use crate::db::sql::{bind_args, renumber_placeholders};
 
 pub(crate) const ACCOUNT: i64 = 7;
@@ -696,7 +694,6 @@ pub(crate) async fn run(conn: &mut AnyConnection, list: ListKind, q: &str) -> Ve
         list,
         query: q,
         account_id: ACCOUNT,
-        engine: engine_of(conn),
         today: today(),
         zone: chrono_tz::UTC,
     })
@@ -729,7 +726,6 @@ pub(crate) fn err(list: ListKind, q: &str) -> QueryError {
         list,
         query: q,
         account_id: ACCOUNT,
-        engine: DbEngine::Sqlite,
         today: today(),
         zone: chrono_tz::UTC,
     })
@@ -868,9 +864,7 @@ mod free_text {
         let (pool, _dir, f) = seeded().await;
         let mut conn = pool.acquire().await.unwrap();
         // "each" sits inside "beach.jpg" but is not a word the full-text
-        // index holds, so only the file-name match can find it. Postgres
-        // reads a whole file name as one token, so without this leg a
-        // search for part of a file name finds nothing there at all.
+        // index holds, so only the file-name match can find it.
         assert_eq!(
             run(&mut conn, ListKind::Messages, "each").await,
             vec![f.feb_big_jpeg]
@@ -925,7 +919,6 @@ mod free_text {
             list: ListKind::Messages,
             query: "avocado -toast",
             account_id: ACCOUNT,
-            engine: DbEngine::Postgres,
             today: today(),
             zone: chrono_tz::UTC,
         };
@@ -941,7 +934,6 @@ mod free_text {
             list: ListKind::Contacts,
             query: "ana",
             account_id: ACCOUNT,
-            engine: DbEngine::Sqlite,
             today: today(),
             zone: chrono_tz::UTC,
         })
@@ -954,52 +946,41 @@ mod free_text {
     /// the matching ids, never as an `EXISTS` correlated to the message
     /// row: SQLite cannot drive that from the FTS index, so it ran the
     /// match once per message and an unscoped word took 10 s to minutes
-    /// on the demo database (#413). Both engines, every term shape.
+    /// on the demo database (#413). Every term shape.
     #[test]
     fn free_text_on_messages_asks_the_index_once() {
-        for engine in [DbEngine::Sqlite, DbEngine::Postgres] {
-            for (query, terms) in [
-                ("avocado", 1),
-                ("avoc*", 1),
-                ("\"two words\"", 1),
-                ("avocado -toast", 2),
-            ] {
-                let f = compile(CompileRequest {
-                    list: ListKind::Messages,
-                    query,
-                    account_id: ACCOUNT,
-                    engine,
-                    today: today(),
-                    zone: chrono_tz::UTC,
-                })
-                .unwrap();
-                let sql = f.where_sql();
-                let (index, per_term) = match engine {
-                    DbEngine::Sqlite => (
-                        "SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?",
-                        "m.id IN (SELECT rowid FROM messages_fts",
-                    ),
-                    DbEngine::Postgres => (
-                        "SELECT fm.id FROM messages fm WHERE fm.search_tsv @@",
-                        "m.id IN (SELECT fm.id FROM messages fm",
-                    ),
-                };
-                assert_eq!(
-                    sql.matches(index).count(),
-                    terms,
-                    "{engine:?} {query}: {sql}"
-                );
-                assert_eq!(
-                    sql.matches(per_term).count(),
-                    terms,
-                    "{engine:?} {query}: {sql}"
-                );
-                assert!(
-                    !sql.contains("fts.rowid = m.id")
-                        && !sql.contains("EXISTS (SELECT 1 FROM messages_fts"),
-                    "{engine:?} {query}: the index is asked per message row: {sql}"
-                );
-            }
+        for (query, terms) in [
+            ("avocado", 1),
+            ("avoc*", 1),
+            ("\"two words\"", 1),
+            ("avocado -toast", 2),
+        ] {
+            let f = compile(CompileRequest {
+                list: ListKind::Messages,
+                query,
+                account_id: ACCOUNT,
+                today: today(),
+                zone: chrono_tz::UTC,
+            })
+            .unwrap();
+            let sql = f.where_sql();
+            assert_eq!(
+                sql.matches("SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?")
+                    .count(),
+                terms,
+                "{query}: {sql}"
+            );
+            assert_eq!(
+                sql.matches("m.id IN (SELECT rowid FROM messages_fts")
+                    .count(),
+                terms,
+                "{query}: {sql}"
+            );
+            assert!(
+                !sql.contains("fts.rowid = m.id")
+                    && !sql.contains("EXISTS (SELECT 1 FROM messages_fts"),
+                "{query}: the index is asked per message row: {sql}"
+            );
         }
     }
 
@@ -1015,49 +996,44 @@ mod free_text {
     /// message the contact sent" would compile to something else.
     fn contact_message_words_read_the_one_sent_messages_query() {
         use crate::search::bridge::{TrashScope, contact_sent_messages};
-        for engine in [DbEngine::Sqlite, DbEngine::Postgres] {
-            for (query, trash) in [
-                ("messages:0", TrashScope::LeftOut),
-                ("first-message:2019", TrashScope::LeftOut),
-                ("last-message:2019", TrashScope::LeftOut),
-                ("date:2019", TrashScope::LeftOut),
-                ("trashed:any messages:0", TrashScope::Counted),
-            ] {
-                let f = compile(CompileRequest {
-                    list: ListKind::Contacts,
-                    query,
-                    account_id: ACCOUNT,
-                    engine,
-                    today: today(),
-                    zone: chrono_tz::UTC,
-                })
-                .unwrap();
-                let sql = f.where_sql();
+        for (query, trash) in [
+            ("messages:0", TrashScope::LeftOut),
+            ("first-message:2019", TrashScope::LeftOut),
+            ("last-message:2019", TrashScope::LeftOut),
+            ("date:2019", TrashScope::LeftOut),
+            ("trashed:any messages:0", TrashScope::Counted),
+        ] {
+            let f = compile(CompileRequest {
+                list: ListKind::Contacts,
+                query,
+                account_id: ACCOUNT,
+                today: today(),
+                zone: chrono_tz::UTC,
+            })
+            .unwrap();
+            let sql = f.where_sql();
+            assert!(
+                sql.contains(&contact_sent_messages(trash)),
+                "{query} does not read contact_sent_messages: {sql}"
+            );
+            if trash == TrashScope::Counted {
                 assert!(
-                    sql.contains(&contact_sent_messages(trash)),
-                    "{engine:?}: {query} does not read contact_sent_messages: {sql}"
+                    !sql.contains(&contact_sent_messages(TrashScope::LeftOut)),
+                    "{query} still leaves the trash out: {sql}"
                 );
-                if trash == TrashScope::Counted {
-                    assert!(
-                        !sql.contains(&contact_sent_messages(TrashScope::LeftOut)),
-                        "{engine:?}: {query} still leaves the trash out: {sql}"
-                    );
-                }
             }
         }
     }
 
     /// Free text on Messages is two legs, the index and the file name, and
-    /// each binds its own value; Postgres is the engine where the two spell
-    /// themselves differently, so check the binding there.
+    /// each binds its own value.
     #[test]
-    fn free_text_on_messages_binds_every_placeholder_on_postgres() {
+    fn free_text_on_messages_binds_every_placeholder() {
         for query in ["avocado", "avoc*", "\"two words\""] {
             let f = compile(CompileRequest {
                 list: ListKind::Messages,
                 query,
                 account_id: ACCOUNT,
-                engine: DbEngine::Postgres,
                 today: today(),
                 zone: chrono_tz::UTC,
             })
@@ -1066,10 +1042,6 @@ mod free_text {
                 f.where_sql().matches('?').count(),
                 f.params().len(),
                 "{query}"
-            );
-            assert!(
-                !f.where_sql().contains("COLLATE NOCASE"),
-                "{query}: SQLite collation leaked into Postgres SQL"
             );
         }
     }
@@ -1218,7 +1190,7 @@ mod text_words {
 }
 
 /// A capital outside ASCII is the same letter as its small form on every
-/// word that compares text, on both engines (#723). SQLite's own `LIKE` and
+/// word that compares text (#723). SQLite's own `LIKE` and
 /// `NOCASE` fold only ASCII, so each case stores the capital and searches
 /// with the small letter, and the other way round. Accents still matter:
 /// each case also seeds the unaccented spelling as a near miss.
@@ -1343,7 +1315,7 @@ mod unicode_case {
 }
 
 /// `%`, `_`, and `\\` in what a person types are those characters, never
-/// LIKE wildcards or escapes, and both engines agree on it. Each case seeds a
+/// LIKE wildcards or escapes. Each case seeds a
 /// near miss that a wildcard reading would also match.
 mod like_characters {
     use super::*;
@@ -1438,12 +1410,10 @@ mod like_characters {
 }
 
 /// Free text on Messages goes to the full-text index, where `&`, `|`, `!`,
-/// `:`, `<`, `>`, quotes, and backslashes are query operators on one engine
-/// or the other, and Postgres refuses a NUL byte in any text. None of that
+/// `:`, `<`, `>`, quotes, and backslashes are query operators. None of that
 /// may reach the index: punctuation inside a word splits it into words that
 /// must appear in that order, a word that is only punctuation or emoji finds
-/// nothing, and a NUL separates words like a space. The same table runs on
-/// whichever engine the test pool uses, so a divergence fails on one of them.
+/// nothing, and a NUL separates words like a space.
 mod index_characters {
     use super::*;
     use crate::search::error::QueryErrorKind;
@@ -1542,7 +1512,6 @@ mod index_characters {
             let m = msg(conv, "2024-06-01T10:00:00Z", false, Some(chat), &body);
             ids.push(message(&mut conn, ACCOUNT, m).await);
         }
-        let engine = engine_of(&conn);
         let index_of = |got: &[i64]| -> Vec<Option<usize>> {
             got.iter()
                 .map(|g| ids.iter().position(|i| i == g))
@@ -1555,7 +1524,6 @@ mod index_characters {
                 list: ListKind::Messages,
                 query: &q,
                 account_id: ACCOUNT,
-                engine,
                 today: today(),
                 zone: chrono_tz::UTC,
             });
@@ -1587,7 +1555,7 @@ mod index_characters {
                 }
             }
         }
-        assert!(failures.is_empty(), "{engine:?}:\n{}", failures.join("\n"));
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 
     /// [`run`], returning the database's error instead of panicking, so one
@@ -1601,7 +1569,6 @@ mod index_characters {
             list,
             query: q,
             account_id: ACCOUNT,
-            engine: engine_of(conn),
             today: today(),
             zone: chrono_tz::UTC,
         })
@@ -2747,7 +2714,7 @@ mod coverage {
     }
 
     #[test]
-    fn every_word_compiles_for_postgres_too() {
+    fn every_word_binds_every_placeholder() {
         for spec in FIELDS {
             for list in spec.lists {
                 for value in sample_values(spec.word, spec.value_type, spec.values) {
@@ -2756,7 +2723,6 @@ mod coverage {
                         list: *list,
                         query: &q,
                         account_id: ACCOUNT,
-                        engine: DbEngine::Postgres,
                         today: today(),
                         zone: chrono_tz::UTC,
                     })
@@ -2765,10 +2731,6 @@ mod coverage {
                         f.where_sql().matches('?').count(),
                         f.params().len(),
                         "{q} on {list:?}"
-                    );
-                    assert!(
-                        !f.where_sql().contains("COLLATE NOCASE"),
-                        "{q}: SQLite collation leaked into Postgres SQL"
                     );
                 }
             }
@@ -3209,7 +3171,6 @@ mod web_fixture {
                 list,
                 query,
                 account_id: ACCOUNT,
-                engine: DbEngine::Sqlite,
                 today: today(),
                 zone: chrono_tz::UTC,
             })

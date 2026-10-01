@@ -19,7 +19,6 @@ pub use fields::FieldDoc;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
-use crate::db::engine::DbEngine;
 use crate::db::sql::SqlParam;
 
 /// Which list a query is compiled for. Each list accepts its own subset of
@@ -71,8 +70,6 @@ pub struct CompileRequest<'a> {
     pub query: &'a str,
     /// The logged-in account; every fragment is scoped to it.
     pub account_id: i64,
-    /// Which engine's SQL to write.
-    pub engine: DbEngine,
     /// Relative dates resolve against this day. Never read from the clock here.
     pub today: NaiveDate,
     /// The account's time zone: the anchor that turns a stored instant into a
@@ -158,11 +155,5 @@ pub fn compile_messages_of_conversations(req: CompileRequest<'_>) -> Result<Filt
 pub fn compile(req: CompileRequest<'_>) -> Result<Filter, QueryError> {
     let tokens = lex::tokenize(req.query)?;
     let expr = parse::parse(req.list, &tokens, req.today)?;
-    emit::compile(
-        req.list,
-        expr.as_ref(),
-        req.account_id,
-        req.engine,
-        req.zone,
-    )
+    emit::compile(req.list, expr.as_ref(), req.account_id, req.zone)
 }

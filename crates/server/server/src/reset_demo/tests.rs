@@ -2,32 +2,6 @@ use super::*;
 use crate::config::PathsConfig;
 use sqlx::AnyConnection;
 
-fn url_config_for_refuse_tests() -> Config {
-    Config {
-        paths: PathsConfig {
-            db: PathBuf::from("data/messagecrate.db"),
-            data_dir: PathBuf::from("data"),
-            assets_dir: "assets".into(),
-            assets_converted_dir: "assets_converted".into(),
-        },
-        server: None,
-        database: crate::config::DatabaseConfig {
-            url: Some("postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate".into()),
-        },
-    }
-}
-
-#[test]
-fn refuse_url_config_errors_when_config_has_url() {
-    let err = refuse_url_config(&url_config_for_refuse_tests())
-        .expect_err("config URL without --db-url must fail");
-    assert!(
-        err.to_string()
-            .contains("URL-served databases cannot be reset"),
-        "{err}"
-    );
-}
-
 pub(crate) fn write_tiny_reset_bundle(root: &Path) {
     fs::create_dir_all(root.join("config")).expect("create bundle config");
     fs::create_dir_all(root.join("staging").join(IMESSAGE_SOURCE)).expect("imessage dir");
@@ -78,85 +52,6 @@ username = "demo"
         conversation(WHATSAPP_SOURCE, "+15555550103", "pg-demo-wa"),
     )
     .expect("write whatsapp jsonl");
-}
-
-#[tokio::test]
-async fn reset_demo_db_url_creates_demo_account_on_postgres() {
-    let Some(url) = crate::pg_test_url() else {
-        return;
-    };
-    // A schema of this test's own. `reset_prepared_bundle_at_url` takes a
-    // URL rather than a pool, so the schema rides in the URL's search_path
-    // and everything the reset writes lands there (#435).
-    let url = crate::db::engine::pg_test_schema_url(&url).await;
-
-    let temp = tempfile::tempdir().expect("temp dir");
-    let bundle = temp.path().join("bundle");
-    write_tiny_reset_bundle(&bundle);
-    let data_dir = temp.path().join("data");
-    fs::create_dir_all(&data_dir).expect("data dir");
-    let unused_db = temp.path().join("unused.db");
-    let config_dest = temp.path().join("config.toml");
-    fs::write(
-        &config_dest,
-        format!(
-            "[paths]\ndb = \"{}\"\ndata_dir = \"{}\"\n",
-            unused_db.display(),
-            data_dir.display()
-        ),
-    )
-    .expect("write host config");
-
-    let pool = engine::open_pool_from_url(&url)
-        .await
-        .expect("open postgres");
-    let mut conn = pool.acquire().await.expect("acquire");
-    schema::ensure_schema(&mut conn).await.expect("schema");
-    conn.close().await.expect("close schema conn");
-    pool.close().await;
-
-    let host_config_before = fs::read(&config_dest).expect("read host config");
-    let cfg = Config::load(&config_dest).expect("load host config");
-    reset_prepared_bundle_at_url(&cfg, &bundle, DEMO_ACCOUNT_ID, &url)
-        .await
-        .expect("reset at url");
-    assert!(
-        !unused_db.exists(),
-        "reset-demo --db-url must not create or replace paths.db"
-    );
-    assert_eq!(
-        fs::read(&config_dest).expect("reread host config"),
-        host_config_before,
-        "reset-demo --db-url must leave the host config file unchanged"
-    );
-
-    let pool = engine::open_pool_from_url(&url)
-        .await
-        .expect("reopen postgres");
-    let mut conn = pool.acquire().await.expect("acquire");
-    let username: Option<String> =
-        sqlx::query_scalar("SELECT username FROM accounts WHERE id = $1")
-            .bind(DEMO_ACCOUNT_ID)
-            .fetch_optional(&mut *conn)
-            .await
-            .expect("username");
-    assert_eq!(username.as_deref(), Some("demo"));
-    let hash: Option<String> =
-        sqlx::query_scalar("SELECT password_hash FROM accounts WHERE id = $1")
-            .bind(DEMO_ACCOUNT_ID)
-            .fetch_one(&mut *conn)
-            .await
-            .expect("password hash");
-    assert!(hash.is_none(), "demo account must have no password hash");
-    let conversations: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM conversations WHERE account_id = $1")
-            .bind(DEMO_ACCOUNT_ID)
-            .fetch_one(&mut *conn)
-            .await
-            .expect("conversations");
-    assert!(conversations >= 1, "expected imported conversations");
-    conn.close().await.expect("close");
-    pool.close().await;
 }
 
 /// Open `db` with the schema applied and one connection checked out.
@@ -283,7 +178,6 @@ async fn failed_reset_preserves_existing_demo_account() {
             assets_converted_dir: "assets_converted".into(),
         },
         server: None,
-        database: crate::config::DatabaseConfig::default(),
     };
     let invalid_bundle = temp.path().join("invalid-bundle");
     fs::create_dir_all(invalid_bundle.join("staging").join(IMESSAGE_SOURCE))
@@ -330,8 +224,7 @@ async fn failed_preparation_preserves_active_config() {
     let invalid_bundle = temp.path().join("invalid-bundle");
     fs::create_dir_all(&invalid_bundle).expect("create invalid bundle");
 
-    let result =
-        prepare_config_and_reset(&invalid_bundle, &config_dest, DEMO_ACCOUNT_ID, None).await;
+    let result = prepare_config_and_reset(&invalid_bundle, &config_dest, DEMO_ACCOUNT_ID).await;
 
     assert!(result.is_err());
     assert_eq!(
@@ -340,7 +233,7 @@ async fn failed_preparation_preserves_active_config() {
     );
 }
 
-/// A complete bundle and no database URL: the reset runs, the bundle's
+/// A complete bundle: the reset runs, the bundle's
 /// config becomes the active one, and the database it names holds the demo.
 #[tokio::test]
 async fn a_complete_bundle_resets_and_its_config_becomes_the_active_one() {
@@ -349,7 +242,7 @@ async fn a_complete_bundle_resets_and_its_config_becomes_the_active_one() {
     write_tiny_reset_bundle(&bundle);
     let config_dest = temp.path().join("config/config.toml");
 
-    let stats = prepare_config_and_reset(&bundle, &config_dest, DEMO_ACCOUNT_ID, None)
+    let stats = prepare_config_and_reset(&bundle, &config_dest, DEMO_ACCOUNT_ID)
         .await
         .expect("a complete bundle resets");
 
@@ -1118,9 +1011,6 @@ async fn count(conn: &mut AnyConnection, sql: &str) -> i64 {
 /// three-line hand-written bundle went through this path in a test, so a
 /// generator change that the import could not read, or a stride the import
 /// dropped, showed up first in the demo Message Crate.
-///
-/// Runs on SQLite by file path, and on Postgres by schema URL when
-/// `MC_TEST_POSTGRES_URL` is set, the two transports `reset-demo` takes.
 #[tokio::test]
 async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
     let temp = tempfile::tempdir().expect("create test directory");
@@ -1135,14 +1025,7 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
     );
 
     let db_path = temp.path().join("messagecrate.db");
-    let pg_url = match crate::pg_test_url() {
-        Some(url) => Some(crate::db::engine::pg_test_schema_url(&url).await),
-        None => None,
-    };
-    let target = match pg_url.as_deref() {
-        Some(url) => DbTarget::Url(url),
-        None => DbTarget::Path(&db_path),
-    };
+    let target = db_path.as_path();
     let cfg = Config {
         paths: PathsConfig {
             db: db_path.clone(),
@@ -1151,7 +1034,6 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
             assets_converted_dir: "assets_converted".into(),
         },
         server: None,
-        database: crate::config::DatabaseConfig::default(),
     };
 
     let prepared = validate_prepared_bundle(bundle).expect("the generator wrote a complete bundle");
@@ -1179,7 +1061,9 @@ async fn a_generated_demo_bundle_imports_whole_and_its_overlap_dedupes() {
         "every tapback imported"
     );
 
-    let pool = target.open().await.expect("open the imported database");
+    let pool = engine::open_pool_for_path(target)
+        .await
+        .expect("open the imported database");
     let mut conn = pool.acquire().await.expect("acquire");
     let dedupe = dedupe::dedupe_cross_source(&mut conn, DEMO_ACCOUNT_ID, None, 2)
         .await
@@ -1398,10 +1282,9 @@ async fn the_wipe_removes_the_demo_rows_and_folder_and_leaves_other_accounts() {
             assets_converted_dir: "assets_converted".into(),
         },
         server: None,
-        database: crate::config::DatabaseConfig::default(),
     };
 
-    wipe_demo_account(&cfg, DEMO_ACCOUNT_ID, DbTarget::Path(&db))
+    wipe_demo_account(&cfg, DEMO_ACCOUNT_ID, &db)
         .await
         .expect("wipe the demo account");
 
@@ -1464,7 +1347,6 @@ async fn a_reset_leaves_a_demo_that_logs_in_and_holds_nothing_old() {
             assets_converted_dir: "assets_converted".into(),
         },
         server: None,
-        database: crate::config::DatabaseConfig::default(),
     };
     {
         let (pool, mut conn) = test_db(&db).await;
@@ -1579,7 +1461,9 @@ fn the_conversion_warning_names_the_failed_attachments_and_is_silent_at_zero() {
 /// The number of accounts and of the demo account's conversations in the
 /// database `cfg` names.
 async fn accounts_and_demo_conversations(cfg: &Config) -> (i64, i64) {
-    let pool = cfg.db_target().open().await.expect("open the database");
+    let pool = engine::open_pool_for_path(&cfg.paths.db)
+        .await
+        .expect("open the database");
     let mut conn = pool.acquire().await.expect("acquire");
     let accounts = count(&mut conn, "SELECT COUNT(*) FROM accounts").await;
     let conversations: i64 =
@@ -1600,7 +1484,7 @@ async fn accounts_and_demo_conversations(cfg: &Config) -> (i64, i64) {
 #[tokio::test]
 async fn a_new_database_is_seeded_once_with_the_demo_account_and_no_owner() {
     let temp = tempfile::tempdir().expect("create test directory");
-    let mut cfg = crate::open_db::fresh_config(temp.path()).await;
+    let mut cfg = crate::open_db::fresh_config(temp.path());
     cfg.paths.db = temp.path().join("new/folder/messagecrate.db");
     assert!(
         database_is_new(&cfg)
@@ -1624,7 +1508,9 @@ async fn a_new_database_is_seeded_once_with_the_demo_account_and_no_owner() {
     let (accounts, conversations) = accounts_and_demo_conversations(&cfg).await;
     assert_eq!(accounts, 1, "the Demo Account and no owner");
     assert!(conversations >= 1);
-    let pool = cfg.db_target().open().await.expect("open the database");
+    let pool = engine::open_pool_for_path(&cfg.paths.db)
+        .await
+        .expect("open the database");
     let mut conn = pool.acquire().await.expect("acquire");
     assert!(
         !account_profile::is_claimed(&mut conn)
@@ -1648,7 +1534,7 @@ async fn a_new_database_is_seeded_once_with_the_demo_account_and_no_owner() {
 #[tokio::test]
 async fn a_database_created_empty_is_not_new() {
     let temp = tempfile::tempdir().expect("create test directory");
-    let cfg = crate::open_db::fresh_config(temp.path()).await;
+    let cfg = crate::open_db::fresh_config(temp.path());
     assert!(database_is_new(&cfg).await.expect("read before creating"));
 
     OpenDb::open(cfg.clone())
@@ -1666,7 +1552,7 @@ async fn a_database_created_empty_is_not_new() {
 #[tokio::test]
 async fn a_first_start_seed_that_fails_partway_leaves_no_demo_account() {
     let temp = tempfile::tempdir().expect("create test directory");
-    let cfg = crate::open_db::fresh_config(temp.path()).await;
+    let cfg = crate::open_db::fresh_config(temp.path());
 
     let seeded = seed_new_database_with(&cfg, |bundle| {
         write_tiny_reset_bundle(bundle);

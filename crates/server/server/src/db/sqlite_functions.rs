@@ -2,10 +2,9 @@
 //!
 //! SQLite's built-in `lower()` folds only ASCII letters unless it is built
 //! with ICU, and the bundled build is not, so `lower('Élodie')` is
-//! `'Élodie'` there while Postgres answers `'élodie'`. The search words
-//! compare `lower(column)` with `lower(text)` on both engines (see
-//! [`crate::db::dialect::like_ci`]), so SQLite needs a `lower()` that folds
-//! the way Postgres does. [`register`] replaces the built-in with one backed
+//! `'Élodie'`. The search words compare `lower(column)` with `lower(text)`
+//! (see [`crate::db::dialect::like_ci`]), so they need a `lower()` that
+//! folds every letter. [`register`] replaces the built-in with one backed
 //! by Rust's `str::to_lowercase`, which folds every letter Unicode gives a
 //! lower-case mapping.
 //!
@@ -106,7 +105,7 @@ unsafe extern "C" fn unicode_lower(
 
 #[cfg(test)]
 mod tests {
-    use crate::db::engine::sqlite_test_pool;
+    use crate::db::engine::test_pool;
 
     async fn lower_of(pool: &sqlx::AnyPool, text: &str) -> Option<String> {
         sqlx::query_scalar("SELECT lower($1)")
@@ -120,7 +119,7 @@ mod tests {
     /// connection gets the Unicode one.
     #[tokio::test]
     async fn lower_folds_non_ascii_letters_on_every_connection() {
-        let (pool, _dir) = sqlite_test_pool().await;
+        let (pool, _dir) = test_pool().await;
         assert_eq!(
             lower_of(&pool, "Élodie ÜNAL").await.as_deref(),
             Some("élodie ünal")
@@ -129,7 +128,7 @@ mod tests {
             lower_of(&pool, "ASCII Only").await.as_deref(),
             Some("ascii only")
         );
-        let (other_pool, _dir) = sqlite_test_pool().await;
+        let (other_pool, _dir) = test_pool().await;
         assert_eq!(
             lower_of(&other_pool, "ÉQUIPE").await.as_deref(),
             Some("équipe")
@@ -139,7 +138,7 @@ mod tests {
     /// `NULL` stays `NULL` and a number is read as text, as the built-in does.
     #[tokio::test]
     async fn lower_keeps_null_and_reads_a_number_as_text() {
-        let (pool, _dir) = sqlite_test_pool().await;
+        let (pool, _dir) = test_pool().await;
         let null: Option<String> = sqlx::query_scalar("SELECT lower(NULL)")
             .fetch_one(&pool)
             .await

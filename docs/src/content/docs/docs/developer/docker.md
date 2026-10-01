@@ -29,7 +29,7 @@ Docker Compose reads a YAML file and starts a container from it. This repository
 
 A local checkout’s `.env.example` sets `COMPOSE_FILE=docker/compose.release.yml`. After copying that file to `.env`, `docker compose up --build` from the repository root uses the build-from-checkout file. Pass `-f` to override.
 
-Do not run either Compose file at the same time as `./scripts/run-dev.sh` or `./scripts/run-pg-dev.sh`. Those scripts also bind port 8080. The Postgres script stops the `docker-compose.pg.yml` container when it exits.
+Do not run either Compose file at the same time as `./scripts/run-dev.sh`. That script also binds port 8080.
 
 ## What the image contains
 

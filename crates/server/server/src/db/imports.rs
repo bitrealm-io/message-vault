@@ -341,16 +341,12 @@ pub async fn start_import(
     }
 }
 
-/// Whether this error is a unique-constraint violation on either engine.
-///
-/// SQLite reports `2067` / `1555`; Postgres reports SQLSTATE `23505`.
+/// Whether this error is a unique-constraint violation, which SQLite
+/// reports as `2067` (unique index) or `1555` (primary key).
 fn is_unique_violation(err: &sqlx::Error) -> bool {
     let Some(db_err) = err.as_database_error() else {
         return false;
     };
-    if db_err.code().as_deref() == Some("23505") {
-        return true;
-    }
     matches!(db_err.code().as_deref(), Some("2067" | "1555"))
 }
 
@@ -592,13 +588,9 @@ pub async fn complete_import(
     };
     let bytes_uploaded = args.bytes_uploaded.unwrap_or(existing.bytes_uploaded);
 
-    // `BEGIN IMMEDIATE` on SQLite matches today's write lock; Postgres uses a
-    // plain BEGIN (no statement-level equivalent). Either way the update and
-    // the issue inserts land as one unit, and a failed commit rolls back
-    // (sqlx drops the transaction).
-    let mut tx = conn
-        .begin_with(dialect::begin_immediate_sql(dialect::engine_of(conn)))
-        .await?;
+    // The update and the issue inserts land as one unit, and a failed
+    // commit rolls back (sqlx drops the transaction).
+    let mut tx = conn.begin_with(dialect::BEGIN_IMMEDIATE_SQL).await?;
     let updated = sqlx::query(
         r"
         UPDATE imports

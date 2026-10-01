@@ -1,19 +1,19 @@
 //! The database, opened from its config.
 //!
 //! Every command line entry point and the HTTP server open the database the
-//! same way: the config (with the command line's `--db` and `--db-url`
-//! already applied, see [`Config::with_db_overrides`]) names the target, the
-//! pool opens it, and the schema is made sure of before anything reads.
+//! same way: the config (with the command line's `--db` already applied, see
+//! [`Config::with_db_override`]) names the file, the pool opens it, and the schema is made sure of before anything reads.
 //! [`OpenDb`] is that opened database plus the config it came from, so a
-//! caller holds one value and never re-derives the target.
+//! caller holds one value and never re-derives the file.
+
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use sqlx::AnyPool;
 use sqlx::pool::PoolConnection;
 
 use crate::config::Config;
-use crate::db::engine::DbTarget;
-use crate::db::{account_profile, schema};
+use crate::db::{account_profile, engine, schema};
 
 /// An opened database and the config it was opened from.
 #[derive(Debug, Clone)]
@@ -27,22 +27,21 @@ pub struct OpenDb {
 impl OpenDb {
     /// Open the database `cfg` names and make sure the schema exists.
     ///
-    /// A SQLite file that does not exist yet is created, folder and all,
+    /// A database file that does not exist yet is created, folder and all,
     /// which is how a new Message Crate begins.
     ///
     /// # Errors
     ///
-    /// Returns an error when the URL scheme is unknown, the connection fails,
-    /// or the schema cannot be applied.
+    /// Returns an error when the file cannot be opened or created, or the
+    /// schema cannot be applied.
     pub async fn open(cfg: Config) -> Result<Self> {
-        if let DbTarget::Path(path) = cfg.db_target()
-            && let Some(parent) = path.parent()
+        if let Some(parent) = cfg.paths.db.parent()
             && !parent.as_os_str().is_empty()
         {
             std::fs::create_dir_all(parent)
                 .with_context(|| format!("create {}", parent.display()))?;
         }
-        let db = cfg.db_target().open().await?;
+        let db = engine::open_pool_for_path(&cfg.paths.db).await?;
         {
             let mut conn = db.acquire().await?;
             schema::ensure_schema(&mut conn).await?;
@@ -50,10 +49,9 @@ impl OpenDb {
         Ok(Self { cfg, db })
     }
 
-    /// Where the database is, for status lines and errors. Never includes
-    /// credentials.
-    pub fn location(&self) -> DbTarget<'_> {
-        self.cfg.db_target()
+    /// The database file, for status lines and errors.
+    pub fn location(&self) -> &Path {
+        &self.cfg.paths.db
     }
 
     /// A connection from the pool.
@@ -84,16 +82,11 @@ impl OpenDb {
 }
 
 /// A config for a fresh database under `dir`, for tests that open one through
-/// [`OpenDb`]. On a Postgres run the database is a schema of its own on
-/// that server, as every other test's is.
+/// [`OpenDb`].
 #[cfg(test)]
-pub(crate) async fn fresh_config(dir: &std::path::Path) -> Config {
-    use crate::config::{DatabaseConfig, PathsConfig};
+pub(crate) fn fresh_config(dir: &Path) -> Config {
+    use crate::config::PathsConfig;
 
-    let url = match crate::pg_test_url() {
-        Some(url) => Some(crate::db::engine::pg_test_schema_url(&url).await),
-        None => None,
-    };
     Config {
         paths: PathsConfig {
             db: dir.join("messagecrate.db"),
@@ -102,7 +95,6 @@ pub(crate) async fn fresh_config(dir: &std::path::Path) -> Config {
             assets_converted_dir: "assets_converted".into(),
         },
         server: None,
-        database: DatabaseConfig { url },
     }
 }
 
@@ -113,7 +105,7 @@ mod tests {
     #[tokio::test]
     async fn opening_a_new_database_creates_it_with_its_schema() {
         let dir = tempfile::tempdir().unwrap();
-        let mut cfg = fresh_config(dir.path()).await;
+        let mut cfg = fresh_config(dir.path());
         cfg.paths.db = dir.path().join("new/folder/messagecrate.db");
         let opened = OpenDb::open(cfg).await.unwrap();
 
@@ -128,7 +120,7 @@ mod tests {
     #[tokio::test]
     async fn account_id_resolves_a_username_and_rejects_an_unknown_one() {
         let dir = tempfile::tempdir().unwrap();
-        let opened = OpenDb::open(fresh_config(dir.path()).await).await.unwrap();
+        let opened = OpenDb::open(fresh_config(dir.path())).await.unwrap();
         let mut conn = opened.conn().await.unwrap();
         let alice = account_profile::insert_account(&mut conn, "alice", None, None)
             .await
@@ -146,14 +138,9 @@ mod tests {
     #[tokio::test]
     async fn location_names_the_sqlite_file() {
         let dir = tempfile::tempdir().unwrap();
-        let mut cfg = fresh_config(dir.path()).await;
-        cfg.database.url = None;
-        let opened = OpenDb::open(cfg).await.unwrap();
+        let opened = OpenDb::open(fresh_config(dir.path())).await.unwrap();
 
-        assert_eq!(
-            opened.location().to_string(),
-            dir.path().join("messagecrate.db").display().to_string()
-        );
+        assert_eq!(opened.location(), dir.path().join("messagecrate.db"));
         opened.close().await;
     }
 }

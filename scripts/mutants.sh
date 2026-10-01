@@ -20,8 +20,7 @@
 # hours on one machine. Point it at the file you changed; the Mutants
 # workflow, started by hand, splits the full run across 40 parallel shards.
 #
-# The server tests run on SQLite, so a mutant in a Postgres-only branch
-# shows as missed. ffmpeg on PATH matters: without it the transcode and
+# ffmpeg on PATH matters: without it the transcode and
 # media tests skip locally (and fail when CI is set), so every mutant they
 # would have caught shows as missed.
 #
@@ -67,7 +66,7 @@ export "${RUNNER_VAR}=${SCRIPT_DIR}/mutants-test-runner.sh"
 
 echo "==> cargo mutants"
 status=0
-env -u MC_TEST_POSTGRES_URL cargo mutants "${CONFIG[@]}" --output "${OUT}" "$@" || status=$?
+cargo mutants "${CONFIG[@]}" --output "${OUT}" "$@" || status=$?
 # 0: every mutant caught. 2: some missed. 3: some timed out. All three are
 # results to report; anything else means the run itself went wrong.
 if [[ ${status} -ne 0 && ${status} -ne 2 && ${status} -ne 3 ]]; then

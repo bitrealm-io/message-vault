@@ -21,22 +21,6 @@ jobs:
     name: Coverage (Rust workspace)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Same Postgres service as the test job in ci.yml, so the gated server
-    # suites count towards the numbers instead of skipping themselves.
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: messagecrate
-          POSTGRES_PASSWORD: messagecrate
-          POSTGRES_DB: messagecrate
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U messagecrate"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v7
 
@@ -63,8 +47,6 @@ jobs:
             ${{ runner.os }}-cargo-llvm-cov-
 
       - name: Measure coverage
-        env:
-          MC_TEST_POSTGRES_URL: postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate
         run: ./scripts/coverage.sh
 
       - name: Publish summary

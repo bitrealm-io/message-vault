@@ -1,26 +1,20 @@
 //! Schema management for the database.
 //!
 //! Serve and import open their database connections through
-//! [`crate::db::engine`] pools (shared pragmas for SQLite) and ensure the
+//! [`crate::db::engine`] pools (shared pragmas) and ensure the
 //! schema with `ensure_schema` / `ensure_accounts_schema`. DDL lives in
-//! the SQL files embedded at compile time; the functions here apply and
-//! evolve it. SQLite and Postgres each have their own DDL variants
-//! (`schema/sql/*.sql` and `schema/sql/pg_*.sql`).
+//! the SQL files embedded at compile time (`schema/sql/*.sql`); the
+//! functions here apply and evolve it.
 //!
 //! The embedded SQL is fingerprinted at compile time ([`SCHEMA_FINGERPRINT`])
-//! and the fingerprint is stamped into the database: `PRAGMA user_version`
-//! on SQLite, a `schema_meta` row (see [`SCHEMA_META_KEY`]) on
-//! Postgres. The rule is: any schema change requires a fresh reload of data,
+//! and the fingerprint is stamped into the database as `PRAGMA
+//! user_version`. The rule is: any schema change requires a fresh reload of data,
 //! so a database stamped with a different fingerprint is rebuilt empty from
 //! the embedded DDL instead of being patched in place. Nothing is bumped by
 //! hand; changing a `schema/sql/*.sql` file is the whole of a schema change.
 
 use anyhow::Result;
 use sqlx::AnyConnection;
-use sqlx::Connection;
-
-use crate::db::dialect;
-use crate::db::engine::DbEngine;
 
 /// Baseline DDL lives in `schema/sql/`. Every column there carries a comment;
 /// `tests/schema_column_comments.rs` enforces it.
@@ -34,17 +28,10 @@ const DROP_MESSAGES_FTS_TRIGGERS_SQL: &str =
     include_str!("../../../../../schema/sql/fts_triggers_drop.sql");
 const CREATE_MESSAGES_FTS_TRIGGERS_SQL: &str =
     include_str!("../../../../../schema/sql/fts_triggers_create.sql");
-/// Postgres FTS twin of `FTS_VIRTUAL_DDL` + `CREATE_MESSAGES_FTS_TRIGGERS_SQL`:
-/// the `search_tsv` column, GIN index, sync functions, and triggers (all
-/// idempotent).
-const FTS_POSTGRES_DDL: &str = include_str!("../../../../../schema/sql/fts_postgres.sql");
-const DROP_MESSAGES_FTS_TRIGGERS_PG_SQL: &str =
-    include_str!("../../../../../schema/sql/fts_postgres_drop.sql");
 
 /// Fingerprint of the embedded schema: a 31-bit FNV-1a hash over every
 /// `schema/sql/*.sql` file, computed at compile time. It is stamped into each
-/// SQLite database as `PRAGMA user_version` and into each Postgres database
-/// under [`SCHEMA_META_KEY`]; a database carrying any other value is
+/// database as `PRAGMA user_version`; a database carrying any other value is
 /// rebuilt empty (see [`migrate_schema`]).
 ///
 /// A hash rather than a hand-kept number so that a schema change is only a
@@ -58,7 +45,7 @@ pub const SCHEMA_FINGERPRINT: i64 = schema_fingerprint();
 const _: () = assert!(SCHEMA_FINGERPRINT > 1000 && SCHEMA_FINGERPRINT <= i32::MAX as i64);
 
 const fn schema_fingerprint() -> i64 {
-    const FILES: [&str; 10] = [
+    const FILES: [&str; 8] = [
         ACCOUNTS_DDL,
         MESSAGE_TABLES_DDL,
         STAGING_TABLES_DDL,
@@ -67,8 +54,6 @@ const fn schema_fingerprint() -> i64 {
         FTS_VIRTUAL_DDL,
         DROP_MESSAGES_FTS_TRIGGERS_SQL,
         CREATE_MESSAGES_FTS_TRIGGERS_SQL,
-        FTS_POSTGRES_DDL,
-        DROP_MESSAGES_FTS_TRIGGERS_PG_SQL,
     ];
     fingerprint_of(&FILES)
 }
@@ -193,38 +178,8 @@ async fn apply_ddl(conn: &mut AnyConnection) -> Result<()> {
     Ok(())
 }
 
-/// The Postgres DDL that creates the server's own tables, in the order the
-/// server installs it — transpiled from the SQLite originals (see
-/// [`crate::db::pg_ddl`]). The installer, the rebuild's drop list, and the
-/// drift guard all read this one value, so a DDL file cannot reach one of
-/// them and miss the others.
-fn pg_table_ddl() -> &'static crate::db::pg_ddl::PgDdl {
-    static DDL: std::sync::OnceLock<crate::db::pg_ddl::PgDdl> = std::sync::OnceLock::new();
-    DDL.get_or_init(|| {
-        crate::db::pg_ddl::transpile(&[
-            ACCOUNTS_DDL,
-            // Contacts before messages: the messages DDL references contact tables.
-            CONTACTS_TABLES_DDL,
-            MESSAGE_TABLES_DDL,
-            STAGING_TABLES_DDL,
-            SAVED_SEARCHES_DDL,
-        ])
-    })
-}
-
-/// Every table name the embedded Postgres DDL creates, as the transpiler
-/// collected them while producing that DDL, so the rebuild's drop list
-/// cannot drift from what the server installs.
-///
-/// A SQLite database file belongs to the server alone, but a Postgres schema
-/// may be shared with another application. The rebuild therefore names the
-/// server's own tables instead of sweeping `current_schema()`.
-fn pg_table_names() -> Vec<&'static str> {
-    pg_table_ddl().tables.iter().map(String::as_str).collect()
-}
-
 /// Quote `name` as a SQL identifier: wrapped in double quotes, with any
-/// double quote inside it doubled. SQLite and Postgres both read this form.
+/// double quote inside it doubled.
 /// Every name that reaches a `DROP TABLE` here came out of a catalog or out
 /// of the embedded DDL, and this is the one place that turns such a name
 /// into statement text.
@@ -232,151 +187,24 @@ fn quote_ident(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 
-/// Drop the server's own tables in the current schema. Postgres twin of
-/// [`rebuild_schema`]: a database stamped with an older marker is
-/// rebuilt empty rather than patched in place.
-///
-/// Only the tables [`pg_table_names`] lists are dropped, and each is
-/// schema-qualified, so a server sharing its schema with another application
-/// rebuilds its own data without touching the neighbour's.
-///
-/// `CASCADE` takes the FTS triggers and foreign keys down with their
-/// tables; the sync functions are recreated with `CREATE OR REPLACE`.
-async fn drop_pg_user_tables(conn: &mut AnyConnection) -> Result<()> {
-    // `::text` because the Any driver has no mapping for Postgres's `name`.
-    let schema: String = sqlx::query_scalar("SELECT current_schema()::text")
-        .fetch_one(&mut *conn)
-        .await?;
-    let schema = quote_ident(&schema);
-    for table in pg_table_names() {
-        sqlx::query(&format!(
-            "DROP TABLE IF EXISTS {schema}.{} CASCADE",
-            quote_ident(table)
-        ))
-        .execute(&mut *conn)
-        .await?;
-    }
-    Ok(())
-}
-
-/// Apply the Postgres DDL variants. The DDL is idempotent (`IF NOT EXISTS`),
-/// so applying it again is a no-op.
-async fn apply_postgres_ddl(conn: &mut AnyConnection) -> Result<()> {
-    // Installed databases skip straight past this (one marker lookup per
-    // request instead of re-running the DDL batch).
-    if pg_schema_ready(&mut *conn).await? {
-        return Ok(());
-    }
-    // One-time install: the advisory lock serializes concurrent
-    // first-touches (the trigger drop/create pair is not race-safe), and
-    // the re-check under the lock turns a waiter into a no-op.
-    let mut tx = conn.begin().await?;
-    sqlx::query("SELECT pg_advisory_xact_lock($1)")
-        .bind(SCHEMA_LOCK_ID)
-        .execute(&mut *tx)
-        .await?;
-    if !pg_schema_ready(&mut tx).await? {
-        // A database stamped with another fingerprint (or none, with tables
-        // present) is rebuilt empty — the same contract SQLite's
-        // user_version gives. Re-importing is the migration.
-        if table_exists(&mut tx, "imports").await? {
-            tracing::warn!(
-                expected = %SCHEMA_FINGERPRINT,
-                "database schema differs from this server's; rebuilding empty (re-import your data)"
-            );
-            drop_pg_user_tables(&mut tx).await?;
-        }
-        // Same ordering as the SQLite variant: contacts before messages.
-        for ddl in &pg_table_ddl().files {
-            execute_batch(&mut tx, ddl).await?;
-        }
-        // Post-hoc FKs last: they reference tables created across the DDL
-        // sequence (see `pg_ddl` rule 4).
-        execute_batch(&mut tx, &pg_table_ddl().deferred_fks).await?;
-        // FTS last, same as the SQLite variant: the tsvector column, GIN
-        // index, and sync triggers all target tables created above.
-        ensure_messages_fts(&mut tx).await?;
-        sqlx::query(
-            "INSERT INTO schema_meta (key, value) VALUES ($1, $2)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        )
-        .bind(SCHEMA_META_KEY)
-        .bind(SCHEMA_FINGERPRINT.to_string())
-        .execute(&mut *tx)
-        .await?;
-    }
-    tx.commit().await?;
-    Ok(())
-}
-
-/// True when the Postgres install marker carries the current
-/// [`SCHEMA_FINGERPRINT`]. Also false when `schema_meta` itself does not
-/// exist yet (pre-install).
-async fn pg_schema_ready(conn: &mut AnyConnection) -> Result<bool> {
-    if !table_exists(&mut *conn, "schema_meta").await? {
-        return Ok(false);
-    }
-    let stamped: Option<String> =
-        sqlx::query_scalar("SELECT value FROM schema_meta WHERE key = $1")
-            .bind(SCHEMA_META_KEY)
-            .fetch_optional(&mut *conn)
-            .await?;
-    Ok(stamped == Some(SCHEMA_FINGERPRINT.to_string()))
-}
-
 /// Create every table and index required by a current database.
 ///
-/// SQLite carries the fingerprint in `PRAGMA user_version` and is rebuilt
-/// when it does not match; Postgres carries it in a `schema_meta` row (see
-/// [`SCHEMA_META_KEY`]) so repeated ensures cost one lookup instead of
-/// re-running the DDL.
+/// The database carries the fingerprint in `PRAGMA user_version` and is
+/// rebuilt when it does not match.
 ///
 /// # Errors
 ///
 /// Returns an error when a DDL statement fails.
 pub async fn ensure_schema(conn: &mut AnyConnection) -> Result<()> {
-    if dialect::engine_of(conn) == DbEngine::Postgres {
-        return apply_postgres_ddl(conn).await;
-    }
     migrate_schema(conn).await
 }
 
 /// Marker that current full-text search (FTS) sync trigger definitions are installed.
 pub const MESSAGES_FTS_TRIGGERS_META_KEY: &str = "messages_fts_triggers_v1";
 
-/// The `schema_meta` row holding the installed [`SCHEMA_FINGERPRINT`] on
-/// Postgres. A database whose row holds another value, or an older
-/// `schema_vN` marker and no such row, is rebuilt empty, matching
-/// SQLite's `user_version` behaviour.
-pub const SCHEMA_META_KEY: &str = "schema_fingerprint";
-
-/// Advisory lock id serializing the one-time Postgres DDL install so two
-/// concurrent first-touches cannot interleave the trigger drop/create pair
-/// (arbitrary but unique within this database).
-const SCHEMA_LOCK_ID: i64 = 0x4D56_0001;
-
 /// Full-text search index over message body/subject plus attachment text:
-/// contentless FTS5 virtual table with sync triggers on SQLite, a `search_tsv`
-/// tsvector column with GIN index and sync triggers on Postgres.
+/// a contentless FTS5 virtual table with sync triggers.
 async fn ensure_messages_fts(conn: &mut AnyConnection) -> Result<()> {
-    if dialect::engine_of(conn) == DbEngine::Postgres {
-        // Postgres has no `CREATE TRIGGER IF NOT EXISTS`, so installing means
-        // dropping the six sync triggers and recreating them. That may only
-        // run when the marker says they are missing: every schema ensure
-        // (each import's reset_staging_for_account) would otherwise drop and
-        // recreate the triggers behind a concurrent writer, a silent desync
-        // window for rows written in between. install_messages_fts_triggers
-        // writes the marker, drop_messages_fts_triggers deletes it.
-        let triggers_ready: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM schema_meta WHERE key = $1")
-                .bind(MESSAGES_FTS_TRIGGERS_META_KEY)
-                .fetch_one(&mut *conn)
-                .await?;
-        if triggers_ready == 0 {
-            install_messages_fts_triggers(conn).await?;
-        }
-        return Ok(());
-    }
     execute_batch(conn, FTS_VIRTUAL_DDL).await?;
 
     let triggers_ready: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM schema_meta WHERE key = $1")
@@ -391,19 +219,13 @@ async fn ensure_messages_fts(conn: &mut AnyConnection) -> Result<()> {
 }
 
 /// Drop full-text search sync triggers (used during bulk promote so inserts skip
-/// per-row indexing). On Postgres this is the drop half of the trigger install
-/// (the promote path disables triggers instead — see
-/// [`disable_fts_triggers_pg`]).
+/// per-row indexing).
 ///
 /// # Errors
 ///
 /// Returns an error when the drop statements fail.
 pub(crate) async fn drop_messages_fts_triggers(conn: &mut AnyConnection) -> Result<()> {
-    if dialect::engine_of(conn) == DbEngine::Postgres {
-        execute_batch(conn, DROP_MESSAGES_FTS_TRIGGERS_PG_SQL).await?;
-    } else {
-        execute_batch(conn, DROP_MESSAGES_FTS_TRIGGERS_SQL).await?;
-    }
+    execute_batch(conn, DROP_MESSAGES_FTS_TRIGGERS_SQL).await?;
     sqlx::query("DELETE FROM schema_meta WHERE key = $1")
         .bind(MESSAGES_FTS_TRIGGERS_META_KEY)
         .execute(&mut *conn)
@@ -412,20 +234,14 @@ pub(crate) async fn drop_messages_fts_triggers(conn: &mut AnyConnection) -> Resu
 }
 
 /// Install full-text search sync triggers and mark them ready in `schema_meta`.
-/// On Postgres the trigger statements are made idempotent by dropping first,
-/// exactly like the SQLite path.
+/// The triggers are dropped first, so installing twice is safe.
 ///
 /// # Errors
 ///
 /// Returns an error when the trigger SQL or metadata write fails.
 pub(crate) async fn install_messages_fts_triggers(conn: &mut AnyConnection) -> Result<()> {
-    if dialect::engine_of(conn) == DbEngine::Postgres {
-        execute_batch(conn, DROP_MESSAGES_FTS_TRIGGERS_PG_SQL).await?;
-        execute_batch(conn, FTS_POSTGRES_DDL).await?;
-    } else {
-        execute_batch(conn, DROP_MESSAGES_FTS_TRIGGERS_SQL).await?;
-        execute_batch(conn, CREATE_MESSAGES_FTS_TRIGGERS_SQL).await?;
-    }
+    execute_batch(conn, DROP_MESSAGES_FTS_TRIGGERS_SQL).await?;
+    execute_batch(conn, CREATE_MESSAGES_FTS_TRIGGERS_SQL).await?;
     sqlx::query(
         "INSERT INTO schema_meta (key, value) VALUES ($1, '1')
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -488,74 +304,9 @@ pub(crate) async fn create_messages_secondary_indexes(conn: &mut AnyConnection) 
     Ok(())
 }
 
-/// Disable the six Postgres FTS sync triggers by name during bulk promote, so
-/// per-row FTS sync work is skipped (Postgres has no per-statement "don't run
-/// triggers" mode; SQLite drops its FTS triggers instead — see
-/// [`drop_messages_fts_triggers`]). Only the FTS triggers are touched: FK
-/// constraint triggers stay enabled, so a staging row that violates a foreign
-/// key still fails loudly, and the statements need only table ownership (no
-/// superuser). The bulk vector fill runs afterwards via
-/// [`index_messages_fts_from_promote_map`], then
-/// [`enable_fts_triggers_pg`] restores the triggers. Disabling and re-enabling
-/// are transactional, so a failed promote rolls the disable back.
-///
-/// # Errors
-///
-/// Returns an error when a disable statement fails.
-pub(crate) async fn disable_fts_triggers_pg(conn: &mut AnyConnection) -> Result<()> {
-    sqlx::query("ALTER TABLE messages DISABLE TRIGGER messages_fts_ai")
-        .execute(&mut *conn)
-        .await?;
-    sqlx::query("ALTER TABLE messages DISABLE TRIGGER messages_fts_au")
-        .execute(&mut *conn)
-        .await?;
-    sqlx::query("ALTER TABLE messages DISABLE TRIGGER messages_fts_ad")
-        .execute(&mut *conn)
-        .await?;
-    sqlx::query("ALTER TABLE attachments DISABLE TRIGGER attachments_fts_ai")
-        .execute(&mut *conn)
-        .await?;
-    sqlx::query("ALTER TABLE attachments DISABLE TRIGGER attachments_fts_ad")
-        .execute(&mut *conn)
-        .await?;
-    sqlx::query("ALTER TABLE attachments DISABLE TRIGGER attachments_fts_au")
-        .execute(&mut *conn)
-        .await?;
-    Ok(())
-}
-
-/// Re-enable the six Postgres FTS sync triggers disabled by
-/// [`disable_fts_triggers_pg`], by the same names.
-///
-/// # Errors
-///
-/// Returns an error when an enable statement fails.
-pub(crate) async fn enable_fts_triggers_pg(conn: &mut AnyConnection) -> Result<()> {
-    sqlx::query("ALTER TABLE messages ENABLE TRIGGER messages_fts_ai")
-        .execute(&mut *conn)
-        .await?;
-    sqlx::query("ALTER TABLE messages ENABLE TRIGGER messages_fts_au")
-        .execute(&mut *conn)
-        .await?;
-    sqlx::query("ALTER TABLE messages ENABLE TRIGGER messages_fts_ad")
-        .execute(&mut *conn)
-        .await?;
-    sqlx::query("ALTER TABLE attachments ENABLE TRIGGER attachments_fts_ai")
-        .execute(&mut *conn)
-        .await?;
-    sqlx::query("ALTER TABLE attachments ENABLE TRIGGER attachments_fts_ad")
-        .execute(&mut *conn)
-        .await?;
-    sqlx::query("ALTER TABLE attachments ENABLE TRIGGER attachments_fts_au")
-        .execute(&mut *conn)
-        .await?;
-    Ok(())
-}
-
 /// Bulk-index promoted messages (joined via temp `_promote_msg_map`).
 /// Call after attachment rows exist so `attachment_text` is complete.
-/// SQLite inserts into the contentless `messages_fts` table; Postgres fills
-/// the `messages.search_tsv` tsvector instead.
+/// Inserts into the contentless `messages_fts` table.
 ///
 /// `_promote_msg_map` also targets messages that already existed before this
 /// promotion (so attachments and tapbacks can attach to them), and several
@@ -567,31 +318,6 @@ pub(crate) async fn index_messages_fts_from_promote_map(
     conn: &mut AnyConnection,
     min_new_message_id: i64,
 ) -> Result<u64> {
-    if dialect::engine_of(conn) == DbEngine::Postgres {
-        let n = sqlx::query(
-            r"
-            UPDATE messages SET search_tsv = fts.vec
-            FROM (
-                SELECT mm.prod_id,
-                       to_tsvector('simple',
-                           coalesce(m.body, '') || ' ' || coalesce(m.subject, '') || ' ' || coalesce(a.attachment_text, '')) AS vec
-                FROM (SELECT DISTINCT prod_id FROM _promote_msg_map WHERE prod_id > $1) mm
-                JOIN messages m ON m.id = mm.prod_id
-                LEFT JOIN (
-                    SELECT message_id,
-                           string_agg(trim(coalesce(original_name, '') || ' ' || coalesce(transcription, '')), ' ') AS attachment_text
-                    FROM attachments
-                    GROUP BY message_id
-                ) a ON a.message_id = mm.prod_id
-            ) fts
-            WHERE messages.id = fts.prod_id
-            ",
-        )
-        .bind(min_new_message_id)
-        .execute(&mut *conn)
-        .await?;
-        return Ok(n.rows_affected());
-    }
     let n = sqlx::query(
         r"
         INSERT INTO messages_fts(rowid, body, subject, attachment_text)
@@ -675,104 +401,60 @@ pub async fn delete_messages_for_source(
 /// Create current account and server metadata tables.
 ///
 /// Account tables live in the same database file as everything else, so
-/// the one `user_version` stamp covers them on SQLite. A stamped database
-/// needs nothing; anything else gets the full schema (with the rebuild
-/// that implies). On Postgres the one-time DDL install is gated by the
-/// [`SCHEMA_META_KEY`] marker.
+/// the one `user_version` stamp covers them. A stamped database needs
+/// nothing; anything else gets the full schema (with the rebuild that
+/// implies).
 ///
 /// # Errors
 ///
 /// Returns an error when a DDL statement fails.
 pub async fn ensure_accounts_schema(conn: &mut AnyConnection) -> Result<()> {
-    if dialect::engine_of(conn) == DbEngine::Postgres {
-        return ensure_schema(conn).await;
-    }
     if user_version(conn).await? != SCHEMA_FINGERPRINT {
         ensure_schema(conn).await?;
     }
     Ok(())
 }
 
-/// True when `table` exists on this engine.
-///
-/// Branches on the engine: `pg_catalog.pg_tables` for Postgres, `sqlite_master`
-/// for SQLite. Used by [`crate::process_assets::run`] to skip the account
-/// sweep on a database that has no schema yet.
-///
-/// The Postgres lookup is restricted to `current_schema()` — the schema the
-/// server reads, writes, and rebuilds — so a same-named table in another
-/// schema of the same database never stands in for the server's own.
+/// True when `table` exists. Used by [`crate::process_assets::run`] to skip
+/// the account sweep on a database that has no schema yet.
 pub async fn table_exists(conn: &mut AnyConnection, name: &str) -> Result<bool> {
-    let found: i64 = if dialect::engine_of(conn) == DbEngine::Postgres {
-        sqlx::query_scalar(
-            "SELECT COUNT(*) FROM pg_catalog.pg_tables
-             WHERE tablename = $1 AND schemaname = current_schema()",
-        )
-        .bind(name)
-        .fetch_one(&mut *conn)
-        .await?
-    } else {
+    let found: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $1")
             .bind(name)
             .fetch_one(&mut *conn)
-            .await?
-    };
+            .await?;
     Ok(found > 0)
 }
 
 /// Column names of `table` in ordinal order.
 #[cfg(test)]
 async fn table_columns(conn: &mut AnyConnection, table: &str) -> Result<Vec<String>> {
-    if dialect::engine_of(conn) == DbEngine::Postgres {
-        return Ok(sqlx::query_scalar(
-            "SELECT column_name FROM information_schema.columns
-             WHERE table_name = $1 ORDER BY ordinal_position",
-        )
-        .bind(table)
-        .fetch_all(&mut *conn)
-        .await?);
-    }
     Ok(sqlx::query_scalar("SELECT name FROM pragma_table_info($1)")
         .bind(table)
         .fetch_all(&mut *conn)
         .await?)
 }
 
-/// True when an index named `name` exists on this engine.
+/// True when an index named `name` exists.
 #[cfg(test)]
 async fn index_exists(conn: &mut AnyConnection, name: &str) -> Result<bool> {
-    let found: i64 = if dialect::engine_of(conn) == DbEngine::Postgres {
-        sqlx::query_scalar("SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE indexname = $1")
-            .bind(name)
-            .fetch_one(&mut *conn)
-            .await?
-    } else {
+    let found: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = $1")
             .bind(name)
             .fetch_one(&mut *conn)
-            .await?
-    };
+            .await?;
     Ok(found > 0)
 }
 
-/// True when a trigger named `name` exists on this engine.
+/// True when a trigger named `name` exists.
 #[cfg(test)]
 async fn trigger_exists(conn: &mut AnyConnection, name: &str) -> Result<bool> {
-    let found: i64 = if dialect::engine_of(conn) == DbEngine::Postgres {
-        sqlx::query_scalar(
-            "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_name = $1",
-        )
-        .bind(name)
-        .fetch_one(&mut *conn)
-        .await?
-    } else {
-        sqlx::query_scalar(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = $1",
-        )
-        .bind(name)
-        .fetch_one(&mut *conn)
-        .await?
-    };
+    let found: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = $1",
+    )
+    .bind(name)
+    .fetch_one(&mut *conn)
+    .await?;
     Ok(found > 0)
 }
 
@@ -780,56 +462,26 @@ async fn trigger_exists(conn: &mut AnyConnection, name: &str) -> Result<bool> {
 ///
 /// The schema files follow a fixed format: comments are whole `--` lines,
 /// ordinary statements end with `;` at end of line, and the only multi-line
-/// statements are trigger bodies (ending in a line ending with `END;`, or
-/// ending on the same line they start), Postgres `DO $$` blocks (ending in a
-/// line ending with `$$;`), and Postgres `CREATE OR REPLACE FUNCTION … AS $$`
-/// blocks (ending in a line that starts with `$$`).
+/// statements are trigger bodies, which end in a line ending with `END;`.
 pub fn split_ddl(batch: &str) -> Vec<String> {
     let mut statements = Vec::new();
     let mut current = String::new();
     let mut in_trigger = false;
-    let mut in_do_block = false;
-    let mut in_function = false;
     for line in batch.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with("--") {
             continue;
         }
-        let starts_trigger = trimmed.starts_with("CREATE TRIGGER");
-        let starts_do_block = trimmed.starts_with("DO $$");
-        let starts_function = trimmed.starts_with("CREATE OR REPLACE FUNCTION");
-        if starts_trigger {
+        if trimmed.starts_with("CREATE TRIGGER") {
             in_trigger = true;
-        }
-        if starts_do_block {
-            in_do_block = true;
-        }
-        if starts_function {
-            in_function = true;
         }
         current.push_str(line);
         current.push('\n');
         if in_trigger {
-            // Multi-line trigger bodies end with `END;`; a one-line trigger
-            // (e.g. `EXECUTE FUNCTION`) ends with `;` on its own line.
-            if trimmed.ends_with("END;") || (starts_trigger && trimmed.ends_with(';')) {
+            if trimmed.ends_with("END;") {
                 statements.push(current.trim_end().to_string());
                 current.clear();
                 in_trigger = false;
-            }
-        } else if in_do_block {
-            if trimmed.ends_with("$$;") {
-                statements.push(current.trim_end().to_string());
-                current.clear();
-                in_do_block = false;
-            }
-        } else if in_function {
-            // The body's closing delimiter is its own `$$` line, e.g.
-            // `$$ LANGUAGE plpgsql;`.
-            if trimmed.starts_with("$$") && trimmed.ends_with(';') {
-                statements.push(current.trim_end().to_string());
-                current.clear();
-                in_function = false;
             }
         } else if trimmed.ends_with(';') {
             statements.push(current.trim_end().to_string());

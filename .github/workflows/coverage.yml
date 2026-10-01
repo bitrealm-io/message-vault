@@ -25,9 +25,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev ffmpeg
+        run: ./scripts/ci-apt-install.sh libfontconfig1-dev libxkbcommon-dev ffmpeg
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2

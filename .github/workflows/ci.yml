@@ -117,9 +117,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev
+        run: ./scripts/ci-apt-install.sh libfontconfig1-dev libxkbcommon-dev
 
       - uses: actions/cache@v6
         with:
@@ -148,9 +146,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev ffmpeg
+        run: ./scripts/ci-apt-install.sh libfontconfig1-dev libxkbcommon-dev ffmpeg
 
       - uses: actions/cache@v6
         with:
@@ -185,8 +181,7 @@ jobs:
 
       - name: Install Tauri build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          ./scripts/ci-apt-install.sh \
             build-essential pkg-config \
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
@@ -437,8 +432,7 @@ jobs:
       - name: Install Linux Tauri build deps
         if: matrix.os == 'ubuntu-latest'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          ./scripts/ci-apt-install.sh \
             build-essential pkg-config \
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \

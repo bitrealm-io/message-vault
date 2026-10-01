@@ -733,5 +733,4 @@ The first release: command-line tools that read a phone backup and write CSV.
 ---
 
 Installable builds also appear on
-[GitHub Releases](https://github.com/messagecrate/message-crate/releases), and a
-summary is published at <https://messagecrate.app/changelog/>.
+[GitHub Releases](https://github.com/messagecrate/message-crate/releases).

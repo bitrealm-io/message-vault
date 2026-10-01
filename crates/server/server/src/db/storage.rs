@@ -12,7 +12,7 @@
 //! measured messages figure split by the account's share of text.
 
 use anyhow::Result;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use super::account_profile::OWNER_ACCOUNT_ID;
 
@@ -28,7 +28,7 @@ pub enum Scope {
 /// Run `SELECT {select} FROM {from}` over the rows `scope` names, where
 /// `account_column` is the column that holds the owning account.
 async fn scalar(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     select: &str,
     from: &str,
     account_column: &str,
@@ -53,29 +53,29 @@ async fn scalar(
 }
 
 /// Messages held.
-pub async fn message_count(conn: &mut AnyConnection, scope: Scope) -> Result<i64> {
+pub async fn message_count(conn: &mut SqliteConnection, scope: Scope) -> Result<i64> {
     scalar(conn, "COUNT(*)", "messages", "account_id", scope).await
 }
 
 /// Conversations held.
-pub async fn conversation_count(conn: &mut AnyConnection, scope: Scope) -> Result<i64> {
+pub async fn conversation_count(conn: &mut SqliteConnection, scope: Scope) -> Result<i64> {
     scalar(conn, "COUNT(*)", "conversations", "account_id", scope).await
 }
 
 /// Contacts held.
-pub async fn contact_count(conn: &mut AnyConnection, scope: Scope) -> Result<i64> {
+pub async fn contact_count(conn: &mut SqliteConnection, scope: Scope) -> Result<i64> {
     scalar(conn, "COUNT(*)", "contacts", "account_id", scope).await
 }
 
 const ATTACHMENTS_FROM: &str = "attachments a JOIN messages m ON m.id = a.message_id";
 
 /// Attachment rows held.
-pub async fn attachment_count(conn: &mut AnyConnection, scope: Scope) -> Result<i64> {
+pub async fn attachment_count(conn: &mut SqliteConnection, scope: Scope) -> Result<i64> {
     scalar(conn, "COUNT(*)", ATTACHMENTS_FROM, "m.account_id", scope).await
 }
 
 /// Bytes the attachments take, by their original `size_bytes`.
-pub async fn attachment_bytes(conn: &mut AnyConnection, scope: Scope) -> Result<i64> {
+pub async fn attachment_bytes(conn: &mut SqliteConnection, scope: Scope) -> Result<i64> {
     scalar(
         conn,
         "COALESCE(SUM(a.size_bytes), 0)",
@@ -101,7 +101,7 @@ pub struct AccountText {
 
 /// Bytes the database takes, without attachment files on disk: the file's
 /// pages.
-pub async fn database_bytes(conn: &mut AnyConnection) -> Result<i64> {
+pub async fn database_bytes(conn: &mut SqliteConnection) -> Result<i64> {
     let n: i64 = sqlx::query_scalar(
         "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
     )
@@ -113,7 +113,7 @@ pub async fn database_bytes(conn: &mut AnyConnection) -> Result<i64> {
 /// Bytes the full-text search index takes: the four shadow tables behind
 /// `messages_fts`, measured through `dbstat`, which the bundled library is
 /// compiled with (`SQLITE_ENABLE_DBSTAT_VTAB`).
-pub async fn fts_bytes(conn: &mut AnyConnection) -> Result<i64> {
+pub async fn fts_bytes(conn: &mut SqliteConnection) -> Result<i64> {
     let n: i64 = sqlx::query_scalar(
         "SELECT COALESCE(SUM(pgsize), 0) FROM dbstat \
          WHERE name IN ('messages_fts_data', 'messages_fts_idx', \
@@ -127,7 +127,7 @@ pub async fn fts_bytes(conn: &mut AnyConnection) -> Result<i64> {
 /// Bytes the `messages` table and its indexes take, without the full-text
 /// search index. The FTS index is separate tables, so the table's `dbstat`
 /// pages are the answer.
-pub async fn messages_bytes(conn: &mut AnyConnection) -> Result<i64> {
+pub async fn messages_bytes(conn: &mut SqliteConnection) -> Result<i64> {
     let n: i64 = sqlx::query_scalar(
         "SELECT COALESCE(SUM(pgsize), 0) FROM dbstat \
          WHERE name = 'messages' \
@@ -144,7 +144,7 @@ pub async fn messages_bytes(conn: &mut AnyConnection) -> Result<i64> {
 /// no messages is listed with zeros. Text is counted in bytes, not
 /// characters: `LENGTH` of text counts characters, so the text is read as a
 /// blob.
-pub async fn text_by_account(conn: &mut AnyConnection) -> Result<Vec<AccountText>> {
+pub async fn text_by_account(conn: &mut SqliteConnection) -> Result<Vec<AccountText>> {
     let bytes_of = |column: &str| format!("COALESCE(LENGTH(CAST({column} AS BLOB)), 0)");
     let rows: Vec<(i64, String, i64, i64)> = sqlx::query_as(&format!(
         "SELECT a.id, a.username, COUNT(m.id), COALESCE(SUM({} + {}), 0) \

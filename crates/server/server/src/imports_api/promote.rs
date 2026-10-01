@@ -8,7 +8,7 @@ use std::io::{self, Write};
 use std::time::Instant;
 
 use anyhow::{Result, bail};
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use crate::db::schema;
 use crate::db::staging;
@@ -33,7 +33,7 @@ pub(super) struct PromoteStats {
 /// staging did to contacts becomes visible only when promote succeeds too.
 /// The caller commits it.
 pub(super) async fn promote_append(
-    tx: &mut AnyConnection,
+    tx: &mut SqliteConnection,
     mode: ImportMode,
     account_id: i64,
     fill_content_keys: bool,
@@ -66,7 +66,7 @@ pub(super) async fn promote_append(
 /// [`promote_append`] calls them because later phases read the temp id maps
 /// earlier ones write.
 struct Promote<'a> {
-    tx: &'a mut AnyConnection,
+    tx: &'a mut SqliteConnection,
     account_id: i64,
     mode: ImportMode,
     stats: PromoteStats,

@@ -373,10 +373,10 @@ impl<'a> World<'a> {
                 .await
                 .unwrap();
         }
-        let session = async |conn: &mut sqlx::AnyConnection, id| {
+        let session = async |conn: &mut sqlx::SqliteConnection, id| {
             insert_account_session_token(conn, id).await.unwrap()
         };
-        let token = async |conn: &mut sqlx::AnyConnection, label, import, export| {
+        let token = async |conn: &mut sqlx::SqliteConnection, label, import, export| {
             create_api_token(conn, alice, label, Permissions::token(import, export), None)
                 .await
                 .unwrap()

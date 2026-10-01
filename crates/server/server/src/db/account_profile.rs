@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result, bail};
 use message_ir::HandleType;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use crate::db::handles::{normalize_handle, upsert_handle_row};
 use crate::db::schema;
@@ -19,7 +19,7 @@ pub struct AccountProfile {
 /// Load the email and phone handles linked to an account. Both default to empty
 /// when nothing is linked.
 pub async fn load_account_profile(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<AccountProfile> {
     let emails = query_account_strings(
@@ -42,7 +42,7 @@ pub async fn load_account_profile(
 
 /// Run a one-column query bound to `account_id` and collect the strings.
 async fn query_account_strings(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     sql: &str,
     account_id: i64,
 ) -> Result<Vec<String>> {
@@ -55,7 +55,7 @@ async fn query_account_strings(
 /// Ensure an `accounts` row exists at `account_id`, with the id as its stub
 /// username. The demo reset and the tests use it to place a row at a chosen
 /// id; every other account is made by [`insert_account`].
-pub async fn ensure_account_row(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
+pub async fn ensure_account_row(conn: &mut SqliteConnection, account_id: i64) -> Result<()> {
     sqlx::query(
         "INSERT INTO accounts (id, username) VALUES ($1, $2)
          ON CONFLICT DO NOTHING",
@@ -71,7 +71,7 @@ pub async fn ensure_account_row(conn: &mut AnyConnection, account_id: i64) -> Re
 /// Ensure a `handles` row exists and link it to the account via `account_handles`.
 /// Returns the handle id.
 pub async fn link_account_handle(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     raw: &str,
     handle_type: HandleType,
@@ -82,7 +82,7 @@ pub async fn link_account_handle(
 /// Like [`link_account_handle`], recording a platform `service`
 /// (`phone` | `whatsapp`). Missing/`None` defaults to `phone`.
 pub async fn link_account_handle_with_service(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     raw: &str,
     handle_type: HandleType,
@@ -107,7 +107,7 @@ pub async fn link_account_handle_with_service(
 /// [`lookup_account_ref`]: a username is what a person types, and an account
 /// whose username happens to be digits must not be mistaken for an id.
 pub async fn lookup_account_by_username(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     username: &str,
 ) -> Result<Option<i64>> {
     let username = username.trim();
@@ -127,7 +127,7 @@ pub async fn lookup_account_by_username(
 /// a command line's `--account`. A reference that parses as an integer is
 /// tried as an id first. `None` when no row matches.
 pub async fn lookup_account_ref(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_ref: &str,
 ) -> Result<Option<i64>> {
     let account_ref = account_ref.trim();
@@ -146,7 +146,7 @@ pub async fn lookup_account_ref(
 
 /// Resolve a command line's `--account` to `accounts.id`. Accepts an id or a
 /// username; anything else is an error naming the reference.
-pub async fn resolve_account_ref(conn: &mut AnyConnection, account_ref: &str) -> Result<i64> {
+pub async fn resolve_account_ref(conn: &mut SqliteConnection, account_ref: &str) -> Result<i64> {
     let account_ref = account_ref.trim();
     if account_ref.is_empty() {
         bail!("account is empty");
@@ -159,7 +159,7 @@ pub async fn resolve_account_ref(conn: &mut AnyConnection, account_ref: &str) ->
 
 /// Username for an account id, if the row exists.
 pub async fn username_for_account(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Option<String>> {
     schema::ensure_accounts_schema(conn).await?;
@@ -175,7 +175,7 @@ pub async fn username_for_account(
 /// Outer `Option` is "row missing"; inner is the nullable `password_hash`
 /// column (NULL/empty means passwordless login).
 pub async fn load_password_hash(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Option<String>> {
     let hash: Option<Option<String>> =
@@ -188,7 +188,7 @@ pub async fn load_password_hash(
 
 /// Replace the argon2 password hash for an account.
 pub async fn update_password_hash(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     password_hash: Option<&str>,
 ) -> Result<()> {
@@ -204,7 +204,7 @@ pub async fn update_password_hash(
 /// Record that the account logged in just now. Called by every route that
 /// opens a Session for a person: login, claiming the server, and
 /// registering. Rotating a token on a password change is not a login.
-pub async fn record_login(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
+pub async fn record_login(conn: &mut SqliteConnection, account_id: i64) -> Result<()> {
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     sqlx::query("UPDATE accounts SET last_login_at = $1 WHERE id = $2")
         .bind(now)
@@ -216,7 +216,10 @@ pub async fn record_login(conn: &mut AnyConnection, account_id: i64) -> Result<(
 }
 
 /// When the account last logged in, as stored, or `None` if it never has.
-pub async fn load_last_login(conn: &mut AnyConnection, account_id: i64) -> Result<Option<String>> {
+pub async fn load_last_login(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+) -> Result<Option<String>> {
     let at: Option<Option<String>> =
         sqlx::query_scalar("SELECT last_login_at FROM accounts WHERE id = $1")
             .bind(account_id)
@@ -228,7 +231,7 @@ pub async fn load_last_login(conn: &mut AnyConnection, account_id: i64) -> Resul
 /// Permanently delete an account. All dependent rows are removed by
 /// ON DELETE CASCADE (messages, conversations, contacts, `imports`,
 /// `account_handles/emails/api_tokens`).
-pub async fn delete_account(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
+pub async fn delete_account(conn: &mut SqliteConnection, account_id: i64) -> Result<()> {
     sqlx::query("DELETE FROM accounts WHERE id = $1")
         .bind(account_id)
         .execute(&mut *conn)
@@ -257,7 +260,7 @@ pub fn is_server_owner(account_id: i64) -> bool {
 }
 
 /// True when there is an owner: this Message Crate is claimed.
-pub async fn is_claimed(conn: &mut AnyConnection) -> Result<bool> {
+pub async fn is_claimed(conn: &mut SqliteConnection) -> Result<bool> {
     schema::ensure_accounts_schema(conn).await?;
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts WHERE id = $1")
         .bind(OWNER_ACCOUNT_ID)
@@ -280,7 +283,7 @@ pub struct AccountAuth {
 
 /// Load one account's authorization row. `None` when the account is gone.
 pub async fn load_account_auth(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Option<AccountAuth>> {
     schema::ensure_accounts_schema(conn).await?;
@@ -308,7 +311,7 @@ pub async fn load_account_auth(
 /// drifts, and the answer has to survive cleared site data and a second
 /// browser.
 pub async fn set_must_set_up_profile(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     must_set_up: bool,
 ) -> Result<()> {
@@ -334,7 +337,7 @@ pub struct DeletedMessagesStats {
 /// attachments, participants, tapbacks), staging rows, and trash markers.
 /// Contacts, groups, login details, and import tokens are retained.
 pub async fn delete_all_messages_for_account(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<DeletedMessagesStats> {
     schema::ensure_schema(conn).await?;
@@ -373,7 +376,7 @@ pub async fn delete_all_messages_for_account(
 /// The account's IANA time zone. UTC when the row is missing or the stored
 /// name is not one chrono-tz knows, so a bad value degrades to Greenwich
 /// rather than to an error on every list.
-pub async fn load_time_zone(conn: &mut AnyConnection, account_id: i64) -> Result<chrono_tz::Tz> {
+pub async fn load_time_zone(conn: &mut SqliteConnection, account_id: i64) -> Result<chrono_tz::Tz> {
     let name: Option<String> = sqlx::query_scalar("SELECT time_zone FROM accounts WHERE id = $1")
         .bind(account_id)
         .fetch_optional(&mut *conn)
@@ -385,7 +388,7 @@ pub async fn load_time_zone(conn: &mut AnyConnection, account_id: i64) -> Result
 
 /// Store the account's time zone.
 pub async fn set_time_zone(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     zone: chrono_tz::Tz,
 ) -> Result<()> {
@@ -400,7 +403,7 @@ pub async fn set_time_zone(
 /// The account's zone and today's date in it: what every search compile and
 /// every year boundary needs.
 pub async fn account_clock(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<(chrono_tz::Tz, chrono::NaiveDate)> {
     let zone = load_time_zone(conn, account_id).await?;
@@ -409,7 +412,7 @@ pub async fn account_clock(
 
 /// Load the `preferred_name` for an account, if set.
 pub async fn load_preferred_name(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Option<String>> {
     let name: Option<Option<String>> =
@@ -429,7 +432,7 @@ pub async fn load_preferred_name(
 ///
 /// Returns an error when the statement fails.
 pub async fn set_preferred_name(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     name: Option<&str>,
 ) -> Result<()> {
@@ -461,7 +464,7 @@ pub struct AccountFlags {
 ///
 /// Returns an error when a statement fails.
 pub async fn set_account_flags(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     flags: AccountFlags,
 ) -> Result<()> {
@@ -489,7 +492,7 @@ pub async fn set_account_flags(
 /// # Errors
 ///
 /// Returns an error when the statement fails.
-pub async fn count_accounts(conn: &mut AnyConnection) -> Result<i64> {
+pub async fn count_accounts(conn: &mut SqliteConnection) -> Result<i64> {
     Ok(sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
         .fetch_one(&mut *conn)
         .await?)
@@ -502,7 +505,7 @@ pub async fn count_accounts(conn: &mut AnyConnection) -> Result<i64> {
 ///
 /// Returns an error when the statement fails.
 pub async fn account_ids_page(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     limit: usize,
     offset: usize,
 ) -> Result<Vec<i64>> {
@@ -521,7 +524,7 @@ pub async fn account_ids_page(
 /// The new account gets every permission (`Permissions::all()`); narrow it
 /// afterward if needed.
 pub async fn insert_account(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     username: &str,
     password_hash: Option<&str>,
     preferred_name: Option<&str>,
@@ -551,7 +554,7 @@ pub const FIRST_GENERATED_ACCOUNT_ID: i64 = 100;
 /// Insert an account at a fixed id: the owner at [`OWNER_ACCOUNT_ID`],
 /// the demo account at [`DEMO_ACCOUNT_ID`], and a test's chosen row.
 pub async fn insert_account_at(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     id: i64,
     username: &str,
     password_hash: Option<&str>,
@@ -573,7 +576,7 @@ pub async fn insert_account_at(
 
 /// Ensure a phone handle is linked to the account via `account_handles`.
 pub async fn upsert_account_phone(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     phone: &str,
 ) -> Result<()> {
@@ -583,7 +586,7 @@ pub async fn upsert_account_phone(
 
 /// Upsert an `account_emails` row.
 pub async fn upsert_account_email(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     email: &str,
     is_primary: bool,
@@ -605,7 +608,7 @@ pub async fn upsert_account_email(
 /// For emails, also removes the matching `account_emails` row. The underlying
 /// `handles` row is left in place so conversation history stays intact.
 pub async fn unlink_account_handle(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     raw: &str,
     handle_type: HandleType,

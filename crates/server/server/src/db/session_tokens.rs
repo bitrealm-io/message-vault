@@ -3,7 +3,7 @@
 use anyhow::{Context, Result, bail};
 pub use message_crate_api_types::AppKind;
 use rand::TryRng;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 const TOKEN_ALPHANUM: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -93,7 +93,7 @@ pub struct Session {
 /// # Errors
 ///
 /// Returns an error when the lookup or delete fails.
-pub async fn lookup_session(conn: &mut AnyConnection, token: &str) -> Result<Option<Session>> {
+pub async fn lookup_session(conn: &mut SqliteConnection, token: &str) -> Result<Option<Session>> {
     let token_hash = hash_api_token(token);
     let found: Option<(i64, String, Option<String>, Option<String>)> = sqlx::query_as(
         "SELECT account_id, expires_at, app_kind, app_build \
@@ -129,7 +129,7 @@ pub async fn lookup_session(conn: &mut AnyConnection, token: &str) -> Result<Opt
 ///
 /// Returns an error when the update fails.
 pub async fn record_connecting_app(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     session: &Session,
     app: &ConnectingApp,
 ) -> Result<()> {
@@ -155,7 +155,7 @@ pub async fn record_connecting_app(
 ///
 /// Returns an error when the lookup fails.
 pub async fn connecting_app_for_account(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Option<ConnectingApp>> {
     let found: Option<(Option<String>, Option<String>)> = sqlx::query_as(
@@ -173,7 +173,7 @@ pub async fn connecting_app_for_account(
 ///
 /// Returns an error when a token cannot be generated or the write fails.
 pub async fn rotate_account_session_token(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<String> {
     let token = generate_session_token()?;
@@ -206,7 +206,7 @@ pub async fn rotate_account_session_token(
 ///
 /// Returns an error when a token cannot be generated or the insert fails.
 pub async fn insert_account_session_token(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<String> {
     insert_account_session_token_with_ttl(conn, account_id, SESSION_TTL_SECS).await
@@ -218,7 +218,7 @@ pub async fn insert_account_session_token(
 ///
 /// Returns an error when a token cannot be generated or the insert fails.
 pub async fn insert_account_session_token_with_ttl(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     ttl_secs: u64,
 ) -> Result<String> {
@@ -246,7 +246,7 @@ pub async fn insert_account_session_token_with_ttl(
 ///
 /// Returns an error when the lookup or token write fails.
 pub async fn get_or_create_session_token(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<String> {
     let existing: Option<String> =
@@ -265,7 +265,7 @@ pub async fn get_or_create_session_token(
 /// # Errors
 ///
 /// Returns an error when the delete fails.
-pub async fn revoke_session_token(conn: &mut AnyConnection, token: &str) -> Result<bool> {
+pub async fn revoke_session_token(conn: &mut SqliteConnection, token: &str) -> Result<bool> {
     let token_hash = hash_api_token(token);
     let n = sqlx::query("DELETE FROM account_session_tokens WHERE token_hash = $1")
         .bind(token_hash)
@@ -284,7 +284,7 @@ pub async fn revoke_session_token(conn: &mut AnyConnection, token: &str) -> Resu
 /// # Errors
 ///
 /// Returns an error when the delete fails.
-pub async fn revoke_account_sessions(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
+pub async fn revoke_account_sessions(conn: &mut SqliteConnection, account_id: i64) -> Result<()> {
     sqlx::query("DELETE FROM account_session_tokens WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut *conn)

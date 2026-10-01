@@ -1,6 +1,6 @@
 use super::*;
 
-async fn insert_contact(conn: &mut AnyConnection, account: i64, name: &str) -> i64 {
+async fn insert_contact(conn: &mut SqliteConnection, account: i64, name: &str) -> i64 {
     sqlx::query_scalar(
         "INSERT INTO contacts (account_id, preferred_name) VALUES ($1, $2) RETURNING id",
     )

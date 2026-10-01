@@ -4,7 +4,7 @@ const TEST_ACCOUNT: i64 = 7;
 
 /// Import one individual conversation holding one message, `guid`, through
 /// the whole pipeline: staging, then promote, in the import's transaction.
-async fn import_one_message(conn: &mut AnyConnection, dir: &std::path::Path, guid: &str) {
+async fn import_one_message(conn: &mut SqliteConnection, dir: &std::path::Path, guid: &str) {
     let path = dir.join(format!("{guid}.jsonl"));
     std::fs::write(
         &path,

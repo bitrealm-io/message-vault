@@ -5,7 +5,7 @@
 //! off, `asset_max_bytes` at 512 MiB — so nothing has to seed it.
 
 use anyhow::Result;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use crate::db::schema;
 
@@ -36,7 +36,7 @@ impl Default for ServerSettings {
 }
 
 /// Read the server's settings, or the defaults when nothing has been written.
-pub async fn load(conn: &mut AnyConnection) -> Result<ServerSettings> {
+pub async fn load(conn: &mut SqliteConnection) -> Result<ServerSettings> {
     schema::ensure_accounts_schema(conn).await?;
     let row: Option<(i64, i64)> = sqlx::query_as(
         "SELECT public_registration, asset_max_bytes FROM server_settings WHERE id = 1",
@@ -60,7 +60,7 @@ pub async fn load(conn: &mut AnyConnection) -> Result<ServerSettings> {
 /// # Errors
 ///
 /// Returns an error when `bytes` does not fit the column, or the write fails.
-pub async fn set_asset_max_bytes(conn: &mut AnyConnection, bytes: u64) -> Result<()> {
+pub async fn set_asset_max_bytes(conn: &mut SqliteConnection, bytes: u64) -> Result<()> {
     schema::ensure_accounts_schema(conn).await?;
     let bytes = i64::try_from(bytes)?;
     sqlx::query(
@@ -75,7 +75,7 @@ pub async fn set_asset_max_bytes(conn: &mut AnyConnection, bytes: u64) -> Result
 
 /// Turn public registration on or off, creating the settings row if this is
 /// the first thing ever written to it.
-pub async fn set_public_registration(conn: &mut AnyConnection, enabled: bool) -> Result<()> {
+pub async fn set_public_registration(conn: &mut SqliteConnection, enabled: bool) -> Result<()> {
     schema::ensure_accounts_schema(conn).await?;
     sqlx::query(
         "INSERT INTO server_settings (id, public_registration) VALUES (1, $1)

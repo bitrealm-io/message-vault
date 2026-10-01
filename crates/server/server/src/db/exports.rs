@@ -5,13 +5,13 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
 use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope};
-use sqlx::any::AnyRow;
-use sqlx::{AnyConnection, Connection, Executor, Row};
+use sqlx::sqlite::SqliteRow;
+use sqlx::{Connection, Executor, Row, SqliteConnection};
 
 use crate::db::conversation_messages::{
     Message, MessageSort, conversation_join_sql, load_messages_from, messages_from_sql,
 };
-use crate::db::sql::{SqlParam, bind_all, renumber_placeholders};
+use crate::db::sql::{SqlParam, bind_all};
 use crate::paging::{Direction, Page, SortKey};
 use crate::server::ApiError;
 
@@ -65,7 +65,7 @@ const EXPORT_COLUMNS: &str = "id, scope_kind, scope_query, scope_conversation_id
      conversation_count, attachment_count, total_bytes, messages_delivered, scope_list";
 
 /// Map one `exports` row by column position.
-fn export_from_row(row: &AnyRow) -> Result<ExportRun> {
+fn export_from_row(row: &SqliteRow) -> Result<ExportRun> {
     let kind: String = row.try_get(1)?;
     let scope = match kind.as_str() {
         "everything" => ExportScope::Everything,
@@ -113,7 +113,7 @@ fn id_list(raw: Option<String>) -> Result<Vec<i64>> {
 /// # Errors
 ///
 /// Returns an error when the insert fails.
-pub async fn start_export(conn: &mut AnyConnection, args: &StartExportArgs<'_>) -> Result<i64> {
+pub async fn start_export(conn: &mut SqliteConnection, args: &StartExportArgs<'_>) -> Result<i64> {
     let (kind, list, query, conversation_ids, message_ids) = match args.scope {
         ExportScope::Everything => ("everything", None, None, None, None),
         ExportScope::Query { list, q } => {
@@ -157,7 +157,7 @@ pub async fn start_export(conn: &mut AnyConnection, args: &StartExportArgs<'_>) 
 ///
 /// Returns an error when the update fails.
 pub async fn record_counts(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     export_id: i64,
     counts: ExportCounts,
 ) -> Result<()> {
@@ -185,7 +185,7 @@ pub async fn record_counts(
 ///
 /// Returns an error when the read fails or the row cannot be mapped.
 pub async fn get_export(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     export_id: i64,
 ) -> Result<Option<ExportRun>> {
@@ -209,7 +209,7 @@ pub async fn get_export(
 ///
 /// Returns an error when a statement fails.
 pub async fn finish_export(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     export_id: i64,
     status: &str,
@@ -244,7 +244,7 @@ pub async fn finish_export(
 ///
 /// Returns an error when the update fails.
 pub async fn record_delivered(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     export_id: i64,
     delivered: i64,
@@ -270,7 +270,7 @@ pub async fn record_delivered(
 ///
 /// Returns an error when a read fails or a row cannot be mapped.
 pub async fn list_exports_page(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     status: Option<&str>,
     order: &[SortKey<ExportSort>],
@@ -325,7 +325,7 @@ pub async fn list_exports_page(
 ///
 /// Returns an error when the statement fails.
 pub async fn list_run_messages(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     export_id: i64,
     filter: &crate::search::Filter,
 ) -> Result<(), sqlx::Error> {
@@ -339,9 +339,7 @@ pub async fn list_run_messages(
     );
     let mut params = vec![SqlParam::Int(export_id)];
     params.extend_from_slice(filter.params());
-    (&mut *conn)
-        .execute(bind_all(&renumber_placeholders(&list_sql), &params))
-        .await?;
+    (&mut *conn).execute(bind_all(&list_sql, &params)).await?;
     Ok(())
 }
 
@@ -355,7 +353,7 @@ pub async fn list_run_messages(
 ///
 /// Returns an error when a statement fails.
 pub async fn export_counts(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     export_id: i64,
 ) -> Result<ExportCounts, sqlx::Error> {
     let row = sqlx::query(
@@ -438,7 +436,7 @@ fn page_places(total: u64, offset: usize, limit: usize, direction: Direction) ->
 ///
 /// Returns an internal error when a database statement fails.
 pub async fn export_messages(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     opts: ExportPageOpts,
 ) -> Result<Page<Message>, ApiError> {
     let direction = opts

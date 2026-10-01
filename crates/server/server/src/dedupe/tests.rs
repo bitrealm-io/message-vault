@@ -131,7 +131,7 @@ fn content_key_distinguishes_group_senders() {
 
 const TEST_ACCOUNT_ID: i64 = 7;
 
-async fn setup_db(conn: &mut AnyConnection) {
+async fn setup_db(conn: &mut SqliteConnection) {
     schema::ensure_schema(conn).await.unwrap();
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'test')")
         .bind(TEST_ACCOUNT_ID)
@@ -180,7 +180,7 @@ struct InsertMsgArgs<'a> {
     sort_order: i64,
 }
 
-async fn insert_msg(conn: &mut AnyConnection, args: InsertMsgArgs<'_>) -> i64 {
+async fn insert_msg(conn: &mut SqliteConnection, args: InsertMsgArgs<'_>) -> i64 {
     sqlx::query_scalar(
         r"
         INSERT INTO messages (
@@ -804,7 +804,7 @@ async fn the_same_words_from_two_group_members_are_never_near_duplicates() {
 // ---------------------------------------------------------------------------
 
 /// Insert (or find) a handle of the test account and return its id.
-async fn handle(conn: &mut AnyConnection, normalized: &str) -> i64 {
+async fn handle(conn: &mut SqliteConnection, normalized: &str) -> i64 {
     if let Some(id) = sqlx::query_scalar::<_, i64>(
         "SELECT id FROM handles WHERE account_id = $1 AND normalized = $2",
     )
@@ -831,7 +831,7 @@ async fn handle(conn: &mut AnyConnection, normalized: &str) -> i64 {
 }
 
 /// A conversation of the test account whose chat handle is `chat`.
-async fn conversation(conn: &mut AnyConnection, chat: &str, kind: &str) -> i64 {
+async fn conversation(conn: &mut SqliteConnection, chat: &str, kind: &str) -> i64 {
     let chat_handle = handle(conn, chat).await;
     sqlx::query_scalar(
         r"
@@ -850,7 +850,7 @@ async fn conversation(conn: &mut AnyConnection, chat: &str, kind: &str) -> i64 {
     .unwrap()
 }
 
-async fn add_participant(conn: &mut AnyConnection, conversation_id: i64, normalized: &str) {
+async fn add_participant(conn: &mut SqliteConnection, conversation_id: i64, normalized: &str) {
     let handle_id = handle(conn, normalized).await;
     sqlx::query("INSERT INTO participants (conversation_id, handle_id) VALUES ($1, $2)")
         .bind(conversation_id)
@@ -860,7 +860,7 @@ async fn add_participant(conn: &mut AnyConnection, conversation_id: i64, normali
         .unwrap();
 }
 
-async fn add_attachment(conn: &mut AnyConnection, message_id: i64, sha: &str) {
+async fn add_attachment(conn: &mut SqliteConnection, message_id: i64, sha: &str) {
     sqlx::query("INSERT INTO attachments (message_id, sha256) VALUES ($1, $2)")
         .bind(message_id)
         .bind(sha)
@@ -880,7 +880,7 @@ struct Msg<'a> {
     body: &'a str,
 }
 
-async fn message(conn: &mut AnyConnection, m: Msg<'_>) -> i64 {
+async fn message(conn: &mut SqliteConnection, m: Msg<'_>) -> i64 {
     sqlx::query_scalar(
         r"
         INSERT INTO messages (
@@ -903,7 +903,7 @@ async fn message(conn: &mut AnyConnection, m: Msg<'_>) -> i64 {
     .unwrap()
 }
 
-async fn setup_account(conn: &mut AnyConnection) {
+async fn setup_account(conn: &mut SqliteConnection) {
     schema::ensure_schema(conn).await.unwrap();
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'test')")
         .bind(TEST_ACCOUNT_ID)
@@ -912,7 +912,7 @@ async fn setup_account(conn: &mut AnyConnection) {
         .unwrap();
 }
 
-async fn duplicate_of(conn: &mut AnyConnection, id: i64) -> Option<i64> {
+async fn duplicate_of(conn: &mut SqliteConnection, id: i64) -> Option<i64> {
     sqlx::query_scalar("SELECT duplicate_of FROM messages WHERE id = $1")
         .bind(id)
         .fetch_one(&mut *conn)
@@ -1174,7 +1174,7 @@ struct GenChat {
 /// twin, a near-time twin (inside the window or one second past it), or a
 /// near-miss (the body or one attachment differs). Messages are a few seconds
 /// apart and share a small vocabulary, so unrelated messages collide too.
-async fn generate_database(conn: &mut AnyConnection, seed: u64) -> Vec<i64> {
+async fn generate_database(conn: &mut SqliteConnection, seed: u64) -> Vec<i64> {
     let mut rng = Lcg(seed);
     setup_account(conn).await;
     let mut people = Vec::new();
@@ -1292,7 +1292,7 @@ impl GenRow {
     }
 }
 
-async fn load_gen_rows(conn: &mut AnyConnection) -> HashMap<i64, GenRow> {
+async fn load_gen_rows(conn: &mut SqliteConnection) -> HashMap<i64, GenRow> {
     type Raw = (
         i64,
         i64,
@@ -1385,7 +1385,7 @@ fn survivor(rows: &HashMap<i64, GenRow>, id: i64, ctx: &str) -> i64 {
 ///   at most one of its messages is shown, and all of them lead to the same
 ///   one. That one may be outside the group, when the near-time pass hid the
 ///   group's own survivor.
-async fn assert_dedupe_invariants(conn: &mut AnyConnection, ctx: &str) {
+async fn assert_dedupe_invariants(conn: &mut SqliteConnection, ctx: &str) {
     let rows = load_gen_rows(conn).await;
 
     let expected: HashMap<i64, String> = ContentKeyInputs::load(conn, TEST_ACCOUNT_ID, false)
@@ -1457,7 +1457,7 @@ async fn assert_dedupe_invariants(conn: &mut AnyConnection, ctx: &str) {
 }
 
 /// `(id, content key, duplicate_of)` for every message, in id order.
-async fn dedupe_snapshot(conn: &mut AnyConnection) -> Vec<(i64, Option<String>, Option<i64>)> {
+async fn dedupe_snapshot(conn: &mut SqliteConnection) -> Vec<(i64, Option<String>, Option<i64>)> {
     let mut v: Vec<_> = load_gen_rows(conn)
         .await
         .into_iter()
@@ -1469,7 +1469,7 @@ async fn dedupe_snapshot(conn: &mut AnyConnection) -> Vec<(i64, Option<String>, 
 
 /// Run dedupe, check the invariants, then run it again and check it changed
 /// nothing. Returns the first run's counts.
-async fn dedupe_and_check(conn: &mut AnyConnection, ctx: &str) -> DedupeStats {
+async fn dedupe_and_check(conn: &mut SqliteConnection, ctx: &str) -> DedupeStats {
     let stats = dedupe_cross_source(conn, TEST_ACCOUNT_ID, None, GEN_WINDOW_SECS)
         .await
         .unwrap();

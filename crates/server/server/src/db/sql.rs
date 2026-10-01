@@ -4,24 +4,24 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
-use sqlx::AnyConnection;
 use sqlx::Arguments;
-use sqlx::any::{AnyArguments, AnyRow};
+use sqlx::SqliteConnection;
+use sqlx::sqlite::{SqliteArguments, SqliteRow};
 
-/// One bound parameter in a dynamic query. sqlx's Any driver exposes no
-/// user-constructible dynamic value, so heterogeneous binds ride this enum.
+/// One bound parameter in a dynamic query, whose binds are of mixed types
+/// and counted only at run time.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SqlParam {
     Text(String),
     Int(i64),
 }
 
-/// Encode `params` into Any-driver arguments, in order.
+/// Encode `params` into sqlx arguments, in order.
 ///
-/// `String`/`i64` cannot fail to encode on the Any driver; an encode
+/// `String`/`i64` cannot fail to encode; an encode
 /// failure is unreachable and panics like sqlx's own `Query::bind`.
-pub fn bind_args<'q>(params: &[SqlParam]) -> AnyArguments<'q> {
-    let mut args = AnyArguments::default();
+pub fn bind_args<'q>(params: &[SqlParam]) -> SqliteArguments<'q> {
+    let mut args = SqliteArguments::default();
     for p in params {
         match p {
             SqlParam::Text(v) => args.add(v.clone()),
@@ -33,34 +33,17 @@ pub fn bind_args<'q>(params: &[SqlParam]) -> AnyArguments<'q> {
 }
 
 /// Build a query from `sql` with all params bound, in order. Placeholders in
-/// the SQL must match this order after [`renumber_placeholders`].
+/// the SQL must match this order.
 ///
 /// sqlx 0.8.6 does not re-export `Query` at the crate root (the root
 /// `sqlx::Query` re-export is 0.9-only), so the concrete query type is
 /// unnameable; this builds the arguments through the public `Arguments` API
 /// instead.
-pub fn bind_all<'q>(sql: &'q str, params: &[SqlParam]) -> impl sqlx::Execute<'q, sqlx::Any> + 'q {
+pub fn bind_all<'q>(
+    sql: &'q str,
+    params: &[SqlParam],
+) -> impl sqlx::Execute<'q, sqlx::Sqlite> + 'q {
     sqlx::query_with(sql, bind_args(params))
-}
-
-/// Rewrite `?` placeholders to `$1..$N` in order, so a fragment written
-/// with `?` joins a statement whose other placeholders are numbered.
-/// Valid because no SQL fragment in this crate contains `?` inside a string
-/// literal — keep it that way, and unit-test this against the committed
-/// fragment set.
-pub fn renumber_placeholders(sql: &str) -> String {
-    let mut out = String::with_capacity(sql.len());
-    let mut n = 0usize;
-    for ch in sql.chars() {
-        if ch == '?' {
-            n += 1;
-            out.push('$');
-            out.push_str(&n.to_string());
-        } else {
-            out.push(ch);
-        }
-    }
-    out
 }
 
 /// Max ids per `IN (...)` bind list (SQLite's default variable limit is 999).
@@ -80,7 +63,7 @@ pub fn max_rows_for_bind_limit(columns: usize) -> usize {
 }
 
 /// Hand-numbered `VALUES` tuples: `($1,$2,$3),($4,$5,$6)` for `row_count` rows
-/// of `col_count` columns. sqlx Any does no placeholder rewriting.
+/// of `col_count` columns.
 pub fn values_tuples(row_count: usize, col_count: usize) -> String {
     (0..row_count)
         .map(|row| {
@@ -97,8 +80,7 @@ pub fn values_tuples(row_count: usize, col_count: usize) -> String {
 
 /// Comma-separated hand-numbered `$N` placeholders for an `IN (...)` list of
 /// length `n`, starting at 1-based index `start` (the index of the first
-/// placeholder in the full statement). sqlx Any does no placeholder rewriting,
-/// so the numbers must be explicit.
+/// placeholder in the full statement).
 pub fn in_placeholders(start: usize, n: usize) -> String {
     (start..start + n)
         .map(|i| format!("${i}"))
@@ -115,10 +97,10 @@ pub fn in_placeholders(start: usize, n: usize) -> String {
 ///
 /// Returns a database error when a statement fails.
 pub async fn group_rows_by_id<T, E>(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     ids: &[i64],
     build_sql: impl Fn(&str) -> String,
-    map_row: impl Fn(&AnyRow) -> Result<(i64, T), sqlx::Error>,
+    map_row: impl Fn(&SqliteRow) -> Result<(i64, T), sqlx::Error>,
 ) -> Result<HashMap<i64, Vec<T>>, E>
 where
     E: From<sqlx::Error>,
@@ -147,10 +129,10 @@ where
 ///
 /// Returns whatever error `query_chunk` returns.
 pub async fn fold_in_id_chunks<T, E>(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     ids: &[i64],
     mut query_chunk: impl for<'a> FnMut(
-        &'a mut AnyConnection,
+        &'a mut SqliteConnection,
         &'a [i64],
     ) -> Pin<
         Box<dyn Future<Output = Result<Vec<(i64, T)>, E>> + Send + 'a>,
@@ -181,19 +163,9 @@ mod tests {
     }
 
     #[test]
-    fn renumber_placeholders_numbers_in_order() {
-        let sql = "a = ? AND b = ? AND c IN (?, ?) AND d LIKE ?";
-        assert_eq!(
-            renumber_placeholders(sql),
-            "a = $1 AND b = $2 AND c IN ($3, $4) AND d LIKE $5"
-        );
-        assert_eq!(renumber_placeholders("no placeholders"), "no placeholders");
-    }
-
-    #[test]
     fn bind_args_encodes_every_variant_in_order() {
         // Every variant must encode without panicking, in order; the
-        // argument count is the only thing the Any driver lets us observe.
+        // argument count is the only thing the arguments let us observe.
         let params = vec![SqlParam::Text("t".into()), SqlParam::Int(7)];
         let args = bind_args(&params);
         assert_eq!(args.len(), params.len());

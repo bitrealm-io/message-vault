@@ -4,7 +4,7 @@
 
 use anyhow::Result as AnyResult;
 use message_ir::HandleType;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use super::{
     AddContactIdentityRequest, RemoveContactIdentityRequest, UpdateContactIdentityRequest,
@@ -124,7 +124,7 @@ impl UpdateContactRequest {
 ///
 /// Returns an error when the mutation is invalid or a database write fails.
 pub async fn mutate_contact(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
     body: &UpdateContactRequest,
@@ -144,7 +144,7 @@ pub async fn mutate_contact(
 /// contact's handle links, so the three things they all need live here and
 /// the edits are methods.
 struct ContactEditor<'a> {
-    conn: &'a mut AnyConnection,
+    conn: &'a mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
 }

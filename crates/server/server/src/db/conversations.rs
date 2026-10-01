@@ -5,13 +5,11 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use crate::db::ownership::owns_conversation;
 use crate::db::participant_names::{Participant, load_for_conversations};
-use crate::db::sql::{
-    SqlParam, bind_args, fold_in_id_chunks, in_placeholders, renumber_placeholders,
-};
+use crate::db::sql::{SqlParam, bind_args, fold_in_id_chunks, in_placeholders};
 use crate::paging::{Direction, Page, SortKey};
 use crate::server::ApiError;
 
@@ -119,7 +117,7 @@ type RawConversationRow = (
 /// `BadRequest` for a query the language refuses; `Internal` when a
 /// statement fails.
 pub async fn list_conversations_sorted(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     q: &str,
     order: &[SortKey<ConversationSort>],
@@ -137,9 +135,7 @@ pub async fn list_conversations_sorted(
     })?;
     let where_sql = filter.where_sql();
 
-    let count_sql = renumber_placeholders(&format!(
-        "SELECT COUNT(*) FROM conversations c WHERE {where_sql}"
-    ));
+    let count_sql = format!("SELECT COUNT(*) FROM conversations c WHERE {where_sql}");
     let total: i64 = sqlx::query_scalar_with(&count_sql, bind_args(filter.params()))
         .fetch_one(&mut *conn)
         .await?;
@@ -151,11 +147,11 @@ pub async fn list_conversations_sorted(
     // The sort reads computed columns (`last_message_at`, `message_count`)
     // inside expressions. Sorting the rows as a derived table makes those
     // aliases real columns.
-    let sql = renumber_placeholders(&format!(
+    let sql = format!(
         "SELECT * FROM ({select} WHERE {where_sql}) AS c ORDER BY {order_by} LIMIT ? OFFSET ?",
         select = CONVERSATION_ROW_SELECT,
         order_by = conversation_order_by(order),
-    ));
+    );
     let out = load_conversation_rows(conn, account_id, &sql, &params).await?;
     Ok(Page {
         items: out,
@@ -173,13 +169,11 @@ pub async fn list_conversations_sorted(
 ///
 /// `Internal` when a statement fails.
 pub async fn get_conversation_summary(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     conversation_id: i64,
 ) -> Result<Option<ConversationSummary>, ApiError> {
-    let sql = renumber_placeholders(&format!(
-        "{CONVERSATION_ROW_SELECT} WHERE c.id = ? AND c.account_id = ?"
-    ));
+    let sql = format!("{CONVERSATION_ROW_SELECT} WHERE c.id = ? AND c.account_id = ?");
     let params = [SqlParam::Int(conversation_id), SqlParam::Int(account_id)];
     let out = load_conversation_rows(conn, account_id, &sql, &params).await?;
     Ok(out.into_iter().next())
@@ -206,7 +200,7 @@ const CONVERSATION_ROW_SELECT: &str = "SELECT c.id,
 /// the list builds them. Shared so the list and the single-conversation read
 /// cannot drift into two different notions of what a conversation summary is.
 async fn load_conversation_rows(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     sql: &str,
     params: &[SqlParam],
@@ -306,7 +300,7 @@ pub fn display_service_label(sources: &[String]) -> String {
 
 /// Source ids per conversation, for conversations holding messages from more than one import.
 async fn load_conversation_sources(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     conversation_ids: &[i64],
 ) -> Result<HashMap<i64, Vec<String>>, ApiError> {
     fold_in_id_chunks(conn, conversation_ids, |conn, chunk| {
@@ -357,7 +351,7 @@ pub struct ConversationSource {
 ///
 /// Returns an internal error when a database statement fails.
 pub async fn list_conversation_source_stats(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     conversation_id: i64,
 ) -> Result<Option<Vec<ConversationSource>>, ApiError> {

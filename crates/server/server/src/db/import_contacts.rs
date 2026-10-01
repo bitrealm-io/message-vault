@@ -10,7 +10,7 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 /// Why a contact is on an import run's record.
 ///
@@ -74,7 +74,7 @@ impl ContactReason {
 ///
 /// Returns an error when a statement fails.
 pub async fn record(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     import_id: Option<i64>,
     contact_id: i64,
     reason: ContactReason,
@@ -148,7 +148,7 @@ pub struct ContactCounts {
 /// # Errors
 ///
 /// Returns an error when the query fails.
-pub async fn counts(conn: &mut AnyConnection, import_id: i64) -> Result<ContactCounts> {
+pub async fn counts(conn: &mut SqliteConnection, import_id: i64) -> Result<ContactCounts> {
     let rows: Vec<(String, i64)> = sqlx::query_as(
         "SELECT reason, COUNT(*) FROM import_contacts
          WHERE import_id = $1 GROUP BY reason",
@@ -176,7 +176,7 @@ pub async fn counts(conn: &mut AnyConnection, import_id: i64) -> Result<ContactC
 ///
 /// Returns an error when a query fails.
 pub async fn page(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     import_id: i64,
     limit: usize,
     offset: usize,
@@ -220,7 +220,7 @@ pub async fn page(
 /// # Errors
 ///
 /// Returns an error when the query fails.
-pub async fn contact_ids(conn: &mut AnyConnection, import_id: i64) -> Result<Vec<i64>> {
+pub async fn contact_ids(conn: &mut SqliteConnection, import_id: i64) -> Result<Vec<i64>> {
     let ids: Vec<i64> = sqlx::query_scalar(
         "SELECT contact_id FROM import_contacts WHERE import_id = $1 ORDER BY contact_id",
     )

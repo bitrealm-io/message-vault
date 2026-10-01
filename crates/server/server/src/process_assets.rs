@@ -10,7 +10,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 use tempfile::TempDir;
 
 use crate::config::Config;
@@ -145,7 +145,7 @@ enum Outcome {
 ///
 /// Returns an error when the requested source is not one of the account's.
 async fn sources_to_process(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     cfg: &Config,
     opts: &ProcessAssetsOptions,
     account_id: i64,
@@ -239,7 +239,7 @@ impl<'a> SourcePass<'a> {
     ///
     /// Returns an error when the original is missing, a conversion fails, or
     /// the row cannot be updated.
-    async fn process(&self, conn: &mut AnyConnection, row: &AssetRow) -> Result<Outcome> {
+    async fn process(&self, conn: &mut SqliteConnection, row: &AssetRow) -> Result<Outcome> {
         let source_path = self.assets_dir.join(&row.assets_path);
         let on_disk = OnDisk {
             original_exists: source_path.is_file(),
@@ -327,7 +327,7 @@ impl<'a> SourcePass<'a> {
 }
 
 /// Account ids from the database, falling back to the folder names under `data_dir` when the table does not exist yet.
-async fn list_account_ids(conn: &mut AnyConnection, data_dir: &Path) -> Result<Vec<i64>> {
+async fn list_account_ids(conn: &mut SqliteConnection, data_dir: &Path) -> Result<Vec<i64>> {
     let mut ids = Vec::new();
     if schema::table_exists(conn, "accounts").await? {
         let rows = sqlx::query_scalar::<_, i64>("SELECT id FROM accounts ORDER BY id")
@@ -353,7 +353,7 @@ async fn list_account_ids(conn: &mut AnyConnection, data_dir: &Path) -> Result<V
 
 /// Source ids for one account: those with messages in the database plus any folder under the account's data dir.
 async fn discover_source_ids(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     data_dir: &Path,
     assets_name: &str,
@@ -398,7 +398,7 @@ async fn discover_source_ids(
 
 /// One row per stored blob for this account and source, with the names that could hint at its media type.
 async fn list_attachments(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     source_id: &str,
 ) -> Result<Vec<AssetRow>> {
@@ -459,7 +459,7 @@ async fn list_attachments(
 
 /// Point every attachment row for `original_sha` at its new derived blob.
 async fn update_derived(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     source_id: &str,
     original_sha: &str,

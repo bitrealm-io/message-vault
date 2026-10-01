@@ -13,14 +13,14 @@
 
 use std::collections::HashMap;
 
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 use sqlx::{Executor, Row};
 
 pub use message_crate_api_types::{Attachment, Message, MessageConversation, Tapback};
 
 use crate::db::ownership::owns_conversation;
 use crate::db::participant_names::load_for_conversations;
-use crate::db::sql::{SqlParam, bind_all, bind_args, group_rows_by_id, renumber_placeholders};
+use crate::db::sql::{SqlParam, bind_all, bind_args, group_rows_by_id};
 use crate::paging::{Direction, Page, SortKey};
 use crate::server::ApiError;
 
@@ -109,7 +109,7 @@ pub const DEFAULT_MESSAGE_SORT: [SortKey<MessageSort>; 1] = [SortKey {
 ///
 /// Returns an error when a database statement fails.
 pub async fn load_messages(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     where_sql: &str,
     params: &[SqlParam],
     order: &[SortKey<MessageSort>],
@@ -143,7 +143,7 @@ pub async fn load_messages(
 ///
 /// Returns an error when a database statement fails.
 pub(crate) async fn load_messages_from(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     from_sql: &str,
     where_sql: &str,
     params: &[SqlParam],
@@ -165,7 +165,6 @@ pub(crate) async fn load_messages_from(
     params.push(SqlParam::Int(limit as i64));
     params.push(SqlParam::Int(offset as i64));
 
-    let sql = renumber_placeholders(&sql);
     let rows = (&mut *conn).fetch_all(bind_all(&sql, &params)).await?;
     let page_rows: Vec<RawRow> = rows
         .iter()
@@ -239,7 +238,7 @@ pub(crate) async fn load_messages_from(
 
 /// Attachment rows for these messages, grouped by message id.
 async fn load_attachments(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     message_ids: &[i64],
 ) -> Result<HashMap<i64, Vec<Attachment>>, ApiError> {
     group_rows_by_id(
@@ -278,7 +277,7 @@ async fn load_attachments(
 /// the account holds no attachment with that fingerprint in `source`, or
 /// `process-assets` wrote no preview for it.
 pub async fn attachment_preview(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     source: &str,
     sha256: &str,
@@ -304,7 +303,7 @@ pub async fn attachment_preview(
 
 /// Tapback rows for these messages, grouped by message id.
 async fn load_tapbacks(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     message_ids: &[i64],
 ) -> Result<HashMap<i64, Vec<Tapback>>, ApiError> {
     group_rows_by_id(
@@ -338,7 +337,7 @@ async fn load_tapbacks(
 
 /// `COUNT(*)` of the messages a compiled filter matches.
 pub(crate) async fn count_matching_messages(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     filter: &crate::search::Filter,
 ) -> Result<u64, ApiError> {
     let sql = format!(
@@ -349,7 +348,7 @@ pub(crate) async fn count_matching_messages(
         where_sql = filter.where_sql(),
     );
     let n: i64 = (&mut *conn)
-        .fetch_one(bind_all(&renumber_placeholders(&sql), filter.params()))
+        .fetch_one(bind_all(&sql, filter.params()))
         .await?
         .try_get(0)?;
     Ok(n.max(0) as u64)
@@ -405,7 +404,7 @@ fn conversation_messages_where(conversation_id: i64, account_id: i64) -> (String
 ///
 /// `Internal` when a statement fails.
 pub async fn get_conversation_messages(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     conversation_id: i64,
     order: &[SortKey<MessageSort>],
@@ -418,9 +417,7 @@ pub async fn get_conversation_messages(
 
     let (where_sql, params) = conversation_messages_where(conversation_id, account_id);
 
-    let count_sql = renumber_placeholders(&format!(
-        "SELECT COUNT(*) FROM messages m WHERE {where_sql}"
-    ));
+    let count_sql = format!("SELECT COUNT(*) FROM messages m WHERE {where_sql}");
     let total: i64 = sqlx::query_scalar_with(&count_sql, bind_args(&params))
         .fetch_one(&mut *conn)
         .await?;

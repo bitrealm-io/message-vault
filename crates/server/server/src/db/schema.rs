@@ -14,7 +14,7 @@
 //! hand; changing a `schema/sql/*.sql` file is the whole of a schema change.
 
 use anyhow::Result;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 /// Baseline DDL lives in `schema/sql/`. Every column there carries a comment;
 /// `tests/schema_column_comments.rs` enforces it.
@@ -88,7 +88,7 @@ const fn fingerprint_of(files: &[&str]) -> i64 {
 ///
 /// The only kind of migration is a full rebuild: schema changes require a
 /// fresh reload of data, never in-place column patches.
-async fn migrate_schema(conn: &mut AnyConnection) -> Result<()> {
+async fn migrate_schema(conn: &mut SqliteConnection) -> Result<()> {
     let stamped = user_version(conn).await?;
     if stamped == SCHEMA_FINGERPRINT {
         return Ok(());
@@ -106,14 +106,14 @@ async fn migrate_schema(conn: &mut AnyConnection) -> Result<()> {
 }
 
 /// The `user_version` pragma value stamped by [`migrate_schema`].
-async fn user_version(conn: &mut AnyConnection) -> Result<i64> {
+async fn user_version(conn: &mut SqliteConnection) -> Result<i64> {
     Ok(sqlx::query_scalar("PRAGMA user_version")
         .fetch_one(&mut *conn)
         .await?)
 }
 
 /// Record the schema fingerprint in SQLite's `user_version` pragma.
-async fn stamp_user_version(conn: &mut AnyConnection, version: i64) -> Result<()> {
+async fn stamp_user_version(conn: &mut SqliteConnection, version: i64) -> Result<()> {
     sqlx::query(&format!("PRAGMA user_version = {version}"))
         .execute(&mut *conn)
         .await?;
@@ -122,7 +122,7 @@ async fn stamp_user_version(conn: &mut AnyConnection, version: i64) -> Result<()
 
 /// Whether any user table exists. A fresh file has none, so a first run stays
 /// quiet instead of warning about a rebuild.
-async fn has_user_tables(conn: &mut AnyConnection) -> Result<bool> {
+async fn has_user_tables(conn: &mut SqliteConnection) -> Result<bool> {
     let tables: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
     )
@@ -140,7 +140,7 @@ async fn has_user_tables(conn: &mut AnyConnection) -> Result<bool> {
 /// reference already-dropped tables ("no such table: main.<dropped>"). The
 /// constraints themselves have `ON DELETE` actions, so the drops would
 /// cascade cleanly; this is a schema-parse limitation, not a data one.
-async fn rebuild_schema(conn: &mut AnyConnection) -> Result<()> {
+async fn rebuild_schema(conn: &mut SqliteConnection) -> Result<()> {
     sqlx::query("PRAGMA foreign_keys = OFF")
         .execute(&mut *conn)
         .await?;
@@ -165,7 +165,7 @@ async fn rebuild_schema(conn: &mut AnyConnection) -> Result<()> {
 
 /// Apply the current embedded DDL: accounts, contacts, messages, staging,
 /// then the FTS index and its sync triggers.
-async fn apply_ddl(conn: &mut AnyConnection) -> Result<()> {
+async fn apply_ddl(conn: &mut SqliteConnection) -> Result<()> {
     execute_batch(conn, ACCOUNTS_DDL).await?;
     // Contacts DDL defines `handles`, the FK target of conversations, participants,
     // messages, and tapbacks (messages.sql) plus account_handles (accounts.sql).
@@ -195,7 +195,7 @@ fn quote_ident(name: &str) -> String {
 /// # Errors
 ///
 /// Returns an error when a DDL statement fails.
-pub async fn ensure_schema(conn: &mut AnyConnection) -> Result<()> {
+pub async fn ensure_schema(conn: &mut SqliteConnection) -> Result<()> {
     migrate_schema(conn).await
 }
 
@@ -204,7 +204,7 @@ pub const MESSAGES_FTS_TRIGGERS_META_KEY: &str = "messages_fts_triggers_v1";
 
 /// Full-text search index over message body/subject plus attachment text:
 /// a contentless FTS5 virtual table with sync triggers.
-async fn ensure_messages_fts(conn: &mut AnyConnection) -> Result<()> {
+async fn ensure_messages_fts(conn: &mut SqliteConnection) -> Result<()> {
     execute_batch(conn, FTS_VIRTUAL_DDL).await?;
 
     let triggers_ready: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM schema_meta WHERE key = $1")
@@ -224,7 +224,7 @@ async fn ensure_messages_fts(conn: &mut AnyConnection) -> Result<()> {
 /// # Errors
 ///
 /// Returns an error when the drop statements fail.
-pub(crate) async fn drop_messages_fts_triggers(conn: &mut AnyConnection) -> Result<()> {
+pub(crate) async fn drop_messages_fts_triggers(conn: &mut SqliteConnection) -> Result<()> {
     execute_batch(conn, DROP_MESSAGES_FTS_TRIGGERS_SQL).await?;
     sqlx::query("DELETE FROM schema_meta WHERE key = $1")
         .bind(MESSAGES_FTS_TRIGGERS_META_KEY)
@@ -239,7 +239,7 @@ pub(crate) async fn drop_messages_fts_triggers(conn: &mut AnyConnection) -> Resu
 /// # Errors
 ///
 /// Returns an error when the trigger SQL or metadata write fails.
-pub(crate) async fn install_messages_fts_triggers(conn: &mut AnyConnection) -> Result<()> {
+pub(crate) async fn install_messages_fts_triggers(conn: &mut SqliteConnection) -> Result<()> {
     execute_batch(conn, DROP_MESSAGES_FTS_TRIGGERS_SQL).await?;
     execute_batch(conn, CREATE_MESSAGES_FTS_TRIGGERS_SQL).await?;
     sqlx::query(
@@ -287,7 +287,7 @@ const MESSAGES_SECONDARY_INDEX_DDL: &[(&str, &str)] = &[
 
 /// Drop secondary `messages` indexes during bulk promote (same transaction as
 /// the promote inserts).
-pub(crate) async fn drop_messages_secondary_indexes(conn: &mut AnyConnection) -> Result<()> {
+pub(crate) async fn drop_messages_secondary_indexes(conn: &mut SqliteConnection) -> Result<()> {
     for (name, _) in MESSAGES_SECONDARY_INDEX_DDL {
         sqlx::query(&format!("DROP INDEX IF EXISTS {name}"))
             .execute(&mut *conn)
@@ -297,7 +297,7 @@ pub(crate) async fn drop_messages_secondary_indexes(conn: &mut AnyConnection) ->
 }
 
 /// Recreate secondary `messages` indexes after bulk promote inserts.
-pub(crate) async fn create_messages_secondary_indexes(conn: &mut AnyConnection) -> Result<()> {
+pub(crate) async fn create_messages_secondary_indexes(conn: &mut SqliteConnection) -> Result<()> {
     for (_, ddl) in MESSAGES_SECONDARY_INDEX_DDL {
         sqlx::query(ddl).execute(&mut *conn).await?;
     }
@@ -315,7 +315,7 @@ pub(crate) async fn create_messages_secondary_indexes(conn: &mut AnyConnection) 
 /// before this promotion inserted anything, keeps them out: only distinct
 /// production ids above it are indexed here.
 pub(crate) async fn index_messages_fts_from_promote_map(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     min_new_message_id: i64,
 ) -> Result<u64> {
     let n = sqlx::query(
@@ -356,7 +356,7 @@ const MESSAGE_IDS_FOR_SOURCE: &str = "SELECT m.id FROM messages m \
 ///
 /// Returns an error when a delete or update statement fails.
 pub async fn delete_messages_for_source(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     source: &str,
 ) -> Result<u64> {
@@ -408,7 +408,7 @@ pub async fn delete_messages_for_source(
 /// # Errors
 ///
 /// Returns an error when a DDL statement fails.
-pub async fn ensure_accounts_schema(conn: &mut AnyConnection) -> Result<()> {
+pub async fn ensure_accounts_schema(conn: &mut SqliteConnection) -> Result<()> {
     if user_version(conn).await? != SCHEMA_FINGERPRINT {
         ensure_schema(conn).await?;
     }
@@ -417,7 +417,7 @@ pub async fn ensure_accounts_schema(conn: &mut AnyConnection) -> Result<()> {
 
 /// True when `table` exists. Used by [`crate::process_assets::run`] to skip
 /// the account sweep on a database that has no schema yet.
-pub async fn table_exists(conn: &mut AnyConnection, name: &str) -> Result<bool> {
+pub async fn table_exists(conn: &mut SqliteConnection, name: &str) -> Result<bool> {
     let found: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $1")
             .bind(name)
@@ -428,7 +428,7 @@ pub async fn table_exists(conn: &mut AnyConnection, name: &str) -> Result<bool> 
 
 /// Column names of `table` in ordinal order.
 #[cfg(test)]
-async fn table_columns(conn: &mut AnyConnection, table: &str) -> Result<Vec<String>> {
+async fn table_columns(conn: &mut SqliteConnection, table: &str) -> Result<Vec<String>> {
     Ok(sqlx::query_scalar("SELECT name FROM pragma_table_info($1)")
         .bind(table)
         .fetch_all(&mut *conn)
@@ -437,7 +437,7 @@ async fn table_columns(conn: &mut AnyConnection, table: &str) -> Result<Vec<Stri
 
 /// True when an index named `name` exists.
 #[cfg(test)]
-async fn index_exists(conn: &mut AnyConnection, name: &str) -> Result<bool> {
+async fn index_exists(conn: &mut SqliteConnection, name: &str) -> Result<bool> {
     let found: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = $1")
             .bind(name)
@@ -448,7 +448,7 @@ async fn index_exists(conn: &mut AnyConnection, name: &str) -> Result<bool> {
 
 /// True when a trigger named `name` exists.
 #[cfg(test)]
-async fn trigger_exists(conn: &mut AnyConnection, name: &str) -> Result<bool> {
+async fn trigger_exists(conn: &mut SqliteConnection, name: &str) -> Result<bool> {
     let found: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = $1",
     )
@@ -496,7 +496,7 @@ pub fn split_ddl(batch: &str) -> Vec<String> {
 }
 
 /// Run every statement in a DDL batch against one connection.
-async fn execute_batch(conn: &mut AnyConnection, batch: &str) -> Result<()> {
+async fn execute_batch(conn: &mut SqliteConnection, batch: &str) -> Result<()> {
     for stmt in split_ddl(batch) {
         sqlx::query(&stmt).execute(&mut *conn).await?;
     }

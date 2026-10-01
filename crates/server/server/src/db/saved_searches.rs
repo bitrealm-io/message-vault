@@ -9,8 +9,8 @@
 //! name-addressed update would use the changing field as its key.
 
 use serde::Serialize;
-use sqlx::any::AnyRow;
-use sqlx::{AnyConnection, Row};
+use sqlx::sqlite::SqliteRow;
+use sqlx::{Row, SqliteConnection};
 
 use crate::db::dialect::{name_eq_ci, order_by_name_ci};
 use crate::db::named_membership::MAX_NAME_LEN;
@@ -76,7 +76,7 @@ impl From<SavedSearchError> for crate::server::ApiError {
 type Result<T> = std::result::Result<T, SavedSearchError>;
 
 /// Map one `saved_searches` row by column name.
-fn row_to_saved_search(row: &AnyRow) -> Result<SavedSearch> {
+fn row_to_saved_search(row: &SqliteRow) -> Result<SavedSearch> {
     Ok(SavedSearch {
         id: row
             .try_get::<i64, _>("id")
@@ -120,7 +120,7 @@ fn normalize_query(query: &str) -> Result<String> {
 
 /// Id of an account's saved search with this name, case-insensitively.
 async fn find_id_by_name(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     name: &str,
 ) -> Result<Option<i64>> {
@@ -137,7 +137,7 @@ async fn find_id_by_name(
 }
 
 /// One account's saved searches, A–Z.
-pub async fn list(conn: &mut AnyConnection, account_id: i64) -> Result<Vec<SavedSearch>> {
+pub async fn list(conn: &mut SqliteConnection, account_id: i64) -> Result<Vec<SavedSearch>> {
     let sql = format!(
         "SELECT id, name, query, kind FROM saved_searches WHERE account_id = $1 {}",
         order_by_name_ci("name")
@@ -151,7 +151,7 @@ pub async fn list(conn: &mut AnyConnection, account_id: i64) -> Result<Vec<Saved
 
 /// One saved search by id, scoped to the account that owns it.
 pub async fn get(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     id: i64,
 ) -> Result<Option<SavedSearch>> {
@@ -167,7 +167,7 @@ pub async fn get(
 
 /// Create a saved search. The name must be free within the account.
 pub async fn create(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     name: &str,
     query: &str,
@@ -205,7 +205,7 @@ pub async fn create(
 /// Replace a saved search's name and query. `kind` is not editable: it records
 /// how the row was born.
 pub async fn update(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     id: i64,
     name: &str,
@@ -246,7 +246,7 @@ pub async fn update(
 ///
 /// This never touches `imports`: an import-created saved search is a
 /// shortcut to a run's messages, and the run's own record is permanent.
-pub async fn delete(conn: &mut AnyConnection, account_id: i64, id: i64) -> Result<()> {
+pub async fn delete(conn: &mut SqliteConnection, account_id: i64, id: i64) -> Result<()> {
     let result = sqlx::query("DELETE FROM saved_searches WHERE account_id = $1 AND id = $2")
         .bind(account_id)
         .bind(id)
@@ -261,7 +261,7 @@ pub async fn delete(conn: &mut AnyConnection, account_id: i64, id: i64) -> Resul
 /// Name for an import's saved search, adding " 2", " 3", … when the account
 /// already used the plain name on the same day.
 async fn unique_import_name(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     source: &str,
     date_ymd: &str,
@@ -290,7 +290,7 @@ async fn unique_import_name(
 /// that failed, was cancelled, or stored nothing gets no saved search — it is
 /// still recorded in `imports` either way.
 pub async fn create_for_import(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     import_id: i64,
     source: &str,

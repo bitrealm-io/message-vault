@@ -4,7 +4,7 @@ use crate::db::schema;
 
 const ACCOUNT: i64 = 7;
 
-async fn fixture_with_a_run() -> (sqlx::AnyPool, tempfile::TempDir, i64) {
+async fn fixture_with_a_run() -> (sqlx::SqlitePool, tempfile::TempDir, i64) {
     let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
     schema::ensure_schema(&mut conn).await.unwrap();
@@ -20,7 +20,7 @@ async fn fixture_with_a_run() -> (sqlx::AnyPool, tempfile::TempDir, i64) {
     (pool, dir, import_id)
 }
 
-async fn contact(conn: &mut AnyConnection, name: &str) -> i64 {
+async fn contact(conn: &mut SqliteConnection, name: &str) -> i64 {
     crate::db::contacts::create_contact(conn, ACCOUNT, name, crate::db::contacts::Origin::Import)
         .await
         .unwrap()

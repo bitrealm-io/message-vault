@@ -15,8 +15,8 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use sqlx::AnyConnection;
 use sqlx::Row;
+use sqlx::SqliteConnection;
 
 use super::sql::{SQLITE_IN_CHUNK, max_rows_for_bind_limit, values_tuples};
 
@@ -28,7 +28,7 @@ use super::sql::{SQLITE_IN_CHUNK, max_rows_for_bind_limit, values_tuples};
 /// # Errors
 ///
 /// Returns an error when the delete fails.
-pub async fn reset_for_account(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
+pub async fn reset_for_account(conn: &mut SqliteConnection, account_id: i64) -> Result<()> {
     sqlx::query("DELETE FROM staging_conversations WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut *conn)
@@ -59,7 +59,7 @@ pub struct StagingConversation<'a> {
 /// Returns an error when the insert fails, including when the account
 /// already staged a conversation on the same handle.
 pub async fn insert_conversation(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     row: &StagingConversation<'_>,
 ) -> Result<i64> {
     Ok(sqlx::query_scalar(
@@ -88,7 +88,7 @@ pub async fn insert_conversation(
 ///
 /// Returns an error when the insert fails.
 pub async fn insert_participant(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     conversation_id: i64,
     handle_id: Option<i64>,
     contact_id: Option<i64>,
@@ -211,7 +211,7 @@ pub fn message_chunk_rows() -> usize {
 ///
 /// Returns an error when the insert fails.
 pub async fn insert_messages(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     rows: &[StagingMessage<'_>],
 ) -> Result<HashMap<i64, i64>> {
     let sql = format!(
@@ -265,7 +265,7 @@ pub async fn insert_messages(
 ///
 /// Returns an error when an insert fails.
 pub async fn insert_attachments(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     rows: &[StagingAttachment],
 ) -> Result<u64> {
     let size = max_rows_for_bind_limit(ATTACHMENT_BIND_COLUMNS).max(1);
@@ -306,7 +306,7 @@ pub async fn insert_attachments(
 /// # Errors
 ///
 /// Returns an error when an insert fails.
-pub async fn insert_tapbacks(conn: &mut AnyConnection, rows: &[StagingTapback]) -> Result<u64> {
+pub async fn insert_tapbacks(conn: &mut SqliteConnection, rows: &[StagingTapback]) -> Result<u64> {
     let size = max_rows_for_bind_limit(TAPBACK_BIND_COLUMNS).max(1);
     let mut inserted = 0u64;
     for chunk in rows.chunks(size) {
@@ -342,7 +342,7 @@ pub async fn insert_tapbacks(conn: &mut AnyConnection, rows: &[StagingTapback]) 
 
 /// Create, or empty, a temp table mapping staging ids to production ids.
 /// Two statements on purpose: one prepared statement holds one command.
-async fn reset_id_map(conn: &mut AnyConnection, table: &str) -> Result<()> {
+async fn reset_id_map(conn: &mut SqliteConnection, table: &str) -> Result<()> {
     let create = format!(
         "CREATE TEMP TABLE IF NOT EXISTS {table} (staging_id BIGINT PRIMARY KEY, prod_id BIGINT NOT NULL)"
     );
@@ -357,7 +357,10 @@ async fn reset_id_map(conn: &mut AnyConnection, table: &str) -> Result<()> {
 /// # Errors
 ///
 /// Returns an error when the count fails.
-pub async fn count_staged_conversations(conn: &mut AnyConnection, account_id: i64) -> Result<i64> {
+pub async fn count_staged_conversations(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+) -> Result<i64> {
     Ok(
         sqlx::query_scalar("SELECT COUNT(*) FROM staging_conversations WHERE account_id = $1")
             .bind(account_id)
@@ -372,7 +375,7 @@ pub async fn count_staged_conversations(conn: &mut AnyConnection, account_id: i6
 /// # Errors
 ///
 /// Returns an error when the query fails.
-pub async fn max_conversation_id(conn: &mut AnyConnection) -> Result<i64> {
+pub async fn max_conversation_id(conn: &mut SqliteConnection) -> Result<i64> {
     Ok(
         sqlx::query_scalar("SELECT COALESCE(MAX(id), 0) FROM conversations")
             .fetch_one(&mut *conn)
@@ -387,7 +390,7 @@ pub async fn max_conversation_id(conn: &mut AnyConnection) -> Result<i64> {
 /// # Errors
 ///
 /// Returns an error when the statement fails.
-pub async fn upsert_conversations(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
+pub async fn upsert_conversations(conn: &mut SqliteConnection, account_id: i64) -> Result<()> {
     sqlx::query(
         r"
         INSERT INTO conversations (
@@ -419,7 +422,7 @@ pub async fn upsert_conversations(conn: &mut AnyConnection, account_id: i64) -> 
 /// # Errors
 ///
 /// Returns an error when a statement fails.
-pub async fn write_conversation_map(conn: &mut AnyConnection, account_id: i64) -> Result<()> {
+pub async fn write_conversation_map(conn: &mut SqliteConnection, account_id: i64) -> Result<()> {
     reset_id_map(conn, "_promote_conv_map").await?;
     sqlx::query(
         r"
@@ -445,7 +448,7 @@ pub async fn write_conversation_map(conn: &mut AnyConnection, account_id: i64) -
 ///
 /// Returns an error when the count fails.
 pub async fn count_mapped_conversations_above(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     max_before: i64,
 ) -> Result<i64> {
     Ok(
@@ -461,7 +464,10 @@ pub async fn count_mapped_conversations_above(
 /// # Errors
 ///
 /// Returns an error when the count fails.
-pub async fn count_staged_participants(conn: &mut AnyConnection, account_id: i64) -> Result<i64> {
+pub async fn count_staged_participants(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+) -> Result<i64> {
     Ok(sqlx::query_scalar(
         r"
         SELECT COUNT(*) FROM staging_participants
@@ -481,7 +487,7 @@ pub async fn count_staged_participants(conn: &mut AnyConnection, account_id: i64
 /// # Errors
 ///
 /// Returns an error when the statement fails.
-pub async fn promote_participants(conn: &mut AnyConnection) -> Result<u64> {
+pub async fn promote_participants(conn: &mut SqliteConnection) -> Result<u64> {
     Ok(sqlx::query(
         r"
         INSERT INTO participants (conversation_id, handle_id, contact_id, name_alias)
@@ -501,7 +507,7 @@ pub async fn promote_participants(conn: &mut AnyConnection) -> Result<u64> {
 /// # Errors
 ///
 /// Returns an error when the count fails.
-pub async fn count_staged_messages(conn: &mut AnyConnection, account_id: i64) -> Result<i64> {
+pub async fn count_staged_messages(conn: &mut SqliteConnection, account_id: i64) -> Result<i64> {
     Ok(sqlx::query_scalar(
         r"
         SELECT COUNT(*) FROM staging_messages
@@ -521,7 +527,7 @@ pub async fn count_staged_messages(conn: &mut AnyConnection, account_id: i64) ->
 /// # Errors
 ///
 /// Returns an error when the count fails.
-pub async fn count_messages(conn: &mut AnyConnection) -> Result<i64> {
+pub async fn count_messages(conn: &mut SqliteConnection) -> Result<i64> {
     Ok(sqlx::query_scalar("SELECT COUNT(*) FROM messages")
         .fetch_one(&mut *conn)
         .await?)
@@ -533,7 +539,7 @@ pub async fn count_messages(conn: &mut AnyConnection) -> Result<i64> {
 /// # Errors
 ///
 /// Returns an error when the query fails.
-pub async fn max_message_id(conn: &mut AnyConnection) -> Result<i64> {
+pub async fn max_message_id(conn: &mut SqliteConnection) -> Result<i64> {
     Ok(
         sqlx::query_scalar("SELECT COALESCE(MAX(id), 0) FROM messages")
             .fetch_one(&mut *conn)
@@ -548,7 +554,7 @@ pub async fn max_message_id(conn: &mut AnyConnection) -> Result<i64> {
 ///
 /// Returns an error when the query fails.
 pub async fn staged_message_id_bounds(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<(Option<i64>, Option<i64>)> {
     Ok(sqlx::query_as(
@@ -604,7 +610,7 @@ const WITHOUT_GUID: &str = " AND (sm.guid IS NULL OR sm.guid = '') ORDER BY sm.i
 ///
 /// Returns an error when the insert fails.
 pub async fn promote_messages_in_range(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     lo: i64,
     hi: i64,
@@ -630,7 +636,7 @@ pub async fn promote_messages_in_range(
 ///
 /// Returns an error when the insert fails.
 pub async fn promote_guid_messages_in_range(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     lo: i64,
     hi: i64,
@@ -653,7 +659,7 @@ pub async fn promote_guid_messages_in_range(
 ///
 /// Returns an error when the insert fails.
 pub async fn promote_messages_without_guid(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<u64> {
     let sql = format!("{INSERT_MESSAGES_FROM_STAGING}{WITHOUT_GUID}");
@@ -671,7 +677,7 @@ pub async fn promote_messages_without_guid(
 ///
 /// Returns an error when the query fails.
 pub async fn staged_message_ids_in_range(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     lo: i64,
     hi: i64,
@@ -692,7 +698,7 @@ pub async fn staged_message_ids_in_range(
 ///
 /// Returns an error when the query fails.
 pub async fn staged_message_ids_without_guid(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Vec<i64>> {
     let sql = format!("{STAGED_MESSAGE_IDS}{WITHOUT_GUID}");
@@ -709,7 +715,7 @@ pub async fn staged_message_ids_without_guid(
 ///
 /// Returns an error when the query fails.
 pub async fn message_ids_above(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     max_before: i64,
 ) -> Result<Vec<i64>> {
@@ -731,7 +737,7 @@ pub async fn message_ids_above(
 ///
 /// Returns an error when a statement fails.
 pub async fn write_message_map(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     pairs: &HashMap<i64, i64>,
 ) -> Result<()> {
@@ -791,7 +797,7 @@ pub struct PromotedAttachments {
 /// # Errors
 ///
 /// Returns an error when a statement fails.
-pub async fn promote_attachments(conn: &mut AnyConnection) -> Result<PromotedAttachments> {
+pub async fn promote_attachments(conn: &mut SqliteConnection) -> Result<PromotedAttachments> {
     let filled = sqlx::query(
         r"
         UPDATE attachments AS a
@@ -864,7 +870,7 @@ pub async fn promote_attachments(conn: &mut AnyConnection) -> Result<PromotedAtt
 /// # Errors
 ///
 /// Returns an error when the statement fails.
-pub async fn promote_tapbacks(conn: &mut AnyConnection) -> Result<u64> {
+pub async fn promote_tapbacks(conn: &mut SqliteConnection) -> Result<u64> {
     Ok(sqlx::query(
         r"
         INSERT INTO tapbacks (

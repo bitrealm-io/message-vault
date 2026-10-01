@@ -134,7 +134,7 @@ impl TestFixture {
 
     /// A connection from this fixture's pool, for a test that seeds or asserts
     /// with SQL directly.
-    pub async fn conn(&self) -> sqlx::pool::PoolConnection<sqlx::Any> {
+    pub async fn conn(&self) -> sqlx::pool::PoolConnection<sqlx::Sqlite> {
         self.state.db.acquire().await.unwrap()
     }
 

@@ -15,8 +15,8 @@ use std::time::Instant;
 use anyhow::{Context, Result, bail};
 pub use message_crate_api_types::ImportMode;
 use serde::{Deserialize, Serialize};
-use sqlx::AnyConnection;
 use sqlx::Connection;
+use sqlx::SqliteConnection;
 use tempfile::TempDir;
 
 use crate::extract::{Json, Path as AxumPath, Query};
@@ -280,7 +280,7 @@ impl OwnedSession {
     /// Returns an error when the account already has a live session or the
     /// row cannot be inserted.
     pub(crate) async fn start(
-        conn: &mut AnyConnection,
+        conn: &mut SqliteConnection,
         account_id: i64,
         source: &str,
         mode: ImportMode,
@@ -297,7 +297,7 @@ impl OwnedSession {
     /// Mark the session succeeded with the run's counts, or failed. Not
     /// being able to record the outcome is a warning on stderr, never an
     /// error: the import's own result is what the caller returns.
-    pub(crate) async fn finish(self, conn: &mut AnyConnection, result: &Result<ImportStats>) {
+    pub(crate) async fn finish(self, conn: &mut SqliteConnection, result: &Result<ImportStats>) {
         let outcome = match result {
             Ok(stats) => CompleteImportArgs::succeeded(stats.messages, stats.attachments),
             Err(_) => CompleteImportArgs::failed(),
@@ -363,7 +363,7 @@ fn validate_import_options(opts: &ImportOptions<'_>) -> Result<()> {
 ///
 /// Returns an error when options are invalid or staging / promote fails.
 pub async fn import_jsonl_files_on_conn(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     paths: &[PathBuf],
     opts: &ImportOptions<'_>,
     schema_mode: ImportSchemaMode,
@@ -455,7 +455,7 @@ fn say(line: &str) {
 ///
 /// Returns an error when the address book cannot be read or written.
 async fn load_contacts_step(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     opts: &ImportOptions<'_>,
 ) -> Result<contacts::ContactLoadStats> {
     match opts.contacts {
@@ -509,7 +509,7 @@ fn sources_to_wipe(opts: &ImportOptions<'_>) -> Result<Vec<String>> {
 ///
 /// Returns an error when a file cannot be read or a row cannot be written.
 async fn stage_all_files(
-    tx: &mut AnyConnection,
+    tx: &mut SqliteConnection,
     paths: &[PathBuf],
     opts: &ImportOptions<'_>,
     stats: &mut ImportStats,
@@ -563,7 +563,7 @@ async fn stage_all_files(
 ///
 /// Returns an error when a promote statement fails.
 async fn promote_step(
-    tx: &mut AnyConnection,
+    tx: &mut SqliteConnection,
     opts: &ImportOptions<'_>,
     wipe_sources: &[String],
     stats: &mut ImportStats,
@@ -1096,7 +1096,7 @@ pub(crate) async fn complete_import(
 /// the import still reports success. The person may delete the saved search
 /// afterwards; the `imports` row it points at is permanent.
 async fn create_import_saved_search(
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut sqlx::SqliteConnection,
     account_id: i64,
     row: &crate::db::imports::ImportRow,
 ) {
@@ -1178,7 +1178,7 @@ pub(crate) async fn list_import_contacts(
 /// messages are already in the database, and losing a shortcut is not a reason to
 /// call the import failed.
 async fn create_import_contact_group(
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut sqlx::SqliteConnection,
     account_id: i64,
     row: &crate::db::imports::ImportRow,
 ) {

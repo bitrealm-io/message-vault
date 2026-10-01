@@ -2,10 +2,10 @@
 //! for a list, run it, and assert which ids come back.
 
 use chrono::NaiveDate;
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use super::{CompileRequest, ListKind, QueryError, compile};
-use crate::db::sql::{bind_args, renumber_placeholders};
+use crate::db::sql::bind_args;
 
 pub(crate) const ACCOUNT: i64 = 7;
 pub(crate) const OTHER_ACCOUNT: i64 = 8;
@@ -71,7 +71,7 @@ pub(crate) struct Fixture {
 }
 
 pub(crate) async fn handle(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     raw: &str,
     service: &str,
@@ -89,7 +89,7 @@ pub(crate) async fn handle(
 }
 
 pub(crate) async fn contact(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     name: &str,
     handles: &[i64],
@@ -119,7 +119,7 @@ pub(crate) async fn contact(
 /// A conversation whose chat handle is `chat` and whose participants are the
 /// given handles, each linked to its contact when one exists.
 pub(crate) async fn conversation(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     chat: i64,
     kind: &str,
@@ -161,7 +161,7 @@ pub(crate) async fn conversation(
 
 /// A participant the source named but gave no address for: `handle_id` is
 /// NULL and `name_alias` carries who they are.
-pub(crate) async fn named_participant(conn: &mut AnyConnection, conversation: i64, alias: &str) {
+pub(crate) async fn named_participant(conn: &mut SqliteConnection, conversation: i64, alias: &str) {
     sqlx::query(
         "INSERT INTO participants (conversation_id, handle_id, contact_id, name_alias)
          VALUES ($1, NULL, NULL, $2)",
@@ -203,7 +203,7 @@ pub(crate) fn msg<'a>(
     }
 }
 
-pub(crate) async fn message(conn: &mut AnyConnection, account: i64, m: Msg<'_>) -> i64 {
+pub(crate) async fn message(conn: &mut SqliteConnection, account: i64, m: Msg<'_>) -> i64 {
     sqlx::query_scalar(
         "INSERT INTO messages (conversation_id, account_id, source, timestamp, is_from_me,
                                sender_handle_id, service, subject, body, sort_order)
@@ -224,7 +224,7 @@ pub(crate) async fn message(conn: &mut AnyConnection, account: i64, m: Msg<'_>) 
 }
 
 pub(crate) async fn attachment(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     message: i64,
     name: &str,
     mime: &str,
@@ -244,7 +244,7 @@ pub(crate) async fn attachment(
 }
 
 pub(crate) async fn group(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     name: &str,
     members: &[i64],
@@ -269,7 +269,7 @@ pub(crate) async fn group(
 }
 
 pub(crate) async fn tag(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account: i64,
     name: &str,
     conversations: &[i64],
@@ -294,7 +294,7 @@ pub(crate) async fn tag(
 }
 
 /// A database with two accounts and every row the spec's cases need.
-pub(crate) async fn seeded() -> (sqlx::AnyPool, tempfile::TempDir, Fixture) {
+pub(crate) async fn seeded() -> (sqlx::SqlitePool, tempfile::TempDir, Fixture) {
     let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
     crate::db::schema::ensure_schema(&mut conn).await.unwrap();
@@ -689,7 +689,7 @@ pub(crate) async fn seeded() -> (sqlx::AnyPool, tempfile::TempDir, Fixture) {
 }
 
 /// Compile `q` for `list` and return the matching ids, ascending.
-pub(crate) async fn run(conn: &mut AnyConnection, list: ListKind, q: &str) -> Vec<i64> {
+pub(crate) async fn run(conn: &mut SqliteConnection, list: ListKind, q: &str) -> Vec<i64> {
     let f = compile(CompileRequest {
         list,
         query: q,
@@ -704,10 +704,10 @@ pub(crate) async fn run(conn: &mut AnyConnection, list: ListKind, q: &str) -> Ve
         ListKind::Messages => "messages",
     };
     let alias = list.base_alias();
-    let sql = renumber_placeholders(&format!(
+    let sql = format!(
         "SELECT {alias}.id FROM {table} {alias} WHERE {} ORDER BY {alias}.id",
         f.where_sql()
-    ));
+    );
     let rows: Vec<i64> = sqlx::query_scalar_with(&sql, bind_args(f.params()))
         .fetch_all(&mut *conn)
         .await
@@ -1561,7 +1561,7 @@ mod index_characters {
     /// [`run`], returning the database's error instead of panicking, so one
     /// bad case does not hide the rest of the table.
     async fn try_run(
-        conn: &mut AnyConnection,
+        conn: &mut SqliteConnection,
         list: ListKind,
         q: &str,
     ) -> Result<Vec<i64>, String> {
@@ -1579,10 +1579,10 @@ mod index_characters {
             ListKind::Messages => "messages",
         };
         let alias = list.base_alias();
-        let sql = renumber_placeholders(&format!(
+        let sql = format!(
             "SELECT {alias}.id FROM {table} {alias} WHERE {} ORDER BY {alias}.id",
             f.where_sql()
-        ));
+        );
         sqlx::query_scalar_with(&sql, bind_args(f.params()))
             .fetch_all(&mut *conn)
             .await

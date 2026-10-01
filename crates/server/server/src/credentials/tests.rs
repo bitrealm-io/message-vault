@@ -127,7 +127,7 @@ fn auth_rate_limits_do_not_cross_servers() {
 
 async fn password_change_setup() -> (
     tempfile::TempDir,
-    sqlx::pool::PoolConnection<sqlx::Any>,
+    sqlx::pool::PoolConnection<sqlx::Sqlite>,
     String,
     Vec<String>,
     String,

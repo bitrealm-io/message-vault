@@ -994,7 +994,7 @@ async fn vacuum_after_demo(target: &Path) {
     vacuum_after_demo_on_pool(pool).await;
 }
 /// Reclaim space after the demo import replaced most rows. Best effort: a failed vacuum only costs disk space.
-async fn vacuum_after_demo_on_pool(pool: sqlx::AnyPool) {
+async fn vacuum_after_demo_on_pool(pool: sqlx::SqlitePool) {
     let mut conn = match pool.acquire().await {
         Ok(conn) => conn,
         Err(err) => {
@@ -1032,7 +1032,7 @@ async fn seed_demo_account(target: &Path, account_id: i64, seed: &DemoSeed) -> R
 }
 /// Create the demo account row and the profile fields the seed names, so the demo logs in without setup.
 async fn seed_demo_account_on_conn(
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut sqlx::SqliteConnection,
     account_id: i64,
     seed: &DemoSeed,
 ) -> Result<()> {

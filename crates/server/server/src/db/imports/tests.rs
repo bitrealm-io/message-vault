@@ -2,7 +2,7 @@ use super::*;
 
 const ACCOUNT_ID: i64 = 7;
 
-async fn setup_accounts_only() -> (sqlx::AnyPool, tempfile::TempDir) {
+async fn setup_accounts_only() -> (sqlx::SqlitePool, tempfile::TempDir) {
     let (pool, dir) = crate::db::engine::test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
     crate::db::schema::ensure_accounts_schema(&mut conn)
@@ -319,7 +319,7 @@ async fn the_list_sorted_by_start_ascending_puts_the_oldest_run_first() {
 
 /// The account's running Import Run through the list, as the desktop app
 /// finds it: `status=running`, and at most one.
-async fn running_import(conn: &mut AnyConnection, account: i64) -> Option<ImportSummary> {
+async fn running_import(conn: &mut SqliteConnection, account: i64) -> Option<ImportSummary> {
     let (items, _) = list_imports_page(conn, account, Some("running"), &DEFAULT_IMPORT_SORT, 1, 0)
         .await
         .unwrap();
@@ -502,7 +502,7 @@ async fn complete_import_refuses_a_run_that_has_finished() {
         }],
         ..Default::default()
     };
-    let issue_count = async |conn: &mut sqlx::AnyConnection, import_id: i64| -> i64 {
+    let issue_count = async |conn: &mut sqlx::SqliteConnection, import_id: i64| -> i64 {
         sqlx::query_scalar("SELECT COUNT(*) FROM import_issues WHERE import_id = $1")
             .bind(import_id)
             .fetch_one(&mut *conn)

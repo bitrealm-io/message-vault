@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 use tempfile::TempDir;
 
 use super::{is_orphaned_export, store_claimed_or_path};
@@ -28,7 +28,7 @@ fn incoming(guid: &str, sender: &str) -> String {
 /// Import one file named `name` with `body` under the fixed source
 /// `sms-backup-restore`, through the real entry point.
 async fn import_one(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     name: &str,
     body: &str,
 ) -> anyhow::Result<ImportStats> {

@@ -8,7 +8,7 @@ use crate::extract::{Json, Path as AxumPath, Query};
 use axum::extract::State;
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use crate::db::contacts::read::{
     CONTACT_SORT_KEYS, ContactSelectionSummary, ContactSummary, DEFAULT_CONTACT_SORT,
@@ -118,7 +118,7 @@ pub struct SummarizeContactsRequest {
 ///
 /// Returns an internal error when a database statement fails.
 pub async fn get_contact_detail(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
 ) -> Result<Option<Contact>, ApiError> {

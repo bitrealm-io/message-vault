@@ -44,7 +44,7 @@
 //! import would (ADR-0013). A backup that still holds the person is the
 //! person saying they still talk to them.
 
-use sqlx::{AnyConnection, Connection};
+use sqlx::{Connection, SqliteConnection};
 
 use crate::db::ownership::{owns_contact, owns_conversation};
 use crate::db::sql::{SQLITE_IN_CHUNK, in_placeholders};
@@ -77,7 +77,7 @@ impl Trashable {
     /// True when `account_id` owns the row this names.
     async fn is_owned(
         self,
-        conn: &mut AnyConnection,
+        conn: &mut SqliteConnection,
         account_id: i64,
     ) -> Result<bool, sqlx::Error> {
         match self {
@@ -89,7 +89,7 @@ impl Trashable {
     /// True when this row carries a trash marker for `account_id`.
     async fn is_trashed(
         self,
-        conn: &mut AnyConnection,
+        conn: &mut SqliteConnection,
         account_id: i64,
     ) -> Result<bool, sqlx::Error> {
         let (table, id_column) = self.marker();
@@ -111,7 +111,7 @@ impl Trashable {
 ///
 /// Returns a database error when a statement fails.
 pub async fn move_to_trash(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     target: Trashable,
 ) -> Result<bool, sqlx::Error> {
@@ -138,7 +138,7 @@ pub async fn move_to_trash(
 ///
 /// Returns a database error when a statement fails.
 pub async fn restore(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     target: Trashable,
 ) -> Result<bool, sqlx::Error> {
@@ -172,7 +172,7 @@ pub async fn restore(
 ///
 /// Returns a database error when a statement fails.
 pub async fn discard_contact_if_trashed(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     contact_id: i64,
 ) -> Result<bool, sqlx::Error> {
@@ -200,7 +200,10 @@ pub async fn discard_contact_if_trashed(
 /// # Errors
 ///
 /// Returns a database error when a statement fails.
-pub async fn purge_account(conn: &mut AnyConnection, account_id: i64) -> Result<(), sqlx::Error> {
+pub async fn purge_account(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM trashed_conversations WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut *conn)
@@ -258,7 +261,7 @@ pub enum OrphanedFile {
 /// Returns a database error when a statement fails; the transaction is then
 /// rolled back.
 pub async fn delete_trashed(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     target: Trashable,
 ) -> Result<DeleteOutcome, sqlx::Error> {
@@ -289,7 +292,7 @@ pub async fn delete_trashed(
 /// Returns a database error when a statement fails; the transaction is then
 /// rolled back.
 pub async fn empty_trash(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Vec<OrphanedFile>, sqlx::Error> {
     let mut tx = conn.begin().await?;
@@ -341,7 +344,7 @@ type AttachmentFilesRow = (
 /// that pointed at one of these is set NULL, so the surviving copy becomes
 /// the one that shows.
 async fn delete_conversations(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     ids: &[i64],
 ) -> Result<Vec<OrphanedFile>, sqlx::Error> {
@@ -389,7 +392,7 @@ async fn delete_conversations(
 /// and the staging attachment tables. Sorted and de-duplicated, so two
 /// deleted messages sharing one file report it once.
 async fn orphaned_files(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     candidates: Vec<AttachmentFilesRow>,
 ) -> Result<Vec<OrphanedFile>, sqlx::Error> {
@@ -425,7 +428,7 @@ async fn orphaned_files(
 /// an import that has already uploaded a file it is about to promote does
 /// not lose it.
 async fn asset_is_referenced(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     source: &str,
     column: &'static str,
@@ -457,7 +460,7 @@ async fn asset_is_referenced(
 /// handles stay linked, so the conversations the person was in keep showing
 /// them as one participant — by handle now, since the name is blank.
 async fn forget_contacts(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     ids: &[i64],
 ) -> Result<(), sqlx::Error> {

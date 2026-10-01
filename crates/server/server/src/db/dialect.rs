@@ -3,7 +3,7 @@
 use std::io::{self, Write};
 use std::time::Instant;
 
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 /// `column` contains a `LIKE` pattern, case-insensitively: both sides go
 /// through `lower()`, so a non-ASCII capital folds the same way an ASCII
@@ -15,10 +15,10 @@ use sqlx::AnyConnection;
 /// `\` is the escape character. SQLite has none unless told, so the clause
 /// names it. The caller escapes the text it binds.
 ///
-/// The `?` placeholder form is **only** for fragments consumed by the
-/// [`crate::db::sql::renumber_placeholders`] pass, which rewrites `?` to the
-/// right `$n`, so a fragment can be placed anywhere in a statement that
-/// numbers its placeholders.
+/// The fragment binds with `?`, so it belongs in a statement whose every
+/// placeholder is `?`. A statement that numbers its placeholders (`$1`)
+/// takes no `?` fragment, because mixing the two forms binds values out of
+/// position.
 pub fn like_ci(column: &str) -> String {
     format!(r"lower({column}) LIKE lower(?) ESCAPE '\'")
 }
@@ -27,7 +27,7 @@ pub fn like_ci(column: &str) -> String {
 /// both sides for the reason [`like_ci`] gives. `column` is the full column
 /// expression (`name`, `ct.name`); the alias must stay INSIDE `lower()` —
 /// `ct.lower(...)` parses as a schema-qualified function call. `placeholder`
-/// is the placeholder text: `"?"` for renumber-pass fragments, `"$2"` for
+/// is the placeholder text: `"?"` in a statement that binds with `?`, `"$2"` in
 /// hand-numbered SQL.
 pub fn name_eq_ci(column: &str, placeholder: &str) -> String {
     format!("lower({column}) = lower({placeholder})")
@@ -61,7 +61,7 @@ pub fn analyze_import_tables_sql() -> &'static [&'static str] {
 }
 
 /// Run each statement, printing a warning instead of failing when one errors.
-async fn run_sql_warn(conn: &mut AnyConnection, statements: &[&str]) {
+async fn run_sql_warn(conn: &mut SqliteConnection, statements: &[&str]) {
     for sql in statements {
         if let Err(err) = sqlx::query(sql).execute(&mut *conn).await {
             eprintln!("  sql:      warning: {sql} failed: {err}");
@@ -71,7 +71,7 @@ async fn run_sql_warn(conn: &mut AnyConnection, statements: &[&str]) {
 
 /// Refresh planner stats on committed import tables. Errors are warnings;
 /// the caller still opens the promote transaction.
-pub async fn analyze_import_tables(conn: &mut AnyConnection) {
+pub async fn analyze_import_tables(conn: &mut SqliteConnection) {
     let started = Instant::now();
     run_sql_warn(conn, analyze_import_tables_sql()).await;
     println!(
@@ -83,7 +83,7 @@ pub async fn analyze_import_tables(conn: &mut AnyConnection) {
 
 /// Reclaim the space the demo import freed: `VACUUM` rewrites the whole
 /// file. Errors are warnings; `reset-demo` still succeeds.
-pub async fn vacuum_import_tables(conn: &mut AnyConnection) {
+pub async fn vacuum_import_tables(conn: &mut SqliteConnection) {
     let started = Instant::now();
     run_sql_warn(conn, &["VACUUM"]).await;
     println!(

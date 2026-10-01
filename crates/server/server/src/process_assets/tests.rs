@@ -547,7 +547,7 @@ async fn open_db() -> (OpenDb, tempfile::TempDir) {
     (OpenDb { cfg, db: pool }, dir)
 }
 
-async fn seed_account(conn: &mut AnyConnection, id: i64) {
+async fn seed_account(conn: &mut SqliteConnection, id: i64) {
     sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, $2)")
         .bind(id)
         .bind(format!("user{id}"))
@@ -558,7 +558,7 @@ async fn seed_account(conn: &mut AnyConnection, id: i64) {
 
 /// One conversation with one message under `source` for [`ACCOUNT`],
 /// returning the message id an attachment can hang off.
-async fn seed_message(conn: &mut AnyConnection, source: &str) -> i64 {
+async fn seed_message(conn: &mut SqliteConnection, source: &str) -> i64 {
     let handle_id: i64 = sqlx::query_scalar(
         "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
          VALUES ($1, $2, $2, 'phone', 'phone') RETURNING id",
@@ -595,7 +595,7 @@ async fn seed_message(conn: &mut AnyConnection, source: &str) -> i64 {
 /// attachment id.
 async fn attach_stored_blob(
     opened: &OpenDb,
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     source: &str,
     message_id: i64,
     sha: &str,
@@ -642,7 +642,7 @@ async fn fixture_with_png(source: &str) -> (OpenDb, tempfile::TempDir, i64) {
 
 /// The derived columns of one attachment row, `None` until a preview is recorded.
 async fn derived_of(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     attachment_id: i64,
 ) -> Option<(String, String, String)> {
     let (sha, path, mime): (Option<String>, Option<String>, Option<String>) = sqlx::query_as(

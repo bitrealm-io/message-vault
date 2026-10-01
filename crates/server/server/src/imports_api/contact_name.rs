@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use message_ir::{HandleType, trimmed};
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use super::ImportStats;
 use crate::db::contacts;
@@ -34,7 +34,7 @@ use crate::db::trash;
 /// (`db::import_contacts`), so the run can say afterwards which contacts it
 /// created, named, or gave a handle, and why.
 pub(super) async fn ensure_contact_for_handle(
-    tx: &mut AnyConnection,
+    tx: &mut SqliteConnection,
     account_id: i64,
     import_id: Option<i64>,
     handle_id: i64,
@@ -90,7 +90,7 @@ pub(super) async fn ensure_contact_for_handle(
 ///
 /// Returns the contact and the display name to record on the participant.
 pub(super) async fn resolve_name_only_participant(
-    tx: &mut AnyConnection,
+    tx: &mut SqliteConnection,
     account_id: i64,
     import_id: Option<i64>,
     name: Option<&str>,
@@ -130,7 +130,7 @@ pub(super) struct IncomingSender<'a> {
 /// `None` for a message the account owner sent, and for one whose source
 /// recorded no sender address.
 pub(super) async fn resolve_incoming_sender_handle(
-    tx: &mut AnyConnection,
+    tx: &mut SqliteConnection,
     cache: &mut HandleIdCache,
     account_id: i64,
     import_id: Option<i64>,
@@ -176,7 +176,7 @@ pub(super) async fn resolve_incoming_sender_handle(
 /// to that contact, and record against `import_id` that the run gave the
 /// contact a handle.
 async fn ensure_sibling_contact_link(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     import_id: Option<i64>,
     handle_id: i64,

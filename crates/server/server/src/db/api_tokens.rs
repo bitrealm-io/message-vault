@@ -1,7 +1,7 @@
 //! Named CLI API tokens (`mc-api-…`); many per account, with per-token permissions.
 
 use anyhow::{Context, Result};
-use sqlx::AnyConnection;
+use sqlx::SqliteConnection;
 
 use super::session_tokens::{generate_prefixed_token, hash_api_token, unix_secs_string};
 use crate::db::dialect::name_ci_expr;
@@ -109,7 +109,7 @@ pub fn generate_api_token() -> Result<String> {
 ///
 /// Returns an error when the lookup or last-accessed update fails.
 pub async fn lookup_account_for_api_token(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     token: &str,
 ) -> Result<Option<ApiTokenAuth>> {
     let token_hash = hash_api_token(token);
@@ -177,7 +177,7 @@ pub struct CreatedApiToken {
 /// Returns `ApiTokenMutationError::InvalidLabel` when the label is empty
 /// or longer than 120 characters, and `Other` for database failures.
 pub async fn create_api_token(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     label: &str,
     permissions: Permissions,
@@ -239,7 +239,7 @@ type ApiTokenRowRaw = (
 ///
 /// Returns an error when the query fails.
 pub async fn list_api_tokens(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
 ) -> Result<Vec<ApiTokenRow>> {
     let order_by = format!("ORDER BY created_at DESC, {}", name_ci_expr("label"));
@@ -284,7 +284,11 @@ pub async fn list_api_tokens(
 /// # Errors
 ///
 /// Returns an error when the delete statement fails.
-pub async fn delete_api_token(conn: &mut AnyConnection, account_id: i64, id: i64) -> Result<bool> {
+pub async fn delete_api_token(
+    conn: &mut SqliteConnection,
+    account_id: i64,
+    id: i64,
+) -> Result<bool> {
     let n = sqlx::query("DELETE FROM account_api_tokens WHERE id = $1 AND account_id = $2")
         .bind(id)
         .bind(account_id)
@@ -300,7 +304,7 @@ pub async fn delete_api_token(conn: &mut AnyConnection, account_id: i64, id: i64
 /// # Errors
 ///
 /// Returns an error when the delete statement fails.
-pub async fn delete_all_api_tokens(conn: &mut AnyConnection, account_id: i64) -> Result<u64> {
+pub async fn delete_all_api_tokens(conn: &mut SqliteConnection, account_id: i64) -> Result<u64> {
     let deleted = sqlx::query("DELETE FROM account_api_tokens WHERE account_id = $1")
         .bind(account_id)
         .execute(&mut *conn)
@@ -315,7 +319,7 @@ pub async fn delete_all_api_tokens(conn: &mut AnyConnection, account_id: i64) ->
 /// Returns `ApiTokenMutationError::InvalidLabel` when the label is empty
 /// or longer than 120 characters, and `Other` for database failures.
 pub async fn update_api_token_label(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     id: i64,
     label: &str,

@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
-use sqlx::{AnyConnection, Connection};
+use sqlx::{Connection, SqliteConnection};
 
 use crate::db::{account_profile, api_tokens, session_tokens};
 use crate::server::ApiError;
@@ -200,7 +200,7 @@ pub(crate) fn require_valid_username(raw: &str) -> Result<String, ApiError> {
 ///
 /// A `409` naming the username when it is taken. A failed lookup is a `500`.
 pub(crate) async fn require_username_free(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     username: &str,
 ) -> Result<(), ApiError> {
     if account_profile::lookup_account_by_username(conn, username)
@@ -228,7 +228,7 @@ pub(crate) async fn require_username_free(
 ///
 /// Fails when a database read or write fails.
 pub(crate) async fn change_password_on_conn(
-    conn: &mut AnyConnection,
+    conn: &mut SqliteConnection,
     account_id: i64,
     new_hash: Option<&str>,
 ) -> Result<String> {

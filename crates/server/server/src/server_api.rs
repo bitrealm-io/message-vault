@@ -68,7 +68,7 @@ pub struct ClaimRequest {
 }
 
 /// Read this Message Crate's state on an existing connection.
-async fn state_on_conn(conn: &mut sqlx::AnyConnection) -> Result<ServerState, ApiError> {
+async fn state_on_conn(conn: &mut sqlx::SqliteConnection) -> Result<ServerState, ApiError> {
     if !account_profile::is_claimed(conn).await? {
         return Ok(ServerState::Unclaimed);
     }
@@ -469,7 +469,7 @@ impl DemoBuild {
 /// Where the Demo Account stands: the build in memory first, then the database.
 async fn demo_account_on_conn(
     state: &AppState,
-    conn: &mut sqlx::AnyConnection,
+    conn: &mut sqlx::SqliteConnection,
 ) -> Result<DemoAccount, ApiError> {
     let exists = account_profile::username_for_account(conn, account_profile::DEMO_ACCOUNT_ID)
         .await?

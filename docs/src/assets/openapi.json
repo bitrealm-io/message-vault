@@ -63,7 +63,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -141,7 +141,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "headers": {
               "Location": {
                 "schema": {
@@ -297,7 +297,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -393,10 +393,10 @@
               "schema": {
                 "oneOf": [
                   {
-                    "type": "null"
+                    "$ref": "#/components/schemas/DeleteAccountRequest"
                   },
                   {
-                    "$ref": "#/components/schemas/DeleteAccountRequest"
+                    "type": "null"
                   }
                 ]
               }
@@ -540,7 +540,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -691,7 +691,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -791,7 +791,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "headers": {
               "Location": {
                 "schema": {
@@ -1043,7 +1043,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -1212,7 +1212,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -1325,7 +1325,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -1456,7 +1456,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -1559,7 +1559,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -1657,10 +1657,10 @@
               "schema": {
                 "oneOf": [
                   {
-                    "type": "null"
+                    "$ref": "#/components/schemas/DeleteMessagesRequest"
                   },
                   {
-                    "$ref": "#/components/schemas/DeleteMessagesRequest"
+                    "type": "null"
                   }
                 ]
               }
@@ -1669,7 +1669,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -1954,7 +1954,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -2322,7 +2322,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -2873,7 +2873,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3021,7 +3021,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3095,7 +3095,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "headers": {
               "Location": {
                 "schema": {
@@ -3233,7 +3233,7 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "401": {
             "description": "[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
@@ -3325,7 +3325,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3488,7 +3488,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3587,7 +3587,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3745,7 +3745,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3818,7 +3818,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -3933,7 +3933,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -4048,7 +4048,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -4165,7 +4165,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -4362,7 +4362,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -4691,7 +4691,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -4771,7 +4771,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -4990,7 +4990,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -5186,7 +5186,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -5390,7 +5390,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -5472,7 +5472,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "headers": {
               "Location": {
                 "schema": {
@@ -5605,7 +5605,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -5703,7 +5703,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -5814,7 +5814,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -5955,7 +5955,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -6095,7 +6095,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -6177,7 +6177,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "headers": {
               "Location": {
                 "schema": {
@@ -6322,7 +6322,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -6429,7 +6429,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -6586,7 +6586,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -6746,7 +6746,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -6917,7 +6917,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7015,7 +7015,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7136,7 +7136,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7210,7 +7210,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "headers": {
               "Location": {
                 "schema": {
@@ -7348,7 +7348,7 @@
         ],
         "responses": {
           "204": {
-            "description": ""
+            "description": "No Content"
           },
           "401": {
             "description": "[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
@@ -7440,7 +7440,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7603,7 +7603,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7702,7 +7702,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7860,7 +7860,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -7940,7 +7940,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8041,7 +8041,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8115,7 +8115,7 @@
         },
         "responses": {
           "201": {
-            "description": "",
+            "description": "Created",
             "headers": {
               "Location": {
                 "schema": {
@@ -8346,7 +8346,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8505,7 +8505,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8599,7 +8599,7 @@
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8665,7 +8665,7 @@
         "operationId": "get_server",
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8817,7 +8817,7 @@
         "operationId": "get_server_settings",
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -8894,7 +8894,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -9003,7 +9003,7 @@
         "operationId": "get_server_storage",
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -9073,7 +9073,7 @@
         "operationId": "get_session",
         "responses": {
           "200": {
-            "description": "",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
@@ -9412,11 +9412,11 @@
           "app": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/AppKind",
                 "description": "Which app last used the account's session, the desktop app or the\nwebsite, or `null` when the account has no session or no request on it\nhas named an app."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -10461,10 +10461,10 @@
               "dedupe": {
                 "oneOf": [
                   {
-                    "type": "null"
+                    "$ref": "#/components/schemas/DedupeCounts"
                   },
                   {
-                    "$ref": "#/components/schemas/DedupeCounts"
+                    "type": "null"
                   }
                 ]
               },
@@ -11586,11 +11586,11 @@
                 "app": {
                   "oneOf": [
                     {
-                      "type": "null"
-                    },
-                    {
                       "$ref": "#/components/schemas/AppKind",
                       "description": "Which app last used the account's session, the desktop app or the\nwebsite, or `null` when the account has no session or no request on it\nhas named an app."
+                    },
+                    {
+                      "type": "null"
                     }
                   ]
                 },
@@ -13538,11 +13538,11 @@
           "add_identity": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/AddContactIdentityRequest",
                 "description": "Identity to link."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -13556,22 +13556,22 @@
           "remove_identity": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/RemoveContactIdentityRequest",
                 "description": "Identity to unlink."
+              },
+              {
+                "type": "null"
               }
             ]
           },
           "update_identity": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/UpdateContactIdentityRequest",
                 "description": "Identity to replace."
+              },
+              {
+                "type": "null"
               }
             ]
           }

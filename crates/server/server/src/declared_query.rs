@@ -16,8 +16,8 @@ use axum::extract::{MatchedPath, Request, State};
 use axum::http::Method;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use utoipa::openapi::OpenApi;
 use utoipa::openapi::path::{Operation, ParameterIn, PathItem};
+use utoipa::openapi::{OpenApi, RefOr};
 
 use crate::server::ApiError;
 
@@ -39,8 +39,14 @@ impl DeclaredQueries {
                     .iter()
                     .flatten()
                     .chain(item.parameters.iter().flatten())
-                    .filter(|p| matches!(p.parameter_in, ParameterIn::Query))
-                    .map(|p| p.name.clone())
+                    // Every parameter is written inline on its handler; the
+                    // document has no shared `#/components/parameters`.
+                    .filter_map(|p| match p {
+                        RefOr::T(p) if matches!(p.parameter_in, ParameterIn::Query) => {
+                            Some(p.name.clone())
+                        }
+                        _ => None,
+                    })
                     .collect();
                 routes.insert((method, path.clone()), names);
             }

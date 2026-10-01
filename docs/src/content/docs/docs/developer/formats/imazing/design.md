@@ -11,7 +11,6 @@ The observed iMazing 3.5.5 directory layout, CSV headers, and source limitations
 
 - Accept either one iMazing Messages/WhatsApp CSV **or** a folder at any level of a device export tree.
 - Emit the common message → packaging via `FormatSink` (CSV uses shared [`CSV_HEADERS`](https://github.com/messagecrate/message-crate/blob/main/crates/libs/ir-format/src/write.rs); default JSON), with WhatsApp kept separate from SMS/iMessage.
-- Resolve phones/names through an optional vCard CSV.
 
 ## Input discovery
 

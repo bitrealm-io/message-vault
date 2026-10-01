@@ -278,7 +278,7 @@ has no such feature.
 | Administer other users | yes (admins) | — |
 | View-only mode | — | yes |
 | Profile handles | phone, email, WhatsApp; add and remove | phone numbers; add and remove |
-| Address-book file load | `.vcf`, `.vcard`, `.csv` from Settings | `.vcf` with a preview dialog mapping vCard categories to labels |
+| Address-book file load | Message Crate's own `.csv` from Settings, as Append or Edit; Export on Contacts writes it | `.vcf` with a preview dialog mapping vCard categories to labels |
 | Demo account | password change and deletion disabled | reset-demo entry pointing at the CLI |
 
 ### Navigation and layout

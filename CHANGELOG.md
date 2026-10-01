@@ -108,6 +108,24 @@ released versions carry their date on the heading.
   keep its database on a Postgres server, which existed for a hosted service
   that is not built yet. That option is removed, so the server is simpler to
   run and to change. Postgres support comes back with the hosted service.
+- **The Address Book is a spreadsheet you export, edit, and load back.**
+  Contacts arrive with your messages, so the Address Book is no longer where
+  they come from. It is how you fix many of them at once. **Export** on the
+  Contacts screen writes the contacts you are looking at (a search, a
+  Contact Group such as Unknown, or the rows you checked) to a CSV file with
+  one row for each identity. Fill in names, Contact Groups, and identities in
+  a spreadsheet, then load the file under Settings, on the Profile tab.
+  **Append** adds and renames and removes nothing. **Edit** also makes each
+  contact in the file match its rows, so deleting a row takes that identity
+  off the contact. Contacts the file does not mention are left alone. A file
+  with a mistake in it is refused whole, and each row at fault is listed with
+  its reason, so nothing is half loaded. Message Crate no longer reads a
+  phone's vCard file, which put every number on a card into your contacts
+  whether or not a message ever used it.
+- **The Demo Account has Contact Groups.** Demo Data is now built the way
+  your own Message Crate is: its messages are imported first, and an Address
+  Book then names the people in them and puts them in Family, Work, College,
+  and Inactive.
 
 ### Fixes
 
@@ -213,6 +231,13 @@ released versions carry their date on the heading.
   server now refuses to start with it. If you start the server with
   `--db-url`, remove that flag; the database file is named by `db` under
   `[paths]`, or by `--db`.
+- A vCard (`.vcf`) file and a contacts CSV from a phone or another app no
+  longer load as an Address Book. To name many contacts at once, use
+  **Export** on the Contacts screen, fill in the file, and load it under
+  Settings.
+- If you load contacts from the command line, the server's `import-contacts`
+  command and the `--contacts` and `--overwrite-contacts` options of `import`
+  are gone. Load the Address Book in the app instead.
 - The database format changed. **An existing Message Crate is rebuilt empty
   on first start and its messages must be imported again.**
 

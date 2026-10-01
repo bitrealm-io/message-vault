@@ -52,7 +52,7 @@ A contact leaves Unknown the moment it has both a name and an identity.
 
 - **Name it.** **Edit name** on the open contact gives a nameless contact a name.
 - **Add an identity.** **Add identity** gives a named contact with no identity a way to be reached.
-- **Load an Address Book.** A load under **Settings** names every nameless contact whose phone number is in the file, which suits a long Unknown list.
+- **Name many at once with the Address Book.** **Export** on the Contacts screen, with **Unknown** open, writes the Unknown contacts to a CSV file. Filling in its `display_name` column and loading the file under **Settings** names them all, which suits a long Unknown list.
 - **Move it to the Trash.** A number that is nobody worth naming, such as a short code, can be set aside with **Move to trash**.
 
 A later import can also name an Unknown contact.

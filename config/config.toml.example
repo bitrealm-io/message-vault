@@ -11,8 +11,8 @@
 # Source folders are not listed here — each import registers its own source for
 # that account under data/<account_id>/<source_id>/.
 #
-# Address books load into SQLite via CLI `import-contacts --contacts`
-# (VCF or vCard CSV).
+# The address book is loaded in the app, under Settings, or with
+# `POST /v1/contacts`. It is Message Crate's own CSV.
 # Older contact_phones / preferred_phone DBs are not upgraded — wipe messagecrate.db and re-import.
 
 [paths]

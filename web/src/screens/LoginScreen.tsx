@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { setBaseUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { initialLoginServerUrl } from "../lib/authGuards";
+import { isOwnAddress, startLocalServer } from "../lib/localServer";
 import { checkServerHealth, type ServerHealthStatus } from "../lib/serverHealth";
 import { isTauri } from "../lib/tauri-check";
 import { accentLink, authCard, authCardBody, authScreenTitle, pageCenter } from "../lib/uiStyles";
@@ -86,6 +87,15 @@ export default function LoginScreen() {
       connectAbort.current = controller;
       setState("connecting");
       setBaseUrl(trimmed);
+      // The desktop app runs a Message Crate of its own at its own address.
+      // It is asked for here and not awaited: a first start takes seconds,
+      // and the disconnected card below already keeps probing until the
+      // server answers. Any other address is never started by the app.
+      if (isTauri() && isOwnAddress(trimmed)) {
+        void startLocalServer().catch((error: unknown) => {
+          console.error("Could not start Message Crate", error);
+        });
+      }
       // GET /health answers plain text, not JSON, so this probes it directly
       // rather than through apiClient (which always parses the body as
       // JSON). The body is discarded either way — only reachability matters.

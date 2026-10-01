@@ -27,8 +27,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": ["binaries/imessage-reader"],
-    "resources": ["resources/imessage-reader-LICENSE.txt"],
+    "externalBin": ["binaries/imessage-reader", "binaries/message-crate-server"],
+    "resources": {
+      "resources/imessage-reader-LICENSE.txt": "resources/imessage-reader-LICENSE.txt",
+      "resources/website/": "website/"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

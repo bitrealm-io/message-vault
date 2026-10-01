@@ -1,4 +1,10 @@
-//! Build the `imessage-reader` sidecar, then run the Tauri build helper.
+//! Build the two programs the app ships beside itself and stage the website
+//! files, then run the Tauri build helper.
+//!
+//! The server (`message-crate-server`) is the Message Crate the app starts
+//! when nothing answers at its own address; `src/local_server.rs` has the
+//! rules. The built website (`web/dist`) goes with it, so a browser on the
+//! same computer works while the app is open.
 //!
 //! The desktop app reads Apple Messages through a separate program because
 //! that program links GPL code and the app is under the Fair Core License
@@ -13,7 +19,8 @@
 //!
 //! The helper is never a dependency of this crate. It is built by a nested
 //! `cargo build` into its own target folder, so `cargo tree` on this manifest
-//! shows no GPL crate.
+//! shows no GPL crate. The server is built the same way for a different
+//! reason: it is one program everywhere, the same one the Docker image runs.
 
 use std::{
     env, fs,
@@ -24,26 +31,34 @@ use std::{
 /// The helper's package and binary name.
 const HELPER: &str = "imessage-reader";
 
+/// The server's package and binary name.
+const SERVER: &str = "message-crate-server";
+
 fn main() {
     // The desktop app's Build, which it sends to the server with every request.
     build_version::emit();
-    build_sidecar();
+    build_sidecar(
+        HELPER,
+        &[
+            "crates/helpers/imessage-reader",
+            "crates/helpers/imessage-reader-protocol",
+        ],
+    );
+    build_sidecar(SERVER, &["crates", "schema"]);
     write_reader_notice();
+    stage_website();
     tauri_build::build();
 }
 
-/// Build the helper for this build's target and place it where Tauri looks.
-fn build_sidecar() {
+/// Build `package` for this build's target and place it where Tauri looks.
+/// `sources` are the workspace folders whose changes mean a rebuild.
+fn build_sidecar(package: &str, sources: &[&str]) {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let workspace = manifest_dir.parent().unwrap().to_path_buf();
     let target_triple = env::var("TARGET").unwrap();
     let profile = env::var("PROFILE").unwrap();
 
-    // Rebuild when the helper or its protocol changes.
-    for dir in [
-        "crates/helpers/imessage-reader",
-        "crates/helpers/imessage-reader-protocol",
-    ] {
+    for dir in sources {
         println!("cargo:rerun-if-changed={}", workspace.join(dir).display());
     }
     println!(
@@ -66,7 +81,7 @@ fn build_sidecar() {
     let mut command = Command::new(cargo);
     command
         .current_dir(&workspace)
-        .args(["build", "-p", HELPER, "--target", &target_triple])
+        .args(["build", "-p", package, "--target", &target_triple])
         .arg("--target-dir")
         .arg(&target_dir)
         // The outer cargo's flags describe this crate's build, not the
@@ -79,10 +94,10 @@ fn build_sidecar() {
     }
     let status = command
         .status()
-        .unwrap_or_else(|e| panic!("start cargo to build {HELPER}: {e}"));
+        .unwrap_or_else(|e| panic!("start cargo to build {package}: {e}"));
     assert!(
         status.success(),
-        "cargo build -p {HELPER} failed ({status})"
+        "cargo build -p {package} failed ({status})"
     );
 
     let exe_suffix = if target_triple.contains("windows") {
@@ -97,10 +112,10 @@ fn build_sidecar() {
         } else {
             "debug"
         })
-        .join(format!("{HELPER}{exe_suffix}"));
+        .join(format!("{package}{exe_suffix}"));
     let binaries = manifest_dir.join("binaries");
     fs::create_dir_all(&binaries).unwrap();
-    let sidecar = binaries.join(format!("{HELPER}-{target_triple}{exe_suffix}"));
+    let sidecar = binaries.join(format!("{package}-{target_triple}{exe_suffix}"));
     copy_if_changed(&built, &sidecar);
 }
 
@@ -131,6 +146,49 @@ fn write_reader_notice() {
     let text = format!("{notice}{license}");
     if fs::read_to_string(&out).ok().as_deref() != Some(text.as_str()) {
         fs::write(&out, text).unwrap_or_else(|e| panic!("write {}: {e}", out.display()));
+    }
+}
+
+/// Copy the built website into `resources/website`, which `tauri.conf.json`
+/// ships as the `website` folder the server is pointed at.
+///
+/// `cargo tauri build` builds `web/dist` before this script runs. A plain
+/// `cargo check` may have no `web/dist` at all; the folder is then staged
+/// with a one-line page, so the build does not depend on the website and a
+/// browser says what is missing.
+fn stage_website() {
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let dist = manifest_dir.parent().unwrap().join("web/dist");
+    println!("cargo:rerun-if-changed={}", dist.display());
+    let staged = manifest_dir.join("resources/website");
+    if staged.exists() {
+        fs::remove_dir_all(&staged).unwrap();
+    }
+    fs::create_dir_all(&staged).unwrap();
+    if dist.join("index.html").is_file() {
+        copy_dir(&dist, &staged);
+    } else {
+        fs::write(
+            staged.join("index.html"),
+            "<!doctype html><title>Message Crate</title>\
+             <p>This build has no website files. Run <code>npm run build</code> in <code>web/</code> and build the app again.</p>\n",
+        )
+        .unwrap();
+    }
+}
+
+/// Copy every file under `from` into `to`, keeping the folder layout.
+fn copy_dir(from: &Path, to: &Path) {
+    for entry in fs::read_dir(from).unwrap_or_else(|e| panic!("read {}: {e}", from.display())) {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            fs::create_dir_all(&target).unwrap();
+            copy_dir(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), &target)
+                .unwrap_or_else(|e| panic!("copy to {}: {e}", target.display()));
+        }
     }
 }
 

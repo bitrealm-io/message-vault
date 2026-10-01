@@ -13,8 +13,16 @@ vi.mock("../lib/auth", () => ({
   useAuth: () => ({ login, setServer, retrySavedLogin, serverUrl: "" }),
 }));
 
+const tauriState = vi.hoisted(() => ({ isTauri: false }));
+const startLocalServer = vi.hoisted(() => vi.fn());
+
 vi.mock("../lib/tauri-check", () => ({
-  isTauri: () => false,
+  isTauri: () => tauriState.isTauri,
+}));
+
+vi.mock("../lib/localServer", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/localServer")>()),
+  startLocalServer: () => startLocalServer(),
 }));
 
 import { Providers } from "../test/providers";
@@ -70,6 +78,9 @@ describe("LoginScreen", () => {
   beforeEach(() => {
     login.mockReset();
     setServer.mockReset();
+    tauriState.isTauri = false;
+    startLocalServer.mockReset();
+    startLocalServer.mockResolvedValue({ status: "starting", first_time: false });
   });
 
   afterEach(() => {
@@ -613,5 +624,40 @@ describe("LoginScreen", () => {
     expect(precedes(confirmField, action)).toBe(true);
     expect(precedes(action, message)).toBe(true);
     expect(precedes(message, orRule)).toBe(true);
+  });
+
+  it("starts the desktop app's own Message Crate at the app's own address", async () => {
+    tauriState.isTauri = true;
+    stubServer();
+    renderScreen();
+
+    await screen.findByRole("tab", { name: "Login" });
+    expect(startLocalServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts nothing for an address the person entered", async () => {
+    tauriState.isTauri = true;
+    stubServer();
+    const user = setupUser();
+    renderScreen();
+    await screen.findByRole("tab", { name: "Login" });
+    startLocalServer.mockClear();
+
+    await user.click(screen.getByRole("button", { name: "Change server address" }));
+    const field = screen.getByRole("textbox");
+    await user.clear(field);
+    await user.type(field, "http://crate.example:8080");
+    await user.click(screen.getByRole("button", { name: "Use this address" }));
+
+    await waitFor(() => expect(setServer).toHaveBeenCalledWith("http://crate.example:8080"));
+    expect(startLocalServer).not.toHaveBeenCalled();
+  });
+
+  it("starts nothing in the browser", async () => {
+    stubServer();
+    renderScreen();
+
+    await screen.findByRole("tab", { name: "Login" });
+    expect(startLocalServer).not.toHaveBeenCalled();
   });
 });

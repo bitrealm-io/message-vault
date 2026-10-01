@@ -2386,6 +2386,37 @@ async fn a_message_is_held_at_its_own_owner_else_the_headers_and_the_owner_gets_
     assert_eq!(owner_participants, 0, "the holder is never a participant");
 }
 
+/// A run's source names its messages and its attachment directory, and the
+/// batch route takes it from the run without checking it again. So a blank
+/// one has to be refused here, where the run is created.
+#[tokio::test]
+async fn creating_an_import_with_a_blank_source_is_a_validation_failure() {
+    let (state, _fixture, token) = importer().await;
+    for source in ["", "   "] {
+        let (status, text) = crate::test_support::post_raw(
+            &state,
+            "/v1/imports",
+            &token,
+            "application/json",
+            serde_json::json!({ "source": source }).to_string(),
+        )
+        .await;
+        crate::test_support::expect_problem(
+            status,
+            &text,
+            crate::problem::ProblemType::ValidationFailed,
+        );
+        let errors: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(
+            errors["errors"],
+            serde_json::json!(["source is required"]),
+            "{text}"
+        );
+    }
+    let runs: serde_json::Value = get_json(&state, "/v1/imports", &token).await;
+    assert_eq!(runs["total"], 0, "no run was created: {runs}");
+}
+
 /// One `whatsapp` conversation with `chat` holding one message `guid` whose
 /// text is `text`, with `attachments` as its JSON attachment array.
 fn one_message_batch(chat: &str, guid: &str, text: &str, attachments: &str) -> String {

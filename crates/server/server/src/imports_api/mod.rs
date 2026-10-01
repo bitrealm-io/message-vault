@@ -348,13 +348,11 @@ pub(crate) async fn import_jsonl_files(
     import_jsonl_files_on_conn(&mut conn, paths, opts, ImportSchemaMode::Ensure).await
 }
 
+/// A fixed source needs no check here: every caller that passes one has
+/// already put it through `validate_source_id`, or passes a constant.
 fn validate_import_options(opts: &ImportOptions<'_>) -> Result<()> {
-    if opts.source_from_jsonl {
-        if opts.paths.is_none() {
-            bail!("source_from_jsonl requires config paths for per-source assets");
-        }
-    } else if opts.source.trim().is_empty() {
-        bail!("import source id must not be empty");
+    if opts.source_from_jsonl && opts.paths.is_none() {
+        bail!("source_from_jsonl requires config paths for per-source assets");
     }
     Ok(())
 }

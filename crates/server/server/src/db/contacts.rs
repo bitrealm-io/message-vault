@@ -493,13 +493,11 @@ fn is_email_handle(handle: &str) -> bool {
 
 /// Raw phone → (normalized, review note) under the guarded policy: E.164 when
 /// the raw is unambiguous (`+`-prefixed, or a US national number), else
-/// digits-as-is plus a reason — never a fabricated `+0…` value.
+/// digits-as-is plus a reason — never a fabricated `+0…` value. The caller
+/// has already dropped email handles.
 fn normalize_phone_guarded(num: &str) -> Option<(String, Option<String>)> {
     let trimmed = num.trim();
-    if trimmed.is_empty() || trimmed.contains('@') {
-        return None;
-    }
-    // No usable digits (e.g. a bare `+`): not a phone at all.
+    // No usable digits (an empty value, a bare `+`): not a phone at all.
     phone::sanitize_number(trimmed)?;
     let guarded = phone::normalize_guarded(trimmed, phone::PhoneRegion::for_raw(trimmed));
     Some((guarded.normalized, guarded.note))

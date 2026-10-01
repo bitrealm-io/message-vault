@@ -275,6 +275,14 @@ mod tests {
         assert!(!attachment_name_matches("photo11.jpg", "11.jpg"));
     }
 
+    /// A file whose name only has a separator somewhere before the end is
+    /// not the file a row names: `a_bcd.png` is not `xyz.png`.
+    #[test]
+    #[ignore = "known bug, see issue 981"]
+    fn a_disk_name_that_does_not_end_with_the_csv_name_does_not_match() {
+        assert!(!attachment_name_matches("a_bcd.png", "xyz.png"));
+    }
+
     #[test]
     fn copied_attachment_includes_digest() {
         let dir = tempfile::tempdir().unwrap();

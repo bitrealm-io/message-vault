@@ -175,6 +175,37 @@ Will do\r\n"
     );
 }
 
+/// A mail with no `X-smssync-type` says which way it went only by its
+/// `From` address: sent when that is one of the owner's email addresses from
+/// the form.
+#[test]
+fn a_mail_without_a_type_from_the_owners_email_is_outgoing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let input_dir = tmp.path().join("in");
+    fs::create_dir_all(&input_dir).unwrap();
+    fs::write(
+        input_dir.join("sent.eml"),
+        "From: Owner <owner@example.com>\r\n\
+To: 4075551234@sms-backup-plus.local\r\n\
+Subject: SMS with Alice\r\n\
+X-smssync-address: 4075551234\r\n\
+X-smssync-date: 1609459200000\r\n\
+Content-Type: text/plain; charset=utf-8\r\n\
+\r\n\
+On my way\r\n",
+    )
+    .unwrap();
+
+    let out = tmp.path().join("out");
+    let report = convert(&[input_dir.as_path()], &out).unwrap();
+
+    assert_eq!(report.messages, 1);
+    assert_csv_row(
+        &out.join("+14075551234.csv"),
+        &[("text", "On my way"), ("direction", "outgoing")],
+    );
+}
+
 #[test]
 fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
     let input = fixtures();

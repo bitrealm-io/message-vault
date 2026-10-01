@@ -249,6 +249,73 @@ mod tests {
 
     const TEST_ACCOUNT: i64 = 7;
 
+    #[test]
+    fn a_handle_with_letters_or_without_a_digit_is_not_a_phone_number() {
+        for handle in ["chat123456", "user123", "", "+"] {
+            assert_eq!(
+                infer_handle_type_from_shape(handle),
+                HandleType::Other,
+                "{handle:?}"
+            );
+        }
+        assert_eq!(
+            infer_handle_type_from_shape("+1 (555) 555-0100"),
+            HandleType::Phone
+        );
+    }
+
+    /// The count of numbers that need a look takes one for each identity the
+    /// call both created and flagged, so a plain new number and a flagged
+    /// number met again add nothing.
+    #[tokio::test]
+    async fn only_the_first_insert_of_a_flagged_handle_is_reported_as_flagged() {
+        let (pool, _dir) = crate::db::engine::test_pool().await;
+        let mut conn = pool.acquire().await.unwrap();
+        schema::ensure_schema(&mut conn).await.unwrap();
+        crate::db::account_profile::ensure_account_row(&mut conn, TEST_ACCOUNT)
+            .await
+            .unwrap();
+
+        let (_, plain) = upsert_handle_row(
+            &mut conn,
+            TEST_ACCOUNT,
+            "+15555550100",
+            HandleType::Phone,
+            Some("phone"),
+        )
+        .await
+        .unwrap();
+        assert!(!plain, "a new number with no review note is not flagged");
+
+        // A trunk-zero number cannot be made E.164, so it carries a note.
+        let ambiguous = "020 7946 0000";
+        let (first_id, first) = upsert_handle_row(
+            &mut conn,
+            TEST_ACCOUNT,
+            ambiguous,
+            HandleType::Phone,
+            Some("phone"),
+        )
+        .await
+        .unwrap();
+        assert!(first, "a new number with a review note is flagged");
+
+        let (second_id, second) = upsert_handle_row(
+            &mut conn,
+            TEST_ACCOUNT,
+            ambiguous,
+            HandleType::Phone,
+            Some("phone"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(first_id, second_id);
+        assert!(
+            !second,
+            "a flagged number already known is not counted again"
+        );
+    }
+
     #[tokio::test]
     async fn upsert_handle_row_cached_reuses_id_without_second_row() {
         let (pool, _dir) = crate::db::engine::test_pool().await;

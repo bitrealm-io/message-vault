@@ -1,6 +1,7 @@
 import ImportSummaryPanel, {
   type ImportSummaryView,
 } from "../../../components/import/ImportSummaryPanel";
+import type { ImportRunStatus } from "../../../lib/serverApi";
 import ImportContactsPanel from "./ImportContactsPanel";
 import type { ImportDetailResponse } from "./storageUtils";
 import {
@@ -43,7 +44,7 @@ export default function ImportDetailPanel({
                 Mode: {selectedImport.mode}
               </span>
               <span className="rounded-full border border-border bg-elevated px-2.5 py-1 text-text">
-                Status: {importStatusLabel(selectedImport.status)}
+                Status: {importStatusLabel(selectedImport.status as ImportRunStatus)}
               </span>
             </div>
           ) : (

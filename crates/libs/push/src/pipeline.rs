@@ -41,7 +41,7 @@ pub(crate) enum ChunkStep {
     Continue,
     /// A flush failed for this conversation; drop its remaining chunks but keep the run going.
     FileFailed,
-    /// A flush failed and the run must stop.
+    /// The run was cancelled and must stop.
     Abort,
 }
 
@@ -217,11 +217,6 @@ impl<'a> ImportPipeline<'a> {
         )
     }
 
-    /// True while a batch is pending or an import request is in flight.
-    pub(crate) fn has_work(&self) -> bool {
-        self.pending.is_some() || self.inflight.is_some()
-    }
-
     /// True when the pending batch is large enough to send now, without
     /// waiting for the next conversation to be prepared.
     pub(crate) fn pending_is_worth_overlapping(&self) -> bool {
@@ -305,7 +300,7 @@ impl<'a> ImportPipeline<'a> {
 
     /// Flush while queueing `idx`, then translate the outcome for that file.
     fn flush_for_file(&mut self, idx: usize, out: &mut Reporter<'_, '_>) -> Result<ChunkStep> {
-        if !self.flush_and_continue(!self.cfg.continue_on_error, out)? {
+        if !self.flush_and_continue(false, out)? {
             return Ok(ChunkStep::Abort);
         }
         let file_failed = self.trackers[idx]
@@ -334,9 +329,9 @@ impl<'a> ImportPipeline<'a> {
 
     /// Flush, then say whether the run may keep going.
     ///
-    /// A failed request stops the run when it was cancelled or when
-    /// `continue_on_error` is off; otherwise the failure is recorded against
-    /// the conversations in that batch and the run moves on.
+    /// A failed request stops the run only when the run was cancelled.
+    /// Otherwise the failure is recorded against the conversations in that
+    /// batch and the run moves on.
     ///
     /// # Errors
     ///
@@ -348,7 +343,7 @@ impl<'a> ImportPipeline<'a> {
         out: &mut Reporter<'_, '_>,
     ) -> Result<bool> {
         let request_ok = self.flush(wait, out)?;
-        Ok(request_ok || (!self.is_cancelled() && self.cfg.continue_on_error))
+        Ok(request_ok || !self.is_cancelled())
     }
 
     /// Finish the current in-flight import (if any), then start the pending batch (if any).
@@ -359,7 +354,7 @@ impl<'a> ImportPipeline<'a> {
     /// import everything".
     ///
     /// `wait = true` means: block until this import finishes (used at end of
-    /// run or when continuing after an error is not allowed).
+    /// run).
     ///
     /// Returns `false` when a request failed.
     ///
@@ -369,10 +364,6 @@ impl<'a> ImportPipeline<'a> {
     /// thread panicked.
     fn flush(&mut self, wait: bool, out: &mut Reporter<'_, '_>) -> Result<bool> {
         let mut ok = self.join_inflight(out)?;
-        if !ok && !self.cfg.continue_on_error {
-            self.pending = None;
-            return Ok(false);
-        }
         let Some(batch) = self.pending.take() else {
             return Ok(ok);
         };

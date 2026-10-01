@@ -98,8 +98,6 @@ pub struct PushConfig {
     pub key: String,
     /// `Append` adds to existing data; `Replace` clears then imports (with force).
     pub mode: ImportMode,
-    /// If true, keep going after one conversation fails. If false, stop early.
-    pub continue_on_error: bool,
     /// If true, ignore the journal and upload/import everything again.
     pub force: bool,
     /// Text-only import: do not upload or attach media.
@@ -213,8 +211,8 @@ impl RunPaths {
 /// # Errors
 ///
 /// Returns an error when setup fails, a worker disconnects, or the report cannot
-/// be written. Per-conversation failures are recorded in the report when
-/// `continue_on_error` is true.
+/// be written. A conversation that fails is recorded in the report and the
+/// run goes on to the next one.
 pub fn run(cfg: &PushConfig, progress: Option<&mut ProgressFn<'_>>) -> Result<PushReport> {
     let run_started = Instant::now();
     let started_at = now_stamp();
@@ -431,7 +429,7 @@ fn drive(
             }
             // Process every consecutive ready index starting at `next_consume`.
             while let Some(result) = queue.take(next_consume) {
-                if consume_result(ctx, result, pipeline, assets, out)? {
+                if consume_result(result, pipeline, assets, out)? {
                     next_consume += 1;
                 } else {
                     aborted = true;
@@ -480,30 +478,21 @@ fn submit_file(
 ///
 /// Returns an error when the journal cannot be updated or the import thread panicked.
 fn consume_result(
-    ctx: &PrepareContext<'_>,
     result: PrepareResult,
     pipeline: &mut ImportPipeline<'_>,
     assets: &mut AssetTotals,
     out: &mut Reporter<'_, '_>,
 ) -> Result<bool> {
-    let continue_on_error = ctx.cfg.continue_on_error;
     match result.outcome {
         PrepareOutcome::Skipped => Ok(true),
         PrepareOutcome::Failed(error) => {
-            // Let the in-flight import land before stopping so the journal is consistent.
-            if !continue_on_error
-                && pipeline.has_work()
-                && !pipeline.flush_and_continue(true, out)?
-            {
-                return Ok(false);
-            }
             pipeline.record_prepare_failure(result.idx, &result.name, &error, out);
-            Ok(continue_on_error)
+            Ok(true)
         }
         PrepareOutcome::Prepared(prepared) => {
             absorb_prepared(&prepared, assets, out);
             if pipeline.pending_source_differs(&prepared.source)
-                && !pipeline.flush_and_continue(!continue_on_error, out)?
+                && !pipeline.flush_and_continue(false, out)?
             {
                 return Ok(false);
             }

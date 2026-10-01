@@ -119,7 +119,11 @@ CREATE TABLE IF NOT EXISTS server_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     -- 1 = anyone reaching the server may create their own account; 0 = only
     -- the owner creates accounts. Off until the owner turns it on.
-    public_registration INTEGER NOT NULL DEFAULT 0
+    public_registration INTEGER NOT NULL DEFAULT 0,
+    -- The attachment size limit: the largest asset the server accepts, in
+    -- bytes. 512 MiB until the owner sets it. BIGINT because Postgres holds
+    -- an INTEGER to 2 GiB.
+    asset_max_bytes BIGINT NOT NULL DEFAULT 536870912
 );
 
 -- Process-wide schema markers (for example FTS trigger install flag).

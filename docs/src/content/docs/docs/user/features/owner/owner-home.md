@@ -45,7 +45,7 @@ The Owner's row reads zero, because the Owner holds no messages.
 
 ## Server Settings
 
-**Server Settings** holds one switch, the Demo Account, and two facts about the server.
+**Server Settings** holds one switch, the attachment size limit, the Demo Account, and two facts about the server.
 
 The switch is **Let anyone who can reach this server create their own account**.
 
@@ -54,6 +54,16 @@ The switch is **Let anyone who can reach this server create their own account**.
 
 It is off on a new Message Crate.
 The switch saves when it is selected. There is no save button.
+
+### Attachment size limit
+
+**Attachment size limit** is the largest file an import can upload as an attachment, in MB.
+It is 512 on a new Message Crate.
+The Owner types a new number and selects **Save**.
+Any number above zero is accepted.
+
+A new limit holds for every upload after it is saved, with no restart.
+An Import Run already under way keeps the limit it started with, so its Staging Review still describes what it will upload.
 
 ### Demo Account
 

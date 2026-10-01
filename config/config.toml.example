@@ -25,9 +25,10 @@ assets_converted_dir = "assets_converted"
 # Auth uses per-account Import API tokens from the web Settings UI (not a host secret).
 [server]
 bind = "127.0.0.1:8080"
-# Max size of one attachment (single PUT or multipart). Default 512 MiB.
-# asset_max_bytes = 536870912
-# Multipart chunk size advertised to clients. Default 64 MiB (keep under ~100 MB for Cloudflare).
+# Largest multipart chunk. Default 64 MiB (keep under ~100 MB for Cloudflare).
+# The attachment size limit has no key here: the owner sets it under Server
+# Settings in the app (512 MiB until then). When the limit is smaller than this
+# chunk size, the server uses chunks the size of the limit.
 # asset_part_size = 67108864
 
 # Extra CORS allowed origins. Two kinds of UI need no entry here: the website

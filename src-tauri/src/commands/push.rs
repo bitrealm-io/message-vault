@@ -11,14 +11,6 @@ use super::events::ExtractProgressEvent;
 use super::jobs::{reset_and_clone_cancel, spawn_job};
 use crate::state::AppState;
 
-/// Largest attachment the desktop app will upload.
-///
-/// The server's own `asset_max_bytes` defaults higher and is not exposed to
-/// clients, so this is the number the app can actually promise. The size
-/// forecast at the first gate predicts against this same constant — a forecast
-/// against a different limit than the upload uses would be worse than none.
-pub const ASSET_MAX_BYTES: u64 = 50 * 1024 * 1024;
-
 /// Convert a report count to the `usize` the progress event uses.
 fn as_usize(value: u64) -> usize {
     usize::try_from(value).unwrap_or(usize::MAX)
@@ -88,6 +80,11 @@ pub struct PushArgs {
     pub trust_export: bool,
     /// Import id of an earlier import to resume, when set.
     pub import_id: Option<i64>,
+    /// The server's attachment size limit, in bytes: Upload leaves out a
+    /// larger file as too large. The app reads it from `GET /v1/server`
+    /// before Staging and stores it with the Import Run, so this is the
+    /// number the Staging Review forecast against.
+    pub asset_max_bytes: u64,
 }
 
 /// Ask this process to upload extracted conversations to a server.
@@ -145,8 +142,9 @@ fn push_config(args: PushArgs) -> PushConfig {
         // desktop uploads switch to multipart sooner so a large attachment
         // moves in small parts instead of one long PUT.
         asset_multipart_threshold: 5 * 1024 * 1024,
-        // Per-file attachment cap. JSONL import batches use MAX_IMPORT_BODY_BYTES.
-        asset_max_bytes: ASSET_MAX_BYTES,
+        // Per-file attachment cap, the server's own. JSONL import batches use
+        // MAX_IMPORT_BODY_BYTES.
+        asset_max_bytes: args.asset_max_bytes,
         report_path: None,
         log_path: None,
         // The journal stays in the staging folder, beside the files it tracks.
@@ -216,6 +214,42 @@ mod tests {
         IrMessage, IrMessageKind, IrParticipant, IrService, SCHEMA_VERSION,
     };
     use serde_json::json;
+
+    /// Upload holds a file to the limit the app read from the server, not to
+    /// a number of the desktop app's own.
+    #[test]
+    fn upload_uses_the_attachment_size_limit_it_is_given() {
+        let args: PushArgs = serde_json::from_value(json!({
+            "baseUrl": "http://127.0.0.1:8080",
+            "username": "",
+            "key": "token",
+            "inputDir": "/tmp/staging-root/staging-run",
+            "mode": "append",
+            "skipAttachments": false,
+            "trustExport": true,
+            "importId": 7,
+            "assetMaxBytes": 123_456_789,
+        }))
+        .unwrap();
+        assert_eq!(push_config(args).asset_max_bytes, 123_456_789);
+    }
+
+    /// The limit has no default in the desktop app: a call that leaves it out
+    /// is refused, because the app has no number of its own to fall back on.
+    #[test]
+    fn upload_without_a_limit_is_refused() {
+        let args = serde_json::from_value::<PushArgs>(json!({
+            "baseUrl": "http://127.0.0.1:8080",
+            "username": "",
+            "key": "token",
+            "inputDir": "/tmp/staging-root/staging-run",
+            "mode": "append",
+            "skipAttachments": false,
+            "trustExport": true,
+            "importId": 7,
+        }));
+        assert!(args.unwrap_err().to_string().contains("assetMaxBytes"));
+    }
 
     /// A resumed Upload runs over the staging folder the interrupted Upload
     /// left, journal included. Sending the journaled messages again would
@@ -293,6 +327,7 @@ mod tests {
                 "skipAttachments": false,
                 "trustExport": true,
                 "importId": 7,
+                "assetMaxBytes": 512 * 1024 * 1024,
             }))
             .unwrap();
             run_push(&push_config(args), None).unwrap()

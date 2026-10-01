@@ -892,7 +892,7 @@ async fn export_endpoint_honors_can_export_flag() {
     );
 }
 
-/// `RequestBodyLimitLayer` answers its own 413 the moment a `Content-Length`
+/// `limit_request_body` answers its own 413 the moment a `Content-Length`
 /// announces an oversize body, without running any handler. That response
 /// must still pass through the CORS layer, or a browser reports a CORS
 /// failure instead of showing the 413 the server sent.
@@ -903,8 +903,8 @@ async fn the_fast_413_carries_cors_headers() {
     // allows the packaged desktop origins (`build_cors_layer`) — not the
     // browser origin this test sends. Configure it explicitly so the
     // assertion below tests CORS header propagation, not the allow list.
-    let mut state = with_cors(fixture.state.clone(), &["https://app.example"]);
-    state.max_body_bytes = 1024;
+    let state = with_cors(fixture.state.clone(), &["https://app.example"]);
+    crate::test_support::store_asset_max_bytes(&state, 1024).await;
 
     let (_, created): (String, serde_json::Value) = crate::test_support::post_created_json(
         &state,

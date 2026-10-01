@@ -11,6 +11,7 @@ build-version = { path = "../../libs/build-version" }
 anyhow = { workspace = true }
 argon2 = "0.6.0"
 axum = "0.8.9"
+http-body-util = "0.1"
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
 clap = { workspace = true }

@@ -42,7 +42,6 @@ use super::events::ExtractProgressEvent;
 use super::extract::{parse_attachment_media, parse_compress_options, parse_max_resolution};
 use super::jobs::{reset_and_clone_cancel, spawn_job};
 use super::paths::{resolve_openable_path, resolve_staging_root};
-use super::push::ASSET_MAX_BYTES;
 use crate::state::AppState;
 
 /// Form fields shared by `summarize_staging` and `transcode_staging` — the
@@ -64,6 +63,11 @@ pub struct StagingArgs {
     pub media_max_fps: Option<String>,
     /// Smallest media file size that still counts as an attachment, for example `20M`.
     pub media_min_size: Option<String>,
+    /// The server's attachment size limit, in bytes, as the app read it from
+    /// `GET /v1/server` when the Import Run was created. The Staging Review's
+    /// forecast and the Media stage both measure against it, and Upload is
+    /// given the same number.
+    pub asset_max_bytes: u64,
 }
 
 /// Resolve `staging_dir` and confirm it is safe to act on: a direct child of
@@ -128,7 +132,7 @@ fn build_transcode_options(args: &StagingArgs) -> Result<TranscodeOptions, Strin
     Ok(TranscodeOptions {
         mode: chosen.media_mode(),
         compress,
-        asset_max_bytes: ASSET_MAX_BYTES,
+        asset_max_bytes: args.asset_max_bytes,
     })
 }
 
@@ -562,7 +566,7 @@ mod tests {
     }
 
     #[test]
-    fn transcode_options_use_the_shared_asset_max_bytes() {
+    fn transcode_options_use_the_asset_max_bytes_they_are_given() {
         let args = StagingArgs {
             staging_dir: "/tmp/staging-root/staging-run".into(),
             staging_root: "/tmp/staging-root".into(),
@@ -570,11 +574,11 @@ mod tests {
             media_max_resolution: Some("720p".into()),
             media_max_fps: Some("24".into()),
             media_min_size: Some("5M".into()),
+            asset_max_bytes: 123_456_789,
         };
         let options = build_transcode_options(&args).unwrap();
-        // Pins the literal, not just the wiring — a change to the constant
-        // elsewhere must not silently move this too.
-        assert_eq!(options.asset_max_bytes, 50 * 1024 * 1024);
+        // The server's limit, passed in. The desktop app has no number of its own.
+        assert_eq!(options.asset_max_bytes, 123_456_789);
         assert_eq!(options.mode, MediaMode::Compress);
         assert_eq!(options.compress.max_fps, 24.0);
     }
@@ -588,6 +592,7 @@ mod tests {
             media_max_resolution: None,
             media_max_fps: None,
             media_min_size: None,
+            asset_max_bytes: 512 * 1024 * 1024,
         };
         let options = build_transcode_options(&args).unwrap();
         assert_eq!(options.mode, MediaMode::Convert);

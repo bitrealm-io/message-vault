@@ -74,7 +74,9 @@ pub const NO_MESSAGE_COUNT_LIMIT: usize = usize::MAX;
 /// Bigger files use multipart upload (many smaller pieces), which proxies
 /// accept more reliably than one huge body.
 pub const MAX_PROXY_BODY_BYTES: usize = 90 * 1024 * 1024;
-/// Refuse attachments larger than this (must match the server setting).
+/// What a server's attachment size limit reads as until its owner sets one.
+/// A caller that pushes to a real server reads the limit from `GET /v1/server`
+/// and passes that; this is for tests.
 pub const DEFAULT_ASSET_MAX_BYTES: u64 = 512 * 1024 * 1024;
 /// How many attachment uploads may run at the same time.
 pub const DEFAULT_ASSET_UPLOAD_WORKERS: usize = 8;

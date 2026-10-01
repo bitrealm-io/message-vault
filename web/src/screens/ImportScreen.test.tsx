@@ -221,6 +221,7 @@ function storedForm(overrides: Record<string, unknown> = {}): Record<string, unk
     timeZone: "America/New_York",
     backupPasswordGiven: false,
     whatsappKeyGiven: false,
+    assetMaxBytes: 512 * 1024 * 1024,
     ...overrides,
   };
 }
@@ -416,6 +417,7 @@ describe("ImportScreen entering Import", () => {
           timeZone: "America/New_York",
           backupPasswordGiven: false,
           whatsappKeyGiven: false,
+          assetMaxBytes: 512 * 1024 * 1024,
         },
       }),
     );
@@ -452,6 +454,7 @@ describe("ImportScreen entering Import", () => {
     timeZone: "America/New_York",
     backupPasswordGiven: false,
     whatsappKeyGiven: false,
+    assetMaxBytes: 512 * 1024 * 1024,
   };
 
   it.each([
@@ -551,6 +554,7 @@ describe("ImportScreen entering Import", () => {
           timeZone: "America/New_York",
           backupPasswordGiven: false,
           whatsappKeyGiven: false,
+          assetMaxBytes: 512 * 1024 * 1024,
         },
       }),
     );
@@ -604,6 +608,7 @@ describe("ImportScreen entering Import", () => {
           timeZone: "America/New_York",
           backupPasswordGiven: false,
           whatsappKeyGiven: false,
+          assetMaxBytes: 512 * 1024 * 1024,
         },
       }),
     );
@@ -723,6 +728,7 @@ describe("ImportScreen entering Import", () => {
           timeZone: "America/New_York",
           backupPasswordGiven: false,
           whatsappKeyGiven: false,
+          assetMaxBytes: 512 * 1024 * 1024,
         },
       }),
     );
@@ -802,6 +808,7 @@ describe("ImportScreen entering Import", () => {
           timeZone: "America/New_York",
           backupPasswordGiven: false,
           whatsappKeyGiven: false,
+          assetMaxBytes: 512 * 1024 * 1024,
         },
       }),
     );

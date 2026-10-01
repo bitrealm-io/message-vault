@@ -7,6 +7,9 @@
 //! server. A browser and a desktop app that each derived the entry screen from
 //! raw fields would be two copies of one rule, free to drift apart.
 //!
+//! It also reports the attachment size limit, because a program that uploads
+//! has to know it before it starts and only the owner reads the settings.
+//!
 //! These are the server's only unauthenticated routes besides logging in and
 //! a stranger's `POST /v1/accounts`, and the first read routes that do not
 //! require a session: the entry screen cannot have one yet, which is the
@@ -48,6 +51,11 @@ pub struct ServerInfo {
     pub version: String,
     /// The Schema Fingerprint, the number this server stamps into its database.
     pub schema_fingerprint: i64,
+    /// The attachment size limit, in bytes: the largest asset the server
+    /// accepts, as one `PUT` or as the declared total of a multipart upload.
+    /// The owner sets it in the server settings. An app reads it here before
+    /// it prepares attachments for upload.
+    pub asset_max_bytes: u64,
 }
 
 /// Body for claiming a Message Crate.
@@ -73,6 +81,9 @@ async fn state_on_conn(conn: &mut sqlx::AnyConnection) -> Result<ServerState, Ap
 }
 
 /// Report whether this Message Crate is unclaimed, closed, or open.
+///
+/// Also reports the server's Build, its Schema Fingerprint, whether the Demo
+/// Account exists, and the attachment size limit.
 #[utoipa::path(
     get,
     path = "/v1/server",
@@ -91,6 +102,7 @@ pub async fn get_server(State(state): State<AppState>) -> Result<Json<ServerInfo
         .is_some(),
         version: crate::BUILD.to_string(),
         schema_fingerprint: crate::db::schema::SCHEMA_FINGERPRINT,
+        asset_max_bytes: server_settings::load(&mut conn).await?.asset_max_bytes,
     }))
 }
 
@@ -170,6 +182,18 @@ pub async fn claim_server(
 pub struct ServerSettings {
     /// Anyone reaching the server may create their own account.
     pub public_registration: bool,
+    /// The attachment size limit, in bytes: the largest asset the server
+    /// accepts. 536870912 (512 MiB) until the owner changes it.
+    pub asset_max_bytes: u64,
+}
+
+impl From<server_settings::ServerSettings> for ServerSettings {
+    fn from(settings: server_settings::ServerSettings) -> Self {
+        Self {
+            public_registration: settings.public_registration,
+            asset_max_bytes: settings.asset_max_bytes,
+        }
+    }
 }
 
 /// Body for changing the server settings. Omitted fields are left alone.
@@ -178,6 +202,25 @@ pub struct UpdateServerSettingsRequest {
     /// Let anyone reaching the server create their own account, or stop them.
     #[serde(default)]
     pub public_registration: Option<bool>,
+    /// The new attachment size limit, in bytes. At least 1. A limit below
+    /// `[server] asset_part_size` is accepted: the server then hands out
+    /// parts the size of the limit.
+    #[serde(default)]
+    pub asset_max_bytes: Option<u64>,
+}
+
+/// Check a new attachment size limit against the rules the owner's change is
+/// held to, returning the sentence for the one it breaks. Any limit the
+/// database can hold is accepted but zero: the part size follows the limit
+/// down, so no limit is too small for the config file.
+fn asset_max_bytes_problem(bytes: u64) -> Option<String> {
+    if bytes == 0 {
+        return Some("asset_max_bytes must be at least 1".to_string());
+    }
+    if i64::try_from(bytes).is_err() {
+        return Some(format!("asset_max_bytes must be at most {}", i64::MAX));
+    }
+    None
 }
 
 /// Read the server settings.
@@ -195,13 +238,14 @@ pub async fn get_server_settings(
     Owner(_auth): Owner,
 ) -> Result<Json<ServerSettings>, ApiError> {
     let mut conn = state.db.acquire().await?;
-    let settings = server_settings::load(&mut conn).await?;
-    Ok(Json(ServerSettings {
-        public_registration: settings.public_registration,
-    }))
+    Ok(Json(server_settings::load(&mut conn).await?.into()))
 }
 
 /// Change the server settings.
+///
+/// A new attachment size limit holds from the next upload, with no restart.
+/// A limit of zero is refused and nothing is changed. The part size the
+/// server hands out for a multipart upload is never larger than the limit.
 #[utoipa::path(
     patch,
     path = "/v1/server/settings",
@@ -217,14 +261,18 @@ pub async fn update_server_settings(
     Owner(_auth): Owner,
     Json(req): Json<UpdateServerSettingsRequest>,
 ) -> Result<Json<ServerSettings>, ApiError> {
+    // Checked before anything is written, so a refused request changes nothing.
+    if let Some(problem) = req.asset_max_bytes.and_then(asset_max_bytes_problem) {
+        return Err(ApiError::validation(problem));
+    }
     let mut conn = state.db.acquire().await?;
     if let Some(enabled) = req.public_registration {
         server_settings::set_public_registration(&mut conn, enabled).await?;
     }
-    let settings = server_settings::load(&mut conn).await?;
-    Ok(Json(ServerSettings {
-        public_registration: settings.public_registration,
-    }))
+    if let Some(bytes) = req.asset_max_bytes {
+        server_settings::set_asset_max_bytes(&mut conn, bytes).await?;
+    }
+    Ok(Json(server_settings::load(&mut conn).await?.into()))
 }
 
 /// What the whole database holds, summed over every account.

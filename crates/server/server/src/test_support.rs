@@ -623,6 +623,33 @@ pub async fn patch_failure(
     (status, problem(&text).sentence())
 }
 
+/// Store an attachment size limit directly, the way a test lowers the body
+/// cap below the part size, which the owner's route refuses.
+pub async fn store_asset_max_bytes(state: &AppState, bytes: u64) {
+    let mut conn = state.db.acquire().await.unwrap();
+    crate::db::server_settings::set_asset_max_bytes(&mut conn, bytes)
+        .await
+        .unwrap();
+}
+
+/// PATCH a JSON body with a Bearer token, returning the status and the raw
+/// response text, for a refusal checked with [`expect_problem`].
+pub async fn patch_raw(
+    state: &AppState,
+    path: &str,
+    token: &str,
+    body: serde_json::Value,
+) -> (StatusCode, String) {
+    request(
+        state,
+        reqwest::Method::PATCH,
+        path,
+        Some(token),
+        Some(json_body(body)),
+    )
+    .await
+}
+
 /// PATCH a JSON body with a Bearer token and decode the JSON response.
 pub async fn patch_json<T: DeserializeOwned>(
     state: &AppState,

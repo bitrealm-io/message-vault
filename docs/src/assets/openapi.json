@@ -8776,6 +8776,7 @@
           "Server"
         ],
         "summary": "Report whether this Message Crate is unclaimed, closed, or open.",
+        "description": "Also reports the server's Build, its Schema Fingerprint, whether the Demo\nAccount exists, and the attachment size limit.",
         "operationId": "get_server",
         "responses": {
           "200": {
@@ -9195,6 +9196,7 @@
           "Server"
         ],
         "summary": "Change the server settings.",
+        "description": "A new attachment size limit holds from the next upload, with no restart.\nA limit of zero is refused and nothing is changed. The part size the\nserver hands out for a multipart upload is never larger than the limit.",
         "operationId": "update_server_settings",
         "requestBody": {
           "content": {
@@ -13579,9 +13581,16 @@
           "state",
           "demo_account",
           "version",
-          "schema_fingerprint"
+          "schema_fingerprint",
+          "asset_max_bytes"
         ],
         "properties": {
+          "asset_max_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The attachment size limit, in bytes: the largest asset the server\naccepts, as one `PUT` or as the declared total of a multipart upload.\nThe owner sets it in the server settings. An app reads it here before\nit prepares attachments for upload.",
+            "minimum": 0
+          },
           "demo_account": {
             "type": "boolean",
             "description": "Whether the Demo Account exists. While it does, the screen offers a\nway into it beside whatever `state` shows: it has no password, so\nthere is nothing to type."
@@ -13605,9 +13614,16 @@
         "type": "object",
         "description": "The server settings the owner controls.",
         "required": [
-          "public_registration"
+          "public_registration",
+          "asset_max_bytes"
         ],
         "properties": {
+          "asset_max_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The attachment size limit, in bytes: the largest asset the server\naccepts. 536870912 (512 MiB) until the owner changes it.",
+            "minimum": 0
+          },
           "public_registration": {
             "type": "boolean",
             "description": "Anyone reaching the server may create their own account."
@@ -14047,6 +14063,15 @@
         "type": "object",
         "description": "Body for changing the server settings. Omitted fields are left alone.",
         "properties": {
+          "asset_max_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The new attachment size limit, in bytes. At least 1. A limit below\n`[server] asset_part_size` is accepted: the server then hands out\nparts the size of the limit.",
+            "minimum": 0
+          },
           "public_registration": {
             "type": [
               "boolean",

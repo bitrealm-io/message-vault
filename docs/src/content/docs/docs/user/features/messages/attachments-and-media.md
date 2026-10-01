@@ -82,7 +82,9 @@ The run keeps waiting at the review until the folder is set.
 
 ## The size limit
 
-The desktop app uploads no file larger than 50 MB.
+The server accepts no attachment larger than its attachment size limit, and the desktop app uploads none.
+The limit is 512 MB on a new Message Crate, and the Owner changes it under [Server Settings](/docs/user/features/owner/owner-home/#attachment-size-limit).
+An Import Run reads the limit when it starts and keeps that number until it ends, through a resume too.
 The Staging Review and the Media Review show the limit as **Size limit per file**, and list the files over it under **Files over the limit**.
 A file over the limit is not uploaded, and its message shows the attachment as `missing — too large`.
 

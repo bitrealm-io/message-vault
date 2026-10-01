@@ -1,5 +1,6 @@
 //! Config file model ([`Config`]) plus path/source validation.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -8,19 +9,102 @@ use serde::Deserialize;
 
 use crate::db::engine::{DbEngine, DbTarget, detect_engine};
 
-/// Complete server configuration, loaded from a TOML file.
-#[derive(Debug, Clone, Deserialize)]
+/// Complete server configuration, loaded from a TOML file. It is read only
+/// through [`Config::load`], which refuses a key the server does not use.
+#[derive(Debug, Clone)]
 pub struct Config {
     /// Filesystem locations (database, per-account data).
     pub paths: PathsConfig,
     /// HTTP ingest server (`message-crate-server serve`). Required for `serve`.
-    #[serde(default)]
     pub server: Option<ServerConfig>,
     /// Database engine and connection URL. When `url` is set (a
     /// `postgres://…` or `sqlite://…` URL), `serve` connects through it
     /// instead of `paths.db`. Required for Postgres.
-    #[serde(default)]
     pub database: DatabaseConfig,
+}
+
+/// Where the keys the config file takes are listed, for a refusal to point at.
+const CONFIG_REFERENCE: &str =
+    "https://messagecrate.app/docs/developer/reference/config-and-accounts/";
+
+/// One section as the file has it: the keys the server uses, and every other
+/// key the section carries. The second map is what lets [`Config::load`]
+/// refuse an unknown key by its own name and its section's.
+#[derive(Debug, Deserialize)]
+struct Section<T> {
+    #[serde(flatten)]
+    known: T,
+    #[serde(flatten)]
+    unknown: BTreeMap<String, toml::Value>,
+}
+
+/// The config file as it is read, before unknown keys are refused.
+#[derive(Debug, Deserialize)]
+struct ConfigFile {
+    paths: Section<PathsConfig>,
+    #[serde(default)]
+    server: Option<Section<ServerConfig>>,
+    #[serde(default)]
+    database: Option<Section<DatabaseConfig>>,
+    /// Sections the server does not have, and keys outside any section.
+    #[serde(flatten)]
+    unknown: BTreeMap<String, toml::Value>,
+}
+
+/// Unknown keys as a refusal lists them: `` `a`, `b` ``.
+fn key_list(unknown: &BTreeMap<String, toml::Value>) -> String {
+    unknown
+        .keys()
+        .map(|key| format!("`{key}`"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Take a section's known keys, refusing it when it carries any other.
+///
+/// A key the server does not use is an error, never ignored: a misspelt key
+/// would load as its default, and a key that was removed would sit in the
+/// file looking as though it still held.
+fn known_keys<T>(name: &str, section: Section<T>) -> Result<T> {
+    if name == "server" && section.unknown.contains_key("asset_max_bytes") {
+        bail!(
+            "[server] asset_max_bytes is not a config key. The attachment size limit is a \
+             Server Setting: the owner changes it on the Server Settings screen. Remove the line."
+        );
+    }
+    if !section.unknown.is_empty() {
+        bail!(
+            "[{name}] has a key the server does not use: {}. Remove it, or correct its name; \
+             the keys the config file takes are listed at {CONFIG_REFERENCE}",
+            key_list(&section.unknown)
+        );
+    }
+    Ok(section.known)
+}
+
+impl ConfigFile {
+    /// The configuration the file states, or the refusal of what it should not hold.
+    fn into_config(self) -> Result<Config> {
+        if !self.unknown.is_empty() {
+            bail!(
+                "{} is not a section or key the server uses. The sections are [paths], \
+                 [server] and [database]; their keys are listed at {CONFIG_REFERENCE}",
+                key_list(&self.unknown)
+            );
+        }
+        Ok(Config {
+            paths: known_keys("paths", self.paths)?,
+            server: self
+                .server
+                .map(|section| known_keys("server", section))
+                .transpose()?,
+            database: self
+                .database
+                .map(|section| known_keys("database", section))
+                .transpose()?
+                .unwrap_or_default(),
+        })
+    }
 }
 
 /// `[database]` section: optional connection URL selecting the engine.
@@ -38,12 +122,10 @@ pub struct ServerConfig {
     /// Bind address (default `127.0.0.1:8080`).
     #[serde(default = "default_server_bind")]
     pub bind: String,
-    /// Max size of one asset (single PUT or multipart complete), in bytes.
-    /// Default 512 MiB.
-    #[serde(default = "default_asset_max_bytes")]
-    pub asset_max_bytes: u64,
-    /// Multipart part size advertised to clients, in bytes. Default 64 MiB
-    /// (under Cloudflare Free/Pro ~100 MB). Must be ≤ `asset_max_bytes`.
+    /// Largest multipart part, in bytes. Default 64 MiB (under Cloudflare
+    /// Free/Pro ~100 MB). The part size a client is told is this or the
+    /// attachment size limit, whichever is smaller. The limit is a Server
+    /// Setting the owner changes in the app and has no key in this file.
     #[serde(default = "default_asset_part_size")]
     pub asset_part_size: usize,
     /// Cross-Origin Resource Sharing (CORS) origins allowed to call this API,
@@ -68,7 +150,6 @@ impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             bind: default_server_bind(),
-            asset_max_bytes: default_asset_max_bytes(),
             asset_part_size: default_asset_part_size(),
             cors_origins: Vec::new(),
             openapi_ui: default_openapi_ui(),
@@ -85,11 +166,6 @@ fn default_static_dir() -> PathBuf {
 /// serde default for `[server] bind`.
 fn default_server_bind() -> String {
     "127.0.0.1:8080".to_string()
-}
-
-/// serde default for `[server] asset_max_bytes` (512 MiB).
-fn default_asset_max_bytes() -> u64 {
-    512 * 1024 * 1024
 }
 
 /// serde default for `[server] asset_part_size` (64 MiB).
@@ -180,11 +256,16 @@ impl Config {
     /// Read and parse a TOML config file. Relative `paths.db` and
     /// `paths.data_dir` values resolve against the directory above the config
     /// file's folder (the repo root for `config/config.toml`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the file cannot be read or parsed, or carries a
+    /// section or key the server does not use; the error names each one.
     pub fn load(path: &Path) -> Result<Self> {
         let text = fs::read_to_string(path)
             .with_context(|| format!("failed to read config {}", path.display()))?;
-        let mut config: Config = toml::from_str(&text)
-            .with_context(|| format!("failed to parse config {}", path.display()))?;
+        let mut config =
+            Self::parse(&text).with_context(|| format!("config {} was refused", path.display()))?;
 
         let abs_config = if path.is_absolute() {
             path.to_path_buf()
@@ -245,6 +326,17 @@ impl Config {
         self
     }
 
+    /// The configuration a config file's text states, with paths as written.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the text is not the TOML the server expects, or
+    /// carries a section or key the server does not use.
+    fn parse(text: &str) -> Result<Self> {
+        let file: ConfigFile = toml::from_str(text)?;
+        file.into_config()
+    }
+
     /// Server settings for `serve`. Fails if `[server]` is missing.
     pub fn require_server(&self) -> Result<&ServerConfig> {
         let server = self
@@ -253,16 +345,6 @@ impl Config {
             .context("config missing [server] section (needed for serve)")?;
         if server.asset_part_size == 0 {
             bail!("server.asset_part_size must be > 0");
-        }
-        if server.asset_max_bytes == 0 {
-            bail!("server.asset_max_bytes must be > 0");
-        }
-        if server.asset_part_size as u64 > server.asset_max_bytes {
-            bail!(
-                "server.asset_part_size ({}) must be ≤ server.asset_max_bytes ({})",
-                server.asset_part_size,
-                server.asset_max_bytes
-            );
         }
         Ok(server)
     }
@@ -441,10 +523,102 @@ mod tests {
         );
         let server = cfg.require_server().unwrap();
         assert_eq!(server.bind, "127.0.0.1:8080");
-        assert_eq!(server.asset_max_bytes, 536_870_912);
         assert_eq!(server.asset_part_size, 67_108_864);
         assert!(!server.openapi_ui);
         assert!(server.cors_origins.is_empty());
+    }
+
+    /// Write `text` as `config/config.toml` under a fresh folder and load it.
+    fn load_text(text: &str) -> Result<Config> {
+        let dir = tempfile::tempdir().unwrap();
+        let config_dir = dir.path().join("config");
+        fs::create_dir_all(&config_dir).unwrap();
+        let path = config_dir.join("config.toml");
+        fs::write(&path, text).unwrap();
+        Config::load(&path)
+    }
+
+    /// The limit left the config file. A line that still sets it is refused,
+    /// and the refusal says where the limit is set now, because a line that
+    /// loaded and did nothing would leave the operator believing it held.
+    #[test]
+    fn a_config_that_still_sets_asset_max_bytes_is_refused_and_told_where_the_limit_lives() {
+        let err = load_text(
+            "[paths]\ndb = \"data/messagecrate.db\"\n\n[server]\nasset_max_bytes = 536870912\n",
+        )
+        .unwrap_err();
+        let text = format!("{err:#}");
+
+        assert!(text.contains("config.toml"), "{text}");
+        assert!(text.contains("[server] asset_max_bytes"), "{text}");
+        assert!(text.contains("Server Settings screen"), "{text}");
+    }
+
+    /// A key the server does not use is refused wherever it sits, by its name
+    /// and its section: a misspelt key otherwise loads as the default.
+    #[test]
+    fn a_config_with_an_unknown_key_is_refused_naming_the_key_and_its_section() {
+        for (section, config) in [
+            (
+                "[paths]",
+                "[paths]\ndb = \"data/messagecrate.db\"\nasset_dir = \"assets\"\n",
+            ),
+            (
+                "[server]",
+                "[paths]\ndb = \"data/messagecrate.db\"\n\n[server]\nasset_dir = 1\n",
+            ),
+            (
+                "[database]",
+                "[paths]\ndb = \"data/messagecrate.db\"\n\n[database]\nasset_dir = 1\n",
+            ),
+        ] {
+            let text = format!("{:#}", load_text(config).unwrap_err());
+            assert!(text.contains("`asset_dir`"), "{section}: {text}");
+            assert!(text.contains(section), "{section}: {text}");
+        }
+    }
+
+    /// Every unknown key is named, not only the first.
+    #[test]
+    fn every_unknown_key_in_a_section_is_named() {
+        let text = format!(
+            "{:#}",
+            load_text(
+                "[paths]\ndb = \"data/messagecrate.db\"\n\n[server]\nbnd = \"x\"\nport = 1\n"
+            )
+            .unwrap_err()
+        );
+        assert!(text.contains("`bnd`") && text.contains("`port`"), "{text}");
+    }
+
+    /// A section the server does not have, or a key outside any section.
+    #[test]
+    fn a_config_with_an_unknown_section_is_refused_naming_it() {
+        let text = format!(
+            "{:#}",
+            load_text("[paths]\ndb = \"data/messagecrate.db\"\n\n[sever]\nbind = \"x\"\n")
+                .unwrap_err()
+        );
+        assert!(text.contains("`sever`"), "{text}");
+        assert!(text.contains("[paths], [server] and [database]"), "{text}");
+    }
+
+    /// The config files the repository ships must load under the same rule:
+    /// the example a developer copies, the one the Docker image starts from,
+    /// and the one `reset-demo` installs.
+    #[test]
+    fn every_committed_config_file_loads() {
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        for file in [
+            "config/config.toml.example",
+            "config/config.docker.toml",
+            "crates/server/demo-seed/config/config.toml",
+        ] {
+            let text = fs::read_to_string(repo.join(file)).unwrap();
+            if let Err(err) = load_text(&text) {
+                panic!("{file} does not load: {err:#}");
+            }
+        }
     }
 
     const PACKAGED_ORIGINS: &[&str] = &[
@@ -489,7 +663,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let cfg: Config =
-            toml::from_str(&uncommented).expect("example after run-dev.sh sed must parse");
+            Config::parse(&uncommented).expect("example after run-dev.sh sed must parse");
         let origins = &cfg
             .server
             .as_ref()
@@ -515,7 +689,7 @@ mod tests {
             env!("CARGO_MANIFEST_DIR"),
             "/../../../config/config.docker.toml"
         ));
-        let cfg: Config = toml::from_str(docker).expect("config.docker.toml must parse");
+        let cfg = Config::parse(docker).expect("config.docker.toml must parse");
         let origins = &cfg
             .server
             .as_ref()

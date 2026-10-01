@@ -16,12 +16,12 @@ use crate::assets_api::{self, StoredAsset};
 
 /// Default part size advertised to clients (under Cloudflare ~100 MiB).
 pub const DEFAULT_PART_SIZE: usize = 64 * 1024 * 1024;
-/// Default max object size for one asset (single PUT or multipart).
-pub const DEFAULT_MAX_BYTES: u64 = 512 * 1024 * 1024;
 /// Drop abandoned `.incoming` sessions older than this (24h).
 const STALE_INCOMING_SECS: u64 = 24 * 60 * 60;
 
-/// Limits for multipart sessions, from `[server]` config. Tests build their own.
+/// Limits for one upload: the attachment size limit from the Server Settings
+/// as it is when the upload starts, and the part size worked out from it and
+/// the `[server]` config ([`UploadLimits::within`]).
 #[derive(Debug, Clone, Copy)]
 pub struct UploadLimits {
     /// Multipart part size advertised to clients.
@@ -34,17 +34,23 @@ impl Default for UploadLimits {
     fn default() -> Self {
         Self {
             part_size: DEFAULT_PART_SIZE,
-            max_bytes: DEFAULT_MAX_BYTES,
+            max_bytes: crate::db::server_settings::DEFAULT_ASSET_MAX_BYTES,
         }
     }
 }
 
 impl UploadLimits {
-    /// Build limits from the `[server]` config values. Part size is at least 1
-    /// byte, and the max size is at least one part.
-    pub fn new(part_size: usize, max_bytes: u64) -> Self {
-        let part_size = part_size.max(1);
-        let max_bytes = max_bytes.max(part_size as u64);
+    /// The limits in force: the attachment size limit as the owner set it,
+    /// and a part size that is the configured one or the limit, whichever is
+    /// smaller. A part is never larger than the limit, so every limit the
+    /// owner can set is one an upload can complete under, and no pairing of
+    /// the setting and the config file is an error.
+    pub fn within(configured_part_size: usize, max_bytes: u64) -> Self {
+        let part_size = usize::try_from(max_bytes)
+            .map_or(configured_part_size, |limit| {
+                configured_part_size.min(limit)
+            })
+            .max(1);
         Self {
             part_size,
             max_bytes,
@@ -530,7 +536,7 @@ mod tests {
         let data = b"abcdefghijklmnopqrstuvwxyz";
         let sha = hash_bytes(data);
         // Tiny parts, set on this test's own limits so no other test sees them.
-        let limits = UploadLimits::new(10, DEFAULT_MAX_BYTES);
+        let limits = UploadLimits::within(10, 1024);
         let (existing, start) =
             start_upload(root, &sha, data.len() as u64, Some("text/plain"), limits).unwrap();
         assert!(existing.is_none());
@@ -577,6 +583,17 @@ mod tests {
         };
         let err = start_upload(root, &sha, 4096, None, limits).unwrap_err();
         assert!(err.to_string().contains("server limit"));
+    }
+
+    /// The limit is the owner's and is never moved. A configured part size
+    /// above it is brought down to it; one below it is used as configured.
+    #[test]
+    fn a_part_is_never_larger_than_the_limit() {
+        let small_limit = UploadLimits::within(4096, 1024);
+        assert_eq!((small_limit.part_size, small_limit.max_bytes), (1024, 1024));
+
+        let small_part = UploadLimits::within(10, 1024);
+        assert_eq!((small_part.part_size, small_part.max_bytes), (10, 1024));
     }
 
     #[test]

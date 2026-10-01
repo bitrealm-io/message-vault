@@ -36,12 +36,26 @@ cors_origins = [
 
 ### Server asset limits
 
-`[server]` also accepts optional upload limits. Both keys default to sensible values for most installs:
+`[server]` also accepts one optional upload setting:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `asset_max_bytes` | `536870912` (512 MiB) | Maximum size for one attachment — a single `PUT /v1/assets/{sha256}` body or the total declared bytes for a multipart upload. Must be greater than 0. |
-| `asset_part_size` | `67108864` (64 MiB) | Chunk size advertised to clients for multipart uploads. Must not exceed `asset_max_bytes`. Keep under ~100 MiB for Cloudflare-proxied setups. |
+| `asset_part_size` | `67108864` (64 MiB) | Largest chunk of a multipart upload. Must be greater than 0. Keep under ~100 MiB for Cloudflare-proxied setups. The chunk size a client is told is this or the attachment size limit, whichever is smaller. |
+
+The server refuses a config file that carries a section or key it does not use.
+Every command that loads the file, `serve` included, stops with an error that names each unknown key and its section, for example ``[server] has a key the server does not use: `bnd` ``.
+Why: a misspelt key would otherwise load as its default, and a removed key would sit in the file looking as though it still held.
+
+The attachment size limit is not a config key, and a file that still sets `[server] asset_max_bytes` is refused with a message saying where the limit is set now.
+It is the largest attachment the server accepts, as a single `PUT /v1/assets/{sha256}` body or as the total declared bytes of a multipart upload, and it is also the cap on every other request body.
+It is a Server Setting stored in the database: 512 MiB until the Owner changes it under **Server Settings**, or a program with the Owner's Session sends `PATCH /v1/server/settings` with `asset_max_bytes` in bytes.
+A change holds from the next upload, with no restart.
+`GET /v1/server` reports the limit as `asset_max_bytes` to any client, with no credential, because the desktop app reads it before Staging.
+
+The limit is whatever the Owner set, and a part is never larger than the limit.
+A limit below `asset_part_size` is accepted, and the server then hands out parts the size of the limit.
+The part size is worked out on each upload, so neither a change to the limit nor an edit to `asset_part_size` can leave a server that does not start.
+The server refuses only a limit of zero, or one above 9223372036854775807, with `422 Unprocessable Entity`.
 
 Web env overrides (optional): `MC_DB`, `MC_DATA_DIR`.
 

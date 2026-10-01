@@ -822,9 +822,10 @@ pub(crate) async fn replace_asset(
         resolve_asset_lookup(&state, &auth, &sha256, &query, AssetAccess::Write).await?;
 
     let mime = upload_content_type(&headers);
+    let max_body_bytes = usize::try_from(state.asset_max_bytes().await?).unwrap_or(usize::MAX);
 
     if let Some(stored) = existing {
-        discard_body(request.into_body(), state.max_body_bytes).await?;
+        discard_body(request.into_body(), max_body_bytes).await?;
         return Ok(Asset::stored(stored, true).into_response());
     }
 
@@ -843,7 +844,7 @@ pub(crate) async fn replace_asset(
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_nanos())
     ));
-    let n = match stream_body_to_file(request.into_body(), &tmp_path, state.max_body_bytes).await {
+    let n = match stream_body_to_file(request.into_body(), &tmp_path, max_body_bytes).await {
         Ok(n) => n,
         Err(err) => {
             let _ = tokio::fs::remove_file(&tmp_path).await;
@@ -959,7 +960,7 @@ pub(crate) async fn create_asset_upload(
     let mime = body.mime.clone();
     let bytes = body.bytes;
     let sha = sha256.clone();
-    let limits = state.upload_limits;
+    let limits = state.upload_limits().await?;
     let result = tokio::task::spawn_blocking(move || {
         asset_uploads::start_upload(&assets_dir, &sha, bytes, mime.as_deref(), limits)
     })
@@ -1027,7 +1028,8 @@ pub(crate) async fn replace_asset_upload_part(
     if part == 0 {
         return Err(ApiError::validation("part number must be >= 1"));
     }
-    let body = read_body_limited(request.into_body(), state.upload_limits.part_size).await?;
+    let part_size = state.upload_limits().await?.part_size;
+    let body = read_body_limited(request.into_body(), part_size).await?;
     let assets_dir = state.cfg.paths.assets_dir_for_account(account, &source_id);
     let sha = sha256.clone();
     let uid = upload_id.clone();

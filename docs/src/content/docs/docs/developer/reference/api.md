@@ -47,7 +47,7 @@ Between those steps, `PATCH /v1/imports/{id}` moves a live run to another stage,
 
 ### Import body
 
-A batch body is `Content-Type: application/jsonl` or `application/x-ndjson`. Any other media type answers `415 Unsupported Media Type`, because attachments never travel in a batch. A body larger than `[server] asset_max_bytes` (default 512 MiB) answers `413 Payload Too Large`.
+A batch body is `Content-Type: application/jsonl` or `application/x-ndjson`. Any other media type answers `415 Unsupported Media Type`, because attachments never travel in a batch. A body larger than the attachment size limit (`asset_max_bytes` on `GET /v1/server`, 512 MiB until the Owner changes it) answers `413 Payload Too Large`.
 
 A file the server cannot read answers `400 Bad Request` with a `malformed-body` problem document. Its `detail` names the line where reading stopped. For a file of the wrong schema version, `detail` names the version the file has and the version the server reads: nothing is upgraded, so the file must be exported again with current tools. Every other failure is a problem document too, described under "Failures" in the HTTP interface rules.
 

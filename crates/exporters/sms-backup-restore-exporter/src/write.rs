@@ -291,13 +291,7 @@ fn synthesize_addrs(
 ) -> Vec<BTreeMap<String, String>> {
     let mut addrs = Vec::new();
     let from = match msg.direction {
-        IrDirection::Incoming => {
-            if let Some(h) = msg.sender_handle.as_deref().filter(|s| !s.is_empty()) {
-                h.to_string()
-            } else {
-                peer_address(doc, msg)
-            }
-        }
+        IrDirection::Incoming => peer_address(doc, msg),
         IrDirection::Outgoing => {
             if owner.is_empty() {
                 "insert-address-token".into()

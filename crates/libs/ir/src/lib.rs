@@ -964,8 +964,6 @@ pub struct PendingAttachment {
     pub rel_path: String,
     /// MIME content type.
     pub content_type: String,
-    /// File extension.
-    pub extension: String,
     /// SHA-256 of the file contents; `None` when unknown.
     pub digest_sha256: Option<String>,
     /// Optional SMIL/content-location name.

@@ -4,7 +4,6 @@
 use crate::types::AttachmentBlob;
 use message_ir::PendingAttachment;
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
 
 /// Queue attachment blobs as metadata. Bytes stay in `blob_bytes` (keyed by
 /// digest) until the shared runner writes them.
@@ -24,11 +23,6 @@ pub(super) fn queue_attachments(
             PendingAttachment {
                 rel_path: String::new(),
                 content_type: blob.mime_type.clone().unwrap_or_default(),
-                extension: Path::new(&blob.filename)
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("")
-                    .to_string(),
                 digest_sha256: Some(blob.digest_hex.clone()),
                 name_hint: blob
                     .original_name

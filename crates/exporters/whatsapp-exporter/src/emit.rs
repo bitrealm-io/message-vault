@@ -25,15 +25,6 @@ const EXPORT_TOOL: &str = "WhatsApp Chat Exporter";
 /// Pinned documented upstream version (JSON convert path; shell-out may differ).
 pub(crate) const EXPORT_TOOL_VERSION: &str = "0.13.0";
 
-/// File extension without the leading dot, e.g. `"jpg"` for `"photo.jpg"`.
-fn ext_of(name: &str) -> String {
-    Path::new(name)
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_string()
-}
-
 /// One conversion of a wtsexporter `result.json`: what to read, where to
 /// write it, and how.
 pub(crate) struct ConvertRequest<'a> {
@@ -278,7 +269,6 @@ fn queue_media(
     let pending = PendingAttachment {
         rel_path: String::new(),
         content_type: msg.mime.clone().unwrap_or_default(),
-        extension: name.as_deref().map(ext_of).unwrap_or_default(),
         digest_sha256: None,
         name_hint: name,
     };

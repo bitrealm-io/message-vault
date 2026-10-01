@@ -562,7 +562,6 @@ mod tests {
         let mut into = vec![PendingAttachment {
             rel_path: "attachments/a.jpg".into(),
             content_type: "image/jpeg".into(),
-            extension: "jpg".into(),
             digest_sha256: Some("aaa".into()),
             name_hint: Some("a.jpg".into()),
         }];
@@ -570,14 +569,12 @@ mod tests {
             PendingAttachment {
                 rel_path: "attachments/a.jpg".into(),
                 content_type: "image/jpeg".into(),
-                extension: "jpg".into(),
                 digest_sha256: Some("aaa".into()),
                 name_hint: Some("a.jpg".into()),
             },
             PendingAttachment {
                 rel_path: "attachments/b.jpg".into(),
                 content_type: "image/jpeg".into(),
-                extension: "jpg".into(),
                 digest_sha256: Some("bbb".into()),
                 name_hint: Some("b.jpg".into()),
             },

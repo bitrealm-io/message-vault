@@ -334,11 +334,6 @@ impl Ingest {
         let attachment = PendingAttachment {
             rel_path: row.attachment.clone(),
             content_type: cell.meta.mime_type.clone().unwrap_or_default(),
-            extension: Path::new(&row.attachment)
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("")
-                .to_string(),
             digest_sha256: None,
             name_hint: cell.meta.original_name.clone(),
         };

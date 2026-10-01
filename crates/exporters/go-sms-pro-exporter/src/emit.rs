@@ -754,7 +754,6 @@ mod tests {
                 .map(|i| PendingAttachment {
                     rel_path: format!("attachments/a{i}.jpg"),
                     content_type: String::new(),
-                    extension: "jpg".into(),
                     digest_sha256: None,
                     name_hint: None,
                 })

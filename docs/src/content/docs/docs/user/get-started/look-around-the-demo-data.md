@@ -1,6 +1,6 @@
 ---
 title: Look around the demo data
-description: Open the Demo Account in a browser, try the conversation list, search, and contacts, then delete the demo Message Crate.
+description: Open the Demo Account in a browser, try the conversation list, search, and contacts, then log out.
 ---
 
 This step uses a browser only.
@@ -12,7 +12,8 @@ The desktop app comes later, in [step 5](/docs/user/get-started/install-the-desk
 2. Select **Explore Demo Account**.
 
 The Demo Account has no password, so there is nothing to type.
-The card also shows **Create Owner**, which is for [step 4](/docs/user/get-started/start-your-own-message-crate/).
+The card also shows **Create Owner**, which is for [step 4](/docs/user/get-started/create-the-owner-and-an-account/).
+The name at the top right, **demo**, shows which account is logged in.
 
 ## Things to try
 
@@ -41,17 +42,15 @@ The demo text is sampled from *Pride and Prejudice*, which is why the conversati
 The Demo Account may export, and move things to the Trash and restore them.
 It may not import or delete for good.
 Anyone who reaches this Message Crate can enter it, so those limits keep a person's own messages out of the demo data and keep one visitor from emptying it for the next.
+
+Names given to contacts, groups, tags, and saved searches made here stay until the Owner resets the Demo Account.
+
+## Log out
+
 The round button at the top right opens the account menu, which holds **Log out**.
+Logging out returns to the first screen, which still shows **Create Owner** and **Explore Demo Account**.
 
-## Delete the demo Message Crate
+The Demo Account stays for as long as it is useful.
+[Step 7](/docs/user/get-started/import-your-backup/#delete-the-demo-account) ends by deleting it.
 
-```bash title="Remove the demo container and its data"
-docker rm -f message-crate-demo
-docker volume rm message-crate-demo-data
-```
-
-The first command stops and removes the server.
-The second deletes the demo database.
-[http://localhost:8080](http://localhost:8080) no longer answers once both have run.
-
-Next: [Start a Message Crate for real messages](/docs/user/get-started/start-your-own-message-crate/).
+Next: [Create the Owner and an account](/docs/user/get-started/create-the-owner-and-an-account/).

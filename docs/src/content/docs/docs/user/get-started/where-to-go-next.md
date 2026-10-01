@@ -14,7 +14,7 @@ What follows depends on what else there is to bring in.
 | WhatsApp, on Android or iPhone | [WhatsApp](/docs/user/import-sources/whatsapp/). Advanced: it needs a separate program and, on Android, a decryption key. |
 | An old backup from SMS Backup+, GO SMS Pro, iMazing, or OpenExtract | [Old backups](/docs/user/import-sources/old-backups/) |
 | A second phone | Steps [6](/docs/user/get-started/back-up-an-iphone/) and [7](/docs/user/get-started/import-your-backup/) again, into the same account |
-| Another person's messages | A new account for that person, added by the Owner as in [step 4](/docs/user/get-started/start-your-own-message-crate/#add-an-account) |
+| Another person's messages | A new account for that person, added by the Owner as in [step 4](/docs/user/get-started/create-the-owner-and-an-account/#add-an-account) |
 
 ## Using what is there
 

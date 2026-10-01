@@ -77,4 +77,18 @@ The record of the run stays under **Settings → Storage → Import history**.
 Importing the same backup twice doesn't create duplicates.
 The Message Crate recognises messages it already holds and skips them, so a newer backup of the same phone adds only what is new.
 
+## Delete the Demo Account
+
+The Demo Account has done its job once real messages are in.
+Deleting it is optional. It holds nothing real, and nothing in it mixes with another account.
+While it exists, anyone who reaches the server can open it from the login screen.
+
+1. Log out, and log in as the Owner. A browser at [http://localhost:8080](http://localhost:8080) works, and so does the desktop app.
+2. On **User Accounts**, select **demo**.
+3. Open **Danger zone** and select **Delete account**.
+4. Confirm with **Delete account**.
+
+The **Explore Demo Account** button leaves the login screen.
+The Owner brings the Demo Account back under [Server Settings](/docs/user/features/owner/owner-home/#demo-account) with **Add Demo Account**.
+
 Next: [Where to go next](/docs/user/get-started/where-to-go-next/).

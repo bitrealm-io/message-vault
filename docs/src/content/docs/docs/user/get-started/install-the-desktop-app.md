@@ -1,10 +1,10 @@
 ---
 title: Install the desktop app
-description: Download the desktop app, get past the unsigned-app warning, and log in to the Message Crate from step 4.
+description: Download the desktop app, get past the unsigned-app warning, and log in to the Message Crate with the account from step 4.
 ---
 
 The desktop app shows the same screens as the website and adds **Import** and **Export**.
-This step installs it and logs in to the Message Crate started in [step 4](/docs/user/get-started/start-your-own-message-crate/).
+This step installs it and logs in with the account made in [step 4](/docs/user/get-started/create-the-owner-and-an-account/).
 
 ## Download
 
@@ -50,7 +50,7 @@ These steps follow Apple's documentation. Nobody on the project has run them on 
 The app opens on a card titled **Message Crate**.
 The line under the title reads **Connected** when the app has found the server.
 
-The app looks for the server at `http://127.0.0.1:8080`, which is this computer, so a Message Crate started with the command in step 4 is found with nothing to change.
+The app looks for the server at `http://127.0.0.1:8080`, which is this computer, so a Message Crate started with the command in step 2 is found with nothing to change.
 
 1. Enter the username and password of the account from step 4. The Owner's login also works here, but the Owner can't import.
 2. Select **Log in**.

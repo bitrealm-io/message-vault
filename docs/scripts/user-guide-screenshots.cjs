@@ -1,13 +1,11 @@
 // Captures the User Guide's screenshots into docs/src/assets/user-guide/.
 //
-// It needs two servers already running from the release image:
-//   DEMO_URL  - a new Message Crate, which starts with the Demo Account (steps 2 and 3)
-//   EMPTY_URL - a second new Message Crate on its own volume (step 4)
-// The empty server must be unclaimed, so its volume is deleted before each run.
+// It needs one server already running from the release image: a new Message
+// Crate, which starts unclaimed with the Demo Account, as the guide's does.
+// The run claims it, so its volume is deleted before each run.
 //
 //   npm install --no-save playwright && npx playwright install chromium
-//   DEMO_URL=http://localhost:18080 EMPTY_URL=http://localhost:18081 \
-//     node scripts/user-guide-screenshots.cjs
+//   CRATE_URL=http://localhost:18080 node scripts/user-guide-screenshots.cjs
 //
 // PLAYWRIGHT names the library's folder when it is installed somewhere else.
 // --verbose prints the text of each captured screen, for checking labels.
@@ -17,8 +15,7 @@
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT || 'playwright');
 
-const DEMO = process.env.DEMO_URL || 'http://localhost:8080';
-const EMPTY = process.env.EMPTY_URL || 'http://localhost:8081';
+const CRATE = process.env.CRATE_URL || 'http://localhost:8080';
 const OUT = path.join(__dirname, '..', 'src', 'assets', 'user-guide');
 
 async function capture(browser) {
@@ -43,26 +40,29 @@ async function capture(browser) {
     await p.waitForTimeout(1000);
   };
 
-  // Steps 2 and 3: the demo Message Crate.
-  const demo = await open(DEMO);
+  // Steps 2 and 3: the first screen, then the Demo Account.
+  const demo = await open(CRATE);
   await shot(demo, 'login');
   await demo.getByRole('button', { name: 'Explore Demo Account' }).click();
   await demo.waitForTimeout(2500);
   await shot(demo, 'demo-messages');
   await demo.getByRole('button', { name: /^Carolyn Jones/ }).first().click();
   await demo.waitForTimeout(2000);
-  await demo.getByPlaceholder('Search messages').fill('attachment:any');
+  // Typed key by key: the search box drops text that arrives faster than a
+  // person types, so `fill` followed at once by Enter searches for nothing.
+  await demo.getByPlaceholder('Search messages').click();
+  await demo.keyboard.type('attachment:any', { delay: 120 });
   await demo.keyboard.press('Enter');
   await demo.waitForTimeout(2500);
   await shot(demo, 'demo-search');
   await demo.context().close();
 
-  // Step 4: an empty Message Crate.
-  const own = await open(EMPTY);
-  await shot(own, 'create-owner');
+  // Step 4: the same Message Crate, claimed.
+  const own = await open(CRATE);
   await own.getByLabel('Username').fill('owner');
   await own.getByLabel('Password', { exact: true }).fill('a long owner password');
   await own.getByLabel('Confirm Password').fill('a long owner password');
+  await shot(own, 'create-owner');
   await own.getByRole('button', { name: 'Create Owner' }).click();
   await own.waitForTimeout(2000);
   await own.getByRole('button', { name: 'Add account' }).click();
@@ -101,7 +101,7 @@ async function capture(browser) {
     };
   });
   const form = await context.newPage();
-  await form.goto(`${EMPTY}/#/import`);
+  await form.goto(`${CRATE}/#/import`);
   await form.waitForTimeout(2500);
   await shot(form, 'import-form');
   await context.close();

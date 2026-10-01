@@ -44,9 +44,9 @@ Every tool that works with message history works this way, so the backup step is
 ## The path from here
 
 1. This page.
-2. [Run a Message Crate with demo data](/docs/user/get-started/run-with-demo-data/).
+2. [Start a Message Crate](/docs/user/get-started/start-a-message-crate/).
 3. [Look around the demo data](/docs/user/get-started/look-around-the-demo-data/).
-4. [Start a Message Crate for real messages](/docs/user/get-started/start-your-own-message-crate/).
+4. [Create the Owner and an account](/docs/user/get-started/create-the-owner-and-an-account/).
 5. [Install the desktop app](/docs/user/get-started/install-the-desktop-app/).
 6. Back up the phone: [iPhone](/docs/user/get-started/back-up-an-iphone/) or [Android](/docs/user/get-started/back-up-an-android-phone/).
 7. [Import the backup](/docs/user/get-started/import-your-backup/).
@@ -55,4 +55,4 @@ Every tool that works with message history works this way, so the backup step is
 Steps 2 and 3 take a few minutes and need no phone.
 They answer whether Message Crate is worth the work of steps 4 to 7.
 
-Next: [Run a Message Crate with demo data](/docs/user/get-started/run-with-demo-data/).
+Next: [Start a Message Crate](/docs/user/get-started/start-a-message-crate/).

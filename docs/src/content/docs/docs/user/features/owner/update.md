@@ -21,7 +21,7 @@ A copy of the `message-crate-data` volume, made as in [Run on another machine](/
 These steps follow Docker's documentation. Nobody on the project has run them. A wrong step is worth [an issue](https://github.com/messagecrate/message-crate/issues).
 :::
 
-The steps match the server started in [Start your own Message Crate](/docs/user/get-started/start-your-own-message-crate/): a container named `message-crate` on the volume `message-crate-data`.
+The steps match the server started in [Start a Message Crate](/docs/user/get-started/start-a-message-crate/): a container named `message-crate` on the volume `message-crate-data`.
 
 `docker stop` and `docker rm` remove the running server.
 They leave the volume alone, so the messages stay.
@@ -88,4 +88,4 @@ Everything the database held is gone after a rebuild:
 - contact names that were typed in, Contact Groups, Message Tags, Saved Searches, and the Trash,
 - every API Token.
 
-The way back is the first-time path again: [create the Owner and an account](/docs/user/get-started/start-your-own-message-crate/#create-the-owner), then [import the backups](/docs/user/get-started/import-your-backup/).
+The way back is the first-time path again: [create the Owner and an account](/docs/user/get-started/create-the-owner-and-an-account/#create-the-owner), then [import the backups](/docs/user/get-started/import-your-backup/).

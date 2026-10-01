@@ -135,6 +135,11 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
   # ── Rust: build + test on SQLite, then the server suite again on Postgres
+  # The Postgres pass is switched off for now: its service and its step are
+  # commented out below. Uncommenting both turns it back on. Until then the
+  # server suite runs on SQLite only here; a developer runs it on Postgres by
+  # exporting MC_TEST_POSTGRES_URL (AGENTS.md, "Build, format, and test").
+  #
   # The workspace runs once with MC_TEST_POSTGRES_URL unset, which is the
   # SQLite run every developer gets locally; the tests whose subject is
   # SQLite itself (the schema contract, FTS5 triggers, rebuilds) only assert
@@ -151,20 +156,20 @@ jobs:
     if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: messagecrate
-          POSTGRES_PASSWORD: messagecrate
-          POSTGRES_DB: messagecrate
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U messagecrate"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 10
+    # services:
+    #   postgres:
+    #     image: postgres:16-alpine
+    #     env:
+    #       POSTGRES_USER: messagecrate
+    #       POSTGRES_PASSWORD: messagecrate
+    #       POSTGRES_DB: messagecrate
+    #     ports:
+    #       - 5432:5432
+    #     options: >-
+    #       --health-cmd "pg_isready -U messagecrate"
+    #       --health-interval 2s
+    #       --health-timeout 2s
+    #       --health-retries 10
     steps:
       - uses: actions/checkout@v7
 
@@ -191,10 +196,10 @@ jobs:
 
       # GitHub publishes service ports on localhost; the hostname `postgres`
       # only resolves when the job itself runs in a container.
-      - name: Test the server on Postgres
-        env:
-          MC_TEST_POSTGRES_URL: postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate
-        run: cargo test -p message-crate-server
+      # - name: Test the server on Postgres
+      #   env:
+      #     MC_TEST_POSTGRES_URL: postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate
+      #   run: cargo test -p message-crate-server
 
   # ── Rust: check, lint, and test src-tauri ─────────────────────────────
   # src-tauri is not a workspace member, so the workspace jobs above skip

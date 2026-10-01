@@ -18,6 +18,21 @@ fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(local_server::data_dir_in(&app_data))
 }
 
+/// The origin `cargo tauri dev` loads the screens from, which the server has
+/// to be told to allow. An installed app loads them from its own origin,
+/// which every server allows, and names nothing here.
+fn dev_origins(app: &AppHandle) -> Vec<String> {
+    if !tauri::is_dev() {
+        return Vec::new();
+    }
+    app.config()
+        .build
+        .dev_url
+        .iter()
+        .map(|url| url.origin().ascii_serialization())
+        .collect()
+}
+
 /// Everything the server is started with.
 fn launch(app: &AppHandle) -> Result<Launch, String> {
     let static_dir = app
@@ -32,6 +47,7 @@ fn launch(app: &AppHandle) -> Result<Launch, String> {
         address: local_server::OWN_ADDRESS
             .parse()
             .map_err(|e| format!("{}: {e}", local_server::OWN_ADDRESS))?,
+        cors_origins: dev_origins(app),
     })
 }
 

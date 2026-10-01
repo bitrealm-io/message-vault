@@ -205,6 +205,7 @@ Run the HTTP API. A database that does not exist yet is created with the Demo Ac
 * `--data-dir <DATA_DIR>` — Keep the whole Message Crate in this folder and read no config file: the database is `messagecrate.db` inside it, with every other setting at its default
 * `--bind <BIND>` — Address to listen on (overrides `[server] bind`; default 127.0.0.1:8080)
 * `--static-dir <STATIC_DIR>` — Folder holding the built website (overrides `[server] static_dir`; default `static`)
+* `--cors-origin <ORIGIN>` — Another website allowed to call this API, added to `[server] cors_origins`; repeat for more than one. The packaged desktop app's own origins are always allowed
 * `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
 
 

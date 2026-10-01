@@ -309,6 +309,12 @@ pub struct ServeArgs {
     #[arg(long)]
     pub static_dir: Option<PathBuf>,
 
+    /// Another website allowed to call this API, added to `[server]
+    /// cors_origins`; repeat for more than one. The packaged desktop app's
+    /// own origins are always allowed
+    #[arg(long = "cors-origin", value_name = "ORIGIN")]
+    pub cors_origins: Vec<String>,
+
     /// Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
     #[arg(long)]
     pub db_url: Option<String>,
@@ -709,7 +715,7 @@ fn serve_config(args: ServeArgs) -> Result<Config> {
     };
     Ok(cfg
         .with_db_overrides(None, args.db_url)
-        .with_serve_overrides(args.bind, args.static_dir))
+        .with_serve_overrides(args.bind, args.static_dir, args.cors_origins))
 }
 
 /// Convert stored media into browser previews.

@@ -226,13 +226,15 @@ impl Config {
         }
     }
 
-    /// Apply `serve`'s own flags: `--bind` replaces `[server] bind` and
-    /// `--static-dir` replaces `[server] static_dir`. A config with no
+    /// Apply `serve`'s own flags: `--bind` replaces `[server] bind`,
+    /// `--static-dir` replaces `[server] static_dir`, and each
+    /// `--cors-origin` is added to `[server] cors_origins`. A config with no
     /// `[server]` section is left without one, for `require_server` to refuse.
     pub(crate) fn with_serve_overrides(
         mut self,
         bind: Option<String>,
         static_dir: Option<PathBuf>,
+        cors_origins: Vec<String>,
     ) -> Self {
         if let Some(server) = self.server.as_mut() {
             if let Some(bind) = bind {
@@ -241,6 +243,7 @@ impl Config {
             if let Some(static_dir) = static_dir {
                 server.static_dir = static_dir;
             }
+            server.cors_origins.extend(cors_origins);
         }
         self
     }

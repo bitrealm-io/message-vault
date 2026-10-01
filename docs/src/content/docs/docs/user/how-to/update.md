@@ -46,4 +46,4 @@ The release that introduces Import Runs changes the schema. Upgrading to it star
 
 The server reads one JSONL schema version at a time, currently version 4. If you import a file written by an older desktop app, the server refuses it and tells you which version it expected — re-export from the current desktop app and import again.
 
-The Docker tag `latest` points at the most recent release. For a specific version, use `bitrealm/message-crate:0.9.0` (no `v` prefix) or a tag from [Releases](https://github.com/messagecrate/message-crate/releases).
+The Docker tag `latest` points at the most recent release. For a specific version, use `bitrealm/message-crate:0.10.0` (no `v` prefix) or a tag from [Releases](https://github.com/messagecrate/message-crate/releases).

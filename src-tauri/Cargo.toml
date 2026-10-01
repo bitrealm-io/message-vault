@@ -1,6 +1,6 @@
 [package]
 name = "message-crate-desktop"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 license = "LicenseRef-FCL-1.0-ALv2"
 description = "Tauri desktop app for message-crate"

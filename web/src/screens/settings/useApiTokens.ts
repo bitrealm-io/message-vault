@@ -155,7 +155,7 @@ export function useApiTokens() {
   return {
     items: data ?? [],
     loading,
-    loadError: loadError ? apiErrorMessage(loadError, "Could not load API keys.") : "",
+    loadError: loadError ? apiErrorMessage(loadError, "Could not load API Tokens.") : "",
     busy,
     composing,
     setComposing,

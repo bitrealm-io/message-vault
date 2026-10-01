@@ -1206,7 +1206,7 @@ export interface components {
              * @description Account id.
              */
             account_id: number;
-            app?: null | components["schemas"]["AppKind"];
+            app?: components["schemas"]["AppKind"] | null;
             /**
              * @description The Build that app reported, such as `0.9.0+343fe0d8`. Present exactly
              *     when `app` is.
@@ -1713,7 +1713,7 @@ export interface components {
         CreateImportBatchResponse: components["schemas"]["ImportStats"] & {
             /** Format: int64 */
             account: number;
-            dedupe?: null | components["schemas"]["DedupeCounts"];
+            dedupe?: components["schemas"]["DedupeCounts"] | null;
             source: string;
         };
         /**
@@ -2268,7 +2268,7 @@ export interface components {
                  * @description Account id.
                  */
                 account_id: number;
-                app?: null | components["schemas"]["AppKind"];
+                app?: components["schemas"]["AppKind"] | null;
                 /**
                  * @description The Build that app reported, such as `0.9.0+343fe0d8`. Present exactly
                  *     when `app` is.
@@ -3248,11 +3248,11 @@ export interface components {
         };
         /** @description Body for `PATCH /v1/contacts/{id}`. Exactly one mutation field should be set. */
         UpdateContactRequest: {
-            add_identity?: null | components["schemas"]["AddContactIdentityRequest"];
+            add_identity?: components["schemas"]["AddContactIdentityRequest"] | null;
             /** @description New display name; `None` leaves it unchanged. */
             name?: string | null;
-            remove_identity?: null | components["schemas"]["RemoveContactIdentityRequest"];
-            update_identity?: null | components["schemas"]["UpdateContactIdentityRequest"];
+            remove_identity?: components["schemas"]["RemoveContactIdentityRequest"] | null;
+            update_identity?: components["schemas"]["UpdateContactIdentityRequest"] | null;
         };
         /** @description New stage for a running Import Run. */
         UpdateImportRequest: {
@@ -3334,6 +3334,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3390,6 +3391,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Created */
             201: {
                 headers: {
                     /** @description Path of the new account */
@@ -3494,6 +3496,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3559,7 +3562,7 @@ export interface operations {
         /** @description Sent by an account deleting itself; the owner sends no body */
         requestBody?: {
             content: {
-                "application/json": null | components["schemas"]["DeleteAccountRequest"];
+                "application/json": components["schemas"]["DeleteAccountRequest"] | null;
             };
         };
         responses: {
@@ -3663,6 +3666,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3759,6 +3763,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3825,6 +3830,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Created */
             201: {
                 headers: {
                     /** @description Path of the new token */
@@ -3985,6 +3991,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4083,6 +4090,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4152,6 +4160,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4225,6 +4234,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4291,6 +4301,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4356,10 +4367,11 @@ export interface operations {
         /** @description Sent by an account deleting its own messages; the owner sends no body */
         requestBody?: {
             content: {
-                "application/json": null | components["schemas"]["DeleteMessagesRequest"];
+                "application/json": components["schemas"]["DeleteMessagesRequest"] | null;
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4558,6 +4570,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4801,6 +4814,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5132,6 +5146,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5227,6 +5242,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5281,6 +5297,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Created */
             201: {
                 headers: {
                     /** @description Path of the new set */
@@ -5372,6 +5389,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description No Content */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -5436,6 +5454,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5539,6 +5558,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5605,6 +5625,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5700,6 +5721,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5760,6 +5782,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5841,6 +5864,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5922,6 +5946,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6002,6 +6027,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6138,6 +6164,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6355,6 +6382,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6412,6 +6440,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6551,6 +6580,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6679,6 +6709,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6808,6 +6839,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6862,6 +6894,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Created */
             201: {
                 headers: {
                     /** @description Path of the new run */
@@ -6948,6 +6981,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7010,6 +7044,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7081,6 +7116,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7159,6 +7195,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7236,6 +7273,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7290,6 +7328,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Created */
             201: {
                 headers: {
                     /** @description Path of the new import */
@@ -7381,6 +7420,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7447,6 +7487,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7551,6 +7592,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7653,6 +7695,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7756,6 +7799,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7818,6 +7862,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7891,6 +7936,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7945,6 +7991,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Created */
             201: {
                 headers: {
                     /** @description Path of the new set */
@@ -8036,6 +8083,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description No Content */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -8100,6 +8148,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8203,6 +8252,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8269,6 +8319,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8364,6 +8415,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8421,6 +8473,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8485,6 +8538,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8539,6 +8593,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Created */
             201: {
                 headers: {
                     /** @description Path of the new saved search */
@@ -8695,6 +8750,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8795,6 +8851,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8850,6 +8907,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8900,6 +8958,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9008,6 +9067,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9064,6 +9124,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9143,6 +9204,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -9195,6 +9257,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;

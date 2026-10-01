@@ -3920,15 +3920,30 @@
         "tags": [
           "Contacts"
         ],
-        "summary": "Load a VCF or vCard CSV address book into this account.",
-        "description": "The body is the file itself, and `Content-Type` says which: `text/vcard` or `text/csv`.\n\nThis is a standalone act, never part of an Import Run: contacts are the\naccount's own state, and a person may load them before or after\nbringing messages in. Only the rows the address book owns are replaced, so\nContact Groups, names the person typed, and identities an import discovered\nall survive. How the file is read is the open question in #270; this route\nis where that answer lands.",
+        "summary": "Load an address book into this account.",
+        "description": "The body is the file itself: Message Crate's own CSV, one row per identity, with the columns `contact_id`, `display_name`, `groups`, `service`, `handle_type` and `identity`, as `POST /v1/contacts/address-book` writes it.\n\nRows that share a `contact_id` are one contact. An id the account holds\nnames that contact, a blank id makes a new contact for that row, and any\nother text groups its rows into one new contact. `append` creates and\nrenames contacts and adds the identities and Contact Group memberships\nthe rows list. `edit` does the same and then takes off each contact in\nthe file every identity and membership its rows do not list. A contact\nthe file does not mention is left alone in both modes.\n\nThe load is one transaction. A file that breaks a rule is refused whole\nwith `422 Unprocessable Entity`, and `errors` holds one sentence for each\nbad row, starting with its row number.",
         "operationId": "create_contacts",
-        "requestBody": {
-          "description": "The address book file: a vCard file as text/vcard, or a vCard CSV export as text/csv.",
-          "content": {
-            "text/csv": {},
-            "text/vcard": {}
+        "parameters": [
+          {
+            "name": "mode",
+            "in": "query",
+            "description": "How the file is applied: `append` (the default) removes nothing; `edit` makes each contact in the file hold exactly the identities and Contact Group memberships its rows list.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/LoadMode"
+            }
           }
+        ],
+        "requestBody": {
+          "description": "The address book: Message Crate's own CSV, one row per identity.",
+          "content": {
+            "text/csv": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -3936,7 +3951,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreateContactsResponse"
+                  "$ref": "#/components/schemas/LoadCounts"
                 }
               }
             }
@@ -4018,6 +4033,131 @@
             },
             "x-problem-types": [
               "https://messagecrate.app/docs/developer/reference/errors/validation-failed"
+            ]
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/contacts/address-book": {
+      "post": {
+        "tags": [
+          "Contacts"
+        ],
+        "summary": "Write the address book for the contacts a search matches, the checked ones among them, or every contact when the body names neither.",
+        "description": "The answer is `text/csv`, not JSON: one row per identity, with the\ncolumns `contact_id`, `display_name`, `groups`, `service`, `handle_type`\nand `identity`. A contact's name and its Contact Group names, separated\nby `;`, repeat on each of its rows. A contact with no name has a blank\n`display_name`, and a contact with no identity is one row with the last\nthree columns blank. Contacts in the trash are left out.\n`POST /v1/contacts` loads the file back.",
+        "operationId": "export_address_book",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportAddressBookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The address book, as an attachment named `address-book.csv`",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "`attachment; filename=\"address-book.csv\"`"
+              }
+            },
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "[`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/malformed-body"
+            ]
+          },
+          "401": {
+            "description": "[`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/authentication-required"
+            ]
+          },
+          "403": {
+            "description": "[`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.\n\n[`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/insufficient-scope",
+              "https://messagecrate.app/docs/developer/reference/errors/account-disabled"
+            ]
+          },
+          "413": {
+            "description": "[`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/payload-too-large"
+            ]
+          },
+          "415": {
+            "description": "[`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type"
+            ]
+          },
+          "422": {
+            "description": "[`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.\n\n[`search-query-invalid`](https://messagecrate.app/docs/developer/reference/errors/search-query-invalid): The search language refused the query.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "x-problem-types": [
+              "https://messagecrate.app/docs/developer/reference/errors/validation-failed",
+              "https://messagecrate.app/docs/developer/reference/errors/search-query-invalid"
             ]
           }
         },
@@ -10721,35 +10861,6 @@
           }
         }
       },
-      "CreateContactsResponse": {
-        "type": "object",
-        "description": "What loading an address book changed.",
-        "required": [
-          "contacts",
-          "phones",
-          "phones_needing_review"
-        ],
-        "properties": {
-          "contacts": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Contacts written from the file.",
-            "minimum": 0
-          },
-          "phones": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Phone identities linked to those contacts.",
-            "minimum": 0
-          },
-          "phones_needing_review": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Identities written with a review note (an ambiguous number).",
-            "minimum": 0
-          }
-        }
-      },
       "CreateExportRequest": {
         "type": "object",
         "description": "Body of `POST /v1/exports`: the scope, and the tool that asked.",
@@ -11063,6 +11174,27 @@
           },
           "status": {
             "$ref": "#/components/schemas/ImportStatus"
+          }
+        }
+      },
+      "ExportAddressBookRequest": {
+        "type": "object",
+        "description": "Which contacts `POST /v1/contacts/address-book` writes: the Contacts\nlist's search and its checked rows.",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Contact ids to keep from what `q` matches. Absent or empty keeps\nthem all."
+          },
+          "q": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A Contacts search, as `GET /v1/contacts` takes in `q`. Absent or\nempty matches every contact."
           }
         }
       },
@@ -11521,10 +11653,7 @@
           "assets_copied",
           "assets_deduped",
           "assets_missing",
-          "contacts",
-          "contact_handles",
           "contacts_created",
-          "contacts_skipped",
           "messages_deduped",
           "messages_appended",
           "mode",
@@ -11555,27 +11684,11 @@
             "description": "Attachment records (message–media links) imported.",
             "minimum": 0
           },
-          "contact_handles": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Contact–handle links created.",
-            "minimum": 0
-          },
-          "contacts": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Contacts loaded from the address book.",
-            "minimum": 0
-          },
           "contacts_created": {
             "type": "integer",
             "format": "int64",
             "description": "Contacts the import created for participants nothing else owned.",
             "minimum": 0
-          },
-          "contacts_skipped": {
-            "type": "boolean",
-            "description": "True when the address book was not loaded (already present or no file)."
           },
           "conversations": {
             "type": "integer",
@@ -11765,6 +11878,71 @@
           "contacts",
           "conversations",
           "messages"
+        ]
+      },
+      "LoadCounts": {
+        "type": "object",
+        "description": "What a load changed.",
+        "required": [
+          "contacts_created",
+          "contacts_updated",
+          "contacts_deleted",
+          "identities_added",
+          "identities_moved",
+          "identities_removed",
+          "groups_created"
+        ],
+        "properties": {
+          "contacts_created": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contacts the load created.",
+            "minimum": 0
+          },
+          "contacts_deleted": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contacts the load deleted: the ones it left with neither a name nor\nan identity.",
+            "minimum": 0
+          },
+          "contacts_updated": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contacts the load renamed, or whose identities or Contact Group\nmemberships it changed.",
+            "minimum": 0
+          },
+          "groups_created": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Contact Groups the load created.",
+            "minimum": 0
+          },
+          "identities_added": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Identities linked to a contact that no contact held before.",
+            "minimum": 0
+          },
+          "identities_moved": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Identities taken from one contact and given to another.",
+            "minimum": 0
+          },
+          "identities_removed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Identities taken off a contact, which only Edit does.",
+            "minimum": 0
+          }
+        }
+      },
+      "LoadMode": {
+        "type": "string",
+        "description": "How a load applies the file.",
+        "enum": [
+          "append",
+          "edit"
         ]
       },
       "Message": {

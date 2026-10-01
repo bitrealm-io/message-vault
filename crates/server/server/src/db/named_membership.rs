@@ -277,6 +277,22 @@ fn normalize_name(spec: &MembershipSpec, name: &str) -> Result<String, Membershi
     Ok(trimmed.to_string())
 }
 
+/// The trimmed name when a person could create a set under it, else the
+/// sentence that says why not: blank, too long, or reserved. For a caller
+/// that creates sets by name outside the set routes, as an address book load
+/// does for the Contact Groups its rows list.
+///
+/// # Errors
+///
+/// The reason the name is refused.
+pub fn check_name(spec: &MembershipSpec, name: &str) -> Result<String, String> {
+    match normalize_name(spec, name) {
+        Ok(name) => Ok(name),
+        Err(MembershipError::BadRequest(reason)) => Err(reason),
+        Err(_) => Err("name refused".to_string()),
+    }
+}
+
 /// True when the member row belongs to this account.
 async fn member_exists(
     spec: &MembershipSpec,

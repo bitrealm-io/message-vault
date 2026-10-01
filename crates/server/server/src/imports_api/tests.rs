@@ -2385,3 +2385,117 @@ async fn a_message_is_held_at_its_own_owner_else_the_headers_and_the_owner_gets_
     .unwrap();
     assert_eq!(owner_participants, 0, "the holder is never a participant");
 }
+
+/// One `whatsapp` conversation with `chat` holding one message `guid` whose
+/// text is `text`, with `attachments` as its JSON attachment array.
+fn one_message_batch(chat: &str, guid: &str, text: &str, attachments: &str) -> String {
+    format!(
+        concat!(
+            r#"{{"schema_version":4,"export":{{"source":"whatsapp","tool":"t","tool_version":"0","owner_handle":"+15550000001","owner_display_name":"Me"}},"#,
+            r#""conversation":{{"chat_identifier":"{chat}","conversation_type":"individual","group_title":null,"#,
+            r#""participants":[{{"handle":"{chat}","display_name":null}}],"#,
+            r#""stats":{{"message_count":1,"attachment_count":0,"first_timestamp_unix_ms":1700000000000,"last_timestamp_unix_ms":1700000000000}}}}}}"#,
+            "\n",
+            r#"{{"guid":"{guid}","timestamp_unix_ms":1700000000000,"direction":"incoming","service":"whatsapp","message_kind":"sms","sender_handle":"{chat}","sender_display_name":null,"subject":null,"text":"{text}","attachments":{attachments},"imessage":null,"source":null}}"#,
+            "\n",
+        ),
+        chat = chat,
+        guid = guid,
+        text = text,
+        attachments = attachments,
+    )
+}
+
+/// Import `body` as one batch of a new `whatsapp` run in `mode`.
+async fn import_batch(state: &crate::server::AppState, token: &str, mode: &str, body: String) {
+    let (_, created): (String, serde_json::Value) = post_created_json(
+        state,
+        "/v1/imports",
+        token,
+        serde_json::json!({ "source": "whatsapp", "mode": mode }),
+    )
+    .await;
+    let id = created["id"].as_i64().unwrap();
+    let path = format!("/v1/imports/{id}/batches");
+    let (status, text) =
+        crate::test_support::post_raw(state, &path, token, "application/jsonl", body).await;
+    assert_eq!(status, axum::http::StatusCode::OK, "{text}");
+    let _: serde_json::Value = post_json(
+        state,
+        &format!("/v1/imports/{id}/complete"),
+        token,
+        serde_json::json!({ "status": "completed" }),
+    )
+    .await;
+}
+
+/// The texts of the messages `GET /v1/messages?q=` finds, and its `total`.
+async fn message_search(
+    state: &crate::server::AppState,
+    token: &str,
+    q: &str,
+) -> (Vec<String>, u64) {
+    let page: serde_json::Value = get_json(state, &format!("/v1/messages?q={q}"), token).await;
+    let texts = page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["text"].as_str().unwrap_or_default().to_string())
+        .collect();
+    (texts, page["total"].as_u64().unwrap())
+}
+
+/// SQLite gives a new message the id of the newest deleted one, and the
+/// search index is keyed by that id. So when deleting a message leaves its
+/// attachment's file name in the index, the next message imported is found
+/// by a file name it never carried.
+#[tokio::test]
+async fn search_forgets_the_attachment_name_of_a_deleted_message() {
+    let fixture = test_fixture().await;
+    let account =
+        crate::test_support::register_via_api(&fixture.state, "importer", "hunter2hunter2").await;
+    let (state, token) = (&fixture.state, account.token.as_str());
+
+    import_batch(
+        state,
+        token,
+        "append",
+        one_message_batch(
+            "+15550000002",
+            "g-old",
+            "see attached",
+            &missing_attachment_json("zzinvoice.pdf"),
+        ),
+    )
+    .await;
+    assert_eq!(
+        message_search(state, token, "zzinvoice").await,
+        (vec!["see attached".to_string()], 1)
+    );
+
+    let _: serde_json::Value = crate::test_support::delete_json_with_body(
+        state,
+        &format!("/v1/accounts/{}/messages", account.account_id),
+        token,
+        serde_json::json!({ "confirm": true }),
+    )
+    .await;
+    assert_eq!(message_search(state, token, "zzinvoice").await, (vec![], 0));
+
+    import_batch(
+        state,
+        token,
+        "append",
+        one_message_batch("+15550000003", "g-new", "lunch tomorrow", "[]"),
+    )
+    .await;
+    assert_eq!(
+        message_search(state, token, "lunch").await,
+        (vec!["lunch tomorrow".to_string()], 1)
+    );
+    assert_eq!(
+        message_search(state, token, "zzinvoice").await,
+        (vec![], 0),
+        "a message imported after the delete is not found by the deleted attachment's name"
+    );
+}

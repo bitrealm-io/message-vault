@@ -559,12 +559,10 @@ pub(crate) async fn enable_fts_triggers_pg(conn: &mut AnyConnection) -> Result<(
 ///
 /// `_promote_msg_map` also targets messages that already existed before this
 /// promotion (so attachments and tapbacks can attach to them), and several
-/// staging rows can point at one production row. `messages_fts` stores no
-/// copy of the message text, so re-indexing an already indexed row writes
-/// extra index entries that a later delete does not fully retract.
-/// `min_new_message_id` is the highest `messages.id` that existed before this
-/// promotion inserted anything; only distinct production ids above it are
-/// indexed here.
+/// staging rows can point at one production row. Those rows are already
+/// indexed, so `min_new_message_id`, the highest `messages.id` that existed
+/// before this promotion inserted anything, keeps them out: only distinct
+/// production ids above it are indexed here.
 pub(crate) async fn index_messages_fts_from_promote_map(
     conn: &mut AnyConnection,
     min_new_message_id: i64,

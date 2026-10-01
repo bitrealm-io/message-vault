@@ -317,10 +317,16 @@ What each reaches:
   searches, search fields) take a session only. A token is refused.
 - `POST /v1/imports` and everything under a run, and every asset write, need
   the `import` scope on either credential.
-- `POST /v1/exports` and everything under a run, `GET /v1/assets/{sha256}` and
+- `POST /v1/exports` and everything under a run, and
   `HEAD /v1/assets/{sha256}`, need the `export` scope on either credential. A
   program with an export token reads messages only through an Export Run it
   started, so every read of message data by a program leaves a record.
+- `GET /v1/assets/{sha256}` takes any session, or a token with the `export`
+  scope. Why: a person looking at a photo in their own conversation is not
+  exporting it, so an account whose `export` permission is off still sees its
+  attachments, as it still reads its messages. A token has no screen to show
+  bytes on; fetching them with one is taking them out, which is what the
+  `export` scope decides.
 - `HEAD /v1/assets/{sha256}` also accepts the `import` scope: a program that
   can only push may ask whether an asset exists, and may not read it.
 - Permanent deletion (`DELETE /v1/conversations/{id}`,

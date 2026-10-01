@@ -1006,8 +1006,7 @@ async fn seed_demo_account_on_conn(
 
     // The demo account exists so someone can try all of Message Crate without
     // making an account of their own, so it may import, export, and delete
-    // like any other account. Reading a conversation goes through the export
-    // route, so a demo account without export cannot open a single thread.
+    // like any other account.
     sqlx::query(
         r"
         INSERT INTO accounts (

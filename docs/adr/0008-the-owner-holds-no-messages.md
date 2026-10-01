@@ -164,12 +164,10 @@ system checks. Structural impossibility was not worth a second login path.
 ## Considered and rejected: three zeroed permission flags
 
 Provisioning the owner with `can_import`, `can_export` and `can_delete` all
-`0` is the cheapest version of the same restriction, and it would work
-today — `can_export = 0` alone blocks reading, because opening a conversation
-goes
-through the export route. It was rejected because "the owner holds no
-messages" would then be a fact about three boolean values that anything with
-database access can change, rather than a property of the design.
+`0` is the cheapest version of the same restriction. It was rejected because
+"the owner holds no messages" would then be a fact about three boolean values
+that anything with database access can change, rather than a property of the
+design.
 
 ## Considered and rejected: a claim token
 

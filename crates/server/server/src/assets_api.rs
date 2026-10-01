@@ -23,7 +23,7 @@ use axum::response::{IntoResponse, Response};
 use crate::asset_uploads;
 use crate::config::validate_source_id;
 use crate::server::{
-    ApiError, AppState, AuthIdentity, Created, ExportAccess, ImportAccess, ImportOrExportAccess,
+    ApiError, AppState, AssetReadAccess, AuthIdentity, Created, ImportAccess, ImportOrExportAccess,
     content_type_base, discard_body, read_body_limited, resolve_import_account,
     stream_body_to_file, upload_content_type,
 };
@@ -648,7 +648,7 @@ pub(crate) async fn head_asset(
     get,
     path = "/v1/assets/{sha256}",
     tag = "Assets",
-    security(("session" = ["export"]), ("api-token" = ["export"])),
+    security(("session" = []), ("api-token" = ["export"])),
     params(
         ("sha256" = String, Path, description = "Content SHA-256 hex"),
         ("source" = String, Query)
@@ -659,7 +659,7 @@ pub(crate) async fn head_asset(
 )]
 pub(crate) async fn get_asset(
     State(state): State<AppState>,
-    ExportAccess(auth): ExportAccess,
+    AssetReadAccess(auth): AssetReadAccess,
     AxumPath(sha256): AxumPath<String>,
     Query(query): Query<AssetQuery>,
 ) -> Result<Response, ApiError> {

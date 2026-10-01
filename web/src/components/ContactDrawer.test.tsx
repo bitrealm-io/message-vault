@@ -604,8 +604,8 @@ describe("ContactDrawer", () => {
       expect(header.className).not.toMatch(/text-center|text-right/);
     }
     for (const name of [
-      /First seen/i,
-      /Last seen/i,
+      /First heard from/i,
+      /Last heard from/i,
       /Conversations/i,
       /Direct messages/i,
       /Group messages/i,

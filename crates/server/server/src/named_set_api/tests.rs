@@ -3,8 +3,9 @@ use serde_json::{Value, json};
 
 use crate::server::AppState;
 use crate::test_support::{
-    RegisteredAccount, delete_status, get_json, get_status, patch_json, patch_status,
-    post_created_json, post_status, register_via_api, test_fixture,
+    RegisteredAccount, delete_status, get_json, get_status, patch_failure, patch_json,
+    patch_status, post_created_json, post_raw, post_status, problem, register_via_api,
+    test_fixture,
 };
 
 /// Which collection a case runs against. Every case runs for both.
@@ -193,6 +194,44 @@ async fn create_and_update_refuse_duplicate_empty_and_reserved_names() {
             StatusCode::UNPROCESSABLE_ENTITY
         );
     }
+}
+
+#[tokio::test]
+async fn a_contact_group_cannot_be_named_unknown_or_none() {
+    let fixture = test_fixture().await;
+    let state = &fixture.state;
+    let user = alice(state).await;
+    let base = Kind::Groups.base();
+    let family = create(state, Kind::Groups, &user.token, "Family").await;
+
+    for name in ["Unknown", "unknown", "UNKNOWN", "none", "None", "NONE"] {
+        let sentence = format!("\"{name}\" is a reserved Contact Group");
+        let (status, text) = post_raw(
+            state,
+            base,
+            &user.token,
+            "application/json",
+            json!({ "name": name }).to_string(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "create {name}");
+        assert_eq!(problem(&text).sentence(), sentence);
+
+        assert_eq!(
+            patch_failure(
+                state,
+                &format!("{base}/{family}"),
+                &user.token,
+                json!({ "name": name })
+            )
+            .await,
+            (StatusCode::UNPROCESSABLE_ENTITY, sentence)
+        );
+    }
+    assert_eq!(
+        names(state, Kind::Groups, &user.token).await,
+        vec!["Family"]
+    );
 }
 
 #[tokio::test]

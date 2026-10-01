@@ -37,6 +37,9 @@ const rows: IdentityRow[] = [
   },
 ];
 
+// The table has no date headings of its own: each screen names the two dates.
+const dates = { firstDateHeading: "First heard from", lastDateHeading: "Last heard from" };
+
 const headers = () =>
   screen.getAllByRole("columnheader").map((h) => h.textContent?.replace(/[▲▼]/g, "").trim());
 const identities = () =>
@@ -44,13 +47,13 @@ const identities = () =>
 
 describe("IdentityTable", () => {
   it("shows the eight columns, text left and numbers right, with the header aligned like its cells", () => {
-    render(<IdentityTable rows={rows} onRemove={() => {}} />);
+    render(<IdentityTable {...dates} rows={rows} onRemove={() => {}} />);
 
     expect(headers()).toEqual([
       "Service",
       "Identity",
-      "First seen",
-      "Last seen",
+      "First heard from",
+      "Last heard from",
       "Conversations",
       "Direct messages",
       "Group messages",
@@ -74,7 +77,7 @@ describe("IdentityTable", () => {
 
   it("puts the sort arrow right after the label and shows it only on the sorted column", async () => {
     const user = userEvent.setup({ delay: null });
-    render(<IdentityTable rows={rows} onRemove={() => {}} />);
+    render(<IdentityTable {...dates} rows={rows} onRemove={() => {}} />);
 
     const identity = screen.getByRole("columnheader", { name: /^Identity/ });
     const arrow = identity.querySelector("[aria-hidden]");
@@ -98,14 +101,14 @@ describe("IdentityTable", () => {
   });
 
   it("cuts a long identity with an ellipsis and keeps the whole value in the title", () => {
-    render(<IdentityTable rows={rows} onRemove={() => {}} />);
+    render(<IdentityTable {...dates} rows={rows} onRemove={() => {}} />);
     const cell = screen.getByRole("rowheader", { name: /someone/ });
     const text = within(cell).getByTitle("someone.with.a.long.address@example.com");
     expect(text.className).toContain("truncate");
   });
 
   it("shows a muted dash for a zero count or a missing date", () => {
-    render(<IdentityTable rows={rows} onRemove={() => {}} />);
+    render(<IdentityTable {...dates} rows={rows} onRemove={() => {}} />);
     const row = screen.getAllByRole("row")[2];
     const cells = within(row).getAllByRole("gridcell");
     expect(cells[1].textContent).toBe("—");
@@ -116,7 +119,7 @@ describe("IdentityTable", () => {
   it("ends every row with an always visible Remove named after the identity and its service", async () => {
     const user = userEvent.setup({ delay: null });
     const onRemove = vi.fn();
-    render(<IdentityTable rows={rows} onRemove={onRemove} />);
+    render(<IdentityTable {...dates} rows={rows} onRemove={onRemove} />);
 
     const remove = screen.getByRole("button", {
       name: "Remove someone.with.a.long.address@example.com (Email)",
@@ -130,7 +133,7 @@ describe("IdentityTable", () => {
   });
 
   it("disables Remove while busy", () => {
-    render(<IdentityTable rows={rows} busy onRemove={() => {}} />);
+    render(<IdentityTable {...dates} rows={rows} busy onRemove={() => {}} />);
     expect(
       screen.getByRole("button", {
         name: "Remove someone.with.a.long.address@example.com (Email)",
@@ -140,12 +143,12 @@ describe("IdentityTable", () => {
 
   it("makes the conversation count a link only when given somewhere to browse to", async () => {
     const user = userEvent.setup({ delay: null });
-    const { unmount } = render(<IdentityTable rows={rows} onRemove={() => {}} />);
+    const { unmount } = render(<IdentityTable {...dates} rows={rows} onRemove={() => {}} />);
     expect(screen.queryByRole("button", { name: /Open 2 conversations/ })).not.toBeInTheDocument();
     unmount();
 
     const onBrowse = vi.fn();
-    render(<IdentityTable rows={rows} onRemove={() => {}} onBrowse={onBrowse} />);
+    render(<IdentityTable {...dates} rows={rows} onRemove={() => {}} onBrowse={onBrowse} />);
     await user.click(screen.getByRole("button", { name: "Open 2 conversations" }));
     expect(onBrowse).toHaveBeenCalledWith(rows[0]);
     // A zero count is never a link.
@@ -153,11 +156,11 @@ describe("IdentityTable", () => {
   });
 
   it("adds a Summary row only when asked, with the earliest, latest and the sums", () => {
-    const { unmount } = render(<IdentityTable rows={rows} onRemove={() => {}} />);
+    const { unmount } = render(<IdentityTable {...dates} rows={rows} onRemove={() => {}} />);
     expect(screen.queryByText("Summary")).not.toBeInTheDocument();
     unmount();
 
-    render(<IdentityTable rows={rows} totals onRemove={() => {}} />);
+    render(<IdentityTable {...dates} rows={rows} totals onRemove={() => {}} />);
     const summary = screen.getByText("Summary").closest("[role=row]");
     const cells = within(summary as HTMLElement).getAllByRole("gridcell");
     expect(cells.map((c) => c.textContent)).toEqual([
@@ -172,7 +175,7 @@ describe("IdentityTable", () => {
   });
 
   it("shows dashes for every count and date while loading", () => {
-    render(<IdentityTable rows={rows} loading onRemove={() => {}} />);
+    render(<IdentityTable {...dates} rows={rows} loading onRemove={() => {}} />);
     const row = screen.getAllByRole("row")[1];
     const cells = within(row).getAllByRole("gridcell");
     expect(cells.slice(1, 6).map((c) => c.textContent)).toEqual(["—", "—", "—", "—", "—"]);
@@ -182,7 +185,9 @@ describe("IdentityTable", () => {
   });
 
   it("says so instead of drawing a table when there are no identities", () => {
-    render(<IdentityTable rows={[]} onRemove={() => {}} emptyText="No identities yet." />);
+    render(
+      <IdentityTable {...dates} rows={[]} onRemove={() => {}} emptyText="No identities yet." />,
+    );
     expect(screen.queryByRole("grid")).not.toBeInTheDocument();
     expect(screen.getByText("No identities yet.")).toBeInTheDocument();
   });

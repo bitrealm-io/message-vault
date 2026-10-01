@@ -54,8 +54,8 @@ The identity table has these columns:
 |---|---|
 | **Service** | **Text message**, **Email**, or **WhatsApp** |
 | **Identity** | The phone number, email address, or username |
-| **First seen** | The date of the first message the contact sent from this identity |
-| **Last seen** | The date of the last message the contact sent from this identity |
+| **First heard from** | The date of the first message the contact sent from this identity |
+| **Last heard from** | The date of the last message the contact sent from this identity |
 | **Conversations** | How many conversations the identity takes part in |
 | **Direct messages** | How many messages the contact sent from it in one-to-one conversations |
 | **Group messages** | How many messages the contact sent from it in group conversations |
@@ -108,9 +108,9 @@ The right pane shows a table headed with the count, such as **3 contacts selecte
 | Column | What it shows |
 |---|---|
 | **Contact** | The name, or the first identity in italics |
-| **First Seen** | The date of the first message the contact sent |
-| **Last Seen** | The date of the last message the contact sent |
-| **Threads** | How many conversations the contact takes part in |
+| **First heard from** | The date of the first message the contact sent |
+| **Last heard from** | The date of the last message the contact sent |
+| **Conversations** | How many conversations the contact takes part in |
 | **Direct Messages** | How many messages the contact sent in one-to-one conversations |
 | **Group Messages** | How many messages the contact sent in group conversations |
 

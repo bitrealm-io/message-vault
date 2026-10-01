@@ -86,11 +86,17 @@ function Heading({
  * long address with an ellipsis. The caller gives the table a scrolling box
  * when its screen can be narrower than the eight columns.
  *
+ * The two date headings come from the screen, because the dates mean
+ * different things: when a contact was heard from at an identity, and when the
+ * account holder sent from one of their own.
+ *
  * `onBrowse` turns a conversation count into a link (the contact drawer
  * passes one; the Profile tab does not), and `totals` adds the Summary row.
  */
 export default function IdentityTable({
   rows,
+  firstDateHeading,
+  lastDateHeading,
   loading = false,
   busy = false,
   totals = false,
@@ -100,6 +106,10 @@ export default function IdentityTable({
   onBrowse,
 }: {
   rows: readonly IdentityRow[];
+  /** Heading of the earliest-message date column. */
+  firstDateHeading: string;
+  /** Heading of the latest-message date column. */
+  lastDateHeading: string;
   /** The rows are placeholders until the server answers: counts and dates show a dash. */
   loading?: boolean;
   /** A change is in flight, so Remove is disabled. */
@@ -163,10 +173,14 @@ export default function IdentityTable({
           {({ sortDirection }) => <Heading sortDirection={sortDirection}>Identity</Heading>}
         </Column>
         <Column id="start_date" allowsSorting className={`${headerClass} text-right`}>
-          {({ sortDirection }) => <Heading sortDirection={sortDirection}>First seen</Heading>}
+          {({ sortDirection }) => (
+            <Heading sortDirection={sortDirection}>{firstDateHeading}</Heading>
+          )}
         </Column>
         <Column id="end_date" allowsSorting className={`${headerClass} text-right`}>
-          {({ sortDirection }) => <Heading sortDirection={sortDirection}>Last seen</Heading>}
+          {({ sortDirection }) => (
+            <Heading sortDirection={sortDirection}>{lastDateHeading}</Heading>
+          )}
         </Column>
         <Column id="conversations" allowsSorting className={`${headerClass} text-right`}>
           {({ sortDirection }) => <Heading sortDirection={sortDirection}>Conversations</Heading>}

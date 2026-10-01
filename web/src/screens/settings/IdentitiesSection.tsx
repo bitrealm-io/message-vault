@@ -131,6 +131,10 @@ export function IdentitiesSection({
       <div className="overflow-x-auto">
         <IdentityTable
           ariaLabel="Identities"
+          // A person does not hear from themselves: these are the dates their
+          // own messages were sent from the identity.
+          firstDateHeading="First sent"
+          lastDateHeading="Last sent"
           rows={tableRows}
           loading={listed === undefined}
           busy={busy}

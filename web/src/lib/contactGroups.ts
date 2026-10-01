@@ -41,18 +41,21 @@ export const RESERVED_GROUP_NAMES = new Set(
     "labels",
     "label",
     "no label",
+    // The two computed groups, as `group:` names them.
+    "unknown",
+    "none",
   ].map((s) => s.toLowerCase()),
 );
 
 export function reservedGroupError(name: string): string {
   const key = name.trim().toLowerCase();
-  if (key === "contacts") return "Contacts is a reserved group";
-  if (key === "all") return "All is a reserved group";
-  if (key === "excluded") return "Excluded is a reserved group";
-  if (key === "unassigned") return "Unassigned is a reserved group";
-  if (key === "trash") return "Trash is a reserved group";
+  if (key === "contacts") return "Contacts is a reserved Contact Group";
+  if (key === "all") return "All is a reserved Contact Group";
+  if (key === "excluded") return "Excluded is a reserved Contact Group";
+  if (key === "unassigned") return "Unassigned is a reserved Contact Group";
+  if (key === "trash") return "Trash is a reserved Contact Group";
   if (key === "no messages" || key === "no-messages") {
-    return "No messages is a reserved group";
+    return "No messages is a reserved Contact Group";
   }
   if (
     key === "groups" ||
@@ -68,7 +71,7 @@ export function reservedGroupError(name: string): string {
   ) {
     return "Group Messages is a reserved name";
   }
-  return `"${name.trim()}" is a reserved group`;
+  return `"${name.trim()}" is a reserved Contact Group`;
 }
 
 export const contactGroups = createNameCollection({

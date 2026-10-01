@@ -86,6 +86,8 @@ export function ContactDrawerHandles({
       <IdentityTable
         key={contactId}
         ariaLabel="Contact identities"
+        firstDateHeading="First heard from"
+        lastDateHeading="Last heard from"
         rows={rows}
         loading={loading}
         busy={busy}

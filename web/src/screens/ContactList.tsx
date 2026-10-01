@@ -241,7 +241,7 @@ export default function ContactList({
   const displayContacts = useMemo(
     () =>
       [...filteredContacts]
-        .filter((c) => contactBelongsToGroup(c.groups, groupFilter))
+        .filter((c) => contactBelongsToGroup(c, groupFilter))
         .sort((a, b) => compareContacts(a, b, sortState)),
     [filteredContacts, sortState, groupFilter],
   );

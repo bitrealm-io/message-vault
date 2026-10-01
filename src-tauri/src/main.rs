@@ -49,6 +49,7 @@ fn main() {
             commands::paths::ios_backup_encrypted,
             commands::paths::imessage_backup_identities,
             commands::paths::open_path,
+            commands::paths::save_text_file,
             commands::local_server::start_local_server,
             commands::local_server::local_server_status,
             commands::local_server::open_data_folder,

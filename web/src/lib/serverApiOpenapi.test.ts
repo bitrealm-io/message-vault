@@ -32,6 +32,7 @@ vi.mock("./api", () => ({
     get: vi.fn().mockResolvedValue({}),
     post: vi.fn().mockResolvedValue({}),
     postRaw: vi.fn().mockResolvedValue({}),
+    postText: vi.fn().mockResolvedValue(""),
     put: vi.fn().mockResolvedValue({}),
     patch: vi.fn().mockResolvedValue({}),
     delete: vi.fn().mockResolvedValue({}),
@@ -69,11 +70,12 @@ const DOCUMENTED = Object.entries(openapi.paths).map(([template, item]) => ({
     ),
 }));
 
-/** `postRaw` is a POST that carries its own media type. */
+/** `postRaw` is a POST that carries its own media type; `postText` is one that reads a file back. */
 const VERB_METHOD: Record<string, string> = {
   get: "GET",
   post: "POST",
   postRaw: "POST",
+  postText: "POST",
   put: "PUT",
   patch: "PATCH",
   delete: "DELETE",
@@ -162,7 +164,8 @@ const EXERCISED: Record<string, () => unknown> = {
   updateContact: () => serverApi.updateContact(42, { name: "Sam" }),
   getContactSummaries: () => serverApi.getContactSummaries({ ids: [1, 2] }),
   unmatchedIdentities: () => serverApi.unmatchedIdentities({ identifiers: ["+15555550100"] }),
-  loadAddressBook: () => serverApi.loadAddressBook("BEGIN:VCARD\nEND:VCARD\n", "text/vcard"),
+  loadAddressBook: () => serverApi.loadAddressBook("contact_id,display_name\n", "edit"),
+  exportAddressBook: () => serverApi.exportAddressBook({ q: "group:Family", ids: [1, 2] }),
   trashContact: () => serverApi.trashContact(42),
   restoreContact: () => serverApi.restoreContact(42),
   deleteContact: () => serverApi.deleteContact(42),
@@ -212,7 +215,7 @@ const EXERCISED: Record<string, () => unknown> = {
  * never reaches `apiClient` and has no single documented path to check. Its own
  * behaviour is covered in `serverApi.test.ts`.
  */
-const NOT_ROUTED = new Set(["fetchAssetObjectUrl", "addressBookContentType"]);
+const NOT_ROUTED = new Set(["fetchAssetObjectUrl"]);
 
 beforeEach(() => {
   vi.clearAllMocks();

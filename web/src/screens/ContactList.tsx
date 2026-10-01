@@ -3,6 +3,7 @@ import Checkbox from "../components/Checkbox";
 import ContactInitialCircle from "../components/ContactInitialCircle";
 import ContactLabel from "../components/ContactLabel";
 import ContactSortMenu from "../components/ContactSortMenu";
+import ExportAddressBookButton from "../components/ExportAddressBookButton";
 import GroupsMenu from "../components/GroupsMenu";
 import InfiniteOffsetList from "../components/InfiniteOffsetList";
 import { useSetRightToolbar } from "../components/useRightToolbar";
@@ -251,6 +252,11 @@ export default function ContactList({
     () => displayContacts.filter((c) => checkedIds.has(c.id)),
     [checkedIds, displayContacts],
   );
+  /** The checked rows as the export route takes them. */
+  const exportIds = useMemo(
+    () => checkedContacts.map((c) => Number(c.id)).filter((id) => Number.isFinite(id) && id > 0),
+    [checkedContacts],
+  );
   const selectAllChecked =
     displayContacts.length > 0 && displayContacts.every((c) => checkedIds.has(c.id));
   const selectAllIndeterminate =
@@ -449,7 +455,15 @@ export default function ContactList({
       getTextValue={(c) => contactLabelText(c.name, c.addresses)}
       ariaLabel="Contacts"
       errorPrefix="Could not load contacts"
-      headerActions={<ContactSortMenu state={sortState} onChange={onSortChange} />}
+      headerActions={
+        <span className="flex items-center gap-1">
+          <ExportAddressBookButton
+            query={groupListQuery(groupFilter, filter)}
+            checkedIds={exportIds}
+          />
+          <ContactSortMenu state={sortState} onChange={onSortChange} />
+        </span>
+      }
       getSectionLetter={filterActive ? undefined : sectionLetter}
       empty={
         !loading ? (

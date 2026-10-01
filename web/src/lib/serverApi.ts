@@ -525,23 +525,31 @@ export function unmatchedIdentities(
   return apiClient.post<Schema["Page_String"]>("/v1/contacts/unmatched-identities", body);
 }
 
-/** The media type an address book file is sent as, from its name; null when it is neither. */
-export function addressBookContentType(fileName: string): "text/vcard" | "text/csv" | null {
-  const lower = fileName.trim().toLowerCase();
-  if (lower.endsWith(".vcf") || lower.endsWith(".vcard")) return "text/vcard";
-  if (lower.endsWith(".csv")) return "text/csv";
-  return null;
-}
+/** How a load applies the address book: `append` removes nothing, `edit` makes each contact match its rows. */
+export type AddressBookLoadMode = Schema["LoadMode"];
 
 /**
- * Load an address book: the file's text is the body, and its media type says
- * whether it is a vCard file or a vCard CSV export.
+ * Load an address book: the file's text is the body, as `text/csv`, and
+ * `mode` says how it is applied. A file that breaks a rule is refused whole,
+ * and the error names each bad row.
  */
 export function loadAddressBook(
   content: string,
-  contentType: "text/vcard" | "text/csv",
-): Promise<Schema["CreateContactsResponse"]> {
-  return apiClient.postRaw<Schema["CreateContactsResponse"]>("/v1/contacts", content, contentType);
+  mode: AddressBookLoadMode,
+): Promise<Schema["LoadCounts"]> {
+  return apiClient.postRaw<Schema["LoadCounts"]>(
+    withQuery("/v1/contacts", query({ mode })),
+    content,
+    "text/csv",
+  );
+}
+
+/**
+ * The address book as CSV text, for the contacts a search matches, the
+ * checked ones, or every contact when the body names neither.
+ */
+export function exportAddressBook(body: Schema["ExportAddressBookRequest"]): Promise<string> {
+  return apiClient.postText("/v1/contacts/address-book", body);
 }
 
 /** Put a contact in the trash. Idempotent: trashing an already-trashed one still answers. */

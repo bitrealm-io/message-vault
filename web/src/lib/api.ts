@@ -201,6 +201,32 @@ async function requestRaw<T>(
   return res.json() as Promise<T>;
 }
 
+/**
+ * POST a JSON body to a route that answers a file's text instead of JSON, and
+ * return that text. A failure is still a problem document, read as everywhere
+ * else.
+ */
+async function requestText(path: string, body: unknown, signal?: AbortSignal): Promise<string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...appHeaders(),
+  };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+  const res = await fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    signal,
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw problemFromBody(res.status, text);
+  }
+  return text;
+}
+
 export type ApiRequestOptions = {
   signal?: AbortSignal;
 };
@@ -217,6 +243,10 @@ export const apiClient = {
     opts?: ApiRequestOptions,
   ): Promise<T> {
     return requestRaw<T>("POST", path, body, contentType, opts?.signal);
+  },
+  /** POST a JSON body and read the answer as text: a file the server writes. */
+  postText(path: string, body: unknown, opts?: ApiRequestOptions): Promise<string> {
+    return requestText(path, body, opts?.signal);
   },
   post<T>(path: string, body?: unknown, opts?: ApiRequestOptions): Promise<T> {
     return request<T>("POST", path, body, opts?.signal);

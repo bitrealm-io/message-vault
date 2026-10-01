@@ -464,17 +464,48 @@ export interface paths {
         get: operations["list_contacts"];
         put?: never;
         /**
-         * Load a VCF or vCard CSV address book into this account.
-         * @description The body is the file itself, and `Content-Type` says which: `text/vcard` or `text/csv`.
+         * Load an address book into this account.
+         * @description The body is the file itself: Message Crate's own CSV, one row per identity, with the columns `contact_id`, `display_name`, `groups`, `service`, `handle_type` and `identity`, as `POST /v1/contacts/address-book` writes it.
          *
-         *     This is a standalone act, never part of an Import Run: contacts are the
-         *     account's own state, and a person may load them before or after
-         *     bringing messages in. Only the rows the address book owns are replaced, so
-         *     Contact Groups, names the person typed, and identities an import discovered
-         *     all survive. How the file is read is the open question in #270; this route
-         *     is where that answer lands.
+         *     Rows that share a `contact_id` are one contact. An id the account holds
+         *     names that contact, a blank id makes a new contact for that row, and any
+         *     other text groups its rows into one new contact. `append` creates and
+         *     renames contacts and adds the identities and Contact Group memberships
+         *     the rows list. `edit` does the same and then takes off each contact in
+         *     the file every identity and membership its rows do not list. A contact
+         *     the file does not mention is left alone in both modes.
+         *
+         *     The load is one transaction. A file that breaks a rule is refused whole
+         *     with `422 Unprocessable Entity`, and `errors` holds one sentence for each
+         *     bad row, starting with its row number.
          */
         post: operations["create_contacts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/contacts/address-book": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write the address book for the contacts a search matches, the checked ones among them, or every contact when the body names neither.
+         * @description The answer is `text/csv`, not JSON: one row per identity, with the
+         *     columns `contact_id`, `display_name`, `groups`, `service`, `handle_type`
+         *     and `identity`. A contact's name and its Contact Group names, separated
+         *     by `;`, repeat on each of its rows. A contact with no name has a blank
+         *     `display_name`, and a contact with no identity is one row with the last
+         *     three columns blank. Contacts in the trash are left out.
+         *     `POST /v1/contacts` loads the file back.
+         */
+        post: operations["export_address_book"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1754,24 +1785,6 @@ export interface components {
             sha256?: string | null;
             upload_id?: string | null;
         };
-        /** @description What loading an address book changed. */
-        CreateContactsResponse: {
-            /**
-             * Format: int64
-             * @description Contacts written from the file.
-             */
-            contacts: number;
-            /**
-             * Format: int64
-             * @description Phone identities linked to those contacts.
-             */
-            phones: number;
-            /**
-             * Format: int64
-             * @description Identities written with a review note (an ambiguous number).
-             */
-            phones_needing_review: number;
-        };
         /** @description Body of `POST /v1/exports`: the scope, and the tool that asked. */
         CreateExportRequest: {
             /** @description What to export. */
@@ -1903,6 +1916,22 @@ export interface components {
             /** Format: int64 */
             id: number;
             status: components["schemas"]["ImportStatus"];
+        };
+        /**
+         * @description Which contacts `POST /v1/contacts/address-book` writes: the Contacts
+         *     list's search and its checked rows.
+         */
+        ExportAddressBookRequest: {
+            /**
+             * @description Contact ids to keep from what `q` matches. Absent or empty keeps
+             *     them all.
+             */
+            ids?: number[];
+            /**
+             * @description A Contacts search, as `GET /v1/contacts` takes in `q`. Absent or
+             *     empty matches every contact.
+             */
+            q?: string | null;
         };
         /**
          * @description Which list an Export Run's query is for (`docs/architecture/http-api.md`,
@@ -2152,21 +2181,9 @@ export interface components {
             attachments: number;
             /**
              * Format: int64
-             * @description Contact–handle links created.
-             */
-            contact_handles: number;
-            /**
-             * Format: int64
-             * @description Contacts loaded from the address book.
-             */
-            contacts: number;
-            /**
-             * Format: int64
              * @description Contacts the import created for participants nothing else owned.
              */
             contacts_created: number;
-            /** @description True when the address book was not loaded (already present or no file). */
-            contacts_skipped: boolean;
             /**
              * Format: int64
              * @description Conversations imported.
@@ -2284,6 +2301,51 @@ export interface components {
          * @enum {string}
          */
         ListKind: "contacts" | "conversations" | "messages";
+        /** @description What a load changed. */
+        LoadCounts: {
+            /**
+             * Format: int64
+             * @description Contacts the load created.
+             */
+            contacts_created: number;
+            /**
+             * Format: int64
+             * @description Contacts the load deleted: the ones it left with neither a name nor
+             *     an identity.
+             */
+            contacts_deleted: number;
+            /**
+             * Format: int64
+             * @description Contacts the load renamed, or whose identities or Contact Group
+             *     memberships it changed.
+             */
+            contacts_updated: number;
+            /**
+             * Format: int64
+             * @description Contact Groups the load created.
+             */
+            groups_created: number;
+            /**
+             * Format: int64
+             * @description Identities linked to a contact that no contact held before.
+             */
+            identities_added: number;
+            /**
+             * Format: int64
+             * @description Identities taken from one contact and given to another.
+             */
+            identities_moved: number;
+            /**
+             * Format: int64
+             * @description Identities taken off a contact, which only Edit does.
+             */
+            identities_removed: number;
+        };
+        /**
+         * @description How a load applies the file.
+         * @enum {string}
+         */
+        LoadMode: "append" | "edit";
         /** @description One exported message. */
         Message: {
             /** @description Attachments on this message. */
@@ -5993,16 +6055,18 @@ export interface operations {
     };
     create_contacts: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description How the file is applied: `append` (the default) removes nothing; `edit` makes each contact in the file hold exactly the identities and Contact Group memberships its rows list. */
+                mode?: components["schemas"]["LoadMode"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** @description The address book file: a vCard file as text/vcard, or a vCard CSV export as text/csv. */
-        requestBody?: {
+        /** @description The address book: Message Crate's own CSV, one row per identity. */
+        requestBody: {
             content: {
-                "text/csv": unknown;
-                "text/vcard": unknown;
+                "text/csv": string;
             };
         };
         responses: {
@@ -6012,7 +6076,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CreateContactsResponse"];
+                    "application/json": components["schemas"]["LoadCounts"];
                 };
             };
             /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
@@ -6065,6 +6129,94 @@ export interface operations {
                 };
             };
             /** @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    export_address_book: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportAddressBookRequest"];
+            };
+        };
+        responses: {
+            /** @description The address book, as an attachment named `address-book.csv` */
+            200: {
+                headers: {
+                    /** @description `attachment; filename="address-book.csv"` */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            /** @description [`malformed-body`](https://messagecrate.app/docs/developer/reference/errors/malformed-body): The request could not be read at all: the body is not valid JSON, an import line is not the JSON Lines the server reads, or the body failed to arrive. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`authentication-required`](https://messagecrate.app/docs/developer/reference/errors/authentication-required): The request carried no usable credential: the `Authorization: Bearer <token>` header is missing, malformed, unknown or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`insufficient-scope`](https://messagecrate.app/docs/developer/reference/errors/insufficient-scope): The credential was accepted but may not do this.
+             *
+             *     [`account-disabled`](https://messagecrate.app/docs/developer/reference/errors/account-disabled): The account exists but the owner has disabled it, so it may not log in or act.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`payload-too-large`](https://messagecrate.app/docs/developer/reference/errors/payload-too-large): The body is over the server's configured cap, whether announced by `Content-Length` or discovered while reading. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description [`unsupported-media-type`](https://messagecrate.app/docs/developer/reference/errors/unsupported-media-type): The request's `Content-Type` is absent or not one this route accepts. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description [`validation-failed`](https://messagecrate.app/docs/developer/reference/errors/validation-failed): A query parameter, path segment or body field was read and then broke a rule: a `limit` of zero, an id that is not a number, a name that is blank or too long, an unknown `sort` key or `status` value, a required parameter or body field that is missing or blank, a query parameter the route does not take.
+             *
+             *     [`search-query-invalid`](https://messagecrate.app/docs/developer/reference/errors/search-query-invalid): The search language refused the query.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;

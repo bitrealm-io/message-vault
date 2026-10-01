@@ -5,13 +5,14 @@ import { keys } from "../../lib/queryKeys";
 import { useRouteCache, useRouteQuery } from "../../lib/routeQuery";
 import { getServerSettings, updateServerSettings } from "../../lib/serverApi";
 import { useServerInfo } from "../../lib/useServerInfo";
+import { DemoAccountCard } from "./DemoAccountCard";
 
 /**
  * Settings that belong to the whole Message Crate rather than to one account.
  *
- * One so far. Public registration is off on a fresh Message Crate, so it admits
- * nobody its owner has not admitted until the owner decides otherwise. Under
- * it the server states which code it runs and which schema its database
+ * Public registration is off on a fresh Message Crate, so it admits nobody
+ * its owner has not admitted until the owner decides otherwise. The Demo
+ * Account is added or reset here. Under them the server states which code it runs and which schema its database
  * carries: the Build, and the Schema Fingerprint as the number the server
  * stamps into the database and names in its startup warning.
  */
@@ -60,6 +61,8 @@ export function ServerSettingsPanel() {
           </p>
         ) : null}
       </div>
+
+      <DemoAccountCard />
 
       {info.data ? (
         <dl className="mt-4 grid grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-x-6 gap-y-2 rounded-xl border border-border bg-elevated p-4 text-[0.875rem]">

@@ -78,6 +78,8 @@ export const keys = {
       ["owner-accounts", accountId, "storage", "import", String(id)] as const,
   },
   serverSettings: { all: ["server-settings"] as const },
+  /** Where the Demo Account stands, from `GET /v1/server/demo-account`. */
+  demoAccount: { all: ["demo-account"] as const },
   /** What the whole database holds, from `GET /v1/server/storage`. */
   serverStorage: { all: ["server-storage"] as const },
   /** The server's own Build and Schema Fingerprint, from `GET /v1/server`. */

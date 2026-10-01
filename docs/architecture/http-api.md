@@ -56,6 +56,13 @@ A collection is plural, and a member is `/{collection}/{id}`. A singular path
 is legal only for a singleton: one per installation (`/v1/server`), or one per logged-in
 credential (`/v1/session`). `/v1/trash` is a singleton by the same rule.
 
+The Demo Account is managed as a singleton of the server,
+`/v1/server/demo-account`: `GET` says whether it exists, is being built, or
+failed to build, and `PUT {size}` adds or resets it. It is deleted as any
+account is, `DELETE /v1/accounts/{id}`. Why: adding it cannot be a verb on
+`/v1/accounts/{id}`, because there is no member to address until it exists,
+and there is at most one per Message Crate.
+
 A path segment names a resource, never a caller's role. Who may call a route is
 decided in its handler, so a change to permissions never renames a URL.
 `/v1/accounts` is one collection for the owner and for the account itself;
@@ -141,6 +148,15 @@ current one, because that account reaches every other.
   answers `200 OK` with a summary of what was created, updated and skipped,
   because no single resource was made.
 - A write with nothing to return answers `204 No Content`.
+- A write the server finishes after it answers is `202 Accepted`, with the
+  resource in its body and a `status` that says the work is under way. The
+  client reads the resource with `GET` until `status` changes; a second write
+  while the first is under way answers `409`. `PUT /v1/server/demo-account`
+  is the one such route: it removes the Demo Account and builds it again,
+  which takes from seconds to a minute, and answers with `status` `building`.
+  Why: an answer held for a minute is lost to a closed tab or a proxy's
+  timeout while the work carries on unseen, and `200` would say the Demo
+  Account is there when it is not yet.
 - A name collision answers `409 Conflict`. So does an action on a resource in
   the wrong state: deleting before trashing, claiming a claimed Message Crate, a batch
   or a `complete` on a finished run.

@@ -28,7 +28,7 @@ fn refuse_url_config_errors_when_config_has_url() {
     );
 }
 
-fn write_tiny_reset_bundle(root: &Path) {
+pub(crate) fn write_tiny_reset_bundle(root: &Path) {
     fs::create_dir_all(root.join("config")).expect("create bundle config");
     fs::create_dir_all(root.join("staging").join(IMESSAGE_SOURCE)).expect("imessage dir");
     fs::create_dir_all(root.join("staging").join(SBR_SOURCE)).expect("sbr dir");

@@ -27,8 +27,9 @@ export function AccountSettingsPanel({ managedAccountId }: { managedAccountId?: 
 
   const managed = managedAccountId !== undefined;
   const isOwner = profile.is_owner === true;
-  // The demo lock is the account's own; the owner may set the demo account's password.
-  const isDemo = profile.is_demo === true && !managed;
+  // The Demo Account never has a password, whoever asks: anyone at the login
+  // card enters it (`docs/adr/0016-the-demo-account-is-fixed-not-configured.md`).
+  const isDemo = profile.is_demo === true;
 
   return (
     <div>
@@ -46,12 +47,20 @@ export function AccountSettingsPanel({ managedAccountId }: { managedAccountId?: 
         <AccountPermissionsSection profile={profile} managedAccountId={managedAccountId} />
       ) : null}
 
-      <ChangePasswordSection
-        disabled={isDemo}
-        canReset={!isOwner}
-        requireCurrent={isOwner && !managed}
-        managedAccountId={managedAccountId}
-      />
+      {isDemo ? (
+        <>
+          <h3 className={sectionTitleClass}>Password</h3>
+          <p className="mb-6 mt-0 text-[0.813rem] text-muted">
+            The Demo Account never has a password.
+          </p>
+        </>
+      ) : (
+        <ChangePasswordSection
+          canReset={!isOwner}
+          requireCurrent={isOwner && !managed}
+          managedAccountId={managedAccountId}
+        />
+      )}
 
       {!managed && !isOwner ? (
         <ApiTokensSection

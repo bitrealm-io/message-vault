@@ -195,6 +195,21 @@ export function updateServerSettings(
   return apiClient.patch<Schema["ServerSettings"]>("/v1/server/settings", body);
 }
 
+/** Where the Demo Account stands: absent, building, ready, or failed. */
+export function getDemoAccount(opts?: RequestOptions): Promise<Schema["DemoAccount"]> {
+  return apiClient.get<Schema["DemoAccount"]>("/v1/server/demo-account", opts);
+}
+
+/**
+ * Add the Demo Account, or reset it. The server answers at once with
+ * `building` and builds it afterwards; `getDemoAccount` says when it ends.
+ */
+export function replaceDemoAccount(
+  body: Schema["ReplaceDemoAccountRequest"],
+): Promise<Schema["DemoAccount"]> {
+  return apiClient.put<Schema["DemoAccount"]>("/v1/server/demo-account", body);
+}
+
 // ── The logged-in account's own row ─────────────────────────────────────────
 
 /** The logged-in account: profile, flags, and how much it holds. */

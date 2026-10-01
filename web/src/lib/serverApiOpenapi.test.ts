@@ -103,6 +103,8 @@ const EXERCISED: Record<string, () => unknown> = {
   getServerSettings: () => serverApi.getServerSettings(),
   updateServerSettings: () => serverApi.updateServerSettings({ public_registration: true }),
   getServerStorage: () => serverApi.getServerStorage(),
+  getDemoAccount: () => serverApi.getDemoAccount(),
+  replaceDemoAccount: () => serverApi.replaceDemoAccount({ size: "medium" }),
 
   // Accounts
   listAccounts: () => serverApi.listAccounts(),

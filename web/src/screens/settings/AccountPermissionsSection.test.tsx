@@ -45,4 +45,19 @@ describe("AccountPermissionsSection", () => {
       screen.queryByText("The owner sets your status and permissions."),
     ).not.toBeInTheDocument();
   });
+
+  it("gives the owner nothing to change on the Demo Account", () => {
+    render(
+      <AccountPermissionsSection
+        profile={{ ...profile, is_demo: true } as AccountProfile}
+        managedAccountId={2}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Status/ })).not.toBeInTheDocument();
+    for (const box of screen.getAllByRole("checkbox")) expect(box).toBeDisabled();
+    expect(
+      screen.getByText("The Demo Account's status and permissions are fixed."),
+    ).toBeInTheDocument();
+  });
 });

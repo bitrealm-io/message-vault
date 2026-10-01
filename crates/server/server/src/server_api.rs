@@ -318,5 +318,215 @@ pub async fn get_server_storage(
     }))
 }
 
+/// How much Demo Data the Demo Account holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DemoDataSize {
+    /// About 54,000 messages. A new Message Crate starts with this.
+    Medium,
+    /// About 613,000 messages. Building it takes about a minute.
+    Large,
+}
+
+impl From<DemoDataSize> for demo_seed::DemoSize {
+    fn from(size: DemoDataSize) -> Self {
+        match size {
+            DemoDataSize::Medium => Self::Medium,
+            DemoDataSize::Large => Self::Large,
+        }
+    }
+}
+
+/// Where the Demo Account stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DemoAccountStatus {
+    /// There is no Demo Account.
+    Absent,
+    /// The server is building it. It may be logged into, and holds part of
+    /// its data until the build ends.
+    Building,
+    /// It exists and no build is running.
+    Ready,
+    /// The last build failed and the account was removed.
+    Failed,
+}
+
+/// The Demo Account, as the owner manages it.
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct DemoAccount {
+    /// Whether it exists, is being built, or failed to build.
+    pub status: DemoAccountStatus,
+    /// The size being built, while `status` is `building`.
+    pub size: Option<DemoDataSize>,
+    /// Why the last build failed, while `status` is `failed`.
+    pub error: Option<String>,
+}
+
+/// Body for adding or resetting the Demo Account.
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
+pub struct ReplaceDemoAccountRequest {
+    /// How much Demo Data to build.
+    pub size: DemoDataSize,
+}
+
+/// The Demo Account build in this server's memory: none, one running, or the
+/// last one failed. A restart forgets it, and the database then says whether
+/// the account exists.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct DemoBuild(std::sync::Arc<std::sync::Mutex<DemoBuildState>>);
+
+#[derive(Debug, Clone, Default)]
+enum DemoBuildState {
+    #[default]
+    Idle,
+    Building(DemoDataSize),
+    Failed(String),
+}
+
+impl DemoBuild {
+    fn get(&self) -> DemoBuildState {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    fn set(&self, state: DemoBuildState) {
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = state;
+    }
+
+    /// Mark a build of `size` as running, unless one already is.
+    fn start(&self, size: DemoDataSize) -> bool {
+        let mut state = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if matches!(*state, DemoBuildState::Building(_)) {
+            return false;
+        }
+        *state = DemoBuildState::Building(size);
+        true
+    }
+
+    /// Whether a build is running. Deleting the Demo Account waits for it.
+    pub(crate) fn is_building(&self) -> bool {
+        matches!(self.get(), DemoBuildState::Building(_))
+    }
+}
+
+/// Where the Demo Account stands: the build in memory first, then the database.
+async fn demo_account_on_conn(
+    state: &AppState,
+    conn: &mut sqlx::AnyConnection,
+) -> Result<DemoAccount, ApiError> {
+    let exists = account_profile::username_for_account(conn, account_profile::DEMO_ACCOUNT_ID)
+        .await?
+        .is_some();
+    Ok(match state.demo_build.get() {
+        DemoBuildState::Building(size) => DemoAccount {
+            status: DemoAccountStatus::Building,
+            size: Some(size),
+            error: None,
+        },
+        // A failed build removes the account. One that exists anyway was
+        // added since, from the command line, and that is the newer fact.
+        DemoBuildState::Failed(error) if !exists => DemoAccount {
+            status: DemoAccountStatus::Failed,
+            size: None,
+            error: Some(error),
+        },
+        DemoBuildState::Idle | DemoBuildState::Failed(_) => DemoAccount {
+            status: if exists {
+                DemoAccountStatus::Ready
+            } else {
+                DemoAccountStatus::Absent
+            },
+            size: None,
+            error: None,
+        },
+    })
+}
+
+/// Read where the Demo Account stands.
+///
+/// A program that started a build reads this until `status` is no longer
+/// `building`.
+#[utoipa::path(
+    get,
+    path = "/v1/server/demo-account",
+    tag = "Server",
+    security(("session" = ["owner"])),
+    responses((status = 200, body = DemoAccount))
+)]
+pub async fn get_demo_account(
+    State(state): State<AppState>,
+    Owner(_auth): Owner,
+) -> Result<Json<DemoAccount>, ApiError> {
+    let mut conn = state.db.acquire().await?;
+    Ok(Json(demo_account_on_conn(&state, &mut conn).await?))
+}
+
+/// Add the Demo Account, or reset it.
+///
+/// The Demo Account is removed, with everything a visitor changed in it, and
+/// built again with Demo Data of the size given. No other account is touched.
+/// The build runs after the answer is sent, while the server keeps serving:
+/// the answer is `202` with `status` `building`, and `GET` reports when it
+/// ends. A second request while one build runs is refused.
+#[utoipa::path(
+    put,
+    path = "/v1/server/demo-account",
+    tag = "Server",
+    security(("session" = ["owner"])),
+    request_body = ReplaceDemoAccountRequest,
+    responses(
+        (status = 202, description = "The build has started", body = DemoAccount),
+        crate::problem::openapi::StateConflict
+    )
+)]
+pub async fn replace_demo_account(
+    State(state): State<AppState>,
+    Owner(_auth): Owner,
+    Json(req): Json<ReplaceDemoAccountRequest>,
+) -> Result<(axum::http::StatusCode, Json<DemoAccount>), ApiError> {
+    if !state.demo_build.start(req.size) {
+        return Err(ApiError::StateConflict(
+            "the Demo Account is already being built".into(),
+        ));
+    }
+    let build = state.demo_build.clone();
+    let cfg = state.cfg.clone();
+    let generate = state.demo_bundle_generator;
+    tokio::spawn(async move {
+        let started = std::time::Instant::now();
+        match crate::reset_demo::build_demo_account(cfg, req.size.into(), generate).await {
+            Ok(messages) => {
+                tracing::info!(
+                    messages,
+                    seconds = started.elapsed().as_secs_f64(),
+                    "Demo Account built"
+                );
+                build.set(DemoBuildState::Idle);
+            }
+            Err(error) => {
+                tracing::error!("Demo Account build failed: {error:#}");
+                build.set(DemoBuildState::Failed(format!("{error:#}")));
+            }
+        }
+    });
+    Ok((
+        axum::http::StatusCode::ACCEPTED,
+        Json(DemoAccount {
+            status: DemoAccountStatus::Building,
+            size: Some(req.size),
+            error: None,
+        }),
+    ))
+}
+
 #[cfg(test)]
 mod tests;

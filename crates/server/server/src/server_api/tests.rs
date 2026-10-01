@@ -578,3 +578,148 @@ async fn only_the_owner_reaches_the_server_totals() {
         StatusCode::UNAUTHORIZED
     );
 }
+
+/// Writes a few conversations in place of the built-in data set.
+fn tiny_bundle(_size: demo_seed::DemoSize, bundle: &std::path::Path) -> anyhow::Result<()> {
+    crate::reset_demo::tests::write_tiny_reset_bundle(bundle);
+    Ok(())
+}
+
+/// [`tiny_bundle`], slowly, so a test can act while the build is running.
+fn slow_tiny_bundle(size: demo_seed::DemoSize, bundle: &std::path::Path) -> anyhow::Result<()> {
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    tiny_bundle(size, bundle)
+}
+
+fn no_bundle(_size: demo_seed::DemoSize, _bundle: &std::path::Path) -> anyhow::Result<()> {
+    anyhow::bail!("the generator has nothing to write")
+}
+
+/// Ask for a build of the medium set and return the answer.
+async fn start_demo_build(state: &AppState, token: &str) -> (StatusCode, String) {
+    crate::test_support::put_raw(
+        state,
+        "/v1/server/demo-account",
+        token,
+        "application/json",
+        r#"{"size":"medium"}"#,
+    )
+    .await
+}
+
+/// Read the Demo Account until its build has ended.
+async fn demo_account_after_build(state: &AppState, token: &str) -> DemoAccount {
+    for _ in 0..400 {
+        let demo: DemoAccount = get_json(state, "/v1/server/demo-account", token).await;
+        if demo.status != DemoAccountStatus::Building {
+            return demo;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    panic!("the Demo Account build did not end");
+}
+
+/// The Owner Home action: on a claimed Message Crate with no Demo Account,
+/// the owner adds one, the build runs after the answer, and it changes
+/// nothing in any other account (#971).
+#[tokio::test(flavor = "multi_thread")]
+async fn the_owner_adds_the_demo_account_and_no_other_account_changes() {
+    let fixture = test_fixture().await;
+    let mut state = fixture.state.clone();
+    state.demo_bundle_generator = tiny_bundle;
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let other = fixture.account("someone").await;
+    crate::test_support::seed_one_message(&state, other).await;
+
+    let demo: DemoAccount = get_json(&state, "/v1/server/demo-account", &owner.token).await;
+    assert_eq!(demo.status, DemoAccountStatus::Absent);
+
+    let (status, body) = start_demo_build(&state, &owner.token).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    let started: DemoAccount = serde_json::from_str(&body).unwrap();
+    assert_eq!(started.status, DemoAccountStatus::Building);
+    assert_eq!(started.size, Some(DemoDataSize::Medium));
+
+    let demo = demo_account_after_build(&state, &owner.token).await;
+    assert_eq!(demo.status, DemoAccountStatus::Ready, "{:?}", demo.error);
+    let info: ServerInfo = get_json(&state, "/v1/server", "").await;
+    assert!(info.demo_account);
+    assert_ne!(
+        info.state,
+        ServerState::Unclaimed,
+        "the owner is still the owner"
+    );
+
+    let mut conn = fixture.conn().await;
+    let count = |account: i64| {
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM messages WHERE account_id = $1")
+            .bind(account)
+    };
+    assert_eq!(count(other).fetch_one(&mut *conn).await.unwrap(), 1);
+    assert!(
+        count(account_profile::DEMO_ACCOUNT_ID)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap()
+            >= 1
+    );
+}
+
+/// While one build runs, a second is refused and so is deleting the Demo
+/// Account: either would pull the account out from under the import.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_running_demo_build_refuses_a_second_build_and_a_delete() {
+    let fixture = test_fixture().await;
+    let mut state = fixture.state.clone();
+    state.demo_bundle_generator = slow_tiny_bundle;
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+
+    let (status, body) = start_demo_build(&state, &owner.token).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+
+    let (status, body) = start_demo_build(&state, &owner.token).await;
+    crate::test_support::expect_problem(status, &body, crate::problem::ProblemType::StateConflict);
+    let demo_path = format!("/v1/accounts/{}", account_profile::DEMO_ACCOUNT_ID);
+    let (status, body) = crate::test_support::delete_raw(&state, &demo_path, &owner.token).await;
+    crate::test_support::expect_problem(status, &body, crate::problem::ProblemType::StateConflict);
+
+    let demo = demo_account_after_build(&state, &owner.token).await;
+    assert_eq!(demo.status, DemoAccountStatus::Ready, "{:?}", demo.error);
+    assert_eq!(
+        crate::test_support::delete_status(&state, &demo_path, &owner.token).await,
+        StatusCode::NO_CONTENT,
+        "once the build has ended the owner deletes it as before"
+    );
+    let demo: DemoAccount = get_json(&state, "/v1/server/demo-account", &owner.token).await;
+    assert_eq!(demo.status, DemoAccountStatus::Absent);
+}
+
+/// A build that fails says why and leaves no Demo Account, and the next
+/// build may start.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failed_demo_build_reports_why_and_leaves_no_account() {
+    let fixture = test_fixture().await;
+    let mut state = fixture.state.clone();
+    state.demo_bundle_generator = no_bundle;
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+
+    let (status, body) = start_demo_build(&state, &owner.token).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    let demo = demo_account_after_build(&state, &owner.token).await;
+    assert_eq!(demo.status, DemoAccountStatus::Failed);
+    assert!(
+        demo.error
+            .as_deref()
+            .is_some_and(|error| error.contains("the generator has nothing to write")),
+        "{:?}",
+        demo.error
+    );
+    let info: ServerInfo = get_json(&state, "/v1/server", "").await;
+    assert!(!info.demo_account);
+
+    state.demo_bundle_generator = tiny_bundle;
+    let (status, body) = start_demo_build(&state, &owner.token).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    let demo = demo_account_after_build(&state, &owner.token).await;
+    assert_eq!(demo.status, DemoAccountStatus::Ready, "{:?}", demo.error);
+}

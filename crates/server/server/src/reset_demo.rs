@@ -286,6 +286,64 @@ async fn seed_new_database_with<G>(cfg: &Config, generate: G) -> Option<u64>
 where
     G: FnOnce(&Path) -> Result<()>,
 {
+    match build_demo_account_with(cfg, generate).await {
+        Ok(messages) => Some(messages),
+        Err(error) => {
+            eprintln!("warning: could not add the Demo Account: {error:#}");
+            eprintln!(
+                "  this Message Crate starts without it; `message-crate-server reset-demo` adds it"
+            );
+            None
+        }
+    }
+}
+
+/// Writes a demo bundle of the given size into the given folder. The server
+/// holds the real one ([`generate_bundle`]); a test holds one that writes a
+/// few conversations.
+pub type BundleGenerator = fn(DemoSize, &Path) -> Result<()>;
+
+/// The generator a running server uses: the built-in data set of the size.
+pub fn generate_bundle(size: DemoSize, bundle: &Path) -> Result<()> {
+    demo_seed::generate_size_to(size, bundle).map(|_| ())
+}
+
+/// Build the Demo Account in the database `cfg` names while the server is
+/// serving it: the Owner Home action. The account is removed and built again,
+/// in the live database, and no other account is touched. Returns the number
+/// of messages imported.
+///
+/// # Errors
+///
+/// Returns an error when generation, import or media processing fails; the
+/// partly built Demo Account is removed first.
+pub async fn build_demo_account(
+    cfg: std::sync::Arc<Config>,
+    size: DemoSize,
+    generate: BundleGenerator,
+) -> Result<u64> {
+    let outcome = async {
+        let work = tempfile::tempdir().context("create temporary demo bundle directory")?;
+        let bundle = work.path().join("bundle");
+        // Generating is CPU work with no await in it, so it runs off the
+        // request-serving threads.
+        let target = bundle.clone();
+        tokio::task::spawn_blocking(move || generate(size, &target))
+            .await
+            .context("the demo bundle generator stopped")?
+            .context("generate demo bundle (demo-seed)")?;
+        seed_new_database_from_bundle(&cfg, &bundle).await
+    }
+    .await;
+    whole_demo_account_or_none(&cfg, outcome).await
+}
+
+/// Generate a bundle with `generate` and build the Demo Account from it in
+/// the database `cfg` names.
+async fn build_demo_account_with<G>(cfg: &Config, generate: G) -> Result<u64>
+where
+    G: FnOnce(&Path) -> Result<()>,
+{
     let outcome = async {
         let work = tempfile::tempdir().context("create temporary demo bundle directory")?;
         let bundle = work.path().join("bundle");
@@ -293,24 +351,31 @@ where
         seed_new_database_from_bundle(cfg, &bundle).await
     }
     .await;
+    whole_demo_account_or_none(cfg, outcome).await
+}
+
+/// The number of messages a build imported. When the build failed, the
+/// partly built account is removed first, so the Message Crate holds a whole
+/// Demo Account or none.
+async fn whole_demo_account_or_none(
+    cfg: &Config,
+    outcome: Result<ResetPreparedStats>,
+) -> Result<u64> {
     match outcome {
-        Ok(stats) => Some(stats.import.messages),
+        Ok(stats) => Ok(stats.import.messages),
         Err(error) => {
-            eprintln!("warning: could not add the Demo Account: {error:#}");
-            eprintln!(
-                "  this Message Crate starts without it; `message-crate-server reset-demo` adds it"
-            );
             if let Err(error) = wipe_demo_account(cfg, DEMO_ACCOUNT_ID, cfg.db_target()).await {
                 eprintln!("warning: could not remove the partly added Demo Account: {error:#}");
             }
-            None
+            Err(error)
         }
     }
 }
 
 /// Build the Demo Account in the database `cfg` names from the bundle at
-/// `bundle`. The database is new, so there is nothing to snapshot or swap:
-/// this writes to it directly, and leaves the config file alone.
+/// `bundle`. There is nothing to snapshot or swap: this writes to the
+/// database directly, touching the Demo Account alone, and leaves the config
+/// file as it is.
 async fn seed_new_database_from_bundle(cfg: &Config, bundle: &Path) -> Result<ResetPreparedStats> {
     let prepared = validate_prepared_bundle(bundle)?;
     let target = cfg.db_target();
@@ -1108,4 +1173,4 @@ fn remove_tree_if_exists(path: &Path) -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

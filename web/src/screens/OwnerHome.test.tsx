@@ -13,6 +13,7 @@ import OwnerHome from "./OwnerHome";
 
 const listAccounts = vi.hoisted(() => vi.fn());
 const getServerSettings = vi.hoisted(() => vi.fn());
+const getDemoAccount = vi.hoisted(() => vi.fn());
 const getServerStorage = vi.hoisted(() => vi.fn());
 const getServerState = vi.hoisted(() => vi.fn());
 const updateServerSettings = vi.hoisted(() => vi.fn());
@@ -38,6 +39,7 @@ vi.mock("../lib/serverApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/serverApi")>()),
   listAccounts: (...a: unknown[]) => listAccounts(...a),
   getServerSettings: (...a: unknown[]) => getServerSettings(...a),
+  getDemoAccount: (...a: unknown[]) => getDemoAccount(...a),
   getServerStorage: (...a: unknown[]) => getServerStorage(...a),
   getServerState: (...a: unknown[]) => getServerState(...a),
   updateServerSettings: (...a: unknown[]) => updateServerSettings(...a),
@@ -145,6 +147,7 @@ beforeEach(() => {
   deleteAccountMessages.mockResolvedValue(undefined);
   listAccounts.mockResolvedValue({ items: [theOwner, anAccount] });
   getServerSettings.mockResolvedValue({ public_registration: false });
+  getDemoAccount.mockResolvedValue({ status: "ready", size: null, error: null });
   getServerStorage.mockResolvedValue({
     message_count: 5678,
     conversation_count: 90,

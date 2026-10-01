@@ -357,6 +357,12 @@ pub struct AppState {
     pub(crate) upload_limits: asset_uploads::UploadLimits,
     /// Axum request body cap (single PUT or one part); equals `asset_max_bytes`.
     pub(crate) max_body_bytes: usize,
+    /// The Demo Account build the owner started, if one is running or the
+    /// last one failed. One per server: a second cannot start while one runs.
+    pub(crate) demo_build: crate::server_api::DemoBuild,
+    /// Writes the demo bundle a build imports. A test swaps in one that
+    /// writes a few conversations.
+    pub(crate) demo_bundle_generator: crate::reset_demo::BundleGenerator,
 }
 
 impl AppState {
@@ -372,6 +378,8 @@ impl AppState {
             auth_rate_limits: Arc::new(std::sync::Mutex::new(HashMap::new())),
             upload_limits,
             max_body_bytes: upload_limits.max_bytes as usize,
+            demo_build: crate::server_api::DemoBuild::default(),
+            demo_bundle_generator: crate::reset_demo::generate_bundle,
         }
     }
 }

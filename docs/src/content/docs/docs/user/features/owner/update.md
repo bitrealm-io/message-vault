@@ -40,7 +40,7 @@ If Import is in use, the `.import-state.jsonl` journal in the work directory is 
 
 Some releases change the shape of the server's own database rather than the JSONL it imports. When that happens, the server rebuilds its tables empty the first time it starts on the new version, on SQLite and Postgres alike, and the release notes say so. Message Crate comes back the way it looked the first time you ran it. You create your account again, then import your conversations again from the backups they came from. Anything that lived only in the database starts fresh too: the contacts you renamed, your tags, whatever you had moved to the trash, and any API tokens you had issued.
 
-The release that introduces Import Runs changes the schema. Upgrading to it starts your Message Crate empty, and you import your conversations again afterward. Keep the backups you imported from where you can get to them: a `chat.db`, an XML export, whatever the source was.
+Keep the backups you imported from where you can get to them: a `chat.db`, an XML export, whatever the source was.
 
 ## Compatibility
 

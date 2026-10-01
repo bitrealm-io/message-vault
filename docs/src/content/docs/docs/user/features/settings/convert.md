@@ -7,8 +7,8 @@ description: Rewrite a folder of exported files into another format without re-r
 It reads files and writes files. It never opens a phone backup and never reads or changes anything in Message Crate.
 Convert lives in the desktop app under **Settings → Convert**, because it is a tool most people use rarely rather than a third sidebar entry beside Import and Export.
 
-Happy-path [Import](/docs/user/import-from-a-backup/) never needs this step.
-Convert is for the case where an export already exists in one format and a copy in another format is wanted, for example a JSON Lines export from [Export](/docs/user/how-to/export-your-messages/) rewritten as MBOX for a mail client.
+Happy-path [Import](/docs/user/features/messages/import/) never needs this step.
+Convert is for the case where an export already exists in one format and a copy in another format is wanted, for example a JSON Lines export from [Export](/docs/user/features/messages/export/) rewritten as MBOX for a mail client.
 
 ## Before starting
 

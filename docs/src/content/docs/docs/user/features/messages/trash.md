@@ -45,8 +45,8 @@ Trash is a marker on the item, not a place its data was moved to, so search can 
 
 Searching `trashed:yes` on Contacts shows trashed contacts in the Contacts list, but they cannot be opened from there — restore or delete them from the Trash view.
 
-See [Search](/docs/user/how-to/search/) for the rest of the operators.
+See [Search](/docs/user/features/messages/search/) for the rest of the operators.
 
 ## Remove everything at once
 
-To remove all message content for an account without trashing each conversation first, use the danger-zone actions under **Settings → Account**. See [Settings](/docs/user/how-to/settings/).
+To remove all message content for an account without trashing each conversation first, use the danger-zone actions under **Settings → Account**. See [Settings](/docs/user/features/settings/settings/).

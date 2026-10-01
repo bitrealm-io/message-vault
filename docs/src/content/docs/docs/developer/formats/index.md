@@ -3,7 +3,7 @@ title: "Converter capabilities"
 description: "What each backup converter writes, where it falls short, and links to input-format and mapping pages."
 ---
 
-These pages are Developer docs (the converter libraries and their field mapping; none has a command line, see [ADR 0001](https://github.com/messagecrate/message-crate/blob/main/docs/adr/0001-no-command-line-except-the-server.md)). Day-to-day Import from a phone backup is in the [User Guide](/docs/user/import-from-a-backup/).
+These pages are Developer docs (the converter libraries and their field mapping; none has a command line, see [ADR 0001](https://github.com/messagecrate/message-crate/blob/main/docs/adr/0001-no-command-line-except-the-server.md)). Day-to-day Import from a phone backup is in the [User Guide](/docs/user/features/messages/import/).
 
 What each converter writes (and where it falls short). Marks: **yes** / **partial** / **no**.
 
@@ -71,8 +71,8 @@ Discord, Signal, Telegram, and Slack are recognized services in the shared model
 | SMS Backup+ | [Format](/docs/developer/formats/sms-backup-plus/format/) · [Import mapping](/docs/developer/formats/sms-backup-plus/mapping/) |
 | OpenExtract | Parser notes live with the crate |
 | iMazing | [Input format](/docs/developer/formats/imazing/input/) · [Design](/docs/developer/formats/imazing/design/) |
-| WhatsApp | [Import methods](/docs/user/prepare-a-backup/android-whatsapp/) |
-| iMessage | [Prepare a backup](/docs/user/prepare-a-backup/iphone-ipad/) |
+| WhatsApp | [Import methods](/docs/user/import-sources/whatsapp/) |
+| iMessage | [Back up an iPhone](/docs/user/get-started/back-up-an-iphone/) |
 
 **Common message:** end-user [export structure](/docs/developer/reference/export-structure/); schema [message-ir architecture](/docs/developer/architecture/common-message/). All exporters parse to `ConversationDocument` then project via `message_ir_format::FormatSink` (per-chat JSON/JSONL/CSV/EML/MBOX, or one SyncTech `smses.xml` as the XML format). Output formats: [mail archives](/docs/developer/formats/mail-archive/) and [SMS Backup & Restore XML](/docs/developer/formats/sms-backup-restore-xml/). Attachment modes (none / copy / convert / compress) and obfuscate apply through `FormatSink` for every format.
 

@@ -42,7 +42,7 @@ The word table is `crates/server/server/src/search/fields.rs`, the registry
 every list compiles against and the source the API reference is generated
 from. The grammar and every word's meaning are in
 `docs/architecture/search.md`; the guide a person reads is
-`docs/src/content/docs/docs/user/how-to/search.mdx`; the words each list
+`docs/src/content/docs/docs/user/features/messages/search.mdx`; the words each list
 accepts are in the [HTTP API reference](/docs/developer/reference/api/).
 
 ## Why

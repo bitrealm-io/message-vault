@@ -74,6 +74,14 @@ article is the product.
 _Avoid_: Vault, Crate on its own, Instance. The server is the running process
 and the database is the store; neither is a name for the installation.
 
+**Demo Data**:
+The made-up conversations, contacts, and attachments a new Message Crate can
+be started with, so a person can look around before bringing their own
+messages. It belongs to the `demo` account, which logs in with an empty
+password. A Message Crate that holds Demo Data is for looking only: a person's
+own messages go on a separate Message Crate started without it.
+_Avoid_: Test data, Sample data, Demo mode
+
 **Time Zone**:
 The zone an account shows every message time in, chosen when the account is
 set up and changeable afterwards. A message records the instant it arrived

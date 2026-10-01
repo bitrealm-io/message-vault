@@ -1,16 +1,17 @@
 ---
-title: Rescue imports
-description: Limited importers for GO SMS Pro, iMazing, OpenExtract, and SMS Backup+.
+title: Old backups
+description: Import a backup that already exists from GO SMS Pro, iMazing, OpenExtract, or SMS Backup+.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
 
-These sources are rescue paths. They read incomplete or reverse-engineered formats and may produce less complete results than a supported backup. Use them only when the export is the only copy you have.
+This page is for a backup that already exists, made years ago by a tool that is no longer the best route.
+It has no steps for making a new backup with these tools.
+They read incomplete or reverse-engineered formats and may produce less complete results than a current backup, so they are for the case where the old export is the only copy.
 
 On the **Import** source list they appear as **GO SMS Pro**, **iMazing**, **OpenExtract**, and **SMS Backup+**.
 
 :::caution[Prefer a supported backup when possible]
-Use SMS Backup & Restore XML over GO SMS Pro or SMS Backup+. Use an iPhone backup or `chat.db` over iMazing Messages CSV. Use a native WhatsApp database or backup over iMazing WhatsApp CSV.
+When the phone still exists, a new backup is better: [SMS Backup & Restore](/docs/user/get-started/back-up-an-android-phone/) over GO SMS Pro or SMS Backup+, an [iPhone backup](/docs/user/get-started/back-up-an-iphone/) over iMazing Messages CSV, and a [WhatsApp](/docs/user/import-sources/whatsapp/) database over iMazing WhatsApp CSV.
 :::
 
 ## GO SMS Pro
@@ -31,7 +32,7 @@ Reads Messages or WhatsApp CSV files from the third-party iMazing backup tool.
 
 Reads `all_conversations.csv` or `conversation_*.csv` files from the OpenExtract tool.
 
-- **What you need**: the CSV export, plus a contacts file for name resolution
+- **What you need**: the CSV export folder
 - **Known gaps**: identity and attachment information can be limited. Group conversations may not include all participants
 
 ## SMS Backup+

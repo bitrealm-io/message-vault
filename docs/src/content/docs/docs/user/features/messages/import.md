@@ -1,17 +1,17 @@
 ---
-title: Import from a backup
+title: Import
 description: Use the desktop app Import screen to read a phone backup and store its messages in Message Crate.
 ---
 
 **Import** is in the desktop app sidebar after you log in. It is not shown in the browser-only UI. Pick a backup source, point at the file or folder, and start the run. The app extracts from that backup and imports into Message Crate in one flow.
 
-JSONL (JSON Lines) folders on disk are a command-line task: [Extract to files](/docs/user/how-to/extract-to-files/).
+A first import is walked through step by step in [Import your backup](/docs/user/get-started/import-your-backup/). This page describes every field and stage.
 
 ## Before you start
 
-- A running Message Crate server — [Try Message Crate](/docs/user/get-started/try-message-crate/)
-- The desktop app logged in as **your** account (not `demo`), server URL such as `http://localhost:8080`
-- A prepared backup — [Prepare a backup](/docs/user/prepare-a-backup/)
+- A running Message Crate — [Start your own Message Crate](/docs/user/get-started/start-your-own-message-crate/)
+- The desktop app, logged in as an account. The Owner can't import, because the Owner holds no messages.
+- A backup on this computer — [iPhone](/docs/user/get-started/back-up-an-iphone/) or [Android](/docs/user/get-started/back-up-an-android-phone/)
 
 ## Run Import
 
@@ -27,9 +27,9 @@ JSONL (JSON Lines) folders on disk are a command-line task: [Extract to files](/
    | **WhatsApp** → **Platform:** **iPhone** | iPhone backup that includes WhatsApp |
    | **SMS Backup & Restore** | SyncTech XML |
 
-   Rescue sources (GO SMS Pro, iMazing, OpenExtract, SMS Backup+) are documented under [rescue imports](/docs/user/how-to/rescue-imports/).
+   GO SMS Pro, iMazing, OpenExtract, and SMS Backup+ are documented under [old backups](/docs/user/import-sources/old-backups/).
 
-4. Fill in paths, passwords, keys, or owner phone numbers for that source. A red asterisk marks a field that has no default and must be filled. **(Optional)** marks an empty field you can leave blank. Dropdowns that already have a value (Platform, Attachments, Contacts) have no extra mark.
+4. Fill in paths, passwords, keys, or owner phone numbers for that source. A red asterisk marks a field that has no default and must be filled. **(Optional)** marks an empty field you can leave blank. Lists that already have a value (Platform, Attachments) have no extra mark.
 5. Start the run and watch the on-screen progress and log
 
 ### iMessage fields
@@ -38,7 +38,7 @@ After you pick **iMessage**, **Platform** chooses Mac Messages or iPhone backup.
 
 **iPhone backup**
 
-- **iPhone Backup Directory** (required) — the device UUID folder from Finder or iTunes, not `sms.db` inside it. See [iPhone or iPad](/docs/user/prepare-a-backup/iphone-ipad/).
+- **iPhone Backup Directory** (required) — the device UUID folder from Finder or iTunes, not `sms.db` inside it. See [iPhone or iPad](/docs/user/get-started/back-up-an-iphone/).
 - **Encryption password** — required (red asterisk) when the backup is encrypted. **(Optional)** when it is not. Fill it in only for an encrypted backup.
 
 **Mac Messages**
@@ -47,7 +47,7 @@ After you pick **iMessage**, **Platform** chooses Mac Messages or iPhone backup.
 - **Attachment folder (Optional)** — leave empty when `Attachments` and `StickerCache` sit next to `chat.db` (the usual Mac layout under `~/Library/Messages`). Set this only when those folders live somewhere else, for example after copying `chat.db` on its own.
 - **Apple Contacts file (Optional)** — leave empty to use the local AddressBook on a live Mac. Point at `AddressBook-v22.abcddb` or `AddressBook.sqlitedb` only if that file is not in the usual Contacts location. People do not normally move that file.
 
-**Attachments** and **Contacts** apply to both platforms. Attachments is Copy / Convert / Compress / Skip. Contacts fills names from the contacts already in Message Crate after import; that is separate from the Apple Contacts file above.
+**Attachments** applies to both platforms: **Copy**, **Convert**, **Compress & Convert**, or **Skip**. See [Attachments and media](/docs/user/features/messages/attachments-and-media/).
 
 ### WhatsApp fields
 
@@ -55,7 +55,7 @@ After you pick **WhatsApp**, **Platform** chooses Android or iPhone. Default Pla
 
 **Android**
 
-- **Backup folder** (required) — a folder that contains `msgstore.db` and/or `msgstore.db.crypt12` / `.crypt14` / `.crypt15`. See [WhatsApp on Android](/docs/user/prepare-a-backup/android-whatsapp/).
+- **Backup folder** (required) — a folder that contains `msgstore.db` and/or `msgstore.db.crypt12` / `.crypt14` / `.crypt15`. See [WhatsApp on Android](/docs/user/import-sources/whatsapp/).
 - **Decryption key** — required (red asterisk) when the folder has a crypt file and no decrypted `msgstore.db`. **(Optional)** when `msgstore.db` is already in the folder. Enter a key file path or a crypt15 hex string. This is the WhatsApp Android decryption key, not the Apple backup password. The app does not save it.
 - **WhatsApp phone number** (required) — the number the WhatsApp account is registered to, pre-filled from the profile's phone. An Android backup does not carry it, so the form asks. Every imported message records this number as the address it was held at, which is what the identity counts in Settings add up; the number is not added to the profile.
 - **Contacts database (Optional)** — `wa.db`. Leave empty if that file is in the backup folder.
@@ -64,12 +64,12 @@ After you pick **WhatsApp**, **Platform** chooses Android or iPhone. Default Pla
 
 **iPhone**
 
-- **Backup folder** (required) — the device UUID folder from Finder or iTunes. See [WhatsApp on iPhone](/docs/user/prepare-a-backup/iphone-whatsapp/).
+- **Backup folder** (required) — the device UUID folder from Finder or iTunes. See [WhatsApp on iPhone](/docs/user/import-sources/whatsapp/).
 - **Contacts database (Optional)** — `ContactsV2.sqlite`. Leave empty if that file is in the backup.
 - **WhatsApp Business** — optional checkbox, unmarked by default. Turn it on only for a WhatsApp Business backup. The app does not remember this choice.
 - **WhatsApp phone number (Optional)**, under **Processing Options (Advanced)** — a fallback, pre-filled from the profile's phone. An iPhone backup carries the number in WhatsApp's own preferences, and Import reads it from there; the field is used only when the backup has no such entry. Import stops with a message when the backup has none and the field is empty.
 
-**Attachments** and **Contacts** apply to both platforms. Attachments is Copy / Convert / Compress / Skip. Contacts fills names from the contacts already in Message Crate after import; that is separate from the WhatsApp contacts database above.
+**Attachments** applies to both platforms: **Copy**, **Convert**, **Compress & Convert**, or **Skip**.
 
 ## Stages and approvals
 
@@ -99,6 +99,6 @@ Turn force reprocessing on when a previous run left messages without attachments
 
 A run that succeeds deletes its staging directory, the import log with it: Message Crate now holds the messages, and its record of the run under **Settings → Storage → Import history** holds the counts, timings and errors. A run that fails leaves the staging directory in place.
 
-The finished run leads with where to go next: **View imported conversations** opens the conversation list narrowed to the run (`import:#` followed by the run's number), and **View modified contacts** opens the Contact Group the server made for the run. **Back**, at the top, returns to the Import form. The run's record, with the same contact list, stays under **Settings → Storage → Import history**. See [Browse your messages](/docs/user/browse-your-messages/).
+The finished run leads with where to go next: **View imported conversations** opens the conversation list narrowed to the run (`import:#` followed by the run's number), and **View modified contacts** opens the Contact Group the server made for the run. **Back**, at the top, returns to the Import form. The run's record, with the same contact list, stays under **Settings → Storage → Import history**. See [Browse your messages](/docs/user/features/messages/browse/).
 
 API tokens under **Settings → Account** are for programs that call the server's [HTTP API](/docs/developer/reference/api/), not for this screen. Desktop Import uses the logged-in session.

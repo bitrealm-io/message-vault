@@ -66,7 +66,6 @@ Import a message-ir JSONL folder (source from export.source unless --source)
   Default value: `config/config.toml`
 * `--input <INPUT>` [aliases: `dir`, `staging-dir`, `export-dir`] — Folder of `*.jsonl` conversation files (+ attachments)
 * `--db <DB>` — Output SQLite database path (overrides config)
-* `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
 * `--assets-dir <ASSETS_DIR>` — Originals asset store directory (overrides account/source default; fixed-source only)
 * `--contacts <CONTACTS>` — Address book to load: VCF or vCard CSV export
 * `--overwrite-contacts` — Reload contacts from --contacts even if the table is non-empty
@@ -108,7 +107,6 @@ Discard the account's active import session, if it has one. A killed `import` le
 
   Default value: `config/config.toml`
 * `--db <DB>` — Output SQLite database path (overrides config)
-* `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
 * `--account <ACCOUNT>` — Account username or id whose active session is discarded
 
 
@@ -125,7 +123,6 @@ Soft-hide the same SMS when it appears under more than one import source
 
   Default value: `config/config.toml`
 * `--db <DB>` — Output SQLite database path (overrides config)
-* `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
 * `--window-secs <WINDOW_SECS>` — Near-time window in seconds for Pass B (default 2)
 
   Default value: `2`
@@ -146,7 +143,6 @@ Import an address book (VCF or vCard CSV) into an existing database
   Default value: `config/config.toml`
 * `--contacts <CONTACTS>` — Address book: VCF, or vCard CSV (First Name, Last Name, Phone columns)
 * `--db <DB>` — Output SQLite database path (overrides config)
-* `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
 * `--account <ACCOUNT>` — Account username or id (scopes contacts to this account)
 
 
@@ -169,10 +165,9 @@ Rebuild the Demo Account: generate Demo Data, clear the account, import, and pro
   - `large`:
     About 613,000 messages
 
-* `--config <CONFIG>` — Active config path. Overwritten on the SQLite path; only read for attachment paths when `--db-url` is set (default config/config.toml)
+* `--config <CONFIG>` — Active config path; overwritten (default config/config.toml)
 
   Default value: `config/config.toml`
-* `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…); seeds that database instead of replacing paths.db
 
 
 
@@ -187,7 +182,6 @@ Create an empty database, with no Demo Account. `serve` adds the Demo Account on
 * `--config <CONFIG>` — Path to config.toml
 
   Default value: `config/config.toml`
-* `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
 
 
 
@@ -205,7 +199,6 @@ Run the HTTP API. A database that does not exist yet is created with the Demo Ac
 * `--data-dir <DATA_DIR>` — Keep the whole Message Crate in this folder and read no config file: the database is `messagecrate.db` inside it, with every other setting at its default
 * `--bind <BIND>` — Address to listen on (overrides `[server] bind`; default 127.0.0.1:8080)
 * `--static-dir <STATIC_DIR>` — Folder holding the built website (overrides `[server] static_dir`; default `static`)
-* `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
 
 
 
@@ -279,7 +272,6 @@ Claim an unclaimed Message Crate by creating its owner. Refuses one that already
 * `--config <CONFIG>` — Path to config.toml
 
   Default value: `config/config.toml`
-* `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
 
 
 
@@ -295,7 +287,6 @@ Set a new password for the owner, ending their sessions. Refuses a Message Crate
 * `--config <CONFIG>` — Path to config.toml
 
   Default value: `config/config.toml`
-* `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
 
 
 

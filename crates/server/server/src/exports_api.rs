@@ -16,7 +16,7 @@ use sqlx::{AnyConnection, Connection};
 use crate::db::conversation_messages::{
     DEFAULT_MESSAGE_SORT, MESSAGE_SORT_KEYS, Message, selection_where,
 };
-use crate::db::dialect::{begin_immediate_sql, engine_of};
+use crate::db::dialect::BEGIN_IMMEDIATE_SQL;
 use crate::db::exports::{
     self, DEFAULT_EXPORT_SORT, EXPORT_SORT_KEYS, EXPORT_STATUSES, ExportPageOpts, StartExportArgs,
     export_messages,
@@ -47,8 +47,7 @@ pub async fn start_export_run(
     tool: Option<&str>,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
 ) -> Result<ExportRun, ApiError> {
-    let engine = engine_of(conn);
-    let mut tx = conn.begin_with(begin_immediate_sql(engine)).await?;
+    let mut tx = conn.begin_with(BEGIN_IMMEDIATE_SQL).await?;
     let filter = scope_filter(&mut tx, account_id, scope, clock).await?;
     crate::db::account_profile::ensure_account_row(&mut tx, account_id).await?;
     let export_id = exports::start_export(
@@ -91,9 +90,8 @@ pub async fn scope_filter(
     scope: &ExportScope,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
 ) -> Result<crate::search::Filter, ApiError> {
-    let engine = engine_of(conn);
     match scope {
-        ExportScope::Everything => message_filter(engine, account_id, "", clock),
+        ExportScope::Everything => message_filter(account_id, "", clock),
         ExportScope::Query { list, q } => {
             if q.trim().is_empty() {
                 return Err(ApiError::validation(
@@ -101,7 +99,7 @@ pub async fn scope_filter(
                 ));
             }
             match list {
-                ExportQueryList::Messages => message_filter(engine, account_id, q, clock),
+                ExportQueryList::Messages => message_filter(account_id, q, clock),
                 ExportQueryList::Conversations => {
                     let (zone, today) = clock;
                     Ok(crate::search::compile_messages_of_conversations(
@@ -109,7 +107,6 @@ pub async fn scope_filter(
                             list: crate::search::ListKind::Conversations,
                             query: q,
                             account_id,
-                            engine,
                             today,
                             zone,
                         },
@@ -168,7 +165,7 @@ pub async fn scope_filter(
             }
 
             let (fragment, params) = selection_where(conversation_ids, message_ids);
-            Ok(message_filter(engine, account_id, "", clock)?.and_where(&fragment, params))
+            Ok(message_filter(account_id, "", clock)?.and_where(&fragment, params))
         }
     }
 }

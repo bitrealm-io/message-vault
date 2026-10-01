@@ -4,7 +4,6 @@
 //! needs and asks the context to wrap it.
 
 use crate::db::dialect::like_ci;
-use crate::db::engine::DbEngine;
 use crate::db::sql::SqlParam;
 
 use super::ListKind;
@@ -42,7 +41,7 @@ impl Sql {
         self.params.push(SqlParam::Text(v.into()));
     }
 
-    /// `column LIKE ?` case-insensitively on both engines
+    /// `column LIKE ?` case-insensitively
     /// ([`db::dialect::like_ci`](crate::db::dialect::like_ci)), binding
     /// `pattern` as it is. In the pattern `%` and `_` are wildcards and `\`
     /// escapes, so text a person typed reaches here only through
@@ -103,7 +102,6 @@ impl TrashScope {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ListCtx {
     pub list: ListKind,
-    pub engine: DbEngine,
     pub account_id: i64,
     /// The account's time zone, for the date words' boundaries.
     pub zone: chrono_tz::Tz,

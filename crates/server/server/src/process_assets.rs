@@ -328,7 +328,6 @@ impl<'a> SourcePass<'a> {
 
 /// Account ids from the database, falling back to the folder names under `data_dir` when the table does not exist yet.
 async fn list_account_ids(conn: &mut AnyConnection, data_dir: &Path) -> Result<Vec<i64>> {
-    // Engine-branched: sqlite_master does not exist on Postgres.
     let mut ids = Vec::new();
     if schema::table_exists(conn, "accounts").await? {
         let rows = sqlx::query_scalar::<_, i64>("SELECT id FROM accounts ORDER BY id")

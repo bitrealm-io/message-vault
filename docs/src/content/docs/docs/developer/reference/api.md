@@ -53,7 +53,7 @@ A file the server cannot read answers `400 Bad Request` with a `malformed-body` 
 
 ### Batches and the database
 
-A batch holds one pooled database connection for the whole of its work: parsing the JSONL, placing attachments, and promoting messages. At most two batches run at once across the whole server, so the rest of the pool stays free for logins, browsing, and export while an import runs. Batches for the same account run one at a time. The same holds on SQLite and on Postgres.
+A batch holds one pooled database connection for the whole of its work: parsing the JSONL, placing attachments, and promoting messages. At most two batches run at once across the whole server, so the rest of the pool stays free for logins, browsing, and export while an import runs. Batches for the same account run one at a time.
 
 `message-crate-server import` reads a folder of JSONL without the HTTP interface. It defaults to `replace` and runs dedupe unless given `--skip-dedupe`.
 
@@ -95,7 +95,7 @@ Every export route takes the `export` scope on a session or an API token. A prog
 - `service:` — `imessage`, `sms`, `mms`, `rcs`, `whatsapp`.
 - `source:` — the backup family it was imported from: `imessage`, `whatsapp`, `sms`.
 - `import:` — the Import Run that brought it in; `#id` or `last`.
-- `date:`, `first-message:`, `last-message:` — when the message was sent, and when its conversation's first and last message were sent; a day, month, year, or relative span, with comparisons and ranges. A message's `timestamp` is a UTC instant. The span's edges are midnight in the account's `time_zone` (`GET /v1/accounts/{id}`), turned into instants before the comparison, so the same rule serves SQLite and Postgres.
+- `date:`, `first-message:`, `last-message:` — when the message was sent, and when its conversation's first and last message were sent; a day, month, year, or relative span, with comparisons and ranges. A message's `timestamp` is a UTC instant. The span's edges are midnight in the account's `time_zone` (`GET /v1/accounts/{id}`), turned into instants before the comparison.
 - `attachment:` — `image`, `video`, `audio`, `document`, `pdf`, `contact`, `other`, `any`, `none`.
 - `filename:` — an attachment's file name; text or a `pre*` prefix.
 - `size:` — an attachment's size, with comparisons and ranges.

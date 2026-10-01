@@ -529,11 +529,10 @@ are one thing or two.
 
 A handler reads the request, checks the caller and shapes the answer; it holds
 no SQL. Every query lives in `db/`, in the module for the table it is chiefly
-about, and whatever differs between SQLite and Postgres goes through
-`db::dialect` alone. Why: a query written into a handler gets written twice
-(the identity counts for contacts and for accounts were), and an engine
-difference outside `dialect` is one the Postgres run of the suite may not
-reach.
+about, and it is written for SQLite, the only database engine
+(`docs/adr/0017-sqlite-is-the-only-database-engine.md` has the rule and its
+reason). Why no SQL in a handler: a query written into a handler gets written
+twice (the identity counts for contacts and for accounts were).
 
 Does the rule stop at handlers? No. An import stage (`imports_api/staging.rs`,
 `imports_api/promote.rs`) is not a handler, but it holds no SQL either: it

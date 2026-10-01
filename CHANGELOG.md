@@ -104,6 +104,10 @@ released versions carry their date on the heading.
   Email, just as the Profile tab does. The vault counts both tables the
   same way. Under the surface, the vault's interface and code were renamed
   to use the words the product uses, with nothing else to see.
+- **The server runs on SQLite only.** A Message Crate could also
+  keep its database on a Postgres server, which existed for a hosted service
+  that is not built yet. That option is removed, so the server is simpler to
+  run and to change. Postgres support comes back with the hosted service.
 
 ### Fixes
 
@@ -191,6 +195,17 @@ released versions carry their date on the heading.
   `+44 7700 900123` as your own number, is now matched as that number. Before,
   some were read as a US number with the same digits and named the wrong
   person, and some matched nobody.
+
+### Upgrading
+
+- A Message Crate that ran on Postgres has to move to SQLite: export its
+  messages first, start the new server, and import them again.
+- If your configuration file has a `[database]` section, delete it. The
+  server now refuses to start with it. If you start the server with
+  `--db-url`, remove that flag; the database file is named by `db` under
+  `[paths]`, or by `--db`.
+- The database format changed. **An existing Message Crate is rebuilt empty
+  on first start and its messages must be imported again.**
 
 ## [0.9.0] - 2026-09-22
 

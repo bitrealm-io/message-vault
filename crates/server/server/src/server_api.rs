@@ -339,7 +339,7 @@ pub async fn get_server_storage(
     let mut conn = state.db.acquire().await?;
     let scope = storage::Scope::AllAccounts;
     let fts_bytes = storage::fts_bytes(&mut conn).await?;
-    let messages_bytes = storage::messages_bytes(&mut conn, fts_bytes).await?;
+    let messages_bytes = storage::messages_bytes(&mut conn).await?;
     let by_account = storage::text_by_account(&mut conn).await?;
     let shares = storage::split_by_text(messages_bytes, &by_account);
     let accounts = by_account

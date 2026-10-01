@@ -9,7 +9,7 @@ use serde::Serialize;
 use sqlx::AnyConnection;
 
 use crate::db::contacts::UNKNOWN_CONTACT_SQL;
-use crate::db::dialect::{engine_of, group_concat_unit_separator, name_ci_expr};
+use crate::db::dialect::{group_concat_unit_separator, name_ci_expr};
 use crate::db::handles::{infer_handle_type_from_shape, normalize_handle};
 use crate::db::sql::{SqlParam, bind_args, in_placeholders, renumber_placeholders};
 use crate::paging::{Direction, MAX_CONTACT_SUMMARY_IDS, Page, SortKey};
@@ -125,15 +125,13 @@ pub const DEFAULT_CONTACT_SORT: [SortKey<ContactSort>; 1] = [SortKey {
 /// The `ORDER BY` body for a parsed `sort`, over the derived table the list
 /// query builds (`name` and `last_heard_at` are real columns there).
 ///
-/// `name` is a select-list alias and the sort applies lower() to it. SQLite
-/// allows that; Postgres only allows a bare alias in ORDER BY, so the rows
-/// are sorted as a derived table where `name` is a real column.
+/// `name` is a select-list alias and the sort applies lower() to it, so the
+/// rows are sorted as a derived table where `name` is a real column.
 ///
 /// `last_heard_at` is NULL for a contact none of whose handles ever sent a
-/// message, and the two engines disagree about where NULLs belong: SQLite
-/// sorts them lowest, Postgres puts them last ascending and first
-/// descending. Leading with `(last_heard_at IS NULL)` — false before true
-/// on both — pins those contacts to the end in either direction.
+/// message, and SQLite sorts NULLs lowest. Leading with
+/// `(last_heard_at IS NULL)`, false before true, pins those contacts to the
+/// end in either direction.
 ///
 /// `ct.id` breaks ties in the direction of the last key, so paging cannot
 /// repeat a row.
@@ -170,13 +168,11 @@ pub async fn list_contacts_sorted(
     offset: usize,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
 ) -> Result<Page<ContactSummary>, ApiError> {
-    let engine = engine_of(conn);
     let (zone, today) = clock;
     let filter = crate::search::compile(crate::search::CompileRequest {
         list: crate::search::ListKind::Contacts,
         query: q,
         account_id,
-        engine,
         today,
         zone,
     })?;
@@ -227,9 +223,9 @@ pub async fn list_contacts_sorted(
          {order_by}
          LIMIT ? OFFSET ?",
         unknown = UNKNOWN_CONTACT_SQL,
-        addresses_agg = group_concat_unit_separator(engine, "val"),
+        addresses_agg = group_concat_unit_separator("val"),
         sent = contact_sent_messages(TrashScope::LeftOut),
-        groups_agg = group_concat_unit_separator(engine, "cl.name"),
+        groups_agg = group_concat_unit_separator("cl.name"),
     ));
     let mut params = filter.params().to_vec();
     params.push(SqlParam::Int(limit as i64));

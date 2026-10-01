@@ -8,8 +8,6 @@ use sqlx::AnyConnection;
 use sqlx::Arguments;
 use sqlx::any::{AnyArguments, AnyRow};
 
-use super::engine::DbEngine;
-
 /// One bound parameter in a dynamic query. sqlx's Any driver exposes no
 /// user-constructible dynamic value, so heterogeneous binds ride this enum.
 #[derive(Debug, Clone, PartialEq)]
@@ -45,8 +43,8 @@ pub fn bind_all<'q>(sql: &'q str, params: &[SqlParam]) -> impl sqlx::Execute<'q,
     sqlx::query_with(sql, bind_args(params))
 }
 
-/// Rewrite `?` placeholders to `$1..$N` in order. The Any driver performs no
-/// placeholder rewriting and `?` is invalid on Postgres; SQLite accepts `$N`.
+/// Rewrite `?` placeholders to `$1..$N` in order, so a fragment written
+/// with `?` joins a statement whose other placeholders are numbered.
 /// Valid because no SQL fragment in this crate contains `?` inside a string
 /// literal — keep it that way, and unit-test this against the committed
 /// fragment set.
@@ -72,31 +70,13 @@ pub const SQLITE_IN_CHUNK: usize = 400;
 /// must keep `columns × rows` at or below this.
 pub const SQLITE_MAX_VARIABLES: usize = 999;
 
-/// Postgres protocol bind-parameter cap. Multi-row `INSERT` chunks must
-/// keep `columns × rows` at or below this.
-pub const POSTGRES_MAX_VARIABLES: usize = 65_535;
-
-/// Practical Postgres `INSERT … VALUES` row cap. The protocol allows
-/// thousands of rows; 1000 is where Docker round-trips flatten out
-/// without building a half-megabyte statement.
-pub const POSTGRES_INSERT_MAX_ROWS: usize = 1000;
-
-/// Largest row count whose binds fit in one statement for `engine`.
-/// SQLite: `columns × rows ≤ 999`. Postgres: `columns × rows ≤ 65_535`
-/// and at most [`POSTGRES_INSERT_MAX_ROWS`] rows.
-pub fn max_rows_for_bind_limit(engine: DbEngine, columns: usize) -> usize {
+/// Largest row count whose binds fit in one statement:
+/// `columns × rows ≤ 999`.
+pub fn max_rows_for_bind_limit(columns: usize) -> usize {
     if columns == 0 {
         return 0;
     }
-    let bind_cap = match engine {
-        DbEngine::Sqlite => SQLITE_MAX_VARIABLES,
-        DbEngine::Postgres => POSTGRES_MAX_VARIABLES,
-    };
-    let by_binds = bind_cap / columns;
-    match engine {
-        DbEngine::Sqlite => by_binds,
-        DbEngine::Postgres => by_binds.min(POSTGRES_INSERT_MAX_ROWS),
-    }
+    SQLITE_MAX_VARIABLES / columns
 }
 
 /// Hand-numbered `VALUES` tuples: `($1,$2,$3),($4,$5,$6)` for `row_count` rows
@@ -160,8 +140,8 @@ where
 }
 
 /// Run `query_chunk` on successive slices of `ids` and group the results by id.
-/// Each chunk keeps binds under the engine bind limit; `SQLITE_IN_CHUNK` (400)
-/// stays as the chunk size for both engines.
+/// Each chunk keeps binds under SQLite's bind limit; `SQLITE_IN_CHUNK` (400)
+/// is the chunk size.
 ///
 /// # Errors
 ///
@@ -191,25 +171,13 @@ pub async fn fold_in_id_chunks<T, E>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::engine::DbEngine;
 
     #[test]
     fn max_rows_for_bind_limit_respects_sqlite_999() {
-        assert_eq!(max_rows_for_bind_limit(DbEngine::Sqlite, 18), 55);
-        assert_eq!(max_rows_for_bind_limit(DbEngine::Sqlite, 10), 99);
-        assert_eq!(max_rows_for_bind_limit(DbEngine::Sqlite, 6), 166);
-        assert_eq!(max_rows_for_bind_limit(DbEngine::Sqlite, 0), 0);
-    }
-
-    #[test]
-    fn max_rows_for_bind_limit_caps_postgres_at_1000() {
-        assert_eq!(max_rows_for_bind_limit(DbEngine::Postgres, 18), 1000);
-        assert_eq!(max_rows_for_bind_limit(DbEngine::Postgres, 10), 1000);
-        assert_eq!(max_rows_for_bind_limit(DbEngine::Postgres, 6), 1000);
-        assert_eq!(max_rows_for_bind_limit(DbEngine::Postgres, 0), 0);
-        // 70 columns: 65_535 / 70 = 936, so the bind cap wins over 1000.
-        assert_eq!(max_rows_for_bind_limit(DbEngine::Postgres, 70), 936);
-        const { assert!(1000 * 18 < POSTGRES_MAX_VARIABLES) };
+        assert_eq!(max_rows_for_bind_limit(18), 55);
+        assert_eq!(max_rows_for_bind_limit(10), 99);
+        assert_eq!(max_rows_for_bind_limit(6), 166);
+        assert_eq!(max_rows_for_bind_limit(0), 0);
     }
 
     #[test]

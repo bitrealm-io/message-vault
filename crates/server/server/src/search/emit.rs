@@ -3,7 +3,6 @@
 
 use crate::db::contacts::UNKNOWN_CONTACT_SQL;
 use crate::db::dialect::name_eq_ci;
-use crate::db::engine::DbEngine;
 
 use super::bridge::{ListCtx, MessageAgg, Sql, TrashScope};
 use super::error::{QueryError, QueryErrorKind};
@@ -46,7 +45,6 @@ pub(crate) fn compile(
     list: ListKind,
     expr: Option<&Expr>,
     account_id: i64,
-    engine: DbEngine,
     zone: chrono_tz::Tz,
 ) -> Result<Filter, QueryError> {
     let uses = |word: &str| expr.is_some_and(|e| e.uses(word));
@@ -60,7 +58,6 @@ pub(crate) fn compile(
     };
     let ctx = ListCtx {
         list,
-        engine,
         account_id,
         zone,
         trash,
@@ -139,7 +136,7 @@ fn emit_expr(ctx: &ListCtx, out: &mut Sql, expr: &Expr) -> Result<(), QueryError
         // contact with no messages under `first-message:`, a message under
         // `import:last` in an account with no Import Runs) makes `q` NULL,
         // and `NOT NULL` is NULL, which would leave the row out of both.
-        // `IS NOT TRUE` turns that NULL into a match, on SQLite and Postgres.
+        // `IS NOT TRUE` turns that NULL into a match.
         Expr::Not(inner) => {
             out.push("(");
             emit_expr(ctx, out, inner)?;
@@ -151,8 +148,7 @@ fn emit_expr(ctx: &ListCtx, out: &mut Sql, expr: &Expr) -> Result<(), QueryError
     Ok(())
 }
 
-/// A contains-or-prefix pattern against `column`, case-insensitive on both
-/// engines. A prefix means "a word starts with this", so it matches at the
+/// A contains-or-prefix pattern against `column`, case-insensitive. A prefix means "a word starts with this", so it matches at the
 /// start of the column or just after a space — never only at the very
 /// start, which would make `avoc*` find less than `avoc`. Anything else, a
 /// phrase included, is an ordinary substring.
@@ -161,7 +157,7 @@ fn emit_expr(ctx: &ListCtx, out: &mut Sql, expr: &Expr) -> Result<(), QueryError
 /// (`free_text_match`) and the text words (`text_match`) both go through it.
 /// It escapes the text first, so a `%`, `_`, or `\` a person types is that
 /// character and never a wildcard: `filename:IMG_0001` does not find
-/// `IMGX0001`. `like_ci` names `\` as the escape character on both engines.
+/// `IMGX0001`. `like_ci` names `\` as the escape character.
 fn like_contains(out: &mut Sql, column: &str, text: &str, prefix: bool) {
     let text = like_escape(text);
     if prefix {
@@ -228,7 +224,6 @@ fn participants_with_contact(trash: TrashScope) -> String {
 
 /// Free text: the row's own text, one meaning applied per row type.
 fn emit_text(ctx: &ListCtx, out: &mut Sql, term: &TextTerm) {
-    let e = ctx.engine;
     match ctx.list {
         ListKind::Contacts => {
             out.push("(");
@@ -258,11 +253,9 @@ fn emit_text(ctx: &ListCtx, out: &mut Sql, term: &TextTerm) {
             free_text_match(out, PARTICIPANT_NAME, term);
             out.push(")))");
         }
-        // The index, or an attachment's file name. Both are needed: a file
-        // name is one token to Postgres's text parser, so "IMG_0001" never
-        // reaches "IMG_0001.jpg" through the index there, while SQLite's
-        // tokenizer does split it. The file-name match makes the two engines
-        // agree and makes part of a file name findable on either.
+        // The index, or an attachment's file name. Both are needed: the
+        // index finds whole words and word prefixes, and the file-name match
+        // makes any part of a file name findable.
         //
         // One `IN` over the union of both id sets, so the planner walks the
         // matching ids rather than every message of the account: an `OR`
@@ -270,7 +263,7 @@ fn emit_text(ctx: &ListCtx, out: &mut Sql, term: &TextTerm) {
         // (0.26 s on the demo database against 2 ms for this shape).
         ListKind::Messages => {
             out.push("m.id IN (");
-            fts::matching_ids(out, e, term);
+            fts::matching_ids(out, term);
             out.push(" UNION ALL SELECT a.message_id FROM attachments a WHERE ");
             free_text_match(out, "coalesce(a.original_name, '')", term);
             out.push(")");
@@ -962,8 +955,8 @@ fn emit_kind_word(
 
 /// `expr` (a stored UTC instant as RFC 3339 text) falls where `cmp` says.
 /// Each day bound becomes the instant that day begins in the account's zone,
-/// written in the same UTC text form, so the comparison is plain text on
-/// both engines and the zone decides which day a message belongs to.
+/// written in the same UTC text form, so the comparison is plain text
+/// and the zone decides which day a message belongs to.
 fn date_sql(out: &mut Sql, expr: &str, cmp: &DateCmp, zone: chrono_tz::Tz) {
     match cmp {
         DateCmp::In(span) => {

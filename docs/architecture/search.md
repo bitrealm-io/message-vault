@@ -143,31 +143,30 @@ A date names a span of days in the account's time zone:
   start of `a` through the end of `b`, which must not end before `a` begins.
 
 A message stores the instant it was sent, in UTC. Each day's edge becomes the
-instant midnight falls in the account's time zone, so the same comparison
-serves SQLite and Postgres and a message sent at 11:59 pm on New Year's Eve
-belongs to the old year wherever the server runs. A midnight that falls in a
+instant midnight falls in the account's time zone, so the comparison is
+plain text and a message sent at 11:59 pm on New Year's Eve belongs to the
+old year wherever the server runs. A midnight that falls in a
 daylight-saving gap starts the day at the first instant after the gap.
 
 Case and accents:
 
 - Case never matters. The text, name and person words compare
-  `lower(column)` with `lower(text)` on both engines, so `name:élodie` finds
-  "Élodie" as `name:jane` finds "Jane". Postgres's `lower()` folds every
-  letter. SQLite's folds only ASCII, and its `LIKE` and `NOCASE` collation
-  fold no more, so the server replaces `lower()` on every SQLite connection
-  with one that folds Unicode (`db/sqlite_functions.rs`, registered through
-  `sqlite3_auto_extension`). Message text, which goes through the full-text
-  index, folds case on both engines.
-- Accents matter, except in message text on SQLite, whose full-text index
-  folds them: `cafe` finds "café" there and not on Postgres.
+  `lower(column)` with `lower(text)`, so `name:élodie` finds "Élodie" as
+  `name:jane` finds "Jane". SQLite's own `lower()` folds only ASCII, and its
+  `LIKE` and `NOCASE` collation fold no more, so the server replaces
+  `lower()` on every connection with one that folds Unicode
+  (`db/sqlite_functions.rs`, registered through `sqlite3_auto_extension`).
+  Message text, which goes through the full-text index, folds case too.
+- Accents matter, except in message text, whose full-text index folds them:
+  `cafe` finds "café" there.
 - `%`, `_`, and `\` are ordinary characters. The only wildcard is a trailing
   `*`, which makes a prefix in free text and on the Text, Name and Person
   words, as the table of value types says.
 - A keyword is read as a keyword quoted or not: `group:"none"` is `group:none`.
   A Contact Group named "none" is reached by its `#id`.
 
-Free text on Messages goes to the full-text index (SQLite's FTS5 table,
-Postgres's `search_tsv`), which indexes the body, the subject, attachment file
+Free text on Messages goes to the full-text index (SQLite's FTS5 table),
+which indexes the body, the subject, attachment file
 names, and transcriptions, together with a contains match on attachment file
 names. Punctuation inside a term splits it into words that must appear next
 to each other in that order, and a term that is only punctuation or emoji

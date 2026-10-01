@@ -44,18 +44,6 @@ async fn fts_hits(conn: &mut AnyConnection, term: &str) -> i64 {
         .unwrap()
 }
 
-/// Search hits via the Postgres `search_tsv` vector (`messages_fts` has no
-/// Postgres twin — the tsvector lives on `messages`).
-async fn pg_fts_hits(conn: &mut AnyConnection, term: &str) -> i64 {
-    sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM messages WHERE search_tsv @@ plainto_tsquery('simple', $1)",
-    )
-    .bind(term)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap()
-}
-
 /// A fixture with schema applied, and two accounts (`A1`/alice, `A2`/bob)
 /// each holding one individual conversation on `+15555550100` from
 /// `t.json`, with no messages.
@@ -82,9 +70,6 @@ async fn seeded_schema_fixture() -> (sqlx::AnyPool, TestFixture) {
 
 #[tokio::test]
 async fn promote_fts_indexing_covers_only_rows_inserted_by_this_promotion() {
-    if crate::test_support::on_postgres() {
-        return; // SQLite-only: asserts against the FTS5 table; the Postgres twin is promote_fts_cycle_pg
-    }
     let (pool, _fixture) = seeded_schema_fixture().await;
     let mut conn = pool.acquire().await.unwrap();
 
@@ -136,9 +121,6 @@ async fn promote_fts_indexing_covers_only_rows_inserted_by_this_promotion() {
 
 #[tokio::test]
 async fn fresh_database_has_complete_current_schema() {
-    if crate::test_support::on_postgres() {
-        return; // SQLite-only: the contract lists SQLite objects such as messages_fts
-    }
     let (pool, _dir) = test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
     ensure_schema(&mut conn).await.unwrap();
@@ -321,9 +303,6 @@ async fn same_source_guid_allowed_across_accounts() {
 
 #[tokio::test]
 async fn old_database_rebuilds_empty_at_current_version() {
-    if crate::test_support::on_postgres() {
-        return; // SQLite-only: builds a legacy SQLite file with its nocase collation and user_version
-    }
     let (pool, _dir) = test_pool().await;
     let mut conn = pool.acquire().await.unwrap();
     // A pre-versioning database from the pre-groups era: contact_labels
@@ -408,9 +387,6 @@ async fn current_version_database_keeps_data_across_reensure() {
 /// the fingerprint does not say which — is rebuilt empty at this one.
 #[tokio::test]
 async fn other_fingerprint_rebuilds_to_current() {
-    if crate::test_support::on_postgres() {
-        return; // SQLite-only: reads PRAGMA user_version; stale_postgres_marker_rebuilds_the_schema_empty is the twin
-    }
     let (pool, _fixture) = seeded_schema_fixture().await;
     let mut conn = pool.acquire().await.unwrap();
     stamp_user_version(&mut conn, SCHEMA_FINGERPRINT ^ 1)
@@ -471,9 +447,6 @@ async fn one_running_import_per_account() {
 
 #[tokio::test]
 async fn messages_fts_stays_in_sync() {
-    if crate::test_support::on_postgres() {
-        return; // SQLite-only: queries the FTS5 table with MATCH; messages_fts_stays_in_sync_pg is the twin
-    }
     let (pool, _fixture) = seeded_schema_fixture().await;
     let mut conn = pool.acquire().await.unwrap();
     let conversation_id: i64 =
@@ -551,9 +524,6 @@ async fn fts_term_entries(conn: &mut AnyConnection, term: &str) -> i64 {
 /// behind would make that message match a name it never carried.
 #[tokio::test]
 async fn messages_fts_forgets_attachment_text_that_is_gone() {
-    if crate::test_support::on_postgres() {
-        return; // SQLite-only: reads the FTS5 table; on Postgres the text is a column of the message row
-    }
     let (pool, _fixture) = seeded_schema_fixture().await;
     let mut conn = pool.acquire().await.unwrap();
     let conversation_id: i64 =
@@ -650,211 +620,6 @@ async fn messages_fts_forgets_attachment_text_that_is_gone() {
     assert_eq!(fts_hits(&mut conn, "zzsecond").await, 0);
 }
 
-/// The `messages_fts_stays_in_sync` twin for Postgres: the sync triggers
-/// keep `search_tsv` in step with message and attachment edits. Skips
-/// unless `MC_TEST_POSTGRES_URL` is set.
-#[tokio::test]
-async fn messages_fts_stays_in_sync_pg() {
-    let Some(url) = crate::pg_test_url() else {
-        return;
-    };
-    let pool = crate::db::engine::pg_test_schema_pool(&url).await;
-    let mut conn = pool.acquire().await.unwrap();
-    ensure_schema(&mut conn).await.unwrap();
-
-    // One account + conversation, mirroring the SQLite test's setup.
-    sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
-        .bind(A1)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    let handle_id: i64 = sqlx::query_scalar(
-        "INSERT INTO handles (account_id, raw, normalized, handle_type, service)
-         VALUES ($1, '+15555550100', '+15555550100', 'phone', 'phone')
-         RETURNING id",
-    )
-    .bind(A1)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    let conversation_id: i64 = sqlx::query_scalar(
-        r"
-        INSERT INTO conversations (
-            account_id, chat_handle_id, conversation_type,
-            group_title, exported_at, source_file
-        ) VALUES ($1, $2, 'individual', NULL, NULL, 't.json')
-        RETURNING id
-        ",
-    )
-    .bind(A1)
-    .bind(handle_id)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    let message_id: i64 = sqlx::query_scalar(
-        r"
-        INSERT INTO messages (
-            conversation_id, account_id, source, guid, timestamp,
-            is_from_me, sort_order, body, subject
-        ) VALUES ($1, $2, 'sms', 'g1', '2020-01-01T00:00:00Z', 0, 0, 'hello there', NULL)
-        RETURNING id
-        ",
-    )
-    .bind(conversation_id)
-    .bind(A1)
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap();
-    sqlx::query(
-        "INSERT INTO attachments (message_id, original_name, transcription) VALUES ($1, 'voice.m4a', 'secret phrase')",
-    )
-    .bind(message_id)
-    .execute(&mut *conn)
-    .await
-    .unwrap();
-
-    assert_eq!(pg_fts_hits(&mut conn, "there").await, 1);
-    assert_eq!(pg_fts_hits(&mut conn, "secret").await, 1);
-
-    sqlx::query("UPDATE messages SET body = 'goodbye' WHERE id = $1")
-        .bind(message_id)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    assert_eq!(pg_fts_hits(&mut conn, "there").await, 0);
-    assert_eq!(pg_fts_hits(&mut conn, "goodbye").await, 1);
-
-    sqlx::query("DELETE FROM attachments WHERE message_id = $1")
-        .bind(message_id)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    sqlx::query("DELETE FROM messages WHERE id = $1")
-        .bind(message_id)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    assert_eq!(pg_fts_hits(&mut conn, "goodbye").await, 0);
-}
-
-/// The `other_fingerprint_rebuilds_to_current` twin for Postgres: a database
-/// whose [`SCHEMA_META_KEY`] row holds another fingerprint is rebuilt
-/// empty by [`drop_pg_user_tables`] rather than patched in place, so new
-/// columns land on an already-installed database too. Skips unless
-/// `MC_TEST_POSTGRES_URL` is set.
-#[tokio::test]
-async fn stale_postgres_marker_rebuilds_the_schema_empty() {
-    let Some(url) = crate::pg_test_url() else {
-        return;
-    };
-    let pool = crate::db::engine::pg_test_schema_pool(&url).await;
-    let mut conn = pool.acquire().await.unwrap();
-    ensure_schema(&mut conn).await.unwrap();
-    sqlx::query("INSERT INTO accounts (id, username) VALUES ($1, 'alice')")
-        .bind(A1)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-
-    // Stamp the fingerprint a server built from different SQL would have
-    // left, simulating the upgrade scenario the rebuild path exists for.
-    sqlx::query("UPDATE schema_meta SET value = $1 WHERE key = $2")
-        .bind((SCHEMA_FINGERPRINT ^ 1).to_string())
-        .bind(SCHEMA_META_KEY)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-
-    ensure_schema(&mut conn).await.unwrap();
-
-    let accounts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-    assert_eq!(
-        accounts, 0,
-        "another fingerprint rebuilds the database empty"
-    );
-
-    let stamped: String = sqlx::query_scalar("SELECT value FROM schema_meta WHERE key = $1")
-        .bind(SCHEMA_META_KEY)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-    assert_eq!(
-        stamped,
-        SCHEMA_FINGERPRINT.to_string(),
-        "the rebuild stamps this server's fingerprint"
-    );
-
-    sqlx::query(
-        "SELECT stage, staging_dir, device_id, form_json, source_fingerprint
-         FROM imports WHERE 1 = 0",
-    )
-    .fetch_optional(&mut *conn)
-    .await
-    .expect("the rebuilt Postgres database carries the session columns");
-}
-
-/// A server sharing its Postgres schema with another application rebuilds
-/// its own tables and leaves the neighbour's alone. Skips unless
-/// `MC_TEST_POSTGRES_URL` is set.
-#[tokio::test]
-async fn postgres_rebuild_spares_tables_the_server_does_not_own() {
-    let Some(url) = crate::pg_test_url() else {
-        return;
-    };
-    let pool = crate::db::engine::pg_test_schema_pool(&url).await;
-    let mut conn = pool.acquire().await.unwrap();
-    ensure_schema(&mut conn).await.unwrap();
-
-    // A co-tenant application's table, sitting in the same schema.
-    sqlx::query("CREATE TABLE mc_test_neighbour (id BIGINT PRIMARY KEY, note TEXT)")
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO mc_test_neighbour (id, note) VALUES (1, 'keep me')")
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-
-    // Roll the marker back so the next ensure takes the rebuild path.
-    sqlx::query("DELETE FROM schema_meta WHERE key = $1")
-        .bind(SCHEMA_META_KEY)
-        .execute(&mut *conn)
-        .await
-        .unwrap();
-    sqlx::query(
-        "INSERT INTO schema_meta (key, value) VALUES ('schema_v1', '1')
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    )
-    .execute(&mut *conn)
-    .await
-    .unwrap();
-
-    ensure_schema(&mut conn).await.unwrap();
-
-    let note: Option<String> =
-        sqlx::query_scalar("SELECT note FROM mc_test_neighbour WHERE id = 1")
-            .fetch_optional(&mut *conn)
-            .await
-            .expect("a table the server does not own survives the rebuild")
-            .flatten();
-    assert_eq!(
-        note.as_deref(),
-        Some("keep me"),
-        "the neighbour's rows survive the rebuild too"
-    );
-
-    // The server's own tables were still rebuilt.
-    let ready: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM schema_meta WHERE key = $1")
-        .bind(SCHEMA_META_KEY)
-        .fetch_one(&mut *conn)
-        .await
-        .unwrap();
-    assert_eq!(ready, 1, "the rebuild stamps the current marker");
-}
-
 /// The fingerprint changes whenever the schema text does, and only then:
 /// a changed column, and text moved from one file to the next, each give
 /// another value, and the same files give the same one. The known answers
@@ -874,44 +639,6 @@ fn the_fingerprint_follows_the_schema_text() {
     assert_eq!(fingerprint_of(&[]), 18_652_613);
     assert_eq!(fingerprint_of(&["a"]), 723_832_900);
     assert_eq!(fingerprint_of(&["ab", "c"]), 896_568_933);
-}
-
-/// The drop list is read out of the embedded DDL, so it covers every
-/// table the server installs and nothing else.
-#[test]
-fn pg_table_names_match_the_embedded_ddl() {
-    let names = pg_table_names();
-    for expected in [
-        "accounts",
-        "account_api_tokens",
-        "schema_meta",
-        "imports",
-        "import_issues",
-        "contacts",
-        "handles",
-        "trashed_conversations",
-        "conversations",
-        "messages",
-        "attachments",
-        "message_tags",
-        "staging_messages",
-    ] {
-        assert!(
-            names.contains(&expected),
-            "{expected} missing from {names:?}"
-        );
-    }
-    let declared = pg_table_ddl()
-        .files
-        .iter()
-        .flat_map(|ddl| ddl.lines())
-        .filter(|line| line.trim_start().starts_with("CREATE TABLE"))
-        .count();
-    assert_eq!(
-        names.len(),
-        declared,
-        "every CREATE TABLE in the Postgres DDL is on the drop list"
-    );
 }
 
 #[test]
@@ -942,60 +669,4 @@ fn split_ddl_skips_comments_and_blanks() {
         out,
         vec!["CREATE TABLE a (x INTEGER);", "CREATE TABLE b (y INTEGER);"]
     );
-}
-
-#[test]
-fn split_ddl_keeps_do_blocks_intact() {
-    let fks = &pg_table_ddl().deferred_fks;
-    let stmts = split_ddl(fks);
-    assert_eq!(
-        stmts.len(),
-        fks.matches("DO $$").count(),
-        "one statement per deferred FK, never a split inside a block"
-    );
-    assert!(!stmts.is_empty(), "the schema has at least one deferred FK");
-    for stmt in &stmts {
-        assert!(stmt.starts_with("DO $$"), "unexpected split: {stmt}");
-        assert!(stmt.ends_with("$$;"), "DO block must end in $$;: {stmt}");
-    }
-}
-
-#[test]
-fn split_ddl_keeps_pg_function_bodies_intact() {
-    let ddl = include_str!("../../../../../../schema/sql/fts_postgres.sql");
-    let stmts = split_ddl(ddl);
-    // Column + GIN index + two sync functions + six one-line triggers.
-    assert_eq!(stmts.len(), 10, "unexpected split of fts_postgres.sql");
-    let mut functions = 0;
-    let mut triggers = 0;
-    for stmt in &stmts {
-        if stmt.starts_with("CREATE OR REPLACE FUNCTION") {
-            functions += 1;
-            assert!(
-                stmt.ends_with("$$ LANGUAGE plpgsql;"),
-                "function must end in $$ LANGUAGE plpgsql;: {stmt}"
-            );
-        } else if stmt.starts_with("CREATE TRIGGER") {
-            triggers += 1;
-            assert!(
-                stmt.ends_with("EXECUTE FUNCTION messages_fts_sync();")
-                    || stmt.ends_with("EXECUTE FUNCTION attachments_fts_sync();"),
-                "unexpected split: {stmt}"
-            );
-        } else {
-            assert!(stmt.ends_with(';'), "statement must end with ;: {stmt}");
-        }
-    }
-    assert_eq!(functions, 2);
-    assert_eq!(triggers, 6);
-    let drop = split_ddl(include_str!(
-        "../../../../../../schema/sql/fts_postgres_drop.sql"
-    ));
-    assert_eq!(drop.len(), 6, "six sync triggers to drop");
-    for stmt in drop {
-        assert!(
-            stmt.starts_with("DROP TRIGGER IF EXISTS"),
-            "unexpected split: {stmt}"
-        );
-    }
 }

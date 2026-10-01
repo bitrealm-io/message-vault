@@ -2,7 +2,7 @@ use std::future::Future;
 use std::time::{Duration, SystemTime};
 
 use super::*;
-use crate::config::{DatabaseConfig, PathsConfig};
+use crate::config::PathsConfig;
 use crate::db::engine;
 
 const SHA: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
@@ -543,7 +543,6 @@ async fn open_db() -> (OpenDb, tempfile::TempDir) {
             assets_converted_dir: "assets_converted".into(),
         },
         server: None,
-        database: DatabaseConfig::default(),
     };
     (OpenDb { cfg, db: pool }, dir)
 }

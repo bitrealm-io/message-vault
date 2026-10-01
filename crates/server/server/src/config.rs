@@ -7,8 +7,6 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 
-use crate::db::engine::{DbEngine, DbTarget, detect_engine};
-
 /// Complete server configuration, loaded from a TOML file. It is read only
 /// through [`Config::load`], which refuses a key the server does not use.
 #[derive(Debug, Clone)]
@@ -17,10 +15,6 @@ pub struct Config {
     pub paths: PathsConfig,
     /// HTTP ingest server (`message-crate-server serve`). Required for `serve`.
     pub server: Option<ServerConfig>,
-    /// Database engine and connection URL. When `url` is set (a
-    /// `postgres://…` or `sqlite://…` URL), `serve` connects through it
-    /// instead of `paths.db`. Required for Postgres.
-    pub database: DatabaseConfig,
 }
 
 /// Where the keys the config file takes are listed, for a refusal to point at.
@@ -44,8 +38,6 @@ struct ConfigFile {
     paths: Section<PathsConfig>,
     #[serde(default)]
     server: Option<Section<ServerConfig>>,
-    #[serde(default)]
-    database: Option<Section<DatabaseConfig>>,
     /// Sections the server does not have, and keys outside any section.
     #[serde(flatten)]
     unknown: BTreeMap<String, toml::Value>,
@@ -87,8 +79,8 @@ impl ConfigFile {
     fn into_config(self) -> Result<Config> {
         if !self.unknown.is_empty() {
             bail!(
-                "{} is not a section or key the server uses. The sections are [paths], \
-                 [server] and [database]; their keys are listed at {CONFIG_REFERENCE}",
+                "{} is not a section or key the server uses. The sections are [paths] \
+                 and [server]; their keys are listed at {CONFIG_REFERENCE}",
                 key_list(&self.unknown)
             );
         }
@@ -98,22 +90,8 @@ impl ConfigFile {
                 .server
                 .map(|section| known_keys("server", section))
                 .transpose()?,
-            database: self
-                .database
-                .map(|section| known_keys("database", section))
-                .transpose()?
-                .unwrap_or_default(),
         })
     }
-}
-
-/// `[database]` section: optional connection URL selecting the engine.
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct DatabaseConfig {
-    /// Connection URL (`postgres://…` or `sqlite://…`). Unset = SQLite at
-    /// `paths.db`.
-    #[serde(default)]
-    pub url: Option<String>,
 }
 
 /// `[server]` section: HTTP bind address, CORS, and asset upload limits.
@@ -303,7 +281,6 @@ impl Config {
                 assets_converted_dir: default_assets_converted_dir_name(),
             },
             server: Some(ServerConfig::default()),
-            database: DatabaseConfig::default(),
         }
     }
 
@@ -360,37 +337,13 @@ fn resolve_path(base: &Path, configured: &Path) -> PathBuf {
 }
 
 impl Config {
-    /// Apply the command line's database flags: `--db` replaces `paths.db`
-    /// and `--db-url` replaces `[database] url`. After this the config alone
-    /// says where the database is; see [`Config::db_target`].
-    pub(crate) fn with_db_overrides(mut self, db: Option<PathBuf>, db_url: Option<String>) -> Self {
+    /// Apply the command line's `--db` flag, which replaces `paths.db`.
+    /// After this the config alone says where the database is.
+    pub(crate) fn with_db_override(mut self, db: Option<PathBuf>) -> Self {
         if let Some(db) = db {
             self.paths.db = db;
         }
-        if let Some(url) = db_url {
-            self.database.url = Some(url);
-        }
         self
-    }
-
-    /// Where the database is: the connection URL when one is set,
-    /// otherwise the SQLite file at `paths.db`. The URL always wins because
-    /// it can name a Postgres server, which a path never can.
-    pub(crate) fn db_target(&self) -> DbTarget<'_> {
-        DbTarget::new(self.database.url.as_deref(), &self.paths.db)
-    }
-
-    /// The engine [`Config::db_target`] selects: SQLite unless the URL's
-    /// scheme says Postgres.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error for a URL whose scheme is neither.
-    pub(crate) fn db_engine(&self) -> Result<DbEngine> {
-        match self.database.url.as_deref() {
-            Some(url) => detect_engine(url),
-            None => Ok(DbEngine::Sqlite),
-        }
     }
 }
 
@@ -407,59 +360,22 @@ mod tests {
                 assets_converted_dir: "assets_converted".into(),
             },
             server: None,
-            database: DatabaseConfig::default(),
         }
     }
 
     #[test]
-    fn without_overrides_the_database_is_the_configured_sqlite_file() {
-        let cfg = config_at("/srv/messagecrate.db").with_db_overrides(None, None);
+    fn without_an_override_the_database_is_the_configured_file() {
+        let cfg = config_at("/srv/messagecrate.db").with_db_override(None);
 
         assert_eq!(cfg.paths.db, PathBuf::from("/srv/messagecrate.db"));
-        assert_eq!(cfg.database.url, None);
-        assert_eq!(cfg.db_target().to_string(), "/srv/messagecrate.db");
-        assert_eq!(cfg.db_engine().unwrap(), DbEngine::Sqlite);
     }
 
     #[test]
-    fn db_override_replaces_the_sqlite_path() {
+    fn db_override_replaces_the_configured_file() {
         let cfg = config_at("/srv/messagecrate.db")
-            .with_db_overrides(Some(PathBuf::from("/elsewhere/other.db")), None);
+            .with_db_override(Some(PathBuf::from("/elsewhere/other.db")));
 
-        assert_eq!(cfg.db_target().to_string(), "/elsewhere/other.db");
-    }
-
-    #[test]
-    fn db_url_override_wins_over_the_path_and_names_the_engine() {
-        let cfg = config_at("/srv/messagecrate.db").with_db_overrides(
-            Some(PathBuf::from("/elsewhere/other.db")),
-            Some("postgres://app:secret@db.example:5432/messagecrate".into()),
-        );
-
-        assert_eq!(
-            cfg.db_target().to_string(),
-            "postgres://db.example:5432/messagecrate"
-        );
-        assert_eq!(cfg.db_engine().unwrap(), DbEngine::Postgres);
-    }
-
-    #[test]
-    fn a_configured_url_is_honoured_without_any_override() {
-        let mut cfg = config_at("/srv/messagecrate.db");
-        cfg.database.url = Some("sqlite:///elsewhere/other.db".into());
-
-        let cfg = cfg.with_db_overrides(None, None);
-
-        assert_eq!(cfg.db_target().to_string(), "sqlite:///elsewhere/other.db");
-        assert_eq!(cfg.db_engine().unwrap(), DbEngine::Sqlite);
-    }
-
-    #[test]
-    fn an_unknown_url_scheme_is_an_error() {
-        let mut cfg = config_at("/srv/messagecrate.db");
-        cfg.database.url = Some("mysql://db.example/messagecrate".into());
-
-        assert!(cfg.db_engine().is_err());
+        assert_eq!(cfg.paths.db, PathBuf::from("/elsewhere/other.db"));
     }
 
     #[test]
@@ -567,10 +483,6 @@ mod tests {
                 "[server]",
                 "[paths]\ndb = \"data/messagecrate.db\"\n\n[server]\nasset_dir = 1\n",
             ),
-            (
-                "[database]",
-                "[paths]\ndb = \"data/messagecrate.db\"\n\n[database]\nasset_dir = 1\n",
-            ),
         ] {
             let text = format!("{:#}", load_text(config).unwrap_err());
             assert!(text.contains("`asset_dir`"), "{section}: {text}");
@@ -600,7 +512,22 @@ mod tests {
                 .unwrap_err()
         );
         assert!(text.contains("`sever`"), "{text}");
-        assert!(text.contains("[paths], [server] and [database]"), "{text}");
+        assert!(text.contains("[paths] and [server]"), "{text}");
+    }
+
+    /// `[database]` named the connection URL while the server ran on Postgres
+    /// too. It is an unknown section now, so a config that still has it is
+    /// refused by name and never read as if the URL were honoured.
+    #[test]
+    fn a_config_with_the_removed_database_section_is_refused_naming_it() {
+        let text = format!(
+            "{:#}",
+            load_text(
+                "[paths]\ndb = \"data/messagecrate.db\"\n\n[database]\nurl = \"sqlite://x.db\"\n"
+            )
+            .unwrap_err()
+        );
+        assert!(text.contains("`database`"), "{text}");
     }
 
     /// The config files the repository ships must load under the same rule:

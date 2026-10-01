@@ -1051,8 +1051,8 @@ async fn a_participant_added_after_the_first_dedupe_changes_the_group_content_ke
 /// on its own and a later pass then fails, every duplicate in the account
 /// shows twice until the next successful run. The failure is forced by
 /// creating, on the same connection, a temp table under the name a pass
-/// writes its flags to but with the wrong columns; temp tables belong to one
-/// connection on both engines, so this works on SQLite and Postgres alike.
+/// writes its flags to but with the wrong columns; a temp table belongs to
+/// one connection.
 #[tokio::test]
 async fn a_failed_dedupe_keeps_the_previous_duplicates_hidden() {
     for broken_table in ["_pass_a_flags", "_pass_b_flags"] {

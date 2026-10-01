@@ -77,7 +77,7 @@ Everything else is a word, a colon, and a value.
 - A space between two terms means both, and so does `and`. `or` means either, and binds looser than both: `a b or c` is `(a b) or c`. Parentheses group: `(toast or guacamole) avocado`.
 - `avoc*` matches words starting with avoc, and `tag:Hol*` a Message Tag whose name starts with Hol. `"exact phrase"` matches the phrase.
 - In message text, punctuation inside a word splits it into words that must come next to each other in that order: `o'brien` finds "O'Brien" and "o brien", and `a&b` finds "a & b" but not "b and a". A word that is only punctuation or emoji finds no message text.
-- On a server that runs on SQLite, `cafe` also finds "café" in message text. On Postgres, accents count.
+- In message text, `cafe` also finds "café". Everywhere else, accents count.
 - A trailing `*` is the only wildcard. `%`, `_`, and `\` are ordinary characters, so `filename:IMG_0001` finds IMG_0001.jpg and not IMGX0001.jpg.
 
 A word the list does not have is refused with a message that says so.

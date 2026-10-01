@@ -440,7 +440,7 @@ impl FileStaging<'_> {
         let pending_rows =
             resolve_message_rows(self.tx, self.stmts, prepared_messages, platform, &mut stats)
                 .await?;
-        let msg_chunk = db_staging::message_chunk_rows(self.tx);
+        let msg_chunk = db_staging::message_chunk_rows();
         for chunk in pending_rows.chunks(msg_chunk) {
             flush_staging_message_chunk(
                 self.tx,

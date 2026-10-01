@@ -82,16 +82,6 @@ pub async fn serve_router(app: axum::Router) -> TestServer {
     }
 }
 
-/// True when `MC_TEST_POSTGRES_URL` points the suite at Postgres.
-///
-/// A test whose subject is SQLite itself (a pragma, the FTS5 table, the
-/// `nocase` collation, `sqlite_stat1`, a trigger written in SQLite's syntax)
-/// returns early on this and says why in a comment; where the same promise
-/// matters on Postgres, a `_pg` twin carries it there.
-pub fn on_postgres() -> bool {
-    crate::pg_test_url().is_some()
-}
-
 /// An empty database with schema applied and no accounts.
 ///
 /// Public registration is turned on, because most of the suite reaches the

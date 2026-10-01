@@ -17,20 +17,15 @@ const CONVERSATION_JSONL: &str = r#"{"schema_version":4,"export":{"source":"imes
 
 /// A database under `dir`: its config file on disk, the way an operator has
 /// one, with absolute paths so the test does not depend on the working
-/// directory. On a Postgres run the database is a schema of its own on that
-/// server, as every other test's is.
-async fn server_config(dir: &Path) -> PathBuf {
+/// directory.
+fn server_config(dir: &Path) -> PathBuf {
     let config_dir = dir.join("config");
     fs::create_dir_all(&config_dir).unwrap();
-    let mut text = format!(
+    let text = format!(
         "[paths]\ndb = \"{}\"\ndata_dir = \"{}\"\n",
         dir.join("messagecrate.db").display(),
         dir.join("data").display()
     );
-    if let Some(url) = crate::pg_test_url() {
-        let scoped = crate::db::engine::pg_test_schema_url(&url).await;
-        text.push_str(&format!("\n[database]\nurl = \"{scoped}\"\n"));
-    }
     let path = config_dir.join("config.toml");
     fs::write(&path, text).unwrap();
     path
@@ -62,7 +57,6 @@ fn import_args(config: &Path, input: &Path) -> ImportArgs {
         config: config.to_path_buf(),
         input: input.to_path_buf(),
         db: None,
-        db_url: None,
         assets_dir: None,
         contacts: None,
         overwrite_contacts: false,
@@ -77,13 +71,12 @@ fn import_args(config: &Path, input: &Path) -> ImportArgs {
 #[tokio::test]
 async fn create_owner_claims_the_server_once_and_reset_password_needs_the_claim() {
     let dir = tempfile::tempdir().unwrap();
-    let config = server_config(dir.path()).await;
+    let config = server_config(dir.path());
 
     let unclaimed = run(Cli {
         command: Commands::ResetOwnerPassword(ResetOwnerPasswordArgs {
             password: "correct horse battery staple".into(),
             config: config.clone(),
-            db_url: None,
         }),
     })
     .await
@@ -98,7 +91,6 @@ async fn create_owner_claims_the_server_once_and_reset_password_needs_the_claim(
             username: "Owner".into(),
             password: "correct horse battery staple".into(),
             config: config.clone(),
-            db_url: None,
         }),
     })
     .await
@@ -109,7 +101,6 @@ async fn create_owner_claims_the_server_once_and_reset_password_needs_the_claim(
             username: "again".into(),
             password: "correct horse battery staple".into(),
             config: config.clone(),
-            db_url: None,
         }),
     })
     .await
@@ -123,7 +114,6 @@ async fn create_owner_claims_the_server_once_and_reset_password_needs_the_claim(
         command: Commands::ResetOwnerPassword(ResetOwnerPasswordArgs {
             password: "a different long enough password".into(),
             config: config.clone(),
-            db_url: None,
         }),
     })
     .await
@@ -143,7 +133,7 @@ async fn create_owner_claims_the_server_once_and_reset_password_needs_the_claim(
 #[tokio::test]
 async fn import_records_the_conversation_then_dedupe_and_process_assets_run_on_it() {
     let dir = tempfile::tempdir().unwrap();
-    let config = server_config(dir.path()).await;
+    let config = server_config(dir.path());
     with_alice(&config).await;
     let input = dir.path().join("export");
     fs::create_dir_all(&input).unwrap();
@@ -165,7 +155,6 @@ async fn import_records_the_conversation_then_dedupe_and_process_assets_run_on_i
         command: Commands::DedupeCrossSource(DedupeArgs {
             config: config.clone(),
             db: None,
-            db_url: None,
             window_secs: 2,
             account: "alice".into(),
         }),
@@ -195,7 +184,6 @@ fn imports_discard_args(config: &Path) -> Cli {
             command: ImportsCommand::Discard(ImportsDiscardArgs {
                 config: config.to_path_buf(),
                 db: None,
-                db_url: None,
                 account: "alice".into(),
             }),
         }),
@@ -205,7 +193,7 @@ fn imports_discard_args(config: &Path) -> Cli {
 #[tokio::test]
 async fn imports_discard_clears_a_stranded_session_so_the_next_import_runs() {
     let dir = tempfile::tempdir().unwrap();
-    let config = server_config(dir.path()).await;
+    let config = server_config(dir.path());
     with_alice(&config).await;
     let input = dir.path().join("export");
     fs::create_dir_all(&input).unwrap();
@@ -281,7 +269,7 @@ async fn imports_discard_clears_a_stranded_session_so_the_next_import_runs() {
 #[tokio::test]
 async fn imports_discard_with_no_session_changes_nothing() {
     let dir = tempfile::tempdir().unwrap();
-    let config = server_config(dir.path()).await;
+    let config = server_config(dir.path());
     with_alice(&config).await;
 
     run(imports_discard_args(&config)).await.unwrap();
@@ -330,7 +318,7 @@ fn imports_discard_prints_the_session_or_that_there_was_none() {
 #[tokio::test]
 async fn import_contacts_loads_the_address_book_for_the_account() {
     let dir = tempfile::tempdir().unwrap();
-    let config = server_config(dir.path()).await;
+    let config = server_config(dir.path());
     with_alice(&config).await;
     let vcf = dir.path().join("book.vcf");
     fs::write(
@@ -344,7 +332,6 @@ async fn import_contacts_loads_the_address_book_for_the_account() {
             config: config.clone(),
             contacts: vcf,
             db: None,
-            db_url: None,
             account: "alice".into(),
         }),
     })
@@ -362,36 +349,9 @@ async fn import_contacts_loads_the_address_book_for_the_account() {
 }
 
 #[tokio::test]
-async fn the_db_url_flag_moves_the_database_to_another_file() {
-    let dir = tempfile::tempdir().unwrap();
-    let config = server_config(dir.path()).await;
-    if crate::pg_test_url().is_some() {
-        // Every database on a Postgres run is a schema on that server; the
-        // point here is the SQLite file the flag names.
-        return;
-    }
-    let other = dir.path().join("elsewhere").join("other.db");
-    fs::create_dir_all(other.parent().unwrap()).unwrap();
-
-    run(Cli {
-        command: Commands::CreateOwner(CreateOwnerArgs {
-            username: "owner".into(),
-            password: "correct horse battery staple".into(),
-            config: config.clone(),
-            db_url: Some(format!("sqlite://{}", other.display())),
-        }),
-    })
-    .await
-    .unwrap();
-
-    assert!(other.is_file(), "the owner went into {}", other.display());
-    assert!(!dir.path().join("messagecrate.db").exists());
-}
-
-#[tokio::test]
 async fn import_refuses_a_negative_window_before_opening_anything() {
     let dir = tempfile::tempdir().unwrap();
-    let config = server_config(dir.path()).await;
+    let config = server_config(dir.path());
     let mut args = import_args(&config, dir.path());
     args.window_secs = -1;
 
@@ -415,7 +375,7 @@ fn a_window_of_zero_seconds_is_accepted_and_a_negative_one_refused() {
 #[tokio::test]
 async fn import_refuses_an_unknown_media_mode() {
     let dir = tempfile::tempdir().unwrap();
-    let config = server_config(dir.path()).await;
+    let config = server_config(dir.path());
     let mut args = import_args(&config, dir.path());
     args.media = "shrink".into();
 
@@ -434,7 +394,7 @@ async fn import_refuses_an_unknown_media_mode() {
 #[tokio::test]
 async fn import_refuses_an_unknown_account() {
     let dir = tempfile::tempdir().unwrap();
-    let config = server_config(dir.path()).await;
+    let config = server_config(dir.path());
     let input = dir.path().join("export");
     fs::create_dir_all(&input).unwrap();
     fs::write(input.join("chat.jsonl"), CONVERSATION_JSONL).unwrap();
@@ -555,7 +515,6 @@ fn serve_with_a_data_dir_needs_no_config_file() {
 
     assert_eq!(cfg.paths.db, data.join("messagecrate.db"));
     assert_eq!(cfg.paths.data_dir, data);
-    assert!(cfg.database.url.is_none());
     let server = cfg.require_server().expect("a [server] section by default");
     assert_eq!(server.bind, "127.0.0.1:8080");
     assert_eq!(server.static_dir, PathBuf::from("static"));
@@ -580,7 +539,7 @@ fn serve_with_a_data_dir_needs_no_config_file() {
 #[tokio::test]
 async fn serve_flags_override_the_config_file_and_a_relative_data_dir_is_made_absolute() {
     let temp = tempfile::tempdir().unwrap();
-    let config = server_config(temp.path()).await;
+    let config = server_config(temp.path());
     fs::write(
         &config,
         format!(

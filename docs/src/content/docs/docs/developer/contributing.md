@@ -111,22 +111,6 @@ Later sessions, start with no flags so `data/` stays. With no database yet, the 
 
 `--reset` alone leaves Message Crate **unclaimed**, so the first screen is Create Owner — which is the only way to reach that screen in dev. Add `--owner` to claim it as `admin`/`admin` instead and land on the login. `--reset-demo` seeds the Demo Account and no owner, so it also leaves Message Crate unclaimed unless `--owner` is added.
 
-### Start the server on Postgres (optional)
-
-Same flags as the SQLite script, against the compose Postgres on
-`127.0.0.1:5432`. Needs Docker. There is no `--sqlweb`.
-
-```bash title="Start the server on Postgres"
-./scripts/run-pg-dev.sh --reset-demo
-```
-
-Press **Explore Demo Account** on the login card to enter the Demo Account,
-which has no password. Add `--owner` to claim Message Crate as `admin` with
-the password `admin` and manage accounts. `--reset` wipes the
-Postgres volume and `data/` and starts empty. A run with no flags keeps
-the volume. Stopping the script (Ctrl+C) stops the Postgres container
-and keeps the volume. Do not run this at the same time as
-`./scripts/run-dev.sh` — both use port 8080.
 
 ### Open the website (terminal 2)
 
@@ -262,7 +246,7 @@ From the repository root:
 
 That script is quick: it checks formatting on the workspace and `src-tauri/`, runs Clippy on both at `-D warnings`, and lints and type-checks `web/`. It stops on the first failure and never rewrites files — if formatting fails, run `./scripts/format-all.sh` and commit the result.
 
-CI runs the complete gate on every pull request: build, tests (including the Postgres-backed server suites), the web bundle and its tests, and the docs build. To run all of that locally in one command, use `./scripts/check-all.sh`; expect it to take a while, since it does serially what CI does in parallel.
+CI runs the complete gate on every pull request: build, tests, the web bundle and its tests, and the docs build. To run all of that locally in one command, use `./scripts/check-all.sh`; expect it to take a while, since it does serially what CI does in parallel.
 
 While iterating on one crate, `cargo test -p go-sms-pro-exporter` is enough. Exporter smoke tests use committed fixtures; personal phone backups are not required.
 

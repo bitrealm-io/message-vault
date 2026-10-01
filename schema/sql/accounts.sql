@@ -121,8 +121,7 @@ CREATE TABLE IF NOT EXISTS server_settings (
     -- the owner creates accounts. Off until the owner turns it on.
     public_registration INTEGER NOT NULL DEFAULT 0,
     -- The attachment size limit: the largest asset the server accepts, in
-    -- bytes. 512 MiB until the owner sets it. BIGINT because Postgres holds
-    -- an INTEGER to 2 GiB.
+    -- bytes. 512 MiB until the owner sets it.
     asset_max_bytes BIGINT NOT NULL DEFAULT 536870912
 );
 

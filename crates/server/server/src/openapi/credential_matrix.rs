@@ -26,7 +26,6 @@ use std::fmt;
 use std::sync::OnceLock;
 
 use axum::http::StatusCode;
-use futures_util::StreamExt;
 use serde_json::{Value, json};
 
 use crate::db::account_profile::{self, OWNER_ACCOUNT_ID};
@@ -269,7 +268,7 @@ pub(super) fn operations() -> Vec<Operation> {
 }
 
 /// One fixture and one running server for the whole matrix, with its owner.
-/// Creating a fixture is the slow part, on Postgres above all, so every call
+/// Creating a fixture is the slow part, so every call
 /// gets fresh accounts inside this one instead of a fixture of its own.
 ///
 /// An account holds one Session at a time, so every call shares the owner's.
@@ -706,19 +705,9 @@ async fn every_route_accepts_and_refuses_each_credential_as_the_document_and_rul
 
     // SQLite has one writer, and a transaction that starts reading and then
     // writes fails outright when another holds the lock, so calls run one at
-    // a time there. Postgres takes them side by side.
-    let side_by_side = if crate::test_support::on_postgres() {
-        8
-    } else {
-        1
-    };
-    let mut mismatches: Vec<String> = futures_util::stream::iter(first)
-        .map(|(n, (op, credential))| run(&shared, n, op, credential))
-        .buffer_unordered(side_by_side)
-        .filter_map(|mismatch| async move { mismatch })
-        .collect()
-        .await;
-    for (n, (op, credential)) in last {
+    // a time.
+    let mut mismatches: Vec<String> = Vec::new();
+    for (n, (op, credential)) in first.into_iter().chain(last) {
         mismatches.extend(run(&shared, n, op, credential).await);
     }
     mismatches.sort();

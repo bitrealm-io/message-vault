@@ -18,7 +18,6 @@ use anyhow::Result;
 use sqlx::AnyConnection;
 use sqlx::Row;
 
-use super::dialect;
 use super::sql::{SQLITE_IN_CHUNK, max_rows_for_bind_limit, values_tuples};
 
 // ── Staging: what one import writes before promotion ─────────────────────
@@ -198,10 +197,9 @@ const MESSAGE_BIND_COLUMNS: usize = 18;
 const ATTACHMENT_BIND_COLUMNS: usize = 10;
 const TAPBACK_BIND_COLUMNS: usize = 6;
 
-/// The most message rows [`insert_messages`] takes in one statement on
-/// this connection's engine.
-pub fn message_chunk_rows(conn: &AnyConnection) -> usize {
-    max_rows_for_bind_limit(dialect::engine_of(conn), MESSAGE_BIND_COLUMNS).max(1)
+/// The most message rows [`insert_messages`] takes in one statement.
+pub fn message_chunk_rows() -> usize {
+    max_rows_for_bind_limit(MESSAGE_BIND_COLUMNS).max(1)
 }
 
 /// Insert one chunk of message rows in one statement, at most
@@ -270,7 +268,7 @@ pub async fn insert_attachments(
     conn: &mut AnyConnection,
     rows: &[StagingAttachment],
 ) -> Result<u64> {
-    let size = max_rows_for_bind_limit(dialect::engine_of(conn), ATTACHMENT_BIND_COLUMNS).max(1);
+    let size = max_rows_for_bind_limit(ATTACHMENT_BIND_COLUMNS).max(1);
     let mut inserted = 0u64;
     for chunk in rows.chunks(size) {
         let sql = format!(
@@ -309,7 +307,7 @@ pub async fn insert_attachments(
 ///
 /// Returns an error when an insert fails.
 pub async fn insert_tapbacks(conn: &mut AnyConnection, rows: &[StagingTapback]) -> Result<u64> {
-    let size = max_rows_for_bind_limit(dialect::engine_of(conn), TAPBACK_BIND_COLUMNS).max(1);
+    let size = max_rows_for_bind_limit(TAPBACK_BIND_COLUMNS).max(1);
     let mut inserted = 0u64;
     for chunk in rows.chunks(size) {
         let sql = format!(
@@ -343,8 +341,7 @@ pub async fn insert_tapbacks(conn: &mut AnyConnection, rows: &[StagingTapback]) 
 // below fill in the order `imports_api::promote` calls them.
 
 /// Create, or empty, a temp table mapping staging ids to production ids.
-/// Two statements on purpose: Postgres refuses two commands in one
-/// prepared statement, and `split_ddl` only splits at line ends.
+/// Two statements on purpose: one prepared statement holds one command.
 async fn reset_id_map(conn: &mut AnyConnection, table: &str) -> Result<()> {
     let create = format!(
         "CREATE TEMP TABLE IF NOT EXISTS {table} (staging_id BIGINT PRIMARY KEY, prod_id BIGINT NOT NULL)"

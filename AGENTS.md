@@ -54,7 +54,7 @@ The product has two pieces:
 | Piece                  | Stack                                                                                                                             |
 |------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
 | Language (Rust crates) | Rust, edition 2024. `rust-toolchain.toml` pins the version (`1.98.1`) for every checkout, CI, and the release image.              |
-| Server                 | Tokio + Axum 0.8 HTTP API. sqlx Any: SQLite (bundled) by default, Postgres via `[database] url`. TOML config. Argon2 passwords, opaque hashed session tokens. |
+| Server                 | Tokio + Axum 0.8 HTTP API. sqlx over SQLite (bundled), the only database engine (`docs/adr/0017-sqlite-is-the-only-database-engine.md`). TOML config. Argon2 passwords, opaque hashed session tokens. |
 | Database               | SQLite file at `data/messagecrate.db`. Table SQL lives in `schema/sql/`. The server fingerprints those files at compile time (`SCHEMA_FINGERPRINT` in `db/schema.rs`) and rebuilds a database stamped with any other fingerprint empty, so a schema change is only a change to the SQL: nothing to bump. The rebuilt database needs a fresh import. |
 | Desktop app            | Tauri 2 native window. Vite 8 + React 19 + TypeScript SPA in `web/`. React Router 7, React Aria, Tailwind CSS 4. Vitest + Biome.  |
 | Website                | Same `web/` SPA. Dev server on port 5173. Production copy in `static/`, served by the server on port 8080.                        |
@@ -189,15 +189,6 @@ API: **http://127.0.0.1:8080**. After `--reset-demo`, press **Explore Demo Accou
 
 Restart terminal 1 after edits under `crates/server/server/` (debug `cargo run`; no hot reload).
 
-**Run on Postgres (optional)** — `./scripts/run-pg-dev.sh` starts
-compose Postgres, runs this checkout's server with `--db-url
-postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate`, and stops the container
-on exit. `--reset` / `--reset-demo` wipe the `messagecrate_pg_data` volume and
-host `data/`. After `--reset-demo`, press **Explore Demo Account** on the login
-card. Pass `--release` to seed and serve with the optimized binary
-(first compile can take several minutes). Do not run this and
-`./scripts/run-dev.sh` at once (both serve on 127.0.0.1:8080).
-
 **Terminal 2 — UI** (pick one)
 
 ```bash
@@ -242,13 +233,6 @@ cargo test --workspace
 cargo test -p sms-backup-restore-exporter   # one crate
 cargo build --manifest-path src-tauri/Cargo.toml
 
-# The same server suite on Postgres. With the variable set every test that
-# takes the shared test pool runs in a schema of its own on that server, so
-# this is the run that proves new SQL works on both engines. About 3.5
-# minutes against the compose service; without the variable it is SQLite.
-docker compose -f docker-compose.pg.yml up -d
-MC_TEST_POSTGRES_URL=postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate cargo test -p message-crate-server
-
 # Test coverage for the workspace (cargo-llvm-cov). Ends with the count of
 # functions no test calls and the files with the most; every one is named
 # in target/llvm-cov/uncovered-functions.txt. HTML report at
@@ -265,7 +249,7 @@ MC_TEST_POSTGRES_URL=postgres://messagecrate:messagecrate@127.0.0.1:5432/message
 
 Coverage is a report, not a gate, and it points at gaps rather than measuring test quality: a function no test calls is worth a look, while uncovered lines inside a called function are not a target. Coverage cannot say whether the tests that do call a function would notice it breaking; mutation testing (below) measures that. Never write a test to raise the coverage number. Write one only when it would fail for a bug that matters, and name that bug. `scripts/coverage.sh` needs `cargo-llvm-cov`, the `llvm-tools` component that `rust-toolchain.toml` installs, and `python3`; it leaves test code out of the numbers and does not measure `src-tauri`. The `Coverage` workflow (`coverage.yml`) runs the same script on every push to `main`, puts the function headline on the run's summary page, and keeps the reports and the uncovered-functions list as a workflow artifact for 30 days.
 
-Mutation testing is a report too, and it answers what coverage cannot: whether a test that calls a function would fail if the function were wrong. cargo-mutants changes the code one small way at a time (`<` to `<=`, `&&` to `||`, a function returning `Default::default()`) and runs that package's tests. A mutant every test still passes is "missed", and that list is the finding. Every workspace crate is mutated except the few `.cargo/mutants.toml` leaves out (test-data generators, the build stamp, serde-only types), along with `Display` and `Debug` text, a handful of functions that only build a log or hint line, arithmetic in top-level constants, retry jitter, and two Postgres-only checks; it says why for each. `scripts/mutants.sh` needs `cargo-mutants`, `cargo-nextest` (it runs each mutant's tests and stops at the first failure, which halves the time of a caught mutant) and `python3`; other arguments go to `cargo mutants`, and `--file` mutates only that file. The server tests run on SQLite, so a mutant in a Postgres-only branch shows as missed. The `Mutants` workflow (`mutants.yml`) runs only when started by hand from the Actions tab, never on a schedule or a pull request. It splits the run across 40 shards of about 2.5 hours each (about 100 runner-hours in all, most of it the server crate, whose whole test suite runs for every mutant), puts the joined table and every missed mutant on the run's summary page, and keeps each shard's logs and diffs as a workflow artifact for 30 days.
+Mutation testing is a report too, and it answers what coverage cannot: whether a test that calls a function would fail if the function were wrong. cargo-mutants changes the code one small way at a time (`<` to `<=`, `&&` to `||`, a function returning `Default::default()`) and runs that package's tests. A mutant every test still passes is "missed", and that list is the finding. Every workspace crate is mutated except the few `.cargo/mutants.toml` leaves out (test-data generators, the build stamp, serde-only types), along with `Display` and `Debug` text, a handful of functions that only build a log or hint line, arithmetic in top-level constants, and retry jitter; it says why for each. `scripts/mutants.sh` needs `cargo-mutants`, `cargo-nextest` (it runs each mutant's tests and stops at the first failure, which halves the time of a caught mutant) and `python3`; other arguments go to `cargo mutants`, and `--file` mutates only that file. The `Mutants` workflow (`mutants.yml`) runs only when started by hand from the Actions tab, never on a schedule or a pull request. It splits the run across 40 shards of about 2.5 hours each (about 100 runner-hours in all, most of it the server crate, whose whole test suite runs for every mutant), puts the joined table and every missed mutant on the run's summary page, and keeps each shard's logs and diffs as a workflow artifact for 30 days.
 
 #### Frontend
 

@@ -195,7 +195,7 @@ pub struct ImportExportArgs<'a> {
     /// Folder of `*.jsonl` conversation files to import.
     pub export_dir: &'a Path,
     /// Database to import into.
-    pub db: engine::DbTarget<'a>,
+    pub db: &'a Path,
     /// Content-addressed asset store directory.
     pub assets_dir: &'a Path,
     /// Optional address book to load: VCF or vCard CSV export.
@@ -227,7 +227,7 @@ pub async fn import_export(args: &ImportExportArgs<'_>) -> Result<ImportStats> {
 
     let paths = crate::import_cli::list_jsonl_files(args.export_dir)?;
 
-    let pool = args.db.open().await?;
+    let pool = engine::open_pool_for_path(args.db).await?;
     let mut conn = pool.acquire().await?;
     schema::ensure_schema(&mut conn).await?;
     crate::db::account_profile::ensure_account_row(&mut conn, args.account_id).await?;
@@ -409,17 +409,15 @@ pub async fn import_jsonl_files_on_conn(
     let started = Instant::now();
     // Stats on already-committed rows so promote's guid join can use the
     // indexes. Outside the transaction, because a failed ANALYZE is only a
-    // warning and on Postgres it would abort the transaction around it.
+    // warning.
     dialect::analyze_import_tables(conn).await;
 
     // Staging and promote share one transaction. Staging makes contacts and,
     // by ADR-0013, discards trashed ones; none of that may outlive a promote
-    // that fails. The write lock is taken up front on SQLite (IMMEDIATE) so two
+    // that fails. The write lock is taken up front (IMMEDIATE) so two
     // imports for different accounts cannot race into SQLITE_BUSY at the
-    // first INSERT; Postgres has no statement-level equivalent.
-    let mut tx = conn
-        .begin_with(dialect::begin_immediate_sql(dialect::engine_of(conn)))
-        .await?;
+    // first INSERT.
+    let mut tx = conn.begin_with(dialect::BEGIN_IMMEDIATE_SQL).await?;
     let asset_stats = stage_all_files(&mut tx, paths, opts, &mut stats, started).await?;
 
     say(&format!(

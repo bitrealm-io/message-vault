@@ -16,7 +16,7 @@ against its base and publishes four booleans — `rust`, `web`, `docs`, `docker`
 | `changes` | always | Diffs against the base and outputs `rust`, `web`, `docs`, `docker` |
 | `fmt` | `rust` | `cargo fmt --check` on the workspace and on `src-tauri` |
 | `clippy` | `rust` | `cargo clippy --workspace --all-targets -- -D warnings` |
-| `test` | `rust` | `cargo build --workspace` and `cargo test --workspace` against a `postgres:16-alpine` service |
+| `test` | `rust` | `cargo build --workspace` and `cargo test --workspace` |
 | `check-tauri` | `rust` | `cargo check`, Clippy at `-D warnings`, and `cargo test` on `src-tauri` |
 | `web` | `web` | `biome ci`, `check-generated-api-types.sh`, `npm run build`, `npm test` |
 | `docs` | `docs` | `npm ci`, `astro check`, `astro build` — the site without rustdoc or the HTTP API catalog |
@@ -50,8 +50,7 @@ The dependency audits live in `audit.yml`, not `ci.yml`. That workflow runs
 Test coverage lives in `coverage.yml` for the same reason seen from the other
 side: it is a report that never fails a pull request, so it has no place in a
 workflow whose every job is required. It runs `scripts/coverage.sh`
-(cargo-llvm-cov over the workspace on SQLite, then the server crate again on
-Postgres, both passes in one report) on each push
+(cargo-llvm-cov over the workspace) on each push
 to `main` and on demand, and keeps the reports as a workflow artifact.
 Mutation testing lives in `mutants.yml` for the same reason. It runs
 `scripts/mutants.sh` (cargo-mutants over the workspace, less what
@@ -228,19 +227,10 @@ allow is permanent and invisible, and the next nine-argument function would
 inherit it. A specific site that genuinely wants nine arguments carries a local
 `#[allow]` with a reason.
 
-The `test-postgres` job is gone. Its Postgres service moved onto the `test`
-job, which runs `cargo test --workspace` on SQLite and then
-`cargo test -p message-crate-server` with `MC_TEST_POSTGRES_URL` set. Only
-the server reads that variable, so the second pass is the server alone.
-Both passes are needed: the tests whose subject is SQLite itself (the schema
-contract, FTS5 triggers, the rebuilds, the password-change rollback) return
-early when the variable is set, and for a while the job set it for its only
-test step, so those tests reported a pass on every pull request without
-asserting anything. Every Postgres-gated test runs in a schema of its own on
-that server (`pg_test_schema_url` in `crates/server/server/src/db/engine.rs`,
-#435), so running them inside the suite introduces no race, and two checkouts
-can run against one server at the same time. The server crate compiles once
-per pull request; the second pass reuses the build.
+The `test-postgres` job is gone. For a while its Postgres service sat on the
+`test` job, which ran the server suite a second time on Postgres. Postgres
+support was then removed (`0017-sqlite-is-the-only-database-engine.md`), so
+the `test` job runs `cargo test --workspace` once.
 
 The job also installs ffmpeg. The transcode, media and demo-seed tests check
 for it and return early when it is missing, and for a while no runner had it,

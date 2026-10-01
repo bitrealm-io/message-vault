@@ -143,7 +143,7 @@ fn print_plan(opts: &CliImportOptions, opened: &OpenDb, plan: &SourcePlan) {
     println!("Import");
     println!("  account:      {}", opts.account_id);
     println!("  input:        {}", opts.input_dir.display());
-    println!("  db:           {}", opened.location());
+    println!("  db:           {}", opened.location().display());
     println!("  sources:      {}", plan.sources.join(", "));
     if plan.from_jsonl {
         println!("  source mode:  from JSONL export.source");
@@ -288,7 +288,7 @@ mod tests {
     /// A database with account alice, an export folder holding one conversation
     /// with `PHONE`, and a one-card address book naming that number.
     async fn fixture_with_export_and_book(dir: &Path) -> (OpenDb, CliImportOptions) {
-        let opened = OpenDb::open(fresh_config(dir).await).await.unwrap();
+        let opened = OpenDb::open(fresh_config(dir)).await.unwrap();
         let mut conn = opened.conn().await.unwrap();
         account_profile::insert_account_at(&mut conn, ALICE, "alice", None, None)
             .await

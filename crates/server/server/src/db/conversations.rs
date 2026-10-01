@@ -7,7 +7,6 @@ use std::collections::{HashMap, HashSet};
 use serde::Serialize;
 use sqlx::AnyConnection;
 
-use crate::db::dialect::engine_of;
 use crate::db::ownership::owns_conversation;
 use crate::db::participant_names::{Participant, load_for_conversations};
 use crate::db::sql::{
@@ -41,17 +40,14 @@ pub const DEFAULT_CONVERSATION_SORT: [SortKey<ConversationSort>; 1] = [SortKey {
 ///
 /// Every part is a fixed literal chosen by matching on the enum, so no part
 /// of the request reaches the SQL text. Both columns are output aliases of
-/// the page query, which SQLite and Postgres each allow in `ORDER BY`.
+/// the page query, which SQLite allows in `ORDER BY`.
 /// `c.id` breaks ties, in the direction of the last key, so paging cannot
 /// repeat or skip a row.
 ///
 /// `last_message_at` is NULL for a thread whose every message is a
-/// duplicate, and the two engines disagree about where NULLs belong:
-/// SQLite sorts them lowest, while Postgres defaults to NULLS LAST when
-/// ascending and NULLS FIRST when descending. Leading with
-/// `(last_message_at IS NULL)` — false before true on both — pins those
-/// threads to the end in either direction and keeps the two engines
-/// agreeing.
+/// duplicate, and SQLite sorts NULLs lowest. Leading with
+/// `(last_message_at IS NULL)`, false before true, pins those threads to
+/// the end in either direction.
 fn conversation_order_by(keys: &[SortKey<ConversationSort>]) -> String {
     let mut parts: Vec<String> = keys
         .iter()
@@ -131,13 +127,11 @@ pub async fn list_conversations_sorted(
     offset: usize,
     clock: (chrono_tz::Tz, chrono::NaiveDate),
 ) -> Result<Page<ConversationSummary>, ApiError> {
-    let engine = engine_of(conn);
     let (zone, today) = clock;
     let filter = crate::search::compile(crate::search::CompileRequest {
         list: crate::search::ListKind::Conversations,
         query: q,
         account_id,
-        engine,
         today,
         zone,
     })?;
@@ -155,9 +149,8 @@ pub async fn list_conversations_sorted(
     params.push(SqlParam::Int(limit as i64));
     params.push(SqlParam::Int(offset as i64));
     // The sort reads computed columns (`last_message_at`, `message_count`)
-    // inside expressions. SQLite lets ORDER BY name a select-list alias
-    // anywhere; Postgres only as a bare name. Sorting the rows as a derived
-    // table makes those aliases real columns on both engines.
+    // inside expressions. Sorting the rows as a derived table makes those
+    // aliases real columns.
     let sql = renumber_placeholders(&format!(
         "SELECT * FROM ({select} WHERE {where_sql}) AS c ORDER BY {order_by} LIMIT ? OFFSET ?",
         select = CONVERSATION_ROW_SELECT,

@@ -4,7 +4,7 @@
 //! functions here only parse, validate, and print; the work lives in the
 //! module each one calls (`import_cli`, `dedupe`, `reset_demo`, and so on).
 //! Every command that reads the database opens it the same way: the config with
-//! `--db` and `--db-url` applied, through [`OpenDb`].
+//! `--db` applied, through [`OpenDb`].
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -94,10 +94,6 @@ pub struct CreateOwnerArgs {
     /// Path to config.toml
     #[arg(long, default_value = "config/config.toml")]
     pub config: PathBuf,
-
-    /// Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
-    #[arg(long)]
-    pub db_url: Option<String>,
 }
 
 /// Options for `reset-owner-password`.
@@ -110,10 +106,6 @@ pub struct ResetOwnerPasswordArgs {
     /// Path to config.toml
     #[arg(long, default_value = "config/config.toml")]
     pub config: PathBuf,
-
-    /// Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
-    #[arg(long)]
-    pub db_url: Option<String>,
 }
 
 /// Options for `import`.
@@ -134,10 +126,6 @@ pub struct ImportArgs {
     /// Output SQLite database path (overrides config)
     #[arg(long)]
     pub db: Option<PathBuf>,
-
-    /// Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
-    #[arg(long)]
-    pub db_url: Option<String>,
 
     /// Originals asset store directory (overrides account/source default; fixed-source only)
     #[arg(long)]
@@ -200,10 +188,6 @@ pub struct ImportsDiscardArgs {
     #[arg(long)]
     pub db: Option<PathBuf>,
 
-    /// Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
-    #[arg(long)]
-    pub db_url: Option<String>,
-
     /// Account username or id whose active session is discarded
     #[arg(long)]
     pub account: String,
@@ -219,10 +203,6 @@ pub struct DedupeArgs {
     /// Output SQLite database path (overrides config)
     #[arg(long)]
     pub db: Option<PathBuf>,
-
-    /// Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
-    #[arg(long)]
-    pub db_url: Option<String>,
 
     /// Near-time window in seconds for Pass B (default 2)
     #[arg(long, default_value_t = 2)]
@@ -248,10 +228,6 @@ pub struct ImportContactsArgs {
     #[arg(long)]
     pub db: Option<PathBuf>,
 
-    /// Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
-    #[arg(long)]
-    pub db_url: Option<String>,
-
     /// Account username or id (scopes contacts to this account)
     #[arg(long)]
     pub account: String,
@@ -264,15 +240,9 @@ pub struct ResetDemoArgs {
     #[arg(long, value_enum, default_value_t = DemoSize::Medium)]
     pub size: DemoSize,
 
-    /// Active config path. Overwritten on the SQLite path; only read for
-    /// attachment paths when `--db-url` is set (default config/config.toml)
+    /// Active config path; overwritten (default config/config.toml)
     #[arg(long, default_value = "config/config.toml")]
     pub config: PathBuf,
-
-    /// Connection URL (postgres://… or sqlite://…); seeds that database
-    /// instead of replacing paths.db
-    #[arg(long)]
-    pub db_url: Option<String>,
 }
 
 /// Options for `create-database`.
@@ -281,10 +251,6 @@ pub struct CreateDatabaseArgs {
     /// Path to config.toml
     #[arg(long, default_value = "config/config.toml")]
     pub config: PathBuf,
-
-    /// Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
-    #[arg(long)]
-    pub db_url: Option<String>,
 }
 
 /// Options for `serve`.
@@ -308,10 +274,6 @@ pub struct ServeArgs {
     /// default `static`)
     #[arg(long)]
     pub static_dir: Option<PathBuf>,
-
-    /// Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
-    #[arg(long)]
-    pub db_url: Option<String>,
 }
 
 /// Options shared by `dump-openapi`, `dump-cli-docs` and `dump-error-docs`.
@@ -392,7 +354,7 @@ pub async fn run(cli: Cli) -> Result<()> {
 
 /// Claim this Message Crate and report the owner's username.
 async fn run_create_owner(args: CreateOwnerArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_overrides(None, args.db_url);
+    let cfg = Config::load(&args.config)?;
     let opened = OpenDb::open(cfg).await?;
     let username = crate::owner_cli::create_owner(&opened, &args.username, &args.password).await?;
     opened.close().await;
@@ -402,7 +364,7 @@ async fn run_create_owner(args: CreateOwnerArgs) -> Result<()> {
 
 /// Set the owner's password and report the username to log in with.
 async fn run_reset_owner_password(args: ResetOwnerPasswordArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_overrides(None, args.db_url);
+    let cfg = Config::load(&args.config)?;
     let opened = OpenDb::open(cfg).await?;
     let username = crate::owner_cli::reset_owner_password(&opened, &args.password).await?;
     opened.close().await;
@@ -420,7 +382,7 @@ fn validate_window_secs(window_secs: i64) -> Result<()> {
 
 /// Import a folder of conversation files, then print the counts.
 async fn run_import(args: ImportArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
+    let cfg = Config::load(&args.config)?.with_db_override(args.db);
     validate_window_secs(args.window_secs)?;
     if let Some(ref source) = args.source {
         validate_source_id(source)?;
@@ -452,7 +414,7 @@ async fn run_import(args: ImportArgs) -> Result<()> {
     .await?;
 
     println!();
-    println!("Import into {}", opened.location());
+    println!("Import into {}", opened.location().display());
     println!("  input:         {}", stats.input_dir.display());
     println!("  sources:       {}", stats.sources.join(", "));
     print!("{}", format_import_stats(&stats.import));
@@ -470,7 +432,7 @@ async fn run_import(args: ImportArgs) -> Result<()> {
 /// Discard the account's active import session and say which one it was,
 /// or that there was none.
 async fn run_imports_discard(args: ImportsDiscardArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
+    let cfg = Config::load(&args.config)?.with_db_override(args.db);
     let opened = OpenDb::open(cfg).await?;
     let account = opened.account_id(&args.account).await?;
     let mut conn = opened.conn().await?;
@@ -569,14 +531,14 @@ fn format_dedupe_stats(stats: &DedupeStats) -> String {
 
 /// Run the cross-source dedupe pass on its own and print the counts.
 async fn run_dedupe(args: DedupeArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
+    let cfg = Config::load(&args.config)?.with_db_override(args.db);
     validate_window_secs(args.window_secs)?;
     let opened = OpenDb::open(cfg).await?;
     let account = opened.account_id(&args.account).await?;
     let mut conn = opened.conn().await?;
     let priority = crate::dedupe::source_priority_from_db(&mut conn, account).await?;
 
-    println!("Cross-source dedupe on {}", opened.location());
+    println!("Cross-source dedupe on {}", opened.location().display());
     println!("  config:       {}", args.config.display());
     println!("  account:      {account}");
     println!("  window_secs:  {}", args.window_secs);
@@ -599,7 +561,7 @@ async fn run_dedupe(args: DedupeArgs) -> Result<()> {
 
 /// Load an address book into an existing database and print the counts.
 async fn run_import_contacts(args: ImportContactsArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_overrides(args.db, args.db_url);
+    let cfg = Config::load(&args.config)?.with_db_override(args.db);
     let opened = OpenDb::open(cfg).await?;
     let account = opened.account_id(&args.account).await?;
     let mut conn = opened.conn().await?;
@@ -607,7 +569,7 @@ async fn run_import_contacts(args: ImportContactsArgs) -> Result<()> {
         contacts_db::load_contacts_if_needed(&mut conn, Some(&args.contacts), true, account)
             .await?;
 
-    println!("Imported contacts into {}", opened.location());
+    println!("Imported contacts into {}", opened.location().display());
     println!("  config:       {}", args.config.display());
     println!("  account:      {account}");
     println!("  contacts:     {}", args.contacts.display());
@@ -620,8 +582,7 @@ async fn run_import_contacts(args: ImportContactsArgs) -> Result<()> {
 
 /// Rebuild the demo account from the bundle and print what landed.
 async fn run_reset_demo(args: ResetDemoArgs) -> Result<()> {
-    let stats =
-        crate::reset_demo::run_reset_demo(args.size, &args.config, args.db_url.as_deref()).await?;
+    let stats = crate::reset_demo::run_reset_demo(args.size, &args.config).await?;
     println!();
     println!("Demo reset complete");
     if stats.seed.messages > 0 {
@@ -669,22 +630,22 @@ async fn run_reset_demo(args: ResetDemoArgs) -> Result<()> {
 
 /// Create the database the config names, empty, or say it is already there.
 async fn run_create_database(args: CreateDatabaseArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_overrides(None, args.db_url);
+    let cfg = Config::load(&args.config)?;
     let is_new = crate::reset_demo::database_is_new(&cfg).await?;
     let opened = OpenDb::open(cfg).await?;
     if is_new {
-        println!("Empty database created at {}.", opened.location());
+        println!("Empty database created at {}.", opened.location().display());
     } else {
         println!(
             "Database at {} already exists; left as it is.",
-            opened.location()
+            opened.location().display()
         );
     }
     opened.close().await;
     Ok(())
 }
 
-/// Start the HTTP server with the config, honouring a `--db-url` override.
+/// Start the HTTP server with the config.
 async fn run_serve(args: ServeArgs) -> Result<()> {
     let cfg = serve_config(args)?;
     let _ = cfg.require_server()?;
@@ -707,14 +668,12 @@ fn serve_config(args: ServeArgs) -> Result<Config> {
         }
         None => Config::load(&args.config)?,
     };
-    Ok(cfg
-        .with_db_overrides(None, args.db_url)
-        .with_serve_overrides(args.bind, args.static_dir))
+    Ok(cfg.with_serve_overrides(args.bind, args.static_dir))
 }
 
 /// Convert stored media into browser previews.
 async fn run_process_assets(args: ProcessAssetsArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_overrides(args.db, None);
+    let cfg = Config::load(&args.config)?.with_db_override(args.db);
     if let Some(ref source) = args.source {
         validate_source_id(source)?;
     }

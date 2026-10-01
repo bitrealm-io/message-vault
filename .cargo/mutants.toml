@@ -44,10 +44,6 @@ exclude_re = [
     "replace [-+*/%] with [-+*/%]$",
     # Retry jitter read from the clock; no test can pin its value.
     "rand_factor",
-    # Checks that only run on Postgres. The mutation run is SQLite only, and
-    # the Postgres CI job runs them.
-    "pg_test_schema_pid",
-    "pg_schema_ready",
 ]
 
 # Run each mutant's tests with cargo-nextest, which stops at the first

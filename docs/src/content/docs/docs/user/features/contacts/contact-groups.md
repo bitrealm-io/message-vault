@@ -32,7 +32,7 @@ A name follows three rules:
 
 - It has at most 80 characters.
 - It is not the name of another Contact Group. Letter case is ignored, so `Family` and `family` are one name.
-- It is not a reserved name. `All`, `Contacts`, `Trash`, `Group`, and `No group` are among them, because they name parts of the product. The dialog answers with a line such as **Trash is a reserved group**.
+- It is not a reserved name. `All`, `Contacts`, `Trash`, `Group`, `Unknown`, and `No group` are among them, because they name parts of the product. The dialog answers with a line such as **Trash is a reserved Contact Group**.
 
 ## Rename or delete a group
 

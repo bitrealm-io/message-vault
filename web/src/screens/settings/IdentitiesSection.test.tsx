@@ -84,8 +84,8 @@ describe("IdentitiesSection", () => {
     for (const name of [
       /Service/,
       /^Identity/,
-      /First seen/,
-      /Last seen/,
+      /First sent/,
+      /Last sent/,
       /Conversations/,
       /Direct messages/,
       /Group messages/,

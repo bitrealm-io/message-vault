@@ -71,6 +71,8 @@ pub struct MembershipSpec {
     pub member_table: &'static str,
     /// Singular label used in error messages (`"tag"` / `"group"`).
     pub label: &'static str,
+    /// What a reserved-name message calls the set (`"tag"` / `"Contact Group"`).
+    pub reserved_label: &'static str,
     /// Member label used in error messages (`"conversation"` / `"contact"`).
     pub member_label: &'static str,
     /// Longest allowed name (characters).
@@ -92,6 +94,7 @@ pub fn tag_spec() -> &'static MembershipSpec {
         member_column: "conversation_id",
         member_table: "conversations",
         label: "tag",
+        reserved_label: "tag",
         member_label: "conversation",
         max_name_len: MAX_NAME_LEN,
         reserved: &[
@@ -127,6 +130,7 @@ pub fn group_spec() -> &'static MembershipSpec {
         member_column: "contact_id",
         member_table: "contacts",
         label: "group",
+        reserved_label: "Contact Group",
         member_label: "contact",
         max_name_len: MAX_NAME_LEN,
         reserved: &[
@@ -154,15 +158,18 @@ pub fn group_spec() -> &'static MembershipSpec {
             "labels",
             "label",
             "no label",
+            // The two computed groups, as `group:` names them.
+            "unknown",
+            "none",
         ],
         special_reserved: &[
-            ("contacts", "Contacts is a reserved group"),
-            ("all", "All is a reserved group"),
-            ("excluded", "Excluded is a reserved group"),
-            ("unassigned", "Unassigned is a reserved group"),
-            ("trash", "Trash is a reserved group"),
-            ("no messages", "No messages is a reserved group"),
-            ("no-messages", "No messages is a reserved group"),
+            ("contacts", "Contacts is a reserved Contact Group"),
+            ("all", "All is a reserved Contact Group"),
+            ("excluded", "Excluded is a reserved Contact Group"),
+            ("unassigned", "Unassigned is a reserved Contact Group"),
+            ("trash", "Trash is a reserved Contact Group"),
+            ("no messages", "No messages is a reserved Contact Group"),
+            ("no-messages", "No messages is a reserved Contact Group"),
             ("groups", "Group Messages is a reserved name"),
             ("group", "Group Messages is a reserved name"),
             ("group chats", "Group Messages is a reserved name"),
@@ -248,7 +255,7 @@ fn reserved_error(spec: &MembershipSpec, name: &str) -> String {
             return (*message).to_string();
         }
     }
-    format!("\"{}\" is a reserved {}", name.trim(), spec.label)
+    format!("\"{}\" is a reserved {}", name.trim(), spec.reserved_label)
 }
 
 /// Trim and validate a set name against the spec's length and reserved-name rules.

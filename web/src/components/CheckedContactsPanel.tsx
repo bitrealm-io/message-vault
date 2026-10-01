@@ -224,13 +224,13 @@ export default function CheckedContactsPanel({
               )}
             </Column>
             <SortableColumn id="start_date" widthClass="w-[14%]">
-              First Seen
+              First heard from
             </SortableColumn>
             <SortableColumn id="end_date" widthClass="w-[14%]">
-              Last Seen
+              Last heard from
             </SortableColumn>
             <SortableColumn id="conversations" widthClass="w-[14%]" align="right">
-              Threads
+              Conversations
             </SortableColumn>
             <SortableColumn id="direct_messages" widthClass="w-[15%]" align="right">
               Direct

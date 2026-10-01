@@ -27,7 +27,7 @@ async fn reserved_names_rejected_with_exact_messages() {
         .await
         .unwrap_err();
     match err {
-        MembershipError::BadRequest(msg) => assert_eq!(msg, "Trash is a reserved group"),
+        MembershipError::BadRequest(msg) => assert_eq!(msg, "Trash is a reserved Contact Group"),
         other => panic!("expected BadRequest, got {other:?}"),
     }
     let err = create_set(group_spec(), &mut conn, account, "Group Chats")
@@ -39,6 +39,40 @@ async fn reserved_names_rejected_with_exact_messages() {
         }
         other => panic!("expected BadRequest, got {other:?}"),
     }
+}
+
+// Unknown and No group are computed from contact state and searched as
+// `group:unknown` and `group:none`. A stored Contact Group under either name
+// would put two things with one name in the left panel.
+#[tokio::test]
+async fn a_contact_group_cannot_take_a_computed_groups_name() {
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let (family_id, _) = create_set(group_spec(), &mut conn, account, "Family")
+        .await
+        .unwrap();
+    for name in ["Unknown", "unknown", "UNKNOWN", "none", "None", "NONE"] {
+        let expected = format!("\"{name}\" is a reserved Contact Group");
+        match create_set(group_spec(), &mut conn, account, name)
+            .await
+            .unwrap_err()
+        {
+            MembershipError::BadRequest(msg) => assert_eq!(msg, expected),
+            other => panic!("create {name}: expected BadRequest, got {other:?}"),
+        }
+        match rename_set(group_spec(), &mut conn, account, family_id, name)
+            .await
+            .unwrap_err()
+        {
+            MembershipError::BadRequest(msg) => assert_eq!(msg, expected),
+            other => panic!("rename to {name}: expected BadRequest, got {other:?}"),
+        }
+    }
+    // Neither name means anything for a Message Tag, so a tag can take it.
+    create_set(tag_spec(), &mut conn, account, "Unknown")
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

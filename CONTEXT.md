@@ -161,6 +161,12 @@ whose identities ever sent a message has no date and sorts last whichever way
 the list runs.
 _Avoid_: Last seen, Last active, Last message
 
+**First heard from**:
+When a contact, or one of a contact's identities, first sent a message. It is
+the other end of Last heard from and follows the same rule: only a message the
+contact sent counts.
+_Avoid_: First seen, First active, First message
+
 **Unknown**:
 The Contact Group Message Crate computes from contacts that have no name or no
 identity. It has no members of its own and empties as a person names people.

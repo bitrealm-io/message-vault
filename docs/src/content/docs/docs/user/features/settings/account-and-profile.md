@@ -150,8 +150,8 @@ The table has one row per Identity:
 |---|---|
 | **Service** | **Text message**, **Email**, or **WhatsApp** |
 | **Identity** | The phone number or email address |
-| **First seen** | The date of the earliest message at this Identity |
-| **Last seen** | The date of the latest message at this Identity |
+| **First sent** | The date of the earliest message the account holder sent from this Identity |
+| **Last sent** | The date of the latest message the account holder sent from this Identity |
 | **Conversations** | How many conversations it takes part in |
 | **Direct messages** | Messages in one-to-one conversations |
 | **Group messages** | Messages in group conversations |

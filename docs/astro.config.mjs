@@ -5,16 +5,15 @@ import mermaid from 'astro-mermaid';
 import { satteri } from '@astrojs/markdown-satteri';
 import { wrapTables } from './src/lib/satteri-wrap-tables.mjs';
 
-// Guidebook type: a display face for headings, a text face for body copy,
-// and a mono face for every typed token. See src/styles/custom.css.
+// Documentation type, the landing page's (src/DESIGN.md): Cal Sans for
+// headings and Inter for body copy, plus a mono face for every typed token.
+// See src/styles/custom.css.
 const fontsHref =
   'https://fonts.googleapis.com/css2' +
-  '?family=Bricolage+Grotesque:opsz,wght@12..96,500..700' +
-  '&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400' +
+  '?family=Cal+Sans' +
+  '&family=Inter:ital,wght@0,400;0,500;0,600;1,400' +
   '&family=IBM+Plex+Mono:wght@400;500' +
   '&display=swap';
-
-const dark = (theme) => theme.type === 'dark';
 
 const limitedBadge = {
   text: 'Limited',
@@ -153,7 +152,9 @@ export default defineConfig({
   },
   integrations: [
     mermaid({
-      autoTheme: true,
+      // The documentation is light only, so there is no theme to follow.
+      theme: 'neutral',
+      autoTheme: false,
       enableLog: false,
     }),
     starlight({
@@ -187,30 +188,34 @@ export default defineConfig({
         { tag: 'link', attrs: { rel: 'stylesheet', href: fontsHref } },
       ],
       customCss: ['./src/styles/custom.css'],
+      // Light only, like the landing page: pin the theme and remove the
+      // theme switch from the header.
+      components: {
+        ThemeProvider: './src/components/LightTheme.astro',
+        ThemeSelect: './src/components/NoThemeSelect.astro',
+      },
       expressiveCode: {
-        // Code blocks: soft border, 6px radius, 13.5px mono, 1.55 line
-        // height, on the code-block ground from custom.css.
+        themes: ['starlight-light'],
+        // Code blocks: White with a Silver border, 8px radius, 13.5px mono,
+        // 1.55 line height. Colours are the DESIGN.md tokens.
         styleOverrides: {
-          borderRadius: '6px',
+          borderRadius: '8px',
           borderWidth: '1px',
-          borderColor: (ctx) => (dark(ctx.theme) ? '#232b2f' : '#e6eaec'),
-          codeBackground: (ctx) => (dark(ctx.theme) ? '#10161a' : '#eef1f0'),
+          borderColor: '#e5e7eb',
+          codeBackground: '#ffffff',
           codeFontFamily:
             '"IBM Plex Mono", SFMono-Regular, Menlo, Consolas, monospace',
           codeFontSize: '0.84375rem',
           codeLineHeight: '1.55',
           codePaddingBlock: '0.875rem',
           codePaddingInline: '1rem',
-          uiFontFamily: '"IBM Plex Sans", "Segoe UI", Roboto, sans-serif',
-          // The editor, terminal, and active-tab backgrounds are set in
-          // custom.css: Starlight's own theme pins them and wins here.
+          uiFontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+          // The editor, terminal, and active-tab backgrounds are also set
+          // in custom.css.
           frames: {
-            editorTabBarBackground: (ctx) =>
-              dark(ctx.theme) ? '#1b2124' : '#f6f7f5',
-            terminalTitlebarBackground: (ctx) =>
-              dark(ctx.theme) ? '#1b2124' : '#f6f7f5',
-            editorActiveTabIndicatorTopColor: (ctx) =>
-              dark(ctx.theme) ? '#63c7ce' : '#0e6b73',
+            editorTabBarBackground: '#f4f4f4',
+            terminalTitlebarBackground: '#f4f4f4',
+            editorActiveTabIndicatorTopColor: '#101010',
             editorActiveTabIndicatorBottomColor: 'transparent',
             frameBoxShadowCssValue: 'none',
           },

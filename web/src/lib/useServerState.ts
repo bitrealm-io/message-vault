@@ -23,6 +23,8 @@ export type ServerState = "unclaimed" | "closed" | "open";
  */
 export function useServerState(serverUrl: string | null): {
   state: ServerState | null;
+  /** Whether the Demo Account exists, so the screen can offer a way into it. */
+  demoAccount: boolean;
   loading: boolean;
   error: string;
 } {
@@ -32,7 +34,7 @@ export function useServerState(serverUrl: string | null): {
     queryFn: async ({ signal }) => {
       if (serverUrl) setBaseUrl(serverUrl);
       const res = await getServerState({ signal });
-      return res.state as ServerState;
+      return { state: res.state as ServerState, demoAccount: res.demo_account };
     },
     // A Message Crate does not change state under a logged-out visitor except by their
     // own act, and every act that changes it navigates away from this screen.
@@ -41,7 +43,8 @@ export function useServerState(serverUrl: string | null): {
   });
 
   return {
-    state: data ?? null,
+    state: data?.state ?? null,
+    demoAccount: data?.demoAccount ?? false,
     loading: serverUrl !== null && isPending,
     error: error ? error.message : "",
   };

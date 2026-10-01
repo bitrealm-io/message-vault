@@ -34,8 +34,8 @@ Usage: $(basename "$0") [--reset | --reset-demo] [--owner] [--release]
 
   --reset       Wipe the Postgres volume and data/, start empty
   --reset-demo  Wipe the Postgres volume and data/, seed the sample inbox
-  --owner       Claim the Message Crate as admin/admin (rejected with --reset-demo,
-                which claims the Message Crate itself)
+  --owner       Claim the Message Crate as admin/admin. Without it, --reset
+                or --reset-demo leaves it unclaimed.
   --release     Build and run the optimized binary (seed and serve)
   -h, --help
 
@@ -78,11 +78,6 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-
-if [[ "${OWNER}" -eq 1 && "${DEMO}" -eq 1 ]]; then
-  echo "error: --reset-demo claims the Message Crate itself; drop --owner" >&2
-  exit 1
-fi
 
 if [[ "${RESET}" -eq 1 && "${DEMO}" -eq 1 ]]; then
   echo "error: use either --reset or --reset-demo, not both" >&2

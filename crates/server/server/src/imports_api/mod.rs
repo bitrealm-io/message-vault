@@ -1196,14 +1196,30 @@ async fn create_import_contact_group(
             return;
         }
     };
-    let name = import_contact_group_name(row);
-    if let Err(e) = crate::db::named_membership::set_membership(
+    let group_id = match crate::db::contacts::create_import_group(
+        conn,
+        account_id,
+        &import_contact_group_name(row),
+    )
+    .await
+    {
+        Ok((id, _)) => id,
+        Err(e) => {
+            tracing::warn!(
+                import_id = row.id,
+                error = %crate::server::error_chain(&e),
+                "the import's Contact Group could not be created"
+            );
+            return;
+        }
+    };
+    if let Err(e) = crate::db::named_membership::patch_members(
         crate::db::named_membership::group_spec(),
         conn,
         account_id,
+        group_id,
         &touched,
-        &name,
-        true,
+        &[],
     )
     .await
     {
@@ -1211,21 +1227,15 @@ async fn create_import_contact_group(
             import_id = row.id,
             contacts = touched.len(),
             error = ?e,
-            "the import's Contact Group could not be created"
-        );
-        return;
-    }
-    if let Err(e) = crate::db::contacts::set_group_kind(conn, account_id, &name, "import").await {
-        tracing::warn!(
-            import_id = row.id,
-            error = %crate::server::error_chain(&e),
-            "the import's Contact Group was created but not marked as import-made"
+            "the import's Contact Group was created but its contacts could not be added"
         );
     }
 }
 
-/// Name for an import run's Contact Group. The run id keeps it unique per
-/// account, which `contact_groups.name` requires.
+/// Name an Import Run's Contact Group starts from: the source and the day
+/// the run finished. `contact_groups.name` is unique per account, and each
+/// run gets a group of its own, so `create_import_group` adds " 2", " 3", …
+/// when the name is taken.
 fn import_contact_group_name(row: &crate::db::imports::ImportRow) -> String {
     format!("{} import {}", row.source, import_date_ymd(row))
 }

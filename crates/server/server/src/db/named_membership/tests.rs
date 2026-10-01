@@ -476,7 +476,7 @@ async fn patch_members_an_id_in_both_add_and_remove_nets_to_removed() {
     );
 }
 
-/// The import path still fills groups by name through `set_membership`.
+/// Tests across the server fill groups by name through `set_membership`.
 #[tokio::test]
 async fn set_membership_by_name_still_creates_and_fills_a_group() {
     let fixture = crate::test_support::test_fixture().await;

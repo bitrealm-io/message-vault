@@ -288,24 +288,51 @@ pub async fn contact_id_by_preferred_name(
     }
 }
 
-/// Record how a Contact Group was born.
+/// Create an empty Contact Group for one Import Run and answer its id and
+/// name. The name is `base`, or `base` with " 2", " 3", … when the account
+/// already has a group under that name in any case, the same rule the run's
+/// Saved Search follows. The group is always a new row: an import never adds
+/// to, or re-marks, a group an earlier run or a person made.
+///
+/// Each candidate is claimed by the insert itself, not by a lookup before
+/// it. When two runs finish at the same moment, `UNIQUE(account_id, name)`
+/// lets one insert through, and the other inserts nothing and tries the
+/// next name.
 ///
 /// # Errors
 ///
-/// Returns an error when the update fails.
-pub async fn set_group_kind(
+/// Returns an error when an insert fails, or when 998 names are all taken.
+pub async fn create_import_group(
     conn: &mut AnyConnection,
     account_id: i64,
-    name: &str,
-    kind: &str,
-) -> Result<()> {
-    sqlx::query("UPDATE contact_groups SET kind = $1 WHERE account_id = $2 AND name = $3")
-        .bind(kind)
-        .bind(account_id)
-        .bind(name)
-        .execute(&mut *conn)
-        .await?;
-    Ok(())
+    base: &str,
+) -> Result<(i64, String)> {
+    let sql = format!(
+        "INSERT INTO contact_groups (account_id, name, kind)
+         SELECT $1, $2, 'import'
+         WHERE NOT EXISTS (
+             SELECT 1 FROM contact_groups WHERE account_id = $1 AND {name_taken}
+         )
+         ON CONFLICT DO NOTHING
+         RETURNING id",
+        name_taken = crate::db::dialect::name_eq_ci("name", "$2"),
+    );
+    for n in 1..1000 {
+        let name = if n == 1 {
+            base.to_string()
+        } else {
+            format!("{base} {n}")
+        };
+        let id: Option<i64> = sqlx::query_scalar(&sql)
+            .bind(account_id)
+            .bind(&name)
+            .fetch_optional(&mut *conn)
+            .await?;
+        if let Some(id) = id {
+            return Ok((id, name));
+        }
+    }
+    anyhow::bail!("too many Contact Groups named like {base:?}")
 }
 
 /// SQL predicate selecting the Unknown contacts of alias `ct`.

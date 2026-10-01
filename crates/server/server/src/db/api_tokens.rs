@@ -682,8 +682,8 @@ mod tests {
         );
         assert_eq!(
             api_token_expiry(None, created),
-            Some((1_000_000 + DEFAULT_API_TOKEN_TTL_SECS).to_string()),
-            "no answer means the default, which is a year"
+            api_token_expiry(Some(365), created),
+            "no answer means the default, which is 365 days"
         );
 
         // A number of days large enough to overflow saturates rather than

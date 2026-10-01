@@ -215,6 +215,41 @@ async fn a_refused_contact_edit_answers_422_with_the_persons_sentence() {
 }
 
 #[tokio::test]
+async fn replacing_an_identity_with_an_empty_address_is_refused_and_keeps_the_old_one() {
+    let (fixture, account) = contacts_fixture_with_handles(&[]).await;
+    let mut conn = fixture.state.db.acquire().await.unwrap();
+    let ada =
+        insert_contact_with_handle(&mut conn, account.account_id, "Ada", "+15555550100").await;
+    drop(conn);
+
+    let (status, sentence) = crate::test_support::patch_failure(
+        &fixture.state,
+        &format!("/v1/contacts/{ada}"),
+        &account.token,
+        serde_json::json!({
+            "update_identity": { "previous_address": "+15555550100", "address": "  " }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(sentence, "previous_address and address must not be empty");
+
+    let detail: serde_json::Value = crate::test_support::get_json(
+        &fixture.state,
+        &format!("/v1/contacts/{ada}"),
+        &account.token,
+    )
+    .await;
+    let addresses: Vec<&str> = detail["identities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|identity| identity["address"].as_str().unwrap())
+        .collect();
+    assert_eq!(addresses, ["+15555550100"]);
+}
+
+#[tokio::test]
 async fn contact_match_rejects_an_oversized_batch() {
     let (fixture, account) = contacts_fixture_with_handles(&[]).await;
     let identifiers: Vec<String> = (0..MAX_MATCH_IDENTIFIERS + 1)

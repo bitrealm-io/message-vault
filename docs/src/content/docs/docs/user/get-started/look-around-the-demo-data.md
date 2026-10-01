@@ -1,19 +1,18 @@
 ---
 title: Look around the demo data
-description: Log in as demo in a browser, try the conversation list, search, and contacts, then delete the demo Message Crate.
+description: Open the Demo Account in a browser, try the conversation list, search, and contacts, then delete the demo Message Crate.
 ---
 
 This step uses a browser only.
 The desktop app comes later, in [step 5](/docs/user/get-started/install-the-desktop-app/), because looking at messages doesn't need it.
 
-## Log in as demo
+## Open the Demo Account
 
 1. Open [http://localhost:8080](http://localhost:8080).
-2. Enter `demo` in **Username**.
-3. Leave **Password** empty.
-4. Select **Log in**.
+2. Select **Explore Demo Account**.
 
-The `demo` account is the only account that logs in with an empty password.
+The Demo Account has no password, so there is nothing to type.
+The card also shows **Create Owner**, which is for [step 4](/docs/user/get-started/start-your-own-message-crate/).
 
 ## Things to try
 
@@ -37,15 +36,12 @@ A contact gathers one person's phone numbers and email addresses, so their conve
 
 The demo text is sampled from *Pride and Prejudice*, which is why the conversations read oddly.
 
-## Two accounts, and why
+## What the Demo Account cannot do
 
-Demo data arrives with a second login: the Owner, with the username `admin` and the password `admin`.
-The Owner manages accounts and server settings and holds no messages.
-Logging in as `admin` shows **Owner Home** in place of the conversation list.
+The Demo Account may export, and move things to the Trash and restore them.
+It may not import or delete for good.
+Anyone who reaches this Message Crate can enter it, so those limits keep a person's own messages out of the demo data and keep one visitor from emptying it for the next.
 The round button at the top right opens the account menu, which holds **Log out**.
-
-A password of `admin` is acceptable only because this Message Crate holds nothing real.
-That is the reason real messages go on a separate Message Crate, where the Owner's password is chosen in [step 4](/docs/user/get-started/start-your-own-message-crate/).
 
 ## Delete the demo Message Crate
 

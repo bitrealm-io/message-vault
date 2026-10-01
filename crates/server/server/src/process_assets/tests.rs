@@ -414,6 +414,21 @@ fn an_upload_session_is_stale_after_a_day_by_its_manifest_or_its_folder() {
     assert!(!upload_session_is_stale(&with_manifest, now + limit / 2).unwrap());
 }
 
+/// The limit is a day on the clock: an upload left alone for 23 hours may
+/// still be resumed, and one left for 25 hours is abandoned.
+#[test]
+fn an_upload_session_idle_for_23_hours_is_kept_and_one_idle_for_25_is_stale() {
+    let dir = tempfile::tempdir().unwrap();
+    let session = dir.path().join("upload");
+    fs::create_dir_all(&session).unwrap();
+    fs::write(session.join("manifest.json"), b"{}").unwrap();
+    let now = SystemTime::now();
+    let hours = |n: u64| Duration::from_secs(n * 3600);
+
+    assert!(!upload_session_is_stale(&session, now + hours(23)).unwrap());
+    assert!(upload_session_is_stale(&session, now + hours(25)).unwrap());
+}
+
 /// An assets folder whose `.incoming/` holds one of each thing cleanup
 /// meets: a `.part` temp, a file that is not a `.part`, a multipart
 /// session two days old, and one still being uploaded.

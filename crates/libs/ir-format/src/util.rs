@@ -237,6 +237,11 @@ mod tests {
         assert_eq!(infer_handle_type("+15555550101"), HandleType::Phone);
         assert_eq!(infer_handle_type("1 (555) 555-0101"), HandleType::Phone);
         assert_eq!(infer_handle_type("alice"), HandleType::Other);
+        assert_eq!(
+            infer_handle_type("user123"),
+            HandleType::Other,
+            "a name with digits in it is not a phone number"
+        );
         assert_eq!(infer_handle_type(""), HandleType::Other);
     }
 }

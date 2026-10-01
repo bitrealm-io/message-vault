@@ -1109,6 +1109,43 @@ async fn every_operation_refuses_a_query_parameter_it_does_not_declare() {
     assert!(checked > 60, "walked only {checked} operations");
 }
 
+/// Two cases the walk above cannot reach. A path segment's name is not a
+/// query parameter the route takes, and a `HEAD` the `GET` handler answers is
+/// held to the `GET` operation's parameters.
+#[tokio::test]
+async fn a_path_parameters_name_and_a_head_request_are_held_to_the_declared_query() {
+    let fixture = crate::test_support::test_fixture().await;
+    let server = crate::test_support::serve(&fixture.state).await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get(format!("{}/v1/conversations/1?id=1", server.base()))
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let text = response.text().await.unwrap();
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::ValidationFailed,
+    );
+    assert_eq!(
+        problem.errors.unwrap(),
+        ["unknown query parameter 'id'; this route takes no query parameters"]
+    );
+
+    let response = client
+        .head(format!(
+            "{}/v1/conversations?no_such_parameter=1",
+            server.base()
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
 /// `Accept` is checked on the `/v1` routes that produce JSON and nowhere
 /// else: not on the static app, and not on the asset download.
 #[tokio::test]
@@ -1385,6 +1422,25 @@ async fn discard_body_reports_a_stream_that_fails_midway() {
 
     assert_eq!(error.status(), StatusCode::BAD_REQUEST);
     assert_eq!(error.to_string(), "failed to read body: connection reset");
+}
+
+/// A body sent in pieces passes the cap between two pieces without ever
+/// standing exactly on it, as an upload with no declared length does.
+#[tokio::test]
+async fn a_body_streamed_to_a_file_is_refused_once_its_chunks_pass_the_cap() {
+    let dir = TempDir::new().unwrap();
+    let chunks: Vec<Result<axum::body::Bytes, std::io::Error>> = vec![
+        Ok(axum::body::Bytes::from_static(b"four")),
+        Ok(axum::body::Bytes::from_static(b"more")),
+        Ok(axum::body::Bytes::from_static(b"last")),
+    ];
+    let body = axum::body::Body::from_stream(futures_util::stream::iter(chunks));
+
+    let error = stream_body_to_file(body, &dir.path().join("upload"), 5)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.status(), StatusCode::PAYLOAD_TOO_LARGE);
 }
 
 // ---------------------------------------------------------------------------

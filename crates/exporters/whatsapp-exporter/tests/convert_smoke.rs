@@ -1,6 +1,6 @@
 use crate::emit::{ConvertRequest, convert_json};
-use message_vault_io_core::testutil::assert_jsonl_resumes;
-use message_vault_io_core::{ExportTransforms, OutputFormat};
+use message_crate_core::testutil::assert_jsonl_resumes;
+use message_crate_core::{ExportTransforms, OutputFormat};
 use std::fs;
 use std::path::PathBuf;
 
@@ -141,7 +141,7 @@ fn jsonl_drains_the_write_queue_and_a_second_run_resumes_it() {
 fn convert_to_documents(
     json: &serde_json::Value,
 ) -> (
-    message_vault_io_core::ExportReport,
+    message_crate_core::ExportReport,
     std::collections::BTreeMap<String, message_ir::ConversationDocument>,
 ) {
     let dir = tempfile::tempdir().expect("tempdir");

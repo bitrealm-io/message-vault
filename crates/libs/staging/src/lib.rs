@@ -12,7 +12,7 @@
 //! staging folder back for the Staging Review.
 //!
 //! Formats live in `message-ir-format`; the run model in
-//! `message-vault-io-core`. Why this is its own crate:
+//! `message-crate-core`. Why this is its own crate:
 //! `docs/adr/0012-four-crates-in-the-export-pipeline.md`.
 
 mod export_writer;

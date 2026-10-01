@@ -1,6 +1,6 @@
 import type { ImportSummaryView } from "../../../components/import/ImportSummaryPanel";
 import { formatDateTime } from "../../../lib/formatDate";
-import type { components } from "../../../lib/vaultApi.types";
+import type { components } from "../../../lib/serverApi.types";
 
 export const ATTACHMENT_PAGE_SIZE = 20;
 
@@ -12,7 +12,7 @@ export const thStyle =
 export const tdStyle = "border-b border-border p-2 px-3 text-[0.813rem] text-text";
 
 /*
- * These three shapes come from the vault, so they are generated rather than
+ * These three shapes come from the server, so they are generated rather than
  * written here: a field renamed on the server is a build error instead of a
  * blank cell in the storage table.
  */

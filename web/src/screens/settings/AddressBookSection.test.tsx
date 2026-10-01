@@ -2,11 +2,11 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadAddressBook } from "../../lib/vaultApi";
+import { loadAddressBook } from "../../lib/serverApi";
 import { AddressBookSection } from "./AddressBookSection";
 
-vi.mock("../../lib/vaultApi", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../lib/vaultApi")>();
+vi.mock("../../lib/serverApi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/serverApi")>();
   return { addressBookContentType: actual.addressBookContentType, loadAddressBook: vi.fn() };
 });
 

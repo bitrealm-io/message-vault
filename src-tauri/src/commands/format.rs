@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use message_vault_io_core::{
+use message_crate_core::{
     ExporterConfig, FormatConfig, LogSink, MediaConfig, OutputFormat, SourceConfig,
 };
 

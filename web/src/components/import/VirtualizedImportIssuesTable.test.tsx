@@ -41,7 +41,7 @@ describe("VirtualizedImportIssuesTable", () => {
       <VirtualizedImportIssuesTable
         issues={[
           issue({ item: "a.jsonl", reason: "could not read", step: "parse" }),
-          issue({ item: "b.jsonl", reason: "HTTP 500 from vault", step: "upload" }),
+          issue({ item: "b.jsonl", reason: "HTTP 500 from server", step: "upload" }),
           issue({ item: "c.jsonl", reason: "new kind of step", step: "reindex" }),
         ]}
       />,
@@ -56,7 +56,7 @@ describe("VirtualizedImportIssuesTable", () => {
   it("shows the filename for a unique issue", () => {
     render(
       <VirtualizedImportIssuesTable
-        issues={[issue({ item: "chat.jsonl", reason: "HTTP 500 from vault" })]}
+        issues={[issue({ item: "chat.jsonl", reason: "HTTP 500 from server" })]}
       />,
     );
     expect(screen.getByRole("table", { name: "Import errors" })).toHaveAttribute(
@@ -98,13 +98,13 @@ describe("VirtualizedImportIssuesTable", () => {
     const user = userEvent.setup();
     render(
       <VirtualizedImportIssuesTable
-        issues={[issue({ item: "chat.jsonl", reason: "HTTP 500 from vault" })]}
+        issues={[issue({ item: "chat.jsonl", reason: "HTTP 500 from server" })]}
       />,
     );
 
     await user.click(screen.getByRole("row", { name: /Expand error for chat.jsonl/ }));
 
-    expect(screen.getByText("HTTP 500 from vault")).toBeInTheDocument();
+    expect(screen.getByText("HTTP 500 from server")).toBeInTheDocument();
     expect(screen.getAllByText("chat.jsonl")).toHaveLength(1);
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
   });

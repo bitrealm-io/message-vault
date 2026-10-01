@@ -13,8 +13,8 @@
 //! `GO_SMS_PRO_OUT` to keep the export in that folder for a closer look.
 
 use crate::emit::{ConvertExportArgs, convert_export};
-use message_vault_io_core::testutil::{csv_files, csv_rows};
-use message_vault_io_core::{ExportTransforms, OutputFormat};
+use message_crate_core::testutil::{csv_files, csv_rows};
+use message_crate_core::{ExportTransforms, OutputFormat};
 use std::path::PathBuf;
 
 #[test]

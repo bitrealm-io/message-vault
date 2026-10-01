@@ -1,5 +1,5 @@
 [
-  {"k": 1, "source": "sms", "guid": "p1", "body": "hello vault"},
+  {"k": 1, "source": "sms", "guid": "p1", "body": "hello archive"},
   {"k": 2, "source": "sms", "guid": "p2", "body": "HELLO again"},
   {"k": 3, "source": "imessage", "guid": "p3", "body": "quarterly reporting deadline"},
   {"k": 4, "source": "imessage", "guid": "p4", "body": "exactly two words"},

@@ -102,7 +102,7 @@ function historySteps(summary: ImportSummaryView): Step[] {
       durationMs: summary.prepareMs,
     },
     {
-      label: "Upload to vault",
+      label: "Upload to Message Crate",
       status: uploadStatus,
       durationMs: summary.uploadMs,
     },

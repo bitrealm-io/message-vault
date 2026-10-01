@@ -9,7 +9,7 @@
 //! that is what makes resuming at a gate work: reopening the session
 //! recomputes rather than restoring.
 //!
-//! Contact matching is not done here — the vault answers which identifiers
+//! Contact matching is not done here — the server answers which identifiers
 //! it already knows, and this returns the distinct identifiers found on
 //! disk for the caller to ask about.
 //!
@@ -111,7 +111,7 @@ pub struct StagingSummary {
     pub conversations: usize,
     /// Messages across every conversation.
     pub messages: u64,
-    /// Distinct participant identifiers, sorted. The vault decides which of
+    /// Distinct participant identifiers, sorted. The server decides which of
     /// these it already knows.
     pub contact_identifiers: Vec<String>,
     /// Messages counted under the owner handle each was sent from or

@@ -8,7 +8,7 @@ assignees: ""
 
 # Feature Request Template
 
-> If you need more information about how to fill in this template, read the [contributing guide](https://bitrealm.io/vault/developer/contributing/).
+> If you need more information about how to fill in this template, read the [contributing guide](https://messagecrate.app/docs/developer/contributing/).
 >
 > This template includes writing instructions and boilerplate text that you can customize, use as-is, or completely replace with your own text. This text is indicated in {curly brackets}. Make sure you replace the placeholders with your own text.
 
@@ -34,7 +34,7 @@ assignees: ""
 
 ## Who this helps
 
-{Identify who would use the change and in what situation. Examples: a person importing an iPhone backup, a person converting JSONL to MBOX, a person running the vault in Docker.}
+{Identify who would use the change and in what situation. Examples: a person importing an iPhone backup, a person converting JSONL to MBOX, a person running the server in Docker.}
 
 ## Additional context (optional)
 

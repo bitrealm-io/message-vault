@@ -107,7 +107,7 @@ export default function ServiceMultiSelect({
       </AriaButton>
       <Popover
         ref={popoverRef}
-        data-mv-overlay=""
+        data-mc-overlay=""
         isNonModal
         className={`box-border w-[var(--trigger-width)] max-w-[var(--trigger-width)] rounded-md border border-border bg-popover p-1 outline-none ${Z_POPOVER} ${popupShadow}`}
       >

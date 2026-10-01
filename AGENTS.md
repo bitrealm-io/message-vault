@@ -1,6 +1,6 @@
 # AGENTS.md
 
-The operations guide for any agent working in this repository: git and pull request workflow, first-time setup, running the vault, the checks, and the release process. Architecture and the rules that are easy to get wrong are in `CLAUDE.md`.
+The operations guide for any agent working in this repository: git and pull request workflow, first-time setup, running the server, the checks, and the release process. Architecture and the rules that are easy to get wrong are in `CLAUDE.md`.
 
 ## Writing
 
@@ -38,53 +38,53 @@ instead of dropping them.
 ## Tools
 
 - **GitHub MCP** (`plugin-github-github`) for issues, PR read/search, reviews, and GitHub code search when the server is authenticated; fall back to `gh` when it is not. See [`.cursor/rules/github-mcp.mdc`](.cursor/rules/github-mcp.mdc).
-- **Playwright MCP** (`plugin-playwright-playwright`) to verify browser UI after `web/` changes: navigate to the Vite app (`http://127.0.0.1:5173` with the vault on `:8080`), take a snapshot, then click/type as needed. See [`.cursor/rules/playwright-mcp.mdc`](.cursor/rules/playwright-mcp.mdc). Desktop-only screens gated by `isTauri()` still need the Tauri window or unit tests — Playwright against Vite alone cannot exercise them.
+- **Playwright MCP** (`plugin-playwright-playwright`) to verify browser UI after `web/` changes: navigate to the Vite app (`http://127.0.0.1:5173` with the server on `:8080`), take a snapshot, then click/type as needed. See [`.cursor/rules/playwright-mcp.mdc`](.cursor/rules/playwright-mcp.mdc). Desktop-only screens gated by `isTauri()` still need the Tauri window or unit tests — Playwright against Vite alone cannot exercise them.
 
-## Message Vault Repository
+## Message Crate Repository
 
-This repository is **message-vault**. Cargo package names may still say `message-vault-io`; that is a package namespace, not the repo name. Public docs and GitHub live under `bitrealm-io`.
+This repository is **messagecrate/message-crate**. The Cargo packages carry the same name (`message-crate-server`, `message-crate-core`). Public docs live at messagecrate.app.
 
 The product has two pieces:
 
-- **The vault** — `message-vault-server`. Stores messages in SQLite (`data/vault.db`), serves `/v1/*`, and can host the website from `static/`. Run it with `./scripts/run-vault-dev.sh` (http://127.0.0.1:8080) or Docker. Login is a local vault account, not a cloud account.
-- **The desktop app** — Tauri v2 around the Vite SPA in `web/`. Reads phone backups, writes JSONL, and imports into a running vault. Browse and search also work in the browser against the vault; importing a backup needs the desktop app.
+- **The server** — `message-crate-server`. Stores messages in SQLite (`data/messagecrate.db`), serves `/v1/*`, and can host the website from `static/`. Run it with `./scripts/run-dev.sh` (http://127.0.0.1:8080) or Docker. Login is a local account, not a cloud account.
+- **The desktop app** — Tauri v2 around the Vite SPA in `web/`. Reads phone backups, writes JSONL, and imports into a running server. Browse and search also work in the browser against the server; importing a backup needs the desktop app.
 
 ### Technology stack
 
 | Piece                  | Stack                                                                                                                             |
 |------------------------|-----------------------------------------------------------------------------------------------------------------------------------|
 | Language (Rust crates) | Rust, edition 2024. `rust-toolchain.toml` pins the version (`1.98.1`) for every checkout, CI, and the release image.              |
-| Vault server           | Tokio + Axum 0.8 HTTP API. sqlx Any: SQLite (bundled) by default, Postgres via `[database] url`. TOML config. Argon2 passwords, opaque hashed session tokens. |
-| Database               | SQLite file at `data/vault.db`. Table SQL lives in `schema/sql/`. The server fingerprints those files at compile time (`SCHEMA_FINGERPRINT` in `db/schema.rs`) and rebuilds a vault stamped with any other fingerprint empty, so a schema change is only a change to the SQL: nothing to bump. The rebuilt vault needs a fresh import. |
+| Server                 | Tokio + Axum 0.8 HTTP API. sqlx Any: SQLite (bundled) by default, Postgres via `[database] url`. TOML config. Argon2 passwords, opaque hashed session tokens. |
+| Database               | SQLite file at `data/messagecrate.db`. Table SQL lives in `schema/sql/`. The server fingerprints those files at compile time (`SCHEMA_FINGERPRINT` in `db/schema.rs`) and rebuilds a database stamped with any other fingerprint empty, so a schema change is only a change to the SQL: nothing to bump. The rebuilt database needs a fresh import. |
 | Desktop app            | Tauri 2 native window. Vite 8 + React 19 + TypeScript SPA in `web/`. React Router 7, React Aria, Tailwind CSS 4. Vitest + Biome.  |
-| Website                | Same `web/` SPA. Dev server on port 5173. Production copy in `static/`, served by the vault on port 8080.                         |
+| Website                | Same `web/` SPA. Dev server on port 5173. Production copy in `static/`, served by the server on port 8080.                        |
 | Node                   | Node.js 22+ for `web/`, `docs/`, and Docker frontend builds.                                                                      |
-| Docs site              | Astro 7 + Starlight, published to GitHub Pages at bitrealm.io on each `v*` release tag.                                            |
+| Docs site              | Astro 7 + Starlight, published to GitHub Pages at messagecrate.app on each `v*` release tag.                                            |
 | Packaging              | Docker (Node 22 + Rust image). GitHub Actions on `v*` tags builds the image and Tauri installers.                                 |
 | Helpers on PATH        | `ffmpeg` / `ffprobe` for media. `wtsexporter` (Python) for WhatsApp. `gh` for GitHub. `imessage-reader` is bundled beside the app, not on PATH (`src-tauri/build.rs` builds it). |
-| Not the product path   | Restored Next.js 16 browse app (`web-next/`), an HTTP client of the vault `/v1` API for evaluating its screens. Kept on purpose; see CLAUDE.md before proposing its removal. |
+| Not the product path   | Restored Next.js 16 browse app (`web-next/`), an HTTP client of the server's `/v1` API for evaluating its screens. Kept on purpose; see CLAUDE.md before proposing its removal. |
 
-### Directory map (`tree -L 2 message-vault`)
+### Directory map (`tree -L 2 message-crate`)
 
 ```text
-message-vault
-├── config/                 # vault server config templates (copy example → config.toml)
+message-crate
+├── config/                 # server config templates (copy example → config.toml)
 ├── crates/                 # Rust workspace (src-tauri is excluded)
 │   ├── core/               # shared form model, jobs, export.ini
 │   ├── exporters/          # backup parsers (iMessage, WhatsApp, SMS, experimental)
 │   ├── helpers/            # imessage-reader (GPL helper process the app spawns) and its protocol
 │   ├── libs/               # shared libraries (ir, ir-format, reexport, contacts, media,
-│   │                       #   vault-push, vault-pull, …)
-│   └── vault/              # message-vault-server (HTTP API + SQLite) and demo-seed
-├── docker/                 # Dockerfile and Compose for a release-shaped vault image
-├── docs/                   # Astro Starlight site (bitrealm.io)
+│   │                       #   message-crate-push, message-crate-pull, …)
+│   └── server/             # message-crate-server (HTTP API + SQLite) and demo-seed
+├── docker/                 # Dockerfile and Compose for a release-shaped server image
+├── docs/                   # Astro Starlight site (messagecrate.app)
 │   ├── img/                # images used in README / docs
 │   ├── public/             # CNAME and other files copied as-is
 │   └── src/                # landing page + User Guide + Developer guidebook
 │       └── assets/architecture/  # C4 PlantUML sources and exported SVGs
-├── schema/                 # SQLite schema for the vault
+├── schema/                 # SQLite schema for the database
 │   └── sql/                # CREATE TABLE sources embedded by the server
-├── scripts/                # host helpers (run-vault-dev, build-static, schema sync)
+├── scripts/                # host helpers (run-dev, build-static, schema sync)
 │   └── deprecated/         # retired helper scripts
 ├── src-tauri/              # Tauri v2 native shell (not a workspace member)
 │   ├── capabilities/       # Tauri permission manifests
@@ -95,19 +95,19 @@ message-vault
 │   └── fixtures/           # committed schema and search fixtures (no personal backups)
 ├── vendor/                 # sqlx-sqlite with libsqlite3-sys bumped (why: VENDORING.md)
 ├── web/                    # Vite + React SPA: website and desktop UI
-│   └── src/                # screens, components, vault API client, Tauri wrappers
+│   └── src/                # screens, components, API client, Tauri wrappers
 └── web-next/               # restored historical Next.js browse UI (not the product GUI)
     └── src/                # App Router pages; reads go through src/lib/vault/ to the /v1 API
 ```
 
 ```text
 # ❌ BAD — web-next IS NOT the product; it exists to evaluate what is worth porting into web/
-# ✅ GOOD — product UI is web/ + src-tauri/; vault API is crates/vault/server/
+# ✅ GOOD — product UI is web/ + src-tauri/; the server API is crates/server/server/
 ```
 
 ### First time setup
 
-Do this once on a new machine. Then follow **Run the vault (development)**.
+Do this once on a new machine. Then follow **Run the server (development)**.
 
 **1. OS toolchain**
 
@@ -160,42 +160,42 @@ cargo install cargo-mutants cargo-nextest --locked                # ./scripts/mu
 **5. Clone and install the frontend**
 
 ```bash
-git clone https://github.com/bitrealm-io/message-vault.git
-cd message-vault
+git clone https://github.com/messagecrate/message-crate.git
+cd message-crate
 cd web && npm ci && cd ..
 ```
 
-First `cargo build --workspace` and first `cargo tauri dev` each take several minutes. `config/config.toml` is created from `config/config.toml.example` on the first `./scripts/run-vault-dev.sh` if it is missing.
+First `cargo build --workspace` and first `cargo tauri dev` each take several minutes. `config/config.toml` is created from `config/config.toml.example` on the first `./scripts/run-dev.sh` if it is missing.
 
-### Run the vault (development)
+### Run the server (development)
 
-Work from the repository root. The vault process must be running before the website or desktop app can log in. First compile of the server and of Tauri each take several minutes.
+Work from the repository root. The server process must be running before the website or desktop app can log in. First compile of the server and of Tauri each take several minutes.
 
-**Terminal 1 — vault API** (leave this running)
+**Terminal 1 — server API** (leave this running)
 
 ```bash
-./scripts/run-vault-dev.sh                 # keep data/ if present; empty vault if none
-./scripts/run-vault-dev.sh --reset-demo    # wipe data/, seed the sample inbox (needs ffmpeg)
-./scripts/run-vault-dev.sh --reset         # wipe data/, start empty and unclaimed (UI opens on Create Vault Owner)
-./scripts/run-vault-dev.sh --reset --owner # wipe data/, claim the vault as admin / admin
-./scripts/run-vault-dev.sh --sqlweb        # also SQLite browser at http://127.0.0.1:8081
-./scripts/run-vault-dev.sh --release       # optimized build; combines with any flag above
+./scripts/run-dev.sh                 # keep data/ if present; empty database if none
+./scripts/run-dev.sh --reset-demo    # wipe data/, seed the sample inbox (needs ffmpeg)
+./scripts/run-dev.sh --reset         # wipe data/, start empty and unclaimed (UI opens on Create Owner)
+./scripts/run-dev.sh --reset --owner # wipe data/, claim it as admin / admin
+./scripts/run-dev.sh --sqlweb        # also SQLite browser at http://127.0.0.1:8081
+./scripts/run-dev.sh --release       # optimized build; combines with any flag above
 ```
 
-`--reset` and `--reset-demo` cannot be combined, and `--owner` is rejected with `--reset-demo`, which claims the vault itself. `--help` on either dev script lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
+`--reset` and `--reset-demo` cannot be combined, and `--owner` is rejected with `--reset-demo`, which claims it itself. `--help` on either dev script lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
 
-API: **http://127.0.0.1:8080**. After `--reset-demo`, log in as username `demo` with an empty password. After `--owner`, log in as `admin` / `admin`. Otherwise create the vault owner in the UI.
+API: **http://127.0.0.1:8080**. After `--reset-demo`, log in as username `demo` with an empty password. After `--owner`, log in as `admin` / `admin`. Otherwise create the owner in the UI.
 
-Restart terminal 1 after edits under `crates/vault/server/` (debug `cargo run`; no hot reload).
+Restart terminal 1 after edits under `crates/server/server/` (debug `cargo run`; no hot reload).
 
-**Run on Postgres (optional)** — `./scripts/run-vault-pg-dev.sh` starts
-compose Postgres, runs this checkout's vault with `--db-url
-postgres://vault:vault@127.0.0.1:5432/vault`, and stops the container
-on exit. `--reset` / `--reset-demo` wipe the `vault_pg_data` volume and
+**Run on Postgres (optional)** — `./scripts/run-pg-dev.sh` starts
+compose Postgres, runs this checkout's server with `--db-url
+postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate`, and stops the container
+on exit. `--reset` / `--reset-demo` wipe the `messagecrate_pg_data` volume and
 host `data/`. After `--reset-demo`, log in as `demo` with an empty
 password. Pass `--release` to seed and serve with the optimized binary
 (first compile can take several minutes). Do not run this and
-`./scripts/run-vault-dev.sh` at once (both serve on 127.0.0.1:8080).
+`./scripts/run-dev.sh` at once (both serve on 127.0.0.1:8080).
 
 **Terminal 2 — UI** (pick one)
 
@@ -210,9 +210,9 @@ Or, browser only (no Tauri):
 cd web && npm run dev        # http://localhost:5173, proxies /v1 to :8080
 ```
 
-Do not run `npm run dev` and `cargo tauri dev` at the same time. Point the app at **http://127.0.0.1:8080** (not `localhost` — that can resolve to IPv6, which the vault does not listen on). `web/` and `src-tauri/` usually reload; restart `cargo tauri dev` if they do not.
+Do not run `npm run dev` and `cargo tauri dev` at the same time. Point the app at **http://127.0.0.1:8080** (not `localhost` — that can resolve to IPv6, which the server does not listen on). `web/` and `src-tauri/` usually reload; restart `cargo tauri dev` if they do not.
 
-Optional: `./scripts/build-static.sh` copies `web/dist` to `static/` so the vault serves the UI at http://127.0.0.1:8080 without Vite. Do not run `docker compose -f docker/compose.release.yml` and the host script at once; they both use port 8080.
+Optional: `./scripts/build-static.sh` copies `web/dist` to `static/` so the server serves the UI at http://127.0.0.1:8080 without Vite. Do not run `docker compose -f docker/compose.release.yml` and the host script at once; they both use port 8080.
 
 ### Build, format, and test
 
@@ -246,7 +246,7 @@ cargo build --manifest-path src-tauri/Cargo.toml
 # this is the run that proves new SQL works on both engines. About 3.5
 # minutes against the compose service; without the variable it is SQLite.
 docker compose -f docker-compose.pg.yml up -d
-MV_TEST_POSTGRES_URL=postgres://vault:vault@127.0.0.1:5432/vault cargo test -p message-vault-server
+MC_TEST_POSTGRES_URL=postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate cargo test -p message-crate-server
 
 # Test coverage for the workspace (cargo-llvm-cov). Ends with the count of
 # functions no test calls and the files with the most; every one is named
@@ -304,7 +304,7 @@ Clippy is a CI job (`-D warnings`, workspace and `src-tauri`). `./scripts/check-
 
 The product follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (`MAJOR.MINOR.PATCH`). Record user-visible changes in `CHANGELOG.md` under the heading for the version in development (`## [0.9.0] — in development`), which becomes `## [0.9.0] - 2026-09-08` when the tag ships.
 
-**`CHANGELOG.md` is written for the people who use Message Vault, not for developers.** Group every entry as **Features** (something a person can now do), **Fixes** (something that was wrong and now behaves correctly), or **Design** (a change in how the product works that is worth knowing about). Say what changed for the reader in plain language: no route paths, status codes, schema versions, type or crate names, or file paths. Internal rework earns a sentence about what it changes for the reader, or one line saying the internals were reworked with nothing visible — never a list of what was moved where. The developer-facing detail already lives in the pull request, the ADRs under `docs/adr/`, and the commit message.
+**`CHANGELOG.md` is written for the people who use Message Crate, not for developers.** Group every entry as **Features** (something a person can now do), **Fixes** (something that was wrong and now behaves correctly), or **Design** (a change in how the product works that is worth knowing about). Say what changed for the reader in plain language: no route paths, status codes, schema versions, type or crate names, or file paths. Internal rework earns a sentence about what it changes for the reader, or one line saying the internals were reworked with nothing visible — never a list of what was moved where. The developer-facing detail already lives in the pull request, the ADRs under `docs/adr/`, and the commit message.
 
 Bullets under the in-development heading start with an ISO date (`YYYY-MM-DD`), the day the change landed. Released sections carry their date on the heading alone. Where a change forces someone to do something — a config key that must be deleted, a database that is rebuilt empty — put it under an **Upgrading** heading in that release, in a sentence they can act on.
 
@@ -312,20 +312,20 @@ Three version numbers are easy to mix up:
 
 | What            | Example             | Meaning                                                                                |
 |-----------------|---------------------|----------------------------------------------------------------------------------------|
-| Product version | `0.9.0`             | Desktop app + vault image. Git tag is `v0.9.0`.                                        |
-| Docker Hub tag  | `0.9.0` (no `v`)    | `bitrealm/message-vault:0.9.0`. Also `0.9`, `latest`, and `sha-…`.                     |
+| Product version | `0.9.0`             | Desktop app + server image. Git tag is `v0.9.0`.                                       |
+| Docker Hub tag  | `0.9.0` (no `v`)    | `bitrealm/message-crate:0.9.0`. Also `0.9`, `latest`, and `sha-…`.                     |
 | JSONL schema    | `schema_version: 4` | Shared chat file format. Independent of the product version. Version 3 is refused, never upgraded. |
-| Build           | `0.9.0+343fe0d8`    | The product version plus the commit, which is what a screen shows as "Version". `.dirty` follows the commit when tracked files held uncommitted changes; a build from a `v*` tag is `0.9.0` alone; `0.9.0+unknown` when nothing is known. Nobody writes it: `crates/libs/build-version` works it out for the vault and the desktop app, and `web/vite.config.ts` for the SPA, under the same rules. |
-| Schema fingerprint | `345080516`      | Derived from `schema/sql/*.sql` and stamped into the vault database. Shown in Owner Home → Vault Settings. Never bumped by hand. |
+| Build           | `0.9.0+343fe0d8`    | The product version plus the commit, which is what a screen shows as "Version". `.dirty` follows the commit when tracked files held uncommitted changes; a build from a `v*` tag is `0.9.0` alone; `0.9.0+unknown` when nothing is known. Nobody writes it: `crates/libs/build-version` works it out for the server and the desktop app, and `web/vite.config.ts` for the SPA, under the same rules. |
+| Schema fingerprint | `345080516`      | Derived from `schema/sql/*.sql` and stamped into the database. Shown in Owner Home → Server Settings. Never bumped by hand. |
 
-The Build asks git for the commit. Where there is no `.git`, which is the case inside `docker/Dockerfile`, set `MESSAGE_VAULT_BUILD_METADATA` to the part after the `+` (the Dockerfile takes it as the `BUILD_METADATA` build argument). Set and empty means a release, and is what the tag job passes.
+The Build asks git for the commit. Where there is no `.git`, which is the case inside `docker/Dockerfile`, set `MESSAGE_CRATE_BUILD_METADATA` to the part after the `+` (the Dockerfile takes it as the `BUILD_METADATA` build argument). Set and empty means a release, and is what the tag job passes.
 
 **Product version files** (keep these in lockstep; current value is `0.9.0`; CI's `version` job fails when they disagree, and on a `v*` tag when the tag disagrees with them):
 
 - `src-tauri/Cargo.toml` — the value the other three are compared against
 - `src-tauri/tauri.conf.json` — installer version
 - `web/package.json` — Vite SPA
-- `crates/vault/server/Cargo.toml` — vault server crate
+- `crates/server/server/Cargo.toml` — server crate
 
 Leave most other `Cargo.toml` files at `0.1.0`. Do not bump `web-next/` (`0.3.0`) for a product release.
 
@@ -336,20 +336,20 @@ Leave most other `Cargo.toml` files at `0.1.0`. Do not bump `web-next/` (`0.3.0`
 3. Set the four product version files to the new number (for example `0.8.0`).
 4. Push a git tag `v0.8.0` on that commit. Pushing the tag is what ships. Push/PR to `main` does not. The `version` job fails the tag run if the four files, their lockfiles, or the changelog heading disagree with the tag, and nothing is built or published.
 
-`.github/workflows/ci.yml` then: runs fmt/test, pushes `bitrealm/message-vault`, builds Tauri installers (Linux `.deb` + AppImage, Windows `.msi`, macOS `.dmg`), and creates a GitHub Release named `Message Vault v0.8.0`. `.github/workflows/docs.yml` publishes the documentation site to bitrealm.io on the same tag; a merge to `main` does not publish it.
+`.github/workflows/ci.yml` then: runs fmt/test, pushes `bitrealm/message-crate`, builds Tauri installers (Linux `.deb` + AppImage, Windows `.msi`, macOS `.dmg`), and creates a GitHub Release named `Message Crate v0.8.0`. `.github/workflows/docs.yml` publishes the documentation site to messagecrate.app on the same tag; a merge to `main` does not publish it.
 
 The docs deploy runs in the `github-pages` environment, whose deployment branch policy in the repository settings must allow the `v*` tag rule as well as `main` (for `workflow_dispatch`). The workflow trigger and that policy have to agree: a tag push against an environment that only allows `main` builds the site and then refuses the deploy, which is what happened to `v0.9.0` (#654). Check and set it with:
 
 ```bash
-gh api repos/bitrealm-io/message-vault/environments/github-pages/deployment-branch-policies -q '.branch_policies[] | "\(.type) \(.name)"'
-gh api --method POST repos/bitrealm-io/message-vault/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag
+gh api repos/messagecrate/message-crate/environments/github-pages/deployment-branch-policies -q '.branch_policies[] | "\(.type) \(.name)"'
+gh api --method POST repos/messagecrate/message-crate/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag
 ```
 
 **Build a release-shaped binary locally (does not publish)**
 
 ```bash
-./scripts/build-app.sh                 # desktop installers, renamed to message_vault_<version>_<arch>, under src-tauri/target/release/bundle/
-docker compose -f docker/compose.release.yml up --build   # vault image from this checkout
+./scripts/build-app.sh                 # desktop installers, renamed to message_crate_<version>_<arch>, under src-tauri/target/release/bundle/
+docker compose -f docker/compose.release.yml up --build   # server image from this checkout
 cargo build --workspace --release          # workspace crates only; not the Tauri installer
 ```
 

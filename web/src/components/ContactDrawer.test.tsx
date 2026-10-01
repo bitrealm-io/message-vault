@@ -6,8 +6,8 @@ import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContactDetail } from "../lib/contactDetail";
-import { keys } from "../lib/vaultKeys";
-import { vaultQueryKey } from "../lib/vaultQueryKey";
+import { keys } from "../lib/queryKeys";
+import { routeQueryKey } from "../lib/routeQueryKey";
 import ContactDrawer from "./ContactDrawer";
 
 vi.mock("../lib/auth", () => ({ useAuth: () => ({ accountId: 7 }) }));
@@ -25,7 +25,7 @@ function render(ui: ReactElement) {
 
 /** Put a contact in the cache, as an earlier open of the drawer would have. */
 function seed(detail: ContactDetail): void {
-  client.setQueryData(vaultQueryKey(7, keys.contacts.detail(detail.id)), detail);
+  client.setQueryData(routeQueryKey(7, keys.contacts.detail(detail.id)), detail);
 }
 
 const get = vi.fn();
@@ -33,7 +33,7 @@ const post = vi.fn();
 
 const trash = vi.fn();
 
-vi.mock("../lib/vaultApi", () => ({
+vi.mock("../lib/serverApi", () => ({
   getContact: (...args: unknown[]) => get(...args),
   updateContact: (...args: unknown[]) => post(...args),
   trashContact: (...args: unknown[]) => trash(...args),

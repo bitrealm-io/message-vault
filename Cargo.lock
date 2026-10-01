@@ -520,7 +520,7 @@ dependencies = [
  "message-ir",
  "phone",
  "tempfile",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -809,7 +809,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1081,10 +1081,10 @@ dependencies = [
  "go-sms-mms",
  "hex",
  "media",
+ "message-crate-core",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "phone",
  "quick-xml 0.42.0",
  "serde",
@@ -1313,7 +1313,7 @@ dependencies = [
  "similar",
  "stringmetrics",
  "tabwriter",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
  "url",
@@ -1539,11 +1539,11 @@ dependencies = [
  "contacts",
  "csv",
  "media",
+ "message-crate-core",
  "message-csv",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "phone",
  "serde_json",
  "tempfile",
@@ -1573,10 +1573,10 @@ dependencies = [
  "anyhow",
  "chat-db-fixture",
  "imessage-reader-protocol",
+ "message-crate-core",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "plist",
  "serde_json",
  "tempfile",
@@ -1708,9 +1708,9 @@ dependencies = [
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.38.1"
+version = "0.38.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6c19a05435c21ac299d71b6a9c13db3e3f47c520517d58990a462a1397a61db"
+checksum = "f1d20bef17f513b9b3004532233187769cd072d790971f4e4da0e346eb6401e8"
 dependencies = [
  "cc",
  "pkg-config",
@@ -1837,6 +1837,128 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "message-crate-api-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "utoipa",
+]
+
+[[package]]
+name = "message-crate-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "media",
+ "message-csv",
+ "message-ir",
+ "obfuscate",
+ "sha2 0.11.0",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "message-crate-http"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "httpmock",
+ "message-crate-api-types",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "message-crate-pull"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hex",
+ "httpmock",
+ "journal",
+ "media",
+ "message-crate-api-types",
+ "message-crate-core",
+ "message-crate-http",
+ "message-ir",
+ "message-ir-format",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "message-crate-push"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "httpmock",
+ "journal",
+ "media",
+ "message-crate-api-types",
+ "message-crate-core",
+ "message-crate-http",
+ "message-ir",
+ "message-ir-format",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+]
+
+[[package]]
+name = "message-crate-server"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "argon2",
+ "axum",
+ "build-version",
+ "chrono",
+ "chrono-tz",
+ "clap",
+ "clap-markdown",
+ "contacts",
+ "demo-seed",
+ "fs2",
+ "futures-util",
+ "libc",
+ "libsqlite3-sys",
+ "media",
+ "message-crate-api-types",
+ "message-ir",
+ "phone",
+ "rand 0.10.2",
+ "rayon",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "toml",
+ "tower-http 0.7.1",
+ "tracing",
+ "tracing-subscriber",
+ "utoipa",
+ "utoipa-axum",
+ "utoipa-swagger-ui",
+ "uuid",
+]
+
+[[package]]
 name = "message-csv"
 version = "0.1.0"
 dependencies = [
@@ -1868,9 +1990,9 @@ dependencies = [
  "csv",
  "mail",
  "media",
+ "message-crate-core",
  "message-csv",
  "message-ir",
- "message-vault-io-core",
  "obfuscate",
  "serde_json",
  "tempfile",
@@ -1883,9 +2005,9 @@ dependencies = [
  "anyhow",
  "csv",
  "media",
+ "message-crate-core",
  "message-ir",
  "message-ir-format",
- "message-vault-io-core",
  "serde_json",
  "sms-backup-restore-exporter",
  "tempfile",
@@ -1898,70 +2020,12 @@ dependencies = [
  "anyhow",
  "fs2",
  "media",
+ "message-crate-core",
  "message-ir",
  "message-ir-format",
- "message-vault-io-core",
  "serde",
  "sha2 0.11.0",
  "tempfile",
-]
-
-[[package]]
-name = "message-vault-io-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "media",
- "message-csv",
- "message-ir",
- "obfuscate",
- "sha2 0.11.0",
- "tempfile",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "message-vault-server"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "argon2",
- "axum",
- "build-version",
- "chrono",
- "chrono-tz",
- "clap",
- "clap-markdown",
- "contacts",
- "demo-seed",
- "fs2",
- "futures-util",
- "libc",
- "libsqlite3-sys",
- "media",
- "message-ir",
- "phone",
- "rand 0.10.2",
- "rayon",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "sqlx",
- "tempfile",
- "thiserror 2.0.20",
- "tokio",
- "tokio-util",
- "toml",
- "tower-http 0.7.1",
- "tracing",
- "tracing-subscriber",
- "utoipa",
- "utoipa-axum",
- "utoipa-swagger-ui",
- "uuid",
- "vault-api-types",
 ]
 
 [[package]]
@@ -2106,11 +2170,11 @@ dependencies = [
  "contacts",
  "csv",
  "media",
+ "message-crate-core",
  "message-csv",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "phone",
  "serde_json",
  "tempfile",
@@ -2378,7 +2442,7 @@ dependencies = [
  "rustc-hash",
  "rustls",
  "socket2",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
  "web-time",
@@ -2400,7 +2464,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tinyvec",
  "tracing",
  "web-time",
@@ -2417,7 +2481,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2665,7 +2729,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c51c9ae4df8a7fba42103df5c621fa3c37eccf3a3c650879e90fc48b11cc192c"
 dependencies = [
  "hashbrown 0.16.1",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -2734,7 +2798,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3024,10 +3088,10 @@ dependencies = [
  "hex",
  "mailparse",
  "media",
+ "message-crate-core",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "phone",
  "rayon",
  "regex",
@@ -3042,11 +3106,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "media",
+ "message-crate-core",
  "message-csv",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "phone",
  "sbr",
  "serde_json",
@@ -3135,7 +3199,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "smallvec",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -3218,7 +3282,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tracing",
  "whoami",
 ]
@@ -3255,7 +3319,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tracing",
  "whoami",
 ]
@@ -3277,7 +3341,7 @@ dependencies = [
  "serde",
  "serde_urlencoded",
  "sqlx-core",
- "thiserror 2.0.20",
+ "thiserror 2.0.21",
  "tracing",
  "url",
 ]
@@ -3378,7 +3442,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3392,11 +3456,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.20"
+version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f"
+checksum = "09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e"
 dependencies = [
- "thiserror-impl 2.0.20",
+ "thiserror-impl 2.0.21",
 ]
 
 [[package]]
@@ -3412,9 +3476,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.20"
+version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af"
+checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3874,70 +3938,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
-name = "vault-api-types"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "utoipa",
-]
-
-[[package]]
-name = "vault-http"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "httpmock",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "vault-api-types",
-]
-
-[[package]]
-name = "vault-pull"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "hex",
- "httpmock",
- "journal",
- "media",
- "message-ir",
- "message-ir-format",
- "message-vault-io-core",
- "reqwest",
- "serde",
- "serde_json",
- "tempfile",
- "vault-api-types",
- "vault-http",
-]
-
-[[package]]
-name = "vault-push"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "hex",
- "httpmock",
- "journal",
- "media",
- "message-ir",
- "message-ir-format",
- "message-vault-io-core",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tempfile",
- "vault-api-types",
- "vault-http",
-]
-
-[[package]]
 name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4080,11 +4080,11 @@ dependencies = [
  "anyhow",
  "hex",
  "media",
+ "message-crate-core",
  "message-csv",
  "message-ir",
  "message-ir-format",
  "message-staging",
- "message-vault-io-core",
  "phone",
  "plist",
  "serde",
@@ -4124,7 +4124,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

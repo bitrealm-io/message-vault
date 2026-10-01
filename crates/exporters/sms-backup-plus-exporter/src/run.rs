@@ -2,7 +2,7 @@
 
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::{Result, bail};
-use message_vault_io_core::{ExportTransforms, ExporterConfig, RunResult, SourceConfig};
+use message_crate_core::{ExportTransforms, ExporterConfig, RunResult, SourceConfig};
 
 /// Check the required inputs, then convert.
 ///
@@ -19,7 +19,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     let SourceConfig::SmsBackupPlus(source) = &config.source else {
         bail!("sms-backup-plus-exporter requires SourceConfig::SmsBackupPlus");
     };
-    message_vault_io_core::check_cancel(config.cancel.as_ref())?;
+    message_crate_core::check_cancel(config.cancel.as_ref())?;
 
     if source.owner_phones.is_empty() {
         bail!("owner phone required: pass --owner-phone");
@@ -45,7 +45,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
         resume: config.resume,
     })?;
     if source.include_summary {
-        return message_vault_io_core::finish_run(config, &report, config.media.mode.needs_tools());
+        return message_crate_core::finish_run(config, &report, config.media.mode.needs_tools());
     }
     // --no-summary: the shared tail appends the summary unconditionally, so
     // keep only the media lines.

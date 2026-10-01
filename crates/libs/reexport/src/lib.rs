@@ -1,17 +1,17 @@
-//! Convert an existing Message Vault output directory to another format.
+//! Convert an existing Message Crate output directory to another format.
 
 use anyhow::{Context, Result, bail};
 use media::{CompressOptions, MediaMode};
+pub use message_crate_core::RunResult;
+use message_crate_core::{
+    ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat, document_messages,
+    stage_conversation_attachments,
+};
 use message_ir::ConversationDocument;
 use message_ir_format::{
     CSV_HEADERS, FormatSink, clean_previous_ir_output, read_conversation_csv,
     read_conversation_eml_dir, read_conversation_json, read_conversation_jsonl,
     read_conversation_mbox,
-};
-pub use message_vault_io_core::RunResult;
-use message_vault_io_core::{
-    ExportReport, ExportTransforms, ExporterConfig, MediaConfig, OutputFormat, document_messages,
-    stage_conversation_attachments,
 };
 use sms_backup_restore_exporter::{ReadOptions, SbrArchive, read_backup};
 use std::collections::HashSet;
@@ -206,7 +206,7 @@ fn read_artifact(path: &Path, format: OutputFormat) -> Result<ConversationDocume
     }
 }
 
-/// Detect a single Message Vault export format in `input_dir`.
+/// Detect a single Message Crate export format in `input_dir`.
 fn detect_ir_export(input_dir: &Path) -> Result<DetectedExport> {
     if !input_dir.is_dir() {
         bail!("input is not a directory: {}", input_dir.display());
@@ -265,7 +265,7 @@ fn detect_ir_export(input_dir: &Path) -> Result<DetectedExport> {
     match present.as_slice() {
         [format] => Ok(DetectedExport { format: *format }),
         [] => bail!(
-            "unsupported input: no Message Vault IR export found in {} \
+            "unsupported input: no Message Crate IR export found in {} \
              (expected smses.xml, *.json, *.jsonl, *.csv, *.mbox, or EML folders)",
             input_dir.display()
         ),

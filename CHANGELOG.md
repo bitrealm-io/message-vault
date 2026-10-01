@@ -1,6 +1,6 @@
 # Changelog
 
-What changed in Message Vault, written for the people who use it.
+What changed in Message Crate, written for the people who use it.
 
 Each release is grouped three ways:
 
@@ -63,6 +63,28 @@ released versions carry their date on the heading.
   the database size.
 
 ### Design
+
+- 2026-09-30 **The project moved.** The repository is now
+  `messagecrate/message-crate`, the documentation is at
+  <https://messagecrate.app/docs/>, the hosted product answers at
+  <https://my.messagecrate.app>, and the Docker image is
+  `bitrealm/message-crate`. Every error response's `type` URL now points at
+  the new documentation host.
+- 2026-09-30 **Message Vault is now Message Crate.** Every screen, every page
+  of the documentation, every error message and the HTTP API reference use
+  the new name, and the word "vault" is gone from all of them. One
+  installation is "a Message Crate", the account that runs it is the
+  "Owner", and the owner's installation-wide settings are "Server Settings".
+  The desktop app's window and installers carry the new name.
+- 2026-09-30 **Everything that was named after the old product has a new
+  name, and nothing old still works.** The owner's routes are under
+  `/v1/server`. Session and API tokens start `mc-user-` and `mc-api-`, so
+  every existing token stops working and everyone logs in again. The
+  database file is `data/messagecrate.db` and several tables are renamed, so
+  an existing database is rebuilt empty and needs a fresh import. The
+  staging folder defaults to `~/message-crate`. The Docker environment
+  variables are `MC_DB` and `MC_DATA_DIR`, the compose service is `server`,
+  and the desktop app installs as a new application beside any older copy.
 
 - 2026-09-22 **An account identity means ownership.** The Profile tab now
   says what the identities are for: your phone numbers and emails, which
@@ -711,5 +733,5 @@ The first release: command-line tools that read a phone backup and write CSV.
 ---
 
 Installable builds also appear on
-[GitHub Releases](https://github.com/bitrealm-io/message-vault/releases), and a
-summary is published at <https://bitrealm.io/changelog/>.
+[GitHub Releases](https://github.com/messagecrate/message-crate/releases), and a
+summary is published at <https://messagecrate.app/changelog/>.

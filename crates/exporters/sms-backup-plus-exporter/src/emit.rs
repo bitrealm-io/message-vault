@@ -6,15 +6,15 @@ use crate::identity::{chat_id_for, cover_identity, name_only_key, timestamp_ms};
 use crate::parse_emit::{ParsedEmlKind, collect_eml_paths, parse_one_eml};
 use crate::types::ParsedMessage;
 use anyhow::{Result, bail};
+use message_crate_core::{
+    CancelFlag, ExportReport, ExportTransforms, LogSink, OutputFormat, emit_log, prepare_outputs,
+    project_conversation,
+};
 use message_ir::{
     ExportMeta, IrAttachment, IrService, IrSource, PendingAttachment, PendingConversation,
     PendingMessage, ProjectionHooks, parse_android_type,
 };
 use message_staging::{AttachmentSource, ExportWriter};
-use message_vault_io_core::{
-    CancelFlag, ExportReport, ExportTransforms, LogSink, OutputFormat, emit_log, prepare_outputs,
-    project_conversation,
-};
 use phone::OwnerHandleSet;
 use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -345,7 +345,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
         "scanning {} .eml files (parallel parse)",
         eml_paths.len()
     ));
-    message_vault_io_core::check_cancel(cancel)?;
+    message_crate_core::check_cancel(cancel)?;
 
     let parse = ParseInputs {
         file_inputs: inputs.iter().filter(|p| p.is_file()).cloned().collect(),
@@ -364,7 +364,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     } = ingest;
 
     let hooks = SbpProjection {
-        export: message_vault_io_core::export_meta(
+        export: message_crate_core::export_meta(
             EXPORT_SOURCE,
             EXPORT_TOOL,
             EXPORT_TOOL_VERSION,
@@ -375,7 +375,7 @@ pub(crate) fn convert_export<P: AsRef<Path>>(
     };
     let mut documents = Vec::new();
     for (chat_id, mut convo) in conversations {
-        message_vault_io_core::check_cancel(cancel)?;
+        message_crate_core::check_cancel(cancel)?;
         if let Some(doc) = project_conversation(&chat_id, &mut convo, &hooks, &mut report) {
             documents.push(doc);
         }
@@ -434,13 +434,13 @@ fn parse_all_emls(
     let total = eml_paths.len() as u64;
     let mut scanned = 0u64;
     for chunk in eml_paths.chunks(EML_PARSE_CHUNK) {
-        message_vault_io_core::check_cancel(cancel)?;
+        message_crate_core::check_cancel(cancel)?;
         let outcomes: Vec<ParsedEmlKind> = chunk
             .par_iter()
             .map(|eml_path| parse_eml_path(eml_path, inputs, cancel))
             .collect();
         for outcome in outcomes {
-            message_vault_io_core::check_cancel(cancel)?;
+            message_crate_core::check_cancel(cancel)?;
             scanned += 1;
             verbose.progress("scanned", scanned, total);
             ingest.absorb(outcome)?;
@@ -456,7 +456,7 @@ fn parse_eml_path(
     inputs: &ParseInputs,
     cancel: Option<&CancelFlag>,
 ) -> ParsedEmlKind {
-    if message_vault_io_core::is_cancelled(cancel) {
+    if message_crate_core::is_cancelled(cancel) {
         return ParsedEmlKind::Cancelled;
     }
     let rel_path = relative_eml_path(eml_path, &inputs.input_roots, &inputs.file_inputs);
@@ -653,10 +653,10 @@ mod tests {
             .iter()
             .flat_map(|msg| msg.attachments.iter().map(|att| att.bytes.clone()))
             .collect();
-        report.attachments_saved += message_vault_io_core::stage_conversation_attachments(
+        report.attachments_saved += message_crate_core::stage_conversation_attachments(
             doc.messages.iter_mut(),
             &att_dir,
-            &message_vault_io_core::MediaConfig::default(),
+            &message_crate_core::MediaConfig::default(),
             |i| Ok(payloads.get(i).cloned().flatten()),
             None,
             None,

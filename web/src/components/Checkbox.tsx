@@ -54,7 +54,7 @@ export default function Checkbox({
           if (el) el.indeterminate = indeterminate && !checked;
         }}
         onChange={(e) => onChange(e.target.checked, e)}
-        className={`mv-list-check disabled:opacity-40 ${className}`}
+        className={`mc-list-check disabled:opacity-40 ${className}`}
         {...rest}
       />
     );
@@ -74,7 +74,7 @@ export default function Checkbox({
           if (el) el.indeterminate = indeterminate && !checked;
         }}
         onChange={(e) => onChange(e.target.checked, e)}
-        className={`mv-list-check disabled:opacity-40 ${className}`}
+        className={`mc-list-check disabled:opacity-40 ${className}`}
         {...rest}
       />
       {children}

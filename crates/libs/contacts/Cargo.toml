@@ -3,7 +3,7 @@ name = "contacts"
 version = "0.1.0"
 edition = "2024"
 license = "LicenseRef-FCL-1.0-ALv2"
-description = "VCF / contacts CSV name↔phone resolution for message-vault-io"
+description = "VCF / contacts CSV name↔phone resolution for message-crate"
 
 [dependencies]
 anyhow = { workspace = true }

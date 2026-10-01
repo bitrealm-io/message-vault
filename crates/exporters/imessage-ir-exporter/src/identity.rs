@@ -91,7 +91,7 @@ fn dedupe(values: Vec<String>) -> Vec<String> {
 }
 
 /// Deduplication key: emails lowercased, phones as US national digits
-/// (matching `toUsNationalDigits` in the web app and the vault's
+/// (matching `toUsNationalDigits` in the web app and the server's
 /// `sanitize_number`).
 fn identity_key(value: &str) -> String {
     if value.contains('@') {

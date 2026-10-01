@@ -17,7 +17,7 @@ export type ContactPreview = {
    */
   handleCount?: number;
   groups?: string[];
-  /** True when the vault counts the contact in the Unknown Contact Group. */
+  /** True when the server counts the contact in the Unknown Contact Group. */
   unknown?: boolean;
 };
 
@@ -76,7 +76,7 @@ export function sameContactPreviews(
 }
 
 export type ThreadParticipantPreviewSource = {
-  /** As the vault sends it: a number. The UI carries contact ids as strings. */
+  /** As the server sends it: a number. The UI carries contact ids as strings. */
   contact_id?: number | null;
   /** Null/undefined when the source named this participant without an address. */
   handle?: string | null;

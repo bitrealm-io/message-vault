@@ -1,6 +1,6 @@
 # Architecture
 
-How Message Vault is put together: the things the system holds, how they
+How Message Crate is put together: the things the system holds, how they
 relate, and the rules that hold between them. These documents are written for
 anyone working on the product, person or AI.
 

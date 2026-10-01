@@ -16,7 +16,7 @@ export type MessageBubbleProps = {
 /**
  * Timestamp shown under a bubble or beside a flat-row sender, read in `zone`.
  *
- * `timestamp` is the UTC instant the vault stores; `zone` is the account's
+ * `timestamp` is the UTC instant the server stores; `zone` is the account's
  * (`useTimeZone`), which is what makes it the clock reading the person saw.
  */
 export function formatMessageTime(timestamp: string, zone: string, withYear = false): string {

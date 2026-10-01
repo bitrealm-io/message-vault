@@ -1,6 +1,6 @@
 # message-reexport
 
-Convert an existing Message Vault output folder from one packaging format to another (JSON Lines, JSON, CSV, EML, MBOX, or XML).
+Convert an existing Message Crate output folder from one packaging format to another (JSON Lines, JSON, CSV, EML, MBOX, or XML).
 
 The desktop app's Export screen uses this crate to write any format other than JSON Lines.
 
@@ -14,9 +14,9 @@ Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ## Docs
 
-How this crate fits the export pipeline: https://bitrealm.io/vault/developer/message-transfer/
+How this crate fits the export pipeline: https://messagecrate.app/docs/developer/message-transfer/
 
-How conversion works: https://bitrealm.io/vault/developer/formats/convert/
+How conversion works: https://messagecrate.app/docs/developer/formats/convert/
 
 ## License
 

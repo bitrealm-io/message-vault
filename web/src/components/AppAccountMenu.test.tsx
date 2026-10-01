@@ -39,7 +39,7 @@ describe("AppAccountMenu", () => {
     const trigger = screen.getByRole("button", { name: "Account menu" });
     expect(trigger.className).toContain("rounded-full");
     expect(trigger.textContent).toBe("");
-    expect(screen.queryByText("Message Vault")).toBeNull();
+    expect(screen.queryByText("Message Crate")).toBeNull();
   });
 
   it("shows the username and preferred name above Settings and Log out", async () => {

@@ -93,7 +93,7 @@ export default function MessageView({
   // the find bar stays on `findTerm` while the thread trails on the deferred one.
   const deferredFindTerm = useDeferredValue(findTerm);
 
-  // While finding, the vault already narrowed the rows to the matches, so
+  // While finding, the server already narrowed the rows to the matches, so
   // every loaded message is one. Ids arrive as numbers; the DOM ids are strings.
   const matchIds = useMemo(
     () => (finding ? messages.map((m) => String(m.id)) : []),

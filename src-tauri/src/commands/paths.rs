@@ -131,8 +131,8 @@ pub fn home_dir() -> Result<HomeDirInfo, String> {
 /// Open a file or folder with the operating system's default handler.
 ///
 /// Only paths under `staging_root` are allowed. That is the Staging
-/// Directory from Settings (default `{home}/message-vault`), where staging
-/// folders live, each with its `vault-push.log` while the run lasts.
+/// Directory from Settings (default `{home}/message-crate`), where staging
+/// folders live, each with its `message-crate-push.log` while the run lasts.
 ///
 /// # Errors
 ///
@@ -263,27 +263,27 @@ mod tests {
 
     #[test]
     fn rejects_empty_path() {
-        let root = "/home/sam/message-vault";
+        let root = "/home/sam/message-crate";
         let err = resolve_openable_path("  ", root).unwrap_err();
         assert!(err.contains("empty"));
     }
 
     #[test]
     fn rejects_empty_staging_root() {
-        let err = resolve_openable_path("/home/sam/message-vault/staging", "  ").unwrap_err();
+        let err = resolve_openable_path("/home/sam/message-crate/staging", "  ").unwrap_err();
         assert!(err.contains("Staging directory is empty"));
     }
 
     #[test]
     fn rejects_relative_path() {
-        let root = "/home/sam/message-vault";
-        let err = resolve_openable_path("message-vault/staging", root).unwrap_err();
+        let root = "/home/sam/message-crate";
+        let err = resolve_openable_path("message-crate/staging", root).unwrap_err();
         assert!(err.contains("absolute"));
     }
 
     #[test]
     fn rejects_relative_staging_root() {
-        let err = resolve_openable_path("/tmp/staging", "message-vault").unwrap_err();
+        let err = resolve_openable_path("/tmp/staging", "message-crate").unwrap_err();
         assert!(err.contains("must be absolute"));
     }
 
@@ -295,8 +295,8 @@ mod tests {
 
     #[test]
     fn accepts_path_under_staging_when_missing() {
-        let root = "/home/sam/message-vault";
-        let path = "/home/sam/message-vault/staging-iphone-ios-260824-180509";
+        let root = "/home/sam/message-crate";
+        let path = "/home/sam/message-crate/staging-iphone-ios-260824-180509";
         let resolved = resolve_openable_path(path, root).unwrap();
         assert_eq!(resolved, PathBuf::from(path));
     }
@@ -311,34 +311,34 @@ mod tests {
 
     #[test]
     fn accepts_log_file_under_staging_when_missing() {
-        let root = "/home/sam/message-vault";
-        let path = "/home/sam/message-vault/staging-x/vault-push.log";
+        let root = "/home/sam/message-crate";
+        let path = "/home/sam/message-crate/staging-x/message-crate-push.log";
         let resolved = resolve_openable_path(path, root).unwrap();
         assert_eq!(resolved, PathBuf::from(path));
     }
 
     #[test]
     fn rejects_path_outside_staging() {
-        let root = "/home/sam/message-vault";
+        let root = "/home/sam/message-crate";
         let err = resolve_openable_path("/home/sam/Documents/notes.txt", root).unwrap_err();
         assert!(err.contains("outside"));
     }
 
     #[test]
     fn rejects_parent_traversal_escape() {
-        let root = "/home/sam/message-vault";
+        let root = "/home/sam/message-crate";
         let err =
-            resolve_openable_path("/home/sam/message-vault/../.ssh/id_rsa", root).unwrap_err();
+            resolve_openable_path("/home/sam/message-crate/../.ssh/id_rsa", root).unwrap_err();
         assert!(err.contains("outside"));
     }
 
     #[test]
     fn accepts_existing_file_under_staging() {
         let temp = tempfile::tempdir().unwrap();
-        let root = temp.path().join("message-vault");
+        let root = temp.path().join("message-crate");
         let staging = root.join("staging-test");
         fs::create_dir_all(&staging).unwrap();
-        let log = staging.join("vault-push.log");
+        let log = staging.join("message-crate-push.log");
         fs::write(&log, "ok\n").unwrap();
 
         let resolved =
@@ -349,7 +349,7 @@ mod tests {
     #[test]
     fn rejects_existing_file_outside_staging() {
         let temp = tempfile::tempdir().unwrap();
-        let root = temp.path().join("message-vault");
+        let root = temp.path().join("message-crate");
         fs::create_dir_all(&root).unwrap();
         let outside = temp.path().join("secrets.txt");
         fs::write(&outside, "secret\n").unwrap();
@@ -363,14 +363,14 @@ mod tests {
     fn missing_log_is_reported_like_any_other_missing_path() {
         // The log is deleted with the staging directory once an import
         // succeeds, so a missing log has nothing special to explain.
-        let log = PathBuf::from("/home/sam/message-vault/staging-x/vault-push.log");
+        let log = PathBuf::from("/home/sam/message-crate/staging-x/message-crate-push.log");
         let err = missing_path_error(&log).unwrap_err();
-        assert_eq!(err, "Nothing exists at vault-push.log yet");
+        assert_eq!(err, "Nothing exists at message-crate-push.log yet");
     }
 
     #[test]
     fn missing_folder_uses_generic_message() {
-        let staging = PathBuf::from("/home/sam/message-vault/staging-x");
+        let staging = PathBuf::from("/home/sam/message-crate/staging-x");
         let err = missing_path_error(&staging).unwrap_err();
         assert!(err.contains("Nothing exists"));
         assert!(err.contains("staging-x"));
@@ -379,14 +379,14 @@ mod tests {
     #[test]
     fn existing_path_passes_missing_check() {
         let temp = tempfile::tempdir().unwrap();
-        let file = temp.path().join("vault-push.log");
+        let file = temp.path().join("message-crate-push.log");
         fs::write(&file, "ok\n").unwrap();
         missing_path_error(&file).unwrap();
     }
 
     #[test]
     fn path_stat_missing() {
-        let stat = path_stat_inner("/no/such/message-vault-path-stat");
+        let stat = path_stat_inner("/no/such/message-crate-path-stat");
         assert!(!stat.exists);
         assert!(!stat.is_file);
         assert!(!stat.is_directory);
@@ -450,7 +450,7 @@ mod tests {
     /// tell apart from a real failure.
     #[test]
     fn path_stat_missing_has_no_size_or_modified_time() {
-        let stat = path_stat_inner("/no/such/message-vault-path-stat");
+        let stat = path_stat_inner("/no/such/message-crate-path-stat");
         assert_eq!(stat.size_bytes, 0);
         assert_eq!(stat.modified_unix_ms, None);
         let blank = path_stat_inner("  ");

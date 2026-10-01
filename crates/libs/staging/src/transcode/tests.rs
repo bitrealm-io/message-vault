@@ -104,7 +104,7 @@ fn the_digest_and_size_are_recomputed_from_the_derivative() {
         return;
     };
     // Decision 29: ffmpeg output is not byte-identical across runs, so a
-    // replayed digest would be a silent corruption — the vault dedupes
+    // replayed digest would be a silent corruption — the server dedupes
     // assets by sha256.
     let (dir, jsonl, _) = staged_one("photo.png", &test_png_bytes());
     transcode_staged(

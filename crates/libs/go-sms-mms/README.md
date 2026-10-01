@@ -20,7 +20,7 @@ Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ## Docs
 
-This crate is a library. Field mapping: https://bitrealm.io/vault/developer/formats/go-sms-pro/mapping/
+This crate is a library. Field mapping: https://messagecrate.app/docs/developer/formats/go-sms-pro/mapping/
 
 ## License
 

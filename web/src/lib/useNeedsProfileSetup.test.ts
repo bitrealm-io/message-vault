@@ -12,7 +12,7 @@ vi.mock("./useAccountProfile", () => ({
 import { useNeedsProfileSetup } from "./useNeedsProfileSetup";
 
 /**
- * Whether an account still owes profile setup is the vault's answer, read off
+ * Whether an account still owes profile setup is the server's answer, read off
  * the profile. These pin that the hook reports what the server said and draws
  * no conclusion of its own — the browser used to infer it from a profile that
  * looked empty, and two clients inferring separately is how the rule drifted.
@@ -22,7 +22,7 @@ describe("useNeedsProfileSetup", () => {
     useAccountProfile.mockReset();
   });
 
-  it("reports the flag the vault set", () => {
+  it("reports the flag the server set", () => {
     useAccountProfile.mockReturnValue({
       profile: { must_set_up_profile: true },
       loading: false,
@@ -32,7 +32,7 @@ describe("useNeedsProfileSetup", () => {
     expect(result.current).toEqual({ needsSetup: true, loading: false });
   });
 
-  it("leaves an account the vault says is set up alone", () => {
+  it("leaves an account the server says is set up alone", () => {
     useAccountProfile.mockReturnValue({
       profile: { must_set_up_profile: false },
       loading: false,
@@ -43,7 +43,7 @@ describe("useNeedsProfileSetup", () => {
   });
 
   // An empty-looking profile is exactly what the browser used to read as
-  // "needs setup". It is not the question any more: the vault answers it.
+  // "needs setup". It is not the question any more: the server answers it.
   it("does not infer setup from a profile with nothing in it", () => {
     useAccountProfile.mockReturnValue({
       profile: { must_set_up_profile: false, preferred_name: null, phones: [], emails: [] },

@@ -1,6 +1,6 @@
 //! Decide whether a contacts file is a vCard `.vcf` or a phone-column CSV.
 //!
-//! The desktop app and the vault server both accept either shape and pick a
+//! The desktop app and the server both accept either shape and pick a
 //! loader from the answer, so detection has to run before any parsing.
 
 use crate::vcard_csv::{VcardCsvColumns, normalize_vcard_csv_header};
@@ -8,7 +8,7 @@ use std::fs::{self, File};
 use std::path::Path;
 
 /// Shapes a contacts file can have, as accepted by
-/// [`crate::ContactsBook::load_contacts_file`] and by the vault server's
+/// [`crate::ContactsBook::load_contacts_file`] and by the server's
 /// contacts import.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContactsFormat {

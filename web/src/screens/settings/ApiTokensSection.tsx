@@ -90,7 +90,7 @@ export function ApiTokensSection({
       />
 
       <p className="mt-3 text-[0.75rem] leading-relaxed text-muted">
-        API keys give secure, programmatic access so vault tools can import, export, and (if
+        API keys give secure, programmatic access so other tools can import, export, and (if
         granted) delete message data. Treat them like passwords: keep them private and never share
         them publicly.
       </p>

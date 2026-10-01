@@ -1,8 +1,8 @@
 # message-ir
 
-Shared conversation types for Message Vault: `ConversationDocument`, messages, attachments, and participants. This crate has no I/O and no formatting. Attachment bytes are never serialized to JSON; paths and hashes point at sidecar files.
+Shared conversation types for Message Crate: `ConversationDocument`, messages, attachments, and participants. This crate has no I/O and no formatting. Attachment bytes are never serialized to JSON; paths and hashes point at sidecar files.
 
-Exporters, `message-ir-format`, `vault-push`, `vault-pull`, and the vault server use this crate.
+Exporters, `message-ir-format`, `message-crate-push`, `message-crate-pull`, and the server use this crate.
 
 ## Build and test
 
@@ -14,7 +14,7 @@ Workspace setup: [CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
 ## Docs
 
-This crate is a library. Schema notes for contributors: [Common message](https://bitrealm.io/vault/developer/architecture/common-message/). JSON Lines layout for imports: https://bitrealm.io/vault/developer/reference/export-structure/
+This crate is a library. Schema notes for contributors: [Common message](https://messagecrate.app/docs/developer/architecture/common-message/). JSON Lines layout for imports: https://messagecrate.app/docs/developer/reference/export-structure/
 
 ## License
 

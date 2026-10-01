@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { type SearchField, type SearchList, useSearchFields } from "./searchFields";
 import { forPerson, suggestion as suggestionTerm } from "./searchQuery";
-import { listContacts } from "./vaultApi";
+import { listContacts } from "./serverApi";
 
 interface ContactName {
   id: string;

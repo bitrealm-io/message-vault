@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_TAURI_VAULT_URL,
+  DEFAULT_TAURI_SERVER_URL,
   initialLoginServerUrl,
   parsePersistedAuth,
 } from "./authGuards.ts";
 
 describe("initialLoginServerUrl", () => {
   it("defaults the desktop app to IPv4 loopback", () => {
-    expect(initialLoginServerUrl(undefined, true)).toBe(DEFAULT_TAURI_VAULT_URL);
-    expect(initialLoginServerUrl("", true)).toBe(DEFAULT_TAURI_VAULT_URL);
+    expect(initialLoginServerUrl(undefined, true)).toBe(DEFAULT_TAURI_SERVER_URL);
+    expect(initialLoginServerUrl("", true)).toBe(DEFAULT_TAURI_SERVER_URL);
   });
 
   it("leaves the browser field blank so the page origin is used", () => {
@@ -17,10 +17,10 @@ describe("initialLoginServerUrl", () => {
   });
 
   it("rewrites the old localhost default and keeps any other saved URL", () => {
-    expect(initialLoginServerUrl("http://localhost:8080", true)).toBe(DEFAULT_TAURI_VAULT_URL);
-    expect(initialLoginServerUrl("http://localhost:8080/", false)).toBe(DEFAULT_TAURI_VAULT_URL);
-    expect(initialLoginServerUrl("https://vault.example.com", true)).toBe(
-      "https://vault.example.com",
+    expect(initialLoginServerUrl("http://localhost:8080", true)).toBe(DEFAULT_TAURI_SERVER_URL);
+    expect(initialLoginServerUrl("http://localhost:8080/", false)).toBe(DEFAULT_TAURI_SERVER_URL);
+    expect(initialLoginServerUrl("https://server.example.com", true)).toBe(
+      "https://server.example.com",
     );
   });
 });

@@ -9,7 +9,7 @@ edition = "2024"
 # Why: docs/adr/0014-gpl-code-only-behind-a-process-boundary.md.
 license = "MIT OR Apache-2.0"
 description = "A small Apple Messages chat.db written with rusqlite, for the tests of the imessage-reader helper and the exporter that spawns it"
-repository = "https://github.com/bitrealm-io/message-vault"
+repository = "https://github.com/messagecrate/message-crate"
 publish = false
 
 [dependencies]

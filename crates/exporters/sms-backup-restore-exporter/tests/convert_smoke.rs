@@ -1,9 +1,9 @@
 use crate::emit::{ConvertExportArgs, convert_export};
 use anyhow::Result;
-use message_vault_io_core::testutil::{
+use message_crate_core::testutil::{
     assert_csv_export, assert_csv_row, assert_jsonl_resumes, csv_files,
 };
-use message_vault_io_core::{ExportReport, ExportTransforms, OutputFormat};
+use message_crate_core::{ExportReport, ExportTransforms, OutputFormat};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -164,7 +164,7 @@ fn rejects_owner_phone_without_digits() {
 
 #[test]
 fn cancel_during_the_write_phase_stops_the_export() {
-    use message_vault_io_core::{CancelFlag, LogSink};
+    use message_crate_core::{CancelFlag, LogSink};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 

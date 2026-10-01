@@ -29,7 +29,7 @@ lead-in states what the command produces rather than ordering the reader to type
 it:
 
 > `npm run dev` starts the browser UI on port 5173 and proxies `/v1` to the
-> vault.
+> server.
 
 Everything below survives the shift into third person unchanged. The register
 governs person, not rhythm.
@@ -164,16 +164,16 @@ A real correction from this repo:
 
 | | |
 |---|---|
-| Rejected | "Once uploading starts, removing these messages again means deleting them from the vault by hand." |
-| Shipped | "Imported conversations can later be removed from your vault in the messages area." |
+| Rejected | "Once uploading starts, removing these messages again means deleting them from Message Crate by hand." |
+| Shipped | "Imported conversations can later be removed from your Message Crate in the messages area." |
 
 Both sentences describe the same situation. The first frames it as a cost and
 leans on "deleting" and "by hand" to make it sound laborious. The second says
 where the capability lives.
 
 Product copy is the one place a document addresses the reader directly, because
-a screen speaks to the person using it. "Your vault" is correct on a screen and
-wrong in a guidebook page.
+a screen speaks to the person using it. "Your Message Crate" is correct on a screen
+and wrong in a guidebook page.
 
 Mockup copy is written for the product being built, not the product as it stands
 today. A screen that assumes a planned but unbuilt capability keeps the finished
@@ -191,6 +191,7 @@ conversation.
 | **Saved Searches** — stored queries that re-resolve as messages arrive | "Saved Groups" |
 | **Message Tags** — marks on conversations | "Thread Tags" |
 | **Text Message** — the reader-facing label for iMessage and SMS/MMS alike | "iMessage" or "SMS" as a UI label |
+| **Message Crate** for the product and for one installation of it, **the server** for the running process, **the database** for the store | "vault", and never "crate" alone |
 
 WhatsApp keeps its own name. The Text Message collapsing covers the Apple and
 carrier texting transports only, and the underlying `service` value still

@@ -6,7 +6,7 @@
  * re-renders its whole subtree — `ConversationList` included — on every
  * write. The effect's dependencies (`targetConversations`, `tagChecks`, and
  * the `applyMembership` callback they feed) were rebuilt from a `conversations`
- * array that `useVaultPagedList` reallocated on every call, so the effect's
+ * array that `useRoutePagedList` reallocated on every call, so the effect's
  * dependency array was never equal to the last render's, the effect fired
  * again after every one of those forced re-renders, and the two fed each
  * other into "Maximum update depth exceeded" before a person touched
@@ -17,12 +17,12 @@ import { cleanup, render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RightToolbarProvider } from "../components/RightToolbarContext";
-import { mockedAuth, VaultProviders } from "../test/vaultProviders";
+import { mockedAuth, Providers } from "../test/providers";
 import ConversationList from "./ConversationList";
 
 vi.mock("../lib/auth", () => ({ useAuth: () => mockedAuth }));
 
-vi.mock("../lib/vaultApi", () => ({
+vi.mock("../lib/serverApi", () => ({
   // messageTags.ts pulls slug helpers from contactGroups.ts, whose module-level
   // `createNameCollection` call needs these even though this test never uses them.
   listContactGroups: vi.fn().mockResolvedValue({ items: [] }),
@@ -83,13 +83,13 @@ function loggedErrors(): string {
 describe("ConversationList", () => {
   it("registers the tag menu into the right toolbar without looping", async () => {
     render(
-      <VaultProviders>
+      <Providers>
         <MemoryRouter>
           <RightToolbarProvider>
             <ConversationList selectedId={null} onSelect={() => {}} query="" />
           </RightToolbarProvider>
         </MemoryRouter>
-      </VaultProviders>,
+      </Providers>,
     );
 
     // Give the effect and any resulting re-renders a chance to settle. If the

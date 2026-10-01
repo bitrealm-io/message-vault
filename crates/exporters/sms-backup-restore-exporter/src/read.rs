@@ -2,15 +2,15 @@
 
 use anyhow::{Result, bail};
 use media::{CompressOptions, MediaMode};
+use message_crate_core::{
+    CancelFlag, LogSink, MediaConfig, ProgressSink, check_cancel, discover_files,
+    document_messages, is_cancelled, stage_conversation_attachments,
+};
 use message_csv::{format_local_ts, stable_guid};
 use message_ir::{
     ConversationDocument, ConversationMeta, ConversationStats, ExportMeta, HandleType,
     IrAttachment, IrConversationType, IrDirection, IrMessage, IrMessageKind, IrParticipant,
     IrService, IrSource, SCHEMA_VERSION, owner_sender,
-};
-use message_vault_io_core::{
-    CancelFlag, LogSink, MediaConfig, ProgressSink, check_cancel, discover_files,
-    document_messages, is_cancelled, stage_conversation_attachments,
 };
 use phone::OwnerHandleSet;
 use sbr::{
@@ -587,7 +587,7 @@ mod tests {
         assert_eq!(
             docs[0].messages[0].attachments[0].size_bytes,
             Some(5),
-            "decoded aGVsbG8= is five bytes; size_bytes lets vault-push skip re-hashing"
+            "decoded aGVsbG8= is five bytes; size_bytes lets message-crate-push skip re-hashing"
         );
         assert_eq!(
             docs[0].messages[0].source.as_ref().unwrap().fields["attrs"]["extra"],

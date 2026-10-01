@@ -1,6 +1,6 @@
 # The HTTP interface
 
-Every rule the vault's `/v1` interface follows, in one place. The interface is
+Every rule the server's `/v1` interface follows, in one place. The interface is
 part of the architecture, so its rules are written down when they are decided,
 not when the code catches up: a design is argued against this file, a pull
 request that touches a route is graded against it, and a route that breaks a
@@ -26,7 +26,7 @@ Why: a name is mutable, needs URL-encoding, and must be matched
 case-insensitively on every request, and a rename would re-key the resource.
 
 The one exception is an Asset, addressed by the SHA-256 of its contents:
-`/v1/assets/{sha256}`. Why: the file exists before the vault does, the client
+`/v1/assets/{sha256}`. Why: the file exists before the database does, the client
 must know the hash before an upload can be deduplicated, and two uploads of
 one file must be one asset.
 
@@ -53,7 +53,7 @@ generated types carry the interface's words into the web app's code.
 ## Naming a route
 
 A collection is plural, and a member is `/{collection}/{id}`. A singular path
-is legal only for a singleton: one per vault (`/v1/vault`), or one per logged-in
+is legal only for a singleton: one per installation (`/v1/server`), or one per logged-in
 credential (`/v1/session`). `/v1/trash` is a singleton by the same rule.
 
 A path segment names a resource, never a caller's role. Who may call a route is
@@ -113,11 +113,11 @@ trash; a search answers an empty page and leaves the trash out. A filter on the
 read by id is a second search that can drift from the first, as `?year=` beside
 `date:` did.
 
-A file the vault reads is the request body, with `Content-Type` naming its
+A file the server reads is the request body, with `Content-Type` naming its
 format, and anything about how to apply it is a declared query parameter.
 `POST /v1/contacts` takes the address book as a `text/csv` body and
 `mode=append|edit`; any other `Content-Type` is `415 Unsupported Media Type`.
-The file the vault writes is answered by a `POST` named for it,
+The file the server writes is answered by a `POST` named for it,
 `POST /v1/contacts/address-book`, whose body `{q, ids}` selects the contacts
 and whose answer is `text/csv` with a `Content-Disposition` filename.
 Why: a body that is the file cannot carry a mode field, and a JSON envelope
@@ -129,20 +129,20 @@ negotiate where every other answers JSON.
 Behaviour that differs by caller lives inside one handler, not in two routes.
 `PUT /v1/accounts/{id}/password` is one route: the owner sets another
 account's password without the current one, a user account changes its own on
-its session alone, and the vault owner changing its own must supply the
+its session alone, and the owner changing its own must supply the
 current one, because that account reaches every other.
 
 ## Status codes
 
 - A creation answers `201 Created` with a `Location` header naming the new
   resource, whatever the method that made it: a `PUT` that stores an asset the
-  vault did not hold, and a claim that makes the owner's Session
+  database did not hold, and a claim that makes the owner's Session
   (`Location: /v1/session`), both answer `201`. A create that takes a batch
   answers `200 OK` with a summary of what was created, updated and skipped,
   because no single resource was made.
 - A write with nothing to return answers `204 No Content`.
 - A name collision answers `409 Conflict`. So does an action on a resource in
-  the wrong state: deleting before trashing, claiming a claimed vault, a batch
+  the wrong state: deleting before trashing, claiming a claimed Message Crate, a batch
   or a `complete` on a finished run.
 - A failed credential answers `401 Unauthorized`. A refused one, including a
   token without the needed scope and a disabled account, answers
@@ -227,7 +227,7 @@ convention this file rejects (`order=`, `fields=`, `year=`) would otherwise be
 answered as though it had been obeyed.
 
 Rejected: cursor paging. Stable under concurrent inserts, but nothing inserts
-rows under a running read on a self-hosted vault, and every screen that shows
+rows under a running read on a self-hosted server, and every screen that shows
 "51–100 of 4,213" needs `total`.
 
 Rejected: a bare `{items}` for small lists. One justified exception is still
@@ -240,7 +240,7 @@ Rejected: query-parameter filters beside the search language. `?date_gte=2019`
 next to `q=date:>2019` is two ways to ask one question.
 
 Rejected: ignoring a query parameter the route does not know, the forgiving
-default of most web servers. The vault's clients are its own apps and programs
+default of most web servers. The server's clients are its own apps and programs
 written against the reference, and a silent wrong answer costs them more than
 a refusal.
 
@@ -252,9 +252,9 @@ Every failure answers an RFC 7807 problem document as
 every rule that broke rather than the first.
 
 `type` is the URL of a page under
-`bitrealm.io/vault/developer/reference/errors/`, one page per problem type.
+`messagecrate.app/docs/developer/reference/errors/`, one page per problem type.
 The code is the registry: each type is declared once in
-`crates/vault/server/src/problem.rs`, the pages are generated from it, and a
+`crates/server/server/src/problem.rs`, the pages are generated from it, and a
 test fails when the checked-in pages drift. Only `500 Internal Server Error`
 uses `about:blank`, because a page about it could say nothing a reader could
 act on. The taxonomy is per problem, not per status: the test for a new type
@@ -283,7 +283,7 @@ but the two that answer bytes: `GET /v1/assets/{sha256}`, which streams the
 asset's own contents, and `POST /v1/contacts/address-book`, which answers the
 address book as `text/csv`. Nothing outside `/v1` is checked.
 
-Rejected: requiring `Accept: application/json`. None of the vault's own clients
+Rejected: requiring `Accept: application/json`. None of the server's own clients
 send one, and the rule would refuse the web app on its first request.
 
 ## Credentials and reach
@@ -294,8 +294,8 @@ scheme with its scopes, so every route says which it accepts.
 - A **Session** is one per logged-in account or owner, made by
   `POST /v1/session` and ended by `DELETE /v1/session`. It carries the
   account's own permissions: `import`, `export`, `delete`. The owner's session
-  carries none of those and reaches only the accounts collection, the vault
-  settings and the vault's storage totals, because the owner holds no
+  carries none of those and reaches only the accounts collection, the server
+  settings and the installation's storage totals, because the owner holds no
   messages.
 - An **API token** is a named credential an account makes for a program, with
   the scopes the person chose from `import` and `export`, capped by the
@@ -341,8 +341,8 @@ What each reaches:
   them. Each pair answers from one function, so the two lists cannot differ.
   Which contacts a run created is content, so `/v1/imports/{id}/contacts` has
   no twin under the account.
-- `GET /v1/vault` and `POST /v1/vault/claim` take no credential.
-  `/v1/vault/settings` and `GET /v1/vault/storage` are the owner's: the
+- `GET /v1/server` and `POST /v1/server/claim` take no credential.
+  `/v1/server/settings` and `GET /v1/server/storage` are the owner's: the
   storage totals sum every account, and no account holds more than its own.
 
 The credential names the account. No route takes an `account=` parameter.
@@ -350,14 +350,14 @@ The credential names the account. No route takes an `account=` parameter.
 Rate limiting guards the three routes that take no credential and make one,
 over a 60-second window; the limit is documented in the developer reference.
 `POST /v1/session` counts per username, because it guards one account's
-password. `POST /v1/accounts` and `POST /v1/vault/claim` count once for the
-whole vault, because they guard against a flood of new accounts, and a count
+password. `POST /v1/accounts` and `POST /v1/server/claim` count once for the
+whole server, because they guard against a flood of new accounts, and a count
 per name lets a script that tries a new name each time straight through.
 
 Rejected: counting registrations by the caller's address. Behind a reverse
 proxy every visitor shares one address, and believing a forwarded address
-needs a list of trusted proxies that is easy to get wrong. A self-hosted vault
-takes a handful of registrations, so a vault-wide count never stops a person.
+needs a list of trusted proxies that is easy to get wrong. A self-hosted server
+takes a handful of registrations, so a server-wide count never stops a person.
 
 ## Runs
 
@@ -383,7 +383,7 @@ and `message_ids`. The record holds what was asked for and how much matched,
 never what the messages said.
 
 An Export Run is a snapshot taken when it is created. In the transaction that
-records the run, the vault lists the ids of the messages the scope matches,
+records the run, the server lists the ids of the messages the scope matches,
 each at a numbered place (oldest first), and computes the four counts
 (messages, conversations, distinct attachments, bytes) from that list.
 `GET /v1/exports/{id}/messages` pages the list, never the scope again, and
@@ -405,7 +405,7 @@ between pages move the offsets, so pages skipped or repeated messages and
 ## The reference
 
 The generated reference, `docs/src/assets/openapi.json`, is produced from the
-handlers by `message-vault-server dump-openapi` and checked in; a test fails
+handlers by `message-crate-server dump-openapi` and checked in; a test fails
 when the two differ, and CI checks the web app's generated types against it.
 
 An operation's error responses are built from shared parts, never written out
@@ -434,14 +434,14 @@ routes someone remembered.
 
 A route group is one module named for the route's first path segment, with
 `_api`: `contacts_api`, `conversations_api`, `imports_api`, `exports_api`,
-`assets_api`, `search_fields_api`, `session_api`, `vault_api`, `trash_api`.
+`assets_api`, `search_fields_api`, `session_api`, `server_api`, `trash_api`.
 Contact Groups and Message Tags, one shape served twice, share
 `named_set_api`. Why: a route's code is found from its URL without searching.
 
 A handler is named `verb_noun`, with no `_handler` suffix. The verb is `list`,
 `get`, `create`, `update` (`PATCH`), `replace` (`PUT`) or `delete`, or the
 action's own verb: `list_contacts`, `get_contact`, `update_contact`,
-`claim_vault`, `complete_import`.
+`claim_server`, `complete_import`.
 
 A type on the wire is named one of two ways, and a reader can tell which from
 the name:
@@ -483,7 +483,7 @@ reason: nothing but a promotion reads them.
 
 A test of a route's answer goes through the router, checks a failure with
 `expect_problem` (status, `type` and `request_id`, not only the sentence), and
-takes its vault and account from the shared fixtures in `test_support.rs`.
+takes its database and account from the shared fixtures in `test_support.rs`.
 A rule every route follows is tested once over the whole document, as above,
 not again per route.
 
@@ -494,13 +494,13 @@ it: endpoint names, request and response shapes, and stored formats change
 whenever a better design is found, and breaking a client is an accepted cost.
 No compatibility alias, deprecation window or version handshake is ever added.
 
-The vault says which code it runs, and an app says which code it is, and
-neither decides anything. `GET /v1/vault` carries the vault's Build in
+The server says which code it runs, and an app says which code it is, and
+neither decides anything. `GET /v1/server` carries the server's Build in
 `version` and the Schema Fingerprint in `schema_fingerprint`. The desktop app
-and the website send `x-message-vault-app` (`desktop` or `website`) and
-`x-message-vault-version` (their Build) on every request; the vault records
+and the website send `x-message-crate-app` (`desktop` or `website`) and
+`x-message-crate-version` (their Build) on every request; the server records
 the pair on the account's session, rewrites it only when it changes, and shows
-it to the vault owner. A request that sends neither header, or sends them
+it to the owner. A request that sends neither header, or sends them
 malformed, is served and nothing is recorded, which covers curl, Swagger UI
 and any program holding an API token. No route refuses, redirects or changes
 its answer on account of either header: this is a record of what connected,

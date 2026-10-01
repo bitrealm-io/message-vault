@@ -19,13 +19,13 @@ use std::{
 };
 
 use chat_db_fixture::{FRIEND_EMAIL, FRIEND_PHONE, OWNER, OWNER_EMAIL, PHOTO_BYTES, write_chat_db};
+use message_crate_core::{
+    AppleConfig, ApplePlatform, ExporterConfig, MediaConfig, OutputFormat, SourceConfig,
+};
 use message_ir::{ConversationDocument, IrDirection, IrMessage};
 use message_ir_format::{
     read_conversation_csv, read_conversation_eml_dir, read_conversation_jsonl,
     read_conversation_mbox,
-};
-use message_vault_io_core::{
-    AppleConfig, ApplePlatform, ExporterConfig, MediaConfig, OutputFormat, SourceConfig,
 };
 
 /// Build `imessage-reader` once per test binary and return its path.

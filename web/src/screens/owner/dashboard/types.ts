@@ -1,4 +1,4 @@
-import type { components } from "../../../lib/vaultApi.types";
+import type { components } from "../../../lib/serverApi.types";
 
-/** What `GET /v1/vault/storage` answers: the figures every Dashboard section reads. */
-export type VaultStorage = components["schemas"]["VaultStorage"];
+/** What `GET /v1/server/storage` answers: the figures every Dashboard section reads. */
+export type ServerStorage = components["schemas"]["ServerStorage"];

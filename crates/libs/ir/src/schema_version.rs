@@ -1,7 +1,7 @@
 //! The one check that refuses a file from another schema version.
 //!
 //! Every reader of a [`ConversationDocument`](crate::ConversationDocument) or
-//! its JSON Lines header — the format reader, the push client, the vault's
+//! its JSON Lines header — the format reader, the push client, the server's
 //! import — refuses a version other than [`SCHEMA_VERSION`] with the same
 //! words, and refuses it before parsing the rest of the file: a version-3
 //! file is not expected to match the version-4 field shapes, and the person
@@ -23,7 +23,7 @@ impl fmt::Display for UnsupportedSchemaVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "This file is schema version {}; the vault reads version {SCHEMA_VERSION}",
+            "This file is schema version {}; Message Crate reads version {SCHEMA_VERSION}",
             self.found
         )
     }
@@ -73,7 +73,7 @@ mod tests {
     fn names_the_version_found_and_the_version_read() {
         assert_eq!(
             check_schema_version(3).unwrap_err().to_string(),
-            "This file is schema version 3; the vault reads version 4"
+            "This file is schema version 3; Message Crate reads version 4"
         );
         assert_eq!(check_schema_version(SCHEMA_VERSION), Ok(()));
     }

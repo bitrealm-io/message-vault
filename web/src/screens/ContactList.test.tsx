@@ -161,4 +161,52 @@ describe("ContactList", () => {
     fireEvent.click(box("Alice"), { shiftKey: true });
     await waitFor(() => expect(checkedNames()).toEqual(["Alice", "Bob", "Carol", "Erin"]));
   });
+
+  it("lists the server's Unknown and No group contacts once the full list is loaded", async () => {
+    // Bob and Dave are Unknown; Dave also has a stored group. Alice is the
+    // only contact that is neither Unknown nor in a stored group.
+    const rows = [
+      { id: 1, name: "Alice", groups: [], unknown: false },
+      { id: 2, name: "Bob", groups: [], unknown: true },
+      { id: 3, name: "Carol", groups: ["Family"], unknown: false },
+      { id: 4, name: "Dave", groups: ["Family"], unknown: true },
+    ];
+    // Answers the way the server does, so the list is right whether the
+    // browser filters the loaded rows or asks again.
+    listContactsMock.mockImplementation(async ({ q } = {}) => {
+      const items = rows
+        .filter((row) => {
+          if (q === "group:unknown") return row.unknown;
+          if (q === "group:none") return row.groups.length === 0 && !row.unknown;
+          return true;
+        })
+        .map((row) => ({ ...row, identity_count: 1, addresses: [] }));
+      return { items, total: items.length, limit: 200, offset: 0 } as unknown as Awaited<
+        ReturnType<typeof listContacts>
+      >;
+    });
+
+    const page = (groupFilter: string | null) => (
+      <Providers>
+        <RightToolbarProvider>
+          <RightPane>
+            <ContactList groupFilter={groupFilter} onSelect={() => {}} />
+          </RightPane>
+        </RightToolbarProvider>
+      </Providers>
+    );
+    const listed = () =>
+      rows
+        .map((row) => row.name)
+        .filter((name) => screen.queryByRole("checkbox", { name: `Select ${name}` }) !== null);
+
+    const { rerender } = render(page(null));
+    await waitFor(() => expect(listed()).toEqual(["Alice", "Bob", "Carol", "Dave"]));
+
+    rerender(page("unknown"));
+    await waitFor(() => expect(listed()).toEqual(["Bob", "Dave"]));
+
+    rerender(page("none"));
+    await waitFor(() => expect(listed()).toEqual(["Alice"]));
+  });
 });

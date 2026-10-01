@@ -120,20 +120,23 @@ export function groupFromSlug(slug: string, groups: readonly string[]): string |
   return null;
 }
 
-/** True when this contact should appear on the given group page. */
-
+/**
+ * True when this contact should appear on the given group page. This is the
+ * server's rule for `group:`, applied to rows already in memory.
+ */
 export function contactBelongsToGroup(
-  groups: readonly string[] | undefined,
+  contact: { groups?: readonly string[]; unknown: boolean },
   groupFilter: string | "none" | null,
 ): boolean {
   if (!groupFilter) return true;
   // Unknown is computed by the server from contact state, so it never appears
-  // in a contact's stored group names. The rows in hand have already been
-  // filtered; re-checking here would discard every one of them.
-  if (groupFilter === UNKNOWN_GROUP) return true;
-  if (groupFilter === "none") return !groups || groups.length === 0;
+  // in a contact's stored group names. Each row carries the answer instead.
+  if (groupFilter === UNKNOWN_GROUP) return contact.unknown;
+  const groups = contact.groups ?? [];
+  // An Unknown contact is in the Unknown group, so it is not in No group.
+  if (groupFilter === "none") return groups.length === 0 && !contact.unknown;
   const needle = groupFilter.toLowerCase();
-  return (groups ?? []).some((g) => g.toLowerCase() === needle);
+  return groups.some((g) => g.toLowerCase() === needle);
 }
 
 /** Build the contact-list query for a group page plus optional typed search. */

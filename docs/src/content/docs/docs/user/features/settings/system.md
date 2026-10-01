@@ -1,6 +1,6 @@
 ---
 title: System
-description: What the System tab of Settings holds, the Staging Directory, remembered importer paths, the ffmpeg folder, and the app's version.
+description: What the System tab of Settings holds, the Staging Directory, remembered importer paths, the ffmpeg folder, the data folder of the app's own Message Crate, and the app's version.
 ---
 
 The **System** tab of **Settings** holds the settings of one installed desktop app.
@@ -53,6 +53,26 @@ The folder is saved only when both tools are found in it, because one without th
 A saved folder is applied again each time the app starts.
 
 **Install help** opens [Attachments and media](/docs/user/features/messages/attachments-and-media/), which covers what the two tools are used for and how to install them.
+
+## Message Crate on this computer
+
+This part is about the Message Crate the desktop app starts for itself.
+
+### Open data folder
+
+**Open data folder** opens the folder where that Message Crate keeps its database and attachments.
+A copy of the folder, made while the app is closed, is a backup.
+
+### Let other devices on this network connect
+
+The checkbox is off by default, and the Message Crate then answers this computer only.
+
+When it is on, a phone or another computer on the same network reaches the Message Crate in a browser, at this computer's address on port 8080.
+That works only while the app is open.
+The connection is plain HTTP, so anyone on the network can read what is sent, passwords included.
+
+Changing the checkbox restarts the Message Crate, which takes a moment.
+It has no effect on a Message Crate the app didn't start, such as one in Docker on the same computer, and a line under the checkbox says so.
 
 ## About
 

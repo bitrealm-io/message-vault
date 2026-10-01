@@ -47,4 +47,4 @@ A phone that changed numbers over the years has several, and each one belongs on
 
 A folder on the computer holds at least one `.xml` file, and the file is larger than a few kilobytes.
 
-Next: [Import the backup](/docs/user/get-started/import-your-backup/).
+Next: [Import the backup](/docs/user/your-messages/import-your-backup/).

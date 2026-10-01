@@ -3,7 +3,7 @@ title: Run on another machine
 description: Run the server on a different computer from the browser and the desktop app, such as a home server, and move an existing Message Crate there.
 ---
 
-The first-time path runs the server, the browser, and the desktop app on one computer.
+The first-time path runs everything on one computer, inside the desktop app.
 This page covers a server on a second computer, such as a home server, reached over the home network.
 
 :::caution[Not tested]
@@ -20,7 +20,7 @@ Three things differ from the first-time path:
 
 ## Publish the server on the network
 
-The command in [Start a Message Crate](/docs/user/get-started/start-a-message-crate/) has `-p 127.0.0.1:8080:8080`.
+The command in [Run Message Crate with Docker](/docs/user/features/owner/run-with-docker/) has `-p 127.0.0.1:8080:8080`.
 The `127.0.0.1` in front means only that computer reaches the server.
 
 Without it, Docker publishes port 8080 on every network the computer is connected to.

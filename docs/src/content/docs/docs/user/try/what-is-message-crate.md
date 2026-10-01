@@ -9,7 +9,7 @@ Nothing is sent to a Message Crate cloud service, because there isn't one.
 
 ## Three pieces
 
-- **The server** stores the messages and serves the website. It runs in Docker.
+- **The server** stores the messages and serves the website. The desktop app carries it and starts it, and it can also run in Docker on a computer that is always on.
 - **The website** is where messages are browsed and searched. Any browser that can reach the server opens it.
 - **The desktop app** shows the same screens as the website and adds **Import** and **Export**. Import lives in the desktop app because reading a phone backup needs access to files on the computer, which a browser doesn't have.
 
@@ -43,16 +43,21 @@ Every tool that works with message history works this way, so the backup step is
 
 ## The path from here
 
+The guide has two parts.
+
+**Try Message Crate** takes a few minutes and needs no phone:
+
 1. This page.
-2. [Start a Message Crate](/docs/user/get-started/start-a-message-crate/).
-3. [Look around the demo data](/docs/user/get-started/look-around-the-demo-data/).
-4. [Create the Owner and an account](/docs/user/get-started/create-the-owner-and-an-account/).
-5. [Install the desktop app](/docs/user/get-started/install-the-desktop-app/).
-6. Back up the phone: [iPhone](/docs/user/get-started/back-up-an-iphone/) or [Android](/docs/user/get-started/back-up-an-android-phone/).
-7. [Import the backup](/docs/user/get-started/import-your-backup/).
-8. [Where to go next](/docs/user/get-started/where-to-go-next/).
+2. [Install the desktop app](/docs/user/try/install-the-desktop-app/).
+3. [Look around the demo data](/docs/user/try/look-around-the-demo-data/).
 
-Steps 2 and 3 take a few minutes and need no phone.
-They answer whether Message Crate is worth the work of steps 4 to 7.
+**Your own messages** puts real messages into the same Message Crate:
 
-Next: [Start a Message Crate](/docs/user/get-started/start-a-message-crate/).
+1. [Create the Owner and an account](/docs/user/your-messages/create-the-owner-and-an-account/).
+2. Back up the phone: [iPhone](/docs/user/your-messages/back-up-an-iphone/) or [Android](/docs/user/your-messages/back-up-an-android-phone/).
+3. [Import the backup](/docs/user/your-messages/import-your-backup/).
+4. [Where to go next](/docs/user/your-messages/where-to-go-next/).
+
+The first part answers whether Message Crate is worth the work of the second.
+
+Next: [Install the desktop app](/docs/user/try/install-the-desktop-app/).

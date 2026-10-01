@@ -3,8 +3,8 @@ title: Import your backup
 description: Point the desktop app's Import form at the backup folder, approve the review, and open the imported conversations.
 ---
 
-This step reads the backup folder from step 6 and stores its messages in the Message Crate.
-It happens in the desktop app, logged in as the account from step 4.
+This step reads the phone's backup folder and stores its messages in the Message Crate.
+It happens in the desktop app, logged in as the account made in [Create the Owner and an account](/docs/user/your-messages/create-the-owner-and-an-account/).
 
 ## Open Import
 
@@ -20,7 +20,7 @@ The Owner's login doesn't show **Import**, because the Owner holds no messages.
 
 1. The first list is the source. Choose **iMessage**. It covers SMS and MMS as well as iMessage, because an iPhone keeps all three together.
 2. **Platform**: **iPhone backup**.
-3. **iPhone Backup Directory**: select **Browse** and pick the device folder from step 6, the one that contains `Manifest.plist`.
+3. **iPhone Backup Directory**: select **Browse** and pick the device folder of the backup, the one that contains `Manifest.plist`.
 4. **Encryption password**: the backup's password. The field is marked required when the app finds the backup is encrypted, and optional when it isn't.
 
 ### For an Android backup
@@ -83,7 +83,7 @@ The Demo Account has done its job once real messages are in.
 Deleting it is optional. It holds nothing real, and nothing in it mixes with another account.
 While it exists, anyone who reaches the server can open it from the login screen.
 
-1. Log out, and log in as the Owner. A browser at [http://localhost:8080](http://localhost:8080) works, and so does the desktop app.
+1. Log out, and log in as the Owner.
 2. On **User Accounts**, select **demo**.
 3. Open **Danger zone** and select **Delete account**.
 4. Confirm with **Delete account**.
@@ -91,4 +91,4 @@ While it exists, anyone who reaches the server can open it from the login screen
 The **Explore Demo Account** button leaves the login screen.
 The Owner brings the Demo Account back under [Server Settings](/docs/user/features/owner/owner-home/#demo-account) with **Add Demo Account**.
 
-Next: [Where to go next](/docs/user/get-started/where-to-go-next/).
+Next: [Where to go next](/docs/user/your-messages/where-to-go-next/).

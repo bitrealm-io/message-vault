@@ -11,7 +11,7 @@ They read incomplete or reverse-engineered formats and may produce less complete
 On the **Import** source list they appear as **GO SMS Pro**, **iMazing**, **OpenExtract**, and **SMS Backup+**.
 
 :::caution[Prefer a supported backup when possible]
-When the phone still exists, a new backup is better: [SMS Backup & Restore](/docs/user/get-started/back-up-an-android-phone/) over GO SMS Pro or SMS Backup+, an [iPhone backup](/docs/user/get-started/back-up-an-iphone/) over iMazing Messages CSV, and a [WhatsApp](/docs/user/import-sources/whatsapp/) database over iMazing WhatsApp CSV.
+When the phone still exists, a new backup is better: [SMS Backup & Restore](/docs/user/your-messages/back-up-an-android-phone/) over GO SMS Pro or SMS Backup+, an [iPhone backup](/docs/user/your-messages/back-up-an-iphone/) over iMazing Messages CSV, and a [WhatsApp](/docs/user/import-sources/whatsapp/) database over iMazing WhatsApp CSV.
 :::
 
 ## GO SMS Pro

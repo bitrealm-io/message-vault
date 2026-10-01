@@ -15,7 +15,7 @@ The desktop app reads that file directly, so no phone backup is needed.
 - There is no iPhone to back up, or no way to back it up.
 - The Mac holds conversations the phone no longer has.
 
-An [iPhone backup](/docs/user/get-started/back-up-an-iphone/) is the better first import, because the phone usually holds more.
+An [iPhone backup](/docs/user/your-messages/back-up-an-iphone/) is the better first import, because the phone usually holds more.
 The Mac has only what Messages on that Mac received.
 A Mac that was signed in recently, or that doesn't receive the phone's SMS texts, holds part of the history.
 
@@ -38,4 +38,4 @@ Messages the Message Crate already holds are skipped.
 The two optional fields exist for a `chat.db` that was copied to another computer.
 In that case **Attachment folder** takes the copied `Attachments` folder, and **Apple Contacts file** takes a copied `AddressBook-v22.abcddb`.
 
-The run itself is the same as in [Import your backup](/docs/user/get-started/import-your-backup/#start-the-import).
+The run itself is the same as in [Import your backup](/docs/user/your-messages/import-your-backup/#start-the-import).

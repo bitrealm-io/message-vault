@@ -4,7 +4,7 @@ description: Import WhatsApp from an Android phone or an iPhone backup. Advanced
 ---
 
 WhatsApp is the hardest source to import.
-It belongs after a first import of [iPhone](/docs/user/get-started/back-up-an-iphone/) or [Android](/docs/user/get-started/back-up-an-android-phone/) messages has worked, not before.
+It belongs after a first import of [iPhone](/docs/user/your-messages/back-up-an-iphone/) or [Android](/docs/user/your-messages/back-up-an-android-phone/) messages has worked, not before.
 
 Three things make it hard:
 
@@ -66,7 +66,7 @@ The [WhatsApp Chat Exporter documentation](https://github.com/KnugiHK/WhatsApp-C
 
 ## WhatsApp on iPhone
 
-WhatsApp's data is inside the iPhone backup made in [Back up an iPhone](/docs/user/get-started/back-up-an-iphone/).
+WhatsApp's data is inside the iPhone backup made in [Back up an iPhone](/docs/user/your-messages/back-up-an-iphone/).
 
 The backup must be made **without** encryption.
 The Import form has no password field for WhatsApp, so it can't open an encrypted backup.
@@ -87,4 +87,4 @@ When the backup doesn't hold it, Import uses **WhatsApp phone number** under **P
 - A run can't be cancelled while `wtsexporter` is working. It ends when the program finishes.
 - Using files from two different backups together fails, because a key decrypts only the backup it was made with.
 
-The run itself is the same as in [Import your backup](/docs/user/get-started/import-your-backup/#start-the-import).
+The run itself is the same as in [Import your backup](/docs/user/your-messages/import-your-backup/#start-the-import).

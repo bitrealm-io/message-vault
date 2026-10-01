@@ -11,12 +11,21 @@ Each entry names what is seen and what fixes it.
 
 The server isn't answering at the address the browser or the desktop app is using.
 
+For the Message Crate the desktop app starts, the card says what went wrong in place of the forms, with **Try again** and the server's own words under **Details**.
+
+For a Message Crate in Docker:
+
 1. `docker ps` lists the running containers. `message-crate` must be among them.
 2. `docker logs message-crate` shows what the server printed, including why it stopped.
-3. In the desktop app, **Change server address** on the login card opens **Server Address**. The **Address** field must hold the server's address, and **Test** checks it. The app starts with `http://127.0.0.1:8080`, which is the same computer.
+3. In the desktop app, **Server Address** must hold the server's address, and **Test** checks it. For any address but its own, `http://127.0.0.1:8080`, the app opens on **Server Address** at every start.
 
 A server on a different computer needs more than the address.
 [Run on another machine](/docs/user/features/owner/run-on-another-machine/) covers it.
+
+### The app says another program is using port 8080
+
+The app's own server listens on port 8080 and something else holds it.
+Closing that program and selecting **Try again** starts the server.
 
 ### Docker refuses to start the server because the port is in use
 
@@ -67,7 +76,7 @@ With it off, the Owner creates every account with **Add account**.
 ### Windows or macOS warns before the first run
 
 The installers are not code-signed yet, so both systems warn that the publisher is unknown.
-[Install the desktop app](/docs/user/get-started/install-the-desktop-app/#install) has the steps for each system.
+[Install the desktop app](/docs/user/try/install-the-desktop-app/#install) has the steps for each system.
 
 ### Import and Export are missing
 

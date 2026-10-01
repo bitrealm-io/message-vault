@@ -18,8 +18,8 @@ export type ThemePreset = {
   seeds: ThemeSeeds;
 };
 
-export const THEME_MODE_KEY = "mv-theme";
-export const THEME_SEEDS_KEY = "mv-theme-seeds";
+export const THEME_MODE_KEY = "mc-theme";
+export const THEME_SEEDS_KEY = "mc-theme-seeds";
 
 export const DEFAULT_MODE: ThemeMode = "dark";
 

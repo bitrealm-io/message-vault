@@ -2,8 +2,8 @@
 
 use anyhow::Result;
 use media::MediaMode;
+use message_crate_core::{ExportTransforms, emit_log};
 use message_ir::{ConversationDocument, IrAttachment, IrDirection, IrImessage, IrParticipant};
-use message_vault_io_core::{ExportTransforms, emit_log};
 use obfuscate::{
     Obfuscator, classify_attachment, materialize_placeholders, placeholder_rel_path,
     resolve_obfuscator_with_log,

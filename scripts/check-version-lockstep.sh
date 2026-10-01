@@ -22,15 +22,15 @@ declare -A found
 
 # The four files the release process edits by hand.
 found["src-tauri/Cargo.toml"]="$(sed -n 's/^version = "\(.*\)"$/\1/p' src-tauri/Cargo.toml | head -1)"
-found["crates/vault/server/Cargo.toml"]="$(sed -n 's/^version = "\(.*\)"$/\1/p' crates/vault/server/Cargo.toml | head -1)"
+found["crates/server/server/Cargo.toml"]="$(sed -n 's/^version = "\(.*\)"$/\1/p' crates/server/server/Cargo.toml | head -1)"
 found["src-tauri/tauri.conf.json"]="$(sed -n 's/^  "version": "\(.*\)",$/\1/p' src-tauri/tauri.conf.json | head -1)"
 found["web/package.json"]="$(sed -n 's/^  "version": "\(.*\)",$/\1/p' web/package.json | head -1)"
 
 # The lockfiles that record those manifests. `npm ci` refuses a package-lock
 # that disagrees with package.json, but `cargo build` rewrites a stale
 # Cargo.lock without a word, so the Cargo entries are the ones worth checking.
-found["Cargo.lock (message-vault-server)"]="$(awk '/^name = "message-vault-server"$/{getline; sub(/^version = "/, ""); sub(/"$/, ""); print; exit}' Cargo.lock)"
-found["src-tauri/Cargo.lock (message-vault-io-tauri)"]="$(awk '/^name = "message-vault-io-tauri"$/{getline; sub(/^version = "/, ""); sub(/"$/, ""); print; exit}' src-tauri/Cargo.lock)"
+found["Cargo.lock (message-crate-server)"]="$(awk '/^name = "message-crate-server"$/{getline; sub(/^version = "/, ""); sub(/"$/, ""); print; exit}' Cargo.lock)"
+found["src-tauri/Cargo.lock (message-crate-desktop)"]="$(awk '/^name = "message-crate-desktop"$/{getline; sub(/^version = "/, ""); sub(/"$/, ""); print; exit}' src-tauri/Cargo.lock)"
 found["web/package-lock.json"]="$(sed -n 's/^  "version": "\(.*\)",$/\1/p' web/package-lock.json | head -1)"
 
 expected="${found["src-tauri/Cargo.toml"]}"

@@ -1,6 +1,6 @@
 # The HTTP interface has one rules document
 
-The rules for the vault's `/v1` interface live in one standing document,
+The rules for the server's `/v1` interface live in one standing document,
 `docs/architecture/http-api.md`. That file states what the interface is today:
 every rule, its reason, and the alternatives turned down. A pull request that
 touches a route is graded against it, and a change to a rule is made there in

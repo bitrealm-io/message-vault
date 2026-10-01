@@ -1,0 +1,28 @@
+[package]
+name = "message-crate-pull"
+version = "0.1.0"
+edition = "2024"
+description = "Pull messages from a Message Crate export API into a message-ir folder"
+license = "LicenseRef-FCL-1.0-ALv2"
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
+jsonl_journal = { package = "journal", path = "../../libs/journal" }
+message-crate-api-types = { path = "../../libs/api-types" }
+message-crate-http = { path = "../../libs/http" }
+message-crate-core = { path = "../../core/message-crate-core" }
+media = { path = "../media" }
+message-ir = { path = "../../libs/ir" }
+message-ir-format = { path = "../../libs/ir-format" }
+reqwest = { workspace = true, features = ["blocking"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+httpmock = "0.8"
+
+[lints]
+workspace = true

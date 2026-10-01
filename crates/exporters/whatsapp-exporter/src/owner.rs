@@ -55,7 +55,7 @@ fn owner_from_plist(path: &Path) -> Result<Option<String>> {
     }))
 }
 
-/// The number typed on the form, under the handle key the vault uses for
+/// The number typed on the form, under the handle key the server uses for
 /// its `handles` rows, so it matches the profile phone it was filled from.
 ///
 /// # Errors
@@ -175,10 +175,10 @@ mod tests {
         assert!(log[0].starts_with("could not read "), "{log:?}");
     }
 
-    /// The form value is stored under the vault's handle key, so a number
+    /// The form value is stored under the server's handle key, so a number
     /// typed with spaces matches the profile phone it was filled from.
     #[test]
-    fn the_form_number_is_normalized_like_a_vault_handle() {
+    fn the_form_number_is_normalized_like_a_stored_handle() {
         assert_eq!(owner_from_form("+1 555 555 0100").unwrap(), "+15555550100");
         assert_eq!(owner_from_form("(555) 555-0100").unwrap(), "+15555550100");
         assert!(owner_from_form("abc").is_err());

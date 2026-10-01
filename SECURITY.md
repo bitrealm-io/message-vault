@@ -1,12 +1,12 @@
 # Security policy
 
-Message Vault stores people's private message archives, so security reports
+Message Crate stores people's private message archives, so security reports
 matter more here than in most projects. If you have found a vulnerability —
 or think you may have — we want to hear about it quickly and quietly.
 
 ## Supported versions
 
-Message Vault is a self-hosted product: the desktop app and the vault server
+Message Crate is a self-hosted product: the desktop app and the server
 both run on machines you control. Because fixes are only ever published for
 the current release, security updates apply to the **latest release only**.
 If you are running an older version and suspect you are affected by a known
@@ -17,7 +17,7 @@ issue, upgrade first and re-test before reporting.
 Please do not open a public issue, and please do not post details in
 discussions or chat. Report suspected vulnerabilities privately to:
 
-**[vault@bitrealm.io](mailto:vault@bitrealm.io)**
+**[hello@bitrealm.io](mailto:hello@bitrealm.io)**
 
 Include as much of the following as you can:
 

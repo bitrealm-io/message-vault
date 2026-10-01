@@ -37,7 +37,9 @@ export default function ImportHistoryTable({
   return (
     <section>
       <h3 className={sectionTitle}>Import history</h3>
-      <p className={sectionHint}>Each vault push or CLI import recorded for this account.</p>
+      <p className={sectionHint}>
+        Each import recorded for this account, from the desktop app or the command line.
+      </p>
       {imports.length === 0 ? (
         <p className={`${sectionHint} mt-3`}>No imports recorded yet.</p>
       ) : (

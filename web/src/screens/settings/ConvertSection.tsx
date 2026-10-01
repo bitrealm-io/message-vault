@@ -23,7 +23,7 @@ function formatLabel(id: ExportFormat): string {
  * screen picks the output format only, and it refuses to write into its own
  * input, so the two folders must differ.
  *
- * Convert reads files and writes files. It never opens a backup or the vault,
+ * Convert reads files and writes files. It never opens a backup or the server,
  * which is why it lives under Settings as a tool rather than in the sidebar
  * beside Import and Export.
  */
@@ -87,7 +87,7 @@ export function ConvertSection() {
       intro={
         <p className="mb-6 text-[0.875rem] text-muted">
           Convert rewrites a folder of exported files into another format. The input format is read
-          from the folder. Convert touches neither a backup nor your vault.
+          from the folder. Convert touches neither a backup nor your Message Crate.
         </p>
       }
       success={

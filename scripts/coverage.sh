@@ -19,7 +19,7 @@
 # python3 for scripts/uncovered-functions.py. The
 # instrumented build lives under target/llvm-cov-target, apart from plain
 # `cargo build` output, so the first run compiles the workspace from scratch.
-# The workspace always runs on SQLite. Export MV_TEST_POSTGRES_URL and the
+# The workspace always runs on SQLite. Export MC_TEST_POSTGRES_URL and the
 # server crate runs a second time on Postgres, so the Postgres-gated suites
 # count too; both passes feed one report. ffmpeg on PATH matters for the
 # same reason: the transcode and media tests skip themselves without it.
@@ -45,11 +45,11 @@ IGNORE='(^|/)tests/|/tests\.rs$'
 mkdir -p "${OUT}"
 
 echo "==> cargo llvm-cov (workspace tests on SQLite, instrumented)"
-env -u MV_TEST_POSTGRES_URL cargo llvm-cov --workspace --no-report --ignore-filename-regex "${IGNORE}"
+env -u MC_TEST_POSTGRES_URL cargo llvm-cov --workspace --no-report --ignore-filename-regex "${IGNORE}"
 
-if [[ -n "${MV_TEST_POSTGRES_URL:-}" ]]; then
+if [[ -n "${MC_TEST_POSTGRES_URL:-}" ]]; then
   echo "==> cargo llvm-cov (server tests on Postgres, same profile)"
-  cargo llvm-cov -p message-vault-server --no-report --ignore-filename-regex "${IGNORE}"
+  cargo llvm-cov -p message-crate-server --no-report --ignore-filename-regex "${IGNORE}"
 fi
 
 echo "==> reports"

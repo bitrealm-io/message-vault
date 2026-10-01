@@ -6,7 +6,7 @@ import { createContext, useContext } from "react";
  * A message is stored as an instant, in UTC. It says nothing about where the
  * phone was, so turning it into a clock reading, a day, or a year needs a zone,
  * and that zone is the account's: chosen at profile setup, changed under
- * Settings → Profile, and the same one the vault uses for `date:` boundaries
+ * Settings → Profile, and the same one the server uses for `date:` boundaries
  * and the year filter. Every label in the app reads it through `useTimeZone`,
  * so a message at 11:59 pm on New Year's Eve sits in the old year in the
  * thread, in the year chips, and in search alike.

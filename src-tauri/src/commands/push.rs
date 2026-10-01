@@ -1,10 +1,10 @@
-//! `push` command — upload an extract folder to a Message Vault server.
+//! `push` command — upload an extract folder to a Message Crate server.
 
+use message_crate_push::ImportMode;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use vault_push::ImportMode;
 
-use vault_push::{ProgressEvent, VaultPushConfig, run as run_push};
+use message_crate_push::{ProgressEvent, PushConfig, run as run_push};
 
 use super::events;
 use super::events::ExtractProgressEvent;
@@ -13,7 +13,7 @@ use crate::state::AppState;
 
 /// Largest attachment the desktop app will upload.
 ///
-/// The vault's own `asset_max_bytes` defaults higher and is not exposed to
+/// The server's own `asset_max_bytes` defaults higher and is not exposed to
 /// clients, so this is the number the app can actually promise. The size
 /// forecast at the first gate predicts against this same constant — a forecast
 /// against a different limit than the upload uses would be worse than none.
@@ -26,7 +26,7 @@ fn as_usize(value: u64) -> usize {
 
 /// Progress bar update and finished JSON payload after a push completes.
 fn finished_push_events(
-    report: &vault_push::PushReport,
+    report: &message_crate_push::PushReport,
 ) -> (ExtractProgressEvent, serde_json::Value) {
     let progress = ExtractProgressEvent {
         step: "upload".into(),
@@ -68,11 +68,11 @@ fn finished_push_events(
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PushArgs {
-    /// Base URL of the vault server, for example `http://127.0.0.1:8080`.
+    /// Base URL of the server, for example `http://127.0.0.1:8080`.
     pub base_url: String,
-    /// Vault account name.
+    /// Account name.
     pub username: String,
-    /// Bearer token for the vault: an API token, or the logged-in Session's
+    /// Bearer token for the server: an API token, or the logged-in Session's
     /// token. Never a password.
     pub key: String,
     /// Folder of conversation files to upload.
@@ -95,7 +95,7 @@ pub struct PushArgs {
     pub import_id: Option<i64>,
 }
 
-/// Ask this process to upload extracted conversations to a vault server.
+/// Ask this process to upload extracted conversations to a server.
 ///
 /// Returns as soon as the background thread starts. Upload progress uses the
 /// same `extract:*` events as Extract so the UI can reuse one progress view.
@@ -124,8 +124,8 @@ pub fn push(
 /// The push settings the desktop app uses. They differ from the command-line
 /// defaults because desktop imports are many small files over a local
 /// network; each number says why.
-fn push_config(args: PushArgs) -> VaultPushConfig {
-    VaultPushConfig {
+fn push_config(args: PushArgs) -> PushConfig {
+    PushConfig {
         input: PathBuf::from(&args.input_dir),
         base_url: args.base_url,
         username: args.username,
@@ -137,15 +137,15 @@ fn push_config(args: PushArgs) -> VaultPushConfig {
         trust_export: args.trust_export,
         verify_digests: false,
         max_retries: 3,
-        // Pack until vault_push::MAX_IMPORT_BODY_BYTES (64 MiB); do not stop at a message count.
-        batch_size: vault_push::NO_MESSAGE_COUNT_LIMIT,
+        // Pack until message_crate_push::MAX_IMPORT_BODY_BYTES (64 MiB); do not stop at a message count.
+        batch_size: message_crate_push::NO_MESSAGE_COUNT_LIMIT,
         // Above the CLI default (8): desktop imports are often many small files.
         asset_upload_workers: 16,
         // Above the CLI default (3): hide more hashing behind in-flight imports.
         prepare_ahead: 8,
         // Above the CLI default (2): more of the prepare-ahead queue runs at once.
         prepare_workers: 4,
-        // Below the CLI default (vault_push::MAX_PROXY_BODY_BYTES, 90 MiB):
+        // Below the CLI default (message_crate_push::MAX_PROXY_BODY_BYTES, 90 MiB):
         // desktop uploads switch to multipart sooner so a large attachment
         // moves in small parts instead of one long PUT.
         asset_multipart_threshold: 5 * 1024 * 1024,
@@ -213,7 +213,7 @@ fn forward_push_event(app: &tauri::AppHandle, event: ProgressEvent) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vault_push::{FileResult, PushReport};
+    use message_crate_push::{FileResult, PushReport};
 
     #[test]
     fn finished_push_event_reports_complete_upload_and_totals() {

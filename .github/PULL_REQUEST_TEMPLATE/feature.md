@@ -24,7 +24,7 @@
 ## Database Changes
 
 - [ ] No schema changes
-- [ ] `schema/sql/*.sql` changed (every vault rebuilds empty and re-imports; the fingerprint is computed, nothing to bump)
+- [ ] `schema/sql/*.sql` changed (every database rebuilds empty and re-imports; the fingerprint is computed, nothing to bump)
 
 ## How to Test
 

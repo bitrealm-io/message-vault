@@ -34,12 +34,12 @@ describe("groupImportIssues", () => {
   it("keeps two different reasons as two groups", () => {
     const groups = groupImportIssues([
       issue({ item: "a.jsonl", reason: "source mismatch" }),
-      issue({ item: "b.jsonl", reason: "HTTP 500 from vault" }),
+      issue({ item: "b.jsonl", reason: "HTTP 500 from server" }),
     ]);
     expect(groups).toHaveLength(2);
     expect(groups[0]?.reason).toBe("source mismatch");
     expect(groups[0]?.items).toEqual(["a.jsonl"]);
-    expect(groups[1]?.reason).toBe("HTTP 500 from vault");
+    expect(groups[1]?.reason).toBe("HTTP 500 from server");
     expect(groups[1]?.items).toEqual(["b.jsonl"]);
   });
 

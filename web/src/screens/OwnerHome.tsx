@@ -13,7 +13,7 @@ import { useAuth } from "../lib/auth";
 import { parseSelectKey } from "../lib/selectKey";
 import { OwnerAccountsPanel } from "./owner/OwnerAccountsPanel";
 import { OwnerDashboardPanel } from "./owner/OwnerDashboardPanel";
-import { VaultSettingsPanel } from "./owner/VaultSettingsPanel";
+import { ServerSettingsPanel } from "./owner/ServerSettingsPanel";
 import SettingsScreen from "./SettingsScreen";
 
 /** What the side panel lists, in its order. */
@@ -22,7 +22,7 @@ const SECTIONS = ["dashboard", "settings", "accounts", "activity", "logs"] as co
 const SECTION_LABELS: Record<(typeof SECTIONS)[number], string> = {
   dashboard: "Dashboard",
   // Not "Settings": that is the screen an account is managed from, here and in the app.
-  settings: "Vault Settings",
+  settings: "Server Settings",
   accounts: "User Accounts",
   activity: "Activity",
   logs: "Logs",
@@ -38,7 +38,7 @@ function sectionLinkClass(active: boolean): string {
 }
 
 /**
- * Owner Home: where the vault owner lands at login and works from, the way
+ * Owner Home: where the owner lands at login and works from, the way
  * any other account lands in Messages.
  *
  * The frame is the one every account sees: the header with the product name,
@@ -46,7 +46,7 @@ function sectionLinkClass(active: boolean): string {
  * What fills it is the owner's own. The owner has no conversations, no
  * contacts, no import, no export and no trash, so the side panel lists
  * Dashboard, Settings, User Accounts, Activity and Logs, and the search bar
- * filters the accounts table. Dashboard shows what the whole vault holds.
+ * filters the accounts table. Dashboard shows what the whole database holds.
  * Activity and Logs show only their name: nothing is built behind them yet.
  *
  * `/owner/accounts/{id}` is one account's Settings, the screen its holder
@@ -54,7 +54,7 @@ function sectionLinkClass(active: boolean): string {
  * opens the owner's own Settings, which is also where the account button's
  * Settings goes. `/owner/accounts/new` is the same screen for an account that
  * does not exist yet, which Add account opens in place of the table. See
- * `docs/adr/0008-the-vault-owner-holds-no-messages.md`.
+ * `docs/adr/0008-the-owner-holds-no-messages.md`.
  */
 export default function OwnerHome() {
   const { section: raw, accountId: rawAccountId } = useParams();
@@ -145,7 +145,7 @@ export default function OwnerHome() {
                 <h3 className="m-0 text-text">{SECTION_LABELS[section]}</h3>
               )}
               {section === "dashboard" && <OwnerDashboardPanel />}
-              {section === "settings" && <VaultSettingsPanel />}
+              {section === "settings" && <ServerSettingsPanel />}
               {section === "accounts" && <OwnerAccountsPanel filter={accountSearch} />}
             </div>
           )}

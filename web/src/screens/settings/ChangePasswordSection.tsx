@@ -1,20 +1,20 @@
 import { useState } from "react";
 import Button from "../../components/Button";
 import { useAuth } from "../../lib/auth";
-import { changePassword, setAccountPassword } from "../../lib/vaultApi";
+import { changePassword, setAccountPassword } from "../../lib/serverApi";
 import { inputClassName, sectionTitleClass } from "./profileStyles";
 
 /**
  * Change an account's password: the logged-in account's own, or, given
- * `managedAccountId`, one the vault owner has opened from User Accounts.
+ * `managedAccountId`, one the owner has opened from User Accounts.
  *
  * One form for both. Two copies of a password form would be two places for
  * the confirmation rule and the token rotation to drift apart.
  *
  * A user account may have no password, so Settings offers Reset password, which clears it.
- * The vault owner must keep one, so its own Settings pass `canReset={false}`.
+ * The owner must keep one, so its own Settings pass `canReset={false}`.
  * They also pass `requireCurrent`: the owner's account reaches every other, so
- * the vault asks for the password being replaced before it changes it.
+ * the server asks for the password being replaced before it changes it.
  */
 export function ChangePasswordSection({
   disabled = false,
@@ -36,7 +36,7 @@ export function ChangePasswordSection({
 
   /**
    * Store `password` as the new one, confirmed by `confirmation`; an empty
-   * pair clears it. The vault checks the pair, not this screen, so the
+   * pair clears it. The server checks the pair, not this screen, so the
    * current password is checked first and the sentences come back in one
    * fixed order.
    */

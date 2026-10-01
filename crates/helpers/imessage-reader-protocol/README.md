@@ -1,6 +1,6 @@
 # imessage-reader-protocol
 
-The line-delimited JSON protocol between the Message Vault desktop app and the [`imessage-reader`](../imessage-reader/) program: the request the app writes on the program's stdin and the events the program writes on its stdout. Type definitions and their serde shapes, nothing else.
+The line-delimited JSON protocol between the Message Crate desktop app and the [`imessage-reader`](../imessage-reader/) program: the request the app writes on the program's stdin and the events the program writes on its stdout. Type definitions and their serde shapes, nothing else.
 
 The session order, the tag on every enum, and the meaning of each field are documented on the types in [`src/lib.rs`](src/lib.rs). `PROTOCOL_VERSION` is bumped when a change would make an older program and a newer app misread each other.
 

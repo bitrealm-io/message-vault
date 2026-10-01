@@ -4,7 +4,7 @@ let baseUrl = "";
 let authToken: string | null = null;
 let accountId: number | null = null;
 
-/** Set the vault server URL. An empty string means "same host as this page". */
+/** Set the server URL. An empty string means "same host as this page". */
 export function setBaseUrl(url: string) {
   baseUrl = url.replace(/\/+$/, "");
 }
@@ -20,7 +20,7 @@ export function getToken(): string | null {
 }
 
 /**
- * Remember which account the session token names. The vault addresses an
+ * Remember which account the session token names. The server addresses an
  * account by id under `/v1/accounts/{id}`, and the credential's own id is
  * what `POST /v1/session` answered, so it is kept beside the token it
  * belongs to. Pass null to log out.
@@ -39,7 +39,7 @@ export function getBaseUrl(): string {
 }
 
 /**
- * The body of every failure the vault answers: an RFC 7807 problem document
+ * The body of every failure the server answers: an RFC 7807 problem document
  * (`docs/architecture/http-api.md`). `type` is the URL of the page describing the kind of failure,
  * or `about:blank` for an internal error.
  */
@@ -63,12 +63,12 @@ export type Problem = {
 const RAW_BODY_FALLBACK_LIMIT = 200;
 
 /**
- * A failed response from the vault: the HTTP status, the problem's slug so a
+ * A failed response from the server: the HTTP status, the problem's slug so a
  * screen can branch on what went wrong, and `message`, the sentence a person
  * reads — the problem's `detail`, or its `errors` joined for a validation
  * failure.
  */
-export class VaultApiError extends Error {
+export class ApiError extends Error {
   readonly status: number;
   /** The last segment of the problem's `type` URL; null when the body was not a problem. */
   readonly type: string | null;
@@ -79,7 +79,7 @@ export class VaultApiError extends Error {
 
   constructor(status: number, message: string, problem: Problem | null = null) {
     super(message);
-    this.name = "VaultApiError";
+    this.name = "ApiError";
     this.status = status;
     this.type = problem ? problemSlug(problem.type) : null;
     this.title = problem?.title ?? null;
@@ -117,16 +117,16 @@ function parseProblem(text: string): Problem | null {
 /**
  * The error to throw for a failed response.
  *
- * The vault answers a problem document, and its `detail` (or, for a
+ * The server answers a problem document, and its `detail` (or, for a
  * validation failure, every one of its `errors`) is what a user should read —
  * not the status code and not the envelope around it. Anything else (a
  * proxy's HTML error page, an empty body) falls back to the raw text — clamped
- * to `RAW_BODY_FALLBACK_LIMIT` characters, since a reverse proxy or non-vault
+ * to `RAW_BODY_FALLBACK_LIMIT` characters, since a reverse proxy or other
  * host can answer with a whole HTML page — then to a generic sentence.
  */
-export function problemFromBody(status: number, text: string): VaultApiError {
+export function problemFromBody(status: number, text: string): ApiError {
   const trimmed = text.trim();
-  if (!trimmed) return new VaultApiError(status, `Request failed (${status})`);
+  if (!trimmed) return new ApiError(status, `Request failed (${status})`);
 
   const problem = parseProblem(trimmed);
   if (problem) {
@@ -134,12 +134,12 @@ export function problemFromBody(status: number, text: string): VaultApiError {
     const errors = (problem.errors ?? []).map((e) => e.trim()).filter(Boolean);
     const message =
       detail || errors.join("; ") || problem.title.trim() || `Request failed (${status})`;
-    return new VaultApiError(status, message, problem);
+    return new ApiError(status, message, problem);
   }
   if (trimmed.length > RAW_BODY_FALLBACK_LIMIT) {
-    return new VaultApiError(status, `${trimmed.slice(0, RAW_BODY_FALLBACK_LIMIT)}…`);
+    return new ApiError(status, `${trimmed.slice(0, RAW_BODY_FALLBACK_LIMIT)}…`);
   }
-  return new VaultApiError(status, trimmed);
+  return new ApiError(status, trimmed);
 }
 
 async function request<T>(
@@ -149,7 +149,7 @@ async function request<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const headers: Record<string, string> = { ...appHeaders() };
-  // A request says it carries JSON only when it does. The vault reads a body
+  // A request says it carries JSON only when it does. The server reads a body
   // wherever the media type promises one, so an empty DELETE marked as JSON is
   // refused as unparseable.
   if (body) {

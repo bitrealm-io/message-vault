@@ -1,7 +1,7 @@
-# Message Vault
+# Message Crate
 
-Message Vault pulls conversations out of chat apps and stores them in a
-self-hosted, searchable vault. This file is the glossary: the words we use
+Message Crate pulls conversations out of chat apps and makes them searchable on
+a server a person runs themselves. This file is the glossary: the words we use
 for things in the product, and the words we have decided not to use. It
 holds no implementation details.
 
@@ -49,13 +49,13 @@ _Avoid_: Text, Post, Item, Row
 **Asset**:
 The bytes of one attachment, stored once and named by the hash of its
 contents, so the same file sent in ten messages is one asset. An asset is
-the only thing in the vault addressed by a hash rather than a row number,
-because the file exists before the vault does and its contents are its
+the only thing in the database addressed by a hash rather than a row number,
+because the file exists before the database does and its contents are its
 identity.
 _Avoid_: Attachment file, Blob, Media, Upload
 
 **Import Run**:
-One attempt to bring messages from a backup into the vault, recorded
+One attempt to bring messages from a backup into Message Crate, recorded
 permanently whether it succeeded, failed, or was cancelled. An account has at
 most one running at a time. A run moves through its Stages and stops at each
 Review until the person approves or cancels it. The record belongs to the
@@ -65,10 +65,14 @@ one with `POST /v1/imports`; it is not a session, which is the logged-in
 account's token.
 _Avoid_: Import Job, Import Session, Push
 
-**Vault**:
-One installation's store of accounts and their messages. A vault holds
-many accounts, and each account's data is isolated from the others.
-_Avoid_: Database, Instance, Server
+**Message Crate**:
+One installation of the product: the thing a person claims, owns, and logs
+into. It holds many accounts and their messages, and each account's data is
+isolated from the others. The product carries the same name. "A Message
+Crate" or "this Message Crate" is one installation; "Message Crate" with no
+article is the product.
+_Avoid_: Vault, Crate on its own, Instance. The server is the running process
+and the database is the store; neither is a name for the installation.
 
 **Time Zone**:
 The zone an account shows every message time in, chosen when the account is
@@ -81,7 +85,7 @@ _Avoid_: Server time, Local time, Offset
 ### People
 
 **Contact**:
-One person the vault knows: a name, and the identities that reach them. A
+One person Message Crate knows: a name, and the identities that reach them. A
 contact is made for every person an import meets, and named from the backup
 when the backup knew the name; a name the person types or loads from an
 address book replaces one an import supplied. Deleting a contact removes the
@@ -91,20 +95,20 @@ from a phone's address book leaves its text threads in place.
 _Avoid_: Card, Identity, Person record
 
 **Address Book**:
-The vault's own CSV of contacts and their identities, one row per identity,
+Message Crate's own CSV of contacts and their identities, one row per identity,
 written by Export on the Contacts screen and read by Load under Settings. It
 is for taking contacts out to a spreadsheet, correcting them, and putting them
 back; contacts themselves arrive with message imports. A load is Append,
 which adds and renames and removes nothing, or Edit, which makes each contact
-in the file match its rows. A phone's vCard is not an address book the vault
-reads.
+in the file match its rows. A phone's vCard is not an address book Message
+Crate reads.
 _Avoid_: Contacts file, VCF, vCard
 
 **Identity**:
 One address a person can be reached at: a phone number, an email address,
 or a username on a service. An identity belongs to at most one contact. The
 id a source gives a group conversation (`chat1000000005`) reaches no person:
-the vault keeps it to key the conversation, and it never belongs to a contact.
+Message Crate keeps it to key the conversation, and it never belongs to a contact.
 Only the people in the group do.
 
 An identity means one of two things depending on whose it is. A contact's
@@ -121,7 +125,7 @@ _Avoid_: Handle, Address, Number
 **Participant**:
 Another person in a Conversation, as the account holder sees it. The account
 holder is never a participant: every conversation in an account is the holder's
-own, so the vault knows they are in it without listing them. Which of the
+own, so Message Crate knows they are in it without listing them. Which of the
 holder's identities a message used is recorded on the message.
 _Avoid_: Member, Recipient
 
@@ -139,7 +143,7 @@ the list runs.
 _Avoid_: Last seen, Last active, Last message
 
 **Unknown**:
-The Contact Group the vault computes from contacts that have no name or no
+The Contact Group Message Crate computes from contacts that have no name or no
 identity. It has no members of its own and empties as a person names people.
 _Avoid_: Unnamed, Unresolved, Uncategorised
 
@@ -162,30 +166,30 @@ _Avoid_: Deleted, Archive, Hidden, Bin
 ### Logging in
 
 **Account**:
-One person's store inside a vault: the login they log in with, and the
-conversations, contacts, and identities that store holds. A vault holds many
+One person's store inside a Message Crate: the login they log in with, and the
+conversations, contacts, and identities that store holds. A Message Crate holds many
 accounts and keeps each one's data isolated from the others, so nothing an
 account holds is visible to another. An account is not finished until
 profile setup finishes.
 _Avoid_: Login, Profile, Tenant, Workspace
 
-**Vault Owner**:
-The vault's administrator: the one account that manages a vault's other
-accounts and its global settings, and the only account that has no vault of
-its own. The vault owner creates, disables and deletes accounts, resets their
+**Owner**:
+The administrator of a Message Crate: the one account that manages its other
+accounts and its server settings, and the only account that holds no messages
+of its own. The owner creates, disables and deletes accounts, resets their
 passwords, deletes their message data, and decides whether strangers may create
-an account. The owner monitors the vault through metadata: counts and totals of
+an account. The owner monitors it through metadata: counts and totals of
 messages, contacts and attachments, each account's imports and exports, when
 it last logged in, and attachment file names and sizes. The owner never reads
 content: a message's text, an attachment's bytes, or a contact's name and
 identities. The full line is in `docs/adr/0008`. There is exactly one, it cannot
 be deleted, and no other account can be given its powers.
-_Avoid_ as its name: Admin, Administrator, Superuser, Root. The role is an
-administrator's; the account is called the vault owner, because exactly one
-exists and it is whoever claimed the vault.
+_Avoid_ as its name: Vault Owner, Admin, Administrator, Superuser, Root. The
+role is an administrator's; the account is called the owner, because exactly
+one exists and it is whoever claimed the Message Crate.
 
 **Owner Home**:
-The screen the vault owner lands on at login and works from, the way any
+The screen the owner lands on at login and works from, the way any
 other account lands in Messages. It has the frame every account sees: the
 product name, a search bar and the account button across the top, over a
 side panel and a content pane. The side panel lists Dashboard, Settings, User
@@ -208,9 +212,9 @@ session and does not make them choose a new one.
 _Avoid_: Console, Dashboard, Admin, Admin panel
 
 **Claiming**:
-Making a vault's owner. A vault with no owner is unclaimed and offers only
-the Create Vault Owner screen; claiming it is what that screen does. A
-claimed vault is closed or open, depending on whether it lets strangers
+Making a Message Crate's owner. One with no owner is unclaimed and offers only
+the Create Owner screen; claiming it is what that screen does. A claimed
+Message Crate is closed or open, depending on whether it lets strangers
 create their own accounts.
 _Avoid_: Setup, First run, Provisioning
 
@@ -234,8 +238,8 @@ was last used.
 _Avoid_: App password, Key, Credential, Session
 
 **User**:
-The person operating Message Vault, in the browser or in the desktop app. A
-user has an account in the vault, and "user" is the colloquial word for that
+The person operating Message Crate, in the browser or in the desktop app. A
+user has an account in a Message Crate, and "user" is the colloquial word for that
 account: User names the person at the keyboard, Account names the record
 they log in to and the data it holds.
 _Avoid_: Member, Operator, End user
@@ -243,13 +247,13 @@ _Avoid_: Member, Operator, End user
 ### Moving messages in and out
 
 **Export**:
-Moving messages out of the vault into files on disk, in a format the
-person chooses. It reads the vault, never a phone backup. Every export is
+Moving messages out of Message Crate into files on disk, in a format the
+person chooses. It reads the database, never a phone backup. Every export is
 recorded as an Export Run.
 _Avoid_: Extract, Pull, Download
 
 **Export Run**:
-One attempt to move messages out of the vault, recorded permanently whether
+One attempt to move messages out of Message Crate, recorded permanently whether
 it completed, failed, or was cancelled. The record holds what was asked for
 and how much matched, never what the messages said. A person asks in one of
 three ways: everything the account holds, whatever a search currently shows,
@@ -262,7 +266,7 @@ _Avoid_: Export Job, Backup, Download
 
 **Convert**:
 Rewriting a folder of already-exported files into a different format,
-reading neither the original backup nor the vault. Export uses it for any
+reading neither the original backup nor the database. Export uses it for any
 format other than JSON Lines. As an operation a person starts on a folder of
 their own it is an advanced tool most people never need, so it lives under
 Settings rather than beside Import and Export.
@@ -273,7 +277,7 @@ One of the three parts of an Import Run, in order: **Staging** reads the
 backup and copies its messages and original attachments into the Staging
 Directory; **Media** converts or compresses the staged attachments, and
 exists only when the person asked for it; **Upload** writes the staged
-messages and attachments into the vault. A run shows its stages as one list
+messages and attachments into Message Crate. A run shows its stages as one list
 that fills in as it goes.
 _Avoid_: Step, Phase, Pass, Gate
 
@@ -288,7 +292,7 @@ _Avoid_: Transcode, Write path, Write queue
 **Review**:
 A stop inside an Import Run where the run shows what it has staged and waits
 for the person to approve or cancel it before spending more time or touching
-the vault. There are at most two: the Staging Review after Staging, and
+Message Crate. There are at most two: the Staging Review after Staging, and
 the Media Review after Media. A waiting review reads "Awaiting approval".
 Approving continues the run; cancelling ends it and deletes what was staged.
 A run left at a review keeps waiting, on another screen or after the app is
@@ -297,8 +301,8 @@ there; "approve" stays the word for the decision that continues the run.
 _Avoid_: Gate, Approval (for the stop), Checkpoint, Confirmation, Deny
 
 **Staging Directory**:
-The folder where Message Vault writes intermediate files that neither the
-person nor the vault keeps — a backup being prepared for import, or JSON
+The folder where Message Crate writes intermediate files that neither the
+person nor Message Crate keeps — a backup being prepared for import, or JSON
 Lines waiting to be converted into the format an export asked for. It is
 deleted when the job succeeds or is cancelled, the import log and resume
 journal with it; a failed import leaves it in place, since the staged files
@@ -309,7 +313,7 @@ _Avoid_: Import Staging Directory, Temp Folder, Working Directory
 The separate program the desktop app runs to read Apple Messages from a Mac
 or an iPhone backup during Import. It is its own program, under the GNU GPL,
 because the library that understands Apple's message database is GPL and the
-rest of Message Vault is not; the app starts it, sends it one request, and
+rest of Message Crate is not; the app starts it, sends it one request, and
 reads its answers back over a pipe. Where a person sees it, it is named with
 its file name once: "the Apple Messages reader (imessage-reader)".
 _Avoid_: Helper, Sidecar, GPL helper, iMessage reader
@@ -320,10 +324,10 @@ internal name of the desktop command that reads a backup during Import.
 ### Versions
 
 **Product Version**:
-The number a release of Message Vault is named by, such as `0.9.0`. The
-vault, the desktop app and the website carry the same one. An app whose
-Product Version differs from its vault's is flagged to the person and to the
-vault owner, and is served all the same.
+The number a release of Message Crate is named by, such as `0.9.0`. The
+server, the desktop app and the website carry the same one. An app whose
+Product Version differs from its server's is flagged to the person and to the
+owner, and is served all the same.
 _Avoid_: Release, Release number, App version
 
 **Build**:
@@ -334,7 +338,7 @@ screen shows the Build under the plain label "Version".
 _Avoid_: Revision, Build number, Full version
 
 **Schema Fingerprint**:
-The number derived from the vault database's table definitions, which the
-vault stamps into its database. It is not the `schema_version` of the shared
+The number derived from the database's table definitions, which the
+server stamps into its database. It is not the `schema_version` of the shared
 chat file format, which is a separate number kept by hand.
 _Avoid_: Schema version, Schema hash, Database version

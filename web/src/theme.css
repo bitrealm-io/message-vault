@@ -296,7 +296,7 @@
   }
 
   /* Compact list checkbox: 14px box, check drawn inside instead of the OS glyph. */
-  .mv-list-check {
+  .mc-list-check {
     appearance: none;
     -webkit-appearance: none;
     box-sizing: border-box;
@@ -310,13 +310,13 @@
     place-content: center;
   }
 
-  .mv-list-check:checked,
-  .mv-list-check:indeterminate {
+  .mc-list-check:checked,
+  .mc-list-check:indeterminate {
     background-color: var(--accent);
     border-color: var(--accent);
   }
 
-  .mv-list-check:checked::after {
+  .mc-list-check:checked::after {
     content: "";
     width: 0.35rem;
     height: 0.2rem;
@@ -326,7 +326,7 @@
     transform: rotate(-45deg);
   }
 
-  .mv-list-check:indeterminate::after {
+  .mc-list-check:indeterminate::after {
     content: "";
     width: 0.4rem;
     height: 0;

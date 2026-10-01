@@ -1,38 +1,38 @@
 # web-next screens and features
 
 A record of `web-next/`, the Next.js browse UI kept in the tree for evaluation,
-captured on 2026-09-05 from the branch that made it an HTTP client of the vault
+captured on 2026-09-05 from the branch that made it an HTTP client of the server
 (pull request #415, commit `c01560e4`). The product UI is `web/`; this document
 exists so the two can be compared feature by feature. The comparison at the end
 records what each app offers today. A feature present in one and absent from
 the other is a fact about the two trees, not a verdict on either.
 
-The screenshots are of the running app against the demo vault
+The screenshots are of the running app against the demo data
 (`./scripts/run-vault-dev.sh --reset-demo`: 442 contacts, 382 conversations,
 609,436 messages, no Contact Groups), in Chromium at 1360 × 860 with the
 default dark theme. They live in [`web-next/`](web-next/).
 
 ## Running it
 
-web-next reads the vault through the `/v1` HTTP API, the same way `web/`
-does. It needs a running vault and Node 22.
+web-next reads from the server through the `/v1` HTTP API, the same way `web/`
+does. It needs a running server and Node 22.
 
 ```bash
-./scripts/run-vault-dev.sh --reset-demo   # vault API on http://127.0.0.1:8080
+./scripts/run-vault-dev.sh --reset-demo   # server API on http://127.0.0.1:8080
 
 cd web-next
 npm ci
 npm run dev                               # http://127.0.0.1:3000
 ```
 
-Log in as `demo` with an empty password. The vault host comes from
+Log in as `demo` with an empty password. The server host comes from
 `VAULT_API_URL`, default `http://127.0.0.1:8080`. `npm run gen:api`
 regenerates the response types from `docs/src/assets/openapi.json`.
 
 Two costs are worth knowing before browsing. The Group Messages list splits
 every conversation by calendar year, which costs one count request per
 conversation per year: about four seconds for the demo's 185 groups. A search
-with body text runs through the message list, and on the demo vault an
+with body text runs through the message list, and on the demo data an
 unscoped text search takes about fifty seconds (issue #413).
 
 ## What works and what does not
@@ -212,7 +212,7 @@ several rows shows a selection summary.
 `src/components/TrashShell.tsx`, `TrashUnifiedList.tsx`. Two tabs, Contacts
 and Group Messages, each with a count; a search field; select-all; Restore and
 Delete forever; and a read-only preview of the trashed item on the right. The
-demo vault has nothing in Trash, and the vault reports no trashed-at time, so
+demo data has nothing in Trash, and the server reports no trashed-at time, so
 the list is empty here.
 
 ![Trash](web-next/trash.png)
@@ -248,7 +248,7 @@ preset swatches, and date and time formats with custom patterns.
 
 `src/app/no-label/page.tsx`, `label/[slug]/page.tsx`, `no-messages/page.tsx`.
 The same browse screen scoped to one label, to contacts with no label, or to
-contacts with no messages. The demo vault has no labels, so only "No label"
+contacts with no messages. The demo data has no labels, so only "No label"
 is reachable.
 
 ![No label](web-next/no-label.png)
@@ -269,7 +269,7 @@ has no such feature.
 | Create an account from the login screen | username, password, confirmation | user ID, password, confirmation, display name, phone, "No password" option |
 | Passwordless login | — | yes |
 | Onboarding profile setup | display name and up to five handles (phone, email, WhatsApp) | display name and phone number |
-| Vault address and connection status | address field, test, connected/disconnected line | — (`VAULT_API_URL` at start) |
+| Server address and connection status | address field, test, connected/disconnected line | — (`VAULT_API_URL` at start) |
 | Passkey (Hanko) login | — | present, unwired on this build |
 | Log out | yes | yes |
 | Change password | yes | yes |
@@ -290,7 +290,7 @@ has no such feature.
 | Home dashboard | — | tiles, recent contacts, vault history, explore |
 | Deep links in the URL | query, filter, trash selection | contact, conversation, group, year, query |
 | Recent searches | per scope, ten most recent | — |
-| Search autocomplete | words, values and contact names from the vault | people and labels for person and label words |
+| Search autocomplete | words, values and contact names from the server | people and labels for person and label words |
 | Mouse back and forward buttons | desktop | — |
 | Keyboard shortcuts | search popdown, lightbox arrows, Enter in find | Ctrl+F find, Enter and Shift+Enter, Escape, Delete and Backspace |
 
@@ -350,7 +350,7 @@ has no such feature.
 
 | Feature | web | web-next |
 |---|---|---|
-| Query language | the vault's words, with autocomplete | its own parser, re-spelled into the vault's words |
+| Query language | the server's words, with autocomplete | its own parser, re-spelled into the server's words |
 | Advanced search, messages | name or title, identity, type, participant count | within, from, to, with, words, doesn't have, subject, date, type, source, attachment, file type, filename, size, results mode, sort, context |
 | Advanced search, contacts | name, no name, identity, no identity, service, first seen, last seen, activity | within, handle, first name, last name, phone, first and last message, group and message counts |
 | Result modes | conversations or contacts, by route | conversations, one row per message, contacts with expandable matches |

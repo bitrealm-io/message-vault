@@ -92,7 +92,7 @@ function SlidersIcon() {
  * The one search bar every list screen uses: magnifying glass, a popdown of
  * recent searches with an Advanced search row, and the advanced form inline
  * below the bar. While a token is being typed the same popdown autocompletes
- * the words the vault says this list accepts, and their values.
+ * the words the server says this list accepts, and their values.
  */
 export default function SearchBar({
   value,
@@ -110,7 +110,7 @@ export default function SearchBar({
   onSubmit: (q: string) => void;
   /** Which bar this is: picks the recents bucket and the DOM id namespace. */
   scope: SearchScope;
-  /** Which list the vault should describe the search words of; `null` autocompletes nothing. */
+  /** Which list the server should describe the search words of; `null` autocompletes nothing. */
   list: SearchList | null;
   /** Placeholder and accessible name, e.g. "Search contacts". */
   placeholder: string;

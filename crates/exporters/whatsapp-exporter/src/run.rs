@@ -4,7 +4,7 @@ use crate::emit::{ConvertRequest, convert_json};
 use crate::owner::{owner_from_backup, owner_from_form};
 use crate::wtsexporter::{Platform, WtsexporterArgs, resolve_wtsexporter, run_wtsexporter};
 use anyhow::{Context, Result, bail};
-use message_vault_io_core::{
+use message_crate_core::{
     ExportTransforms, ExporterConfig, RunResult, SourceConfig, WhatsappPlatform as CorePlatform,
 };
 use std::env;
@@ -21,7 +21,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     let SourceConfig::Whatsapp(source) = &config.source else {
         bail!("whatsapp-exporter requires SourceConfig::Whatsapp");
     };
-    message_vault_io_core::check_cancel(config.cancel.as_ref())?;
+    message_crate_core::check_cancel(config.cancel.as_ref())?;
     let mut messages = Vec::new();
 
     let platform = match source.platform {
@@ -31,7 +31,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     };
     let input = config.primary_input().map(|p| p.to_path_buf());
 
-    // The number typed on the form, under the vault's handle key. Android's
+    // The number typed on the form, under the server's handle key. Android's
     // only source; iPhone's fallback when the backup carries no owner key.
     let form_owner = source
         .owner_phone
@@ -63,7 +63,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
             None => env::current_dir().context("resolve current working directory")?,
         };
 
-        message_vault_io_core::check_cancel(config.cancel.as_ref())?;
+        message_crate_core::check_cancel(config.cancel.as_ref())?;
         let bin = resolve_wtsexporter()?;
         fs::create_dir_all(&config.output)
             .with_context(|| format!("create {}", config.output.display()))?;
@@ -77,7 +77,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
 
         // Cooperative only: cancel is checked before and after the external process.
         // Killing wtsexporter mid-run is not implemented.
-        message_vault_io_core::check_cancel(config.cancel.as_ref())?;
+        message_crate_core::check_cancel(config.cancel.as_ref())?;
         let log = run_wtsexporter(
             &bin,
             &WtsexporterArgs {
@@ -93,7 +93,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
             },
             &json_out,
         )?;
-        message_vault_io_core::check_cancel(config.cancel.as_ref())?;
+        message_crate_core::check_cancel(config.cancel.as_ref())?;
 
         if !log.trim().is_empty() {
             let trimmed = log.trim_end_matches('\n');
@@ -135,7 +135,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
         bail!("JSON not found: {}", json_path.display());
     }
 
-    message_vault_io_core::check_cancel(config.cancel.as_ref())?;
+    message_crate_core::check_cancel(config.cancel.as_ref())?;
     let transforms = ExportTransforms::from_config(config);
     let needs_media_tools = transforms.needs_media_tools();
     let report = convert_json(ConvertRequest {
@@ -151,7 +151,7 @@ pub fn run(config: &ExporterConfig) -> Result<RunResult> {
     // Drop tempdir after convert (media files already copied).
     drop(_work_keep_alive);
 
-    let result = message_vault_io_core::finish_run(config, &report, needs_media_tools)?;
+    let result = message_crate_core::finish_run(config, &report, needs_media_tools)?;
     messages.extend(result.messages);
     Ok(RunResult { messages })
 }

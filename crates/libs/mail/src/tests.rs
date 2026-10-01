@@ -90,7 +90,7 @@ fn writes_individual_sms_text_only() {
         Some("sms-backup-restore")
     );
     let mid = headers.get_first_value("Message-ID").unwrap();
-    assert!(mid.contains("aabbccddeeff00112233445566778899@message-vault-io.local"));
+    assert!(mid.contains("aabbccddeeff00112233445566778899@message-crate.local"));
     assert!(headers.get_first_value("In-Reply-To").is_none());
     let from = headers.get_first_value("From").unwrap();
     assert!(from.contains("Sam"), "From was {from}");

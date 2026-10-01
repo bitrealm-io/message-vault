@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { useAccountProfile } from "../lib/useAccountProfile";
-import { useIsVaultOwner } from "../lib/useIsVaultOwner";
+import { useIsOwner } from "../lib/useIsOwner";
 import { Z_POPOVER } from "../lib/zLayers";
 import { GearIcon, LogOutIcon, PersonIcon } from "./icons";
 import PopupMenu from "./PopupMenu";
@@ -22,7 +22,7 @@ export default function AppAccountMenu() {
   const { logout, accountId } = useAuth();
   const { profile } = useAccountProfile();
   // The owner's Settings are its own row in User Accounts; every other account has /settings.
-  const { isOwner } = useIsVaultOwner();
+  const { isOwner } = useIsOwner();
   const settingsPath = isOwner ? `/owner/accounts/${accountId}` : "/settings";
   const settingsActive = location.pathname.startsWith(settingsPath);
 

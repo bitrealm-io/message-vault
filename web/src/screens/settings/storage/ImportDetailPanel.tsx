@@ -21,7 +21,7 @@ export default function ImportDetailPanel({
   onClose,
 }: {
   detailId: string;
-  /** False for the vault owner: who an account's contacts are is the account's own. */
+  /** False for the owner: who an account's contacts are is the account's own. */
   listContacts: boolean;
   selectedImport: ImportDetailResponse | null;
   selectedImportSummary: ImportSummaryView | null;

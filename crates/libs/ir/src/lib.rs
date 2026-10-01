@@ -4,7 +4,7 @@
 //! metadata, participants, and messages. Backup converters parse vendor
 //! formats into this type. Writing files (JSON, CSV, EML, and so on) lives
 //! in `message-ir-format`. Converting an existing export directory lives in
-//! `message-reexport`. See the [common message](https://bitrealm.io/vault/developer/architecture/common-message/) page.
+//! `message-reexport`. See the [common message](https://messagecrate.app/docs/developer/architecture/common-message/) page.
 //!
 //! Converters stage parsed rows in [`PendingMessage`] and
 //! [`PendingConversation`] (with per-converter metadata in their `extra`
@@ -39,13 +39,13 @@ pub const SCHEMA_VERSION: u32 = 4;
 /// The rescue exporters (iMazing, OpenExtract, SMS Backup+) read formats that
 /// sometimes identify the other party by name alone. They set this so the
 /// projection emits a participant carrying the name and no identity, instead
-/// of promoting the name stem into the handle field. The vault resolves the
+/// of promoting the name stem into the handle field. The server resolves the
 /// name against contacts on import.
 pub const CHAT_ID_IS_NAME: &str = "chat_id_is_name";
 /// One exported chat: export metadata, conversation roster and stats, and messages.
 ///
 /// This is the common-message schema every exporter writes and every reader
-/// parses. See the [common message](https://bitrealm.io/vault/developer/architecture/common-message/) page.
+/// parses. See the [common message](https://messagecrate.app/docs/developer/architecture/common-message/) page.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConversationDocument {
     /// Schema version written into this document (currently 4).
@@ -174,7 +174,7 @@ pub struct ConversationStats {
 /// `handle` is `None` when the source named a person without recording any
 /// address for them — the rescue exporters (iMazing, OpenExtract, SMS
 /// Backup+) read formats that identify the other party by name alone. Such a
-/// participant always carries a `display_name`; the vault reconciles it
+/// participant always carries a `display_name`; the server reconciles it
 /// against contacts on import rather than the exporter inventing an address.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IrParticipant {
@@ -454,7 +454,7 @@ pub struct IrAttachment {
     pub transcription: Option<String>,
     /// iMessage sticker effect name.
     pub sticker_effect: Option<String>,
-    /// On-disk / vault asset length in bytes (not file contents).
+    /// On-disk / stored asset length in bytes (not file contents).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size_bytes: Option<u64>,
     /// None when the attachment was imported; set only when bytes were
@@ -1147,7 +1147,7 @@ mod handle_service_tests {
 /// Each list names every variant, so a new variant without a `parse` arm
 /// fails here instead of turning into the fallback value on read. The storage
 /// id must also be the serde name, because JSONL is written by serde and read
-/// back through `parse` by the vault.
+/// back through `parse` by the server.
 #[cfg(test)]
 mod storage_id_round_trip_tests {
     use super::*;

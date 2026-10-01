@@ -23,15 +23,15 @@ describe("openPathInExplorer", () => {
     resolveStagingParent.mockReset();
     isTauri.mockReturnValue(true);
     invoke.mockResolvedValue(undefined);
-    resolveStagingParent.mockResolvedValue("/home/sam/message-vault");
+    resolveStagingParent.mockResolvedValue("/home/sam/message-crate");
   });
 
   it("invokes open_path with the staging parent in the desktop app", async () => {
     const { openPathInExplorer } = await import("./openPath");
-    await openPathInExplorer("/home/sam/message-vault/staging");
+    await openPathInExplorer("/home/sam/message-crate/staging");
     expect(invoke).toHaveBeenCalledWith("open_path", {
-      path: "/home/sam/message-vault/staging",
-      stagingRoot: "/home/sam/message-vault",
+      path: "/home/sam/message-crate/staging",
+      stagingRoot: "/home/sam/message-crate",
     });
   });
 
@@ -45,7 +45,7 @@ describe("openPathInExplorer", () => {
   it("rejects when not running in Tauri", async () => {
     isTauri.mockReturnValue(false);
     const { openPathInExplorer } = await import("./openPath");
-    await expect(openPathInExplorer("/home/sam/message-vault/staging")).rejects.toThrow(
+    await expect(openPathInExplorer("/home/sam/message-crate/staging")).rejects.toThrow(
       "desktop app",
     );
   });
@@ -53,7 +53,7 @@ describe("openPathInExplorer", () => {
   it("rejects when the staging parent cannot be resolved", async () => {
     resolveStagingParent.mockResolvedValue("");
     const { openPathInExplorer } = await import("./openPath");
-    await expect(openPathInExplorer("/home/sam/message-vault/staging")).rejects.toThrow(
+    await expect(openPathInExplorer("/home/sam/message-crate/staging")).rejects.toThrow(
       /staging directory/i,
     );
   });

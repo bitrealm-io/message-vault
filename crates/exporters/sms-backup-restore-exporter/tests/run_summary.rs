@@ -4,8 +4,8 @@
 //! error, passed them.
 
 use crate::emit::{ConvertExportArgs, convert_export};
-use message_vault_io_core::testutil::{assert_run_wrote_jsonl, jsonl_run_config};
-use message_vault_io_core::{ExportTransforms, OutputFormat, SmsBackupRestoreConfig, SourceConfig};
+use message_crate_core::testutil::{assert_run_wrote_jsonl, jsonl_run_config};
+use message_crate_core::{ExportTransforms, OutputFormat, SmsBackupRestoreConfig, SourceConfig};
 use std::fs;
 use std::path::Path;
 

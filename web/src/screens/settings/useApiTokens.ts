@@ -1,9 +1,9 @@
 import { type UseMutationResult, useMutation } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { apiErrorMessage } from "../../lib/apiErrorMessage";
-import { createApiToken, deleteApiToken, listApiTokens, renameApiToken } from "../../lib/vaultApi";
-import { keys } from "../../lib/vaultKeys";
-import { useVaultCache, useVaultQuery } from "../../lib/vaultQuery";
+import { keys } from "../../lib/queryKeys";
+import { useRouteCache, useRouteQuery } from "../../lib/routeQuery";
+import { createApiToken, deleteApiToken, listApiTokens, renameApiToken } from "../../lib/serverApi";
 import type { ApiTokenItem } from "./apiTokensUtils";
 
 const fetchTokens = (signal: AbortSignal) =>
@@ -14,7 +14,7 @@ type CreatedToken = Awaited<ReturnType<typeof createApiToken>>;
 
 /** Every token write marks the list stale, and the list refetches itself. */
 function useApiTokenWrite<T, V>(write: (vars: V) => Promise<T>): UseMutationResult<T, Error, V> {
-  const cache = useVaultCache();
+  const cache = useRouteCache();
   return useMutation<T, Error, V>({
     mutationFn: write,
     onSettled: () => cache.invalidate(keys.apiTokens.all),
@@ -44,7 +44,7 @@ export function useRevokeApiToken(): UseMutationResult<
 }
 
 /**
- * The list goes through `useVaultQuery` and each write through one of the
+ * The list goes through `useRouteQuery` and each write through one of the
  * mutations above — the busy flag and error string are the union of the
  * three mutations' own state rather than a separate piece of state.
  */
@@ -62,7 +62,7 @@ export function useApiTokens() {
     data,
     isPending: loading,
     error: loadError,
-  } = useVaultQuery(keys.apiTokens.all, fetchTokens);
+  } = useRouteQuery(keys.apiTokens.all, fetchTokens);
   const createToken = useCreateApiToken();
   const renameToken = useRenameApiToken();
   const revokeToken = useRevokeApiToken();
@@ -147,7 +147,7 @@ export function useApiTokens() {
     );
   };
 
-  /** The dialog closes whether or not the vault agreed; the refusal shows in `actionError`. */
+  /** The dialog closes whether or not the server agreed; the refusal shows in `actionError`. */
   const revoke = (item: ApiTokenItem) => {
     revokeToken.mutate(item.id, { onSettled: () => setRevokeTarget(null) });
   };

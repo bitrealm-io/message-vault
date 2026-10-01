@@ -3,7 +3,7 @@ import { tdClass, tdMuted } from "../../settings/apiTokensUtils";
 import { formatBytes } from "../../settings/storage/storageUtils";
 import { rowStripe, thClass, thSeparator } from "../ownerTableStyles";
 import { DashboardSection } from "./DashboardSection";
-import type { VaultStorage } from "./types";
+import type { ServerStorage } from "./types";
 
 /** A figure lines up on the right, so sizes can be read down the column. */
 const numberCell = "whitespace-nowrap text-right";
@@ -13,12 +13,12 @@ const numberCell = "whitespace-nowrap text-right";
  * text they are, and the estimated share of the messages' storage. The
  * accounts come in the order the User Accounts table lists them: the owner
  * first, then by username. The totals row at the bottom carries the
- * whole-vault figures, so the split can be seen to add up.
+ * whole-database figures, so the split can be seen to add up.
  *
  * The estimate is the measured messages-on-disk figure split by each
  * account's share of text; the hint says so.
  */
-export function MessagesByAccountSection({ storage }: { storage: VaultStorage }) {
+export function MessagesByAccountSection({ storage }: { storage: ServerStorage }) {
   const totalText = storage.accounts.reduce((sum, account) => sum + account.text_bytes, 0);
   return (
     <DashboardSection
@@ -49,7 +49,7 @@ export function MessagesByAccountSection({ storage }: { storage: VaultStorage })
               </tr>
             ))}
             <tr className="border-t border-border">
-              <td className={`${tdClass} whitespace-nowrap font-semibold`}>Whole vault</td>
+              <td className={`${tdClass} whitespace-nowrap font-semibold`}>All accounts</td>
               <td className={`${tdClass} ${numberCell} font-semibold`}>
                 {storage.message_count.toLocaleString()}
               </td>

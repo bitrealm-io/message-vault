@@ -2,10 +2,10 @@
 
 use super::*;
 use mail::clean_previous_mail_output;
+use message_crate_core::OutputFormat;
 use message_ir::{
     ConversationDocument, IrDirection, IrImessage, IrMessage, IrMessageKind, IrService,
 };
-use message_vault_io_core::OutputFormat;
 use serde_json::{Value, json};
 use std::fs;
 
@@ -396,7 +396,7 @@ fn json_refuses_a_version_3_file_by_name() {
     assert_eq!(refusal.found, 3);
     assert_eq!(
         refusal.to_string(),
-        "This file is schema version 3; the vault reads version 4"
+        "This file is schema version 3; Message Crate reads version 4"
     );
 }
 

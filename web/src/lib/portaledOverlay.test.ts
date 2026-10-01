@@ -27,7 +27,7 @@ describe("shouldIgnoreOutsideDismiss", () => {
   it("ignores clicks on marked portaled overlays", () => {
     const root = document.createElement("div");
     const overlay = document.createElement("div");
-    overlay.setAttribute("data-mv-overlay", "");
+    overlay.setAttribute("data-mc-overlay", "");
     document.body.append(root, overlay);
     expect(shouldIgnoreOutsideDismiss(clickEvent([overlay]), root)).toBe(true);
     root.remove();

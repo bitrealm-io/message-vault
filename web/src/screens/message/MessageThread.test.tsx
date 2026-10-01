@@ -59,8 +59,8 @@ describe("MessageThread", () => {
   });
 
   it("shows the server's error sentence when the query failed", () => {
-    render(<MessageThread {...baseProps} messages={[]} error={new Error("vault is down")} />);
-    expect(screen.getByText("vault is down")).toBeInTheDocument();
+    render(<MessageThread {...baseProps} messages={[]} error={new Error("server is down")} />);
+    expect(screen.getByText("server is down")).toBeInTheDocument();
   });
 
   it("falls back to a generic message when the error carries no message", () => {

@@ -6,11 +6,11 @@ use crate::write_queue::{
 };
 use anyhow::Result;
 use media::{CompressOptions, MediaMode};
-use message_ir::{ConversationDocument, IrAttachment};
-use message_ir_format::{FormatSink, MergedArchive, write_documents_through_sink};
-use message_vault_io_core::{
+use message_crate_core::{
     CancelFlag, ExportReport, ExportTransforms, LogSink, OutputFormat, ProgressSink,
 };
+use message_ir::{ConversationDocument, IrAttachment};
+use message_ir_format::{FormatSink, MergedArchive, write_documents_through_sink};
 use std::path::{Path, PathBuf};
 
 /// Owns the write tail of an exporter run: output preparation, the
@@ -230,10 +230,10 @@ impl ExportWriter {
                 }
             }
         }
-        report.attachments_saved += message_vault_io_core::stage_conversation_attachments(
-            message_vault_io_core::document_messages(&mut documents),
+        report.attachments_saved += message_crate_core::stage_conversation_attachments(
+            message_crate_core::document_messages(&mut documents),
             &self.attachments_dir,
-            &message_vault_io_core::MediaConfig {
+            &message_crate_core::MediaConfig {
                 mode: self.media_mode,
                 compress: self.compress.clone(),
             },

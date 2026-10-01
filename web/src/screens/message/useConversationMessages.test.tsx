@@ -2,9 +2,9 @@
 
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { listConversationMessages, listMessages } from "../../lib/serverApi";
 import type { Message } from "../../lib/types";
-import { listConversationMessages, listMessages } from "../../lib/vaultApi";
-import { mockedAuth, VaultProviders } from "../../test/vaultProviders";
+import { mockedAuth, Providers } from "../../test/providers";
 import {
   buildFooterLabel,
   conversationYears,
@@ -13,8 +13,8 @@ import {
 
 vi.mock("../../lib/auth", () => ({ useAuth: () => mockedAuth }));
 
-vi.mock("../../lib/vaultApi", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/vaultApi")>()),
+vi.mock("../../lib/serverApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/serverApi")>()),
   listConversationMessages: vi.fn(),
   listMessages: vi.fn(),
 }));
@@ -87,7 +87,7 @@ describe("useConversationMessages", () => {
 
     const { result, rerender } = renderHook(
       ({ id }: { id: number }) => useConversationMessages(id),
-      { initialProps: { id: 1 }, wrapper: VaultProviders },
+      { initialProps: { id: 1 }, wrapper: Providers },
     );
 
     rerender({ id: 2 });
@@ -108,7 +108,7 @@ describe("useConversationMessages", () => {
 
     const { result, rerender } = renderHook(
       ({ id }: { id: number }) => useConversationMessages(id),
-      { initialProps: { id: 1 }, wrapper: VaultProviders },
+      { initialProps: { id: 1 }, wrapper: Providers },
     );
 
     rerender({ id: 2 });
@@ -130,7 +130,7 @@ describe("useConversationMessages", () => {
 
     const { result } = renderHook(({ id }: { id: number }) => useConversationMessages(id), {
       initialProps: { id: 7 },
-      wrapper: VaultProviders,
+      wrapper: Providers,
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -145,7 +145,7 @@ describe("useConversationMessages", () => {
     await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual([1, 2]));
 
     // A year is a search scoped to the conversation, not a filter on the
-    // read by id: the vault refuses `year=` there. The conversation is
+    // read by id: the server refuses `year=` there. The conversation is
     // reached in the trash too, because it can be opened from there.
     expect(searchMessages).toHaveBeenNthCalledWith(
       1,
@@ -165,7 +165,7 @@ describe("useConversationMessages", () => {
     expect(result.current.finding).toBe(false);
   });
 
-  it("runs the find box on the vault, scoped to the conversation and the chosen year", async () => {
+  it("runs the find box on the server, scoped to the conversation and the chosen year", async () => {
     getMessages.mockResolvedValue(page([message(9)]));
     searchMessages.mockResolvedValue({
       items: [message(4), message(5)],
@@ -176,7 +176,7 @@ describe("useConversationMessages", () => {
 
     const { result } = renderHook(({ id }: { id: number }) => useConversationMessages(id), {
       initialProps: { id: 7 },
-      wrapper: VaultProviders,
+      wrapper: Providers,
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -217,7 +217,7 @@ describe("useConversationMessages", () => {
 
     const { result, rerender } = renderHook(
       ({ id }: { id: number }) => useConversationMessages(id),
-      { initialProps: { id: 1 }, wrapper: VaultProviders },
+      { initialProps: { id: 1 }, wrapper: Providers },
     );
     await waitFor(() => expect(result.current.loading).toBe(false));
 

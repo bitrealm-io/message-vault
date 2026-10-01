@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { clearRecentSearches, loadRecentSearches, pushRecentSearch } from "./recentSearches.ts";
 
-const CONTACT_RECENT_SEARCHES_KEY = "mv-contact-recent-searches:v1";
+const CONTACT_RECENT_SEARCHES_KEY = "mc-contact-recent-searches:v1";
 
 const mem = new Map<string, string>();
 

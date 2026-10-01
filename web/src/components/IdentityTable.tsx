@@ -100,7 +100,7 @@ export default function IdentityTable({
   onBrowse,
 }: {
   rows: readonly IdentityRow[];
-  /** The rows are placeholders until the vault answers: counts and dates show a dash. */
+  /** The rows are placeholders until the server answers: counts and dates show a dash. */
   loading?: boolean;
   /** A change is in flight, so Remove is disabled. */
   busy?: boolean;

@@ -135,7 +135,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
   # ── Rust: build + test on SQLite, then the server suite again on Postgres
-  # The workspace runs once with MV_TEST_POSTGRES_URL unset, which is the
+  # The workspace runs once with MC_TEST_POSTGRES_URL unset, which is the
   # SQLite run every developer gets locally; the tests whose subject is
   # SQLite itself (the schema contract, FTS5 triggers, rebuilds) only assert
   # there. The server crate then runs a second time with the variable set:
@@ -155,13 +155,13 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: vault
-          POSTGRES_PASSWORD: vault
-          POSTGRES_DB: vault
+          POSTGRES_USER: messagecrate
+          POSTGRES_PASSWORD: messagecrate
+          POSTGRES_DB: messagecrate
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U vault"
+          --health-cmd "pg_isready -U messagecrate"
           --health-interval 2s
           --health-timeout 2s
           --health-retries 10
@@ -193,8 +193,8 @@ jobs:
       # only resolves when the job itself runs in a container.
       - name: Test the server on Postgres
         env:
-          MV_TEST_POSTGRES_URL: postgres://vault:vault@127.0.0.1:5432/vault
-        run: cargo test -p message-vault-server
+          MC_TEST_POSTGRES_URL: postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate
+        run: cargo test -p message-crate-server
 
   # ── Rust: check, lint, and test src-tauri ─────────────────────────────
   # src-tauri is not a workspace member, so the workspace jobs above skip
@@ -267,7 +267,7 @@ jobs:
       - name: Lint and format-check
         run: cd web && npx biome ci .
 
-      - name: Generated vault API types match the OpenAPI document
+      - name: Generated server API types match the OpenAPI document
         run: ./scripts/check-generated-api-types.sh
 
       - name: Type-check and build bundle
@@ -403,7 +403,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: bitrealm/message-vault
+          images: bitrealm/message-crate
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -523,15 +523,15 @@ jobs:
                 ls -R "$BUNDLE_DIR" || true
                 exit 1
               fi
-              cp "${debs[0]}" "dist/message_vault_${VERSION}_amd64.deb"
-              cp "${appimages[0]}" "dist/message_vault_${VERSION}_amd64.AppImage"
+              cp "${debs[0]}" "dist/message_crate_${VERSION}_amd64.deb"
+              cp "${appimages[0]}" "dist/message_crate_${VERSION}_amd64.AppImage"
               ;;
             windows-latest)
-              cp "$BUNDLE_DIR"/msi/*.msi "dist/message_vault_${VERSION}_x64.msi" 2>/dev/null || \
+              cp "$BUNDLE_DIR"/msi/*.msi "dist/message_crate_${VERSION}_x64.msi" 2>/dev/null || \
               { echo "No Windows MSI found"; ls -R "$BUNDLE_DIR" || true; exit 1; }
               ;;
             macos-latest)
-              cp "$BUNDLE_DIR"/dmg/*.dmg "dist/message_vault_${VERSION}_aarch64.dmg" 2>/dev/null || \
+              cp "$BUNDLE_DIR"/dmg/*.dmg "dist/message_crate_${VERSION}_aarch64.dmg" 2>/dev/null || \
               { echo "No macOS DMG found"; ls -R "$BUNDLE_DIR" || true; exit 1; }
               ;;
           esac
@@ -580,23 +580,23 @@ jobs:
           ls -la dist/
 
           gh release create "$TAG" "${assets[@]}" \
-            --title "Message Vault ${TAG}" \
+            --title "Message Crate ${TAG}" \
             --notes "## Highlights
 
           - Tauri v2 desktop app with all exporters included
-          - Vault push/pull, format conversion, contacts preview
-          - Vault server Docker image: \`bitrealm/message-vault:${TAG}\`
-          - User Guide and developer docs: https://bitrealm.io/vault/user/ and https://bitrealm.io/vault/developer/
+          - Push and pull against a server, format conversion, contacts preview
+          - Server Docker image: \`bitrealm/message-crate:${TAG}\`
+          - User Guide and developer docs: https://messagecrate.app/docs/user/ and https://messagecrate.app/docs/developer/
 
           ## Installers
 
-          - \`message_vault_*.deb\` — Debian/Ubuntu
-          - \`message_vault_*.AppImage\` — Linux (portable)
-          - \`message_vault_*.msi\` — Windows
-          - \`message_vault_*.dmg\` — macOS (Apple Silicon)
+          - \`message_crate_*.deb\` — Debian/Ubuntu
+          - \`message_crate_*.AppImage\` — Linux (portable)
+          - \`message_crate_*.msi\` — Windows
+          - \`message_crate_*.dmg\` — macOS (Apple Silicon)
 
           ## Docker
 
           \`\`\`bash
-          docker pull bitrealm/message-vault:${TAG}
+          docker pull bitrealm/message-crate:${TAG}
           \`\`\`"

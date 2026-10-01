@@ -8,8 +8,8 @@ CONFIG_DOCKER="config/config.docker.toml"
 CONFIG="config/config.toml"
 DEMO_DATA="${DEMO_DATA-true}"
 
-export VAULT_DB="${VAULT_DB:-/app/data/vault.db}"
-export VAULT_DATA_DIR="${VAULT_DATA_DIR:-/app/data}"
+export MC_DB="${MC_DB:-/app/data/messagecrate.db}"
+export MC_DATA_DIR="${MC_DATA_DIR:-/app/data}"
 
 ensure_docker_config() {
   mkdir -p config data
@@ -24,11 +24,11 @@ demo_data_requested() {
 }
 
 seed_if_needed() {
-  if [[ ! -f data/vault.db ]]; then
-    rm -f data/vault.ready
+  if [[ ! -f data/messagecrate.db ]]; then
+    rm -f data/server.ready
   fi
-  if [[ -f data/vault.db ]]; then
-    echo "Vault DB present; skipping seed (DEMO_DATA=${DEMO_DATA})."
+  if [[ -f data/messagecrate.db ]]; then
+    echo "Database present; skipping seed (DEMO_DATA=${DEMO_DATA})."
     ensure_docker_config
     return
   fi
@@ -37,10 +37,10 @@ seed_if_needed() {
 
   if demo_data_requested; then
     echo "Seeding demo data (DEMO_DATA=${DEMO_DATA})…"
-    message-vault-server reset-demo --config "${CONFIG}"
+    message-crate-server reset-demo --config "${CONFIG}"
     ensure_docker_config
     echo "Converting demo media…"
-    message-vault-server process-assets --config "${CONFIG}" \
+    message-crate-server process-assets --config "${CONFIG}" \
       || echo "warning: process-assets failed; UI still works"
   else
     echo "DEMO_DATA=${DEMO_DATA}: empty data/ (create an account in the web UI)."
@@ -49,5 +49,5 @@ seed_if_needed() {
 
 seed_if_needed
 
-echo "Starting message-vault-server (API + static files)…"
-exec message-vault-server serve --config "${CONFIG}"
+echo "Starting message-crate-server (API + static files)…"
+exec message-crate-server serve --config "${CONFIG}"

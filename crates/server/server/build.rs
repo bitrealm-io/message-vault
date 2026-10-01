@@ -1,0 +1,6 @@
+//! Embed this server's Build, the Product Version plus the commit, as
+//! `MESSAGE_CRATE_BUILD`. The rules are in the `build-version` crate.
+
+fn main() {
+    build_version::emit();
+}

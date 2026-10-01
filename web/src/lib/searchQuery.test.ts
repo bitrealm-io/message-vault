@@ -220,10 +220,10 @@ describe("advancedContacts", () => {
   });
 });
 
-// --- The fixture the vault's search tests read -----------------------
+// --- The fixture the server's search tests read -----------------------
 //
 // This module is the only place the web composes a search query, and the
-// vault's search language (crates/vault/server/src/search/) is the only
+// server's search language (crates/server/server/src/search/) is the only
 // thing that gets to say whether a query is valid. Nothing on this side
 // checks that agreement — a builder could emit a query the language refuses
 // and nothing here would notice until someone hit it at runtime.
@@ -233,16 +233,16 @@ describe("advancedContacts", () => {
 // to fix (a name with a space, a name with a parenthesis, a name with a
 // quote), and writes one line per result to
 // tests/fixtures/search/web-queries.txt: the list the query is meant for,
-// a tab, then the query text. crates/vault/server/src/search/tests.rs reads
+// a tab, then the query text. crates/server/server/src/search/tests.rs reads
 // that file back and asserts every line parses on the list its first column
 // names.
 //
 // The committed file is generated, not authored — this test fails when it
 // drifts from what the builders produce today, the same way
-// scripts/check-generated-api-types.sh fails when vaultApi.types.ts drifts
+// scripts/check-generated-api-types.sh fails when serverApi.types.ts drifts
 // from the OpenAPI spec.
 
-/** The vault's three searchable lists, spelled the way the fixture and the
+/** The server's three searchable lists, spelled the way the fixture and the
  * Rust `ListKind` enum both name them. */
 type ListName = "contacts" | "conversations" | "messages";
 
@@ -262,7 +262,7 @@ function addLines(lines: Set<string>, query: string, lists: readonly ListName[])
 }
 
 /** Every query every builder in searchQuery.ts can produce, tagged with the
- * list(s) the vault's field registry (search/fields.rs) accepts each term
+ * list(s) the server's field registry (search/fields.rs) accepts each term
  * on. Sorted so the fixture's diff is stable. */
 function buildFixtureLines(): string[] {
   const lines = new Set<string>();

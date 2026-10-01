@@ -3,8 +3,8 @@
 //! wrote nothing, or a report that dropped a skip count or a file's parse
 //! error, passed them.
 
-use message_vault_io_core::testutil::{assert_run_wrote_jsonl, jsonl_run_config};
-use message_vault_io_core::{GoSmsProConfig, SourceConfig};
+use message_crate_core::testutil::{assert_run_wrote_jsonl, jsonl_run_config};
+use message_crate_core::{GoSmsProConfig, SourceConfig};
 use std::fs;
 
 /// One row for every reason an SMS is skipped, around two good messages.

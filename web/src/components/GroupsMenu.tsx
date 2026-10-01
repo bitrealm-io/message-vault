@@ -151,7 +151,7 @@ export default function GroupsMenu({
         ) : null}
       </button>
       {open && mode === "list" ? (
-        <div data-mv-overlay="" className={popoverClass}>
+        <div data-mc-overlay="" className={popoverClass}>
           <div className="border-b border-border p-2">
             <input
               ref={searchRef}
@@ -211,7 +211,7 @@ export default function GroupsMenu({
         </div>
       ) : null}
       {open && mode === "create" ? (
-        <div data-mv-overlay="" className={`${popoverClass} p-3`}>
+        <div data-mc-overlay="" className={`${popoverClass} p-3`}>
           <h3 className="text-[0.875rem] font-semibold text-text">{createTitle}</h3>
           <input
             ref={nameRef}

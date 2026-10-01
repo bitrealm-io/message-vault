@@ -2,11 +2,11 @@
 --
 -- A saved search collects nothing: it holds a query string, not members.
 -- The rows an `import` search points at outlive it — deleting a saved
--- search never touches `vault_imports`.
+-- search never touches `imports`.
 CREATE TABLE IF NOT EXISTS saved_searches (
     -- Surrogate primary key for this saved search.
     id INTEGER PRIMARY KEY,
-    -- Owning vault account (`accounts.id`).
+    -- Owning account (`accounts.id`).
     account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     -- Display name, unique per account.
     name TEXT NOT NULL,

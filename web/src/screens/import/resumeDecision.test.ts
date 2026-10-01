@@ -10,7 +10,7 @@ function session(overrides: Partial<ActiveImportSession> = {}): ActiveImportSess
     status: "running",
     started_at: "2026-08-30T00:00:00Z",
     stage: "pushing",
-    staging_dir: "/home/u/message-vault/staging-260830",
+    staging_dir: "/home/u/message-crate/staging-260830",
     device_id: "this-device",
     form: { source: "imessage-ios" },
     source_fingerprint: null,

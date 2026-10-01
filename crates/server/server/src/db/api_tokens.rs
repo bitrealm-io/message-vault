@@ -1,0 +1,701 @@
+//! Named CLI API tokens (`mc-api-…`); many per account, with per-token permissions.
+
+use anyhow::{Context, Result};
+use sqlx::AnyConnection;
+
+use super::session_tokens::{generate_prefixed_token, hash_api_token, unix_secs_string};
+use crate::db::dialect::name_ci_expr;
+use crate::db::permissions::Permissions;
+
+/// Metadata for one API token (never includes plaintext or hash).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApiTokenRow {
+    /// Token id (the secret itself is stored hashed, never in this row).
+    pub id: i64,
+    /// User-chosen label shown in Settings.
+    pub label: String,
+    /// What this token may do.
+    pub permissions: Permissions,
+    /// Masked secret for Settings, e.g. `mc-api-Sd..mE`.
+    pub token_hint: String,
+    /// Creation time as a Unix-seconds string.
+    pub created_at: String,
+    /// Unix-seconds string when the token was last used; `None` if never.
+    pub last_accessed_at: Option<String>,
+    /// Unix-seconds expiry; `None` means no expiry.
+    pub expires_at: Option<String>,
+    /// True when the token is disabled and rejects requests.
+    pub disabled: bool,
+}
+
+/// Default API token lifetime when the client does not pass `expires_in_days` (365 days).
+pub const DEFAULT_API_TOKEN_TTL_SECS: u64 = 365 * 24 * 60 * 60;
+
+const API_TOKEN_PREFIX: &str = "mc-api-";
+const LEGACY_APP_PASSWORD_PREFIX: &str = "mc-app-";
+const HINT_HEAD: usize = 2;
+const HINT_TAIL: usize = 2;
+
+/// Mask a plaintext API token for list display (keeps `mc-api-` or legacy `mc-app-` + ends).
+/// Format: `mc-api-xx..yy`.
+pub fn mask_api_token(token: &str) -> String {
+    let (prefix, secret) = if let Some(s) = token.strip_prefix(API_TOKEN_PREFIX) {
+        (API_TOKEN_PREFIX, s)
+    } else if let Some(s) = token.strip_prefix(LEGACY_APP_PASSWORD_PREFIX) {
+        (LEGACY_APP_PASSWORD_PREFIX, s)
+    } else {
+        return format!("{API_TOKEN_PREFIX}..");
+    };
+    if secret.len() < HINT_HEAD + HINT_TAIL {
+        return format!("{prefix}..");
+    }
+    let head = &secret[..HINT_HEAD];
+    let tail = &secret[secret.len() - HINT_TAIL..];
+    format!("{prefix}{head}..{tail}")
+}
+
+/// Account + permissions for a presented API token Bearer value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApiTokenAuth {
+    /// Account the token belongs to.
+    pub account_id: i64,
+    /// What this token may do (not yet intersected with its owner's grant).
+    pub permissions: Permissions,
+}
+
+/// Label validation failures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum ApiTokenLabelError {
+    /// The trimmed label is empty.
+    #[error("label is required")]
+    Required,
+    /// The label is longer than 120 characters.
+    #[error("label must be at most 120 characters")]
+    TooLong,
+}
+
+/// Failures from creating or renaming an API token: a typed label error, or
+/// any other database error.
+#[derive(Debug, thiserror::Error)]
+pub enum ApiTokenMutationError {
+    /// The label failed validation.
+    #[error(transparent)]
+    InvalidLabel(#[from] ApiTokenLabelError),
+    /// Any other database failure.
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+impl From<sqlx::Error> for ApiTokenMutationError {
+    fn from(e: sqlx::Error) -> Self {
+        Self::Other(anyhow::Error::new(e))
+    }
+}
+
+/// Generate a new API token (`mc-api-` + 32 alphanumeric characters).
+///
+/// # Errors
+///
+/// Returns an error when random bytes cannot be generated.
+pub fn generate_api_token() -> Result<String> {
+    generate_prefixed_token("mc-api-")
+}
+
+/// Look up which account owns this API token Bearer value.
+/// On a successful match, updates `last_accessed_at`. Expired or disabled
+/// tokens are rejected.
+///
+/// # Errors
+///
+/// Returns an error when the lookup or last-accessed update fails.
+pub async fn lookup_account_for_api_token(
+    conn: &mut AnyConnection,
+    token: &str,
+) -> Result<Option<ApiTokenAuth>> {
+    let token_hash = hash_api_token(token);
+    let row: Option<(i64, i64, i64, Option<String>, i64)> = sqlx::query_as(
+        "SELECT account_id, can_import, can_export, expires_at, disabled
+         FROM account_api_tokens WHERE token_hash = $1",
+    )
+    .bind(token_hash.as_str())
+    .fetch_optional(&mut *conn)
+    .await?;
+    match row {
+        Some((account_id, can_import, can_export, expires_at, disabled)) => {
+            if disabled != 0 {
+                return Ok(None);
+            }
+            if let Some(exp) = expires_at.as_deref() {
+                let exp_secs = exp.parse::<u64>().unwrap_or(0);
+                let now = unix_secs_string().parse::<u64>().unwrap_or(0);
+                let expired = exp_secs == 0 || exp_secs <= now;
+                if expired {
+                    return Ok(None);
+                }
+            }
+            sqlx::query(
+                "UPDATE account_api_tokens SET last_accessed_at = $1 WHERE token_hash = $2",
+            )
+            .bind(unix_secs_string())
+            .bind(token_hash)
+            .execute(&mut *conn)
+            .await
+            .with_context(|| "update API token last_accessed_at")?;
+            Ok(Some(ApiTokenAuth {
+                account_id,
+                permissions: Permissions::token(can_import != 0, can_export != 0),
+            }))
+        }
+        None => Ok(None),
+    }
+}
+
+/// A freshly created API token, including the plaintext secret.
+///
+/// This is the only place the plaintext `token` exists; everything else
+/// stores or returns the hash and the masked hint.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreatedApiToken {
+    /// Token id.
+    pub id: i64,
+    /// The validated (trimmed) label as stored.
+    pub label: String,
+    /// What this token may do.
+    pub permissions: Permissions,
+    /// Creation time as a Unix-seconds string.
+    pub created_at: String,
+    /// Unix-seconds expiry; `None` means no expiry.
+    pub expires_at: Option<String>,
+    /// The plaintext secret (`mc-api-…`), shown to the caller exactly once.
+    pub token: String,
+}
+
+/// Create a named API token. It stores `permissions.import` and
+/// `permissions.export`; `permissions.delete` is not stored, because a token
+/// never carries it, and the returned grant says so.
+///
+/// Returns `ApiTokenMutationError::InvalidLabel` when the label is empty
+/// or longer than 120 characters, and `Other` for database failures.
+pub async fn create_api_token(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    label: &str,
+    permissions: Permissions,
+    expires_in_days: Option<u64>,
+) -> Result<CreatedApiToken, ApiTokenMutationError> {
+    let label = validate_api_token_label(label)?;
+    let token = generate_api_token()?;
+    let token_hash = hash_api_token(&token);
+    let token_hint = mask_api_token(&token);
+    let created_at = unix_secs_string();
+    let expires_at = api_token_expiry(expires_in_days, &created_at);
+    let label_owned = label.to_string();
+    let id: i64 = sqlx::query_scalar(
+        r"
+        INSERT INTO account_api_tokens
+            (account_id, label, token_hash, can_import, can_export, token_hint, created_at, expires_at, disabled)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0)
+        RETURNING id
+        ",
+    )
+    .bind(account_id)
+    .bind(label_owned.as_str())
+    .bind(token_hash.as_str())
+    .bind(permissions.import as i32)
+    .bind(permissions.export as i32)
+    .bind(token_hint.as_str())
+    .bind(created_at.as_str())
+    .bind(expires_at.as_deref())
+    .fetch_one(&mut *conn)
+    .await
+    .with_context(|| format!("insert API token for {account_id}"))?;
+    Ok(CreatedApiToken {
+        id,
+        label: label_owned,
+        permissions: Permissions::token(permissions.import, permissions.export),
+        created_at,
+        expires_at,
+        token,
+    })
+}
+
+/// Raw row for [`list_api_tokens`] before disabled/expiry mapping into
+/// [`ApiTokenRow`].
+type ApiTokenRowRaw = (
+    i64,
+    String,
+    i64,
+    i64,
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    i64,
+);
+
+/// List API tokens for an account (no secrets).
+///
+/// # Errors
+///
+/// Returns an error when the query fails.
+pub async fn list_api_tokens(
+    conn: &mut AnyConnection,
+    account_id: i64,
+) -> Result<Vec<ApiTokenRow>> {
+    let order_by = format!("ORDER BY created_at DESC, {}", name_ci_expr("label"));
+    let rows: Vec<ApiTokenRowRaw> = sqlx::query_as(&format!(
+        "SELECT id, label, can_import, can_export, token_hint, created_at, last_accessed_at, expires_at, disabled
+         FROM account_api_tokens
+         WHERE account_id = $1
+         {order_by}"
+    ))
+    .bind(account_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut out = Vec::with_capacity(rows.len());
+    for (
+        id,
+        label,
+        can_import,
+        can_export,
+        token_hint,
+        created_at,
+        last_accessed_at,
+        expires_at,
+        disabled,
+    ) in rows
+    {
+        out.push(ApiTokenRow {
+            id,
+            label,
+            permissions: Permissions::token(can_import != 0, can_export != 0),
+            token_hint,
+            created_at,
+            last_accessed_at,
+            expires_at,
+            disabled: disabled != 0,
+        });
+    }
+    Ok(out)
+}
+
+/// Delete one API token if it belongs to the account.
+///
+/// # Errors
+///
+/// Returns an error when the delete statement fails.
+pub async fn delete_api_token(conn: &mut AnyConnection, account_id: i64, id: i64) -> Result<bool> {
+    let n = sqlx::query("DELETE FROM account_api_tokens WHERE id = $1 AND account_id = $2")
+        .bind(id)
+        .bind(account_id)
+        .execute(&mut *conn)
+        .await
+        .with_context(|| format!("delete API token {id} for {account_id}"))?
+        .rows_affected();
+    Ok(n > 0)
+}
+
+/// Delete every named API token belonging to an account.
+///
+/// # Errors
+///
+/// Returns an error when the delete statement fails.
+pub async fn delete_all_api_tokens(conn: &mut AnyConnection, account_id: i64) -> Result<u64> {
+    let deleted = sqlx::query("DELETE FROM account_api_tokens WHERE account_id = $1")
+        .bind(account_id)
+        .execute(&mut *conn)
+        .await
+        .with_context(|| format!("delete all API tokens for {account_id}"))?
+        .rows_affected();
+    Ok(deleted)
+}
+
+/// Rename an API token label if it belongs to the account.
+///
+/// Returns `ApiTokenMutationError::InvalidLabel` when the label is empty
+/// or longer than 120 characters, and `Other` for database failures.
+pub async fn update_api_token_label(
+    conn: &mut AnyConnection,
+    account_id: i64,
+    id: i64,
+    label: &str,
+) -> Result<bool, ApiTokenMutationError> {
+    let label = validate_api_token_label(label)?;
+    let n =
+        sqlx::query("UPDATE account_api_tokens SET label = $1 WHERE id = $2 AND account_id = $3")
+            .bind(label)
+            .bind(id)
+            .bind(account_id)
+            .execute(&mut *conn)
+            .await
+            .with_context(|| format!("rename API token {id} for {account_id}"))?
+            .rows_affected();
+    Ok(n > 0)
+}
+
+/// Expiry timestamp `expires_in_days` after `created_at`; `Some(0)` means the caller asked for no expiry.
+fn api_token_expiry(expires_in_days: Option<u64>, created_at: &str) -> Option<String> {
+    let now = created_at.parse::<u64>().unwrap_or(0);
+    match expires_in_days {
+        Some(0) => None, // caller asked for no expiry
+        Some(days) => Some(format!(
+            "{}",
+            now.saturating_add(days.saturating_mul(86_400))
+        )),
+        None => Some(format!(
+            "{}",
+            now.saturating_add(DEFAULT_API_TOKEN_TTL_SECS)
+        )),
+    }
+}
+
+/// Trim a token label and reject empty or over-long ones.
+fn validate_api_token_label(label: &str) -> Result<&str, ApiTokenLabelError> {
+    let label = label.trim();
+    if label.is_empty() {
+        return Err(ApiTokenLabelError::Required);
+    }
+    if label.len() > 120 {
+        return Err(ApiTokenLabelError::TooLong);
+    }
+    Ok(label)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn create_list_lookup_delete() {
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
+        let created = create_api_token(
+            &mut conn,
+            account_id,
+            " laptop CLI ",
+            Permissions {
+                import: false,
+                export: true,
+                delete: false,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+        let id = created.id;
+        let token = created.token;
+        assert!(token.starts_with("mc-api-"));
+        assert_eq!(
+            created.permissions,
+            Permissions {
+                import: false,
+                export: true,
+                delete: false
+            }
+        );
+        assert_eq!(
+            mask_api_token("mc-api-Sd1abcdefghijklmnopqrsmtuvwxyZmE"),
+            "mc-api-Sd..mE"
+        );
+        assert_eq!(
+            mask_api_token("mc-app-Sd1abcdefghijklmnopqrsmtuvwxyZmE"),
+            "mc-app-Sd..mE"
+        );
+
+        let listed = list_api_tokens(&mut conn, account_id).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, id);
+        assert_eq!(listed[0].label, "laptop CLI");
+        assert_eq!(
+            listed[0].permissions,
+            Permissions {
+                import: false,
+                export: true,
+                delete: false
+            }
+        );
+        assert_eq!(listed[0].token_hint, mask_api_token(&token));
+        assert!(listed[0].last_accessed_at.is_none());
+
+        let auth = lookup_account_for_api_token(&mut conn, &token)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(auth.account_id, account_id);
+        assert_eq!(
+            auth.permissions,
+            Permissions {
+                import: false,
+                export: true,
+                delete: false
+            }
+        );
+
+        let listed_after = list_api_tokens(&mut conn, account_id).await.unwrap();
+        assert!(listed_after[0].last_accessed_at.is_some());
+
+        assert!(
+            lookup_account_for_api_token(&mut conn, "mc-api-nope")
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        assert!(delete_api_token(&mut conn, account_id, id).await.unwrap());
+        assert!(
+            list_api_tokens(&mut conn, account_id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            lookup_account_for_api_token(&mut conn, &token)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn empty_label_rejected() {
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
+        assert!(
+            create_api_token(&mut conn, account_id, "  ", Permissions::all(), None)
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn rename_label() {
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
+        let id = create_api_token(&mut conn, account_id, "old name", Permissions::all(), None)
+            .await
+            .unwrap()
+            .id;
+        assert!(
+            update_api_token_label(&mut conn, account_id, id, " new name ")
+                .await
+                .unwrap()
+        );
+        let listed = list_api_tokens(&mut conn, account_id).await.unwrap();
+        assert_eq!(listed[0].label, "new name");
+        assert!(
+            update_api_token_label(&mut conn, account_id, id, "  ")
+                .await
+                .is_err()
+        );
+        assert!(
+            !update_api_token_label(&mut conn, 102, id, "stolen")
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            list_api_tokens(&mut conn, account_id).await.unwrap()[0].label,
+            "new name"
+        );
+    }
+
+    #[tokio::test]
+    async fn label_validation_errors_are_typed() {
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
+
+        let err = create_api_token(&mut conn, account_id, "  ", Permissions::all(), None)
+            .await
+            .unwrap_err();
+        match err {
+            ApiTokenMutationError::InvalidLabel(label_err) => {
+                assert_eq!(label_err.to_string(), "label is required");
+            }
+            other => panic!("expected InvalidLabel, got {other:?}"),
+        }
+
+        let err = create_api_token(
+            &mut conn,
+            account_id,
+            &"x".repeat(121),
+            Permissions::all(),
+            None,
+        )
+        .await
+        .unwrap_err();
+        match err {
+            ApiTokenMutationError::InvalidLabel(label_err) => {
+                assert_eq!(
+                    label_err.to_string(),
+                    "label must be at most 120 characters"
+                );
+            }
+            other => panic!("expected InvalidLabel, got {other:?}"),
+        }
+    }
+
+    /// An expired token stops working, and a disabled one stops working at
+    /// once.
+    ///
+    /// Both guards sit at the top of `lookup_account_for_api_token` and
+    /// neither was tested: every test issued a token and used it immediately.
+    /// A token is a long-lived credential handed to a script, so the expiry is
+    /// the only thing that limits the damage of one leaking, and `disabled` is
+    /// how someone revokes one without deleting the record of it.
+    #[tokio::test]
+    async fn an_expired_token_is_refused_and_a_live_one_is_not() {
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
+
+        let live = create_api_token(&mut conn, account_id, "live", Permissions::all(), None)
+            .await
+            .unwrap();
+        let expiring =
+            create_api_token(&mut conn, account_id, "expiring", Permissions::all(), None)
+                .await
+                .unwrap();
+
+        // The default expiry is a year out, so both work now.
+        for token in [&live.token, &expiring.token] {
+            assert!(
+                lookup_account_for_api_token(&mut conn, token)
+                    .await
+                    .unwrap()
+                    .is_some(),
+                "a fresh token must be accepted"
+            );
+        }
+
+        // Move one into the past. The stored value is Unix seconds as text.
+        sqlx::query("UPDATE account_api_tokens SET expires_at = '1' WHERE label = 'expiring'")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+
+        assert!(
+            lookup_account_for_api_token(&mut conn, &expiring.token)
+                .await
+                .unwrap()
+                .is_none(),
+            "an expired token must be refused"
+        );
+        assert!(
+            lookup_account_for_api_token(&mut conn, &live.token)
+                .await
+                .unwrap()
+                .is_some(),
+            "and the other token is untouched"
+        );
+    }
+
+    /// A token whose expiry cannot be read as a time is refused rather than
+    /// treated as never expiring. `expires_at.parse().unwrap_or(0)` and the
+    /// `exp_secs == 0` test are what make that so, and a change to either
+    /// turns an unreadable expiry into a credential that never dies.
+    #[tokio::test]
+    async fn a_token_with_an_unreadable_expiry_is_refused() {
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
+
+        let created = create_api_token(&mut conn, account_id, "odd", Permissions::all(), None)
+            .await
+            .unwrap();
+
+        for stored in ["not-a-time", "0", ""] {
+            sqlx::query("UPDATE account_api_tokens SET expires_at = $1 WHERE label = 'odd'")
+                .bind(stored)
+                .execute(&mut *conn)
+                .await
+                .unwrap();
+            assert!(
+                lookup_account_for_api_token(&mut conn, &created.token)
+                    .await
+                    .unwrap()
+                    .is_none(),
+                "an expiry of {stored:?} must not be read as no expiry"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_disabled_token_is_refused_while_its_row_remains() {
+        let fixture = crate::test_support::test_fixture().await;
+        let account_id = fixture.account_with_id(101, "alice").await;
+        let mut conn = fixture.conn().await;
+
+        let created = create_api_token(&mut conn, account_id, "revoked", Permissions::all(), None)
+            .await
+            .unwrap();
+        assert!(
+            lookup_account_for_api_token(&mut conn, &created.token)
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        sqlx::query("UPDATE account_api_tokens SET disabled = 1 WHERE label = 'revoked'")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+
+        assert!(
+            lookup_account_for_api_token(&mut conn, &created.token)
+                .await
+                .unwrap()
+                .is_none(),
+            "a disabled token must be refused"
+        );
+        // The row survives, which is the difference between disabling and
+        // deleting: the account can still see that the token existed.
+        let listed = list_api_tokens(&mut conn, account_id).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].disabled, "and the listing says it is disabled");
+    }
+
+    /// `expires_in_days` decides the lifetime, and `Some(0)` means "no expiry"
+    /// while `None` means "the default year". Getting those two the wrong way
+    /// round either issues immortal tokens by default or expires every token
+    /// the moment it is made.
+    #[test]
+    fn the_expiry_follows_the_days_asked_for() {
+        // Created at Unix second 1_000_000.
+        let created = "1000000";
+
+        assert_eq!(
+            api_token_expiry(Some(30), created),
+            Some((1_000_000 + 30 * 86_400).to_string()),
+            "thirty days out"
+        );
+        assert_eq!(
+            api_token_expiry(Some(1), created),
+            Some((1_000_000 + 86_400).to_string()),
+            "one day out"
+        );
+        assert_eq!(
+            api_token_expiry(Some(0), created),
+            None,
+            "zero days is the caller asking for no expiry at all"
+        );
+        assert_eq!(
+            api_token_expiry(None, created),
+            Some((1_000_000 + DEFAULT_API_TOKEN_TTL_SECS).to_string()),
+            "no answer means the default, which is a year"
+        );
+
+        // A number of days large enough to overflow saturates rather than
+        // wrapping to a time in the past, which would expire the token at once.
+        let huge = api_token_expiry(Some(u64::MAX), created).expect("an expiry");
+        assert_eq!(huge, u64::MAX.to_string());
+
+        // A created-at that cannot be read is treated as the epoch rather than
+        // panicking.
+        assert_eq!(
+            api_token_expiry(Some(1), "not-a-time"),
+            Some(86_400.to_string())
+        );
+    }
+}

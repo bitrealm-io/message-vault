@@ -34,7 +34,6 @@ pub(super) fn queue_pdu_attachments(
         out.push(PendingAttachment {
             rel_path: String::new(),
             content_type: att.content_type.clone(),
-            extension: ext.trim_start_matches('.').to_string(),
             digest_sha256: Some(digest_hex),
             name_hint: att.name.clone().or(Some(name)),
         });

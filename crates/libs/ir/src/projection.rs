@@ -592,7 +592,6 @@ mod tests {
             m.attachments = vec![PendingAttachment {
                 rel_path: format!("attachments/{digest}.jpg"),
                 content_type: "image/jpeg".into(),
-                extension: "jpg".into(),
                 digest_sha256: Some(digest.to_string()),
                 name_hint: None,
             }];

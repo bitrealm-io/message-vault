@@ -29,7 +29,6 @@ fn pending_att(rel_path: &str, digest: Option<&str>) -> PendingAttachment {
     PendingAttachment {
         rel_path: rel_path.into(),
         content_type: String::new(),
-        extension: "jpg".into(),
         digest_sha256: digest.map(str::to_string),
         name_hint: None,
     }

@@ -12,13 +12,11 @@
 
 mod book;
 mod format;
-mod mapping;
 mod name;
 mod vcard_csv;
 mod vcf;
 
 pub use book::{ContactsBook, resolve_contacts_cli};
 pub use format::{ContactsFormat, ContactsInputError, detect_contacts_format};
-pub use mapping::NameMapping;
 pub use vcard_csv::{ContactCsvRow, read_vcard_csv_rows};
 pub use vcf::{VcfCard, extract_tags, parse_vcf, strip_tags};

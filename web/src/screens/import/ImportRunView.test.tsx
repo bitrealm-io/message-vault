@@ -71,13 +71,6 @@ function staged(overrides: Partial<StagingSummary> = {}): StagingSummary {
     ownerHandles: [],
     attachments: 6118,
     attachmentBytes: 9.4 * 1024 * 1024 * 1024,
-    verdictCounts: {
-      fitsAsIs: 0,
-      likelyFits: 0,
-      mayGrow: 0,
-      probablyTooBig: 0,
-      cannotProcess: 0,
-    },
     forecasts: [],
     assetMaxBytes: 50 * 1024 * 1024,
     ...overrides,

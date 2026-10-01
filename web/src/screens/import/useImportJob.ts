@@ -302,17 +302,6 @@ export function parseStoredStagingSummary(raw: unknown): StagingSummary | undefi
   }
   if (typeof r.attachments !== "number") return undefined;
   if (typeof r.attachmentBytes !== "number") return undefined;
-  if (typeof r.verdictCounts !== "object" || r.verdictCounts === null) return undefined;
-  const vc = r.verdictCounts as Record<string, unknown>;
-  if (
-    typeof vc.fitsAsIs !== "number" ||
-    typeof vc.likelyFits !== "number" ||
-    typeof vc.mayGrow !== "number" ||
-    typeof vc.probablyTooBig !== "number" ||
-    typeof vc.cannotProcess !== "number"
-  ) {
-    return undefined;
-  }
   if (!Array.isArray(r.forecasts) || !r.forecasts.every(isAttachmentForecast)) return undefined;
   if (typeof r.assetMaxBytes !== "number") return undefined;
 
@@ -323,13 +312,6 @@ export function parseStoredStagingSummary(raw: unknown): StagingSummary | undefi
     ownerHandles: r.ownerHandles,
     attachments: r.attachments,
     attachmentBytes: r.attachmentBytes,
-    verdictCounts: {
-      fitsAsIs: vc.fitsAsIs,
-      likelyFits: vc.likelyFits,
-      mayGrow: vc.mayGrow,
-      probablyTooBig: vc.probablyTooBig,
-      cannotProcess: vc.cannotProcess,
-    },
     forecasts: r.forecasts,
     assetMaxBytes: r.assetMaxBytes,
   };

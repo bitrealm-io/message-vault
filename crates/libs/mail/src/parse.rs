@@ -134,14 +134,9 @@ pub fn mail_message_from_eml_bytes(bytes: &[u8]) -> Result<MailMessage> {
     })
 }
 
-/// Parse a JSON header cell, treating blank and `null` as `None`.
+/// Parse a JSON header, or `None` when the header is missing.
 fn header_json(headers: &[MailHeader<'_>], name: &str) -> Option<serde_json::Value> {
-    let s = optional_header(headers, name)?;
-    let t = s.trim();
-    if t.is_empty() || t == "null" {
-        return None;
-    }
-    serde_json::from_str(t).ok()
+    serde_json::from_str(&optional_header(headers, name)?).ok()
 }
 
 /// Read an mboxrd file and parse each record into [`MailMessage`].
@@ -228,9 +223,9 @@ fn header_or(headers: &[MailHeader<'_>], name: &str, default: &str) -> String {
     optional_header(headers, name).unwrap_or_else(|| default.to_string())
 }
 
-/// True when the header is `true` or `1`.
+/// True when the header is `true`, the only value the writer gives it.
 fn header_bool(headers: &[MailHeader<'_>], name: &str) -> bool {
-    optional_header(headers, name).is_some_and(|s| s.eq_ignore_ascii_case("true") || s == "1")
+    optional_header(headers, name).as_deref() == Some("true")
 }
 
 /// A header value parsed as a number.

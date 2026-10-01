@@ -411,7 +411,6 @@ mod tests {
                 vec![message_ir::PendingAttachment {
                     rel_path: "attachments/a.jpg".to_string(),
                     content_type: "image/jpeg".to_string(),
-                    extension: "jpg".to_string(),
                     digest_sha256: None,
                     name_hint: None,
                 }]

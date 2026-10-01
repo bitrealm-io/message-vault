@@ -92,10 +92,11 @@ The list shows 50 runs to a page.
 | **Attachments** | Distinct attachments among the matching messages |
 | **Size** | Total size of those attachments |
 
-**Scope** takes one of three forms:
+**Scope** takes one of four forms:
 
 - `Everything`, for all the account holds.
-- `Search:` followed by the search text.
+- `Conversations found by:` followed by the search text, for an export of whole conversations.
+- `Messages found by:` followed by the search text, for an export of the matching messages alone.
 - `Picked:` followed by a count of conversations and messages chosen by hand.
 
 A run that never finished shows how far it got in **Delivered**.

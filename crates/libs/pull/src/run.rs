@@ -15,7 +15,7 @@ use serde::Serialize;
 
 use crate::http::{ExportMessagesArgs, HttpSession};
 use crate::project::{build_document, conversation_key, to_ir_message};
-use message_crate_api_types::{ExportRun, ExportScope, Message};
+use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope, Message};
 
 /// Page size for `GET /v1/exports/{id}/messages`; the server's maximum.
 pub const DEFAULT_PAGE_LIMIT: usize = 500;
@@ -42,6 +42,10 @@ pub struct PullConfig {
     /// A query in the server's search language. Blank asks for everything the
     /// account holds; anything else is the run's `query` scope.
     pub query: String,
+    /// The list `query` is for: the messages it matches on the Messages list,
+    /// or every message of the conversations it shows on the Conversations
+    /// list. Unused when `query` is blank.
+    pub list: ExportQueryList,
     /// Write messages only; download no attachments.
     pub skip_attachments: bool,
     /// Messages per `GET /v1/exports/{id}/messages` page, clamped to
@@ -288,7 +292,12 @@ impl<'a> Pull<'a> {
             ProgressEvent::Log(if query.is_empty() {
                 "Backup query: (all messages)".into()
             } else {
-                format!("Backup query: {query}")
+                match cfg.list {
+                    ExportQueryList::Messages => format!("Backup query: {query}"),
+                    ExportQueryList::Conversations => format!(
+                        "Backup query: {query} (every message of the conversations it finds)"
+                    ),
+                }
             }),
         );
         // Load the local skip log so a later run does not re-download files already on disk.
@@ -305,13 +314,14 @@ impl<'a> Pull<'a> {
         })
     }
 
-    /// The scope this pull asks the server for: the trimmed query, or
-    /// everything when it is blank.
+    /// The scope this pull asks the server for: the trimmed query for its
+    /// list, or everything when it is blank.
     fn scope(&self) -> ExportScope {
         if self.query.is_empty() {
             ExportScope::Everything
         } else {
             ExportScope::Query {
+                list: self.cfg.list,
                 q: self.query.clone(),
             }
         }

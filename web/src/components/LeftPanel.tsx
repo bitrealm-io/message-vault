@@ -111,8 +111,9 @@ export default function LeftPanel({
   onSearchChange: (v: string) => void;
   /**
    * The query the conversation list is showing right now, or "" when the
-   * person is not looking at conversations. Export opens with it prefilled,
-   * so exporting the current view is one click.
+   * person is not looking at conversations. Export opens with it prefilled
+   * and told it is a Conversations list query, so exporting the current view
+   * is one click and the file holds the conversations that list showed.
    */
   browseQuery: string;
 }) {
@@ -275,7 +276,11 @@ export default function LeftPanel({
             <button
               type="button"
               onClick={() =>
-                navigate(browseQuery ? `/export?q=${encodeURIComponent(browseQuery)}` : "/export")
+                navigate(
+                  browseQuery
+                    ? `/export?q=${encodeURIComponent(browseQuery)}&list=conversations`
+                    : "/export",
+                )
               }
               className={`${navGlyphRowClass(isActive("/export"))} cursor-pointer`}
             >

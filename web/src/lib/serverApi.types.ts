@@ -1896,6 +1896,13 @@ export interface components {
             status: string;
         };
         /**
+         * @description Which list an Export Run's query is for (`docs/architecture/http-api.md`,
+         *     "Runs"). The list decides which search words the query may use and what
+         *     the run hands over.
+         * @enum {string}
+         */
+        ExportQueryList: "conversations" | "messages";
+        /**
          * @description One Export Run: what was asked for and how much matched, never what
          *     the messages said. `POST /v1/exports` creates one, every route under
          *     `/v1/exports/{id}` answers it.
@@ -1956,6 +1963,12 @@ export interface components {
         } | {
             /** @enum {string} */
             kind: "query";
+            /**
+             * @description The list the query is for. `messages` hands over the messages the
+             *     query matches; `conversations` hands over every message of each
+             *     conversation the query shows on the Conversations list.
+             */
+            list: components["schemas"]["ExportQueryList"];
             /**
              * @description The query, as typed. Never blank: an empty query is the
              *     `everything` form.

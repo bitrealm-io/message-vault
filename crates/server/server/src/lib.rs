@@ -64,7 +64,7 @@ pub use db::exports::{ExportPageOpts, export_messages};
 pub use db::schema::ensure_schema;
 #[doc(hidden)]
 pub use exports_api::start_export_run;
-pub use message_crate_api_types::ExportScope;
+pub use message_crate_api_types::{ExportQueryList, ExportScope};
 
 use clap::Command;
 

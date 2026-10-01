@@ -66,9 +66,13 @@ beforeEach(() => {
   });
 });
 
-/** The screen at `/export`, or at `/export?q=` when `query` is given. */
+/**
+ * The screen at `/export`, or at `/export?q=` when `query` is given, the way
+ * LeftPanel opens it from the conversation list: with `list=conversations`.
+ */
 function renderScreen(query?: string) {
-  const path = query === undefined ? "/export" : `/export?q=${encodeURIComponent(query)}`;
+  const path =
+    query === undefined ? "/export" : `/export?q=${encodeURIComponent(query)}&list=conversations`;
   return render(
     <MemoryRouter initialEntries={[path]}>
       <ExportScreen />
@@ -200,22 +204,48 @@ describe("ExportScreen", () => {
     await user.click(screen.getByRole("button", { name: "Export" }));
 
     await waitFor(() => expect(invokePull).toHaveBeenCalledTimes(1));
-    expect(invokePull.mock.calls[0][0]).toMatchObject({ query: "in:#19,#22" });
+    // A search typed here, with no hand-off, is for the Messages list.
+    expect(screen.getByRole("button", { name: /Search in/ })).toHaveTextContent("Messages");
+    expect(invokePull.mock.calls[0][0]).toMatchObject({ query: "in:#19,#22", list: "messages" });
   });
 
   it("opens in Search with the query it was given, and sends it", async () => {
     // LeftPanel hands over the conversation list's query as `?q=`, so the
     // person sees what "the current view" means before exporting it.
     const user = userEvent.setup();
-    renderScreen("from:me tag:Work");
+    renderScreen("messages:>100 tag:Work");
     expect(screen.getByRole("button", { name: /Scope/ })).toHaveTextContent("Search");
-    expect(screen.getByRole("textbox", { name: "Search" })).toHaveValue("from:me tag:Work");
+    expect(screen.getByRole("textbox", { name: "Search" })).toHaveValue("messages:>100 tag:Work");
+    // The query came from the Conversations list, and the screen says the
+    // file will hold whole conversations.
+    expect(screen.getByRole("button", { name: /Search in/ })).toHaveTextContent("Conversations");
+    expect(
+      screen.getByText(/holds every message of each conversation this search finds/),
+    ).toBeTruthy();
 
     await user.type(screen.getByPlaceholderText("Choose folder…"), "/home/demo/out");
     await user.click(screen.getByRole("button", { name: "Export" }));
 
     await waitFor(() => expect(invokePull).toHaveBeenCalledTimes(1));
-    expect(invokePull.mock.calls[0][0]).toMatchObject({ query: "from:me tag:Work" });
+    // Sent as a Messages query, the server would refuse `messages:` (#959).
+    expect(invokePull.mock.calls[0][0]).toMatchObject({
+      query: "messages:>100 tag:Work",
+      list: "conversations",
+    });
+  });
+
+  it("exports only the matching messages once the search is switched to Messages", async () => {
+    const user = userEvent.setup();
+    renderScreen("tag:Work");
+    await user.click(screen.getByRole("button", { name: /Search in/ }));
+    await user.click(await screen.findByRole("option", { name: "Messages" }));
+    expect(screen.getByText(/holds only the messages this search finds/)).toBeTruthy();
+
+    await user.type(screen.getByPlaceholderText("Choose folder…"), "/home/demo/out");
+    await user.click(screen.getByRole("button", { name: "Export" }));
+
+    await waitFor(() => expect(invokePull).toHaveBeenCalledTimes(1));
+    expect(invokePull.mock.calls[0][0]).toMatchObject({ query: "tag:Work", list: "messages" });
   });
 
   it("will not export a Search scope with a blank query", async () => {

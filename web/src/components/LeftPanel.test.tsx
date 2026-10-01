@@ -243,13 +243,17 @@ describe("LeftPanel", () => {
       expect(screen.queryByText("Failed")).toBeNull();
     });
 
-    it("opens Export with the query the conversation list is showing", async () => {
+    it("opens Export with the query the conversation list is showing, and says which list", async () => {
       // "Export what I am looking at" is one click: the Export screen reads
-      // `?q=` and opens in its Search scope with that text.
+      // `?q=` and opens in its Search scope with that text. `list` says the
+      // query is the Conversations list's: without it Export would read
+      // `messages:>100` as a Messages query, which the server refuses (#959).
       const user = userEvent.setup();
-      renderPanel(["/?q=from%3Ame"], "from:me tag:Work");
+      renderPanel(["/?q=messages%3A%3E100"], "messages:>100 tag:Work");
       await user.click(screen.getByRole("button", { name: "Export" }));
-      expect(screen.getByTestId("location")).toHaveTextContent("/export?q=from%3Ame%20tag%3AWork");
+      expect(screen.getByTestId("location").textContent).toBe(
+        "/export?q=messages%3A%3E100%20tag%3AWork&list=conversations",
+      );
     });
 
     it("opens Export plain when no conversation list is showing", async () => {

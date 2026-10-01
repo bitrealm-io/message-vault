@@ -12,7 +12,7 @@ mod project;
 mod run;
 
 pub use journal::{PULL_JOURNAL_NAME, PullJournalEvent, PullJournalState, journal_path};
-pub use message_crate_api_types::{ExportRun, ExportScope, Message};
+pub use message_crate_api_types::{ExportQueryList, ExportRun, ExportScope, Message};
 pub use message_crate_http::{AuthError, AuthInfo, auth_check as authenticate};
 pub use run::{
     DEFAULT_ASSET_DOWNLOAD_WORKERS, DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, ProgressEvent, ProgressFn,

@@ -129,8 +129,11 @@ describe("toImportSummaryView", () => {
 describe("describeExportScope", () => {
   it("names each scope form in one line", () => {
     expect(describeExportScope({ kind: "everything" })).toBe("Everything");
-    expect(describeExportScope({ kind: "query", q: "from:me pizza" })).toBe(
-      "Search: from:me pizza",
+    expect(describeExportScope({ kind: "query", list: "messages", q: "from:me pizza" })).toBe(
+      "Messages found by: from:me pizza",
+    );
+    expect(describeExportScope({ kind: "query", list: "conversations", q: "messages:>100" })).toBe(
+      "Conversations found by: messages:>100",
     );
     expect(
       describeExportScope({ kind: "selection", conversation_ids: [1, 2], message_ids: [9] }),

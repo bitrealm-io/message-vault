@@ -213,6 +213,10 @@ CREATE TABLE IF NOT EXISTS exports (
     -- Which of the three scope forms the run asked for: everything, query,
     -- or selection.
     scope_kind TEXT NOT NULL,
+    -- Which list the query is for, when `scope_kind` is query: conversations
+    -- (every message of the conversations the query shows) or messages (the
+    -- messages the query matches); NULL otherwise.
+    scope_list TEXT,
     -- The search-language query, when `scope_kind` is query; NULL otherwise.
     scope_query TEXT,
     -- JSON array of the conversation ids picked by hand, when `scope_kind`

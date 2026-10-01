@@ -2996,10 +2996,10 @@ mod docs {
         }
     }
 
-    /// `api.md` describes what an Export Run's `query` scope accepts, which
-    /// compiles as the Messages list (`messages_api::message_filter`). It
-    /// should name every word the registry marks for Messages, and no word
-    /// the registry does not have at all — the same shape of check as
+    /// `api.md` describes what an Export Run's `query` scope accepts for the
+    /// Messages list (`messages_api::message_filter`). It should name every
+    /// word the registry marks for Messages, and no word the registry does
+    /// not have at all — the same shape of check as
     /// `the_page_lists_every_word_and_nothing_else`, scoped to one list.
     #[test]
     fn the_api_reference_lists_every_messages_word_and_nothing_else() {

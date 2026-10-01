@@ -20,11 +20,12 @@ The record holds what was asked for, never what the messages said.
 
 ## The form
 
-The Export screen has four fields.
+The Export screen has five fields.
 
 | Field | What it sets |
 |---|---|
 | **Scope** | **Everything** or **Search**. |
+| **Search in** | **Conversations** or **Messages**: the list the search runs on. Shown only when **Scope** is **Search**. |
 | **Search** | The search an export is limited to. Shown only when **Scope** is **Search**. |
 | **Save to** | The folder the export is written into. |
 | **Format** | One of six formats. **JSON Lines (.jsonl)** is the default. |
@@ -38,12 +39,28 @@ A finished run reads `Export complete.` followed by the format and the folder.
 
 **Everything** writes every conversation the account holds.
 
-**Search** writes only the conversations a search finds.
-The box takes the same [search language](/docs/user/features/messages/search/) as the search bar, so `from:me last year` exports what that search shows.
-`in:` names particular conversations by title, by identity, or by id: `in:#19,#22` exports those two conversations and nothing else.
+**Search** writes only what a search finds.
+The box takes the [search language](/docs/user/features/messages/search/), and **Search in** sets which list the search runs on.
+The line under the box says what the export will hold.
 
-Export opened from the conversation list starts in **Search**, with the search that list is showing already in the box.
-Opened from any other screen, or with no search running, it starts in **Everything**.
+| **Search in** | The export holds | Example |
+|---|---|---|
+| **Conversations** | Every message of each conversation the search finds | `messages:>100` exports each conversation of more than 100 messages, whole |
+| **Messages** | Only the messages the search finds | `from:me last year` exports the messages the account sent last year and no others |
+
+Each list has its own search words.
+`messages:` is a Conversations word, and `from:`, `to:`, and `in:` are Messages words.
+A search that uses a word its list doesn't have is refused, and the log names the word.
+
+Under **Messages**, `in:` names particular conversations by title, by identity, or by id: `in:#19,#22` exports those two conversations and nothing else.
+
+Does a search that both lists accept export the same thing on each? No.
+`date:2024` under **Messages** exports the messages sent in 2024.
+Under **Conversations** it exports every conversation with a message in 2024, including what those conversations hold from other years.
+
+Export opened from the conversation list starts in **Search**, with the search that list is showing already in the box and **Search in** set to **Conversations**.
+The export then holds every message of the conversations the list showed.
+Opened from any other screen, or with no search running, it starts in **Everything**, and choosing **Search** there starts in **Messages**.
 
 An Export Run hands over the messages that matched when it started.
 A message imported or trashed while the run is being read does not change what the run writes.

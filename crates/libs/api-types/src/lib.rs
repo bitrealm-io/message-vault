@@ -167,6 +167,30 @@ macro_rules! api_shape {
     };
 }
 
+/// Which list an Export Run's query is for (`docs/architecture/http-api.md`,
+/// "Runs"). The list decides which search words the query may use and what
+/// the run hands over.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(utoipa::ToSchema))]
+#[serde(rename_all = "lowercase")]
+pub enum ExportQueryList {
+    /// The Conversations list: every message of each conversation the query
+    /// shows there.
+    Conversations,
+    /// The Messages list: the messages the query matches, and no others.
+    Messages,
+}
+
+impl ExportQueryList {
+    /// The value as the wire and the database spell it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Conversations => "conversations",
+            Self::Messages => "messages",
+        }
+    }
+}
+
 /// What an Export Run asked for, stored as given (`docs/architecture/http-api.md`,
 /// "Runs"). One of three forms: everything the account holds, a query in the
 /// search language, or conversations and messages picked by hand.
@@ -176,8 +200,12 @@ macro_rules! api_shape {
 pub enum ExportScope {
     /// Every non-trashed message the account holds.
     Everything,
-    /// The messages a query in the search language matches.
+    /// What a query in the search language finds on one of two lists.
     Query {
+        /// The list the query is for. `messages` hands over the messages the
+        /// query matches; `conversations` hands over every message of each
+        /// conversation the query shows on the Conversations list.
+        list: ExportQueryList,
         /// The query, as typed. Never blank: an empty query is the
         /// `everything` form.
         q: String,
@@ -472,12 +500,15 @@ mod export_scope_tests {
         assert_eq!(everything, serde_json::json!({ "kind": "everything" }));
 
         let query = ExportScope::Query {
+            list: ExportQueryList::Conversations,
             q: "from:me".into(),
         };
         assert_eq!(
             serde_json::to_value(&query).unwrap(),
-            serde_json::json!({ "kind": "query", "q": "from:me" })
+            serde_json::json!({ "kind": "query", "list": "conversations", "q": "from:me" })
         );
+        // A query names its list: no list is assumed for one that leaves it out.
+        assert!(serde_json::from_str::<ExportScope>(r#"{"kind":"query","q":"from:me"}"#).is_err());
 
         let selection: ExportScope =
             serde_json::from_str(r#"{"kind":"selection","conversation_ids":[3]}"#).unwrap();

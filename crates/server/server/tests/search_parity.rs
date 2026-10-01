@@ -12,8 +12,8 @@
 //! pools come from the crate's test-support re-exports.
 
 use message_crate_server::{
-    ExportPageOpts, ExportScope, ensure_schema, export_messages, pg_test_schema_pool,
-    sqlite_test_pool, start_export_run,
+    ExportPageOpts, ExportQueryList, ExportScope, ensure_schema, export_messages,
+    pg_test_schema_pool, sqlite_test_pool, start_export_run,
 };
 use serde::Deserialize;
 use sqlx::AnyConnection;
@@ -151,11 +151,14 @@ async fn setup_fixture(conn: &mut AnyConnection) {
     }
 }
 
-/// Start an Export Run with the `query` scope `q` and read its first page, the
+/// Start an Export Run with the `query` scope `q` for the Messages list and read its first page, the
 /// same entry points the API uses ([`start_export_run`], [`export_messages`]).
 /// Returns the sorted ids.
 async fn export_ids(conn: &mut AnyConnection, q: &str) -> Vec<i64> {
-    let scope = ExportScope::Query { q: q.into() };
+    let scope = ExportScope::Query {
+        list: ExportQueryList::Messages,
+        q: q.into(),
+    };
     let clock = (
         chrono_tz::UTC,
         chrono::NaiveDate::from_ymd_opt(2026, 9, 2).unwrap(),

@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use message_crate_pull::{
-    DEFAULT_ASSET_DOWNLOAD_WORKERS, DEFAULT_PAGE_LIMIT, ProgressEvent, PullConfig, run as run_pull,
+    DEFAULT_ASSET_DOWNLOAD_WORKERS, DEFAULT_PAGE_LIMIT, ExportQueryList, ProgressEvent, PullConfig,
+    run as run_pull,
 };
 
 use super::events;
@@ -24,8 +25,12 @@ pub struct PullArgs {
     pub key: String,
     /// Folder the pulled conversation files are written into.
     pub out_dir: String,
-    /// Search query selecting which conversations to pull.
+    /// Search query selecting what to pull. Blank pulls everything.
     pub query: String,
+    /// The list the query is for, `conversations` or `messages`: every
+    /// message of the conversations the query shows, or the messages it
+    /// matches.
+    pub list: ExportQueryList,
     /// When true, skip attachments and download messages only.
     pub skip_attachments: bool,
 }
@@ -56,6 +61,7 @@ pub fn pull(
             username: args.username,
             key: args.key,
             query: args.query,
+            list: args.list,
             skip_attachments: args.skip_attachments,
             page_limit: DEFAULT_PAGE_LIMIT,
             cancel: Some(cancel),

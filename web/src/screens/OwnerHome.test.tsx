@@ -520,8 +520,9 @@ describe("OwnerHome", () => {
     await user.click(await screen.findByRole("tab", { name: "Storage" }));
 
     await waitFor(() => expect(getAccountStorage).toHaveBeenCalledWith(expect.anything(), 101));
-    expect(listAccountImports).toHaveBeenCalledWith(expect.anything(), 101);
-    expect(listAccountExports).toHaveBeenCalledWith(expect.anything(), 101);
+    const firstPage = { limit: 50, offset: 0 };
+    expect(listAccountImports).toHaveBeenCalledWith(firstPage, expect.anything(), 101);
+    expect(listAccountExports).toHaveBeenCalledWith(firstPage, expect.anything(), 101);
     // What the accounts table used to carry: the message count and the storage total.
     expect(await screen.findByText(/1,234 messages/)).toBeInTheDocument();
     expect(screen.getByText(/7 attachments/)).toBeInTheDocument();

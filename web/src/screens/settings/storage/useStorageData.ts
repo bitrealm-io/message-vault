@@ -1,3 +1,4 @@
+import { keepPreviousData } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { apiErrorMessage } from "../../../lib/apiErrorMessage";
 import { keys } from "../../../lib/queryKeys";
@@ -8,11 +9,9 @@ import {
   listAccountExports,
   listAccountImports,
 } from "../../../lib/serverApi";
-import type { ExportRow, ImportRow, TopAttachment } from "./storageUtils";
+import { RUN_PAGE_SIZE, type TopAttachment } from "./storageUtils";
 
 type StorageOverview = {
-  imports: ImportRow[];
-  exports: ExportRow[];
   totalBytes: number;
   attachmentCount: number;
   conversationCount: number;
@@ -21,14 +20,8 @@ type StorageOverview = {
 };
 
 async function fetchOverview(signal: AbortSignal, accountId?: number): Promise<StorageOverview> {
-  const [importsRes, exportsRes, usageRes] = await Promise.all([
-    listAccountImports({ signal }, accountId),
-    listAccountExports({ signal }, accountId),
-    getAccountStorage({ signal }, accountId),
-  ]);
+  const usageRes = await getAccountStorage({ signal }, accountId);
   return {
-    imports: importsRes.items,
-    exports: exportsRes.items,
     totalBytes: usageRes.total_bytes ?? 0,
     attachmentCount: usageRes.attachment_count ?? 0,
     conversationCount: usageRes.conversation_count ?? 0,
@@ -37,19 +30,30 @@ async function fetchOverview(signal: AbortSignal, accountId?: number): Promise<S
   };
 }
 
+/** `limit` and `offset` for one page of a history table. */
+function runPage(page: number) {
+  return { limit: RUN_PAGE_SIZE, offset: page * RUN_PAGE_SIZE };
+}
+
 /**
- * Both requests run through `useRouteQuery`, which already owns the
+ * Every request runs through `useRouteQuery`, which already owns the
  * abort-on-unmount and aborted-guard handling these effects were repeating —
  * and the overview request, written by hand, had no AbortController at all.
+ *
+ * The two history tables each read one page of runs from the server, so an
+ * account with more runs than a page holds can reach all of them. Largest
+ * attachments pages over the rows the overview already brought.
  */
 export function useStorageData(managedAccountId?: number) {
   const [page, setPage] = useState(0);
+  const [importPage, setImportPage] = useState(0);
+  const [exportPage, setExportPage] = useState(0);
   const [selectedImportId, setSelectedImportId] = useState<number | null>(null);
 
   const {
     data: overview,
-    isPending: loading,
-    error,
+    isPending: overviewLoading,
+    error: overviewError,
   } = useRouteQuery(
     managedAccountId === undefined
       ? keys.storage.overview
@@ -57,7 +61,36 @@ export function useStorageData(managedAccountId?: number) {
     (signal) => fetchOverview(signal, managedAccountId),
   );
 
-  // A fresh overview invalidates whatever page the user was on.
+  // The page on screen stays up while the next one loads, so the table does
+  // not blank between pages.
+  const {
+    data: importsPage,
+    isPending: importsLoading,
+    error: importsError,
+  } = useRouteQuery(
+    managedAccountId === undefined
+      ? keys.storage.imports(importPage)
+      : keys.ownerAccounts.imports(managedAccountId, importPage),
+    (signal) => listAccountImports(runPage(importPage), { signal }, managedAccountId),
+    { placeholderData: keepPreviousData },
+  );
+
+  const {
+    data: exportsPage,
+    isPending: exportsLoading,
+    error: exportsError,
+  } = useRouteQuery(
+    managedAccountId === undefined
+      ? keys.storage.exports(exportPage)
+      : keys.ownerAccounts.exports(managedAccountId, exportPage),
+    (signal) => listAccountExports(runPage(exportPage), { signal }, managedAccountId),
+    { placeholderData: keepPreviousData },
+  );
+
+  const loading = overviewLoading || importsLoading || exportsLoading;
+  const error = overviewError ?? importsError ?? exportsError;
+
+  // A fresh overview invalidates whatever page of attachments the user was on.
   useEffect(() => {
     if (overview) setPage(0);
   }, [overview]);
@@ -93,8 +126,14 @@ export function useStorageData(managedAccountId?: number) {
   }, []);
 
   return {
-    imports: overview?.imports ?? [],
-    exports: overview?.exports ?? [],
+    imports: importsPage?.items ?? [],
+    importTotal: importsPage?.total ?? 0,
+    importPage,
+    setImportPage,
+    exports: exportsPage?.items ?? [],
+    exportTotal: exportsPage?.total ?? 0,
+    exportPage,
+    setExportPage,
     totalBytes: overview?.totalBytes ?? 0,
     attachmentCount: overview?.attachmentCount ?? 0,
     conversationCount: overview?.conversationCount ?? 0,

@@ -1,9 +1,11 @@
 import ScrollingTableCard from "../../../components/ScrollingTableCard";
+import PageControl from "./PageControl";
 import type { ExportRow } from "./storageUtils";
 import {
   describeExportScope,
   formatBytes,
   formatImportDate,
+  RUN_PAGE_SIZE,
   sectionHint,
   sectionTitle,
   tableCard,
@@ -28,54 +30,79 @@ function statusLabel(status: string): string {
 }
 
 /**
- * Every Export Run recorded for the account: what was asked for and how much
- * matched, never what the messages said. A run that never finished shows how
- * far it got in the Delivered column.
+ * Every Export Run recorded for the account, one page at a time: what was
+ * asked for and how much matched, never what the messages said. A run that
+ * never finished shows how far it got in the Delivered column.
  */
-export default function ExportHistoryTable({ exports }: { exports: ExportRow[] }) {
+export default function ExportHistoryTable({
+  exports,
+  total,
+  page,
+  onPageChange,
+}: {
+  /** The runs on this page. */
+  exports: ExportRow[];
+  /** How many runs the account has, across every page. */
+  total: number;
+  page: number;
+  onPageChange: (page: number) => void;
+}) {
   return (
     <section>
       <h3 className={sectionTitle}>Export history</h3>
-      <p className={sectionHint}>Each export recorded for this account.</p>
-      {exports.length === 0 ? (
+      <p className={sectionHint}>
+        Each export recorded for this account
+        {total > RUN_PAGE_SIZE ? ` · ${RUN_PAGE_SIZE} per page` : ""}.
+      </p>
+      {total === 0 ? (
         <p className={`${sectionHint} mt-3`}>No exports recorded yet.</p>
       ) : (
-        <ScrollingTableCard className="mt-3" cardClassName={tableCard}>
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <th className={thStyle}>Date</th>
-                <th className={thStyle}>Scope</th>
-                <th className={thStyle}>Status</th>
-                <th className={`${thStyle} text-right`}>Messages</th>
-                <th className={`${thStyle} text-right`}>Delivered</th>
-                <th className={`${thStyle} text-right`}>Attachments</th>
-                <th className={`${thStyle} text-right`}>Size</th>
-              </tr>
-            </thead>
-            <tbody>
-              {exports.map((row) => (
-                <tr key={row.id}>
-                  <td className={tdStyle}>{formatImportDate(row.finished_at ?? row.started_at)}</td>
-                  <td className={tdStyle}>{describeExportScope(row.scope)}</td>
-                  <td className={tdStyle}>{statusLabel(row.status)}</td>
-                  <td className={`${tdStyle} text-right tabular-nums`}>
-                    {row.message_count.toLocaleString()}
-                  </td>
-                  <td className={`${tdStyle} text-right tabular-nums`}>
-                    {row.messages_delivered.toLocaleString()}
-                  </td>
-                  <td className={`${tdStyle} text-right tabular-nums`}>
-                    {row.attachment_count.toLocaleString()}
-                  </td>
-                  <td className={`${tdStyle} text-right tabular-nums`}>
-                    {formatBytes(row.total_bytes)}
-                  </td>
+        <div className="mt-3 flex flex-col gap-3">
+          <ScrollingTableCard cardClassName={tableCard}>
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <th className={thStyle}>Date</th>
+                  <th className={thStyle}>Scope</th>
+                  <th className={thStyle}>Status</th>
+                  <th className={`${thStyle} text-right`}>Messages</th>
+                  <th className={`${thStyle} text-right`}>Delivered</th>
+                  <th className={`${thStyle} text-right`}>Attachments</th>
+                  <th className={`${thStyle} text-right`}>Size</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollingTableCard>
+              </thead>
+              <tbody>
+                {exports.map((row) => (
+                  <tr key={row.id}>
+                    <td className={tdStyle}>
+                      {formatImportDate(row.finished_at ?? row.started_at)}
+                    </td>
+                    <td className={tdStyle}>{describeExportScope(row.scope)}</td>
+                    <td className={tdStyle}>{statusLabel(row.status)}</td>
+                    <td className={`${tdStyle} text-right tabular-nums`}>
+                      {row.message_count.toLocaleString()}
+                    </td>
+                    <td className={`${tdStyle} text-right tabular-nums`}>
+                      {row.messages_delivered.toLocaleString()}
+                    </td>
+                    <td className={`${tdStyle} text-right tabular-nums`}>
+                      {row.attachment_count.toLocaleString()}
+                    </td>
+                    <td className={`${tdStyle} text-right tabular-nums`}>
+                      {formatBytes(row.total_bytes)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollingTableCard>
+          <PageControl
+            page={page}
+            total={total}
+            pageSize={RUN_PAGE_SIZE}
+            onPageChange={onPageChange}
+          />
+        </div>
       )}
     </section>
   );

@@ -74,6 +74,12 @@ export const keys = {
     member: (accountId: number) => ["owner-accounts", accountId] as const,
     storage: (accountId: number) => ["owner-accounts", accountId, "storage"] as const,
     identities: (accountId: number) => ["owner-accounts", accountId, "identities"] as const,
+    /** One page of the account's Import Runs. Under `storage`, like the run it opens. */
+    imports: (accountId: number, page: number) =>
+      ["owner-accounts", accountId, "storage", "imports", page] as const,
+    /** One page of the account's Export Runs. */
+    exports: (accountId: number, page: number) =>
+      ["owner-accounts", accountId, "storage", "exports", page] as const,
     importDetail: (accountId: number, id: number | null) =>
       ["owner-accounts", accountId, "storage", "import", String(id)] as const,
   },
@@ -87,6 +93,10 @@ export const keys = {
   storage: {
     all: ["storage"] as const,
     overview: ["storage", "overview"] as const,
+    /** One page of the account's Import Runs. */
+    imports: (page: number) => ["storage", "imports", page] as const,
+    /** One page of the account's Export Runs. */
+    exports: (page: number) => ["storage", "exports", page] as const,
     importDetail: (id: number | null) => ["storage", "import", String(id)] as const,
   },
   trash: {

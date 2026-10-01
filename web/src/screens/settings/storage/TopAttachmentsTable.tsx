@@ -1,5 +1,5 @@
-import Button from "../../../components/Button";
 import ScrollingTableCard from "../../../components/ScrollingTableCard";
+import PageControl from "./PageControl";
 import type { TopAttachment } from "./storageUtils";
 import {
   ATTACHMENT_PAGE_SIZE,
@@ -23,7 +23,6 @@ export default function TopAttachmentsTable({
   /** False for the owner, whom the server does not tell which conversation a file is in. */
   showConversation: boolean;
 }) {
-  const pageCount = Math.max(1, Math.ceil(topAttachments.length / ATTACHMENT_PAGE_SIZE));
   const pageRows = topAttachments.slice(
     page * ATTACHMENT_PAGE_SIZE,
     page * ATTACHMENT_PAGE_SIZE + ATTACHMENT_PAGE_SIZE,
@@ -66,29 +65,12 @@ export default function TopAttachmentsTable({
               </tbody>
             </table>
           </ScrollingTableCard>
-          {topAttachments.length > ATTACHMENT_PAGE_SIZE && (
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-[0.75rem] text-muted">
-                Page {page + 1} of {pageCount}
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  disabled={page <= 0}
-                  onClick={() => onPageChange(Math.max(0, page - 1))}
-                  size="sm"
-                >
-                  Back
-                </Button>
-                <Button
-                  disabled={page >= pageCount - 1}
-                  onClick={() => onPageChange(Math.min(pageCount - 1, page + 1))}
-                  size="sm"
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
+          <PageControl
+            page={page}
+            total={topAttachments.length}
+            pageSize={ATTACHMENT_PAGE_SIZE}
+            onPageChange={onPageChange}
+          />
         </div>
       )}
     </section>

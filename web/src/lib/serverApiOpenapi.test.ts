@@ -129,9 +129,9 @@ const EXERCISED: Record<string, () => unknown> = {
     serverApi.deleteAccount({ confirm: true, current_password: "hunter2hunter2" }),
   getAccountStorage: () => serverApi.getAccountStorage(),
   listAccountIdentities: () => serverApi.listAccountIdentities(undefined, 3),
-  listAccountImports: () => serverApi.listAccountImports(undefined, 3),
+  listAccountImports: () => serverApi.listAccountImports({ limit: 50, offset: 50 }, undefined, 3),
   getAccountImport: () => serverApi.getAccountImport(2, undefined, 3),
-  listAccountExports: () => serverApi.listAccountExports(),
+  listAccountExports: () => serverApi.listAccountExports({ limit: 50, offset: 50 }),
   deleteAllMessages: () => serverApi.deleteAllMessages({ confirm: true }),
 
   // API tokens

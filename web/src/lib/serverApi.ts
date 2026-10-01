@@ -263,12 +263,19 @@ export function listAccountIdentities(
   return apiClient.get<Schema["Page_Identity"]>(`${accountBase(accountId)}/identities`, opts);
 }
 
+/** Which page of an account's run history to read. Absent values are left off the URL. */
+export type AccountRunListParams = { limit?: number; offset?: number };
+
 /** An account's Import Runs, newest first: the logged-in one, or as the owner the one named. */
 export function listAccountImports(
+  params: AccountRunListParams,
   opts?: RequestOptions,
   accountId?: number,
 ): Promise<Schema["Page_ImportSummary"]> {
-  return apiClient.get<Schema["Page_ImportSummary"]>(`${accountBase(accountId)}/imports`, opts);
+  return apiClient.get<Schema["Page_ImportSummary"]>(
+    withQuery(`${accountBase(accountId)}/imports`, query(params)),
+    opts,
+  );
 }
 
 /** One of an account's Import Runs, with its counts, timings and issues. */
@@ -282,10 +289,14 @@ export function getAccountImport(
 
 /** An account's Export Runs, newest first: the logged-in one, or as the owner the one named. */
 export function listAccountExports(
+  params: AccountRunListParams,
   opts?: RequestOptions,
   accountId?: number,
 ): Promise<Schema["Page_ExportRun"]> {
-  return apiClient.get<Schema["Page_ExportRun"]>(`${accountBase(accountId)}/exports`, opts);
+  return apiClient.get<Schema["Page_ExportRun"]>(
+    withQuery(`${accountBase(accountId)}/exports`, query(params)),
+    opts,
+  );
 }
 
 /** Destroy the logged-in account's messages and attachments. Contacts and the login survive. */

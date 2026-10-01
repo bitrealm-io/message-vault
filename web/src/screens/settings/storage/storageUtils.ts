@@ -5,6 +5,9 @@ import type { components } from "../../../lib/serverApi.types";
 
 export const ATTACHMENT_PAGE_SIZE = 20;
 
+/** Import Runs or Export Runs on one page of a history table, and the `limit` each request sends. */
+export const RUN_PAGE_SIZE = 50;
+
 export const sectionTitle = "m-0 text-[0.938rem] font-semibold text-text";
 export const sectionHint = "mt-1 text-[0.813rem] text-muted";
 export const tableCard = "overflow-hidden rounded-lg";

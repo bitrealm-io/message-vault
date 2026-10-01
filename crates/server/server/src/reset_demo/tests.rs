@@ -54,6 +54,44 @@ username = "demo"
     .expect("write whatsapp jsonl");
 }
 
+/// The refusal for the committed `seed.toml` with `find` replaced by `replace`.
+fn refusal_of_committed_seed_with(find: &str, replace: &str) -> String {
+    let committed = Path::new(env!("CARGO_MANIFEST_DIR")).join("../demo-seed/config/seed.toml");
+    let text = fs::read_to_string(committed).expect("read the committed seed.toml");
+    assert!(
+        text.contains(find),
+        "the committed seed.toml holds {find:?}"
+    );
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("seed.toml");
+    fs::write(&path, text.replacen(find, replace, 1)).expect("write seed.toml");
+    format!("{:#}", load_demo_seed(&path).unwrap_err())
+}
+
+/// The `seed.toml` the repository ships loads under the rule that refuses an
+/// unknown key.
+#[test]
+fn the_committed_seed_toml_loads() {
+    let committed = Path::new(env!("CARGO_MANIFEST_DIR")).join("../demo-seed/config/seed.toml");
+    let seed = load_demo_seed(&committed).expect("the committed seed.toml loads");
+    assert_eq!(seed.account.username, "demo");
+}
+
+/// A key `reset-demo` does not use is refused by its name, with the file: a
+/// misspelt `emails` otherwise seeds a Demo Account with no email identity.
+#[test]
+fn a_seed_toml_with_an_unknown_key_or_section_is_refused_naming_it() {
+    let text = refusal_of_committed_seed_with("emails = ", "email = ");
+    assert!(text.contains("`email`"), "{text}");
+    assert!(text.contains("seed.toml"), "{text}");
+
+    let text = refusal_of_committed_seed_with("[account]\n", "[account]\npassword = \"x\"\n");
+    assert!(text.contains("`password`"), "{text}");
+
+    let text = refusal_of_committed_seed_with("[account]\n", "[acount]\nx = 1\n\n[account]\n");
+    assert!(text.contains("`acount`"), "{text}");
+}
+
 /// Open `db` with the schema applied and one connection checked out.
 async fn test_db_conn(db: &Path) -> sqlx::pool::PoolConnection<sqlx::Sqlite> {
     let (_pool, conn) = test_db(db).await;

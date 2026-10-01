@@ -44,7 +44,13 @@ impl std::fmt::Display for DemoSize {
 
 /// Generator settings: how many contacts, how conversations are split across
 /// backups, and how often messages get photos or replies.
+///
+/// A key the generator does not use is an error, never ignored
+/// (`deny_unknown_fields` here and on every section): a misspelt key would
+/// otherwise be dropped and the run would differ from what the file says.
+/// The refusal names the key, its line, and the keys that section takes.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SeedConfig {
     /// Random seed. The same seed and settings produce the same backups.
     pub seed: u64,
@@ -81,6 +87,7 @@ where
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ContactsConfig {
     pub count: usize,
     pub no_name: f64,
@@ -94,6 +101,7 @@ pub struct ContactsConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LabelsConfig {
     pub names: Vec<String>,
     pub family: f64,
@@ -102,6 +110,7 @@ pub struct LabelsConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OneToOneConfig {
     pub typical_min: u32,
     pub typical_max: u32,
@@ -117,6 +126,7 @@ pub struct OneToOneConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GroupsConfig {
     pub per_contact_mean: f64,
     pub per_contact_min: u32,
@@ -141,6 +151,7 @@ pub struct GroupsConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MessagesConfig {
     pub emoji_probability: f64,
     pub jpg_base_stride: usize,
@@ -153,6 +164,7 @@ pub struct MessagesConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EdgeCasesConfig {
     pub unassigned_phones: usize,
     pub unassigned_emails: usize,
@@ -163,6 +175,7 @@ pub struct EdgeCasesConfig {
 
 /// How demo conversations are split across the iMessage, Android, and WhatsApp folders.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SourcesConfig {
     /// Share of one-to-one contacts (excluding the ones that appear in both
     /// backups) that only appear in the Android backup.
@@ -189,10 +202,7 @@ impl SeedConfig {
     pub fn load(path: &Path) -> Result<Self> {
         let text = fs::read_to_string(path)
             .with_context(|| format!("read demo-seed config {}", path.display()))?;
-        let cfg: Self =
-            toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
-        cfg.validate()?;
-        Ok(cfg)
+        Self::from_toml(&text).with_context(|| format!("parse {}", path.display()))
     }
 
     /// The built-in settings for `size`.
@@ -203,8 +213,13 @@ impl SeedConfig {
     /// [`Self::validate`]; a test loads both sizes, so neither happens in a
     /// released program.
     pub fn for_size(size: DemoSize) -> Result<Self> {
-        let cfg: Self = toml::from_str(size.settings())
-            .with_context(|| format!("parse the built-in {size} demo settings"))?;
+        Self::from_toml(size.settings())
+            .with_context(|| format!("parse the built-in {size} demo settings"))
+    }
+
+    /// Settings from the text of a settings file, checked by [`Self::validate`].
+    fn from_toml(text: &str) -> Result<Self> {
+        let cfg: Self = toml::from_str(text)?;
         cfg.validate()?;
         Ok(cfg)
     }
@@ -274,6 +289,60 @@ mod tests {
         let large = SeedConfig::for_size(DemoSize::Large).expect("large settings");
         assert!(medium.contacts.count < large.contacts.count);
         assert_eq!(DemoSize::default(), DemoSize::Medium);
+    }
+
+    /// The medium settings with `find` replaced by `replace`.
+    fn medium_with(find: &str, replace: &str) -> String {
+        let settings = DemoSize::Medium.settings();
+        assert!(settings.contains(find), "the medium settings hold {find:?}");
+        settings.replacen(find, replace, 1)
+    }
+
+    /// The refusal for the medium settings with `find` replaced by `replace`.
+    fn refusal_of_medium_with(find: &str, replace: &str) -> String {
+        let text = medium_with(find, replace);
+        format!("{:#}", SeedConfig::from_toml(&text).unwrap_err())
+    }
+
+    /// A key the generator does not use is refused wherever it sits, by its
+    /// name and its line: a misspelt key otherwise loads as nothing at all.
+    #[test]
+    fn settings_with_an_unknown_key_are_refused_naming_the_key_and_its_line() {
+        for (section, key) in [("[contacts]\n", "cuont"), ("[sources]\n", "overlap")] {
+            let settings = medium_with(section, &format!("{section}{key} = 3\n"));
+            let line = 1 + settings
+                .lines()
+                .position(|line| line == format!("{key} = 3"))
+                .expect("the added line");
+            let text = format!("{:#}", SeedConfig::from_toml(&settings).unwrap_err());
+            assert!(text.contains(&format!("`{key}`")), "{text}");
+            assert!(text.contains(&format!("line {line},")), "{text}");
+        }
+    }
+
+    /// A key outside any section, and a section the generator does not have.
+    #[test]
+    fn settings_with_an_unknown_top_level_key_or_section_are_refused_naming_it() {
+        let text = refusal_of_medium_with("seed = ", "sede = 1\nseed = ");
+        assert!(text.contains("`sede`"), "{text}");
+
+        let text = refusal_of_medium_with("[contacts]\n", "[contcats]\nx = 1\n\n[contacts]\n");
+        assert!(text.contains("`contcats`"), "{text}");
+    }
+
+    /// A refusal from a file names the file.
+    #[test]
+    fn a_settings_file_with_an_unknown_key_is_refused_naming_the_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("demo_seed.toml");
+        let text =
+            DemoSize::Medium
+                .settings()
+                .replacen("[labels]\n", "[labels]\nfriends = 0.1\n", 1);
+        fs::write(&path, text).expect("write settings");
+        let text = format!("{:#}", SeedConfig::load(&path).unwrap_err());
+        assert!(text.contains("demo_seed.toml"), "{text}");
+        assert!(text.contains("`friends`"), "{text}");
     }
 
     #[test]

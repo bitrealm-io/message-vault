@@ -196,6 +196,11 @@ released versions carry their date on the heading.
   some were read as a US number with the same digits and named the wrong
   person, and some matched nobody.
 
+- **The Import form marks every field it needs.** With **SMS Backup+**,
+  **Backup Device Email Addresses** had no asterisk, and with **iMazing** and
+  **OpenExtract**, **Backup path** had none, though the Import button stays
+  disabled until each is filled. Both now carry the asterisk.
+
 ### Upgrading
 
 - A Message Crate that ran on Postgres has to move to SQLite: export its

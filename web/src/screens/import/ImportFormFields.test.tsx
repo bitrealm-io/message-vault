@@ -3,12 +3,14 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { IMESSAGE_SOURCE_ID } from "../../lib/imessageImport";
+import { EXPORT_SOURCES } from "../../lib/exportSources";
+import { IMESSAGE_METHODS, IMESSAGE_SOURCE_ID } from "../../lib/imessageImport";
 import {
   emptyWhatsappPathStats,
   WHATSAPP_ERR_CRYPT_KEY,
   WHATSAPP_ERR_FOLDER_IS_FILE,
   WHATSAPP_ERR_OWNER_PHONE,
+  WHATSAPP_METHODS,
   WHATSAPP_SOURCE_ID,
 } from "../../lib/whatsappImport";
 import ImportFormFields, { type ImportFormFieldsProps } from "./ImportFormFields";
@@ -509,5 +511,212 @@ describe("ImportFormFields Import button", () => {
     await user.click(screen.getByRole("button", { name: "Import" }));
 
     expect(onImport).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The asterisk and the Import button have to agree (#1031). Each case is one
+ * source with every field filled, so Import is enabled, and names each field
+ * the source shows with the props that empty it. The test empties one field
+ * at a time: a field whose absence disables Import must carry the asterisk,
+ * and a field that carries the asterisk must be one Import needs.
+ */
+type FormCase = {
+  name: string;
+  props: Partial<ImportFormFieldsProps>;
+  fields: { label: string; empty: Partial<ImportFormFieldsProps> }[];
+};
+
+const filledWhatsappStats = {
+  backup: presentDir,
+  contactsDb: presentFile,
+  media: presentDir,
+  db: presentFile,
+  hasMsgstoreDb: true,
+  cryptName: null,
+};
+const whatsappAndroidProps: Partial<ImportFormFieldsProps> = {
+  source: "whatsapp-android",
+  backupPath: "/backups/whatsapp",
+  whatsappKey: "/backups/key",
+  whatsappOwnerPhone: "+15555550100",
+  whatsappWa: "/backups/wa.db",
+  whatsappMedia: "/backups/Media",
+  whatsappDb: "/backups/msgstore.db",
+  whatsappStats: filledWhatsappStats,
+};
+const whatsappAndroidFields: FormCase["fields"] = [
+  { label: "Backup folder", empty: { backupPath: "" } },
+  { label: "Decryption key", empty: { whatsappKey: "" } },
+  { label: "WhatsApp phone number", empty: { whatsappOwnerPhone: "" } },
+  { label: "Contacts database", empty: { whatsappWa: "" } },
+  { label: "Media folder", empty: { whatsappMedia: "" } },
+  { label: "Message database", empty: { whatsappDb: "" } },
+];
+const iphoneBackupStats = {
+  backup: presentDir,
+  attachmentRoot: null,
+  appleContacts: null,
+  backupEncrypted: false,
+};
+const iphoneBackupFields: FormCase["fields"] = [
+  { label: "iPhone Backup Directory", empty: { backupPath: "" } },
+  { label: "Encryption password", empty: { backupPassword: "" } },
+];
+const messagesDbProps: Partial<ImportFormFieldsProps> = {
+  backupPath: "/mnt/messages.db",
+  attachmentRoot: "/mnt/attachments",
+  appleContacts: "/mnt/AddressBook.sqlitedb",
+  pathStats: {
+    backup: presentFile,
+    attachmentRoot: presentDir,
+    appleContacts: presentFile,
+    backupEncrypted: null,
+  },
+};
+const messagesDbFields: FormCase["fields"] = [
+  { label: "Messages database", empty: { backupPath: "" } },
+  { label: "Attachment folder", empty: { attachmentRoot: "" } },
+  { label: "Apple Contacts file", empty: { appleContacts: "" } },
+];
+const androidSmsProps: Partial<ImportFormFieldsProps> = {
+  backupPath: "/backups/sms",
+  ownerPhones: ["+15555550100"],
+  profilePhones: ["+15555550100"],
+  ownerEmails: "me@example.com",
+};
+const androidSmsFields: FormCase["fields"] = [
+  { label: "Backup Directory", empty: { backupPath: "" } },
+  { label: "Backup Device Phone Numbers", empty: { ownerPhones: [] } },
+];
+
+const FORM_CASES: FormCase[] = [
+  {
+    name: "iMessage, iPhone backup",
+    props: { source: "imessage-ios", backupPassword: "secret", pathStats: iphoneBackupStats },
+    fields: iphoneBackupFields,
+  },
+  {
+    name: "iMessage, encrypted iPhone backup",
+    props: {
+      source: "imessage-ios",
+      backupPassword: "secret",
+      pathStats: { ...iphoneBackupStats, backupEncrypted: true },
+    },
+    fields: iphoneBackupFields,
+  },
+  {
+    name: "iMessage, Mac Messages",
+    props: { source: "imessage-macos", ...messagesDbProps },
+    fields: messagesDbFields,
+  },
+  {
+    name: "iMessage, jailbroken iPhone",
+    props: { source: "imessage-jailbreak", ...messagesDbProps },
+    fields: messagesDbFields,
+  },
+  { name: "WhatsApp, Android", props: whatsappAndroidProps, fields: whatsappAndroidFields },
+  {
+    name: "WhatsApp, encrypted Android backup",
+    props: {
+      ...whatsappAndroidProps,
+      whatsappStats: {
+        ...filledWhatsappStats,
+        hasMsgstoreDb: false,
+        cryptName: "msgstore.db.crypt15",
+      },
+    },
+    fields: whatsappAndroidFields,
+  },
+  {
+    name: "WhatsApp, iPhone",
+    props: {
+      source: "whatsapp-ios",
+      backupPath: "/backups/iphone",
+      whatsappOwnerPhone: "+15555550100",
+      whatsappWa: "/backups/ContactsV2.sqlite",
+      whatsappStats: filledWhatsappStats,
+      processingOpen: true,
+    },
+    fields: [
+      { label: "Backup folder", empty: { backupPath: "" } },
+      { label: "Contacts database", empty: { whatsappWa: "" } },
+      { label: "WhatsApp phone number", empty: { whatsappOwnerPhone: "" } },
+    ],
+  },
+  {
+    name: "SMS Backup & Restore",
+    props: { source: "sms-backup-restore", ...androidSmsProps },
+    fields: androidSmsFields,
+  },
+  {
+    name: "GO SMS Pro",
+    props: { source: "go-sms-pro", ...androidSmsProps },
+    fields: androidSmsFields,
+  },
+  {
+    name: "SMS Backup+",
+    props: { source: "sms-backup-plus", ...androidSmsProps },
+    fields: [
+      ...androidSmsFields,
+      { label: "Backup Device Email Addresses", empty: { ownerEmails: "" } },
+    ],
+  },
+  {
+    name: "iMazing",
+    props: { source: "imazing", backupPath: "/backups/imazing" },
+    fields: [{ label: "Backup path", empty: { backupPath: "" } }],
+  },
+  {
+    name: "OpenExtract",
+    props: { source: "openextract", backupPath: "/backups/openextract" },
+    fields: [{ label: "Backup path", empty: { backupPath: "" } }],
+  },
+];
+
+/** The labels on screen that carry the asterisk, without it. */
+function markedLabels(): string[] {
+  return Array.from(document.querySelectorAll("label"))
+    .map((label) => label.textContent ?? "")
+    .filter((text) => text.endsWith(" *"))
+    .map((text) => text.slice(0, -2))
+    .sort();
+}
+
+function importButton(): HTMLElement {
+  return screen.getByRole("button", { name: "Import" });
+}
+
+describe("ImportFormFields required marks", () => {
+  // A source added to the Import source list, or a platform added under
+  // iMessage or WhatsApp, fails here until its fields are listed above.
+  it("has a case for every import source", () => {
+    const covered = new Set(FORM_CASES.map((c) => c.props.source));
+    const sources = [
+      ...IMESSAGE_METHODS.map((m) => m.id),
+      ...WHATSAPP_METHODS.map((m) => m.id),
+      ...EXPORT_SOURCES.map((s) => s.id).filter(
+        (id) => id !== IMESSAGE_SOURCE_ID && id !== WHATSAPP_SOURCE_ID,
+      ),
+    ];
+    for (const source of sources) {
+      expect(covered, source).toContain(source);
+    }
+  });
+
+  it.each(FORM_CASES)("marks exactly the fields Import needs: $name", ({ props, fields }) => {
+    const filled = renderForm(props);
+    expect(importButton(), "Import is enabled with every field filled").not.toBeDisabled();
+    const marked = markedLabels();
+    filled.unmount();
+
+    const needed: string[] = [];
+    for (const field of fields) {
+      const emptied = renderForm({ ...props, ...field.empty });
+      if (importButton().hasAttribute("disabled")) needed.push(field.label);
+      emptied.unmount();
+    }
+
+    expect(marked).toEqual(needed.sort());
   });
 });

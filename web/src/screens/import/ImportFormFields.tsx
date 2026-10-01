@@ -6,7 +6,6 @@ import PasswordField from "../../components/PasswordField";
 import PathPicker from "../../components/PathPicker";
 import PhoneTokenField, { type PhoneTokenFieldHandle } from "../../components/PhoneTokenField";
 import Select, { ListBoxItem, selectItemClassName } from "../../components/Select";
-import TextField from "../../components/TextField";
 import TimeZoneField from "../../components/TimeZoneField";
 import {
   backupFolderHint,
@@ -241,7 +240,6 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
   const isImazing = props.source === IMAZING_SOURCE_ID;
   const isAndroidSms = isAndroidSmsSource(props.source);
   const wantsEmails = needsOwnerEmails(props.source);
-  const hasOwnerEmail = !wantsEmails || splitEmails(props.ownerEmails).length > 0;
   const imessageMethod = isImessageMethod(props.source) ? props.source : null;
   const whatsappMethod = isWhatsappMethod(props.source) ? props.source : null;
   const whatsappFallbackPhone =
@@ -303,15 +301,32 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
     }
   }, [isAndroidSms]);
 
+  // The fields a source without a gate of its own (Android SMS, iMazing,
+  // OpenExtract) needs. The asterisks and `canImport` both read this, so a
+  // field cannot be needed and unmarked.
+  const required = {
+    backupPath: true,
+    ownerPhones: isAndroidSms,
+    ownerEmails: wantsEmails,
+  };
+  const filled = {
+    backupPath: Boolean(props.backupPath),
+    ownerPhones: props.ownerPhones.length > 0 || phoneDraftPending,
+    ownerEmails: splitEmails(props.ownerEmails).length > 0,
+  };
+  const hasOwnerEmail = !required.ownerEmails || filled.ownerEmails;
+  const requiredFilled =
+    (!required.backupPath || filled.backupPath) &&
+    (!required.ownerPhones || filled.ownerPhones) &&
+    hasOwnerEmail;
+
   const canImport = imessageGate
     ? imessageGate.enabled && !props.running
     : whatsappGate
       ? whatsappGate.enabled && !props.running
-      : Boolean(props.backupPath) &&
+      : requiredFilled &&
         !props.running &&
         (!isAndroidSms || props.profilePhonesReady) &&
-        (!isAndroidSms || props.ownerPhones.length > 0 || phoneDraftPending) &&
-        hasOwnerEmail &&
         (!phonesMismatch || mismatchAck);
 
   function handleImport(): void {
@@ -610,7 +625,7 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
           </>
         ) : isAndroidSms ? (
           <>
-            <StackedField label="Backup Directory" required>
+            <StackedField label="Backup Directory" required={required.backupPath}>
               <PathPicker
                 value={props.backupPath}
                 onChange={props.onBackupPathChange}
@@ -632,7 +647,7 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
               onMinSizeMbChange={props.onMinSizeMbChange}
             />
 
-            <StackedField label="Backup Device Phone Numbers" required>
+            <StackedField label="Backup Device Phone Numbers" required={required.ownerPhones}>
               <PhoneTokenField
                 ref={phoneFieldRef}
                 value={props.ownerPhones}
@@ -675,18 +690,25 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
             </StackedField>
 
             {wantsEmails ? (
-              <TextField
-                label="Backup Device Email Addresses"
-                aria-label="Backup Device Email Addresses"
-                value={props.ownerEmails}
-                onChange={props.onOwnerEmailsChange}
-                hint="Pre-filled from your profile. The Gmail or IMAP account SMS Backup+ synced to; separate several with commas."
-                placeholder="you@example.com"
-              />
+              <StackedField label="Backup Device Email Addresses" required={required.ownerEmails}>
+                <input
+                  type="text"
+                  inputMode="email"
+                  aria-label="Backup Device Email Addresses"
+                  value={props.ownerEmails}
+                  onChange={(e) => props.onOwnerEmailsChange(e.target.value)}
+                  placeholder="you@example.com"
+                  className={fieldStyle}
+                />
+                <p className={hintStyle}>
+                  Pre-filled from your profile. The Gmail or IMAP account SMS Backup+ synced to;
+                  separate several with commas.
+                </p>
+              </StackedField>
             ) : null}
           </>
         ) : (
-          <StackedField label="Backup path">
+          <StackedField label="Backup path" required={required.backupPath}>
             <PathPicker value={props.backupPath} onChange={props.onBackupPathChange} directory />
           </StackedField>
         )}

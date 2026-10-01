@@ -963,6 +963,16 @@ mod tests {
         assert!(normalize_digest_sha256("not-a-digest").is_err());
     }
 
+    /// The fingerprint becomes part of a request path, so the right length
+    /// alone or hex digits alone is not enough.
+    #[test]
+    fn normalize_digest_sha256_refuses_the_wrong_length_or_a_non_hex_digit() {
+        assert!(normalize_digest_sha256(&"a".repeat(63)).is_err());
+        assert!(normalize_digest_sha256(&"a".repeat(65)).is_err());
+        assert!(normalize_digest_sha256(&"z".repeat(64)).is_err());
+        assert!(normalize_digest_sha256(&format!("../{}", "a".repeat(61))).is_err());
+    }
+
     #[test]
     fn trust_export_skips_hash_when_size_matches() {
         let dir = tempfile::tempdir().unwrap();

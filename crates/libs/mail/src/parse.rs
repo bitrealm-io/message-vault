@@ -495,6 +495,10 @@ mod tests {
         assert_eq!(parsed.participants[1].display_name, None);
         assert_eq!(parsed.message.sender_display_name.as_deref(), Some("Sam"));
         assert_eq!(parsed.message.subject.as_deref(), Some("MMS subject"));
+        assert_eq!(
+            parsed.message.text, "full bag",
+            "the text is the text/plain part beside the attachment"
+        );
         assert_eq!(parsed.export_source, "imessage");
         assert_eq!(parsed.export_tool, "imessage-exporter");
         assert_eq!(parsed.export_tool_version, "3.1.0");
@@ -531,5 +535,26 @@ mod tests {
         let a = String::from_utf8_lossy(&records[0]);
         assert!(a.contains("From spoofed"));
         assert!(!a.contains(">From spoofed"));
+    }
+
+    /// Only a `From ` line is escaped on write, so only that loses a `>` on
+    /// read. A line a person wrote as a quote starts with `>` too.
+    #[test]
+    fn split_mboxrd_leaves_a_quoted_line_as_it_is() {
+        let text = "From me@x Tue May 20 00:00:00 2014\nX-ME-Guid: a\n\n> quoted\n>> twice\n>From spoofed\n>>From escaped twice\n\n";
+        let records = split_mboxrd(text);
+        assert_eq!(records.len(), 1);
+        let lines: Vec<&str> = std::str::from_utf8(&records[0]).unwrap().lines().collect();
+        assert_eq!(
+            lines,
+            [
+                "X-ME-Guid: a",
+                "",
+                "> quoted",
+                ">> twice",
+                "From spoofed",
+                ">From escaped twice",
+            ]
+        );
     }
 }

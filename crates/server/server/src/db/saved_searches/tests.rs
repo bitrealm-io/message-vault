@@ -279,6 +279,104 @@ async fn repeat_imports_on_one_day_get_numbered_names() {
     assert_eq!(third.query, "import:#3");
 }
 
+/// A person's Saved Search already holds the name the import would use. The
+/// import leaves that row alone and takes the next free name.
+#[tokio::test]
+async fn import_takes_the_next_name_when_a_hand_made_saved_search_holds_it() {
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    let by_hand = create(
+        &mut conn,
+        account,
+        "Import imessage 2026-08-30",
+        "from:bob",
+        SavedSearchKind::Manual,
+    )
+    .await
+    .unwrap();
+
+    let made = create_for_import(&mut conn, account, 7, "imessage", "2026-08-30")
+        .await
+        .unwrap();
+
+    assert_eq!(made.name, "Import imessage 2026-08-30 2");
+    assert_eq!(made.query, "import:#7");
+    assert_eq!(made.kind, "import");
+    let kept = get(&mut conn, account, by_hand.id).await.unwrap().unwrap();
+    assert_eq!(kept.name, "Import imessage 2026-08-30");
+    assert_eq!(kept.query, "from:bob");
+    assert_eq!(kept.kind, "manual");
+    let stored = get(&mut conn, account, made.id).await.unwrap().unwrap();
+    assert_eq!(
+        (
+            stored.name.as_str(),
+            stored.query.as_str(),
+            stored.kind.as_str()
+        ),
+        ("Import imessage 2026-08-30 2", "import:#7", "import"),
+        "the id answered is the row the import inserted"
+    );
+}
+
+/// A hand-made name differing only in letter case holds the name too, the
+/// same as it would against a second hand-made Saved Search. `É` is there
+/// because SQLite's own case folding stops at ASCII.
+#[tokio::test]
+async fn import_treats_a_name_in_another_letter_case_as_taken() {
+    let fixture = crate::test_support::test_fixture().await;
+    let account = fixture.account_with_id(101, "alice").await;
+    let mut conn = fixture.conn().await;
+    for name in ["IMPORT ÉCRAN 2026-08-30", "import écran 2026-08-30 2"] {
+        create(
+            &mut conn,
+            account,
+            name,
+            "from:bob",
+            SavedSearchKind::Manual,
+        )
+        .await
+        .unwrap();
+    }
+
+    let made = create_for_import(&mut conn, account, 7, "Écran", "2026-08-30")
+        .await
+        .unwrap();
+
+    assert_eq!(made.name, "Import Écran 2026-08-30 3");
+    let names: Vec<String> = list(&mut conn, account)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+    assert_eq!(
+        names,
+        vec![
+            "IMPORT ÉCRAN 2026-08-30",
+            "import écran 2026-08-30 2",
+            "Import Écran 2026-08-30 3",
+        ]
+    );
+}
+
+/// Another account's names are not this account's: the import takes the
+/// plain name.
+#[tokio::test]
+async fn import_name_is_claimed_per_account() {
+    let fixture = crate::test_support::test_fixture().await;
+    let alice = fixture.account_with_id(101, "alice").await;
+    let bob = fixture.account_with_id(102, "bob").await;
+    let mut conn = fixture.conn().await;
+    create_for_import(&mut conn, alice, 1, "imessage", "2026-08-30")
+        .await
+        .unwrap();
+    let made = create_for_import(&mut conn, bob, 2, "imessage", "2026-08-30")
+        .await
+        .unwrap();
+    assert_eq!(made.name, "Import imessage 2026-08-30");
+}
+
 #[tokio::test]
 async fn deleting_a_saved_search_leaves_the_import_record() {
     let fixture = crate::test_support::test_fixture().await;

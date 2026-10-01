@@ -40,6 +40,10 @@ bind = "127.0.0.1:8080"
 # Keep this array on one line: scripts/run-dev.sh uncomments only this line.
 # cors_origins = ["http://localhost:5173", "http://127.0.0.1:5173", "https://tauri.localhost", "http://tauri.localhost", "tauri://localhost"]
 
+# Folder holding the built website, served at /. Default "static", relative to
+# the directory the server is started in. `serve --static-dir` overrides it.
+# static_dir = "static"
+
 # Serve an interactive OpenAPI explorer at /docs (and /openapi.json).
 # Default false. Calls from the explorer still need a Bearer token.
 # openapi_ui = false

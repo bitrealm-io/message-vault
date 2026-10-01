@@ -57,6 +57,29 @@ pub struct ServerConfig {
     /// Serve Swagger UI at `/docs` and the spec at `/openapi.json`. Default false.
     #[serde(default = "default_openapi_ui")]
     pub openapi_ui: bool,
+    /// Folder holding the built website, served at `/`. Default `static`,
+    /// relative to the directory the server is started in.
+    #[serde(default = "default_static_dir")]
+    pub static_dir: PathBuf,
+}
+
+impl Default for ServerConfig {
+    /// The `[server]` section with every key left out.
+    fn default() -> Self {
+        Self {
+            bind: default_server_bind(),
+            asset_max_bytes: default_asset_max_bytes(),
+            asset_part_size: default_asset_part_size(),
+            cors_origins: Vec::new(),
+            openapi_ui: default_openapi_ui(),
+            static_dir: default_static_dir(),
+        }
+    }
+}
+
+/// serde default for `[server] static_dir`.
+fn default_static_dir() -> PathBuf {
+    PathBuf::from("static")
 }
 
 /// serde default for `[server] bind`.
@@ -183,6 +206,43 @@ impl Config {
         config.paths.data_dir = resolve_path(repo, &config.paths.data_dir);
 
         Ok(config)
+    }
+
+    /// The config for a Message Crate kept whole in one folder, with no config
+    /// file: the database is `messagecrate.db` in `data_dir`, the accounts'
+    /// files sit beside it, and every server setting has its default. This is
+    /// what `serve --data-dir` runs on, and how the desktop app starts the
+    /// server without writing a file a person would have to find.
+    pub fn for_data_dir(data_dir: &Path) -> Self {
+        Self {
+            paths: PathsConfig {
+                db: data_dir.join("messagecrate.db"),
+                data_dir: data_dir.to_path_buf(),
+                assets_dir: default_assets_dir_name(),
+                assets_converted_dir: default_assets_converted_dir_name(),
+            },
+            server: Some(ServerConfig::default()),
+            database: DatabaseConfig::default(),
+        }
+    }
+
+    /// Apply `serve`'s own flags: `--bind` replaces `[server] bind` and
+    /// `--static-dir` replaces `[server] static_dir`. A config with no
+    /// `[server]` section is left without one, for `require_server` to refuse.
+    pub(crate) fn with_serve_overrides(
+        mut self,
+        bind: Option<String>,
+        static_dir: Option<PathBuf>,
+    ) -> Self {
+        if let Some(server) = self.server.as_mut() {
+            if let Some(bind) = bind {
+                server.bind = bind;
+            }
+            if let Some(static_dir) = static_dir {
+                server.static_dir = static_dir;
+            }
+        }
+        self
     }
 
     /// Server settings for `serve`. Fails if `[server]` is missing.

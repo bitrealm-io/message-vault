@@ -29,6 +29,8 @@ cors_origins = [
 - Paths resolve relative to the repo root (parent of `config/`).
 - `[server]` is required for `serve`. The demo config comments it out.
 - `cors_origins` lists origins allowed on top of the three the packaged desktop app runs from (`tauri://localhost`, `http://tauri.localhost`, `https://tauri.localhost`), which the server allows whether or not you name them. The website the server serves is same-origin and needs no entry either, so an empty list is the right setting for most installs. Add the Vite origins (`http://localhost:5173`, `http://127.0.0.1:5173`) when running the dev UI against this server.
+- `static_dir` is the folder holding the built website, served at `/`. It defaults to `static`, relative to the directory the server is started in.
+- `serve` runs without a config file when given `--data-dir <folder>`: the database is `messagecrate.db` in that folder, the accounts' files sit beside it, and every `[server]` key has its default. `--bind` and `--static-dir` override `bind` and `static_dir`, with or without a config file. The desktop app starts the server this way.
 - Source names are **not** listed in TOML — each import registers its own
   source slug for that account under `data/<account_id>/<source_id>/`.
 

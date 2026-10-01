@@ -1555,3 +1555,23 @@ async fn an_api_token_records_no_app() {
         None
     );
 }
+
+/// The website is served from the folder the config names, so a server
+/// started somewhere other than beside a `static` folder, as the desktop
+/// app's is (#970), still has its website.
+#[tokio::test]
+async fn the_website_is_served_from_the_configured_folder() {
+    let fixture = crate::test_support::test_fixture().await;
+    let site = fixture.dir().join("site");
+    std::fs::create_dir_all(&site).unwrap();
+    std::fs::write(site.join("index.html"), "<title>the site</title>").unwrap();
+    let mut state = fixture.state.clone();
+    let mut cfg = (*state.cfg).clone();
+    cfg.server.as_mut().unwrap().static_dir = site;
+    state.cfg = std::sync::Arc::new(cfg);
+
+    let (status, body) = crate::test_support::get_raw(&state, "/", "").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, "<title>the site</title>");
+}

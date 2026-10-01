@@ -855,6 +855,11 @@ pub(crate) fn http_app(state: AppState) -> Router {
         .as_ref()
         .map(|s| s.cors_origins.clone())
         .unwrap_or_default();
+    let static_dir = state
+        .cfg
+        .server
+        .as_ref()
+        .map_or_else(|| "static".into(), |s| s.static_dir.clone());
     let (auth_small, mut spec) = limited_auth_router();
     let (doc_router, rest) = crate::openapi::api_openapi().split_for_parts();
     spec.merge(rest);
@@ -882,7 +887,7 @@ pub(crate) fn http_app(state: AppState) -> Router {
             crate::declared_query::refuse_undeclared_query,
         ))
         .method_not_allowed_fallback(api_method_not_allowed)
-        .fallback_service(ServeDir::new("static"))
+        .fallback_service(ServeDir::new(static_dir))
         .layer(RequestBodyLimitLayer::new(state.max_body_bytes))
         // Rewrite the limit layer's plain-text 413 into `{error}` before CORS
         // sees it, so the response a browser gets is both JSON and CORS-clean.
@@ -1252,6 +1257,7 @@ pub(crate) fn test_app_state(pool: sqlx::AnyPool, data_dir: &Path) -> AppState {
             asset_part_size: 1024 * 1024,
             cors_origins: Vec::new(),
             openapi_ui: false,
+            static_dir: "static".into(),
         }),
         database: crate::config::DatabaseConfig::default(),
     };

@@ -294,6 +294,21 @@ pub struct ServeArgs {
     #[arg(long, default_value = "config/config.toml")]
     pub config: PathBuf,
 
+    /// Keep the whole Message Crate in this folder and read no config file:
+    /// the database is `messagecrate.db` inside it, with every other setting
+    /// at its default
+    #[arg(long, conflicts_with = "config")]
+    pub data_dir: Option<PathBuf>,
+
+    /// Address to listen on (overrides `[server] bind`; default 127.0.0.1:8080)
+    #[arg(long)]
+    pub bind: Option<String>,
+
+    /// Folder holding the built website (overrides `[server] static_dir`;
+    /// default `static`)
+    #[arg(long)]
+    pub static_dir: Option<PathBuf>,
+
     /// Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
     #[arg(long)]
     pub db_url: Option<String>,
@@ -671,9 +686,30 @@ async fn run_create_database(args: CreateDatabaseArgs) -> Result<()> {
 
 /// Start the HTTP server with the config, honouring a `--db-url` override.
 async fn run_serve(args: ServeArgs) -> Result<()> {
-    let cfg = Config::load(&args.config)?.with_db_overrides(None, args.db_url);
+    let cfg = serve_config(args)?;
     let _ = cfg.require_server()?;
     crate::server::run(cfg).await
+}
+
+/// The config `serve` runs on: the folder `--data-dir` names, or else the
+/// config file, with the other flags applied over either.
+fn serve_config(args: ServeArgs) -> Result<Config> {
+    let cfg = match &args.data_dir {
+        Some(data_dir) => {
+            // Made absolute so nothing later depends on the directory the
+            // server was started in.
+            let data_dir = if data_dir.is_absolute() {
+                data_dir.clone()
+            } else {
+                std::env::current_dir()?.join(data_dir)
+            };
+            Config::for_data_dir(&data_dir)
+        }
+        None => Config::load(&args.config)?,
+    };
+    Ok(cfg
+        .with_db_overrides(None, args.db_url)
+        .with_serve_overrides(args.bind, args.static_dir))
 }
 
 /// Convert stored media into browser previews.

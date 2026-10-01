@@ -530,3 +530,99 @@ fn dedupe_stats_print_one_line_per_count() {
          \x20 near duplicates flagged: 1\n"
     );
 }
+
+/// Parse a `serve` command line the way `main` does.
+fn serve_args(args: &[&str]) -> ServeArgs {
+    let argv = ["message-crate-server", "serve"].iter().chain(args);
+    match Cli::try_parse_from(argv)
+        .expect("serve arguments parse")
+        .command
+    {
+        Commands::Serve(args) => args,
+        other => panic!("expected serve, parsed {other:?}"),
+    }
+}
+
+/// How the desktop app starts the server (#970): one folder holds the whole
+/// Message Crate, no config file is read, and the other settings are the
+/// defaults unless a flag says otherwise.
+#[test]
+fn serve_with_a_data_dir_needs_no_config_file() {
+    let temp = tempfile::tempdir().unwrap();
+    let data = temp.path().join("crate");
+
+    let cfg = serve_config(serve_args(&["--data-dir", data.to_str().unwrap()])).unwrap();
+
+    assert_eq!(cfg.paths.db, data.join("messagecrate.db"));
+    assert_eq!(cfg.paths.data_dir, data);
+    assert!(cfg.database.url.is_none());
+    let server = cfg.require_server().expect("a [server] section by default");
+    assert_eq!(server.bind, "127.0.0.1:8080");
+    assert_eq!(server.static_dir, PathBuf::from("static"));
+    assert!(server.cors_origins.is_empty());
+
+    let cfg = serve_config(serve_args(&[
+        "--data-dir",
+        data.to_str().unwrap(),
+        "--bind",
+        "0.0.0.0:9000",
+        "--static-dir",
+        "/opt/site",
+    ]))
+    .unwrap();
+    let server = cfg.require_server().unwrap();
+    assert_eq!(server.bind, "0.0.0.0:9000");
+    assert_eq!(server.static_dir, PathBuf::from("/opt/site"));
+}
+
+/// The same two flags apply over a config file, and a relative data folder
+/// is made absolute so the server does not depend on where it was started.
+#[tokio::test]
+async fn serve_flags_override_the_config_file_and_a_relative_data_dir_is_made_absolute() {
+    let temp = tempfile::tempdir().unwrap();
+    let config = server_config(temp.path()).await;
+    fs::write(
+        &config,
+        format!(
+            "{}\n[server]\nbind = \"127.0.0.1:8080\"\nstatic_dir = \"site\"\n",
+            fs::read_to_string(&config).unwrap()
+        ),
+    )
+    .unwrap();
+
+    let from_file = serve_config(serve_args(&["--config", config.to_str().unwrap()])).unwrap();
+    assert_eq!(
+        from_file.require_server().unwrap().static_dir,
+        PathBuf::from("site")
+    );
+    let overridden = serve_config(serve_args(&[
+        "--config",
+        config.to_str().unwrap(),
+        "--bind",
+        "127.0.0.1:9100",
+        "--static-dir",
+        "elsewhere",
+    ]))
+    .unwrap();
+    let server = overridden.require_server().unwrap();
+    assert_eq!(server.bind, "127.0.0.1:9100");
+    assert_eq!(server.static_dir, PathBuf::from("elsewhere"));
+
+    let relative = serve_config(serve_args(&["--data-dir", "some/crate"])).unwrap();
+    assert!(relative.paths.data_dir.is_absolute());
+    assert!(relative.paths.data_dir.ends_with("some/crate"));
+}
+
+/// A config file and a data folder are two answers to one question.
+#[test]
+fn serve_refuses_a_config_file_together_with_a_data_dir() {
+    let argv = [
+        "message-crate-server",
+        "serve",
+        "--config",
+        "c.toml",
+        "--data-dir",
+        "d",
+    ];
+    assert!(Cli::try_parse_from(argv).is_err());
+}

@@ -14,6 +14,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      push_docker_image:
+        description: Push the Docker image to Docker Hub as sha-<commit> only
+        type: boolean
+        default: false
 
 # A new push to a pull request cancels its previous run, so queued Rust
 # jobs do not sit until the 6-hour default timeout on a branch nobody is
@@ -347,12 +352,15 @@ jobs:
           TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: ./scripts/check-version-lockstep.sh ${TAG:+"$TAG"}
 
-  # ── Tag only: Docker image → DockerHub ────────────────────────────────
-  # On a tag the changes job reports everything true, so every job in `needs`
-  # below actually runs; nothing ships unless all of them are green.
+  # ── Tag, or a manual run that asks for it: Docker image → DockerHub ───
+  # On a tag or a manual run the changes job reports everything true, so
+  # every job above actually runs; nothing ships unless all of them are
+  # green. A manual run with push_docker_image ticked pushes sha-<commit>
+  # and nothing else: the version tags and latest belong to a release, so
+  # an image built from a branch can never replace the one people pull.
   docker:
     name: Docker image
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.push_docker_image)
     needs: [changes, fmt, clippy, test, check-tauri, web, docs, license, docker-context, version]
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -376,8 +384,23 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=sha,prefix=sha-
+
+      # Empty on a tag on purpose: a release reports the Product Version
+      # alone. A manual run reports the commit, as any other build does.
+      # The image cannot ask git because .git is not in its context.
+      - name: Choose the build metadata
+        id: build
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$REF" == refs/tags/v* ]]; then
+            echo "metadata=" >> "$GITHUB_OUTPUT"
+          else
+            echo "metadata=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build and push
         uses: docker/build-push-action@v7
@@ -387,10 +410,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Empty on purpose: a release reports the Product Version alone,
-          # and the image cannot ask git because .git is not in its context.
           build-args: |
-            BUILD_METADATA=
+            BUILD_METADATA=${{ steps.build.outputs.metadata }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

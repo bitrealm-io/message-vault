@@ -42,6 +42,28 @@ describe("AppAccountMenu", () => {
     expect(screen.queryByText("Message Crate")).toBeNull();
   });
 
+  it("shows the username beside the button without opening the menu", () => {
+    profileState.profile = { username: "ada", preferred_name: "Ada Lovelace" };
+    renderMenu();
+    expect(screen.getByTestId("header-username").textContent).toBe("ada");
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("cuts a long username short and keeps the whole of it in the tooltip", () => {
+    const long = "a-very-long-username-that-would-push-the-search-bar";
+    profileState.profile = { username: long };
+    renderMenu();
+    const name = screen.getByTestId("header-username");
+    expect(name.className).toContain("truncate");
+    expect(name.getAttribute("title")).toBe(long);
+  });
+
+  it("shows no username while the profile is loading", () => {
+    profileState.profile = null;
+    renderMenu();
+    expect(screen.queryByTestId("header-username")).toBeNull();
+  });
+
   it("shows the username and preferred name above Settings and Log out", async () => {
     const user = userEvent.setup();
     profileState.profile = { username: "ada", preferred_name: "Ada Lovelace" };

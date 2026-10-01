@@ -3,7 +3,7 @@ export const landingLinks = {
   home: "/",
   howItWorks: "/#how-it-works",
   features: "/#features",
-  getStarted: "/docs/user/get-started/run-with-demo-data/",
+  getStarted: "/docs/user/get-started/start-a-message-crate/",
   docs: "/docs/user/",
   developer: "/docs/developer/",
   backups: "/docs/user/get-started/what-is-message-crate/#who-provides-the-messages",

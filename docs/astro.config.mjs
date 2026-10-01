@@ -31,9 +31,9 @@ const userGuideItems = [
     label: 'Get started',
     items: [
       { label: '1. What Message Crate is', slug: 'docs/user/get-started/what-is-message-crate' },
-      { label: '2. Run a Message Crate with demo data', slug: 'docs/user/get-started/run-with-demo-data' },
+      { label: '2. Start a Message Crate', slug: 'docs/user/get-started/start-a-message-crate' },
       { label: '3. Look around the demo data', slug: 'docs/user/get-started/look-around-the-demo-data' },
-      { label: '4. Start your own Message Crate', slug: 'docs/user/get-started/start-your-own-message-crate' },
+      { label: '4. Create the Owner and an account', slug: 'docs/user/get-started/create-the-owner-and-an-account' },
       { label: '5. Install the desktop app', slug: 'docs/user/get-started/install-the-desktop-app' },
       { label: '6. Back up an iPhone', slug: 'docs/user/get-started/back-up-an-iphone' },
       { label: '6. Back up an Android phone', slug: 'docs/user/get-started/back-up-an-android-phone' },

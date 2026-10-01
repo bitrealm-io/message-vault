@@ -20,7 +20,7 @@ Three things differ from the first-time path:
 
 ## Publish the server on the network
 
-The command in [Start your own Message Crate](/docs/user/get-started/start-your-own-message-crate/) has `-p 127.0.0.1:8080:8080`.
+The command in [Start a Message Crate](/docs/user/get-started/start-a-message-crate/) has `-p 127.0.0.1:8080:8080`.
 The `127.0.0.1` in front means only that computer reaches the server.
 
 Without it, Docker publishes port 8080 on every network the computer is connected to.

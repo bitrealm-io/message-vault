@@ -74,9 +74,9 @@ This is the usual local path. Compose compiles `docker/Dockerfile` and starts th
 docker compose -f docker/compose.release.yml up --build
 ```
 
-The server is at **http://127.0.0.1:8080**. On an empty data volume, `DEMO_DATA=true` (the default) loads the sample inbox and claims Message Crate for a sample owner. Log in as `demo` with an empty password, or as `admin` with the password `admin` to manage accounts.
+The server is at **http://127.0.0.1:8080**. On an empty data volume, `DEMO_DATA=true` (the default) loads the sample inbox into the Demo Account and leaves Message Crate unclaimed. The first screen offers **Create Owner** and **Explore Demo Account**; the Demo Account has no password.
 
-With `DEMO_DATA=false` nothing is seeded and Message Crate starts unclaimed, so the first screen is **Create Owner** rather than a login.
+With `DEMO_DATA=false` nothing is seeded, so the first screen is **Create Owner** alone.
 
 ### Build without starting
 

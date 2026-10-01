@@ -182,9 +182,9 @@ Work from the repository root. The server process must be running before the web
 ./scripts/run-dev.sh --release       # optimized build; combines with any flag above
 ```
 
-`--reset` and `--reset-demo` cannot be combined, and `--owner` is rejected with `--reset-demo`, which claims it itself. `--help` on either dev script lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
+`--reset` and `--reset-demo` cannot be combined. Neither claims the Message Crate; add `--owner` to either for that. `--help` on either dev script lists every flag with examples. `--reset-demo` also rewrites `config/config.toml` from the example (CORS for Vite `:5173` enabled). Later sessions omit `--reset-demo` so the existing database stays.
 
-API: **http://127.0.0.1:8080**. After `--reset-demo`, log in as username `demo` with an empty password. After `--owner`, log in as `admin` / `admin`. Otherwise create the owner in the UI.
+API: **http://127.0.0.1:8080**. After `--reset-demo`, press **Explore Demo Account** on the login card; the Demo Account has no password. After `--owner`, log in as `admin` / `admin`. Otherwise create the owner in the UI.
 
 Restart terminal 1 after edits under `crates/server/server/` (debug `cargo run`; no hot reload).
 

@@ -1,5 +1,5 @@
-# demo-seed generator config.
-# Regenerate: cargo run -p demo-seed -- --config crates/server/demo-seed/demo_seed.toml
+# The large Demo Data set: about 613,000 messages.
+# `reset-demo --size large` builds it; `cargo run -p demo-seed -- --size large` writes its files.
 
 seed = 42
 out = "crates/server/demo-seed"

@@ -19,6 +19,7 @@ This document contains the help content for the `message-crate-server` command-l
 * [`message-crate-server dedupe-cross-source`↴](#message-crate-server-dedupe-cross-source)
 * [`message-crate-server import-contacts`↴](#message-crate-server-import-contacts)
 * [`message-crate-server reset-demo`↴](#message-crate-server-reset-demo)
+* [`message-crate-server create-database`↴](#message-crate-server-create-database)
 * [`message-crate-server serve`↴](#message-crate-server-serve)
 * [`message-crate-server dump-openapi`↴](#message-crate-server-dump-openapi)
 * [`message-crate-server dump-cli-docs`↴](#message-crate-server-dump-cli-docs)
@@ -39,8 +40,9 @@ Import and view messages in SQLite
 * `imports` — Work on an account's import sessions (`discard` clears a stranded one)
 * `dedupe-cross-source` — Soft-hide the same SMS when it appears under more than one import source
 * `import-contacts` — Import an address book (VCF or vCard CSV) into an existing database
-* `reset-demo` — Regenerate demo bundle, clear demo account data, import, and process assets
-* `serve` — Run the HTTP API (`POST /v1/imports/{id}/batches` takes message-ir JSONL)
+* `reset-demo` — Rebuild the Demo Account: generate Demo Data, clear the account, import, and process assets. Adds the account when it is not there
+* `create-database` — Create an empty database, with no Demo Account. `serve` adds the Demo Account only to a database that does not exist yet, so this is how a Message Crate starts empty
+* `serve` — Run the HTTP API. A database that does not exist yet is created with the Demo Account before the server listens
 * `dump-openapi` — Write the OpenAPI document (JSON) to stdout or --output. Does not open the database
 * `dump-cli-docs` — Write this CLI's docs-site reference page (Markdown) to stdout or --output. Does not open the database
 * `dump-error-docs` — Write one docs-site page per HTTP problem type (Markdown) into the --output directory, or all of them to stdout. Does not open the database
@@ -151,15 +153,22 @@ Import an address book (VCF or vCard CSV) into an existing database
 
 ## `message-crate-server reset-demo`
 
-Regenerate demo bundle, clear demo account data, import, and process assets
+Rebuild the Demo Account: generate Demo Data, clear the account, import, and process assets. Adds the account when it is not there
 
 **Usage:** `message-crate-server reset-demo [OPTIONS]`
 
 ###### **Options:**
 
-* `--bundle <BUNDLE>` — Demo bundle directory (rewritten by demo-seed, then imported)
+* `--size <SIZE>` — How much Demo Data: medium is about 54,000 messages, large about 613,000
 
-  Default value: `crates/server/demo-seed`
+  Default value: `medium`
+
+  Possible values:
+  - `medium`:
+    About 54,000 messages. A new Message Crate starts with this
+  - `large`:
+    About 613,000 messages
+
 * `--config <CONFIG>` — Active config path. Overwritten on the SQLite path; only read for attachment paths when `--db-url` is set (default config/config.toml)
 
   Default value: `config/config.toml`
@@ -167,9 +176,24 @@ Regenerate demo bundle, clear demo account data, import, and process assets
 
 
 
+## `message-crate-server create-database`
+
+Create an empty database, with no Demo Account. `serve` adds the Demo Account only to a database that does not exist yet, so this is how a Message Crate starts empty
+
+**Usage:** `message-crate-server create-database [OPTIONS]`
+
+###### **Options:**
+
+* `--config <CONFIG>` — Path to config.toml
+
+  Default value: `config/config.toml`
+* `--db-url <DB_URL>` — Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
+
+
+
 ## `message-crate-server serve`
 
-Run the HTTP API (`POST /v1/imports/{id}/batches` takes message-ir JSONL)
+Run the HTTP API. A database that does not exist yet is created with the Demo Account before the server listens
 
 **Usage:** `message-crate-server serve [OPTIONS]`
 

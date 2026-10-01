@@ -6,7 +6,6 @@
 #
 # docker/Dockerfile builds the Vite SPA in its own stage — no host build needed.
 #
-# Empty Message Crate (no demo seed): DEMO_DATA=false docker compose -f docker/compose.release.yml up --build
 # Staging drop: copy JSONL into ./staging (mounted at /app/staging).
 #
 # VPS Hub + nginx TLS: private message-crate-ops repo (compose-hub.yml).
@@ -25,8 +24,6 @@ services:
     ports:
       - "0.0.0.0:8080:8080"
     user: "${UID}:${GID}"
-    environment:
-      DEMO_DATA: ${DEMO_DATA:-true}
     volumes:
       - message-crate-data:/app/data
       - ../staging:/app/staging

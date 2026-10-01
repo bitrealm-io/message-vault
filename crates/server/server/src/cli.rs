@@ -17,6 +17,7 @@ use crate::config::{Config, validate_source_id};
 use crate::db::contacts as contacts_db;
 use crate::dedupe::DedupeStats;
 use crate::open_db::OpenDb;
+use demo_seed::DemoSize;
 
 #[derive(Debug, Parser)]
 #[command(name = "message-crate-server")]
@@ -43,10 +44,17 @@ pub enum Commands {
     /// Import an address book (VCF or vCard CSV) into an existing database.
     ImportContacts(ImportContactsArgs),
 
-    /// Regenerate demo bundle, clear demo account data, import, and process assets
+    /// Rebuild the Demo Account: generate Demo Data, clear the account,
+    /// import, and process assets. Adds the account when it is not there.
     ResetDemo(ResetDemoArgs),
 
-    /// Run the HTTP API (`POST /v1/imports/{id}/batches` takes message-ir JSONL)
+    /// Create an empty database, with no Demo Account. `serve` adds the Demo
+    /// Account only to a database that does not exist yet, so this is how a
+    /// Message Crate starts empty.
+    CreateDatabase(CreateDatabaseArgs),
+
+    /// Run the HTTP API. A database that does not exist yet is created with
+    /// the Demo Account before the server listens.
     Serve(ServeArgs),
 
     /// Write the OpenAPI document (JSON) to stdout or --output. Does not open the database.
@@ -252,9 +260,9 @@ pub struct ImportContactsArgs {
 /// Options for `reset-demo`.
 #[derive(Debug, Args)]
 pub struct ResetDemoArgs {
-    /// Demo bundle directory (rewritten by demo-seed, then imported)
-    #[arg(long, default_value = "crates/server/demo-seed")]
-    pub bundle: PathBuf,
+    /// How much Demo Data: medium is about 54,000 messages, large about 613,000
+    #[arg(long, value_enum, default_value_t = DemoSize::Medium)]
+    pub size: DemoSize,
 
     /// Active config path. Overwritten on the SQLite path; only read for
     /// attachment paths when `--db-url` is set (default config/config.toml)
@@ -263,6 +271,18 @@ pub struct ResetDemoArgs {
 
     /// Connection URL (postgres://… or sqlite://…); seeds that database
     /// instead of replacing paths.db
+    #[arg(long)]
+    pub db_url: Option<String>,
+}
+
+/// Options for `create-database`.
+#[derive(Debug, Args)]
+pub struct CreateDatabaseArgs {
+    /// Path to config.toml
+    #[arg(long, default_value = "config/config.toml")]
+    pub config: PathBuf,
+
+    /// Connection URL (postgres://… or sqlite://…; overrides `[database]` url)
     #[arg(long)]
     pub db_url: Option<String>,
 }
@@ -342,6 +362,7 @@ pub async fn run(cli: Cli) -> Result<()> {
         Commands::DedupeCrossSource(args) => run_dedupe(args).await,
         Commands::ImportContacts(args) => run_import_contacts(args).await,
         Commands::ResetDemo(args) => run_reset_demo(args).await,
+        Commands::CreateDatabase(args) => run_create_database(args).await,
         Commands::Serve(args) => run_serve(args).await,
         Commands::DumpOpenapi(args) => crate::openapi::write_openapi(args.output.as_deref()),
         Commands::DumpCliDocs(args) => crate::cli_docs::write_cli_docs(args.output.as_deref()),
@@ -585,8 +606,7 @@ async fn run_import_contacts(args: ImportContactsArgs) -> Result<()> {
 /// Rebuild the demo account from the bundle and print what landed.
 async fn run_reset_demo(args: ResetDemoArgs) -> Result<()> {
     let stats =
-        crate::reset_demo::run_reset_demo(&args.bundle, &args.config, args.db_url.as_deref())
-            .await?;
+        crate::reset_demo::run_reset_demo(args.size, &args.config, args.db_url.as_deref()).await?;
     println!();
     println!("Demo reset complete");
     if stats.seed.messages > 0 {
@@ -629,6 +649,23 @@ async fn run_reset_demo(args: ResetDemoArgs) -> Result<()> {
         stats.process_assets.skipped
     );
     println!("  conversion failures:   {}", stats.process_assets.errors);
+    Ok(())
+}
+
+/// Create the database the config names, empty, or say it is already there.
+async fn run_create_database(args: CreateDatabaseArgs) -> Result<()> {
+    let cfg = Config::load(&args.config)?.with_db_overrides(None, args.db_url);
+    let is_new = crate::reset_demo::database_is_new(&cfg).await?;
+    let opened = OpenDb::open(cfg).await?;
+    if is_new {
+        println!("Empty database created at {}.", opened.location());
+    } else {
+        println!(
+            "Database at {} already exists; left as it is.",
+            opened.location()
+        );
+    }
+    opened.close().await;
     Ok(())
 }
 

@@ -932,6 +932,14 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
     let upload_limits =
         asset_uploads::UploadLimits::new(server.asset_part_size, server.asset_max_bytes);
 
+    // Every new Message Crate starts with the Demo Account: seed first, then
+    // listen, so the first page a person loads already offers it (#971).
+    if crate::reset_demo::database_is_new(&cfg).await? {
+        if engine == DbEngine::Sqlite {
+            crate::operation_lock::clear_ready(&cfg.paths.db)?;
+        }
+        crate::reset_demo::seed_new_database(&cfg).await;
+    }
     let opened = OpenDb::open(cfg).await?;
     if engine == DbEngine::Sqlite {
         crate::operation_lock::mark_ready(&opened.cfg.paths.db)?;

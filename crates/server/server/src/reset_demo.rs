@@ -1,4 +1,8 @@
-//! Regenerate the demo bundle, clear the demo account's data, re-import, and process media.
+//! Generate the demo bundle, clear the demo account's data, import, and process media.
+//!
+//! Two callers: `reset-demo`, and `serve` on a database that does not exist
+//! yet ([`seed_new_database`]), which is how every new Message Crate starts
+//! with the Demo Account.
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -6,6 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+use demo_seed::DemoSize;
 use message_ir::HandleType;
 use serde::Deserialize;
 use sqlx::Row;
@@ -200,26 +205,23 @@ fn reset_account_work_dir(data_dir: &Path) -> Result<tempfile::TempDir> {
         })
 }
 
-/// Rebuild the demo Message Crate from the bundle at `bundle` and write the active
-/// config to `config_dest`.
+/// Generate the Demo Data set of `size` and rebuild the demo account from it,
+/// writing the active config to `config_dest` on the SQLite path.
 ///
 /// # Errors
 ///
-/// Returns an error when the bundle is incomplete, the database cannot be
-/// replaced, or import / media processing fails.
+/// Returns an error when generation fails, the database cannot be replaced,
+/// or import / media processing fails.
 pub async fn run_reset_demo(
-    bundle: &Path,
+    size: DemoSize,
     config_dest: &Path,
     db_url: Option<&str>,
 ) -> Result<ResetDemoStats> {
-    let bundle = if bundle.is_absolute() {
-        bundle.to_path_buf()
-    } else {
-        std::env::current_dir()?.join(bundle)
-    };
-
-    println!("  bundle:       {}", bundle.display());
-    let seed_stats = maybe_regenerate_bundle(&bundle, &demo_seed::SeedConfig::default_path())?;
+    let work = tempfile::tempdir().context("create temporary demo bundle directory")?;
+    let bundle = work.path().join("bundle");
+    println!("Reset demo — generating the {size} data set");
+    let seed_stats =
+        demo_seed::generate_size_to(size, &bundle).context("generate demo bundle (demo-seed)")?;
     let reset_stats =
         prepare_config_and_reset(&bundle, config_dest, DEMO_ACCOUNT_ID, db_url).await?;
 
@@ -229,6 +231,95 @@ pub async fn run_reset_demo(
         dedupe_keys_filled: reset_stats.dedupe_keys_filled,
         process_assets: reset_stats.process_assets,
     })
+}
+
+/// Whether the database `cfg` names does not exist yet: a SQLite file that is
+/// not there, or a database with no `accounts` table. `serve` seeds such a
+/// database and no other, so one that was ever started, or made empty with
+/// `create-database`, is left as it is.
+///
+/// # Errors
+///
+/// Returns an error when the database cannot be opened or read.
+pub async fn database_is_new(cfg: &Config) -> Result<bool> {
+    let target = cfg.db_target();
+    if let DbTarget::Path(path) = target
+        && !path.exists()
+    {
+        return Ok(true);
+    }
+    let pool = target.open().await?;
+    let mut conn = pool.acquire().await?;
+    let has_accounts = schema::table_exists(&mut conn, "accounts").await?;
+    conn.close().await?;
+    pool.close().await;
+    Ok(!has_accounts)
+}
+
+/// Add the Demo Account, with the medium data set, to a database that does
+/// not exist yet. `serve` calls this before it listens.
+///
+/// A failure is reported and not returned: the partly written Demo Account is
+/// removed and the Message Crate starts without one, since a person can still
+/// claim it and import, and the owner can add the Demo Account later.
+pub async fn seed_new_database(cfg: &Config) {
+    let size = DemoSize::Medium;
+    eprintln!("New database: adding the Demo Account ({size} data set)…");
+    let started = std::time::Instant::now();
+    if let Some(messages) = seed_new_database_with(cfg, |bundle| {
+        demo_seed::generate_size_to(size, bundle).map(|_| ())
+    })
+    .await
+    {
+        eprintln!(
+            "Demo Account ready: {messages} messages in {:.1} s",
+            started.elapsed().as_secs_f64()
+        );
+    }
+}
+
+/// [`seed_new_database`] with the step that writes the bundle injected, so a
+/// test can seed from a few conversations, or from a bundle that fails
+/// partway. Returns the number of messages imported, or `None` when seeding
+/// failed and the Demo Account was removed again.
+async fn seed_new_database_with<G>(cfg: &Config, generate: G) -> Option<u64>
+where
+    G: FnOnce(&Path) -> Result<()>,
+{
+    let outcome = async {
+        let work = tempfile::tempdir().context("create temporary demo bundle directory")?;
+        let bundle = work.path().join("bundle");
+        generate(&bundle).context("generate demo bundle (demo-seed)")?;
+        seed_new_database_from_bundle(cfg, &bundle).await
+    }
+    .await;
+    match outcome {
+        Ok(stats) => Some(stats.import.messages),
+        Err(error) => {
+            eprintln!("warning: could not add the Demo Account: {error:#}");
+            eprintln!(
+                "  this Message Crate starts without it; `message-crate-server reset-demo` adds it"
+            );
+            if let Err(error) = wipe_demo_account(cfg, DEMO_ACCOUNT_ID, cfg.db_target()).await {
+                eprintln!("warning: could not remove the partly added Demo Account: {error:#}");
+            }
+            None
+        }
+    }
+}
+
+/// Build the Demo Account in the database `cfg` names from the bundle at
+/// `bundle`. The database is new, so there is nothing to snapshot or swap:
+/// this writes to it directly, and leaves the config file alone.
+async fn seed_new_database_from_bundle(cfg: &Config, bundle: &Path) -> Result<ResetPreparedStats> {
+    let prepared = validate_prepared_bundle(bundle)?;
+    let target = cfg.db_target();
+    if let DbTarget::Path(path) = target {
+        let parent = parent_dir_or_cwd(path);
+        fs::create_dir_all(parent)
+            .with_context(|| format!("create database parent {}", parent.display()))?;
+    }
+    rebuild_demo_account(cfg, &prepared, DEMO_ACCOUNT_ID, target).await
 }
 
 /// Refuse a config that serves the database from a URL. The SQLite reset
@@ -869,44 +960,6 @@ fn remove_any_if_exists(path: &Path) -> Result<()> {
         fs::remove_file(path).with_context(|| format!("remove {}", path.display()))?;
     }
     Ok(())
-}
-
-/// Rebuild the demo bundle from `seed_toml` when that file is present (a
-/// development checkout, where it is the crate's `demo_seed.toml`). Release
-/// images copy a generated staging/config tree and omit the seed file, so a
-/// complete bundle is used as it is and an incomplete one is an error.
-///
-/// Staging here is the temporary import area under the demo bundle
-/// (`staging/imessage`, and so on).
-fn maybe_regenerate_bundle(bundle: &Path, seed_toml: &Path) -> Result<demo_seed::GenStats> {
-    if seed_toml.is_file() {
-        println!(
-            "Reset demo — regenerating bundle from {}",
-            seed_toml.display()
-        );
-        return demo_seed::generate_to(seed_toml, bundle)
-            .context("regenerate demo bundle (demo-seed)");
-    }
-
-    let complete = bundle.join("config/seed.toml").is_file()
-        && bundle.join("staging").join(IMESSAGE_SOURCE).is_dir()
-        && bundle.join("staging").join(SBR_SOURCE).is_dir()
-        && bundle.join("staging").join(WHATSAPP_SOURCE).is_dir()
-        && bundle.join("config/contacts.vcf").is_file();
-    if complete {
-        println!(
-            "Reset demo — using image bundle (no {} in this image)",
-            seed_toml.display()
-        );
-        return Ok(demo_seed::GenStats::default());
-    }
-
-    bail!(
-        "cannot reset demo: {} is missing and {} is not a complete demo bundle \
-         (need staging/{IMESSAGE_SOURCE}/, staging/{SBR_SOURCE}/, and staging/{WHATSAPP_SOURCE}/)",
-        seed_toml.display(),
-        bundle.display()
-    );
 }
 
 /// Compact import tables after the sample inbox is fully loaded. Best effort:

@@ -1,5 +1,5 @@
 # Container defaults for Docker Compose (dev + release profiles).
-# Entrypoints copy this to config/config.toml when missing, and restore it
+# The entrypoint copies this to config/config.toml on every start, and again
 # after `reset-demo` (which otherwise installs the demo config without [server]).
 
 [paths]

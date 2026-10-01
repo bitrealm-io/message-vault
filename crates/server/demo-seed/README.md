@@ -25,7 +25,7 @@ Or regenerate the bundle only:
 cargo run -p demo-seed
 ```
 
-Config knobs live in `crates/server/demo-seed/demo_seed.toml` (seed, contact count, rate/span
+Config knobs live in `crates/server/demo-seed/demo_seed_medium.toml` and `demo_seed_large.toml` (seed, contact count, rate/span
 distributions, group membership, dual-source split, `whatsapp_contact_fraction`,
 `apple_fallback_transport_fraction`). Message bodies are sampled from Pride and
 Prejudice (5274 sentences) under `crates/server/demo-seed/data/corpus/`. Names come from

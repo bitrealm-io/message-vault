@@ -86,7 +86,8 @@ from `100` up.
   no messages, and nothing can disable or delete it. `create-owner` and
   `reset-owner-password` on the server CLI are the only ways to make or
   recover the owner's login.
-- Demo seed identity: username `demo` (`crates/server/demo-seed/config/seed.toml`), always
-  no-password. Login stays username `demo` and an empty password.
+- The Demo Account: username `demo`, never a password. `serve` adds it to a
+  database that does not exist yet; `reset-demo` rebuilds it; the login card's
+  **Explore Demo Account** button logs in as it.
 
 See [Account and Profile](/docs/user/features/settings/account-and-profile/).

@@ -632,7 +632,8 @@ mod tests {
 
     #[test]
     fn roster_guarantees_large_groups() {
-        let cfg = SeedConfig::load(&SeedConfig::default_path()).expect("load demo_seed.toml");
+        let cfg =
+            SeedConfig::for_size(crate::config::DemoSize::Large).expect("load the large settings");
         let names = NameBank::load_default().expect("names");
         let mut rng = ChaCha8Rng::seed_from_u64(cfg.seed);
         let roster = build_roster(&cfg, &names, &mut rng).expect("roster");
@@ -657,7 +658,8 @@ mod tests {
 
     #[test]
     fn sample_name_shape_respects_configured_shares() {
-        let mut cfg = SeedConfig::load(&SeedConfig::default_path()).expect("load demo_seed.toml");
+        let mut cfg =
+            SeedConfig::for_size(crate::config::DemoSize::Large).expect("load the large settings");
         let names = NameBank::load_default().expect("names");
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         cfg.contacts.first_only = 1.0;
@@ -690,7 +692,8 @@ mod tests {
 
     #[test]
     fn group_labels_come_from_config_names() {
-        let cfg = SeedConfig::load(&SeedConfig::default_path()).expect("load demo_seed.toml");
+        let cfg =
+            SeedConfig::for_size(crate::config::DemoSize::Large).expect("load the large settings");
         let names = NameBank::load_default().expect("names");
         let mut rng = ChaCha8Rng::seed_from_u64(cfg.seed);
         let roster = build_roster(&cfg, &names, &mut rng).expect("roster");

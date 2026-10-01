@@ -1,0 +1,106 @@
+# The medium Demo Data set: about 54,000 messages. A new Message Crate starts with it.
+# It is the large set with fewer contacts and groups and lower message rates.
+# `cargo run -p demo-seed` writes its files.
+
+seed = 42
+out = "crates/server/demo-seed"
+reference_time = "2026-08-01T12:00:00Z"
+
+[contacts]
+count = 75
+# Fraction of contacts with no display name (phone-only VCF).
+no_name = 0.02
+# Among named contacts: first+last / first+middle+last / first-only.
+first_last = 0.96
+first_middle_last = 0.02
+first_only = 0.02
+# Phone mix
+us_phones = 0.90
+# Small extras for UI exercises (beyond `count`)
+inactive_fraction = 0.02
+no_messages_fraction = 0.03
+multi_phone_fraction = 0.05
+
+[labels]
+names = ["Family", "Work", "College", "Inactive"]
+# Rough share of contacts that get each non-Inactive label (independent rolls).
+family = 0.25
+work = 0.25
+college = 0.20
+
+[one_to_one]
+# Messages per year. Typical band holds most contacts; log-skewed into max.
+# Timestamps are bursty: several msgs on active days, quiet gaps, occasional floods.
+typical_min = 80
+typical_max = 120
+min_per_year = 5
+max_per_year = 2000
+# Probability mass outside the typical band (split between low and high tails).
+low_tail = 0.12
+high_tail = 0.08
+# History span in years (first message age).
+span_mean_years = 4.0
+span_mean_jitter = 1.0
+span_max_years = 14.0
+# Newest thread may start this many days ago.
+newest_days = 7
+# Fraction of contacts with a 1:1 thread (others group-only or silent).
+one_to_one_fraction = 0.85
+
+[groups]
+# Groups each contact joins.
+per_contact_mean = 2.0
+per_contact_min = 0
+per_contact_max = 20
+# Participants per group (including owner implicitly as viewer; roster members only).
+participants_mean = 4.0
+participants_min = 2
+participants_max = 25
+# Guaranteed named groups in this size band (reserved before the Normal sampler).
+large_min_count = 4
+large_participants_min = 8
+large_participants_max = 20
+# Messages per year. Typical band + log-skewed high tail (same shape as 1:1).
+# Timestamps are bursty: several msgs on active days, quiet gaps, occasional floods.
+typical_min = 60
+typical_max = 150
+min_per_year = 30
+max_per_year = 1000
+low_tail = 0.18
+high_tail = 0.08
+# History span for groups (years).
+span_mean_years = 3.0
+span_max_years = 10.0
+# Fraction of groups that are phone-number-only (no named contacts).
+phone_only_fraction = 0.08
+
+[messages]
+emoji_probability = 0.015
+# Attachments sparse on large threads (stride grows with size).
+jpg_base_stride = 40
+other_base_stride = 90
+tapback_stride = 80
+reply_stride = 100
+# iMessage-tree messages that fall back to SMS/RCS (visible transport badges).
+apple_fallback_transport_fraction = 0.20
+
+[edge_cases]
+unassigned_phones = 4
+unassigned_emails = 2
+orphaned_messages = 6
+empty_individual = true
+empty_group = true
+
+# Dual backup sources: imessage (primary) + sms-backup-restore (Android XML-style).
+[sources]
+# Share of 1:1 contacts (after overlap) that are Android-only.
+android_only_fraction = 0.12
+# Contacts present in both staging trees (light overlap for Sources + dedupe).
+overlap_count = 10
+# Fraction of an overlap thread's iMessage messages also written to Android (shared fingerprint).
+overlap_shared_fraction = 0.35
+# Extra Android-only messages appended on overlap threads.
+overlap_android_extra_min = 20
+overlap_android_extra_max = 80
+# Contacts that also get a WhatsApp 1:1 thread (same phone, platform whatsapp).
+whatsapp_contact_fraction = 0.20

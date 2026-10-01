@@ -4,7 +4,8 @@
 #   ./scripts/run-pg-dev.sh                 # start Postgres if needed; keep data
 #   ./scripts/run-pg-dev.sh --reset         # wipe volume + data/, empty Message Crate
 #   ./scripts/run-pg-dev.sh --reset --owner # wipe, claim the Message Crate as admin/admin
-#   ./scripts/run-pg-dev.sh --reset-demo    # wipe, seed sample inbox (demo / empty password)
+#   ./scripts/run-pg-dev.sh --reset-demo    # wipe, seed sample inbox (press Explore Demo Account)
+#   ./scripts/run-pg-dev.sh --reset-demo --large  # the large sample inbox (about 613,000 messages)
 #   ./scripts/run-pg-dev.sh --release       # optimized binary (also with --reset / --reset-demo)
 #
 # Website (separate terminal):
@@ -24,16 +25,19 @@ CONFIG_EXAMPLE="config/config.toml.example"
 COMPOSE=(docker compose -f docker-compose.pg.yml)
 DB_URL="postgres://messagecrate:messagecrate@127.0.0.1:5432/messagecrate"
 DEMO=0
+SIZE=medium
 RESET=0
 OWNER=0
 RELEASE=0
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [--reset | --reset-demo] [--owner] [--release]
+Usage: $(basename "$0") [--reset | --reset-demo [--large]] [--owner] [--release]
 
   --reset       Wipe the Postgres volume and data/, start empty
   --reset-demo  Wipe the Postgres volume and data/, seed the sample inbox
+                (about 54,000 messages)
+  --large       With --reset-demo, seed about 613,000 messages instead
   --owner       Claim the Message Crate as admin/admin. Without it, --reset
                 or --reset-demo leaves it unclaimed.
   --release     Build and run the optimized binary (seed and serve)
@@ -41,7 +45,8 @@ Usage: $(basename "$0") [--reset | --reset-demo] [--owner] [--release]
 
 Examples:
   ./scripts/$(basename "$0")
-      Start Postgres if needed, keep its data, and serve
+      Start Postgres if needed, keep its data, and serve. On a new volume
+      the server adds the Demo Account as any new Message Crate does.
   ./scripts/$(basename "$0") --reset
       Empty, unclaimed Message Crate: the web UI opens on Create Owner
   ./scripts/$(basename "$0") --reset --owner
@@ -50,7 +55,7 @@ Examples:
       Claim the existing Message Crate as admin / admin (warns and carries on
       if it is already claimed)
   ./scripts/$(basename "$0") --reset-demo
-      Sample inbox, log in as demo with an empty password
+      Sample inbox, unclaimed: press Explore Demo Account on the login card
   ./scripts/$(basename "$0") --reset-demo --release
       Sample inbox on the optimized binary
 EOF
@@ -60,6 +65,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --reset) RESET=1 ;;
     --reset-demo) DEMO=1 ;;
+    --large) SIZE=large ;;
     --owner) OWNER=1 ;;
     --release) RELEASE=1 ;;
     --sqlweb)
@@ -81,6 +87,11 @@ done
 
 if [[ "${RESET}" -eq 1 && "${DEMO}" -eq 1 ]]; then
   echo "error: use either --reset or --reset-demo, not both" >&2
+  exit 1
+fi
+
+if [[ "${SIZE}" == "large" && "${DEMO}" -eq 0 ]]; then
+  echo "error: --large goes with --reset-demo" >&2
   exit 1
 fi
 
@@ -163,10 +174,13 @@ wait_postgres
 if [[ "${DEMO}" -eq 1 ]]; then
   require_cmd ffmpeg
   require_cmd ffprobe
-  echo "Seeding demo data into Postgres…"
-  "${CARGO_RUN[@]}" -- reset-demo --config "${CONFIG}" --db-url "${DB_URL}"
+  echo "Seeding demo data (${SIZE}) into Postgres…"
+  "${CARGO_RUN[@]}" -- reset-demo --size "${SIZE}" --config "${CONFIG}" --db-url "${DB_URL}"
   write_host_dev_config
 elif [[ "${RESET}" -eq 1 ]]; then
+  # The server adds the Demo Account to a database that does not exist yet,
+  # so an empty start means creating the database first.
+  "${CARGO_RUN[@]}" -- create-database --config "${CONFIG}" --db-url "${DB_URL}"
   echo "Empty Postgres (claim the Message Crate in the web UI, or pass --owner)."
 else
   echo "Postgres volume present; leaving it in place."

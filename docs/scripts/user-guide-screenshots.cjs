@@ -1,8 +1,8 @@
 // Captures the User Guide's screenshots into docs/src/assets/user-guide/.
 //
 // It needs two servers already running from the release image:
-//   DEMO_URL  - started with DEMO_DATA=true  (steps 2 and 3)
-//   EMPTY_URL - started with DEMO_DATA=false on a new volume (step 4)
+//   DEMO_URL  - a new Message Crate, which starts with the Demo Account (steps 2 and 3)
+//   EMPTY_URL - a second new Message Crate on its own volume (step 4)
 // The empty server must be unclaimed, so its volume is deleted before each run.
 //
 //   npm install --no-save playwright && npx playwright install chromium

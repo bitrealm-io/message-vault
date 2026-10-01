@@ -89,7 +89,7 @@ Work from the repository root in two terminals. The first server compile takes s
 
 ### Start the server (terminal 1)
 
-`--reset-demo` deletes `data/` and loads a sample inbox. Use it on the first run, or whenever you want a fresh sample inbox.
+`--reset-demo` deletes `data/` and loads a sample inbox of about 54,000 messages. Use it whenever you want a fresh sample inbox. Add `--large` for about 613,000 messages.
 
 ```bash title="Start the server"
 ./scripts/run-dev.sh --reset-demo
@@ -101,13 +101,13 @@ To browse the tables while developing, add `--sqlweb` (needs `sqlite-web` from t
 
 ### Server flags
 
-The first run uses `--reset-demo`. Later sessions, start with no flags so `data/` stays:
+Later sessions, start with no flags so `data/` stays. With no database yet, the server adds the Demo Account itself, as every new Message Crate does:
 
 ```bash title="Start the server, keep data"
 ./scripts/run-dev.sh
 ```
 
-`--reset` wipes `data/` and starts empty (no sample inbox). Don't combine `--reset` and `--reset-demo`. `--sqlweb` works with any of these.
+`--reset` wipes `data/` and starts empty (no sample inbox): it runs `create-database` first, because the server adds the Demo Account only to a database that does not exist yet. Don't combine `--reset` and `--reset-demo`. `--sqlweb` works with any of these.
 
 `--reset` alone leaves Message Crate **unclaimed**, so the first screen is Create Owner — which is the only way to reach that screen in dev. Add `--owner` to claim it as `admin`/`admin` instead and land on the login. `--reset-demo` seeds the Demo Account and no owner, so it also leaves Message Crate unclaimed unless `--owner` is added.
 

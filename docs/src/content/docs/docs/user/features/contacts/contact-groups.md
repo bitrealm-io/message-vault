@@ -41,7 +41,8 @@ Pointing at a group in the left panel shows a **…** button with two commands.
 **Rename…** opens the **Rename group** dialog.
 The new name follows the same three rules.
 
-**Delete** deletes the group at once, with no confirmation.
+**Delete** asks for confirmation first, in a dialog that names the group.
+Confirming with **Delete** deletes the group.
 The contacts that were in it are not deleted.
 They lose that one membership.
 

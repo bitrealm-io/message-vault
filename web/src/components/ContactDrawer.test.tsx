@@ -566,6 +566,18 @@ describe("ContactDrawer", () => {
     });
   });
 
+  it("shows why an empty name was refused and keeps the editor open", async () => {
+    post.mockRejectedValue(new Error("name must not be empty"));
+    const user = userEvent.setup();
+    const input = await openNameEditor(user);
+    await user.clear(input);
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("name must not be empty");
+    expect(post).toHaveBeenCalledWith("1", { name: "" });
+    expect(screen.getByRole("textbox", { name: "Contact name" })).toBeTruthy();
+  });
+
   it("aligns text headers left and number headers right, and keeps Remove last", async () => {
     get.mockResolvedValue(detail(1));
     render(

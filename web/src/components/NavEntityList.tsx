@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { apiErrorMessage } from "../lib/apiErrorMessage";
 import { type NameCollection, useNameCollectionActions } from "../lib/nameCollection";
 import { Z_ROW_MENU } from "../lib/zLayers";
+import ConfirmDialog from "./ConfirmDialog";
 import GroupNameDialog from "./GroupNameDialog";
 import { EllipsisIcon } from "./icons";
 import NavCollapsibleSection from "./NavCollapsibleSection";
@@ -46,6 +47,8 @@ export type NavEntityCopy = {
   namePlaceholder: string;
   /** Menu button label, completed with the entity name. */
   optionsLabel: (name: string) => string;
+  /** What the delete confirmation says is removed and what is kept. */
+  deleteBody: (name: string) => string;
   createError: string;
   renameError: string;
   deleteError: string;
@@ -73,6 +76,7 @@ export default function NavEntityList({
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [renameFor, setRenameFor] = useState<string | null>(null);
+  const [deleteFor, setDeleteFor] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
 
@@ -110,9 +114,9 @@ export default function NavEntityList({
 
   const remove = async (name: string) => {
     setError(null);
-    setMenuFor(null);
     try {
       await actions.remove(name);
+      setDeleteFor(null);
       if (location.pathname === `${copy.routeBase}/${slug(name)}`) {
         navigate(copy.fallbackRoute);
       }
@@ -202,7 +206,12 @@ export default function NavEntityList({
                   {
                     label: "Delete",
                     disabled: busy,
-                    onSelect: () => void remove(name),
+                    // Deleting takes the name off everything that carried it,
+                    // so it is confirmed first.
+                    onSelect: () => {
+                      setError(null);
+                      setDeleteFor(name);
+                    },
                   },
                 ]}
               />
@@ -250,6 +259,22 @@ export default function NavEntityList({
           }}
         />
       ) : null}
+      <ConfirmDialog
+        open={deleteFor !== null}
+        title={deleteFor !== null ? `Delete ${deleteFor}?` : ""}
+        body={deleteFor !== null ? copy.deleteBody(deleteFor) : ""}
+        confirmLabel="Delete"
+        danger
+        busy={busy}
+        error={error ?? ""}
+        onClose={() => {
+          setDeleteFor(null);
+          setError(null);
+        }}
+        onConfirm={() => {
+          if (deleteFor !== null) void remove(deleteFor);
+        }}
+      />
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { apiErrorMessage } from "../lib/apiErrorMessage";
 import { canUseImportExportWithProfile } from "../lib/desktopFeatures";
 import { type SavedSearch, useSavedSearchActions, useSavedSearches } from "../lib/savedSearches";
 import { isTauri } from "../lib/tauri-check";
@@ -158,9 +159,42 @@ export default function LeftPanel({
   const [showGroupForm, setShowGroupForm] = useState(false);
   const [editFor, setEditFor] = useState<SavedSearch | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
+  // Why the open form's last save was refused, and why the last delete failed.
+  // A delete has no dialog to show it in, so it is shown under the list.
+  const [formError, setFormError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const savedSearchMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const { groups: contactGroups } = useContactGroups();
   const { tags: messageTags } = useMessageTags();
+
+  const createSavedSearch = async (name: string, query: string) => {
+    setFormError(null);
+    try {
+      await savedSearchActions.create(name, query);
+      setShowGroupForm(false);
+    } catch (err) {
+      setFormError(apiErrorMessage(err, "Could not create saved search"));
+    }
+  };
+
+  const updateSavedSearch = async (id: number, name: string, query: string) => {
+    setFormError(null);
+    try {
+      await savedSearchActions.update(id, name, query);
+      setEditFor(null);
+    } catch (err) {
+      setFormError(apiErrorMessage(err, "Could not save saved search"));
+    }
+  };
+
+  const removeSavedSearch = async (id: number) => {
+    setDeleteError(null);
+    try {
+      await savedSearchActions.remove(id);
+    } catch (err) {
+      setDeleteError(apiErrorMessage(err, "Could not delete saved search"));
+    }
+  };
 
   return (
     <div
@@ -265,6 +299,7 @@ export default function LeftPanel({
           onAdd={() => {
             setMenuFor(null);
             setEditFor(null);
+            setFormError(null);
             setShowGroupForm(true);
           }}
           className="px-3 pt-3"
@@ -305,6 +340,7 @@ export default function LeftPanel({
                         e.preventDefault();
                         e.stopPropagation();
                         savedSearchMenuTriggerRef.current = e.currentTarget;
+                        setDeleteError(null);
                         setMenuFor(menuOpen ? null : g.id);
                       }}
                       className={
@@ -327,14 +363,13 @@ export default function LeftPanel({
                         label: "Rename…",
                         onSelect: () => {
                           setShowGroupForm(false);
+                          setFormError(null);
                           setEditFor(g);
                         },
                       },
                       {
                         label: "Delete",
-                        onSelect: () => {
-                          void savedSearchActions.remove(g.id);
-                        },
+                        onSelect: () => void removeSavedSearch(g.id),
                       },
                     ]}
                   />
@@ -342,6 +377,11 @@ export default function LeftPanel({
               );
             })
           )}
+          {deleteError ? (
+            <p role="alert" className="py-1.5 text-[0.813rem] text-danger">
+              {deleteError}
+            </p>
+          ) : null}
         </NavCollapsibleSection>
 
         <MessageTagsNav tags={messageTags} />
@@ -349,10 +389,9 @@ export default function LeftPanel({
 
       {showGroupForm ? (
         <SavedSearchForm
-          onSave={(name, query) => {
-            void savedSearchActions.create(name, query);
-            setShowGroupForm(false);
-          }}
+          error={formError}
+          busy={savedSearchActions.pending}
+          onSave={createSavedSearch}
           onCancel={() => setShowGroupForm(false)}
         />
       ) : null}
@@ -360,10 +399,9 @@ export default function LeftPanel({
         <SavedSearchForm
           key={editFor.id}
           initial={{ name: editFor.name, query: editFor.query }}
-          onSave={(name, query) => {
-            void savedSearchActions.update(editFor.id, name, query);
-            setEditFor(null);
-          }}
+          error={formError}
+          busy={savedSearchActions.pending}
+          onSave={(name, query) => updateSavedSearch(editFor.id, name, query)}
           onCancel={() => setEditFor(null)}
         />
       ) : null}

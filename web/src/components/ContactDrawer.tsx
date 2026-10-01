@@ -89,6 +89,8 @@ export default function ContactDrawer({
   const { detail: matchedDetail } = useContactDetail(contactId);
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState("");
+  // Why the last save of the name was refused. The editor stays open with it.
+  const [nameError, setNameError] = useState<string | null>(null);
   const nameEditorRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const savingNameRef = useRef(false);
@@ -126,7 +128,10 @@ export default function ContactDrawer({
   }, [matchedName]);
 
   useEffect(() => {
-    if (!editingName) savingNameRef.current = false;
+    if (!editingName) {
+      savingNameRef.current = false;
+      setNameError(null);
+    }
   }, [editingName]);
 
   useEffect(() => {
@@ -203,6 +208,7 @@ export default function ContactDrawer({
   const saveName = async () => {
     if (savingNameRef.current) return;
     savingNameRef.current = true;
+    setNameError(null);
     try {
       if (!detailMatches || nameValue === matchedDetail?.name) {
         setEditingName(false);
@@ -210,8 +216,9 @@ export default function ContactDrawer({
       }
       await updateContact.mutateAsync({ contactId, body: { name: nameValue } });
       setEditingName(false);
-    } catch {
+    } catch (err) {
       savingNameRef.current = false;
+      setNameError(apiErrorMessage(err, "Could not save the name"));
     }
   };
 
@@ -270,6 +277,11 @@ export default function ContactDrawer({
                 }}
                 className="box-border h-7 w-full min-w-0 rounded border border-border bg-elevated px-1.5 py-0 text-[1.125rem] font-semibold leading-none text-text"
               />
+              {nameError ? (
+                <p role="alert" className="m-0 mt-1 text-[0.813rem] font-normal text-danger">
+                  {nameError}
+                </p>
+              ) : null}
             </div>
           ) : (
             <div className="flex min-w-0 items-center gap-2">

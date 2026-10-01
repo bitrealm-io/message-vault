@@ -1,20 +1,29 @@
 import { useState } from "react";
 import Button from "./Button";
-import ModalShell from "./ModalShell";
+import ModalShell, { DialogError } from "./ModalShell";
 
 interface SavedSearchFormProps {
-  onSave: (name: string, query: string) => void;
+  onSave: (name: string, query: string) => void | Promise<void>;
   onCancel: () => void;
   initial?: { name: string; query: string };
+  /** Why the last save was refused. The form stays open so it can be corrected. */
+  error?: string | null;
+  busy?: boolean;
 }
 
-export default function SavedSearchForm({ onSave, onCancel, initial }: SavedSearchFormProps) {
+export default function SavedSearchForm({
+  onSave,
+  onCancel,
+  initial,
+  error = null,
+  busy = false,
+}: SavedSearchFormProps) {
   const [name, setName] = useState(initial?.name || "");
   const [query, setQuery] = useState(initial?.query || "");
 
   const handleSave = () => {
-    if (!name.trim() || !query.trim()) return;
-    onSave(name.trim(), query.trim());
+    if (!name.trim() || !query.trim() || busy) return;
+    void onSave(name.trim(), query.trim());
   };
 
   return (
@@ -42,7 +51,7 @@ export default function SavedSearchForm({ onSave, onCancel, initial }: SavedSear
         />
       </label>
 
-      <label className="mb-4 block">
+      <label className="block">
         <span className="mb-1 block text-[0.813rem] font-medium text-text">Query</span>
         <input
           type="text"
@@ -54,14 +63,16 @@ export default function SavedSearchForm({ onSave, onCancel, initial }: SavedSear
         />
       </label>
 
-      <div className="flex justify-end gap-2">
-        <Button onClick={onCancel} size="sm">
+      <DialogError message={error ?? ""} />
+
+      <div className="mt-4 flex justify-end gap-2">
+        <Button onClick={onCancel} disabled={busy} size="sm">
           Cancel
         </Button>
         <Button
           variant="primary"
           onClick={handleSave}
-          disabled={!name.trim() || !query.trim()}
+          disabled={busy || !name.trim() || !query.trim()}
           size="sm"
           className="!px-4"
         >

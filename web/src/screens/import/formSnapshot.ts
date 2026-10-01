@@ -14,6 +14,9 @@ export type SnapshotSecret = "backupPassword" | "whatsappKey";
 /**
  * Form snapshot for the session record, without the secrets.
  *
+ * It carries `assetMaxBytes`, the server's attachment size limit as the run
+ * read it before Staging, so a resumed run works to the same number.
+ *
  * It records that a backup password or WhatsApp key was given, never the
  * secret itself, so a resume that reads the backup again knows to ask for
  * it. Each is recorded only for the source whose extract reads it: the
@@ -95,6 +98,9 @@ export function restoreFormFromSnapshot(raw: unknown): ImportJobFormValues | nul
   if (typeof r.whatsappOwnerPhone !== "string") return null;
   if (typeof r.backupPasswordGiven !== "boolean") return null;
   if (typeof r.whatsappKeyGiven !== "boolean") return null;
+  // The limit the run was created under. Every stage after creation measures
+  // against it, so a run without one cannot be picked up.
+  if (typeof r.assetMaxBytes !== "number" || !(r.assetMaxBytes > 0)) return null;
 
   return {
     source: r.source,
@@ -117,5 +123,6 @@ export function restoreFormFromSnapshot(raw: unknown): ImportJobFormValues | nul
     whatsappDb: r.whatsappDb,
     whatsappBusiness: r.whatsappBusiness,
     whatsappOwnerPhone: r.whatsappOwnerPhone,
+    assetMaxBytes: r.assetMaxBytes,
   };
 }

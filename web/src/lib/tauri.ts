@@ -59,6 +59,8 @@ export interface StagingConfig {
   media_max_resolution?: string;
   media_max_fps?: string;
   media_min_size?: string;
+  /** The server's attachment size limit, in bytes, as stored with the Import Run. */
+  asset_max_bytes: number;
 }
 
 /**
@@ -123,6 +125,7 @@ export async function invokeSummarizeStaging(config: StagingConfig): Promise<Sta
       mediaMaxResolution: config.media_max_resolution ?? null,
       mediaMaxFps: config.media_max_fps ?? null,
       mediaMinSize: config.media_min_size ?? null,
+      assetMaxBytes: config.asset_max_bytes,
     },
   });
 }
@@ -142,6 +145,7 @@ export async function invokeTranscodeStaging(config: StagingConfig): Promise<voi
       mediaMaxResolution: config.media_max_resolution ?? null,
       mediaMaxFps: config.media_max_fps ?? null,
       mediaMinSize: config.media_min_size ?? null,
+      assetMaxBytes: config.asset_max_bytes,
     },
   });
 }
@@ -169,6 +173,8 @@ export interface PushConfig {
   skip_attachments: boolean;
   trust_export: boolean;
   import_id?: number;
+  /** The server's attachment size limit, in bytes: Upload leaves out a larger file. */
+  asset_max_bytes: number;
 }
 
 export interface PushFinishedReport {
@@ -234,6 +240,7 @@ export async function invokePush(config: PushConfig): Promise<void> {
       skipAttachments: config.skip_attachments,
       trustExport: config.trust_export,
       importId: config.import_id ?? null,
+      assetMaxBytes: config.asset_max_bytes,
     },
   });
 }

@@ -26,6 +26,7 @@ import type { AttachmentMediaMode, ImportIssueEvent, ImportProgressEvent } from 
 import { restoreFormFromSnapshot, snapshotSecret } from "./formSnapshot";
 
 const createImportMock = vi.fn();
+const getServerStateMock = vi.fn();
 const completeImportMock = vi.fn();
 const runMock = vi.fn<(fn: () => Promise<unknown>) => Promise<TauriJobResult>>();
 const cancelMock = vi.fn();
@@ -85,11 +86,12 @@ vi.mock("../../lib/api", () => ({
   getBaseUrl: () => "http://127.0.0.1:8080",
 }));
 
-// The two server calls this hook makes. Everything else in serverApi stays real,
+// The three server calls this hook makes. Everything else in serverApi stays real,
 // since other modules in this graph import from it.
 vi.mock("../../lib/serverApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../lib/serverApi")>()),
   createImport: (...args: unknown[]) => createImportMock(...args),
+  getServerState: (...args: unknown[]) => getServerStateMock(...args),
   completeImport: (...args: unknown[]) => completeImportMock(...args),
 }));
 
@@ -200,6 +202,8 @@ function stagingSummary(overrides: Partial<StagingSummary> = {}): StagingSummary
   };
 }
 
+const MIB = 1024 * 1024;
+
 function okProbe(): FfmpegToolsProbe {
   return {
     ok: true,
@@ -235,6 +239,9 @@ const baseForm = {
   whatsappBusiness: false,
   whatsappOwnerPhone: "",
   timeZone: "America/New_York",
+  // What a resumed run reads back from its stored form. A new run reads the
+  // server's limit instead and replaces this.
+  assetMaxBytes: 512 * MIB,
 };
 
 function form(overrides: { attachmentMedia?: AttachmentMediaMode } = {}) {
@@ -250,6 +257,8 @@ describe("useImportJob wiring", () => {
     // the push on top of this one.
     runMock.mockImplementationOnce(runResult(EXTRACT_RESULT));
     cancelMock.mockReset();
+    getServerStateMock.mockReset();
+    getServerStateMock.mockResolvedValue({ asset_max_bytes: 512 * MIB });
     createImportMock.mockReset();
     createImportMock.mockResolvedValue({ id: 1 });
     completeImportMock.mockReset();
@@ -282,6 +291,92 @@ describe("useImportJob wiring", () => {
     createImportMock.mockResolvedValue({ id: 1 });
     completeImportMock.mockReset();
     completeImportMock.mockResolvedValue({});
+  });
+
+  it("reads the server's attachment size limit before Staging and works to it through Upload", async () => {
+    getServerStateMock.mockResolvedValue({ asset_max_bytes: 100 * MIB });
+    runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+
+    // Stored with the Import Run when it is created, before anything is staged.
+    expect(createImportMock).toHaveBeenCalledWith(
+      expect.objectContaining({ form: expect.objectContaining({ assetMaxBytes: 100 * MIB }) }),
+    );
+    expect(getServerStateMock.mock.invocationCallOrder[0]).toBeLessThan(
+      invokeExtractMock.mock.invocationCallOrder[0] as number,
+    );
+    // The Staging Review forecasts against it.
+    expect(invokeSummarizeStagingMock).toHaveBeenCalledWith(
+      expect.objectContaining({ asset_max_bytes: 100 * MIB }),
+    );
+
+    await act(() => result.current.approve());
+    expect(invokePushMock).toHaveBeenCalledWith(
+      expect.objectContaining({ asset_max_bytes: 100 * MIB }),
+    );
+  });
+
+  it("gives the Media stage the limit the run was created with", async () => {
+    getServerStateMock.mockResolvedValue({ asset_max_bytes: 100 * MIB });
+    runMock.mockImplementationOnce(
+      runResult({ summary: "Transcode finished.", transcode: undefined }),
+    );
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "compress" })));
+    await act(() => result.current.approve());
+
+    expect(invokeTranscodeStagingMock).toHaveBeenCalledWith(
+      expect.objectContaining({ asset_max_bytes: 100 * MIB }),
+    );
+  });
+
+  it("resumes an Upload with the limit stored on the Import Run, not the server's current one", async () => {
+    // The owner changed the limit after this run was staged and reviewed.
+    // The files the person approved were measured against 7 MiB.
+    getServerStateMock.mockResolvedValue({ asset_max_bytes: 100 * MIB });
+    runMock.mockReset();
+    runMock.mockImplementationOnce(runResult({ summary: "Push finished.", report: okReport() }));
+    const { result } = renderHook(() => useImportJob());
+    await act(() =>
+      result.current.startImport(
+        { ...form({ attachmentMedia: "copy" }), assetMaxBytes: 7 * MIB },
+        { sessionId: 9, stagingDir: "/home/sam/message-crate/staging-iphone" },
+      ),
+    );
+
+    expect(getServerStateMock).not.toHaveBeenCalled();
+    expect(invokePushMock).toHaveBeenCalledWith(
+      expect.objectContaining({ asset_max_bytes: 7 * MIB, import_id: 9 }),
+    );
+  });
+
+  it("resumes an interrupted Staging with the limit stored on the Import Run", async () => {
+    getServerStateMock.mockResolvedValue({ asset_max_bytes: 100 * MIB });
+    const { result } = renderHook(() => useImportJob());
+    await act(() =>
+      result.current.startImport(
+        { ...form({ attachmentMedia: "copy" }), assetMaxBytes: 7 * MIB },
+        undefined,
+        { sessionId: 9, stagingDir: "/home/sam/message-crate/staging-iphone" },
+      ),
+    );
+
+    expect(getServerStateMock).not.toHaveBeenCalled();
+    expect(invokeSummarizeStagingMock).toHaveBeenCalledWith(
+      expect.objectContaining({ asset_max_bytes: 7 * MIB }),
+    );
+  });
+
+  it("ends the import without staging anything when the server's limit cannot be read", async () => {
+    getServerStateMock.mockRejectedValue(new Error("Failed to fetch"));
+    const { result } = renderHook(() => useImportJob());
+    await act(() => result.current.startImport(form({ attachmentMedia: "copy" })));
+
+    expect(createImportMock).not.toHaveBeenCalled();
+    expect(invokeExtractMock).not.toHaveBeenCalled();
+    expect(result.current.phase).toBe("done");
+    expect(result.current.summaryView?.status).toBe("failed");
   });
 
   it("stops at the first gate instead of uploading", async () => {
@@ -1340,6 +1435,7 @@ const validSnapshot = {
   timeZone: "America/New_York",
   backupPasswordGiven: false,
   whatsappKeyGiven: false,
+  assetMaxBytes: 512 * MIB,
 };
 
 describe("restoreFormFromSnapshot", () => {
@@ -1375,6 +1471,9 @@ describe("restoreFormFromSnapshot", () => {
     ["a non-boolean obfuscate", { ...validSnapshot, obfuscate: "yes" }],
     ["a non-boolean backupPasswordGiven", { ...validSnapshot, backupPasswordGiven: "yes" }],
     ["a snapshot with no whatsappKeyGiven", { ...validSnapshot, whatsappKeyGiven: undefined }],
+    // Every stage measures against the limit the run was created under.
+    ["a snapshot with no assetMaxBytes", { ...validSnapshot, assetMaxBytes: undefined }],
+    ["a limit of zero", { ...validSnapshot, assetMaxBytes: 0 }],
   ])("returns null for a malformed snapshot (%s)", (_label, raw) => {
     expect(restoreFormFromSnapshot(raw)).toBeNull();
   });

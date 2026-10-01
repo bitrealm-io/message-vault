@@ -144,13 +144,18 @@ describe("staging command wrappers resolve their own staging root", () => {
   });
 
   it("invokeSummarizeStaging resolves the root itself rather than taking one from the caller", async () => {
-    await invokeSummarizeStaging({ staging_dir: "/home/sam/message-crate/staging-run" });
+    await invokeSummarizeStaging({
+      staging_dir: "/home/sam/message-crate/staging-run",
+      asset_max_bytes: 104857600,
+    });
 
     expect(resolveStagingParent).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledWith("summarize_staging", {
       args: expect.objectContaining({
         stagingDir: "/home/sam/message-crate/staging-run",
         stagingRoot: "/home/sam/message-crate",
+        // The command takes the run's limit; it has no number of its own.
+        assetMaxBytes: 104857600,
       }),
     });
   });
@@ -159,6 +164,7 @@ describe("staging command wrappers resolve their own staging root", () => {
     await invokeTranscodeStaging({
       staging_dir: "/home/sam/message-crate/staging-run",
       attachment_media: "convert",
+      asset_max_bytes: 104857600,
     });
 
     expect(resolveStagingParent).toHaveBeenCalledTimes(1);
@@ -167,6 +173,7 @@ describe("staging command wrappers resolve their own staging root", () => {
         stagingDir: "/home/sam/message-crate/staging-run",
         stagingRoot: "/home/sam/message-crate",
         attachmentMedia: "convert",
+        assetMaxBytes: 104857600,
       }),
     });
   });
@@ -187,7 +194,10 @@ describe("staging command wrappers resolve their own staging root", () => {
     resolveStagingParent.mockResolvedValue("");
 
     await expect(
-      invokeSummarizeStaging({ staging_dir: "/home/sam/message-crate/staging-run" }),
+      invokeSummarizeStaging({
+        staging_dir: "/home/sam/message-crate/staging-run",
+        asset_max_bytes: 104857600,
+      }),
     ).rejects.toThrow(/staging directory/i);
     expect(invoke).not.toHaveBeenCalled();
   });

@@ -582,17 +582,17 @@ async fn an_asset_get_for_an_unknown_sha_is_a_json_404() {
     crate::test_support::expect_problem(status, &text, crate::problem::ProblemType::NotFound);
 }
 
-/// A part body past `upload_limits.part_size` is a 413. This is the one
-/// oversize check reachable over HTTP: the layer limit is `max_body_bytes`
+/// A part body past `asset_part_size` is a 413. This is the one oversize
+/// check reachable over HTTP: the body cap is the attachment size limit
 /// (512 MiB by default) and the part limit is far smaller, so the handler's
 /// own check is what answers. `docs/architecture/http-api.md`: the status carries the meaning.
 #[tokio::test]
 async fn an_upload_part_over_the_part_size_is_a_json_413() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
     let mut state = fixture.state.clone();
-    // `UploadLimits` is `Copy` and `part_size` is public, so a test can lower
-    // it without rebuilding the config.
-    state.upload_limits.part_size = 16;
+    // The part size is a field of the state, so a test can lower it without
+    // rebuilding the config.
+    state.asset_part_size = 16;
 
     let sha = "0".repeat(64);
     let (status, text) = crate::test_support::put_raw(
@@ -615,6 +615,71 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
     );
 }
 
+/// The attachment size limit is read from the Server Settings on each upload:
+/// the owner lowers it, and the next upload over it is refused by the server
+/// that was already running, whether it is sent as one `PUT` or opened as a
+/// multipart upload. The same file was accepted a moment before.
+#[tokio::test]
+async fn an_upload_over_the_limit_the_owner_just_set_is_refused() {
+    let (fixture, user) = crate::test_support::fixture_with_account().await;
+    let mut state = fixture.state.clone();
+    state.asset_part_size = 16;
+    let owner = crate::test_support::claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let bytes: Vec<u8> = (0u8..40).collect();
+    let sha = sha256_hex(&bytes);
+    let start = format!("/v1/assets/{sha}/uploads?source=imessage");
+    let declared = serde_json::json!({ "bytes": bytes.len(), "mime": "image/png" });
+
+    assert_eq!(
+        crate::test_support::post_status(&state, &start, &user.token, declared.clone()).await,
+        StatusCode::CREATED,
+        "40 bytes is under the 512 MiB a new Message Crate allows"
+    );
+
+    let _: serde_json::Value = crate::test_support::patch_json(
+        &state,
+        "/v1/server/settings",
+        &owner.token,
+        serde_json::json!({ "asset_max_bytes": 32 }),
+    )
+    .await;
+
+    let (status, text) = crate::test_support::post_raw(
+        &state,
+        &start,
+        &user.token,
+        "application/json",
+        declared.to_string(),
+    )
+    .await;
+    let problem = crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::AssetUploadInvalid,
+    );
+    assert!(
+        problem
+            .detail
+            .as_deref()
+            .is_some_and(|d| d.contains("32 byte")),
+        "the refusal names the limit now in force: {text}"
+    );
+
+    let (status, text) = crate::test_support::put_raw(
+        &state,
+        &format!("/v1/assets/{sha}?source=imessage"),
+        &user.token,
+        "image/png",
+        bytes,
+    )
+    .await;
+    crate::test_support::expect_problem(
+        status,
+        &text,
+        crate::problem::ProblemType::PayloadTooLarge,
+    );
+}
+
 /// The multipart upload over HTTP, the way `message-crate-push` sends a large file:
 /// open the upload, send each part, complete it, and read the asset back.
 /// Each step is tested alone in `asset_uploads`; this proves the routes join
@@ -624,7 +689,7 @@ async fn an_upload_part_over_the_part_size_is_a_json_413() {
 async fn a_multipart_upload_completes_end_to_end_over_http() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
     let mut state = fixture.state.clone();
-    state.upload_limits.part_size = 16;
+    state.asset_part_size = 16;
     let bytes: Vec<u8> = (0u8..40).collect();
     let sha = sha256_hex(&bytes);
     let server = crate::test_support::serve(&state).await;
@@ -864,7 +929,7 @@ async fn starting_an_upload_for_a_stored_blob_answers_200_already_present() {
 async fn deleting_an_upload_answers_204_and_removes_its_files() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
     let mut state = fixture.state.clone();
-    state.upload_limits.part_size = 16;
+    state.asset_part_size = 16;
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
     let bytes: Vec<u8> = (0u8..40).collect();
@@ -960,7 +1025,7 @@ async fn an_asset_put_with_an_empty_body_answers_422() {
 async fn completing_an_upload_for_a_blob_a_put_stored_first_answers_200() {
     let (fixture, user) = crate::test_support::fixture_with_account().await;
     let mut state = fixture.state.clone();
-    state.upload_limits.part_size = 16;
+    state.asset_part_size = 16;
     let server = crate::test_support::serve(&state).await;
     let client = reqwest::Client::new();
     let bytes: Vec<u8> = (0u8..40).collect();

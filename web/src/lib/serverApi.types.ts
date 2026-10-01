@@ -1093,7 +1093,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Report whether this Message Crate is unclaimed, closed, or open. */
+        /**
+         * Report whether this Message Crate is unclaimed, closed, or open.
+         * @description Also reports the server's Build, its Schema Fingerprint, whether the Demo
+         *     Account exists, and the attachment size limit.
+         */
         get: operations["get_server"];
         put?: never;
         post?: never;
@@ -1171,7 +1175,12 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Change the server settings. */
+        /**
+         * Change the server settings.
+         * @description A new attachment size limit holds from the next upload, with no restart.
+         *     A limit of zero, or one below the part size the server hands out for a
+         *     multipart upload, is refused and nothing is changed.
+         */
         patch: operations["update_server_settings"];
         trace?: never;
     };
@@ -3165,6 +3174,14 @@ export interface components {
         /** @description The state of this Message Crate, for the screen a logged-out person sees. */
         ServerInfo: {
             /**
+             * Format: int64
+             * @description The attachment size limit, in bytes: the largest asset the server
+             *     accepts, as one `PUT` or as the declared total of a multipart upload.
+             *     The owner sets it in the server settings. An app reads it here before
+             *     it prepares attachments for upload.
+             */
+            asset_max_bytes: number;
+            /**
              * @description Whether the Demo Account exists. While it does, the screen offers a
              *     way into it beside whatever `state` shows: it has no password, so
              *     there is nothing to type.
@@ -3189,6 +3206,12 @@ export interface components {
         };
         /** @description The server settings the owner controls. */
         ServerSettings: {
+            /**
+             * Format: int64
+             * @description The attachment size limit, in bytes: the largest asset the server
+             *     accepts. 536870912 (512 MiB) until the owner changes it.
+             */
+            asset_max_bytes: number;
             /** @description Anyone reaching the server may create their own account. */
             public_registration: boolean;
         };
@@ -3391,6 +3414,13 @@ export interface components {
         };
         /** @description Body for changing the server settings. Omitted fields are left alone. */
         UpdateServerSettingsRequest: {
+            /**
+             * Format: int64
+             * @description The new attachment size limit, in bytes. At least 1, and at least the
+             *     part size the server hands out for a multipart upload
+             *     (`[server] asset_part_size` in the config file).
+             */
+            asset_max_bytes?: number | null;
             /** @description Let anyone reaching the server create their own account, or stop them. */
             public_registration?: boolean | null;
         };

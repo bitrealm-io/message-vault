@@ -377,6 +377,14 @@ What each reaches:
 - `GET /v1/server` and `POST /v1/server/claim` take no credential.
   `/v1/server/settings` and `GET /v1/server/storage` are the owner's: the
   storage totals sum every account, and no account holds more than its own.
+- The attachment size limit is a server setting, `asset_max_bytes` in bytes,
+  and the settings row is the only place it lives. The owner reads and
+  changes it at `/v1/server/settings`; `GET /v1/server` reports it to any
+  client. Why: a program that uploads has to know the limit before it
+  prepares attachments, and it holds an account's credential, never the
+  owner's. A change is `422 Unprocessable Entity` when it is zero or below
+  the part size the server hands out for a multipart upload, and an accepted
+  one holds from the next upload, because every upload reads the setting.
 
 The credential names the account. No route takes an `account=` parameter.
 

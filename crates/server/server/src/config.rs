@@ -38,12 +38,10 @@ pub struct ServerConfig {
     /// Bind address (default `127.0.0.1:8080`).
     #[serde(default = "default_server_bind")]
     pub bind: String,
-    /// Max size of one asset (single PUT or multipart complete), in bytes.
-    /// Default 512 MiB.
-    #[serde(default = "default_asset_max_bytes")]
-    pub asset_max_bytes: u64,
-    /// Multipart part size advertised to clients, in bytes. Default 64 MiB
-    /// (under Cloudflare Free/Pro ~100 MB). Must be ≤ `asset_max_bytes`.
+    /// Multipart part size advertised to clients, in bytes. Default 64 MiB
+    /// (under Cloudflare Free/Pro ~100 MB). Must not exceed the attachment
+    /// size limit, which is a Server Setting the owner changes in the app and
+    /// has no key in this file.
     #[serde(default = "default_asset_part_size")]
     pub asset_part_size: usize,
     /// Cross-Origin Resource Sharing (CORS) origins allowed to call this API,
@@ -68,7 +66,6 @@ impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             bind: default_server_bind(),
-            asset_max_bytes: default_asset_max_bytes(),
             asset_part_size: default_asset_part_size(),
             cors_origins: Vec::new(),
             openapi_ui: default_openapi_ui(),
@@ -85,11 +82,6 @@ fn default_static_dir() -> PathBuf {
 /// serde default for `[server] bind`.
 fn default_server_bind() -> String {
     "127.0.0.1:8080".to_string()
-}
-
-/// serde default for `[server] asset_max_bytes` (512 MiB).
-fn default_asset_max_bytes() -> u64 {
-    512 * 1024 * 1024
 }
 
 /// serde default for `[server] asset_part_size` (64 MiB).
@@ -253,16 +245,6 @@ impl Config {
             .context("config missing [server] section (needed for serve)")?;
         if server.asset_part_size == 0 {
             bail!("server.asset_part_size must be > 0");
-        }
-        if server.asset_max_bytes == 0 {
-            bail!("server.asset_max_bytes must be > 0");
-        }
-        if server.asset_part_size as u64 > server.asset_max_bytes {
-            bail!(
-                "server.asset_part_size ({}) must be ≤ server.asset_max_bytes ({})",
-                server.asset_part_size,
-                server.asset_max_bytes
-            );
         }
         Ok(server)
     }
@@ -441,7 +423,6 @@ mod tests {
         );
         let server = cfg.require_server().unwrap();
         assert_eq!(server.bind, "127.0.0.1:8080");
-        assert_eq!(server.asset_max_bytes, 536_870_912);
         assert_eq!(server.asset_part_size, 67_108_864);
         assert!(!server.openapi_ui);
         assert!(server.cors_origins.is_empty());

@@ -36,12 +36,20 @@ cors_origins = [
 
 ### Server asset limits
 
-`[server]` also accepts optional upload limits. Both keys default to sensible values for most installs:
+`[server]` also accepts one optional upload setting:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `asset_max_bytes` | `536870912` (512 MiB) | Maximum size for one attachment — a single `PUT /v1/assets/{sha256}` body or the total declared bytes for a multipart upload. Must be greater than 0. |
-| `asset_part_size` | `67108864` (64 MiB) | Chunk size advertised to clients for multipart uploads. Must not exceed `asset_max_bytes`. Keep under ~100 MiB for Cloudflare-proxied setups. |
+| `asset_part_size` | `67108864` (64 MiB) | Chunk size advertised to clients for multipart uploads. Must be greater than 0 and must not exceed the attachment size limit. Keep under ~100 MiB for Cloudflare-proxied setups. |
+
+The attachment size limit is not a config key.
+It is the largest attachment the server accepts, as a single `PUT /v1/assets/{sha256}` body or as the total declared bytes of a multipart upload, and it is also the cap on every other request body.
+It is a Server Setting stored in the database: 512 MiB until the Owner changes it under **Server Settings**, or a program with the Owner's Session sends `PATCH /v1/server/settings` with `asset_max_bytes` in bytes.
+A change holds from the next upload, with no restart.
+`GET /v1/server` reports the limit as `asset_max_bytes` to any client, with no credential, because the desktop app reads it before Staging.
+
+The server refuses a limit of zero or one below `asset_part_size` with `422 Unprocessable Entity`.
+When `asset_part_size` is raised above a limit already stored, `serve` stops at startup and names both numbers.
 
 Web env overrides (optional): `MC_DB`, `MC_DATA_DIR`.
 

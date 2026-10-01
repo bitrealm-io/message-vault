@@ -20,7 +20,7 @@ import {
 } from "../../lib/importSession";
 import { importSessionCreateBody } from "../../lib/importSource";
 import { mediaExtractFields, sbrExtractFields } from "../../lib/sbrExtractFields";
-import { completeImport, createImport } from "../../lib/serverApi";
+import { completeImport, createImport, getServerState } from "../../lib/serverApi";
 import { resolveImportStagingDir } from "../../lib/system-settings";
 import {
   type AttachmentForecast,
@@ -119,19 +119,37 @@ function extractAttachmentMedia(mode: AttachmentMediaMode): AttachmentMediaMode 
   return mode === "convert" || mode === "compress" ? "copy" : mode;
 }
 
-/** The media fields `summarize_staging` and `transcode_staging` share, read from the submitted form. */
+/**
+ * The attachment size limit this Import Run works to, in bytes. A run always
+ * has one by the time a stage needs it: a new run reads the server's before
+ * Staging, and a resumed run reads its own back from the stored form.
+ */
+function assetLimitOf(form: Pick<ImportJobFormValues, "assetMaxBytes">): number {
+  if (typeof form.assetMaxBytes !== "number") {
+    throw new Error("This Import Run has no attachment size limit stored with it.");
+  }
+  return form.assetMaxBytes;
+}
+
+/**
+ * The fields `summarize_staging` and `transcode_staging` share: the media
+ * fields read from the submitted form, and the run's attachment size limit.
+ */
 function stagingMediaFields(
-  form: Pick<ImportJobFormValues, "attachmentMedia" | "maxResolution" | "maxFps" | "minSizeMb">,
-): Pick<
-  StagingConfig,
-  "attachment_media" | "media_max_resolution" | "media_max_fps" | "media_min_size"
-> {
-  return mediaExtractFields({
-    attachmentMedia: form.attachmentMedia,
-    maxResolution: form.maxResolution,
-    maxFps: form.maxFps,
-    minSizeMb: form.minSizeMb,
-  });
+  form: Pick<
+    ImportJobFormValues,
+    "attachmentMedia" | "maxResolution" | "maxFps" | "minSizeMb" | "assetMaxBytes"
+  >,
+): Omit<StagingConfig, "staging_dir"> {
+  return {
+    ...mediaExtractFields({
+      attachmentMedia: form.attachmentMedia,
+      maxResolution: form.maxResolution,
+      maxFps: form.maxFps,
+      minSizeMb: form.minSizeMb,
+    }),
+    asset_max_bytes: assetLimitOf(form),
+  };
 }
 
 /** What a step is doing and what it counts, for every step but `media`
@@ -222,6 +240,14 @@ export type ImportJobFormValues = {
   whatsappBusiness: boolean;
   /** The holder's WhatsApp number: required on Android, a fallback on iPhone. */
   whatsappOwnerPhone: string;
+  /**
+   * The server's attachment size limit, in bytes, as this Import Run works
+   * to it. Not a field the person fills in: a new run reads it from
+   * `GET /v1/server` before Staging, and it is stored with the run in the
+   * form snapshot, so a resume uses the number the run was staged and
+   * reviewed against even when the owner has changed the limit since.
+   */
+  assetMaxBytes?: number;
 };
 
 /** Pick up a session whose staging folder is already complete. */
@@ -751,6 +777,7 @@ async function deleteStagingAfterSuccess(): Promise<string | null> {
  */
 async function runPush(
   token: string | null,
+  form: ImportJobFormValues,
   sessionId: number,
   outputDir: string,
   approvedPlan?: StagingSummary,
@@ -778,6 +805,7 @@ async function runPush(
         // size_bytes lets message-crate-push skip a second full-file hash.
         trust_export: true,
         import_id: sessionId,
+        asset_max_bytes: assetLimitOf(form),
       }),
     );
   } catch (e: unknown) {
@@ -946,12 +974,13 @@ function extractFieldsFor(form: ImportJobFormValues) {
 
 async function runImport(
   token: string | null,
-  form: ImportJobFormValues,
+  submitted: ImportJobFormValues,
   identities: string[] | null,
   resume?: ResumePush,
   resumeWrite?: ResumeWrite,
 ): Promise<void> {
   if (!isTauri()) return;
+  let form = submitted;
   beginRun(form, "parse");
   store.set({
     running: true,
@@ -974,6 +1003,16 @@ async function runImport(
   try {
     if (!token) throw new Error("Not authenticated");
 
+    if (!resume && !resumeWrite) {
+      // A new Import Run works to the server's attachment size limit as it is
+      // now. It goes into the form the run is created with, so every later
+      // stage, and a resume, measures against this same number.
+      const server = await getServerState();
+      form = { ...form, assetMaxBytes: server.asset_max_bytes };
+      scratch.form = form;
+      store.set({ form });
+    }
+
     if (resume) {
       // The staging folder is already complete, so there is nothing to
       // resolve, no new run to create (the account already has this one),
@@ -992,7 +1031,7 @@ async function runImport(
             : { ...step, status: "done", detail: "Already staged" },
         ),
       });
-      await runPush(token, sessionId, outputDir, resume.approved);
+      await runPush(token, form, sessionId, outputDir, resume.approved);
       return;
     }
 
@@ -1240,7 +1279,7 @@ export function useImportJob() {
       if (phase === "staging_review" && mediaJobVerb(form.attachmentMedia) !== null) {
         await runMediaPass(form, sessionId, outputDir, approvedSummary);
       } else {
-        await runPush(token, sessionId, outputDir, approvedSummary);
+        await runPush(token, form, sessionId, outputDir, approvedSummary);
       }
     } finally {
       scratch.reviewAction = false;

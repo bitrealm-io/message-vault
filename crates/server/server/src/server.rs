@@ -353,10 +353,11 @@ pub struct AppState {
     /// here, not in a static, so tests in one binary cannot rate-limit each
     /// other; a running server has a single state, so the limit still spans it.
     pub(crate) auth_rate_limits: crate::credentials::AuthRateLimits,
-    /// Multipart / asset size limits from `[server]` (env may override part size).
-    pub(crate) upload_limits: asset_uploads::UploadLimits,
-    /// Axum request body cap (single PUT or one part); equals `asset_max_bytes`.
-    pub(crate) max_body_bytes: usize,
+    /// Multipart part size handed to clients, from `[server] asset_part_size`.
+    /// The attachment size limit is not held here: it is a Server Setting,
+    /// read from the database when a request needs it
+    /// ([`AppState::asset_max_bytes`]).
+    pub(crate) asset_part_size: usize,
     /// The Demo Account build the owner started, if one is running or the
     /// last one failed. One per server: a second cannot start while one runs.
     pub(crate) demo_build: crate::server_api::DemoBuild,
@@ -367,20 +368,29 @@ pub struct AppState {
 
 impl AppState {
     /// The state every handler shares, over an opened database. `serve` and the
-    /// test harness both come through here, so the locks, the rate limits
-    /// and the body cap are assembled in one place.
-    pub fn new(opened: OpenDb, upload_limits: asset_uploads::UploadLimits) -> Self {
+    /// test harness both come through here, so the locks and the rate limits
+    /// are assembled in one place.
+    pub fn new(opened: OpenDb, asset_part_size: usize) -> Self {
         Self {
             cfg: Arc::new(opened.cfg),
             db: opened.db,
             account_import_locks: KeyedLocks::default(),
             asset_complete_locks: KeyedLocks::default(),
             auth_rate_limits: Arc::new(std::sync::Mutex::new(HashMap::new())),
-            upload_limits,
-            max_body_bytes: upload_limits.max_bytes as usize,
+            asset_part_size,
             demo_build: crate::server_api::DemoBuild::default(),
             demo_bundle_generator: crate::reset_demo::generate_bundle,
         }
+    }
+
+    /// The attachment size limit as the Server Settings hold it at this
+    /// moment, in bytes. Read on every request that needs it, so a change the
+    /// owner makes holds for the next upload with no restart.
+    pub(crate) async fn asset_max_bytes(&self) -> anyhow::Result<u64> {
+        let mut conn = self.db.acquire().await?;
+        Ok(crate::db::server_settings::load(&mut conn)
+            .await?
+            .asset_max_bytes)
     }
 }
 
@@ -791,6 +801,43 @@ async fn json_body_limit_response(response: Response) -> Response {
     ApiError::PayloadTooLarge("the request body is too large".to_string()).into_response()
 }
 
+/// Hold a request body to the attachment size limit, as the Server Settings
+/// have it when the request arrives. The limit is the body cap for every
+/// route, because the largest body the server takes is one attachment sent as
+/// a single `PUT`. A `Content-Length` over the limit is refused before any
+/// handler runs; a body with no declared length is cut off once it passes the
+/// limit. A request with a safe method carries no body the server reads, so
+/// it skips the read of the settings.
+async fn limit_request_body(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    use axum::http::Method;
+    if matches!(
+        *request.method(),
+        Method::GET | Method::HEAD | Method::OPTIONS
+    ) {
+        return next.run(request).await;
+    }
+    let limit = match state.asset_max_bytes().await {
+        Ok(limit) => usize::try_from(limit).unwrap_or(usize::MAX),
+        Err(error) => return ApiError::Internal(error).into_response(),
+    };
+    let declared = request
+        .headers()
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
+    if declared.is_some_and(|bytes| bytes > limit as u64) {
+        return ApiError::PayloadTooLarge("the request body is too large".to_string())
+            .into_response();
+    }
+    let request =
+        request.map(|body| axum::body::Body::new(http_body_util::Limited::new(body, limit)));
+    next.run(request).await
+}
+
 /// Refuse a request whose `Accept` names nothing this route can produce
 /// (`docs/architecture/http-api.md`). Narrow on purpose: only when the header is present and none of
 /// its members is `application/json`, `application/problem+json`,
@@ -892,9 +939,13 @@ pub(crate) fn http_app(state: AppState) -> Router {
         ))
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback_service(ServeDir::new(static_dir))
-        .layer(RequestBodyLimitLayer::new(state.max_body_bytes))
-        // Rewrite the limit layer's plain-text 413 into `{error}` before CORS
-        // sees it, so the response a browser gets is both JSON and CORS-clean.
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            limit_request_body,
+        ))
+        // Rewrite the auth routes' limit layer's plain-text 413 into a problem
+        // before CORS sees it, so the response a browser gets is both JSON and
+        // CORS-clean.
         .layer(axum::middleware::map_response(json_body_limit_response))
         // Outermost: every response, including one the limit layer answered
         // itself, carries the CORS headers a browser needs to show it.
@@ -946,8 +997,6 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
         cfg.paths.data_dir.join(".operation.lock")
     };
     let _operation_lock = crate::operation_lock::acquire_for_serve(&lock_path)?;
-    let upload_limits =
-        asset_uploads::UploadLimits::new(server.asset_part_size, server.asset_max_bytes);
 
     // Every new Message Crate starts with the Demo Account: seed first, then
     // listen, so the first page a person loads already offers it (#971).
@@ -969,13 +1018,21 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
             opened.cfg.paths.db.display()
         );
     }
+    let state = AppState::new(opened, server.asset_part_size);
+    // A stored limit below the configured part size can only come from a
+    // config edit made after the owner set the limit. No multipart upload
+    // could complete under it, so the server says so and does not start.
+    let upload_limits = asset_uploads::UploadLimits::checked(
+        state.asset_part_size,
+        state.asset_max_bytes().await?,
+    )?;
     eprintln!(
         "  assets: max={} MiB  part_size={} MiB",
         upload_limits.max_bytes / message_ir::MIB,
         upload_limits.part_size as u64 / message_ir::MIB
     );
 
-    let app = http_app(AppState::new(opened, upload_limits));
+    let app = http_app(state);
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     eprintln!("message-crate-server serve listening on http://{bind}");
     eprintln!(
@@ -1242,7 +1299,7 @@ pub(crate) async fn stream_body_to_file(
 /// Build the `AppState` every test in this crate drives: a real `Config`
 /// rooted at `data_dir` (with a sibling `messagecrate.db` path that nothing in the
 /// test suite reads from disk — queries go through `pool`), the given pool,
-/// and default upload limits. Goes through [`AppState::new`], the same
+/// and the default part size. Goes through [`AppState::new`], the same
 /// assembly `serve` uses. `#[cfg(test)]`-gated so it never ships in a release
 /// build; `pub(crate)` so `test_support` and the other test modules in this
 /// crate can reach it.
@@ -1257,7 +1314,6 @@ pub(crate) fn test_app_state(pool: sqlx::AnyPool, data_dir: &Path) -> AppState {
         },
         server: Some(crate::config::ServerConfig {
             bind: "127.0.0.1:0".into(),
-            asset_max_bytes: 8 * 1024 * 1024,
             asset_part_size: 1024 * 1024,
             cors_origins: Vec::new(),
             openapi_ui: false,
@@ -1265,10 +1321,7 @@ pub(crate) fn test_app_state(pool: sqlx::AnyPool, data_dir: &Path) -> AppState {
         }),
         database: crate::config::DatabaseConfig::default(),
     };
-    AppState::new(
-        OpenDb { cfg, db: pool },
-        asset_uploads::UploadLimits::default(),
-    )
+    AppState::new(OpenDb { cfg, db: pool }, asset_uploads::DEFAULT_PART_SIZE)
 }
 
 #[cfg(test)]

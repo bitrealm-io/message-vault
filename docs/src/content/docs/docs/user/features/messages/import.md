@@ -214,7 +214,7 @@ The run stops and the row reads **Awaiting approval**.
 Everything it shows is read from the staged files, not estimated, except the group that is labelled as estimates.
 
 - **Contacts**: the count of contacts in the backup, split into **Existing** and **New** to the account.
-- **Attachments**: the **Size limit per file**, and **Files over the limit**, marked **Skip upload**. The row opens to each file and its size.
+- **Attachments**: the **Size limit per file**, which is the server's attachment size limit as the run read it when it started, and **Files over the limit**, marked **Skip upload**. The row opens to each file and its size.
 - **Conversion estimates** or **Compression estimates**, under **Convert** or **Compress & Convert**. It sorts the files that matter into **Likely within limit**, **May exceed limit**, and **Not audio or video**. Each opens to its files, with the staged size and the expected size. The group is marked **Media has not run yet**, because these are estimates.
 - **Identities**, for an iMessage source: the addresses the backup's device used, how many messages each one **Sent** and **Received**, whether it is **On your profile**, and **Add to profile** for one that is not.
 

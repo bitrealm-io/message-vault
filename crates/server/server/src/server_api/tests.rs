@@ -336,6 +336,130 @@ async fn only_the_owner_reaches_the_server_settings() {
     );
 }
 
+/// 512 MiB, the limit a Message Crate nobody has configured holds an attachment to.
+const DEFAULT_LIMIT: u64 = 512 * 1024 * 1024;
+
+/// Nothing seeds the attachment size limit: a Message Crate whose owner never
+/// set it reads as 512 MiB, to the owner and to a client with no credential.
+#[tokio::test]
+async fn the_attachment_size_limit_reads_as_512_mib_until_the_owner_sets_it() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+
+    let settings: serde_json::Value = get_json(&state, "/v1/server/settings", &owner.token).await;
+    assert_eq!(settings["asset_max_bytes"], DEFAULT_LIMIT);
+
+    let server: serde_json::Value = get_json(&state, "/v1/server", "").await;
+    assert_eq!(server["asset_max_bytes"], DEFAULT_LIMIT);
+}
+
+/// The owner changes the limit, and `GET /v1/server` reports the new number
+/// to a client that holds no credential: the desktop app reads it there
+/// before Staging. The registration setting the request did not name is
+/// left alone.
+#[tokio::test]
+async fn the_owner_changes_the_attachment_size_limit_and_the_server_reports_it() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let limit: u64 = 100 * 1024 * 1024;
+
+    let changed: serde_json::Value = crate::test_support::patch_json(
+        &state,
+        "/v1/server/settings",
+        &owner.token,
+        serde_json::json!({ "asset_max_bytes": limit }),
+    )
+    .await;
+    assert_eq!(changed["asset_max_bytes"], limit);
+    assert_eq!(
+        changed["public_registration"], true,
+        "test fixtures open registration, and the request did not name it"
+    );
+
+    let settings: serde_json::Value = get_json(&state, "/v1/server/settings", &owner.token).await;
+    assert_eq!(settings["asset_max_bytes"], limit);
+    let server: serde_json::Value = get_json(&state, "/v1/server", "").await;
+    assert_eq!(server["asset_max_bytes"], limit);
+
+    // Changing registration afterwards keeps the limit.
+    let closed: serde_json::Value = crate::test_support::patch_json(
+        &state,
+        "/v1/server/settings",
+        &owner.token,
+        serde_json::json!({ "public_registration": false }),
+    )
+    .await;
+    assert_eq!(closed["asset_max_bytes"], limit);
+}
+
+/// An account that is not the owner is refused, and the limit stays put.
+#[tokio::test]
+async fn an_ordinary_account_cannot_change_the_attachment_size_limit() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    let _owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let ordinary = register_via_api(&state, "bob", "hunter2hunter2").await;
+
+    assert_eq!(
+        patch_status(
+            &state,
+            "/v1/server/settings",
+            &ordinary.token,
+            serde_json::json!({ "asset_max_bytes": 100 * 1024 * 1024 }),
+        )
+        .await,
+        StatusCode::FORBIDDEN
+    );
+    let server: serde_json::Value = get_json(&state, "/v1/server", "").await;
+    assert_eq!(server["asset_max_bytes"], DEFAULT_LIMIT);
+}
+
+/// A limit of zero, or one smaller than the part size the server hands out
+/// for a multipart upload, is refused: no upload could ever complete under
+/// it. A limit equal to the part size is the smallest one accepted.
+#[tokio::test]
+async fn a_limit_of_zero_or_below_the_part_size_is_refused() {
+    let fixture = test_fixture().await;
+    let state = fixture.state.clone();
+    let owner = claim_as_owner(&state, "keeper", "hunter2hunter2").await;
+    let part_size = state.asset_part_size as u64;
+
+    for refused in [0, part_size - 1] {
+        let (status, text) = crate::test_support::patch_raw(
+            &state,
+            "/v1/server/settings",
+            &owner.token,
+            serde_json::json!({ "asset_max_bytes": refused }),
+        )
+        .await;
+        let problem = crate::test_support::expect_problem(
+            status,
+            &text,
+            crate::problem::ProblemType::ValidationFailed,
+        );
+        assert!(
+            problem.errors.unwrap()[0].contains("asset_max_bytes"),
+            "{text}"
+        );
+    }
+    let server: serde_json::Value = get_json(&state, "/v1/server", "").await;
+    assert_eq!(
+        server["asset_max_bytes"], DEFAULT_LIMIT,
+        "a refused change writes nothing"
+    );
+
+    let accepted: serde_json::Value = crate::test_support::patch_json(
+        &state,
+        "/v1/server/settings",
+        &owner.token,
+        serde_json::json!({ "asset_max_bytes": part_size }),
+    )
+    .await;
+    assert_eq!(accepted["asset_max_bytes"], part_size);
+}
+
 /// Claiming this Message Crate puts a row at the owner id and nowhere else.
 #[tokio::test]
 async fn claiming_the_server_creates_exactly_one_owner() {

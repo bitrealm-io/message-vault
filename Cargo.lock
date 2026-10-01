@@ -1911,6 +1911,7 @@ dependencies = [
  "demo-seed",
  "fs2",
  "futures-util",
+ "http-body-util",
  "libc",
  "libsqlite3-sys",
  "media",

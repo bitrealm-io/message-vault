@@ -278,6 +278,8 @@ pub(crate) struct Probe {
     pub width: u32,
     pub height: u32,
     pub bitrate: u64,
+    /// Frames per second, `None` when ffprobe reported no rate.
+    pub fps: Option<f32>,
 }
 
 /// Build a `Command` for ffprobe, resolved the same way as every other tool
@@ -304,7 +306,7 @@ pub(crate) fn ffprobe_command() -> Result<Command> {
     Ok(cmd)
 }
 
-/// Width, height, and frame rate of a video from ffprobe.
+/// Codec, width, height, frame rate, and bitrate of a video from ffprobe.
 pub(crate) fn probe_video(path: &std::path::Path) -> Result<Probe> {
     let mut cmd = ffprobe_command()?;
     cmd.args([
@@ -313,7 +315,7 @@ pub(crate) fn probe_video(path: &std::path::Path) -> Result<Probe> {
         "-select_streams",
         "v:0",
         "-show_entries",
-        "stream=codec_name,width,height,bit_rate",
+        "stream=codec_name,width,height,avg_frame_rate,bit_rate",
         "-of",
         "csv=p=0",
         path.to_str().unwrap_or(""),
@@ -329,12 +331,14 @@ pub(crate) fn probe_video(path: &std::path::Path) -> Result<Probe> {
     let codec = parts.first().copied().unwrap_or("").to_ascii_lowercase();
     let width = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
     let height = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
-    let bitrate = parts.get(3).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let fps = parts.get(3).and_then(|s| crate::probe::parse_frame_rate(s));
+    let bitrate = parts.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
     Ok(Probe {
         codec,
         width,
         height,
         bitrate,
+        fps,
     })
 }
 

@@ -464,6 +464,28 @@ describe("ImportFormFields Import button", () => {
     expect(screen.queryByRole("combobox", { name: "Time zone of the messages" })).toBeNull();
   });
 
+  it("names each Android SMS source's own backup files in the folder placeholder", () => {
+    const placeholders = [
+      ["sms-backup-restore", "Folder containing sms-*.xml backup files"],
+      ["go-sms-pro", "Folder containing gosms_sys*.xml backup files"],
+      ["sms-backup-plus", "Folder containing .eml files"],
+    ];
+    for (const [source, placeholder] of placeholders) {
+      const { unmount } = renderForm({ source });
+      expect(screen.getByPlaceholderText(placeholder)).toBeTruthy();
+      unmount();
+    }
+  });
+
+  // Import stays disabled without either one, so both carry the asterisk.
+  it("marks the Android SMS backup folder and phone numbers required", () => {
+    renderForm({ source: "sms-backup-restore" });
+    const backupLabel = screen.getByText("Backup Directory").closest("label");
+    expect(backupLabel?.textContent).toContain("*");
+    const phonesLabel = screen.getByText("Backup Device Phone Numbers").closest("label");
+    expect(phonesLabel?.textContent).toContain("*");
+  });
+
   it("refuses an Android SMS backup with no owner number", async () => {
     const user = userEvent.setup();
     const onImport = vi.fn();

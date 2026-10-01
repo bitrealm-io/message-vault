@@ -869,14 +869,13 @@ fn compress_video(
     }
 
     let max_edge = opts.max_resolution.max_long_edge();
-    let fps = if opts.max_fps > 0.0 {
-        opts.max_fps
-    } else {
-        30.0
-    };
-    let vf = format!(
-        "scale='if(gt(iw,ih),min({max_edge},iw),-2)':'if(gt(iw,ih),-2,min({max_edge},ih))',fps={fps}"
+    let scale = format!(
+        "scale='if(gt(iw,ih),min({max_edge},iw),-2)':'if(gt(iw,ih),-2,min({max_edge},ih))'"
     );
+    let vf = match frame_rate_cap(probe.fps, opts.max_fps) {
+        Some(fps) => format!("{scale},fps={fps}"),
+        None => scale,
+    };
     let tmp = temp_sibling(path, "mp4");
 
     with_temp_output(&tmp, || {
@@ -921,6 +920,20 @@ fn compress_video(
         }
         Ok(Some(commit_produced(commit, path, &tmp)?))
     })
+}
+
+/// The frame rate to bring a video down to, or `None` to leave its rate alone.
+///
+/// The maximum is a ceiling: a video at or under it keeps its frame rate, so
+/// a 24 fps video is not raised to 30. A maximum of zero means none was given
+/// and stands for 30. A video whose rate ffprobe could not read gets the
+/// maximum, because nothing shows it is under it.
+fn frame_rate_cap(source_fps: Option<f32>, max_fps: f32) -> Option<f32> {
+    let max = if max_fps > 0.0 { max_fps } else { 30.0 };
+    match source_fps {
+        Some(source) if source <= max => None,
+        _ => Some(max),
+    }
 }
 
 /// The ffmpeg arguments shared by every video re-encode: input, filter graph, and output settings.

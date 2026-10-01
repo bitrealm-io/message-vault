@@ -10,6 +10,7 @@ import TextField from "../../components/TextField";
 import TimeZoneField from "../../components/TimeZoneField";
 import {
   backupFolderHint,
+  backupFolderPlaceholder,
   isAndroidSmsSource,
   needsOwnerEmails,
   splitEmails,
@@ -219,7 +220,7 @@ function AttachmentFields(props: {
               className={fieldStyle}
             />
             <p className={hintStyle}>
-              Maximum video frame rate; videos are not upscaled to this FPS.
+              Maximum video frame rate; a video with a lower frame rate keeps it.
             </p>
           </StackedField>
           <StackedField label="Minimum Video File Size (Megabytes)">
@@ -607,12 +608,12 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
           </>
         ) : isAndroidSms ? (
           <>
-            <StackedField label="Backup Directory">
+            <StackedField label="Backup Directory" required>
               <PathPicker
                 value={props.backupPath}
                 onChange={props.onBackupPathChange}
                 directory
-                placeholder="Folder containing sms-*.xml backup files"
+                placeholder={backupFolderPlaceholder(props.source)}
               />
               <p className={hintStyle}>{backupFolderHint(props.source)}</p>
             </StackedField>
@@ -629,7 +630,7 @@ export default function ImportFormFields(props: ImportFormFieldsProps) {
               onMinSizeMbChange={props.onMinSizeMbChange}
             />
 
-            <StackedField label="Backup Device Phone Numbers">
+            <StackedField label="Backup Device Phone Numbers" required>
               <PhoneTokenField
                 ref={phoneFieldRef}
                 value={props.ownerPhones}

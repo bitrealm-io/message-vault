@@ -528,6 +528,128 @@ async fn messages_fts_stays_in_sync() {
     assert_eq!(fts_hits(&mut conn, "goodbye").await, 0);
 }
 
+/// How many index entries `term` has, read from the index itself. `MATCH`
+/// only answers for rows the index still counts as present, so it cannot
+/// show a term left behind under a deleted row.
+async fn fts_term_entries(conn: &mut AnyConnection, term: &str) -> i64 {
+    sqlx::query("CREATE VIRTUAL TABLE IF NOT EXISTS temp.fts_vocab USING fts5vocab(main, messages_fts, row)")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    sqlx::query_scalar("SELECT COALESCE(SUM(doc), 0) FROM temp.fts_vocab WHERE term = $1")
+        .bind(term)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+}
+
+/// An attachment's name and transcription leave the index when the
+/// attachment is renamed, when it is removed from a message that stays,
+/// and when its message is deleted with the attachment still on it (the
+/// delete cascades, which is how a conversation is deleted). SQLite gives
+/// the next message the id of the newest deleted one, so a term left
+/// behind would make that message match a name it never carried.
+#[tokio::test]
+async fn messages_fts_forgets_attachment_text_that_is_gone() {
+    if crate::test_support::on_postgres() {
+        return; // SQLite-only: reads the FTS5 table; on Postgres the text is a column of the message row
+    }
+    let (pool, _fixture) = seeded_schema_fixture().await;
+    let mut conn = pool.acquire().await.unwrap();
+    let conversation_id: i64 =
+        sqlx::query_scalar("SELECT id FROM conversations WHERE account_id = $1")
+            .bind(A1)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    let insert_message = r"
+        INSERT INTO messages (
+            conversation_id, account_id, source, guid, timestamp,
+            is_from_me, sort_order, body, subject
+        ) VALUES ($1, $2, 'sms', $3, '2020-01-01T00:00:00Z', 0, 0, $4, NULL)
+        RETURNING id
+        ";
+    let message_id: i64 = sqlx::query_scalar(insert_message)
+        .bind(conversation_id)
+        .bind(A1)
+        .bind("g-att")
+        .bind("zzbody text")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    for (name, transcription) in [("zzfirst.m4a", "zzspoken words"), ("zzsecond.pdf", "")] {
+        sqlx::query(
+            "INSERT INTO attachments (message_id, original_name, transcription) VALUES ($1, $2, $3)",
+        )
+        .bind(message_id)
+        .bind(name)
+        .bind(transcription)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    }
+    for term in ["zzbody", "zzfirst", "zzspoken", "zzsecond"] {
+        assert_eq!(fts_hits(&mut conn, term).await, 1, "{term}");
+        assert_eq!(fts_term_entries(&mut conn, term).await, 1, "{term}");
+    }
+
+    sqlx::query("UPDATE attachments SET original_name = 'zzrenamed.m4a' WHERE original_name = 'zzfirst.m4a'")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(fts_hits(&mut conn, "zzfirst").await, 0);
+    assert_eq!(fts_term_entries(&mut conn, "zzfirst").await, 0);
+    for term in ["zzbody", "zzrenamed", "zzspoken", "zzsecond"] {
+        assert_eq!(fts_hits(&mut conn, term).await, 1, "{term}");
+    }
+
+    sqlx::query("DELETE FROM attachments WHERE original_name = 'zzrenamed.m4a'")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    for term in ["zzrenamed", "zzspoken"] {
+        assert_eq!(fts_hits(&mut conn, term).await, 0, "{term}");
+        assert_eq!(fts_term_entries(&mut conn, term).await, 0, "{term}");
+    }
+    for term in ["zzbody", "zzsecond"] {
+        assert_eq!(fts_hits(&mut conn, term).await, 1, "{term}");
+    }
+
+    sqlx::query("UPDATE messages SET body = 'zzedited text' WHERE id = $1")
+        .bind(message_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(fts_term_entries(&mut conn, "zzbody").await, 0);
+    assert_eq!(fts_hits(&mut conn, "zzsecond").await, 1);
+    assert_eq!(fts_term_entries(&mut conn, "zzsecond").await, 1);
+
+    sqlx::query("DELETE FROM messages WHERE id = $1")
+        .bind(message_id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    for term in ["zzedited", "zzsecond"] {
+        assert_eq!(fts_hits(&mut conn, term).await, 0, "{term}");
+        assert_eq!(fts_term_entries(&mut conn, term).await, 0, "{term}");
+    }
+
+    let reused_id: i64 = sqlx::query_scalar(insert_message)
+        .bind(conversation_id)
+        .bind(A1)
+        .bind("g-next")
+        .bind("zznext text")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(
+        reused_id, message_id,
+        "SQLite hands the deleted id out again"
+    );
+    assert_eq!(fts_hits(&mut conn, "zznext").await, 1);
+    assert_eq!(fts_hits(&mut conn, "zzsecond").await, 0);
+}
+
 /// The `messages_fts_stays_in_sync` twin for Postgres: the sync triggers
 /// keep `search_tsv` in step with message and attachment edits. Skips
 /// unless `MC_TEST_POSTGRES_URL` is set.
